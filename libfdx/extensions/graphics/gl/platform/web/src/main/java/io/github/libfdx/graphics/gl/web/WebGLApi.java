@@ -1,0 +1,508 @@
+package io.github.libfdx.graphics.gl.web;
+
+import io.github.libfdx.core.FdxException;
+import io.github.libfdx.graphics.PrimitiveTopology;
+import io.github.libfdx.graphics.TextureWrap;
+import io.github.libfdx.graphics.gl.GLApi;
+import io.github.libfdx.graphics.gl.GLShaderType;
+import org.teavm.jso.JSBody;
+import org.teavm.jso.JSClass;
+import org.teavm.jso.JSObject;
+import org.teavm.jso.typedarrays.ArrayBufferView;
+import org.teavm.jso.typedarrays.Uint8Array;
+import org.teavm.jso.webgl.WebGLBuffer;
+import org.teavm.jso.webgl.WebGLProgram;
+import org.teavm.jso.webgl.WebGLRenderingContext;
+import org.teavm.jso.webgl.WebGLShader;
+import org.teavm.jso.webgl.WebGLTexture;
+import org.teavm.jso.webgl.WebGLUniformLocation;
+
+import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
+
+final class WebGLApi implements GLApi {
+    private static final int ARRAY_BUFFER = 0x8892;
+    private static final int ELEMENT_ARRAY_BUFFER = 0x8893;
+    private static final int DYNAMIC_DRAW = 0x88E8;
+    private static final int STATIC_DRAW = 0x88E4;
+    private static final int VERTEX_SHADER = 0x8B31;
+    private static final int FRAGMENT_SHADER = 0x8B30;
+    private static final int COMPILE_STATUS = 0x8B81;
+    private static final int LINK_STATUS = 0x8B82;
+    private static final int TEXTURE_2D = 0x0DE1;
+    private static final int TEXTURE_MIN_FILTER = 0x2801;
+    private static final int TEXTURE_MAG_FILTER = 0x2800;
+    private static final int TEXTURE_WRAP_S = 0x2802;
+    private static final int TEXTURE_WRAP_T = 0x2803;
+    private static final int NEAREST = 0x2600;
+    private static final int LINEAR = 0x2601;
+    private static final int REPEAT = 0x2901;
+    private static final int CLAMP_TO_EDGE = 0x812F;
+    private static final int MIRRORED_REPEAT = 0x8370;
+    private static final int RGBA = 0x1908;
+    private static final int UNSIGNED_BYTE = 0x1401;
+    private static final int UNSIGNED_SHORT = 0x1403;
+    private static final int TEXTURE0 = 0x84C0;
+    private static final int BLEND = 0x0BE2;
+    private static final int SRC_ALPHA = 0x0302;
+    private static final int ONE_MINUS_SRC_ALPHA = 0x0303;
+    private static final int FLOAT = 0x1406;
+    private static final int COLOR_BUFFER_BIT = 0x4000;
+    private static final int DEPTH_BUFFER_BIT = 0x0100;
+    private static final int DEPTH_TEST = 0x0B71;
+    private static final int LEQUAL = 0x0203;
+    private static final int LINES = 0x0001;
+    private static final int TRIANGLES = 0x0004;
+    private static final int TRIANGLE_STRIP = 0x0005;
+    private static final int UNPACK_ALIGNMENT = 0x0CF5;
+    private static final int UNPACK_PREMULTIPLY_ALPHA_WEBGL = 0x9241;
+
+    @JSClass(transparent = true)
+    static class HandleMap<T extends JSObject> implements JSObject {
+        @JSBody(script = "return [undefined];")
+        static native <T extends JSObject> HandleMap<T> create();
+
+        @JSBody(params = { "key" }, script = "if (this[key] === undefined) return null; return this[key];")
+        native T get(int key);
+
+        @JSBody(params = { "key", "value" }, script = "this[key] = value;")
+        native void put(int key, T value);
+
+        @JSBody(params = { "value" }, script = "this.push(value); return this.length - 1;")
+        native int add(T value);
+
+        @JSBody(params = { "key" }, script = "var value = this[key]; delete this[key]; return value;")
+        native T remove(int key);
+    }
+
+    private final WebGLRenderingContext gl;
+    private final HandleMap<WebGLProgram> programs = HandleMap.create();
+    private final HandleMap<WebGLShader> shaders = HandleMap.create();
+    private final HandleMap<WebGLBuffer> buffers = HandleMap.create();
+    private final HandleMap<WebGLTexture> textures = HandleMap.create();
+    private final HandleMap<HandleMap<WebGLUniformLocation>> uniforms = HandleMap.create();
+    private final Map<Integer, GLShaderType> shaderTypes = new HashMap<Integer, GLShaderType>();
+    private int currentProgram;
+
+    WebGLApi(WebGLRenderingContext gl) {
+        this.gl = gl;
+        this.gl.pixelStorei(UNPACK_ALIGNMENT, 1);
+        this.gl.pixelStorei(UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
+    }
+
+    @Override
+    public int createProgram() {
+        return programs.add(gl.createProgram());
+    }
+
+    @Override
+    public int createShader(GLShaderType type) {
+        int nativeType;
+        if (type == GLShaderType.VERTEX) {
+            nativeType = VERTEX_SHADER;
+        } else if (type == GLShaderType.FRAGMENT) {
+            nativeType = FRAGMENT_SHADER;
+        } else {
+            throw new FdxException("Unsupported WebGL shader type: " + type);
+        }
+        int shader = shaders.add(gl.createShader(nativeType));
+        shaderTypes.put(shader, type);
+        return shader;
+    }
+
+    @Override
+    public void shaderSource(int shader, String source) {
+        gl.shaderSource(shaders.get(shader), toGlesSource(shaderTypes.get(shader), source));
+    }
+
+    @Override
+    public void compileShader(int shader) {
+        gl.compileShader(shaders.get(shader));
+    }
+
+    @Override
+    public boolean shaderCompileStatus(int shader) {
+        return gl.getShaderParameterb(shaders.get(shader), COMPILE_STATUS);
+    }
+
+    @Override
+    public String shaderInfoLog(int shader) {
+        return gl.getShaderInfoLog(shaders.get(shader));
+    }
+
+    @Override
+    public void deleteShader(int shader) {
+        shaderTypes.remove(shader);
+        gl.deleteShader(shaders.remove(shader));
+    }
+
+    @Override
+    public void attachShader(int program, int shader) {
+        gl.attachShader(programs.get(program), shaders.get(shader));
+    }
+
+    @Override
+    public void linkProgram(int program) {
+        gl.linkProgram(programs.get(program));
+    }
+
+    @Override
+    public boolean programLinkStatus(int program) {
+        return gl.getProgramParameterb(programs.get(program), LINK_STATUS);
+    }
+
+    @Override
+    public String programInfoLog(int program) {
+        return gl.getProgramInfoLog(programs.get(program));
+    }
+
+    @Override
+    public void deleteProgram(int program) {
+        uniforms.remove(program);
+        gl.deleteProgram(programs.remove(program));
+    }
+
+    @Override
+    public void useProgram(int program) {
+        currentProgram = program;
+        gl.useProgram(programs.get(program));
+    }
+
+    @Override
+    public int genVertexArray() {
+        return 1;
+    }
+
+    @Override
+    public void bindVertexArray(int vertexArray) {
+    }
+
+    @Override
+    public void deleteVertexArray(int vertexArray) {
+    }
+
+    @Override
+    public int genBuffer() {
+        return buffers.add(gl.createBuffer());
+    }
+
+    @Override
+    public void bindArrayBuffer(int buffer) {
+        gl.bindBuffer(ARRAY_BUFFER, buffers.get(buffer));
+    }
+
+    @Override
+    public void bindElementArrayBuffer(int buffer) {
+        gl.bindBuffer(ELEMENT_ARRAY_BUFFER, buffers.get(buffer));
+    }
+
+    @Override
+    public void bufferData(int size) {
+        gl.bufferData(ARRAY_BUFFER, size, DYNAMIC_DRAW);
+    }
+
+    @Override
+    public void elementBufferData(int size) {
+        gl.bufferData(ELEMENT_ARRAY_BUFFER, size, STATIC_DRAW);
+    }
+
+    @Override
+    public void bufferSubData(ByteBuffer data) {
+        gl.bufferSubData(ARRAY_BUFFER, 0, activeBytes(data));
+    }
+
+    @Override
+    public void elementBufferSubData(ByteBuffer data) {
+        gl.bufferSubData(ELEMENT_ARRAY_BUFFER, 0, activeBytes(data));
+    }
+
+    @Override
+    public void deleteBuffer(int buffer) {
+        gl.deleteBuffer(buffers.remove(buffer));
+    }
+
+    @Override
+    public int genTexture() {
+        return textures.add(gl.createTexture());
+    }
+
+    @Override
+    public void bindTexture2D(int texture) {
+        gl.bindTexture(TEXTURE_2D, textures.get(texture));
+    }
+
+    @Override
+    public void texImage2D(int width, int height, ByteBuffer data) {
+        gl.texParameterf(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR);
+        gl.texParameterf(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR);
+        gl.texParameterf(TEXTURE_2D, TEXTURE_WRAP_S, CLAMP_TO_EDGE);
+        gl.texParameterf(TEXTURE_2D, TEXTURE_WRAP_T, CLAMP_TO_EDGE);
+        gl.texImage2D(TEXTURE_2D, 0, RGBA, width, height, 0, RGBA, UNSIGNED_BYTE,
+                data != null ? activeBytes(data) : (ArrayBufferView) null);
+    }
+
+    @Override
+    public void texSubImage2D(int width, int height, ByteBuffer data) {
+        gl.texSubImage2D(TEXTURE_2D, 0, 0, 0, width, height, RGBA, UNSIGNED_BYTE,
+                activeBytes(data));
+    }
+
+    @Override
+    public void textureWrap2D(TextureWrap wrapS, TextureWrap wrapT) {
+        gl.texParameterf(TEXTURE_2D, TEXTURE_WRAP_S, toNative(wrapS));
+        gl.texParameterf(TEXTURE_2D, TEXTURE_WRAP_T, toNative(wrapT));
+    }
+
+    @Override
+    public void deleteTexture(int texture) {
+        gl.deleteTexture(textures.remove(texture));
+    }
+
+    @Override
+    public void activeTexture(int slot) {
+        gl.activeTexture(TEXTURE0 + slot);
+    }
+
+    @Override
+    public int uniformLocation(int program, String name) {
+        WebGLUniformLocation location = gl.getUniformLocation(programs.get(program), name);
+        if (location == null) {
+            return -1;
+        }
+        HandleMap<WebGLUniformLocation> programUniforms = uniforms.get(program);
+        if (programUniforms == null) {
+            programUniforms = HandleMap.create();
+            uniforms.put(program, programUniforms);
+        }
+        return programUniforms.add(location);
+    }
+
+    @Override
+    public void uniform1i(int location, int value) {
+        if (location < 0 || currentProgram == 0) {
+            return;
+        }
+        HandleMap<WebGLUniformLocation> programUniforms = uniforms.get(currentProgram);
+        if (programUniforms != null) {
+            gl.uniform1i(programUniforms.get(location), value);
+        }
+    }
+
+    @Override
+    public void uniform1f(int location, float value) {
+        if (location < 0 || currentProgram == 0) {
+            return;
+        }
+        HandleMap<WebGLUniformLocation> programUniforms = uniforms.get(currentProgram);
+        if (programUniforms != null) {
+            gl.uniform1f(programUniforms.get(location), value);
+        }
+    }
+
+    @Override
+    public void uniform3f(int location, float x, float y, float z) {
+        if (location < 0 || currentProgram == 0) {
+            return;
+        }
+        HandleMap<WebGLUniformLocation> programUniforms = uniforms.get(currentProgram);
+        if (programUniforms != null) {
+            gl.uniform3f(programUniforms.get(location), x, y, z);
+        }
+    }
+
+    @Override
+    public void uniform4f(int location, float x, float y, float z, float w) {
+        if (location < 0 || currentProgram == 0) {
+            return;
+        }
+        HandleMap<WebGLUniformLocation> programUniforms = uniforms.get(currentProgram);
+        if (programUniforms != null) {
+            gl.uniform4f(programUniforms.get(location), x, y, z, w);
+        }
+    }
+
+    @Override
+    public void uniformMatrix4fv(int location, boolean transpose, float[] values) {
+        if (location < 0 || currentProgram == 0) {
+            return;
+        }
+        HandleMap<WebGLUniformLocation> programUniforms = uniforms.get(currentProgram);
+        if (programUniforms != null) {
+            uniformMatrix4fv(gl, programUniforms.get(location), transpose, values);
+        }
+    }
+
+    @Override
+    public void enableAlphaBlending() {
+        gl.enable(BLEND);
+        gl.blendFunc(SRC_ALPHA, ONE_MINUS_SRC_ALPHA);
+    }
+
+    @Override
+    public void enableDepthTest(boolean enabled) {
+        if (enabled) {
+            gl.enable(DEPTH_TEST);
+        } else {
+            gl.disable(DEPTH_TEST);
+        }
+    }
+
+    @Override
+    public void depthMask(boolean enabled) {
+        gl.depthMask(enabled);
+    }
+
+    @Override
+    public void depthFuncLessEqual() {
+        gl.depthFunc(LEQUAL);
+    }
+
+    @Override
+    public void enableVertexAttribArray(int index) {
+        gl.enableVertexAttribArray(index);
+    }
+
+    @Override
+    public void vertexAttribPointer(int index, int size, int stride, int offset) {
+        gl.vertexAttribPointer(index, size, FLOAT, false, stride, offset);
+    }
+
+    @Override
+    public void vertexAttribDivisor(int index, int divisor) {
+        vertexAttribDivisor(gl, index, divisor);
+    }
+
+    @Override
+    public void viewport(int x, int y, int width, int height) {
+        gl.viewport(x, y, width, height);
+    }
+
+    @Override
+    public void clearColor(float red, float green, float blue, float alpha) {
+        gl.clearColor(red, green, blue, alpha);
+    }
+
+    @Override
+    public void clearColorBuffer() {
+        gl.clear(COLOR_BUFFER_BIT);
+    }
+
+    @Override
+    public void clearDepth(float depth) {
+        gl.clearDepth(depth);
+    }
+
+    @Override
+    public void clearDepthBuffer() {
+        gl.clear(DEPTH_BUFFER_BIT);
+    }
+
+    @Override
+    public void drawArrays(PrimitiveTopology topology, int firstVertex, int vertexCount) {
+        gl.drawArrays(toNative(topology), firstVertex, vertexCount);
+    }
+
+    @Override
+    public void drawArraysInstanced(PrimitiveTopology topology, int firstVertex, int vertexCount, int instanceCount) {
+        drawArraysInstanced(gl, toNative(topology), firstVertex, vertexCount, instanceCount);
+    }
+
+    @Override
+    public void drawElements(PrimitiveTopology topology, int indexCount, int offsetBytes) {
+        gl.drawElements(toNative(topology), indexCount, UNSIGNED_SHORT, offsetBytes);
+    }
+
+    @Override
+    public void drawElementsInstanced(PrimitiveTopology topology, int indexCount, int offsetBytes, int instanceCount) {
+        drawElementsInstanced(gl, toNative(topology), indexCount, UNSIGNED_SHORT, offsetBytes, instanceCount);
+    }
+
+    private int toNative(PrimitiveTopology topology) {
+        if (topology == PrimitiveTopology.LINE_LIST) {
+            return LINES;
+        }
+        if (topology == PrimitiveTopology.TRIANGLE_STRIP) {
+            return TRIANGLE_STRIP;
+        }
+        return TRIANGLES;
+    }
+
+    private int toNative(TextureWrap wrap) {
+        if (wrap == TextureWrap.REPEAT) {
+            return REPEAT;
+        }
+        if (wrap == TextureWrap.MIRRORED_REPEAT) {
+            return MIRRORED_REPEAT;
+        }
+        return CLAMP_TO_EDGE;
+    }
+
+    private Uint8Array activeBytes(ByteBuffer data) {
+        Uint8Array bytes = Uint8Array.fromJavaBuffer(data);
+        int position = data.position();
+        int remaining = data.remaining();
+        if (position == 0 && remaining == bytes.getByteLength()) {
+            return bytes;
+        }
+        return Uint8Array.create(bytes.getBuffer(), bytes.getByteOffset() + position, remaining);
+    }
+
+    private String toGlesSource(GLShaderType type, String source) {
+        String actualSource = source != null ? source : "";
+        if (actualSource.startsWith("#version 330 core")) {
+            actualSource = "#version 300 es" + actualSource.substring("#version 330 core".length());
+        } else if (actualSource.startsWith("#version 330")) {
+            actualSource = "#version 300 es" + actualSource.substring("#version 330".length());
+        } else if (!actualSource.startsWith("#version 300 es")) {
+            actualSource = "#version 300 es\n" + actualSource;
+        }
+        if (type == GLShaderType.FRAGMENT && actualSource.indexOf("precision ") < 0) {
+            int lineEnd = actualSource.indexOf('\n');
+            if (lineEnd >= 0) {
+                actualSource = actualSource.substring(0, lineEnd + 1)
+                        + "precision highp float;\n"
+                        + actualSource.substring(lineEnd + 1);
+            } else {
+                actualSource = actualSource + "\nprecision highp float;\n";
+            }
+        }
+        return actualSource;
+    }
+
+    @JSBody(params = { "gl", "mode", "first", "count", "instances" }, script =
+            "if (gl.drawArraysInstanced) {\n" +
+            "  gl.drawArraysInstanced(mode, first, count, instances);\n" +
+            "} else {\n" +
+            "  for (var i = 0; i < instances; i++) gl.drawArrays(mode, first, count);\n" +
+            "}")
+    private static native void drawArraysInstanced(WebGLRenderingContext gl, int mode, int first, int count,
+            int instances);
+
+    @JSBody(params = { "gl", "mode", "count", "type", "offset", "instances" }, script =
+            "if (gl.drawElementsInstanced) {\n" +
+            "  gl.drawElementsInstanced(mode, count, type, offset, instances);\n" +
+            "} else {\n" +
+            "  for (var i = 0; i < instances; i++) gl.drawElements(mode, count, type, offset);\n" +
+            "}")
+    private static native void drawElementsInstanced(WebGLRenderingContext gl, int mode, int count, int type,
+            int offset, int instances);
+
+    @JSBody(params = { "gl", "index", "divisor" }, script =
+            "if (gl.vertexAttribDivisor) {\n" +
+            "  gl.vertexAttribDivisor(index, divisor);\n" +
+            "} else {\n" +
+            "  var ext = gl.getExtension('ANGLE_instanced_arrays');\n" +
+            "  if (ext && ext.vertexAttribDivisorANGLE) {\n" +
+            "    ext.vertexAttribDivisorANGLE(index, divisor);\n" +
+            "  } else if (divisor !== 0) {\n" +
+            "    throw 'Instanced vertex attributes are not supported';\n" +
+            "  }\n" +
+            "}")
+    private static native void vertexAttribDivisor(WebGLRenderingContext gl, int index, int divisor);
+
+    @JSBody(params = { "gl", "location", "transpose", "values" }, script =
+            "gl.uniformMatrix4fv(location, transpose, values);")
+    private static native void uniformMatrix4fv(WebGLRenderingContext gl, WebGLUniformLocation location,
+            boolean transpose, float[] values);
+}

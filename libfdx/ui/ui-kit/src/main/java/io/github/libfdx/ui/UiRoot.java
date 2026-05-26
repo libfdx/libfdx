@@ -1,0 +1,2643 @@
+package io.github.libfdx.ui;
+
+import io.github.libfdx.core.Disposable;
+import io.github.libfdx.display.Display;
+import io.github.libfdx.files.FileSystem;
+import io.github.libfdx.graphics.GraphicsContext;
+import io.github.libfdx.input.Input;
+import io.github.libfdx.input.Key;
+import io.github.libfdx.input.KeyEvent;
+import io.github.libfdx.input.PointerEvent;
+import io.github.libfdx.input.PointerType;
+import io.github.libfdx.input.TextInputEvent;
+import io.github.libfdx.input.TextInputRequest;
+import io.github.libfdx.input.TextInputType;
+import io.github.libfdx.graphics.g2d.BitmapFontLayout;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+public final class UiRoot implements Disposable, UiStateListener {
+    private static final HitResult NO_HIT = new HitResult(null, false);
+    private static final int WINDOW_POINTER_NONE = 0;
+    private static final int WINDOW_POINTER_DRAG = 1;
+    private static final int WINDOW_POINTER_RESIZE = 2;
+    private static final int SCROLL_POINTER_NONE = 0;
+    private static final int SCROLL_POINTER_VERTICAL = 1;
+    private static final int SCROLL_POINTER_HORIZONTAL = 2;
+    private static final int SCROLL_POINTER_BODY = 3;
+    private static final float CHECKBOX_SIZE = 20.0f;
+    private static final float CHECKBOX_LABEL_GAP = 8.0f;
+    private static final float WINDOW_TITLE_HEIGHT = 30.0f;
+    private static final float WINDOW_RESIZE_HANDLE = 18.0f;
+    private static final float SCROLLBAR_SIZE = 4.0f;
+    private static final float SCROLLBAR_MIN_THUMB = 22.0f;
+    private static final float SCROLL_BODY_DRAG_SLOP = 8.0f;
+    private static final float TOUCH_TEXT_AREA_DRAG_SLOP = 8.0f;
+
+    private final FileSystem files;
+    private final Display display;
+    private final GraphicsContext graphics;
+    private final UiTextEngine textEngine;
+    private final Map<String, UiNode> retainedNodes = new LinkedHashMap<String, UiNode>();
+    private final Set<String> usedNodeIdentities = new LinkedHashSet<String>();
+    private final Set<UiObservableState> observedStates = new LinkedHashSet<UiObservableState>();
+    private final Map<String, UiAnimatable<?>> animatables = new LinkedHashMap<String, UiAnimatable<?>>();
+    private final Map<String, UiFloatAnimatable> floatAnimatables = new LinkedHashMap<String, UiFloatAnimatable>();
+    private final Map<String, UiScrollState> scrollStates = new LinkedHashMap<String, UiScrollState>();
+    private final Map<String, UiListState> listStates = new LinkedHashMap<String, UiListState>();
+    private final Map<String, UiRect> tooltipAnchors = new LinkedHashMap<String, UiRect>();
+    private final UiInputHandler inputHandler = new UiInputHandler(this);
+    private UiTheme theme = UiTheme.dark();
+    private UiRenderer renderer;
+    private Input input;
+    private UiContent content;
+    private UiNode rootNode;
+    private UiNode hoveredNode;
+    private UiNode pressedNode;
+    private UiNode focusedNode;
+    private UiNode tooltipHoverNode;
+    private float tooltipHoverStartSeconds;
+    private float tooltipWakeSeconds = -1.0f;
+    private UiInsets safeArea = UiInsets.ZERO;
+    private float uiScale = 1.0f;
+    private boolean autoUiScale;
+    private boolean debugLines;
+    private float animationScale = 1.0f;
+    private UiWindowState activeWindowState;
+    private UiNode activeWindowNode;
+    private int activeWindowPointerMode = WINDOW_POINTER_NONE;
+    private UiRect activeWindowArea = UiRect.ZERO;
+    private float activeWindowStartPointerX;
+    private float activeWindowStartPointerY;
+    private float activeWindowStartX;
+    private float activeWindowStartY;
+    private float activeWindowStartWidth;
+    private float activeWindowStartHeight;
+    private UiNode activeScrollNode;
+    private int activeScrollPointerMode = SCROLL_POINTER_NONE;
+    private float activeScrollPointerOffset;
+    private float activeScrollStartPointerX;
+    private float activeScrollStartPointerY;
+    private float activeScrollStartX;
+    private float activeScrollStartY;
+    private UiNode pendingScrollBodyNode;
+    private float pendingScrollBodyStartX;
+    private float pendingScrollBodyStartY;
+    private UiNode activeTextNode;
+    private int activeTextSelectionAnchor;
+    private UiNode pendingTouchTextAreaNode;
+    private float pendingTouchTextAreaStartX;
+    private float pendingTouchTextAreaStartY;
+    private UiNode pendingTextInputTapNode;
+    private float pendingTextInputTapStartX;
+    private float pendingTextInputTapStartY;
+    private String clipboardText = "";
+    private int nextWindowZOrder = 1;
+    private boolean dirty = true;
+    private boolean disposed;
+    private int width;
+    private int height;
+    private float elapsedSeconds;
+    private int layoutPass;
+
+    private static final class HitResult {
+        final UiNode node;
+        final boolean blocked;
+
+        HitResult(UiNode node, boolean blocked) {
+            this.node = node;
+            this.blocked = blocked;
+        }
+
+        boolean handled() {
+            return node != null || blocked;
+        }
+    }
+
+    UiRoot(FileSystem files, Display display, GraphicsContext graphics, UiTheme theme) {
+        this.files = files;
+        this.display = display;
+        this.graphics = graphics;
+        this.textEngine = new UiTextEngine(files, graphics);
+        this.theme = theme != null ? theme : UiTheme.dark();
+        this.width = display != null ? display.width() : 0;
+        this.height = display != null ? display.height() : 0;
+        this.renderer = graphics != null ? new UiG2DRenderer(graphics) : null;
+    }
+
+    public void setContent(UiContent content) {
+        this.content = content;
+        requestCompose();
+    }
+
+    public void requestCompose() {
+        dirty = true;
+    }
+
+    public void update(float deltaSeconds) {
+        ensureComposed();
+        float previousElapsedSeconds = elapsedSeconds;
+        elapsedSeconds += Math.max(0.0f, deltaSeconds);
+        boolean animationRunning = false;
+        Iterator<UiAnimatable<?>> iterator = animatables.values().iterator();
+        while (iterator.hasNext()) {
+            UiAnimatable<?> animatable = iterator.next();
+            boolean wasRunning = animatable.isRunning();
+            animatable.update(deltaSeconds * animationScale);
+            animationRunning = animationRunning || wasRunning || animatable.isRunning();
+        }
+        Iterator<UiFloatAnimatable> floatIterator = floatAnimatables.values().iterator();
+        while (floatIterator.hasNext()) {
+            UiFloatAnimatable animatable = floatIterator.next();
+            boolean wasRunning = animatable.isRunning();
+            animatable.update(deltaSeconds * animationScale);
+            animationRunning = animationRunning || wasRunning || animatable.isRunning();
+        }
+        boolean tooltipWakeDue = tooltipWakeDue(previousElapsedSeconds, elapsedSeconds);
+        if (animationRunning || tooltipWakeDue) {
+            requestCompose();
+        }
+        if (animationRunning || tooltipWakeDue) {
+            ensureComposed();
+        }
+    }
+
+    public void render() {
+        ensureComposed();
+        if (renderer != null && rootNode != null) {
+            renderer.render(this, rootNode);
+        }
+    }
+
+    public void resize(int width, int height) {
+        this.width = Math.max(0, width);
+        this.height = Math.max(0, height);
+        layout();
+    }
+
+    public Display display() {
+        return display;
+    }
+
+    public FileSystem files() {
+        return files;
+    }
+
+    public GraphicsContext graphics() {
+        return graphics;
+    }
+
+    public UiTheme theme() {
+        return theme;
+    }
+
+    public void theme(UiTheme theme) {
+        this.theme = theme != null ? theme : UiTheme.dark();
+        requestCompose();
+    }
+
+    public UiInsets safeArea() {
+        return safeArea;
+    }
+
+    public UiRoot safeArea(UiInsets safeArea) {
+        this.safeArea = safeArea != null ? safeArea : UiInsets.ZERO;
+        layout();
+        return this;
+    }
+
+    public float uiScale() {
+        return uiScale;
+    }
+
+    public UiRoot uiScale(float uiScale) {
+        this.uiScale = uiScale > 0.0f ? uiScale : 1.0f;
+        layout();
+        return this;
+    }
+
+    public boolean autoUiScale() {
+        return autoUiScale;
+    }
+
+    public UiRoot autoUiScale(boolean autoUiScale) {
+        this.autoUiScale = autoUiScale;
+        layout();
+        return this;
+    }
+
+    public boolean debugLines() {
+        return debugLines;
+    }
+
+    public UiRoot debugLines(boolean debugLines) {
+        this.debugLines = debugLines;
+        return this;
+    }
+
+    public int displayX(float uiX) {
+        return Math.round(uiX * effectiveUiScale());
+    }
+
+    public int displayY(float uiY) {
+        return Math.round(uiY * effectiveUiScale());
+    }
+
+    public float uiX(int displayX) {
+        return displayX / effectiveUiScale();
+    }
+
+    public float uiY(int displayY) {
+        return displayY / effectiveUiScale();
+    }
+
+    public float animationScale() {
+        return animationScale;
+    }
+
+    public UiRoot animationScale(float animationScale) {
+        this.animationScale = Math.max(0.0f, animationScale);
+        return this;
+    }
+
+    public UiNode rootNode() {
+        ensureComposed();
+        return rootNode;
+    }
+
+    public UiRenderer renderer() {
+        return renderer;
+    }
+
+    public void renderer(UiRenderer renderer) {
+        if (this.renderer != null && this.renderer != renderer) {
+            this.renderer.dispose();
+        }
+        this.renderer = renderer;
+    }
+
+    public UiRoot input(Input input) {
+        if (this.input == input) {
+            return this;
+        }
+        if (this.input != null) {
+            hidePlatformTextInput(this.input);
+            this.input.removeProcessor(inputHandler);
+        }
+        this.input = input;
+        if (this.input != null) {
+            this.input.addProcessor(inputHandler);
+            requestPlatformTextInput(focusedNode);
+        }
+        return this;
+    }
+
+    public Input input() {
+        return input;
+    }
+
+    <T> UiAnimatable<T> animatable(String key, T value) {
+        String id = key != null ? key : "animatable-" + animatables.size();
+        UiAnimatable<?> current = animatables.get(id);
+        if (current == null) {
+            current = new UiAnimatable<T>(value);
+            animatables.put(id, current);
+        }
+        @SuppressWarnings("unchecked")
+        UiAnimatable<T> typed = (UiAnimatable<T>) current;
+        return typed;
+    }
+
+    UiFloatAnimatable floatAnimatable(String key, float value) {
+        String id = key != null ? key : "float-animatable-" + floatAnimatables.size();
+        UiFloatAnimatable current = floatAnimatables.get(id);
+        if (current == null) {
+            current = new UiFloatAnimatable(value);
+            floatAnimatables.put(id, current);
+        }
+        return current;
+    }
+
+    UiScrollState scrollState(String key) {
+        String id = key != null ? key : "scroll-" + scrollStates.size();
+        UiScrollState state = scrollStates.get(id);
+        if (state == null) {
+            state = new UiScrollState();
+            scrollStates.put(id, state);
+        }
+        return state;
+    }
+
+    UiListState listState(String key) {
+        String id = key != null ? key : "list-" + listStates.size();
+        UiListState state = listStates.get(id);
+        if (state == null) {
+            state = new UiListState();
+            listStates.put(id, state);
+        }
+        return state;
+    }
+
+    void observe(UiObservableState state) {
+        if (state != null && observedStates.add(state)) {
+            state.addListener(this);
+        }
+    }
+
+    UiNode retainNode(String identity, UiNodeType type, String key, UiModifier modifier) {
+        UiNode node = retainedNodes.get(identity);
+        if (node == null || node.isDisposed() || node.type() != type) {
+            if (node != null) {
+                node.dispose();
+            }
+            node = new UiNode(type, identity);
+            retainedNodes.put(identity, node);
+        }
+        Object descriptor = node.descriptor();
+        usedNodeIdentities.add(identity);
+        node.begin(key, modifier);
+        if ((type == UiNodeType.TEXT_FIELD || type == UiNodeType.TEXT_AREA)
+                && descriptor instanceof UiTextFieldModel) {
+            node.descriptor(descriptor);
+        }
+        return node;
+    }
+
+    @Override
+    public void stateChanged(UiObservableState state) {
+        requestCompose();
+        updatePlatformTextInput(focusedNode);
+    }
+
+    @Override
+    public void dispose() {
+        if (disposed) {
+            return;
+        }
+        disposed = true;
+        for (UiObservableState state : observedStates) {
+            state.removeListener(this);
+        }
+        observedStates.clear();
+        for (UiNode node : retainedNodes.values()) {
+            node.dispose();
+        }
+        retainedNodes.clear();
+        animatables.clear();
+        floatAnimatables.clear();
+        scrollStates.clear();
+        listStates.clear();
+        tooltipAnchors.clear();
+        if (input != null) {
+            hidePlatformTextInput(input);
+            input.removeProcessor(inputHandler);
+            input = null;
+        }
+        if (renderer != null) {
+            renderer.dispose();
+            renderer = null;
+        }
+        textEngine.dispose();
+    }
+
+    @Override
+    public boolean isDisposed() {
+        return disposed;
+    }
+
+    private void ensureComposed() {
+        if (!dirty || disposed) {
+            return;
+        }
+        for (UiObservableState state : observedStates) {
+            state.removeListener(this);
+        }
+        observedStates.clear();
+        usedNodeIdentities.clear();
+        tooltipWakeSeconds = -1.0f;
+
+        UiRoot previous = UiComposition.CURRENT_ROOT.get();
+        UiComposition.CURRENT_ROOT.set(this);
+        try {
+            rootNode = retainNode("root", UiNodeType.ROOT, "root", UiModifier.none().fill());
+            if (content != null) {
+                content.build(new UiScope(this, rootNode, "root"));
+            }
+        } finally {
+            if (previous != null) {
+                UiComposition.CURRENT_ROOT.set(previous);
+            } else {
+                UiComposition.CURRENT_ROOT.remove();
+            }
+        }
+        disposeUnusedNodes();
+        dirty = false;
+        layout();
+    }
+
+
+
+    private void disposeUnusedNodes() {
+        List<String> toRemove = new ArrayList<String>();
+        for (String identity : retainedNodes.keySet()) {
+            if (!usedNodeIdentities.contains(identity)) {
+                toRemove.add(identity);
+            }
+        }
+        for (int i = 0; i < toRemove.size(); i++) {
+            String identity = toRemove.get(i);
+            UiNode node = retainedNodes.remove(identity);
+            clearReferencesToNode(node);
+            removeAnimationsForNode(identity);
+            if (node != null) {
+                node.dispose();
+            }
+        }
+    }
+
+    private void clearReferencesToNode(UiNode node) {
+        if (node == null) {
+            return;
+        }
+        if (hoveredNode == node) {
+            hoveredNode = null;
+        }
+        if (pressedNode == node) {
+            pressedNode = null;
+        }
+        if (focusedNode == node) {
+            if (input != null && requestsPlatformTextInput(focusedNode)) {
+                input.hideTextInput();
+            }
+            focusedNode.focused(false);
+            focusedNode = null;
+        }
+        if (tooltipHoverNode == node) {
+            tooltipHoverNode = null;
+            tooltipWakeSeconds = -1.0f;
+        }
+        if (activeScrollNode == node) {
+            activeScrollNode = null;
+            activeScrollPointerMode = SCROLL_POINTER_NONE;
+            activeScrollPointerOffset = 0.0f;
+        }
+        if (activeTextNode == node) {
+            activeTextNode = null;
+            activeTextSelectionAnchor = 0;
+        }
+    }
+
+    private void removeAnimationsForNode(String identity) {
+        removeObjectAnimationsForNode(identity);
+        removeFloatAnimationsForNode(identity);
+    }
+
+    private void removeObjectAnimationsForNode(String identity) {
+        String prefix = identity + ":";
+        Iterator<String> iterator = animatables.keySet().iterator();
+        while (iterator.hasNext()) {
+            String key = iterator.next();
+            if (key.equals(identity) || key.startsWith(prefix)) {
+                iterator.remove();
+            }
+        }
+    }
+
+    private void removeFloatAnimationsForNode(String identity) {
+        String prefix = identity + ":";
+        Iterator<String> iterator = floatAnimatables.keySet().iterator();
+        while (iterator.hasNext()) {
+            String key = iterator.next();
+            if (key.equals(identity) || key.startsWith(prefix)) {
+                iterator.remove();
+            }
+        }
+    }
+
+
+    float renderWidth() {
+        int value = display != null ? display.width() : width;
+        return value > 0 ? value : width;
+    }
+
+    float renderHeight() {
+        int value = display != null ? display.height() : height;
+        return value > 0 ? value : height;
+    }
+
+    float effectiveUiScale() {
+        float scale = uiScale > 0.0f ? uiScale : 1.0f;
+        if (autoUiScale && display != null) {
+            scale *= display.contentScale();
+        }
+        return Math.max(0.25f, Math.min(4.0f, scale));
+    }
+
+    float elapsedSeconds() {
+        return elapsedSeconds;
+    }
+
+    boolean tooltipActive(UiTooltip tooltip) {
+        if (tooltip == null || hoveredNode == null || hoveredNode != tooltipHoverNode) {
+            return false;
+        }
+        String target = tooltip.text();
+        if (target == null || target.length() == 0 || !target.equals(tooltipTarget(hoveredNode))) {
+            return false;
+        }
+        float wakeSeconds = tooltipHoverStartSeconds + tooltip.delayMillis() / 1000.0f;
+        if (elapsedSeconds < wakeSeconds) {
+            scheduleTooltipWake(wakeSeconds);
+            return false;
+        }
+        return true;
+    }
+
+    UiRect tooltipAnchorBounds(UiTooltip tooltip) {
+        if (tooltip == null || tooltip.text() == null) {
+            return null;
+        }
+        if (tooltipActive(tooltip)) {
+            UiRect bounds = hoveredNode.bounds();
+            tooltipAnchors.put(tooltip.text(), bounds);
+            return bounds;
+        }
+        return tooltipAnchors.get(tooltip.text());
+    }
+
+    boolean handlePointerMoved(PointerEvent event) {
+        ensureComposed();
+        float x = uiX(event.x());
+        float y = uiY(event.y());
+        if (activeWindowState != null) {
+            updateActiveWindowPointer(x, y);
+            return true;
+        }
+        if (activeScrollNode != null) {
+            updateActiveScrollPointer(x, y);
+            return true;
+        }
+        if (pendingTouchTextAreaNode != null) {
+            if (updatePendingTouchTextAreaGesture(x, y)) {
+                setHovered(hitTest(x, y));
+                return true;
+            }
+            if (pendingTouchTextAreaNode != null) {
+                setHovered(hitTest(x, y));
+                return true;
+            }
+        }
+        if (updatePendingScrollBodyGesture(x, y)) {
+            setHovered(hitTest(x, y));
+            return true;
+        }
+        if (updatePendingTextInputTapGesture(x, y)) {
+            setHovered(hitTest(x, y));
+            return true;
+        }
+        if (activeTextNode != null) {
+            updateActiveTextSelection(x, y);
+            setHovered(hitTest(x, y));
+            return true;
+        }
+        if (isSlider(pressedNode)) {
+            updateSliderFromPointer(pressedNode, x);
+            setHovered(hitTest(x, y));
+            return true;
+        }
+        HitResult hit = hitTestResult(x, y);
+        setHovered(hit.node);
+        return hit.handled();
+    }
+
+    boolean handlePointerDown(PointerEvent event) {
+        ensureComposed();
+        float x = uiX(event.x());
+        float y = uiY(event.y());
+        HitResult hit = hitTestResult(x, y);
+        setHovered(hit.node);
+        clearPendingScrollBodyGesture();
+        clearPendingTextInputTapGesture();
+        UiNode scroll = findAncestorOrSelf(hit.node, UiNodeType.SCROLL);
+        if (scroll != null && beginScrollPointer(scroll, x, y, hit.node == scroll)) {
+            setFocused(null);
+            pressedNode = null;
+            return true;
+        }
+        pressedNode = hit.node;
+        if (pressedNode != null) {
+            bringWindowToFront(windowState(findAncestorOrSelf(pressedNode, UiNodeType.WINDOW)));
+            pressedNode.pressed(true);
+            boolean focusedTextInputTap = isTextInput(pressedNode) && focusedNode == pressedNode;
+            boolean deferTextInputTap = event.type() == PointerType.TOUCH && isTextInput(pressedNode);
+            if (isFocusable(pressedNode) && !deferTextInputTap) {
+                setFocused(pressedNode);
+            }
+            if (beginWindowPointer(pressedNode, x, y)) {
+                return true;
+            }
+            if (pressedNode.type() == UiNodeType.TEXT_AREA && beginScrollPointer(pressedNode, x, y, false)) {
+                return true;
+            }
+            if (isTextInput(pressedNode)) {
+                if (deferTextInputTap) {
+                    beginPendingTextInputTapGesture(pressedNode, x, y);
+                    if (pressedNode.type() == UiNodeType.TEXT_AREA) {
+                        beginTouchTextAreaGesture(pressedNode, x, y);
+                    }
+                    beginPendingScrollBodyGesture(scroll, pressedNode, x, y);
+                    return true;
+                }
+                if (pressedNode.type() == UiNodeType.TEXT_AREA && event.type() == PointerType.TOUCH) {
+                    beginTouchTextAreaGesture(pressedNode, x, y);
+                } else {
+                    beginTextSelection(pressedNode, x, y);
+                }
+                if (focusedTextInputTap) {
+                    requestPlatformTextInput(pressedNode);
+                }
+                return true;
+            }
+            if (!isSlider(pressedNode)) {
+                beginPendingScrollBodyGesture(scroll, pressedNode, x, y);
+            }
+            updateSliderFromPointer(pressedNode, x);
+            return true;
+        }
+        setFocused(null);
+        return hit.blocked;
+    }
+
+    boolean handlePointerUp(PointerEvent event) {
+        ensureComposed();
+        float x = uiX(event.x());
+        float y = uiY(event.y());
+        HitResult hit = hitTestResult(x, y);
+        boolean handled = false;
+        if (activeScrollNode != null) {
+            activeScrollNode = null;
+            activeScrollPointerMode = SCROLL_POINTER_NONE;
+            activeScrollPointerOffset = 0.0f;
+            handled = true;
+        }
+        if (activeTextNode != null) {
+            updateActiveTextSelection(x, y);
+            activeTextNode = null;
+            activeTextSelectionAnchor = 0;
+            handled = true;
+        }
+        if (pendingTouchTextAreaNode != null) {
+            pendingTouchTextAreaNode = null;
+        }
+        clearPendingScrollBodyGesture();
+        UiNode pendingTextInputTap = pendingTextInputTapNode;
+        clearPendingTextInputTapGesture();
+        if (pressedNode != null) {
+            pressedNode.pressed(false);
+            if (activeWindowState != null) {
+                updateActiveWindowPointer(x, y);
+                activeWindowState = null;
+                activeWindowNode = null;
+                activeWindowPointerMode = WINDOW_POINTER_NONE;
+                activeWindowArea = UiRect.ZERO;
+                handled = true;
+            }
+            if (isSlider(pressedNode)) {
+                updateSliderFromPointer(pressedNode, x);
+                handled = true;
+            } else if (pressedNode == hit.node) {
+                updateSliderFromPointer(pressedNode, x);
+                if (!handled && isTabs(pressedNode)) {
+                    selectTabFromPointer(pressedNode, x, y);
+                    handled = true;
+                } else if (!handled && pressedNode.activatable()) {
+                    pressedNode.activate();
+                    handled = true;
+                } else if (!handled && isTextInput(pressedNode)) {
+                    if (pendingTextInputTap == pressedNode) {
+                        activateTextInputTap(pressedNode, x, y);
+                    }
+                    handled = true;
+                }
+            }
+        }
+        pressedNode = null;
+        setHovered(hit.node);
+        return handled || hit.handled();
+    }
+
+    boolean handleScrolled(PointerEvent event) {
+        ensureComposed();
+        float x = uiX(event.x());
+        float y = uiY(event.y());
+        HitResult hit = hitTestResult(x, y);
+        UiNode scroll = scrollTarget(hit.node);
+        if (scroll != null && scroll.scrollState() != null) {
+            scroll.scrollState().scrollBy(event.scrollX() * 24.0f, event.scrollY() * 24.0f);
+            requestCompose();
+            return true;
+        }
+        return hit.handled();
+    }
+
+    boolean handleKeyDown(KeyEvent event) {
+        ensureComposed();
+        if (focusedNode == null) {
+            if (event.key() == Key.TAB || event.key() == Key.DOWN || event.key() == Key.RIGHT) {
+                return focusNext(1);
+            }
+            if (event.key() == Key.UP || event.key() == Key.LEFT) {
+                return focusNext(-1);
+            }
+            return false;
+        }
+        if (handleTabsKey(focusedNode, event.key())) {
+            return true;
+        }
+        if (event.key() == Key.TAB || (!isTextInput(focusedNode) && event.key() == Key.DOWN)
+                || (!isTextInput(focusedNode) && event.key() == Key.RIGHT)) {
+            return focusNext(1);
+        }
+        if ((!isTextInput(focusedNode) && event.key() == Key.UP)
+                || (!isTextInput(focusedNode) && event.key() == Key.LEFT)) {
+            return focusNext(-1);
+        }
+        if (isTextInput(focusedNode) && focusedNode.descriptor() instanceof UiTextFieldModel) {
+            UiTextFieldModel model = (UiTextFieldModel) focusedNode.descriptor();
+            if (handleTextShortcut(model, event.key())) {
+                ensureTextCursorVisible(focusedNode);
+                updatePlatformTextInput(focusedNode);
+                return true;
+            }
+            if (event.key() == Key.BACKSPACE) {
+                model.backspace();
+                ensureTextCursorVisible(focusedNode);
+                updatePlatformTextInput(focusedNode);
+                return true;
+            }
+            if (event.key() == Key.DELETE) {
+                model.delete();
+                ensureTextCursorVisible(focusedNode);
+                updatePlatformTextInput(focusedNode);
+                return true;
+            }
+            if (event.key() == Key.LEFT) {
+                model.moveCursor(model.cursor() - 1, isShiftDown());
+                ensureTextCursorVisible(focusedNode);
+                updatePlatformTextInput(focusedNode);
+                return true;
+            }
+            if (event.key() == Key.RIGHT) {
+                model.moveCursor(model.cursor() + 1, isShiftDown());
+                ensureTextCursorVisible(focusedNode);
+                updatePlatformTextInput(focusedNode);
+                return true;
+            }
+            if (event.key() == Key.HOME) {
+                model.moveCursor(0, isShiftDown());
+                ensureTextCursorVisible(focusedNode);
+                updatePlatformTextInput(focusedNode);
+                return true;
+            }
+            if (event.key() == Key.END) {
+                model.moveCursor(model.value().length(), isShiftDown());
+                ensureTextCursorVisible(focusedNode);
+                updatePlatformTextInput(focusedNode);
+                return true;
+            }
+            if (event.key() == Key.ENTER && model.multiline()) {
+                model.insert("\n");
+                ensureTextCursorVisible(focusedNode);
+                updatePlatformTextInput(focusedNode);
+                return true;
+            }
+        }
+        if ((event.key() == Key.ENTER || event.key() == Key.SPACE) && focusedNode.activatable()) {
+            focusedNode.activate();
+            return true;
+        }
+        return false;
+    }
+
+    private boolean focusNext(int direction) {
+        List<UiNode> focusable = new ArrayList<UiNode>();
+        collectFocusable(rootNode, focusable);
+        if (focusable.isEmpty()) {
+            setFocused(null);
+            return false;
+        }
+        int current = focusedNode != null ? focusable.indexOf(focusedNode) : -1;
+        int next = current + (direction >= 0 ? 1 : -1);
+        if (next < 0) {
+            next = focusable.size() - 1;
+        }
+        if (next >= focusable.size()) {
+            next = 0;
+        }
+        setFocused(focusable.get(next));
+        return true;
+    }
+
+    private void collectFocusable(UiNode node, List<UiNode> result) {
+        if (node == null || !node.visible()) {
+            return;
+        }
+        if (isFocusable(node)) {
+            result.add(node);
+        }
+        for (UiNode child : node.children()) {
+            collectFocusable(child, result);
+        }
+    }
+
+    boolean handleTextInput(TextInputEvent event) {
+        ensureComposed();
+        if (focusedNode != null && isTextInput(focusedNode)
+                && focusedNode.descriptor() instanceof UiTextFieldModel) {
+            ((UiTextFieldModel) focusedNode.descriptor()).insert(event.text());
+            ensureTextCursorVisible(focusedNode);
+            updatePlatformTextInput(focusedNode);
+            return true;
+        }
+        return false;
+    }
+
+    UiNode hitTest(float x, float y) {
+        return hitTestResult(x, y).node;
+    }
+
+    private HitResult hitTestResult(float x, float y) {
+        if (rootNode == null || !rootNode.visible()) {
+            return NO_HIT;
+        }
+        return hitTestResult(rootNode, x, y);
+    }
+
+    List<UiNode> renderChildren(UiNode node) {
+        return orderedChildren(node, false);
+    }
+
+    boolean isOverlayNode(UiNode node) {
+        return isOverlay(node);
+    }
+
+    UiInsets effectivePadding(UiNode node) {
+        UiInsets modifierPadding = node.modifier().padding();
+        UiStyle style = styleFor(node);
+        UiInsets stylePadding = style != null ? style.padding() : UiInsets.ZERO;
+        if (stylePadding == UiInsets.ZERO) {
+            return modifierPadding;
+        }
+        if (modifierPadding == UiInsets.ZERO) {
+            return stylePadding;
+        }
+        return UiInsets.of(stylePadding.left() + modifierPadding.left(), stylePadding.top() + modifierPadding.top(),
+                stylePadding.right() + modifierPadding.right(), stylePadding.bottom() + modifierPadding.bottom());
+    }
+
+    UiStyle styleFor(UiNode node) {
+        String styleName = node.modifier().style();
+        if (styleName == null) {
+            styleName = defaultStyleName(node.type());
+        }
+        return styleName != null ? theme.style(styleName) : null;
+    }
+
+    BitmapFontLayout textLayout(String text, UiTextStyle style, float maxWidth) {
+        return textEngine.layout(text, style, maxWidth, effectiveUiScale());
+    }
+
+    BitmapFontLayout textLayout(UiNode node, String text, UiTextStyle style, float maxWidth) {
+        if (node == null) {
+            return textLayout(text, style, maxWidth);
+        }
+        BitmapFontLayout cached = node.cachedTextLayout(layoutPass, text, style, maxWidth);
+        if (cached != null) {
+            return cached;
+        }
+        BitmapFontLayout layout = textLayout(text, style, maxWidth);
+        node.cacheTextLayout(layoutPass, text, style, maxWidth, layout);
+        return layout;
+    }
+
+    io.github.libfdx.graphics.g2d.BitmapFont textFont(UiTextStyle style) {
+        UiTextStyle actualStyle = style != null ? style : UiTextStyle.text();
+        return textEngine.resolve(actualStyle.font(), effectiveUiScale());
+    }
+
+    private void layout() {
+        if (rootNode == null) {
+            return;
+        }
+        float scale = effectiveUiScale();
+        int layoutWidth = (int) Math.ceil(renderWidth() / scale);
+        int layoutHeight = (int) Math.ceil(renderHeight() / scale);
+        if (layoutWidth <= 0) {
+            layoutWidth = width;
+        }
+        if (layoutHeight <= 0) {
+            layoutHeight = height;
+        }
+        if (layoutWidth <= 0 || layoutHeight <= 0) {
+            return;
+        }
+        UiRect rootBounds = new UiRect(0.0f, 0.0f, layoutWidth, layoutHeight).inset(safeArea);
+        if (rootBounds.width() <= 0.0f || rootBounds.height() <= 0.0f) {
+            return;
+        }
+        rootNode.bounds(rootBounds);
+        layoutPass++;
+        layoutChildren(rootNode, rootBounds);
+    }
+
+    private void layoutNode(UiNode node, UiRect bounds) {
+        UiModifier modifier = node.modifier();
+        UiInsets margin = modifier.margin();
+        UiRect area = bounds.inset(margin);
+        UiSize preferred = preferredSize(node, area.width(), area.height());
+        float widthValue = chooseDimension(modifier.width(), modifier.isFillWidth(), preferred.width(), area.width(),
+                modifier.minWidth(), modifier.maxWidth());
+        float heightValue = chooseDimension(modifier.height(), modifier.isFillHeight(), preferred.height(), area.height(),
+                modifier.minHeight(), modifier.maxHeight());
+        float x = alignX(area, widthValue, modifier.align()) + modifier.offsetX();
+        float y = area.y() + modifier.offsetY();
+        UiRect targetBounds = new UiRect(x, y, widthValue, heightValue);
+        UiRect actualBounds = animatedBounds(node, targetBounds);
+        node.bounds(actualBounds);
+        updateTextAreaMetrics(node);
+        layoutChildren(node, actualBounds);
+    }
+
+    private UiRect animatedBounds(UiNode node, UiRect targetBounds) {
+        UiModifier modifier = node.modifier();
+        UiRect bounds = targetBounds;
+        if (modifier.contentSizeAnimation() != null) {
+            UiSize targetSize = new UiSize(targetBounds.width(), targetBounds.height());
+            UiAnimatable<UiSize> size = animatable(node.identity() + ":content-size", targetSize);
+            size.animateTo(targetSize, modifier.contentSizeAnimation());
+            UiSize animated = size.get();
+            bounds = new UiRect(targetBounds.x(), targetBounds.y(), animated.width(), animated.height());
+        }
+        if (modifier.placementAnimation() != null) {
+            UiAnimatable<UiRect> placement = animatable(node.identity() + ":placement", bounds);
+            placement.animateTo(bounds, modifier.placementAnimation());
+            bounds = placement.get();
+        }
+        return bounds;
+    }
+
+    private void layoutChildren(UiNode node, UiRect bounds) {
+        if (!node.visible() || node.children().isEmpty()) {
+            return;
+        }
+        UiRect inner = bounds.inset(effectivePadding(node));
+        if (node.type() == UiNodeType.SCROLL && node.scrollState() != null) {
+            layoutScroll(node, inner);
+            layoutOverlayChildren(node, bounds);
+            return;
+        }
+        layoutContainerChildren(node, inner);
+        layoutOverlayChildren(node, bounds);
+    }
+
+    private void layoutContainerChildren(UiNode node, UiRect inner) {
+        if (node.type() == UiNodeType.MODAL || node.type() == UiNodeType.POPUP
+                || node.type() == UiNodeType.TOOLTIP) {
+            layoutOverlay(node, inner);
+        } else if (isColumnContainer(node.type())) {
+            layoutColumn(node, inner);
+        } else if (node.type() == UiNodeType.ROW) {
+            layoutRow(node, inner);
+        } else if (node.type() == UiNodeType.GRID) {
+            layoutGrid(node, inner);
+        } else {
+            for (UiNode child : node.children()) {
+                layoutNode(child, inner);
+            }
+        }
+    }
+
+    private void layoutScroll(UiNode node, UiRect viewport) {
+        UiScrollState state = node.scrollState();
+        UiRect scrolled = scrolledViewport(viewport, state);
+        layoutContainerChildren(node, scrolled);
+        if (updateScrollMetrics(node, viewport, scrolled)) {
+            scrolled = scrolledViewport(viewport, state);
+            layoutContainerChildren(node, scrolled);
+            updateScrollMetrics(node, viewport, scrolled);
+        }
+    }
+
+    private UiRect scrolledViewport(UiRect viewport, UiScrollState state) {
+        return new UiRect(viewport.x() - state.x(), viewport.y() - state.y(), viewport.width(), viewport.height());
+    }
+
+    private boolean updateScrollMetrics(UiNode node, UiRect viewport, UiRect scrolled) {
+        float contentRight = scrolled.x() + viewport.width();
+        float contentBottom = scrolled.y() + viewport.height();
+        List<UiNode> children = node.children();
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
+            if (!isLayoutChild(child)) {
+                continue;
+            }
+            UiRect childBounds = child.bounds();
+            contentRight = Math.max(contentRight, childBounds.right());
+            contentBottom = Math.max(contentBottom, childBounds.bottom());
+        }
+        float contentWidth = Math.max(viewport.width(), contentRight - scrolled.x());
+        float contentHeight = Math.max(viewport.height(), contentBottom - scrolled.y());
+        return node.scrollState().updateMetrics(viewport.width(), viewport.height(), contentWidth, contentHeight);
+    }
+
+    private void layoutColumn(UiNode node, UiRect inner) {
+        List<UiNode> children = node.children();
+        int childCount = layoutChildCount(children);
+        float gap = node.modifier().gap();
+        float availableHeight = Math.max(0.0f, inner.height() - gap * Math.max(0, childCount - 1));
+        float fixedHeight = 0.0f;
+        float weight = 0.0f;
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
+            if (!isLayoutChild(child)) {
+                continue;
+            }
+            if (child.modifier().weight() > 0.0f) {
+                weight += child.modifier().weight();
+            } else if (child.modifier().isFillHeight()) {
+                weight += 1.0f;
+            } else {
+                fixedHeight += preferredSize(child, inner.width(), availableHeight).height();
+            }
+        }
+        float y = inner.y();
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
+            if (!isLayoutChild(child)) {
+                continue;
+            }
+            float heightValue;
+            float childWeight = child.modifier().weight() > 0.0f
+                    ? child.modifier().weight()
+                    : child.modifier().isFillHeight() ? 1.0f : 0.0f;
+            if (childWeight > 0.0f && weight > 0.0f) {
+                heightValue = Math.max(0.0f, availableHeight - fixedHeight) * childWeight / weight;
+            } else {
+                heightValue = preferredSize(child, inner.width(), availableHeight).height();
+            }
+            layoutNode(child, new UiRect(inner.x(), y, inner.width(), heightValue));
+            y += heightValue + gap;
+        }
+    }
+
+    private void layoutRow(UiNode node, UiRect inner) {
+        List<UiNode> children = node.children();
+        int childCount = layoutChildCount(children);
+        float gap = node.modifier().gap();
+        float availableWidth = Math.max(0.0f, inner.width() - gap * Math.max(0, childCount - 1));
+        float fixedWidth = 0.0f;
+        float weight = 0.0f;
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
+            if (!isLayoutChild(child)) {
+                continue;
+            }
+            if (child.modifier().weight() > 0.0f) {
+                weight += child.modifier().weight();
+            } else if (child.modifier().isFillWidth()) {
+                weight += 1.0f;
+            } else {
+                fixedWidth += preferredSize(child, availableWidth, inner.height()).width();
+            }
+        }
+        float x = inner.x();
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
+            if (!isLayoutChild(child)) {
+                continue;
+            }
+            UiSize preferred = preferredSize(child, availableWidth, inner.height());
+            float widthValue;
+            float childWeight = child.modifier().weight() > 0.0f
+                    ? child.modifier().weight()
+                    : child.modifier().isFillWidth() ? 1.0f : 0.0f;
+            if (childWeight > 0.0f && weight > 0.0f) {
+                widthValue = Math.max(0.0f, availableWidth - fixedWidth) * childWeight / weight;
+            } else {
+                widthValue = preferred.width();
+            }
+            UiModifier childModifier = child.modifier();
+            float heightValue = chooseDimension(childModifier.height(), childModifier.isFillHeight(),
+                    preferred.height(), inner.height(), childModifier.minHeight(), childModifier.maxHeight());
+            float y = inner.y() + Math.max(0.0f, inner.height() - heightValue) * 0.5f;
+            layoutNode(child, new UiRect(x, y, widthValue, heightValue));
+            x += widthValue + gap;
+        }
+    }
+
+    private void layoutGrid(UiNode node, UiRect inner) {
+        List<UiNode> children = node.children();
+        int columns = Math.max(1, node.intValue());
+        float gap = node.modifier().gap();
+        float cellWidth = (inner.width() - gap * Math.max(0, columns - 1)) / columns;
+        float y = inner.y();
+        float rowHeight = 0.0f;
+        int layoutIndex = 0;
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
+            if (!isLayoutChild(child)) {
+                continue;
+            }
+            int column = layoutIndex % columns;
+            if (column == 0 && layoutIndex > 0) {
+                y += rowHeight + gap;
+                rowHeight = 0.0f;
+            }
+            UiSize preferred = preferredSize(child, cellWidth, inner.height());
+            rowHeight = Math.max(rowHeight, preferred.height());
+            float x = inner.x() + column * (cellWidth + gap);
+            layoutNode(child, new UiRect(x, y, cellWidth, preferred.height()));
+            layoutIndex++;
+        }
+    }
+
+    private int layoutChildCount(List<UiNode> children) {
+        int count = 0;
+        for (int i = 0; i < children.size(); i++) {
+            if (isLayoutChild(children.get(i))) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean isLayoutChild(UiNode child) {
+        return child != null && child.visible() && !isOverlay(child);
+    }
+
+    private void layoutOverlayChildren(UiNode node, UiRect bounds) {
+        for (UiNode child : node.children()) {
+            if (child.visible() && isOverlay(child)) {
+                if (child.type() == UiNodeType.WINDOW) {
+                    layoutWindow(child, bounds);
+                } else {
+                    child.bounds(bounds);
+                    layoutChildren(child, bounds);
+                }
+            }
+        }
+    }
+
+    private void layoutWindow(UiNode node, UiRect bounds) {
+        if (!(node.descriptor() instanceof UiWindowModel)) {
+            return;
+        }
+        UiRect area = visibleWindowArea(bounds);
+        UiWindowModel model = (UiWindowModel) node.descriptor();
+        UiWindowState state = model.state();
+        ensureWindowZOrder(state);
+        model.layoutArea(area);
+        state.clamp(area);
+        UiRect target = new UiRect(state.x(), state.y(), state.width(), state.height());
+        UiRect actualBounds = animatedBounds(node, target);
+        node.bounds(actualBounds);
+        layoutChildren(node, actualBounds);
+    }
+
+    private UiRect visibleWindowArea(UiRect bounds) {
+        UiRect rootBounds = rootNode != null ? rootNode.bounds() : bounds;
+        float x = Math.max(bounds.x(), rootBounds.x());
+        float y = Math.max(bounds.y(), rootBounds.y());
+        float right = Math.min(bounds.right(), rootBounds.right());
+        float bottom = Math.min(bounds.bottom(), rootBounds.bottom());
+        return new UiRect(x, y, right - x, bottom - y);
+    }
+
+    private void layoutOverlay(UiNode node, UiRect inner) {
+        UiTooltip tooltip = node.descriptor() instanceof UiTooltip ? (UiTooltip) node.descriptor() : null;
+        UiRect tooltipAnchor = tooltip != null ? tooltipAnchorBounds(tooltip) : null;
+        List<UiNode> children = node.children();
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
+            if (!isLayoutChild(child)) {
+                continue;
+            }
+            UiSize preferred = preferredSize(child, inner.width(), inner.height());
+            float widthValue = chooseDimension(child.modifier().width(), child.modifier().isFillWidth(),
+                    preferred.width(), inner.width(), child.modifier().minWidth(), child.modifier().maxWidth());
+            float heightValue = chooseDimension(child.modifier().height(), child.modifier().isFillHeight(),
+                    preferred.height(), inner.height(), child.modifier().minHeight(), child.modifier().maxHeight());
+            float x;
+            float y;
+            if (tooltip != null) {
+                if (tooltipAnchor == null) {
+                    layoutChildren(child, child.bounds());
+                    continue;
+                }
+                UiRect anchor = tooltipAnchor;
+                x = clamp(anchor.x(), inner.x(), inner.right() - widthValue) + child.modifier().offsetX();
+                float aboveY = anchor.y() - heightValue - 8.0f + child.modifier().offsetY();
+                float belowY = anchor.bottom() + 8.0f + child.modifier().offsetY();
+                y = belowY;
+                if (y + heightValue > inner.bottom() && aboveY >= inner.y()) {
+                    y = aboveY;
+                }
+                y = clamp(y, inner.y(), inner.bottom() - heightValue);
+            } else {
+                x = alignOverlayX(inner, widthValue, overlayHorizontalAlign(node)) + child.modifier().offsetX();
+                y = alignOverlayY(inner, heightValue, overlayVerticalAlign(node)) + child.modifier().offsetY();
+            }
+            UiRect childBounds = animatedBounds(child, new UiRect(x, y, widthValue, heightValue));
+            child.bounds(childBounds);
+            layoutChildren(child, childBounds);
+        }
+    }
+
+    private UiAlign overlayHorizontalAlign(UiNode node) {
+        if (node.descriptor() instanceof UiPopup) {
+            return ((UiPopup) node.descriptor()).horizontalAlign();
+        }
+        if (node.descriptor() instanceof UiTooltip) {
+            return ((UiTooltip) node.descriptor()).align();
+        }
+        return UiAlign.CENTER;
+    }
+
+    private UiAlign overlayVerticalAlign(UiNode node) {
+        if (node.descriptor() instanceof UiPopup) {
+            return ((UiPopup) node.descriptor()).verticalAlign();
+        }
+        if (node.descriptor() instanceof UiTooltip) {
+            return ((UiTooltip) node.descriptor()).align();
+        }
+        return UiAlign.CENTER;
+    }
+
+    private float alignOverlayX(UiRect area, float widthValue, UiAlign align) {
+        if (align == UiAlign.START) {
+            return area.x();
+        }
+        if (align == UiAlign.END) {
+            return area.right() - widthValue;
+        }
+        return area.x() + (area.width() - widthValue) * 0.5f;
+    }
+
+    private float alignOverlayY(UiRect area, float heightValue, UiAlign align) {
+        if (align == UiAlign.START) {
+            return area.y();
+        }
+        if (align == UiAlign.END) {
+            return area.bottom() - heightValue;
+        }
+        return area.y() + (area.height() - heightValue) * 0.5f;
+    }
+
+    private boolean isOverlay(UiNode node) {
+        return node.type() == UiNodeType.MODAL || node.type() == UiNodeType.POPUP || node.type() == UiNodeType.TOOLTIP
+                || node.type() == UiNodeType.WINDOW;
+    }
+
+    private UiSize preferredSize(UiNode node, float availableWidth, float availableHeight) {
+        UiSize cached = node.cachedPreferredSize(layoutPass, availableWidth, availableHeight);
+        if (cached != null) {
+            return cached;
+        }
+        UiModifier modifier = node.modifier();
+        if (!Float.isNaN(modifier.width()) && !Float.isNaN(modifier.height())) {
+            return new UiSize(modifier.width(), modifier.height());
+        }
+        UiInsets padding = effectivePadding(node);
+        UiSize size;
+        if (node.type() == UiNodeType.TEXT) {
+            size = textSize(node, node.text(), padding, availableWidth);
+        } else if (node.type() == UiNodeType.BUTTON) {
+            UiSize text = textSize(node, node.text(), padding, availableWidth);
+            size = new UiSize(Math.max(72.0f, text.width() + 16.0f), Math.max(32.0f, text.height() + 6.0f));
+        } else if (node.type() == UiNodeType.CHECKBOX) {
+            if (!node.checkboxLabel()) {
+                size = new UiSize(CHECKBOX_SIZE + padding.horizontal(), CHECKBOX_SIZE + padding.vertical());
+            } else {
+                UiSize text = textSize(node, node.text(), padding, availableWidth);
+                size = new UiSize(text.width() + CHECKBOX_SIZE + CHECKBOX_LABEL_GAP,
+                        Math.max(CHECKBOX_SIZE + padding.vertical(), text.height()));
+            }
+        } else if (node.type() == UiNodeType.SLIDER) {
+            size = new UiSize(160.0f + padding.horizontal(), 24.0f + padding.vertical());
+        } else if (node.type() == UiNodeType.PROGRESS_BAR) {
+            size = new UiSize(160.0f + padding.horizontal(), 16.0f + padding.vertical());
+        } else if (node.type() == UiNodeType.TABS) {
+            size = tabsSize(node, padding);
+        } else if (node.type() == UiNodeType.TEXT_FIELD) {
+            UiSize text = textSize(node, nodeTextValue(node), padding, availableWidth);
+            size = new UiSize(Math.max(180.0f + padding.horizontal(), text.width() + 12.0f),
+                    Math.max(28.0f, text.height() + 2.0f));
+        } else if (node.type() == UiNodeType.TEXT_AREA) {
+            size = textAreaSize(node, padding, availableWidth);
+        } else if (node.type() == UiNodeType.IMAGE && node.image() != null) {
+            size = new UiSize(node.image().width() + padding.horizontal(), node.image().height() + padding.vertical());
+        } else if (node.type() == UiNodeType.CUSTOM && node.customContext() != null
+                && node.customContext().measureFunction() != null) {
+            size = node.customContext().measureFunction().measure(new UiLayoutConstraints(0.0f, 0.0f,
+                    availableWidth, availableHeight));
+        } else if (node.children().isEmpty()) {
+            size = new UiSize(padding.horizontal(), padding.vertical());
+        } else if (node.type() == UiNodeType.ROW) {
+            size = preferredRowSize(node, availableWidth, availableHeight, padding);
+        } else {
+            size = preferredColumnSize(node, availableWidth, availableHeight, padding);
+        }
+        UiSize result = applyExplicitPreferredSize(modifier, size);
+        node.cachePreferredSize(layoutPass, availableWidth, availableHeight, result);
+        return result;
+    }
+
+    private UiSize applyExplicitPreferredSize(UiModifier modifier, UiSize size) {
+        float widthValue = !Float.isNaN(modifier.width()) ? modifier.width() : size.width();
+        float heightValue = !Float.isNaN(modifier.height()) ? modifier.height() : size.height();
+        return new UiSize(widthValue, heightValue);
+    }
+
+    private boolean isColumnContainer(UiNodeType type) {
+        return type == UiNodeType.COLUMN
+                || type == UiNodeType.ROOT
+                || type == UiNodeType.PANEL
+                || type == UiNodeType.SCROLL
+                || type == UiNodeType.ITEM
+                || type == UiNodeType.ANIMATED_VISIBILITY
+                || type == UiNodeType.WINDOW
+                || type == UiNodeType.MODAL
+                || type == UiNodeType.POPUP
+                || type == UiNodeType.TOOLTIP;
+    }
+
+    private UiSize preferredColumnSize(UiNode node, float availableWidth, float availableHeight, UiInsets padding) {
+        float widthValue = padding.horizontal();
+        float heightValue = padding.vertical();
+        float gap = node.modifier().gap();
+        int count = 0;
+        List<UiNode> children = node.children();
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
+            if (!isLayoutChild(child)) {
+                continue;
+            }
+            UiSize childSize = preferredSize(child, availableWidth, availableHeight);
+            widthValue = Math.max(widthValue, childSize.width() + padding.horizontal());
+            heightValue += childSize.height();
+            count++;
+        }
+        heightValue += gap * Math.max(0, count - 1);
+        return new UiSize(widthValue, heightValue);
+    }
+
+    private UiSize preferredRowSize(UiNode node, float availableWidth, float availableHeight, UiInsets padding) {
+        float widthValue = padding.horizontal();
+        float heightValue = padding.vertical();
+        float gap = node.modifier().gap();
+        int count = 0;
+        List<UiNode> children = node.children();
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
+            if (!isLayoutChild(child)) {
+                continue;
+            }
+            UiSize childSize = preferredSize(child, availableWidth, availableHeight);
+            widthValue += childSize.width();
+            heightValue = Math.max(heightValue, childSize.height() + padding.vertical());
+            count++;
+        }
+        widthValue += gap * Math.max(0, count - 1);
+        return new UiSize(widthValue, heightValue);
+    }
+
+    private UiSize textSize(UiNode node, String text, UiInsets padding, float availableWidth) {
+        int fallbackLength = text != null ? text.length() : 0;
+        UiStyle style = styleFor(node);
+        UiTextStyle textStyle = style != null ? style.textStyle() : UiTextStyle.text();
+        float maxWidth = textStyle.wrap() || textStyle.ellipsis() ? availableWidth : 0.0f;
+        BitmapFontLayout layout = textLayout(text, textStyle, maxWidth);
+        node.cacheTextLayout(layoutPass, text, textStyle, maxWidth, layout);
+        if (layout != null) {
+            return new UiSize(layout.width() + padding.horizontal(), layout.height() + padding.vertical());
+        }
+        return new UiSize(fallbackLength * 8.0f + padding.horizontal(), 20.0f + padding.vertical());
+    }
+
+    private UiSize textAreaSize(UiNode node, UiInsets padding, float availableWidth) {
+        UiTextFieldModel model = textModel(node);
+        UiTextAreaOptions options = model != null ? model.textAreaOptions() : UiTextAreaOptions.defaults();
+        UiSize text = textSize(node, nodeTextValue(node), padding, Math.max(0.0f, availableWidth - padding.horizontal()));
+        float height = Math.max(options.minHeight(), text.height() + 2.0f);
+        if (options.autoGrow() && !Float.isNaN(options.maxHeight())) {
+            height = Math.min(height, options.maxHeight());
+        } else if (!options.autoGrow()) {
+            height = options.minHeight();
+        }
+        return new UiSize(Math.max(220.0f + padding.horizontal(), Math.min(availableWidth, text.width() + 12.0f)),
+                height);
+    }
+
+    private UiSize tabsSize(UiNode node, UiInsets padding) {
+        UiTabsModel model = tabsModel(node);
+        int count = model != null ? model.count() : 0;
+        UiTextStyle style = textStyleFor(node);
+        float width = padding.horizontal();
+        float height = Math.max(32.0f, textLineHeight(style) + 12.0f) + padding.vertical();
+        for (int i = 0; i < count; i++) {
+            width += Math.max(68.0f, textWidth(model.label(i), style) + 28.0f);
+        }
+        return new UiSize(width, height);
+    }
+
+    private void updateTextAreaMetrics(UiNode node) {
+        if (node == null || node.type() != UiNodeType.TEXT_AREA || !(node.descriptor() instanceof UiTextFieldModel)) {
+            return;
+        }
+        UiTextFieldModel model = (UiTextFieldModel) node.descriptor();
+        UiScrollState state = model.scrollState();
+        if (state == null) {
+            return;
+        }
+        UiRect viewport = textInputBounds(node);
+        UiTextStyle style = textStyleFor(node);
+        float lineHeight = textLineHeight(style);
+        String value = model.value();
+        int lineCount = textLineCount(value);
+        float contentHeight = Math.max(viewport.height(), lineCount * lineHeight);
+        float contentWidth = Math.max(viewport.width(), maxTextLineWidth(value, style));
+        state.updateMetrics(viewport.width(), viewport.height(), contentWidth, contentHeight);
+    }
+
+    private String nodeTextValue(UiNode node) {
+        if (isTextInput(node) && node.descriptor() instanceof UiTextFieldModel) {
+            return ((UiTextFieldModel) node.descriptor()).value();
+        }
+        return node.text();
+    }
+
+    private String defaultStyleName(UiNodeType type) {
+        if (type == UiNodeType.BUTTON) {
+            return "button";
+        }
+        if (type == UiNodeType.PANEL) {
+            return "panel";
+        }
+        if (type == UiNodeType.TEXT_FIELD) {
+            return "text-field";
+        }
+        if (type == UiNodeType.TEXT_AREA) {
+            return "text-area";
+        }
+        if (type == UiNodeType.TABS) {
+            return "tabs";
+        }
+        if (type == UiNodeType.WINDOW) {
+            return "window";
+        }
+        if (type == UiNodeType.TEXT) {
+            return "text";
+        }
+        return null;
+    }
+
+    private float chooseDimension(float explicit, boolean fill, float preferred, float available, float min, float max) {
+        float value = !Float.isNaN(explicit) ? explicit : fill ? available : preferred;
+        if (!Float.isNaN(min)) {
+            value = Math.max(value, min);
+        }
+        if (!Float.isNaN(max)) {
+            value = Math.min(value, max);
+        }
+        return Math.max(0.0f, value);
+    }
+
+    private float alignX(UiRect area, float width, UiAlign align) {
+        if (align == UiAlign.CENTER) {
+            return area.x() + (area.width() - width) * 0.5f;
+        }
+        if (align == UiAlign.END) {
+            return area.right() - width;
+        }
+        return area.x();
+    }
+
+    private HitResult hitTestResult(UiNode node, float x, float y) {
+        if (!node.visible()) {
+            return NO_HIT;
+        }
+        boolean contains = node.bounds().contains(x, y);
+        if (!contains && clipsHitToBounds(node)) {
+            return NO_HIT;
+        }
+        if (node.type() == UiNodeType.WINDOW
+                && (windowTitleBar(node).contains(x, y) || windowResizeHandle(node).contains(x, y))) {
+            return new HitResult(node, false);
+        }
+        List<UiNode> children = node.children();
+        if (children.size() > 1 && hasLayeredChildren(children)) {
+            List<UiNode> ordered = orderedChildren(node, true);
+            for (int i = 0; i < ordered.size(); i++) {
+                HitResult hit = hitTestResult(ordered.get(i), x, y);
+                if (hit.handled()) {
+                    return hit;
+                }
+            }
+        } else {
+            for (int i = children.size() - 1; i >= 0; i--) {
+                HitResult hit = hitTestResult(children.get(i), x, y);
+                if (hit.handled()) {
+                    return hit;
+                }
+            }
+        }
+        if (!contains) {
+            return NO_HIT;
+        }
+        if (acceptsInput(node)) {
+            return new HitResult(node, false);
+        }
+        if (blocksInput(node)) {
+            return new HitResult(null, true);
+        }
+        return NO_HIT;
+    }
+
+    private boolean clipsHitToBounds(UiNode node) {
+        UiNodeType type = node.type();
+        return type == UiNodeType.ROOT
+                || type == UiNodeType.SCROLL
+                || type == UiNodeType.TEXT_AREA
+                || type == UiNodeType.WINDOW
+                || type == UiNodeType.MODAL
+                || type == UiNodeType.POPUP
+                || type == UiNodeType.TOOLTIP;
+    }
+
+    private List<UiNode> orderedChildren(UiNode node, boolean frontToBack) {
+        List<UiNode> children = node.children();
+        if (children.size() < 2 || !hasLayeredChildren(children)) {
+            return children;
+        }
+        List<UiNode> ordered = new ArrayList<UiNode>(children);
+        Collections.sort(ordered, new Comparator<UiNode>() {
+            @Override
+            public int compare(UiNode left, UiNode right) {
+                int leftLayer = layerRank(left);
+                int rightLayer = layerRank(right);
+                if (leftLayer != rightLayer) {
+                    return leftLayer < rightLayer ? -1 : 1;
+                }
+                if (left.type() == UiNodeType.WINDOW && right.type() == UiNodeType.WINDOW) {
+                    int leftZ = windowZOrder(left);
+                    int rightZ = windowZOrder(right);
+                    if (leftZ != rightZ) {
+                        return leftZ < rightZ ? -1 : 1;
+                    }
+                }
+                return 0;
+            }
+        });
+        if (frontToBack) {
+            Collections.reverse(ordered);
+        }
+        return ordered;
+    }
+
+    private boolean hasLayeredChildren(List<UiNode> children) {
+        for (int i = 0; i < children.size(); i++) {
+            if (layerRank(children.get(i)) > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private int layerRank(UiNode node) {
+        if (node.type() == UiNodeType.WINDOW) {
+            return 1;
+        }
+        if (node.type() == UiNodeType.POPUP || node.type() == UiNodeType.TOOLTIP) {
+            return 2;
+        }
+        if (node.type() == UiNodeType.MODAL) {
+            return 3;
+        }
+        return 0;
+    }
+
+    private int windowZOrder(UiNode node) {
+        UiWindowState state = windowState(node);
+        return state != null ? state.zOrder() : 0;
+    }
+
+    private boolean acceptsInput(UiNode node) {
+        if (!node.modifier().enabled()) {
+            return false;
+        }
+        return node.activatable() || node.modifier().focusable() || node.type() == UiNodeType.SCROLL
+                || node.type() == UiNodeType.SLIDER || node.type() == UiNodeType.TABS || isTextInput(node)
+                || node.type() == UiNodeType.WINDOW || hasTooltipTarget(node);
+    }
+
+    private boolean blocksInput(UiNode node) {
+        if (node == null) {
+            return false;
+        }
+        if (node.type() == UiNodeType.MODAL) {
+            return true;
+        }
+        return node.type() == UiNodeType.POPUP && node.descriptor() instanceof UiPopup
+                && ((UiPopup) node.descriptor()).blockingInput();
+    }
+
+    private boolean isFocusable(UiNode node) {
+        return node != null && node.modifier().enabled() && node.modifier().focusable();
+    }
+
+    private boolean isSlider(UiNode node) {
+        return node != null && node.type() == UiNodeType.SLIDER && node.modifier().enabled();
+    }
+
+    private boolean isTabs(UiNode node) {
+        return node != null && node.type() == UiNodeType.TABS && node.modifier().enabled();
+    }
+
+    UiTabsModel tabsModel(UiNode node) {
+        return node != null && node.type() == UiNodeType.TABS && node.descriptor() instanceof UiTabsModel
+                ? (UiTabsModel) node.descriptor()
+                : null;
+    }
+
+    int tabCount(UiNode node) {
+        UiTabsModel model = tabsModel(node);
+        return model != null ? model.count() : 0;
+    }
+
+    String tabLabel(UiNode node, int index) {
+        UiTabsModel model = tabsModel(node);
+        return model != null ? model.label(index) : "";
+    }
+
+    int tabActiveIndex(UiNode node) {
+        UiTabsModel model = tabsModel(node);
+        return model != null ? model.clamp(node.intValue()) : -1;
+    }
+
+    UiRect tabBounds(UiNode node, int index) {
+        int count = tabCount(node);
+        if (count <= 0 || index < 0 || index >= count) {
+            return UiRect.ZERO;
+        }
+        UiRect content = node.bounds().inset(effectivePadding(node));
+        float tabWidth = content.width() / count;
+        float x = content.x() + tabWidth * index;
+        float width = index == count - 1 ? Math.max(0.0f, content.right() - x) : tabWidth;
+        return new UiRect(x, content.y(), width, content.height());
+    }
+
+    private int tabIndexAt(UiNode node, float x, float y) {
+        int count = tabCount(node);
+        if (count <= 0) {
+            return -1;
+        }
+        UiRect content = node.bounds().inset(effectivePadding(node));
+        if (!content.contains(x, y) || content.width() <= 0.0f) {
+            return -1;
+        }
+        int index = (int) ((x - content.x()) / Math.max(1.0f, content.width() / count));
+        return Math.max(0, Math.min(count - 1, index));
+    }
+
+    private void selectTabFromPointer(UiNode node, float x, float y) {
+        int index = tabIndexAt(node, x, y);
+        if (index >= 0) {
+            selectTab(node, index);
+        }
+    }
+
+    private void selectTab(UiNode node, int index) {
+        UiTabsModel model = tabsModel(node);
+        if (model == null) {
+            return;
+        }
+        int selected = model.clamp(index);
+        if (selected < 0) {
+            return;
+        }
+        model.select(selected);
+        node.intValue(selected);
+        requestCompose();
+    }
+
+    private boolean handleTabsKey(UiNode node, Key key) {
+        if (!isTabs(node)) {
+            return false;
+        }
+        int count = tabCount(node);
+        if (count <= 0) {
+            return false;
+        }
+        int active = tabActiveIndex(node);
+        if (key == Key.LEFT) {
+            selectTab(node, active <= 0 ? count - 1 : active - 1);
+            return true;
+        }
+        if (key == Key.RIGHT) {
+            selectTab(node, active >= count - 1 ? 0 : active + 1);
+            return true;
+        }
+        if (key == Key.HOME) {
+            selectTab(node, 0);
+            return true;
+        }
+        if (key == Key.END) {
+            selectTab(node, count - 1);
+            return true;
+        }
+        return false;
+    }
+
+    private void setHovered(UiNode node) {
+        if (hoveredNode == node) {
+            return;
+        }
+        if (hoveredNode != null) {
+            hoveredNode.hovered(false);
+        }
+        hoveredNode = node;
+        tooltipHoverNode = node;
+        tooltipHoverStartSeconds = elapsedSeconds;
+        tooltipWakeSeconds = -1.0f;
+        if (hoveredNode != null) {
+            hoveredNode.hovered(true);
+        }
+        requestCompose();
+    }
+
+    private void scheduleTooltipWake(float wakeSeconds) {
+        if (wakeSeconds < 0.0f) {
+            return;
+        }
+        if (tooltipWakeSeconds < 0.0f || wakeSeconds < tooltipWakeSeconds) {
+            tooltipWakeSeconds = wakeSeconds;
+        }
+    }
+
+    private boolean tooltipWakeDue(float previousElapsedSeconds, float currentElapsedSeconds) {
+        return tooltipWakeSeconds >= 0.0f
+                && previousElapsedSeconds < tooltipWakeSeconds
+                && currentElapsedSeconds >= tooltipWakeSeconds;
+    }
+
+    private String nodeLabel(UiNode node) {
+        if (node == null) {
+            return null;
+        }
+        if (node.text() != null) {
+            return node.text();
+        }
+        return node.modifier().semanticLabel();
+    }
+
+    private boolean hasTooltipTarget(UiNode node) {
+        return node != null && node.modifier() != null
+                && node.modifier().tooltipTarget() != null
+                && node.modifier().tooltipTarget().length() > 0;
+    }
+
+    private String tooltipTarget(UiNode node) {
+        if (hasTooltipTarget(node)) {
+            return node.modifier().tooltipTarget();
+        }
+        return nodeLabel(node);
+    }
+
+    private void setFocused(UiNode node) {
+        if (focusedNode == node) {
+            return;
+        }
+        UiNode previous = focusedNode;
+        if (focusedNode != null) {
+            focusedNode.focused(false);
+        }
+        focusedNode = node;
+        if (focusedNode != null) {
+            focusedNode.focused(true);
+        }
+        updatePlatformTextInput(previous, focusedNode);
+    }
+
+    private void updatePlatformTextInput(UiNode previous, UiNode next) {
+        if (input == null) {
+            return;
+        }
+        if (requestsPlatformTextInput(next)) {
+            input.showTextInput(textInputRequest(next));
+        } else if (requestsPlatformTextInput(previous)) {
+            input.hideTextInput();
+        }
+    }
+
+    private void requestPlatformTextInput(UiNode node) {
+        if (input != null && requestsPlatformTextInput(node)) {
+            input.showTextInput(textInputRequest(node));
+        }
+    }
+
+    private void updatePlatformTextInput(UiNode node) {
+        if (input != null && requestsPlatformTextInput(node)) {
+            input.updateTextInput(textInputRequest(node));
+        }
+    }
+
+    private void hidePlatformTextInput(Input targetInput) {
+        if (targetInput != null && requestsPlatformTextInput(focusedNode)) {
+            targetInput.hideTextInput();
+        }
+    }
+
+    private boolean requestsPlatformTextInput(UiNode node) {
+        UiTextFieldModel model = textModel(node);
+        return model != null && !model.readOnly();
+    }
+
+    private TextInputRequest textInputRequest(UiNode node) {
+        UiTextFieldModel model = textModel(node);
+        if (model == null) {
+            return TextInputRequest.builder().build();
+        }
+        UiRect bounds = platformTextInputBounds(node, model);
+        float scale = effectiveUiScale();
+        return TextInputRequest.builder()
+                .text(model.value())
+                .selection(model.selectionStart(), model.selectionEnd())
+                .multiline(model.multiline())
+                .password(model.password())
+                .readOnly(model.readOnly())
+                .type(textInputType(model.inputFilter()))
+                .bounds(Math.round(bounds.x() * scale), Math.round(bounds.y() * scale),
+                        Math.max(1, Math.round(bounds.width() * scale)),
+                        Math.max(1, Math.round(bounds.height() * scale)))
+                .build();
+    }
+
+    private TextInputType textInputType(UiTextInputFilter inputFilter) {
+        if (inputFilter == UiTextInputFilter.INTEGER) {
+            return TextInputType.INTEGER;
+        }
+        if (inputFilter == UiTextInputFilter.FLOAT) {
+            return TextInputType.DECIMAL;
+        }
+        return TextInputType.TEXT;
+    }
+
+    private boolean isTextInput(UiNode node) {
+        return node != null && (node.type() == UiNodeType.TEXT_FIELD || node.type() == UiNodeType.TEXT_AREA);
+    }
+
+    private UiTextFieldModel textModel(UiNode node) {
+        return isTextInput(node) && node.descriptor() instanceof UiTextFieldModel
+                ? (UiTextFieldModel) node.descriptor()
+                : null;
+    }
+
+    private UiTextStyle textStyleFor(UiNode node) {
+        UiStyle style = styleFor(node);
+        return style != null ? style.textStyle() : UiTextStyle.text();
+    }
+
+    private UiRect textInputBounds(UiNode node) {
+        return node.bounds().inset(effectivePadding(node));
+    }
+
+    private UiRect platformTextInputBounds(UiNode node, UiTextFieldModel model) {
+        UiRect bounds = textInputBounds(node);
+        if (node == null || model == null || node.type() != UiNodeType.TEXT_AREA) {
+            return bounds;
+        }
+        float lineHeight = textLineHeight(textStyleFor(node));
+        int line = lineIndexForOffset(model.value(), model.cursor());
+        float scrollY = model.scrollState() != null ? model.scrollState().y() : 0.0f;
+        return new UiRect(bounds.x(), bounds.y() + line * lineHeight - scrollY, bounds.width(), lineHeight);
+    }
+
+    private float textLineHeight(UiTextStyle style) {
+        UiTextStyle actual = style != null ? style : UiTextStyle.text();
+        BitmapFontLayout layout = textLayout("M", actual, 0.0f);
+        if (layout != null) {
+            return Math.max(actual.lineHeight(), layout.lineHeight());
+        }
+        return Math.max(10.0f, actual.lineHeight());
+    }
+
+    private int textLineCount(String value) {
+        String text = value != null ? value : "";
+        int count = 1;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '\n') {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private float maxTextLineWidth(String value, UiTextStyle style) {
+        String text = value != null ? value : "";
+        float width = 0.0f;
+        int start = 0;
+        for (int i = 0; i <= text.length(); i++) {
+            if (i == text.length() || text.charAt(i) == '\n') {
+                width = Math.max(width, textWidth(text.substring(start, i), style));
+                start = i + 1;
+            }
+        }
+        return width;
+    }
+
+    private void beginTextSelection(UiNode node, float x, float y) {
+        UiTextFieldModel model = textModel(node);
+        if (model == null) {
+            return;
+        }
+        int cursor = textIndexAtPointer(node, x, y);
+        if (isShiftDown() && model.hasSelection()) {
+            model.select(model.selectionStart(), cursor);
+        } else {
+            model.cursor(cursor);
+        }
+        activeTextNode = node;
+        activeTextSelectionAnchor = model.selectionStart();
+        ensureTextCursorVisible(node);
+        updatePlatformTextInput(node);
+        requestCompose();
+    }
+
+    private void updateActiveTextSelection(float x, float y) {
+        UiTextFieldModel model = textModel(activeTextNode);
+        if (model == null) {
+            return;
+        }
+        model.select(activeTextSelectionAnchor, textIndexAtPointer(activeTextNode, x, y));
+        ensureTextCursorVisible(activeTextNode);
+        updatePlatformTextInput(activeTextNode);
+        requestCompose();
+    }
+
+    private void beginTouchTextAreaGesture(UiNode node, float x, float y) {
+        UiTextFieldModel model = textModel(node);
+        if (model == null) {
+            return;
+        }
+        pendingTouchTextAreaNode = node;
+        pendingTouchTextAreaStartX = x;
+        pendingTouchTextAreaStartY = y;
+    }
+
+    private boolean updatePendingTouchTextAreaGesture(float x, float y) {
+        UiNode node = pendingTouchTextAreaNode;
+        if (node == null) {
+            return false;
+        }
+        float deltaX = x - pendingTouchTextAreaStartX;
+        float deltaY = y - pendingTouchTextAreaStartY;
+        float slop = TOUCH_TEXT_AREA_DRAG_SLOP;
+        if (deltaX * deltaX + deltaY * deltaY < slop * slop) {
+            return false;
+        }
+        if (beginScrollBodyPointer(node, pendingTouchTextAreaStartX, pendingTouchTextAreaStartY)) {
+            pendingTouchTextAreaNode = null;
+            cancelPendingTextInputTapGesture();
+            clearPendingScrollBodyGesture();
+            updateActiveScrollPointer(x, y);
+            return true;
+        } else {
+            pendingTouchTextAreaNode = null;
+        }
+        return false;
+    }
+
+    private int textIndexAtPointer(UiNode node, float x, float y) {
+        UiTextFieldModel model = textModel(node);
+        if (model == null) {
+            return 0;
+        }
+        String value = model.value();
+        UiTextStyle style = textStyleFor(node);
+        UiRect bounds = textInputBounds(node);
+        float localY = y - bounds.y();
+        if (node.type() == UiNodeType.TEXT_AREA && model.scrollState() != null) {
+            localY += model.scrollState().y();
+        }
+        int line = node.type() == UiNodeType.TEXT_AREA
+                ? Math.max(0, Math.min(textLineCount(value) - 1, (int) (localY / Math.max(1.0f, textLineHeight(style)))))
+                : 0;
+        int lineStart = lineStart(value, line);
+        int lineEnd = lineEnd(value, lineStart);
+        String lineText = value.substring(lineStart, lineEnd);
+        return lineStart + textIndexForX(lineText, style, Math.max(0.0f, x - bounds.x()));
+    }
+
+    private int lineStart(String value, int targetLine) {
+        int line = 0;
+        String text = value != null ? value : "";
+        for (int i = 0; i < text.length(); i++) {
+            if (line == targetLine) {
+                return i;
+            }
+            if (text.charAt(i) == '\n') {
+                line++;
+            }
+        }
+        return text.length();
+    }
+
+    private int lineEnd(String value, int start) {
+        String text = value != null ? value : "";
+        int index = Math.max(0, Math.min(start, text.length()));
+        while (index < text.length() && text.charAt(index) != '\n') {
+            index++;
+        }
+        return index;
+    }
+
+    private int lineIndexForOffset(String value, int offset) {
+        String text = value != null ? value : "";
+        int clamped = Math.max(0, Math.min(offset, text.length()));
+        int line = 0;
+        for (int i = 0; i < clamped; i++) {
+            if (text.charAt(i) == '\n') {
+                line++;
+            }
+        }
+        return line;
+    }
+
+    private int textIndexForX(String line, UiTextStyle style, float x) {
+        if (line == null || line.length() == 0 || x <= 0.0f) {
+            return 0;
+        }
+        float cursor = 0.0f;
+        for (int i = 0; i < line.length(); i++) {
+            float advance = textWidth(line.substring(i, i + 1), style);
+            if (x < cursor + advance * 0.5f) {
+                return i;
+            }
+            cursor += advance;
+        }
+        return line.length();
+    }
+
+    UiRect textCaretBounds(UiNode node, int offset) {
+        UiTextFieldModel model = textModel(node);
+        if (model == null) {
+            return null;
+        }
+        String text = model.value();
+        int cursor = Math.max(0, Math.min(offset, text.length()));
+        UiTextStyle style = textStyleFor(node);
+        UiRect bounds = textInputBounds(node);
+        float lineHeight = Math.min(bounds.height(), Math.max(12.0f, textLineHeight(style)));
+        if (node.type() == UiNodeType.TEXT_AREA) {
+            int line = lineIndexForOffset(text, cursor);
+            int start = lineStart(text, line);
+            int end = Math.max(start, Math.min(cursor, lineEnd(text, start)));
+            float x = bounds.x() + textWidth(text.substring(start, end), style);
+            float y = bounds.y() + line * textLineHeight(style)
+                    - (model.scrollState() != null ? model.scrollState().y() : 0.0f);
+            return new UiRect(x, y, 1.5f, textLineHeight(style));
+        }
+        float cursorX = bounds.x() + textWidth(text.substring(0, cursor), style);
+        float y = bounds.y() + Math.max(0.0f, (bounds.height() - lineHeight) * 0.5f);
+        return new UiRect(cursorX, y, 1.5f, lineHeight);
+    }
+
+    private float textWidth(String text, UiTextStyle style) {
+        UiTextStyle actual = style != null ? style : UiTextStyle.text();
+        io.github.libfdx.graphics.g2d.BitmapFont font = textFont(actual);
+        if (font != null) {
+            return font.width(text, actual.size());
+        }
+        return (text != null ? text.length() : 0) * 8.0f;
+    }
+
+    private boolean handleTextShortcut(UiTextFieldModel model, Key key) {
+        if (!isShortcutDown()) {
+            return false;
+        }
+        if (key == Key.A) {
+            model.selectAll();
+            return true;
+        }
+        if (key == Key.C) {
+            clipboardText = model.selectedText();
+            return true;
+        }
+        if (key == Key.X) {
+            clipboardText = model.selectedText();
+            model.deleteSelection();
+            return true;
+        }
+        if (key == Key.V) {
+            model.insert(clipboardText);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isShortcutDown() {
+        return input != null && (input.isKeyPressed(Key.CONTROL_LEFT) || input.isKeyPressed(Key.CONTROL_RIGHT));
+    }
+
+    private boolean isShiftDown() {
+        return input != null && (input.isKeyPressed(Key.SHIFT_LEFT) || input.isKeyPressed(Key.SHIFT_RIGHT));
+    }
+
+    private void ensureTextCursorVisible(UiNode node) {
+        UiTextFieldModel model = textModel(node);
+        if (model == null || node.type() != UiNodeType.TEXT_AREA || model.scrollState() == null) {
+            return;
+        }
+        UiScrollState state = model.scrollState();
+        UiRect viewport = textInputBounds(node);
+        float lineHeight = textLineHeight(textStyleFor(node));
+        int line = lineIndexForOffset(model.value(), model.cursor());
+        float cursorTop = line * lineHeight;
+        float cursorBottom = cursorTop + lineHeight;
+        float y = state.y();
+        if (cursorTop < y) {
+            y = cursorTop;
+        } else if (cursorBottom > y + viewport.height()) {
+            y = cursorBottom - viewport.height();
+        }
+        state.scrollTo(state.x(), y);
+    }
+
+    private UiNode scrollTarget(UiNode node) {
+        if (node == null) {
+            return null;
+        }
+        if (node.type() == UiNodeType.TEXT_AREA && node.scrollState() != null) {
+            return node;
+        }
+        return findAncestorOrSelf(node, UiNodeType.SCROLL);
+    }
+
+    private boolean isScrollable(UiNode node) {
+        return node != null && (node.type() == UiNodeType.SCROLL || node.type() == UiNodeType.TEXT_AREA);
+    }
+
+
+    private UiNode findAncestorOrSelf(UiNode node, UiNodeType type) {
+        UiNode current = node;
+        while (current != null) {
+            if (current.type() == type) {
+                return current;
+            }
+            current = current.parent();
+        }
+        return null;
+    }
+
+    private boolean beginWindowPointer(UiNode node, float x, float y) {
+        if (node == null || node.type() != UiNodeType.WINDOW || !(node.descriptor() instanceof UiWindowModel)) {
+            return false;
+        }
+        UiWindowModel model = (UiWindowModel) node.descriptor();
+        UiWindowState state = model.state();
+        bringWindowToFront(state);
+        activeWindowState = state;
+        activeWindowNode = node;
+        activeWindowArea = model.layoutArea();
+        if (activeWindowArea.width() <= 0.0f || activeWindowArea.height() <= 0.0f) {
+            activeWindowArea = rootNode != null ? rootNode.bounds() : UiRect.ZERO;
+        }
+        activeWindowStartPointerX = x;
+        activeWindowStartPointerY = y;
+        activeWindowStartX = state.x();
+        activeWindowStartY = state.y();
+        activeWindowStartWidth = state.width();
+        activeWindowStartHeight = state.height();
+        if (windowResizeHandle(node).contains(x, y)) {
+            activeWindowPointerMode = WINDOW_POINTER_RESIZE;
+        } else {
+            activeWindowPointerMode = WINDOW_POINTER_DRAG;
+        }
+        return true;
+    }
+
+    private boolean beginScrollPointer(UiNode node, float pointerX, float pointerY, boolean allowBodyDrag) {
+        if (node == null || !node.modifier().enabled() || !isScrollable(node) || node.scrollState() == null) {
+            return false;
+        }
+        UiScrollState state = node.scrollState();
+        UiRect verticalTrack = scrollVerticalTrack(node);
+        UiRect verticalThumb = scrollVerticalThumb(node, state);
+        if (state.canScrollY() && verticalTrack != null && verticalTrack.contains(pointerX, pointerY)) {
+            activeScrollNode = node;
+            activeScrollPointerMode = SCROLL_POINTER_VERTICAL;
+            if (verticalThumb != null && verticalThumb.contains(pointerX, pointerY)) {
+                activeScrollPointerOffset = pointerY - verticalThumb.y();
+            } else {
+                state.scrollTo(state.x(), scrollYFromPointer(node, state, pointerY));
+                requestCompose();
+                UiRect updatedThumb = scrollVerticalThumb(node, state);
+                if (updatedThumb != null) {
+                    activeScrollPointerOffset = pointerY - updatedThumb.y();
+                } else {
+                    activeScrollPointerOffset = SCROLLBAR_MIN_THUMB * 0.5f;
+                }
+            }
+            return true;
+        }
+        UiRect horizontalTrack = scrollHorizontalTrack(node);
+        UiRect horizontalThumb = scrollHorizontalThumb(node, state);
+        if (state.canScrollX() && horizontalTrack != null && horizontalTrack.contains(pointerX, pointerY)) {
+            activeScrollNode = node;
+            activeScrollPointerMode = SCROLL_POINTER_HORIZONTAL;
+            if (horizontalThumb != null && horizontalThumb.contains(pointerX, pointerY)) {
+                activeScrollPointerOffset = pointerX - horizontalThumb.x();
+            } else {
+                state.scrollTo(scrollXFromPointer(node, state, pointerX), state.y());
+                requestCompose();
+                UiRect updatedThumb = scrollHorizontalThumb(node, state);
+                if (updatedThumb != null) {
+                    activeScrollPointerOffset = pointerX - updatedThumb.x();
+                } else {
+                    activeScrollPointerOffset = SCROLLBAR_MIN_THUMB * 0.5f;
+                }
+            }
+            return true;
+        }
+        UiRect body = node.bounds().inset(effectivePadding(node));
+        if (allowBodyDrag && body.contains(pointerX, pointerY) && (state.canScrollX() || state.canScrollY())) {
+            return beginScrollBodyPointer(node, pointerX, pointerY);
+        }
+        return false;
+    }
+
+    private boolean beginScrollBodyPointer(UiNode node, float pointerX, float pointerY) {
+        if (node == null || !node.modifier().enabled() || !isScrollable(node) || node.scrollState() == null) {
+            return false;
+        }
+        UiScrollState state = node.scrollState();
+        if (!state.canScrollX() && !state.canScrollY()) {
+            return false;
+        }
+        activeScrollNode = node;
+        activeScrollPointerMode = SCROLL_POINTER_BODY;
+        activeScrollStartPointerX = pointerX;
+        activeScrollStartPointerY = pointerY;
+        activeScrollStartX = state.x();
+        activeScrollStartY = state.y();
+        return true;
+    }
+
+    private void beginPendingScrollBodyGesture(UiNode scroll, UiNode pressed, float pointerX, float pointerY) {
+        if (scroll == null || pressed == null || scroll == pressed || isSlider(pressed)) {
+            return;
+        }
+        if (!scroll.modifier().enabled() || !isScrollable(scroll) || scroll.scrollState() == null) {
+            return;
+        }
+        UiScrollState state = scroll.scrollState();
+        if (!state.canScrollX() && !state.canScrollY()) {
+            return;
+        }
+        UiRect body = scroll.bounds().inset(effectivePadding(scroll));
+        if (!body.contains(pointerX, pointerY)) {
+            return;
+        }
+        pendingScrollBodyNode = scroll;
+        pendingScrollBodyStartX = pointerX;
+        pendingScrollBodyStartY = pointerY;
+    }
+
+    private boolean updatePendingScrollBodyGesture(float pointerX, float pointerY) {
+        if (pendingScrollBodyNode == null) {
+            return false;
+        }
+        float deltaX = pointerX - pendingScrollBodyStartX;
+        float deltaY = pointerY - pendingScrollBodyStartY;
+        float slop = SCROLL_BODY_DRAG_SLOP;
+        if (deltaX * deltaX + deltaY * deltaY < slop * slop) {
+            return false;
+        }
+        UiNode scroll = pendingScrollBodyNode;
+        float startX = pendingScrollBodyStartX;
+        float startY = pendingScrollBodyStartY;
+        clearPendingScrollBodyGesture();
+        if (!beginScrollBodyPointer(scroll, startX, startY)) {
+            return false;
+        }
+        if (pressedNode != null) {
+            pressedNode.pressed(false);
+            pressedNode = null;
+        }
+        clearPendingTextInputTapGesture();
+        setFocused(null);
+        updateActiveScrollPointer(pointerX, pointerY);
+        return true;
+    }
+
+    private void clearPendingScrollBodyGesture() {
+        pendingScrollBodyNode = null;
+        pendingScrollBodyStartX = 0.0f;
+        pendingScrollBodyStartY = 0.0f;
+    }
+
+    private void beginPendingTextInputTapGesture(UiNode node, float pointerX, float pointerY) {
+        if (!isTextInput(node)) {
+            return;
+        }
+        pendingTextInputTapNode = node;
+        pendingTextInputTapStartX = pointerX;
+        pendingTextInputTapStartY = pointerY;
+    }
+
+    private boolean updatePendingTextInputTapGesture(float pointerX, float pointerY) {
+        if (pendingTextInputTapNode == null) {
+            return false;
+        }
+        float deltaX = pointerX - pendingTextInputTapStartX;
+        float deltaY = pointerY - pendingTextInputTapStartY;
+        float slop = SCROLL_BODY_DRAG_SLOP;
+        if (deltaX * deltaX + deltaY * deltaY < slop * slop) {
+            return false;
+        }
+        cancelPendingTextInputTapGesture();
+        return true;
+    }
+
+    private void cancelPendingTextInputTapGesture() {
+        clearPendingTextInputTapGesture();
+        if (pressedNode != null && isTextInput(pressedNode)) {
+            pressedNode.pressed(false);
+            pressedNode = null;
+        }
+    }
+
+    private void clearPendingTextInputTapGesture() {
+        pendingTextInputTapNode = null;
+        pendingTextInputTapStartX = 0.0f;
+        pendingTextInputTapStartY = 0.0f;
+    }
+
+    private void activateTextInputTap(UiNode node, float x, float y) {
+        UiTextFieldModel model = textModel(node);
+        if (model == null) {
+            return;
+        }
+        model.cursor(textIndexAtPointer(node, x, y));
+        ensureTextCursorVisible(node);
+        boolean alreadyFocused = focusedNode == node;
+        setFocused(node);
+        if (alreadyFocused) {
+            requestPlatformTextInput(node);
+        }
+        updatePlatformTextInput(node);
+        requestCompose();
+    }
+
+    private void updateActiveScrollPointer(float pointerX, float pointerY) {
+        if (activeScrollNode == null || activeScrollNode.scrollState() == null) {
+            return;
+        }
+        UiScrollState state = activeScrollNode.scrollState();
+        if (activeScrollPointerMode == SCROLL_POINTER_BODY) {
+            float deltaX = pointerX - activeScrollStartPointerX;
+            float deltaY = pointerY - activeScrollStartPointerY;
+            state.scrollTo(activeScrollStartX - deltaX, activeScrollStartY - deltaY);
+            requestCompose();
+            return;
+        }
+        if (activeScrollPointerMode == SCROLL_POINTER_VERTICAL) {
+            UiRect track = scrollVerticalTrack(activeScrollNode);
+            UiRect thumb = scrollVerticalThumb(activeScrollNode, state);
+            if (track == null || thumb == null || state.maxY() <= 0.0f) {
+                state.scrollTo(state.x(), 0.0f);
+                return;
+            }
+            float travel = Math.max(0.0f, track.height() - thumb.height());
+            if (travel <= 0.0f) {
+                state.scrollTo(state.x(), 0.0f);
+                return;
+            }
+            float target = (pointerY - track.y() - activeScrollPointerOffset) / travel * state.maxY();
+            state.scrollTo(state.x(), target);
+            requestCompose();
+            return;
+        }
+        if (activeScrollPointerMode == SCROLL_POINTER_HORIZONTAL) {
+            UiRect track = scrollHorizontalTrack(activeScrollNode);
+            UiRect thumb = scrollHorizontalThumb(activeScrollNode, state);
+            if (track == null || thumb == null || state.maxX() <= 0.0f) {
+                state.scrollTo(0.0f, state.y());
+                return;
+            }
+            float travel = Math.max(0.0f, track.width() - thumb.width());
+            if (travel <= 0.0f) {
+                state.scrollTo(0.0f, state.y());
+                return;
+            }
+            float target = (pointerX - track.x() - activeScrollPointerOffset) / travel * state.maxX();
+            state.scrollTo(target, state.y());
+            requestCompose();
+        }
+    }
+
+    private UiRect scrollVerticalTrack(UiNode node) {
+        if (node == null) {
+            return null;
+        }
+        UiRect bounds = node.bounds().inset(effectivePadding(node));
+        if (!isScrollable(node) || bounds.width() <= 0.0f || bounds.height() <= 0.0f) {
+            return null;
+        }
+        return new UiRect(bounds.right() - SCROLLBAR_SIZE, bounds.y(), SCROLLBAR_SIZE, bounds.height());
+    }
+
+    private UiRect scrollHorizontalTrack(UiNode node) {
+        if (node == null) {
+            return null;
+        }
+        UiRect bounds = node.bounds().inset(effectivePadding(node));
+        if (!isScrollable(node) || bounds.width() <= 0.0f || bounds.height() <= 0.0f) {
+            return null;
+        }
+        return new UiRect(bounds.x(), bounds.bottom() - SCROLLBAR_SIZE, bounds.width(), SCROLLBAR_SIZE);
+    }
+
+    private UiRect scrollVerticalThumb(UiNode node, UiScrollState state) {
+        UiRect track = scrollVerticalTrack(node);
+        if (track == null || state == null || !state.canScrollY() || state.contentHeight() <= 0.0f) {
+            return null;
+        }
+        float thumbHeight = Math.max(SCROLLBAR_MIN_THUMB, track.height() * state.viewportHeight() / state.contentHeight());
+        thumbHeight = Math.min(track.height(), thumbHeight);
+        float travel = Math.max(0.0f, track.height() - thumbHeight);
+        if (travel <= 0.0f) {
+            return new UiRect(track.x(), track.y(), SCROLLBAR_SIZE, track.height());
+        }
+        float thumbY = track.y() + travel * state.y() / Math.max(1.0f, state.maxY());
+        return new UiRect(track.x(), thumbY, SCROLLBAR_SIZE, thumbHeight);
+    }
+
+    private UiRect scrollHorizontalThumb(UiNode node, UiScrollState state) {
+        UiRect track = scrollHorizontalTrack(node);
+        if (track == null || state == null || !state.canScrollX() || state.contentWidth() <= 0.0f) {
+            return null;
+        }
+        float thumbWidth = Math.max(SCROLLBAR_MIN_THUMB, track.width() * state.viewportWidth() / state.contentWidth());
+        thumbWidth = Math.min(track.width(), thumbWidth);
+        float travel = Math.max(0.0f, track.width() - thumbWidth);
+        if (travel <= 0.0f) {
+            return new UiRect(track.x(), track.y(), track.width(), SCROLLBAR_SIZE);
+        }
+        float thumbX = track.x() + travel * state.x() / Math.max(1.0f, state.maxX());
+        return new UiRect(thumbX, track.y(), thumbWidth, SCROLLBAR_SIZE);
+    }
+
+    private float scrollYFromPointer(UiNode node, UiScrollState state, float pointerY) {
+        UiRect track = scrollVerticalTrack(node);
+        UiRect thumb = scrollVerticalThumb(node, state);
+        if (track == null || thumb == null || state == null || state.maxY() <= 0.0f) {
+            return 0.0f;
+        }
+        float halfThumb = thumb.height() * 0.5f;
+        float clamped = clamp(pointerY - track.y() - halfThumb, 0.0f, track.height() - thumb.height());
+        return clamped * state.maxY() / Math.max(1.0f, track.height() - thumb.height());
+    }
+
+    private float scrollXFromPointer(UiNode node, UiScrollState state, float pointerX) {
+        UiRect track = scrollHorizontalTrack(node);
+        UiRect thumb = scrollHorizontalThumb(node, state);
+        if (track == null || thumb == null || state == null || state.maxX() <= 0.0f) {
+            return 0.0f;
+        }
+        float halfThumb = thumb.width() * 0.5f;
+        float clamped = clamp(pointerX - track.x() - halfThumb, 0.0f, track.width() - thumb.width());
+        return clamped * state.maxX() / Math.max(1.0f, track.width() - thumb.width());
+    }
+
+    private UiWindowState windowState(UiNode node) {
+        if (node == null || !(node.descriptor() instanceof UiWindowModel)) {
+            return null;
+        }
+        return ((UiWindowModel) node.descriptor()).state();
+    }
+
+    private void ensureWindowZOrder(UiWindowState state) {
+        if (state == null) {
+            return;
+        }
+        if (state.zOrder() <= 0) {
+            state.zOrder(nextWindowZOrder++);
+        } else if (state.zOrder() >= nextWindowZOrder) {
+            nextWindowZOrder = state.zOrder() + 1;
+        }
+    }
+
+    private void bringWindowToFront(UiWindowState state) {
+        if (state == null) {
+            return;
+        }
+        ensureWindowZOrder(state);
+        if (state.zOrder() < nextWindowZOrder - 1) {
+            state.zOrder(nextWindowZOrder++);
+        }
+    }
+
+    private void updateActiveWindowPointer(float x, float y) {
+        if (activeWindowState == null) {
+            return;
+        }
+        float deltaX = x - activeWindowStartPointerX;
+        float deltaY = y - activeWindowStartPointerY;
+        if (activeWindowPointerMode == WINDOW_POINTER_DRAG) {
+            float maxX = Math.max(activeWindowArea.x(), activeWindowArea.right() - activeWindowStartWidth);
+            float maxY = Math.max(activeWindowArea.y(), activeWindowArea.bottom() - activeWindowStartHeight);
+            float nextX = clamp(activeWindowStartX + deltaX, activeWindowArea.x(), maxX);
+            float nextY = clamp(activeWindowStartY + deltaY, activeWindowArea.y(), maxY);
+            activeWindowState.position(nextX, nextY);
+            moveActiveWindowNode(nextX, nextY);
+        } else if (activeWindowPointerMode == WINDOW_POINTER_RESIZE) {
+            float maxWidth = Math.max(activeWindowState.minWidth(), activeWindowArea.right() - activeWindowStartX);
+            float maxHeight = Math.max(activeWindowState.minHeight(), activeWindowArea.bottom() - activeWindowStartY);
+            activeWindowState.position(activeWindowStartX, activeWindowStartY)
+                    .size(clamp(activeWindowStartWidth + deltaX, activeWindowState.minWidth(), maxWidth),
+                            clamp(activeWindowStartHeight + deltaY, activeWindowState.minHeight(), maxHeight));
+            resizeActiveWindowNode();
+        }
+    }
+
+    private void moveActiveWindowNode(float nextX, float nextY) {
+        if (activeWindowNode == null) {
+            return;
+        }
+        UiRect bounds = activeWindowNode.bounds();
+        float deltaX = nextX - bounds.x();
+        float deltaY = nextY - bounds.y();
+        if (deltaX == 0.0f && deltaY == 0.0f) {
+            return;
+        }
+        translateNode(activeWindowNode, deltaX, deltaY);
+    }
+
+    private void resizeActiveWindowNode() {
+        if (activeWindowNode == null || activeWindowState == null) {
+            return;
+        }
+        activeWindowNode.bounds(new UiRect(activeWindowState.x(), activeWindowState.y(),
+                activeWindowState.width(), activeWindowState.height()));
+        layoutChildren(activeWindowNode, activeWindowNode.bounds());
+    }
+
+    private void translateNode(UiNode node, float deltaX, float deltaY) {
+        UiRect bounds = node.bounds();
+        node.bounds(new UiRect(bounds.x() + deltaX, bounds.y() + deltaY, bounds.width(), bounds.height()));
+        List<UiNode> children = node.children();
+        for (int i = 0; i < children.size(); i++) {
+            translateNode(children.get(i), deltaX, deltaY);
+        }
+    }
+
+    private float clamp(float value, float minimum, float maximum) {
+        return Math.max(minimum, Math.min(value, maximum));
+    }
+
+    UiRect windowTitleBar(UiNode node) {
+        UiRect bounds = node != null ? node.bounds() : UiRect.ZERO;
+        return new UiRect(bounds.x(), bounds.y(), bounds.width(), Math.min(WINDOW_TITLE_HEIGHT, bounds.height()));
+    }
+
+    UiRect windowResizeHandle(UiNode node) {
+        UiRect bounds = node != null ? node.bounds() : UiRect.ZERO;
+        float size = Math.min(WINDOW_RESIZE_HANDLE, Math.min(bounds.width(), bounds.height()));
+        return new UiRect(bounds.right() - size, bounds.bottom() - size, size, size);
+    }
+
+    private void updateSliderFromPointer(UiNode node, float x) {
+        if (node == null || node.type() != UiNodeType.SLIDER || !(node.descriptor() instanceof UiSliderModel)) {
+            return;
+        }
+        UiSliderModel model = (UiSliderModel) node.descriptor();
+        float trackX = node.bounds().x() + 8.0f;
+        float trackWidth = Math.max(1.0f, node.bounds().width() - 16.0f);
+        float progress = Math.max(0.0f, Math.min(1.0f, (x - trackX) / trackWidth));
+        UiRange range = model.range();
+        float value = range.minimum() + (range.maximum() - range.minimum()) * progress;
+        float clamped = range.clamp(value);
+        if (model.state() != null) {
+            model.state().set(clamped);
+        }
+        node.floatValue(clamped);
+    }
+}
