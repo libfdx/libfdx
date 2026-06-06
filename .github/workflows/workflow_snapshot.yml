@@ -5,6 +5,9 @@ on:
     branches:
       - master
 
+permissions:
+  contents: write
+
 jobs:
   snapshot:
     name: Build and Publish Snapshot

@@ -54,7 +54,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build runtime fdx Windows native
-        run: .\gradlew.bat :libfdx:runtime:fdx:platform:windows:generate_runtime_fdx_windows_native
+        run: .\gradlew.bat :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_windows_native
 
       - name: Upload runtime fdx Windows native
         uses: actions/upload-artifact@v4
@@ -83,7 +83,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build runtime fdx Linux native
-        run: ./gradlew :libfdx:runtime:fdx:platform:linux:generate_runtime_fdx_linux_native
+        run: ./gradlew :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_linux_native
 
       - name: Upload runtime fdx Linux native
         uses: actions/upload-artifact@v4
@@ -112,7 +112,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build runtime fdx macOS x64 native
-        run: ./gradlew :libfdx:runtime:fdx:platform:macos:generate_runtime_fdx_macos_native
+        run: ./gradlew :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native
 
       - name: Upload runtime fdx macOS x64 native
         uses: actions/upload-artifact@v4
@@ -141,7 +141,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build runtime fdx macOS arm64 native
-        run: ./gradlew :libfdx:runtime:fdx:platform:macos:generate_runtime_fdx_macos_native
+        run: ./gradlew :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native
 
       - name: Upload runtime fdx macOS arm64 native
         uses: actions/upload-artifact@v4
@@ -175,7 +175,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build runtime fdx web natives
-        run: ./gradlew :libfdx:runtime:fdx:platform:fdx_web:generate_runtime_fdx_web_native
+        run: ./gradlew :libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native
 
       - name: Upload runtime fdx web natives
         uses: actions/upload-artifact@v4
@@ -217,7 +217,7 @@ jobs:
       - name: Build Android native artifacts
         run: |
           ./gradlew \
-            :libfdx:runtime:fdx:platform:fdx_android:assembleRelease \
+            :libfdx:runtime:fdx:platform:android:assembleRelease \
             :libfdx:backends:android:assembleRelease \
             :libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease \
             :libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease
