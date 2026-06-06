@@ -1,0 +1,159 @@
+import org.gradle.api.GradleException
+import org.gradle.api.tasks.Exec
+import org.gradle.language.jvm.tasks.ProcessResources
+
+plugins {
+    id("java-library")
+}
+
+java {
+    sourceCompatibility = JavaVersion.toVersion(25)
+    targetCompatibility = JavaVersion.toVersion(25)
+}
+
+base {
+    archivesName.set("fdx_web")
+}
+
+val freetypeVersion = "2.14.3"
+val freetypeSourceDir =
+    rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/build/third-party/freetype/freetype-$freetypeVersion")
+val runtimeFdxNativeDir = rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/runtime_fdx")
+val runtimeFdxWebCmakeDir = layout.projectDirectory.dir("src/main/cpp")
+val runtimeFdxWebBuildDir = layout.buildDirectory.dir("emscripten/freetype")
+val runtimeFdxWebGeneratedResources = layout.buildDirectory.dir("generated/resources/runtimeFdxWeb")
+
+fun executableCommand(name: String): List<String> {
+    val windows = System.getProperty("os.name").lowercase().contains("win")
+    if (!windows) {
+        return listOf(name)
+    }
+    val path = System.getenv("PATH") ?: return listOf(name)
+    val candidates = listOf("$name.exe", "$name.bat", "$name.cmd", "$name.ps1", name)
+    for (entry in path.split(File.pathSeparatorChar)) {
+        val directory = entry.trim().trim('"')
+        if (directory.isEmpty()) {
+            continue
+        }
+        for (candidate in candidates) {
+            val file = File(directory, candidate)
+            if (file.isFile) {
+                return if (file.extension.equals("ps1", ignoreCase = true)) {
+                    listOf("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", file.absolutePath)
+                } else {
+                    listOf(file.absolutePath)
+                }
+            }
+        }
+    }
+    return listOf(name)
+}
+
+fun deleteUnexpectedWebRuntimeArtifacts(directory: File) {
+    if (!directory.isDirectory) {
+        return
+    }
+    val expected = setOf("fdx.js", "fdx.wasm")
+    directory.listFiles()?.forEach { file ->
+        if (file.isFile && file.name !in expected
+                && (file.extension.equals("js", ignoreCase = true)
+                || file.extension.equals("wasm", ignoreCase = true))) {
+            file.delete()
+        }
+    }
+}
+
+fun hasValidEmscriptenCmakeCache(directory: File): Boolean {
+    val cache = File(directory, "CMakeCache.txt")
+    if (!cache.isFile) {
+        return false
+    }
+    val text = cache.readText()
+    val hasEmscriptenToolchain = text.contains("Emscripten.cmake")
+    val hasEmscriptenCCompiler = text.lineSequence().any { line ->
+        line.startsWith("CMAKE_C_COMPILER:") && line.contains("emcc")
+    }
+    val hasEmscriptenCxxCompiler = text.lineSequence().any { line ->
+        line.startsWith("CMAKE_CXX_COMPILER:") && line.contains("em++")
+    }
+    return hasEmscriptenToolchain && hasEmscriptenCCompiler && hasEmscriptenCxxCompiler
+}
+
+sourceSets {
+    named("main") {
+        resources.srcDir(runtimeFdxWebGeneratedResources)
+    }
+}
+
+val configureRuntimeFdxWebNative = tasks.register<Exec>("configure_runtime_fdx_web_native") {
+    group = "libfdx native"
+    description = "Configures the Emscripten FreeType build used by runtime fdx web font support."
+    dependsOn(":libfdx:runtime:fdx:platform:shared:extract_freetype_source")
+    inputs.file(runtimeFdxWebCmakeDir.file("CMakeLists.txt"))
+    outputs.dir(runtimeFdxWebBuildDir)
+    outputs.upToDateWhen {
+        hasValidEmscriptenCmakeCache(runtimeFdxWebBuildDir.get().asFile)
+    }
+    doFirst {
+        val buildDir = runtimeFdxWebBuildDir.get().asFile
+        if (buildDir.exists() && !hasValidEmscriptenCmakeCache(buildDir)) {
+            buildDir.deleteRecursively()
+        }
+        buildDir.mkdirs()
+        runtimeFdxWebGeneratedResources.get().asFile.mkdirs()
+    }
+    commandLine(executableCommand("emcmake") + listOf(
+        "cmake",
+        "-S", runtimeFdxWebCmakeDir.asFile.absolutePath,
+        "-B", runtimeFdxWebBuildDir.get().asFile.absolutePath,
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DLIBFDX_FREETYPE_SOURCE_DIR=${freetypeSourceDir.asFile.absolutePath}",
+        "-DLIBFDX_RUNTIME_FDX_NATIVE_DIR=${runtimeFdxNativeDir.asFile.absolutePath}",
+        "-DLIBFDX_WEB_OUTPUT_DIR=${runtimeFdxWebGeneratedResources.get().asFile.absolutePath}"
+    ))
+}
+
+val buildRuntimeFdxWebNative = tasks.register<Exec>("build_runtime_fdx_web_native") {
+    group = "libfdx native"
+    description = "Builds fdx.js and fdx.wasm for runtime fdx web font support."
+    dependsOn(configureRuntimeFdxWebNative)
+    outputs.file(runtimeFdxWebGeneratedResources.map { it.file("fdx.js") })
+    outputs.file(runtimeFdxWebGeneratedResources.map { it.file("fdx.wasm") })
+    doFirst {
+        deleteUnexpectedWebRuntimeArtifacts(runtimeFdxWebGeneratedResources.get().asFile)
+    }
+    commandLine(executableCommand("cmake") + listOf(
+        "--build", runtimeFdxWebBuildDir.get().asFile.absolutePath,
+        "--config", "Release"
+    ))
+}
+
+tasks.named<ProcessResources>("processResources") {
+    mustRunAfter(buildRuntimeFdxWebNative)
+    doFirst {
+        deleteUnexpectedWebRuntimeArtifacts(destinationDir)
+    }
+}
+
+tasks.register("generate_runtime_fdx_web_native") {
+    group = "libfdx native"
+    description = "Generates runtime fdx web native resources in fdx_web generated resources."
+    dependsOn(buildRuntimeFdxWebNative)
+}
+
+tasks.register("validate_runtime_fdx_web_native_resources") {
+    group = "libfdx native"
+    description = "Validates generated fdx_web native resources before packaging."
+    doLast {
+        val missing = listOf("fdx.js", "fdx.wasm")
+            .map { runtimeFdxWebGeneratedResources.get().asFile.resolve(it) }
+            .filterNot(File::isFile)
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "Missing generated fdx_web native resources:\n" +
+                        missing.joinToString(separator = "\n") { " - ${it.absolutePath}" } + "\n" +
+                        "Run :libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native first."
+            )
+        }
+    }
+}

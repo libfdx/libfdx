@@ -209,7 +209,7 @@ tasks.register<JavaExec>("test_wgpu") {
 
 tasks.register<JavaExec>("test_math_acceleration_desktop") {
     group = applicationTestGroup
-    description = "Builds and validates desktop runtime_core SIMD math acceleration against scalar math."
+    description = "Builds and validates desktop runtime fdx SIMD math acceleration against scalar math."
     if (!LibExt.usePublishedLibfdx) {
         dependsOn(":libfdx:backends:desktop:processResources")
     }

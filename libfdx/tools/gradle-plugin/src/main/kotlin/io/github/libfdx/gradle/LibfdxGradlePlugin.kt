@@ -138,14 +138,14 @@ class LibfdxGradlePlugin : Plugin<Project> {
 
     private fun registerJsTasks(project: Project, extension: LibfdxExtension) {
         val runtimeClasspath = project.extensions.getByType<SourceSetContainer>().getByName("main").runtimeClasspath
-        val runtimeCore = project.rootProject.findProject(":libfdx:runtime:core")
-        val runtimeCoreWebResources = runtimeCore?.tasks?.named("build_web_freetype_emscripten")
-        val runtimeCoreWebResourcesDir = runtimeCore?.layout?.buildDirectory?.dir("generated/resources/runtimeCoreWeb")
+        val runtimeFdxWeb = project.rootProject.findProject(":libfdx:runtime:fdx:platform:web")
+        val runtimeFdxWebResources = runtimeFdxWeb?.tasks?.matching { it.name == "generate_runtime_fdx_web_native" }
+        val runtimeFdxWebResourcesDir = runtimeFdxWeb?.layout?.buildDirectory?.dir("generated/resources/runtimeFdxWeb")
         val prepare = project.tasks.register<LibfdxWebAppTask>("libfdx_web_js_prepare") {
             group = TASK_GROUP
             description = "Generate the libfdx Web JavaScript web application shell."
             dependsOn(project.tasks.named(TeaVMPlugin.JS_TASK_NAME))
-            runtimeCoreWebResources?.let { dependsOn(it) }
+            runtimeFdxWebResources?.let { dependsOn(it) }
             webappDir.set(extension.js.webappDir())
             title.set(extension.js.htmlTitle)
             width.set(extension.js.htmlWidth)
@@ -157,7 +157,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
             wasm.set(false)
             assets.from(extension.assets)
             this.runtimeClasspath.from(runtimeClasspath)
-            runtimeCoreWebResourcesDir?.let { this.runtimeClasspath.from(it) }
+            runtimeFdxWebResourcesDir?.let { this.runtimeClasspath.from(it) }
         }
         val build = project.tasks.register("libfdx_web_js_build") {
             group = TASK_GROUP
@@ -176,14 +176,14 @@ class LibfdxGradlePlugin : Plugin<Project> {
 
     private fun registerWasmTasks(project: Project, extension: LibfdxExtension) {
         val runtimeClasspath = project.extensions.getByType<SourceSetContainer>().getByName("main").runtimeClasspath
-        val runtimeCore = project.rootProject.findProject(":libfdx:runtime:core")
-        val runtimeCoreWebResources = runtimeCore?.tasks?.named("build_web_freetype_emscripten")
-        val runtimeCoreWebResourcesDir = runtimeCore?.layout?.buildDirectory?.dir("generated/resources/runtimeCoreWeb")
+        val runtimeFdxWeb = project.rootProject.findProject(":libfdx:runtime:fdx:platform:web")
+        val runtimeFdxWebResources = runtimeFdxWeb?.tasks?.matching { it.name == "generate_runtime_fdx_web_native" }
+        val runtimeFdxWebResourcesDir = runtimeFdxWeb?.layout?.buildDirectory?.dir("generated/resources/runtimeFdxWeb")
         val prepare = project.tasks.register<LibfdxWebAppTask>("libfdx_web_wasm_prepare") {
             group = TASK_GROUP
             description = "Generate the libfdx Web Wasm web application shell."
             dependsOn(project.tasks.named(TeaVMPlugin.BUILD_WASM_GC_TASK_NAME))
-            runtimeCoreWebResources?.let { dependsOn(it) }
+            runtimeFdxWebResources?.let { dependsOn(it) }
             webappDir.set(extension.wasm.webappDir())
             title.set(extension.wasm.htmlTitle)
             width.set(extension.wasm.htmlWidth)
@@ -195,7 +195,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
             wasm.set(true)
             assets.from(extension.assets)
             this.runtimeClasspath.from(runtimeClasspath)
-            runtimeCoreWebResourcesDir?.let { this.runtimeClasspath.from(it) }
+            runtimeFdxWebResourcesDir?.let { this.runtimeClasspath.from(it) }
         }
         val build = project.tasks.register("libfdx_web_wasm_build") {
             group = TASK_GROUP

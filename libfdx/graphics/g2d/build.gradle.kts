@@ -19,5 +19,5 @@ dependencies {
     api(project(":libfdx:graphics:api"))
     api(project(":libfdx:assets:manager"))
     api(project(":libfdx:assets:loaders"))
-    implementation(project(":libfdx:runtime:core"))
+    implementation(project(":libfdx:runtime:fdx:core"))
 }

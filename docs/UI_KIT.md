@@ -518,7 +518,7 @@ io.github.libfdx.ui
 Rules:
 
 - Keep `ui-kit` as one user-facing module. Do not split it into scene graph, layout, and widget artifacts.
-- `ui-kit` may depend on `runtime/core`, display/application runtime APIs, `graphics/api`, `graphics:g2d`, and asset modules needed for fonts, skins, and ninepatches.
+- `ui-kit` may depend on `runtime/fdx/core`, display/application runtime APIs, `graphics/api`, `graphics:g2d`, and asset modules needed for fonts, skins, and ninepatches.
 - `ui-kit` must not depend on backend modules or provider-specific graphics modules.
 - `ui-kit` is not exposed from `Fdx`; users create `UiToolkit`/`UiRoot` explicitly.
 

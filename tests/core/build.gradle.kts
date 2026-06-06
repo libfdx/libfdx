@@ -20,7 +20,7 @@ dependencies {
     if (LibExt.usePublishedLibfdx) {
         api("${LibExt.fdxGroup}:application:${LibExt.publishedLibfdxVersion}")
         api("${LibExt.fdxGroup}:input:${LibExt.publishedLibfdxVersion}")
-        api("${LibExt.fdxGroup}:graphics_api:${LibExt.publishedLibfdxVersion}")
+        api("${LibExt.fdxGroup}:graphics:${LibExt.publishedLibfdxVersion}")
         api("${LibExt.fdxGroup}:g2d:${LibExt.publishedLibfdxVersion}")
         api("${LibExt.fdxGroup}:g3d:${LibExt.publishedLibfdxVersion}")
         api("${LibExt.fdxGroup}:ui_kit:${LibExt.publishedLibfdxVersion}")

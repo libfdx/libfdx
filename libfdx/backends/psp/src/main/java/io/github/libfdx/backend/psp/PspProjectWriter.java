@@ -202,7 +202,7 @@ public final class PspProjectWriter {
                 project(@PROJECT_NAME@ C)
 
                 include_directories("@ROOT@/c/external_cpp/psp")
-                include_directories("@ROOT@/c/external_cpp/teavm_optimizations/pure")
+                include_directories("@ROOT@/c/external_cpp/native_optimizations")
                 include_directories("@ROOT@/c/external_cpp/teavm_optimizations/teavm")
                 include_directories("@ROOT@/c/external_cpp/teavm_stats")
                 include_directories("@ROOT@/c/external_cpp/stb/include")

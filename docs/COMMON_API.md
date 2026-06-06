@@ -49,7 +49,7 @@ Use this document to decide what a common API type means, what module owns it, a
 17. [Scenario Validator](#17-scenario-validator)
     1. [Scenario Validator Contracts](#171-scenario-validator-contracts)
 18. [Initial API Decisions](#18-initial-api-decisions)
-19. [Runtime Core](#19-runtime-core)
+19. [Runtime Core](#19-runtime fdx)
 
 ## 1. Goals
 
@@ -95,7 +95,7 @@ Rules:
 - Objects returned by `as()` are valid only for the lifetime of the backing provider/device/resource.
 - Portable modules should not require `as()` for normal behavior.
 - Native handles should not appear in normal game-facing common APIs. The `NativeWindow` type is the explicit backend/provider setup exception and should be created by backends and consumed by graphics providers, not used by shared game code.
-- `runtime/core` services are framework-internal runtime capabilities. Game code should normally use higher-level APIs such as `UiFont.freeType(...)`, `BitmapFontFiles.loadFreeType(...)`, and math classes. Those APIs may use `runtime/core` internally for default native-backed behavior.
+- `runtime/fdx/core` services are framework-internal runtime capabilities. Game code should normally use higher-level APIs such as `UiFont.freeType(...)`, `BitmapFontFiles.loadFreeType(...)`, and math classes. Those APIs may use `runtime/fdx/core` internally for default native-backed behavior.
 
 Common handles backed by provider state should implement `ProviderHandle`, including:
 
@@ -226,7 +226,7 @@ External binding extensions should not rename public binding classes just to mat
 Module:
 
 ```text
-:libfdx:runtime:core
+:libfdx:runtime:fdx:core
 ```
 
 Package:
@@ -235,7 +235,7 @@ Package:
 io.github.libfdx.core
 ```
 
-Core owns tiny framework contracts, base errors, logging, provider identity, async primitives, and shared runtime services that every module can depend on. It is the only public `core` module and publishes as `io.github.libfdx:core`.
+The fdx runtime module owns tiny framework contracts, base errors, logging, provider identity, async primitives, and shared runtime services that every module can depend on. It is the only public common runtime foundation module and publishes as `io.github.libfdx:fdx`.
 
 Defined types:
 
@@ -316,7 +316,7 @@ Rules:
 
 - `Disposable.dispose()` should be safe to call more than once.
 - Using a disposed provider-backed object should fail clearly.
-- Core must not depend on assets, graphics, audio, UI, physics, extensions, or backends. Foundation modules may depend on `runtime/core` for shared base contracts, but not on higher runtime systems.
+- Core must not depend on assets, graphics, audio, UI, physics, extensions, or backends. Foundation modules may depend on `runtime/fdx/core` for shared base contracts, but not on higher runtime systems.
 - Async APIs should not assume blocking threads are available on every platform.
 - When a method returns an object and that object does not exist, it returns `null`.
 - `FdxFuture.get()` and `FdxFuture.join()` return the completed value and fail clearly if the future has not completed or completed with an error.
@@ -2162,7 +2162,7 @@ Rules:
 - `g2d` should hide `TextureView` from simple sprite users when possible.
 - `ShapeRenderer2D` is the first g2d implementation. It streams CPU-generated vertices into common `Buffer` objects and currently uses normalized -1..1 coordinates.
 - `Batch2D` is the common textured g2d batch contract. `SpriteBatch` is the first implementation. It streams quad vertices into common `Buffer` objects, binds common `Texture` handles, and currently uses normalized -1..1 coordinates. Rotation is expressed in degrees around the supplied local origin. `viewport(width, height)` supplies the framebuffer size used to keep rotated sprites pixel-proportional while coordinates are still normalized. The array-based `draw(TextureRegion, float[], float[], ...)` overload submits repeated same-region sprites in one logical batch and may use instanced/static GPU buffers internally.
-- Bitmap fonts are provider-neutral glyph metadata plus provider-backed page textures. `BitmapFontFiles.loadBitmap(...)` reads AngelCode BMFont-style `.fnt` files and page images. `BitmapFontFiles.loadFreeType(...)` rasterizes `.ttf`/`.otf` font assets into a bitmap atlas when the selected backend has registered a runtime-core FreeType provider. `BitmapFontFiles.generateFreeType(...)` is reserved for backend-specific system-font providers and must fail clearly until a provider exists. Generated atlases should match or oversample the effective UI scale because rendering still submits texture quads.
+- Bitmap fonts are provider-neutral glyph metadata plus provider-backed page textures. `BitmapFontFiles.loadBitmap(...)` reads AngelCode BMFont-style `.fnt` files and page images. `BitmapFontFiles.loadFreeType(...)` rasterizes `.ttf`/`.otf` font assets into a bitmap atlas when the selected backend has registered a runtime fdx FreeType provider. `BitmapFontFiles.generateFreeType(...)` is reserved for backend-specific system-font providers and must fail clearly until a provider exists. Generated atlases should match or oversample the effective UI scale because rendering still submits texture quads.
 - Future tile maps, particles, sprites, and additional 2D helpers belong in `g2d`, not separate required user dependencies.
 
 ## 15. Graphics 3D
@@ -2675,7 +2675,7 @@ Rules:
 These decisions are part of the common API contract:
 
 - Use `FdxFuture<T>` for portable async APIs.
-- Use `runtime/core` as the shared framework runtime service layer. Its first default service is FreeType font rasterization for `.ttf`/`.otf` assets. Backends provide the platform implementation; higher-level APIs consume it and keep rendering cached atlas data every frame.
+- Use `runtime/fdx/core` as the shared framework runtime service layer. Its first default service is FreeType font rasterization for `.ttf`/`.otf` assets. Backends provide the platform implementation; higher-level APIs consume it and keep rendering cached atlas data every frame.
 - Use `HttpClient` as the HTTP entry point type.
 - Keep `AudioSource` as the advanced persistent playback source/channel type. Basic playback should still use `Sound`, `Music`, and `PlaybackHandle`.
 - Use descriptor names ending in `Descriptor` for graphics creation inputs, such as `TextureDescriptor`, `BufferDescriptor`, and `RenderPipelineDescriptor`.
@@ -2687,7 +2687,7 @@ These decisions are part of the common API contract:
 Module:
 
 ```text
-:libfdx:runtime:core
+:libfdx:runtime:fdx:core
 ```
 
 Package:
@@ -2696,7 +2696,7 @@ Package:
 io.github.libfdx.runtime.core
 ```
 
-`runtime/core` is the shared framework runtime service layer. It is not a user-created feature object and it is not a generic service locator. It provides small framework-wide services that common modules can use by default when the selected backend/platform has supplied the implementation.
+`runtime/fdx/core` is the shared framework runtime service layer. It is not a user-created feature object and it is not a generic service locator. It provides small framework-wide services that common modules can use by default when the selected backend/platform has supplied the implementation.
 
 Initial scope:
 
@@ -2712,13 +2712,13 @@ Defined types:
 
 | Type | Role |
 | --- | --- |
-| `RuntimeCore` | Static framework runtime-core access point and provider registration hook used by backend/platform wiring. |
-| `RuntimeCoreProvider` | Backend/platform provider contract for runtime-core services. |
+| `RuntimeCore` | Static framework runtime fdx access point and provider registration hook used by backend/platform wiring. |
+| `RuntimeCoreProvider` | Backend/platform provider contract for runtime fdx services. |
 | `FontRasterizer` | Rasterizes font bytes into glyph metrics and atlas pixels. |
 | `FontRasterizerOptions` | Size, character set, padding, and atlas width for font rasterization. |
 | `RasterizedFont` | Rasterized font result: atlas pixels, glyph metrics, line height, baseline, and kerning. |
 | `RasterizedGlyph` | One glyph's atlas region and layout metrics. |
-| `RuntimeCoreException` | Clear framework exception for runtime-core failures. |
+| `RuntimeCoreException` | Clear framework exception for runtime fdx failures. |
 
 Rules:
 
@@ -2727,12 +2727,12 @@ Rules:
 - Font rasterization happens when a font is loaded or cached, not during every UI render frame.
 - UI and g2d rendering consume cached `BitmapFont` atlas data after rasterization.
 - Backends must register a platform-specific `RuntimeCoreProvider` before code loads `.ttf`/`.otf` fonts through `UiFont.freeType(...)` or `BitmapFontFiles.loadFreeType(...)`.
-- If no platform provider is registered, `runtime/core` must fail clearly. Do not silently fall back to a Java rasterizer or any non-FreeType implementation.
-- Desktop JVM registers a provider backed by LWJGL FreeType. Desktop_native and Android register providers backed by the runtime-core C/C++ bridge linked with downloaded FreeType source. Web registers a provider backed by the runtime-core Emscripten JS/WASM bridge.
-- Native bridge resources owned by this module live under `src/main/resources/libfdx-native/...`, not under Java package folders.
-- Third-party FreeType source is not committed into the repository. The runtime-core build prepares the pinned FreeType source archive under `build/third-party/...`; desktop_native generated CMake, Android CMake, and the runtime-core Emscripten build use the same pinned source when compiling the native bridge.
-- Platform-specific native resources are scoped under `src/main/resources/libfdx-native/<platform>/...`.
-- The shared runtime-core FreeType bridge is scoped under `src/main/resources/libfdx-native/desktop/runtime_core/...` until a platform needs a separate bridge source.
+- If no platform provider is registered, `runtime/fdx/core` must fail clearly. Do not silently fall back to a Java rasterizer or any non-FreeType implementation.
+- Desktop JVM registers a provider backed by LWJGL FreeType. Desktop_native and Android register providers backed by the runtime fdx C/C++ bridge linked with downloaded FreeType source. Web registers a provider backed by the runtime fdx Emscripten JS/WASM bridge.
+- Native bridge source is owned by `runtime/fdx/platform/*`, not by the Java core module. The core module owns Java contracts. `fdx_shared` packages the shared native source payload needed by TeaVM/native project generation, and `fdx_desktop`, `fdx_android`, and `fdx_web` package platform native outputs.
+- Third-party FreeType source is not committed into the repository. The `runtime/fdx/platform` build prepares the pinned FreeType source archive under `build/third-party/...`; Android and web runtime fdx platform builds use that source when compiling the native bridge.
+- Platform-specific native resources generated for the core JAR are scoped under `libfdx-native/<platform>/...` in generated resource output.
+- The shared runtime fdx FreeType bridge source is scoped under `runtime/fdx/platform/shared/src/main/cpp/runtime_fdx/...` until a platform needs a separate bridge source.
 - Native implementation code should be reused across platforms. Platform-specific code should be limited to small ABI adapters, not duplicated copies of the same FreeType rasterizer.
-- Runtime-core native artifacts use core framework names. Web runtime-core output is `fdx.js` plus `fdx.wasm`; shared-library outputs should use the platform's `fdx` library filename convention, such as `fdx.dll` or `libfdx.so`, even when the first exported service is FreeType.
+- Runtime fdx native artifacts use core framework names. Web runtime fdx output is `fdx.js` plus `fdx.wasm`; shared-library outputs should use the platform's `fdx` library filename convention, such as `fdx.dll` or `libfdx.so`, even when the first exported service is FreeType.
 - Backend/native build logic is responsible for copying, compiling, linking, or loading the matching platform resources.

@@ -23,5 +23,28 @@ allprojects {
     }
 }
 
+fun runtimeFdxHostNativeTaskPath(): String {
+    val os = System.getProperty("os.name").lowercase()
+    return when {
+        os.contains("windows") -> ":libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_windows_native"
+        os.contains("linux") -> ":libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_linux_native"
+        os.contains("mac") || os.contains("darwin") -> ":libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native"
+        else -> throw GradleException("Unsupported host OS for runtime fdx native artifacts: ${System.getProperty("os.name")}")
+    }
+}
+
+tasks.register("build_native_artifacts") {
+    group = "libfdx native"
+    description = "Builds generated native artifacts for the current host, web, and Android release packaging."
+    dependsOn(
+        runtimeFdxHostNativeTaskPath(),
+        ":libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native",
+        ":libfdx:runtime:fdx:platform:android:assembleRelease",
+        ":libfdx:backends:android:assembleRelease",
+        ":libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease",
+        ":libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease"
+    )
+}
+
 extra["libfdxPublishTarget"] = LibfdxPublishTarget.LIBRARIES
 apply(plugin = "publish")

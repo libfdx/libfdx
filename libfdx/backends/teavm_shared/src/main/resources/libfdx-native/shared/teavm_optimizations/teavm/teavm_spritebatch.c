@@ -21,7 +21,7 @@
 #include "../../../src/classes/org/teavm/runtime/ExceptionHandling.h"
 #endif
 
-#include "../pure/spritebatch.h"
+#include "../../native_optimizations/spritebatch.h"
 
 #if defined(_MSC_VER)
 #define TEAVM_SPRITEBATCH_INLINE static __forceinline

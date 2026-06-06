@@ -1,7 +1,11 @@
+import io.github.libfdx.build.LibExt
+
 plugins {
     `kotlin-dsl`
     `java-gradle-plugin`
 }
+
+LibExt.configure(rootProject.projectDir, gradle.startParameter.projectProperties)
 
 repositories {
     google()

@@ -33,7 +33,10 @@ final class DesktopRuntimeCoreNative {
     }
 
     private static boolean tryLoadConfiguredPath() {
-        String configured = trim(System.getProperty("libfdx.desktop.runtimeCoreNative"));
+        String configured = trim(System.getProperty("libfdx.desktop.runtimeFdxNative"));
+        if (configured == null) {
+            configured = trim(System.getProperty("libfdx.desktop.runtimeCoreNative"));
+        }
         if (configured == null) {
             return false;
         }
@@ -53,7 +56,7 @@ final class DesktopRuntimeCoreNative {
             if (input == null) {
                 return false;
             }
-            Path extracted = Files.createTempFile("libfdx-runtime-core-", librarySuffix());
+            Path extracted = Files.createTempFile("libfdx-runtime-fdx-", librarySuffix());
             Files.copy(input, extracted, StandardCopyOption.REPLACE_EXISTING);
             extracted.toFile().deleteOnExit();
             System.load(extracted.toAbsolutePath().toString());

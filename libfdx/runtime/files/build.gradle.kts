@@ -16,5 +16,5 @@ base {
 }
 
 dependencies {
-    api(project(":libfdx:runtime:core"))
+    api(project(":libfdx:runtime:fdx:core"))
 }

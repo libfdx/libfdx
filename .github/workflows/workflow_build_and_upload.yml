@@ -53,14 +53,14 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build runtime_core Windows native
-        run: .\gradlew.bat :libfdx:runtime:core:copy_desktop_runtime_core_native
+      - name: Build runtime fdx Windows native
+        run: .\gradlew.bat :libfdx:runtime:fdx:platform:windows:generate_runtime_fdx_windows_native
 
-      - name: Upload runtime_core Windows native
+      - name: Upload runtime fdx Windows native
         uses: actions/upload-artifact@v4
         with:
-          name: runtime-core-desktop-windows-x64
-          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/windows-x64/fdx.dll
+          name: runtime-fdx-desktop-windows-x64
+          path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/windows-x64/fdx.dll
           if-no-files-found: error
 
   build_linux:
@@ -82,14 +82,14 @@ jobs:
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
 
-      - name: Build runtime_core Linux native
-        run: ./gradlew :libfdx:runtime:core:copy_desktop_runtime_core_native
+      - name: Build runtime fdx Linux native
+        run: ./gradlew :libfdx:runtime:fdx:platform:linux:generate_runtime_fdx_linux_native
 
-      - name: Upload runtime_core Linux native
+      - name: Upload runtime fdx Linux native
         uses: actions/upload-artifact@v4
         with:
-          name: runtime-core-desktop-linux-x64
-          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/linux-x64/libfdx.so
+          name: runtime-fdx-desktop-linux-x64
+          path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/linux-x64/libfdx.so
           if-no-files-found: error
 
   build_macos_x64:
@@ -111,14 +111,14 @@ jobs:
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
 
-      - name: Build runtime_core macOS x64 native
-        run: ./gradlew :libfdx:runtime:core:copy_desktop_runtime_core_native
+      - name: Build runtime fdx macOS x64 native
+        run: ./gradlew :libfdx:runtime:fdx:platform:macos:generate_runtime_fdx_macos_native
 
-      - name: Upload runtime_core macOS x64 native
+      - name: Upload runtime fdx macOS x64 native
         uses: actions/upload-artifact@v4
         with:
-          name: runtime-core-desktop-macos-x64
-          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/macos-x64/libfdx.dylib
+          name: runtime-fdx-desktop-macos-x64
+          path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-x64/libfdx.dylib
           if-no-files-found: error
 
   build_macos_arm64:
@@ -140,14 +140,14 @@ jobs:
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
 
-      - name: Build runtime_core macOS arm64 native
-        run: ./gradlew :libfdx:runtime:core:copy_desktop_runtime_core_native
+      - name: Build runtime fdx macOS arm64 native
+        run: ./gradlew :libfdx:runtime:fdx:platform:macos:generate_runtime_fdx_macos_native
 
-      - name: Upload runtime_core macOS arm64 native
+      - name: Upload runtime fdx macOS arm64 native
         uses: actions/upload-artifact@v4
         with:
-          name: runtime-core-desktop-macos-arm64
-          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/macos-arm64/libfdx.dylib
+          name: runtime-fdx-desktop-macos-arm64
+          path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-arm64/libfdx.dylib
           if-no-files-found: error
 
   build_web:
@@ -174,16 +174,16 @@ jobs:
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
 
-      - name: Build runtime_core web natives
-        run: ./gradlew :libfdx:runtime:core:build_web_freetype_emscripten
+      - name: Build runtime fdx web natives
+        run: ./gradlew :libfdx:runtime:fdx:platform:fdx_web:generate_runtime_fdx_web_native
 
-      - name: Upload runtime_core web natives
+      - name: Upload runtime fdx web natives
         uses: actions/upload-artifact@v4
         with:
-          name: runtime-core-web
+          name: runtime-fdx-web
           path: |
-            libfdx/runtime/core/build/generated/resources/runtimeCoreWeb/fdx.js
-            libfdx/runtime/core/build/generated/resources/runtimeCoreWeb/fdx.wasm
+            libfdx/runtime/fdx/platform/web/build/generated/resources/runtimeFdxWeb/fdx.js
+            libfdx/runtime/fdx/platform/web/build/generated/resources/runtimeFdxWeb/fdx.wasm
           if-no-files-found: error
 
   build_android:
@@ -217,6 +217,7 @@ jobs:
       - name: Build Android native artifacts
         run: |
           ./gradlew \
+            :libfdx:runtime:fdx:platform:fdx_android:assembleRelease \
             :libfdx:backends:android:assembleRelease \
             :libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease \
             :libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease
@@ -226,6 +227,7 @@ jobs:
         with:
           name: android-native-artifacts
           path: |
+            libfdx/runtime/fdx/platform/android/build/outputs/aar/*.aar
             libfdx/backends/android/build/outputs/aar/*.aar
             libfdx/extensions/graphics/vulkan/platform/android_jni/build/outputs/aar/*.aar
             libfdx/extensions/graphics/wgpu/platform/android_jni/build/outputs/aar/*.aar
@@ -299,52 +301,56 @@ PY
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
 
-      - name: Download runtime_core Windows native
+      - name: Download runtime fdx Windows native
         uses: actions/download-artifact@v4
         with:
-          name: runtime-core-desktop-windows-x64
-          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/windows-x64
+          name: runtime-fdx-desktop-windows-x64
+          path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/windows-x64
 
-      - name: Download runtime_core Linux native
+      - name: Download runtime fdx Linux native
         uses: actions/download-artifact@v4
         with:
-          name: runtime-core-desktop-linux-x64
-          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/linux-x64
+          name: runtime-fdx-desktop-linux-x64
+          path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/linux-x64
 
-      - name: Download runtime_core macOS x64 native
+      - name: Download runtime fdx macOS x64 native
         uses: actions/download-artifact@v4
         with:
-          name: runtime-core-desktop-macos-x64
-          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/macos-x64
+          name: runtime-fdx-desktop-macos-x64
+          path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-x64
 
-      - name: Download runtime_core macOS arm64 native
+      - name: Download runtime fdx macOS arm64 native
         uses: actions/download-artifact@v4
         with:
-          name: runtime-core-desktop-macos-arm64
-          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/macos-arm64
+          name: runtime-fdx-desktop-macos-arm64
+          path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-arm64
 
-      - name: Download runtime_core web natives
+      - name: Download runtime fdx web natives
         uses: actions/download-artifact@v4
         with:
-          name: runtime-core-web
-          path: libfdx/runtime/core/build/generated/resources/runtimeCoreWeb
+          name: runtime-fdx-web
+          path: libfdx/runtime/fdx/platform/web/build/generated/resources/runtimeFdxWeb
 
       - name: Download Android build artifacts
         uses: actions/download-artifact@v4
         with:
           name: android-native-artifacts
-          path: build/ci-artifacts/android
+          path: .
 
       - name: Verify downloaded native artifacts
         shell: bash
         run: |
           required_files=(
-            "libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/windows-x64/fdx.dll"
-            "libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/linux-x64/libfdx.so"
-            "libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/macos-x64/libfdx.dylib"
-            "libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/macos-arm64/libfdx.dylib"
-            "libfdx/runtime/core/build/generated/resources/runtimeCoreWeb/fdx.js"
-            "libfdx/runtime/core/build/generated/resources/runtimeCoreWeb/fdx.wasm"
+            "libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/windows-x64/fdx.dll"
+            "libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/linux-x64/libfdx.so"
+            "libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-x64/libfdx.dylib"
+            "libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-arm64/libfdx.dylib"
+            "libfdx/runtime/fdx/platform/web/build/generated/resources/runtimeFdxWeb/fdx.js"
+            "libfdx/runtime/fdx/platform/web/build/generated/resources/runtimeFdxWeb/fdx.wasm"
+            "libfdx/runtime/fdx/platform/android/build/outputs/aar/fdx_android-release.aar"
+            "libfdx/backends/android/build/outputs/aar/backend_android-release.aar"
+            "libfdx/extensions/graphics/vulkan/platform/android_jni/build/outputs/aar/vulkan_android_jni-release.aar"
+            "libfdx/extensions/graphics/wgpu/platform/android_jni/build/outputs/aar/wgpu_android_jni-release.aar"
           )
           for file in "${required_files[@]}"; do
             if [ ! -f "$file" ]; then
@@ -352,25 +358,23 @@ PY
               exit 1
             fi
           done
-          if ! find build/ci-artifacts/android -name '*.aar' -print -quit | grep -q .; then
-            echo "Missing Android build artifacts"
-            exit 1
-          fi
 
       - name: Build without upload
         if: ${{ !inputs.shouldUpload }}
-        run: ./gradlew build -Plibfdx.runtimeCore.usePrebuiltNatives=true
+        run: ./gradlew build
 
       - name: Prepare release deploy files
         if: ${{ inputs.shouldUpload && inputs.isRelease }}
-        run: ./gradlew prepareReleaseDeploy -Plibfdx.runtimeCore.usePrebuiltNatives=true
+        run: ./gradlew prepareReleaseDeploy -Plibfdx.runtimeFdx.requireAllNativeResources=true
 
       - name: Upload release deploy files artifact
         uses: actions/upload-artifact@v4
         if: ${{ inputs.shouldUpload && inputs.isRelease }}
         with:
           name: release-staging-deploy-${{ steps.version.outputs.value }}
-          path: ./build/staging-deploy/
+          path: |
+            ./build/staging-deploy/
+            ./build/staging-deploy.zip
 
       - name: Upload release to repository
         uses: nick-fields/retry@v3
@@ -379,11 +383,11 @@ PY
           max_attempts: 6
           timeout_minutes: 20
           retry_on: error
-          command: ./gradlew publishRelease -Plibfdx.runtimeCore.usePrebuiltNatives=true
+          command: ./gradlew publishRelease
 
       - name: Prepare snapshot deploy files
         if: ${{ inputs.shouldUpload && !inputs.isRelease }}
-        run: ./gradlew prepareSnapshotDeploy -Plibfdx.runtimeCore.usePrebuiltNatives=true
+        run: ./gradlew prepareSnapshotDeploy -Plibfdx.runtimeFdx.requireAllNativeResources=true
 
       - name: Upload snapshot deploy files artifact
         uses: actions/upload-artifact@v4
@@ -399,7 +403,7 @@ PY
           max_attempts: 6
           timeout_minutes: 20
           retry_on: error
-          command: ./gradlew publishSnapshot -Plibfdx.runtimeCore.usePrebuiltNatives=true
+          command: ./gradlew publishSnapshot
 
       - name: Create Git tag
         uses: actions/github-script@v7

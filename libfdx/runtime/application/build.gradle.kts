@@ -12,7 +12,7 @@ base {
 }
 
 dependencies {
-    api(project(":libfdx:runtime:core"))
+    api(project(":libfdx:runtime:fdx:core"))
     api(project(":libfdx:runtime:display"))
     api(project(":libfdx:runtime:files"))
     api(project(":libfdx:runtime:input"))

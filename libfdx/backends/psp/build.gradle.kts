@@ -19,4 +19,6 @@ dependencies {
 
     api(libs.teavm.interop)
     compileOnly("org.teavm:teavm-core:${libs.versions.teavm.get()}")
+
+    runtimeOnly(project(":libfdx:runtime:fdx:platform:shared"))
 }

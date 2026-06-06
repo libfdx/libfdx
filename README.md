@@ -57,17 +57,19 @@ Set the Maven group in `libfdx.toml` as `release.fdxGroup`, and set the upcoming
 Tests, samples, and benchmarks use local source modules by default. To validate those consumers against published libFDX artifacts, set `development.usePublishedLibfdx = true` in `libfdx.toml`; their dependency blocks use explicit `if (LibExt.usePublishedLibfdx)` branches and then resolve libFDX dependencies as `<fdxGroup>:<artifact>:<publishedLibfdxVersion>`. The default `development.publishedLibfdxVersion` is `-SNAPSHOT`. The Gradle override is `-Plibfdx.usePublishedLibfdx=true`, and `-Plibfdx.publishedVersion=<version>` can override the dependency version when needed.
 
 ```powershell
+.\gradlew.bat build_native_artifacts
+.\gradlew.bat listMavenDeployProjects
 .\gradlew.bat prepareSnapshotDeploy
 .\gradlew.bat prepareReleaseDeploy
 .\gradlew.bat publishSnapshot
 .\gradlew.bat publishRelease
 ```
 
-`prepareSnapshotDeploy` writes local snapshot artifacts with Maven version `-SNAPSHOT` to `build/snapshot-deploy`. `prepareReleaseDeploy` writes release artifacts with the configured base version to `build/staging-deploy` and creates `build/staging-deploy.zip` for Maven Central Portal upload.
+`listMavenDeployProjects` prints the explicit library project allowlist that deploy preparation uses. `prepareSnapshotDeploy` writes local snapshot artifacts with Maven version `-SNAPSHOT` to `build/snapshot-deploy`. `prepareReleaseDeploy` writes release artifacts with the configured base version to `build/staging-deploy` and creates `build/staging-deploy.zip` for Maven Central Portal upload.
 
-`publishSnapshot` uploads snapshot artifacts to the Central Portal snapshot repository. `publishRelease` prepares the release bundle and uploads it to Maven Central Portal. Remote publish tasks require `CENTRAL_PORTAL_USERNAME` and `CENTRAL_PORTAL_PASSWORD`; signed Central releases also require `SIGNING_KEY` and `SIGNING_PASSWORD`.
+`publishSnapshot` only uploads existing files from `build/snapshot-deploy`; it does not generate artifacts and fails if the directory is absent or empty. `publishRelease` only uploads existing `build/staging-deploy.zip`; it does not prepare the release bundle and fails if the zip is absent. Run the matching `prepare*Deploy` task before each remote publish task. Remote publish tasks require `CENTRAL_PORTAL_USERNAME` and `CENTRAL_PORTAL_PASSWORD`; signed Central releases also require `SIGNING_KEY` and `SIGNING_PASSWORD`.
 
-The published `core` artifact includes generated desktop and web runtime-core native resources. Local publish/deploy tasks build the current host desktop native and web FreeType bridge. GitHub publication uses platform jobs to build Windows, Linux, macOS, Android, and web artifacts first, then the final publish job downloads those artifacts and runs Gradle with `-Plibfdx.runtimeCore.usePrebuiltNatives=true`.
+The published artifacts include `fdx_shared`, the native-source/tooling artifact used when user projects generate TeaVM/native builds, plus generated desktop, Android, and web native resources. `build_native_artifacts` builds the current host runtime fdx desktop native file, the runtime fdx web JS/WASM files, the runtime fdx Android AAR, and the Android release AARs needed for publication. Native artifacts are built by explicit native/platform tasks before they are used by tests, samples, or deploy preparation. Deploy preparation validates and packages those existing files; it does not compile C native artifacts. GitHub publication uses platform jobs to build Windows, Linux, macOS, Android, and web artifacts first, then the final publish job downloads those artifacts before running the deploy and publish tasks.
 
 ## Standalone Builders
 

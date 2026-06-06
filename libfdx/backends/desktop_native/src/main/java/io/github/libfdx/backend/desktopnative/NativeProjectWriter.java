@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -15,7 +16,9 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 public final class NativeProjectWriter {
-    private static final String NATIVE_RESOURCE_PREFIX = "libfdx-native/desktop/";
+    private static final List<String> NATIVE_RESOURCE_PREFIXES = List.of(
+            "libfdx-native/shared/",
+            "libfdx-native/desktop/");
 
     private NativeProjectWriter() {
     }
@@ -66,12 +69,18 @@ public final class NativeProjectWriter {
         for (Path entry : nativeResourceClasspath) {
             Path normalized = entry.toAbsolutePath().normalize();
             if (Files.isDirectory(normalized)) {
-                Path nativeRoot = normalized.resolve("libfdx-native/desktop");
-                if (Files.isDirectory(nativeRoot)) {
-                    copyDirectory(nativeRoot, normalizedOutputRoot);
-                }
+                copyNativeResourcesFromDirectory(normalized, normalizedOutputRoot);
             } else if (Files.isRegularFile(normalized) && normalized.getFileName().toString().endsWith(".jar")) {
                 copyNativeResourcesFromJar(normalized, normalizedOutputRoot);
+            }
+        }
+    }
+
+    private static void copyNativeResourcesFromDirectory(Path classpathRoot, Path outputRoot) throws IOException {
+        for (String prefix : NATIVE_RESOURCE_PREFIXES) {
+            Path nativeRoot = classpathRoot.resolve(prefix).normalize();
+            if (Files.isDirectory(nativeRoot)) {
+                copyDirectory(nativeRoot, outputRoot);
             }
         }
     }
@@ -93,11 +102,11 @@ public final class NativeProjectWriter {
     private static void copyNativeResourcesFromJar(Path jar, Path outputRoot) throws IOException {
         try (ZipFile zip = new ZipFile(jar.toFile())) {
             for (ZipEntry entry : zip.stream().toList()) {
-                if (entry.isDirectory() || !entry.getName().startsWith(NATIVE_RESOURCE_PREFIX)) {
+                if (entry.isDirectory()) {
                     continue;
                 }
-                String relativePath = entry.getName().substring(NATIVE_RESOURCE_PREFIX.length());
-                if (relativePath.isBlank()) {
+                String relativePath = relativeNativeResourcePath(entry.getName());
+                if (relativePath == null || relativePath.isBlank()) {
                     continue;
                 }
                 Path output = outputRoot.resolve(relativePath).normalize();
@@ -111,6 +120,15 @@ public final class NativeProjectWriter {
                 }
             }
         }
+    }
+
+    private static String relativeNativeResourcePath(String entryName) {
+        for (String prefix : NATIVE_RESOURCE_PREFIXES) {
+            if (entryName.startsWith(prefix)) {
+                return entryName.substring(prefix.length());
+            }
+        }
+        return null;
     }
 
     private static void deleteDirectory(Path path) throws IOException {
@@ -174,12 +192,12 @@ public final class NativeProjectWriter {
                   endif()
                 endif()
 
-                include_directories("%5$s/c/external_cpp/teavm_optimizations/pure")
+                include_directories("%5$s/c/external_cpp/native_optimizations")
                 include_directories("%5$s/c/external_cpp/teavm_optimizations/teavm")
                 include_directories("%5$s/c/external_cpp/teavm_stats")
                 include_directories("%5$s/c/external_cpp/desktop_native")
                 include_directories("%5$s/c/external_cpp/desktop_vulkan")
-                include_directories("%5$s/c/external_cpp/runtime_core")
+                include_directories("%5$s/c/external_cpp/runtime_fdx")
 
                 set(SOURCES "%5$s/c/src/app_include.c")
                 set(TEAVM_FASTMATH_SOURCE "%5$s/c/external_cpp/teavm_optimizations/teavm/teavm_fastmath.c")
@@ -197,7 +215,7 @@ public final class NativeProjectWriter {
                 endif()
                 set(LIBFDX_NATIVE_IMAGE_SOURCE "%5$s/c/external_cpp/desktop_native/libfdx_native_image.cpp")
                 set(LIBFDX_DESKTOP_VULKAN_SOURCE "%5$s/c/external_cpp/desktop_vulkan/libfdx_desktop_vulkan.cpp")
-                set(LIBFDX_RUNTIME_CORE_FREETYPE_SOURCE "%5$s/c/external_cpp/runtime_core/libfdx_freetype.cpp")
+                set(LIBFDX_RUNTIME_FDX_FREETYPE_SOURCE "%5$s/c/external_cpp/runtime_fdx/libfdx_freetype.cpp")
                 set(LIBFDX_HAS_CXX_SOURCES OFF)
                 if(EXISTS "${LIBFDX_NATIVE_IMAGE_SOURCE}")
                   set(LIBFDX_HAS_CXX_SOURCES ON)
@@ -205,7 +223,7 @@ public final class NativeProjectWriter {
                 if(EXISTS "${LIBFDX_DESKTOP_VULKAN_SOURCE}")
                   set(LIBFDX_HAS_CXX_SOURCES ON)
                 endif()
-                if(EXISTS "${LIBFDX_RUNTIME_CORE_FREETYPE_SOURCE}")
+                if(EXISTS "${LIBFDX_RUNTIME_FDX_FREETYPE_SOURCE}")
                   set(LIBFDX_HAS_CXX_SOURCES ON)
                 endif()
                 if(LIBFDX_HAS_CXX_SOURCES)
@@ -229,9 +247,9 @@ public final class NativeProjectWriter {
                     message(STATUS "desktop_native Vulkan: Vulkan SDK not found; using local ABI shim and runtime loader")
                   endif()
                 endif()
-                set(LIBFDX_HAS_RUNTIME_CORE_FREETYPE OFF)
-                if(EXISTS "${LIBFDX_RUNTIME_CORE_FREETYPE_SOURCE}")
-                  set(LIBFDX_HAS_RUNTIME_CORE_FREETYPE ON)
+                set(LIBFDX_HAS_RUNTIME_FDX_FREETYPE OFF)
+                if(EXISTS "${LIBFDX_RUNTIME_FDX_FREETYPE_SOURCE}")
+                  set(LIBFDX_HAS_RUNTIME_FDX_FREETYPE ON)
                   include(FetchContent)
                   set(FT_DISABLE_ZLIB ON CACHE BOOL "" FORCE)
                   set(FT_DISABLE_BZIP2 ON CACHE BOOL "" FORCE)
@@ -242,7 +260,7 @@ public final class NativeProjectWriter {
                     URL https://download.savannah.gnu.org/releases/freetype/freetype-2.14.3.tar.xz
                     DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
                   FetchContent_MakeAvailable(libfdx_freetype)
-                  list(APPEND SOURCES "${LIBFDX_RUNTIME_CORE_FREETYPE_SOURCE}")
+                  list(APPEND SOURCES "${LIBFDX_RUNTIME_FDX_FREETYPE_SOURCE}")
                 endif()
 
                 add_executable(%1$s ${SOURCES})
@@ -275,7 +293,7 @@ public final class NativeProjectWriter {
                   target_compile_definitions(%1$s PRIVATE LIBFDX_USE_SYSTEM_VULKAN_SDK=1)
                   target_link_libraries(%1$s PRIVATE Vulkan::Vulkan)
                 endif()
-                if(LIBFDX_HAS_RUNTIME_CORE_FREETYPE)
+                if(LIBFDX_HAS_RUNTIME_FDX_FREETYPE)
                   target_link_libraries(%1$s PRIVATE freetype)
                 endif()
 

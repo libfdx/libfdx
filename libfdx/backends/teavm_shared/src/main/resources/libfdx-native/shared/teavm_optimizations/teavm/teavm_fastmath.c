@@ -1,4 +1,4 @@
-#include "../pure/fastmath.h"
+#include "../../native_optimizations/fastmath.h"
 
 float teavm_fastmath_sin_deg(float degrees) {
     return fastmath_sin_deg(degrees);

@@ -10,7 +10,11 @@ pluginManagement {
 
 include(":libfdx:foundation:math")
 include(":libfdx:runtime:application")
-include(":libfdx:runtime:core")
+include(":libfdx:runtime:fdx:core")
+include(":libfdx:runtime:fdx:platform:shared")
+include(":libfdx:runtime:fdx:platform:desktop")
+include(":libfdx:runtime:fdx:platform:android")
+include(":libfdx:runtime:fdx:platform:web")
 include(":libfdx:runtime:display")
 include(":libfdx:runtime:files")
 include(":libfdx:runtime:input")

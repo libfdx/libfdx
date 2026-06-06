@@ -19,7 +19,7 @@ base {
 dependencies {
     if (LibExt.usePublishedLibfdx) {
         api("${LibExt.fdxGroup}:application:${LibExt.publishedLibfdxVersion}")
-        api("${LibExt.fdxGroup}:graphics_api:${LibExt.publishedLibfdxVersion}")
+        api("${LibExt.fdxGroup}:graphics:${LibExt.publishedLibfdxVersion}")
         api("${LibExt.fdxGroup}:g2d:${LibExt.publishedLibfdxVersion}")
     } else {
         api(project(":libfdx:runtime:application"))

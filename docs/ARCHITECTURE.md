@@ -213,15 +213,15 @@ Dependencies should point from higher-level modules to lower-level contracts, ne
 Allowed dependency shape:
 
 ```text
-foundation/math, foundation/collections -> runtime/core
+foundation/math, foundation/collections -> runtime/fdx/core
 
-runtime/core -> no lower libFDX module
-runtime/* -> runtime/core and selected foundation helpers
-runtime/application -> runtime/core only
+runtime/fdx/core -> no lower libFDX module
+runtime/* -> runtime/fdx/core and selected foundation helpers
+runtime/application -> runtime/fdx/core only
 
-assets/* -> runtime/core, foundation/*, and runtime/files when file access is needed
+assets/* -> runtime/fdx/core, foundation/*, and runtime/files when file access is needed
 
-graphics/api -> runtime/core, foundation/*, and runtime/display for presentation handles
+graphics/api -> runtime/fdx/core, foundation/*, and runtime/display for presentation handles
 graphics/g2d, graphics/g3d -> graphics/api, foundation/*, assets/* when asset integration is needed
 
 ui/ui-kit -> runtime/display, runtime/files, runtime/input, assets/loaders, graphics/api, graphics/g2d
@@ -251,15 +251,16 @@ The arrows above mean "depends on". For example, `graphics/g2d` may depend on `g
 
 General rules:
 
-- `runtime/core` is the single public `core` module and should stay small.
-- Non-required systems must not be placed in `runtime/core`.
+- `runtime/fdx/core` is the single public `core` module and should stay small.
+- Non-required systems must not be placed in `runtime/fdx/core`.
 - Runtime APIs should be backend-neutral.
-- `runtime/core` owns base framework contracts and default runtime services shared by all systems, such as framework exceptions, provider identity, logging, async primitives, FreeType font rasterization now, and native math/image helpers later. User code normally reaches runtime services through higher-level APIs such as `UiFont`, `BitmapFontFiles`, or math classes, not by calling native runtime bindings directly.
-- Backends and platform launchers register or package the platform implementation for `runtime/core`. Common modules consume the shared Java contracts and must not know the concrete native file layout.
-- `runtime/core` libFDX native bridge resources live under `src/main/resources/libfdx-native/...` so desktop_native, Android, web, and desktop packaging can consume the same source/resource model used by other native-backed modules. Current FreeType providers are desktop JVM through LWJGL FreeType, desktop_native and Android through the runtime-core C/C++ bridge, and web through an Emscripten-built JS/WASM bridge.
-- Third-party FreeType source is not committed into the repository. The pinned source archive is prepared under `runtime/core/build/third-party/...` for native artifact generation. Desktop_native generated CMake, Android CMake, and the runtime-core Emscripten task all use the same pinned FreeType source when compiling the native bridge.
-- Runtime-core C/C++ implementation files should be shared by default. Platform modules should add only thin adapters required by the platform ABI or toolchain, such as JNI for Android or JS/WASM loading for web. Do not fork the FreeType rasterizer implementation per platform.
-- Runtime-core native artifacts use the framework core name, not feature-specific names. Web emits `fdx.js` and `fdx.wasm`; native shared-library platforms should emit the platform convention for `fdx`, such as `fdx.dll` on Windows and `libfdx.so` on Android/Linux.
+- `runtime/fdx/core` owns base framework contracts and default runtime services shared by all systems, such as framework exceptions, provider identity, logging, async primitives, FreeType font rasterization now, and native math/image helpers later. User code normally reaches runtime services through higher-level APIs such as `UiFont`, `BitmapFontFiles`, or math classes, not by calling native runtime bindings directly.
+- Backends and platform launchers register the platform implementation for `runtime/fdx/core`. Common modules consume the shared Java contracts and must not know the concrete native file layout.
+- `runtime/fdx/core` owns the Java contracts and does not compile or package platform native code directly.
+- `runtime/fdx/platform/*` owns native runtime fdx compilation. Windows, Linux, macOS, Android, and web platform modules build the matching native artifacts and write generated outputs into the core module's generated resource directories or Android AAR outputs.
+- Third-party FreeType source is not committed into the repository. The pinned source archive is prepared under `runtime/fdx/platform/build/third-party/...` for native artifact generation. Android and web runtime fdx platform builds use that source when compiling the native bridge.
+- Runtime fdx C/C++ implementation files should be shared by default under `runtime/fdx/platform/shared`. Platform modules should add only thin adapters required by the platform ABI or toolchain, such as JNI for Android or JS/WASM loading for web. Do not fork the FreeType rasterizer implementation per platform.
+- Runtime fdx native artifacts use the framework core name, not feature-specific names. Web emits `fdx.js` and `fdx.wasm`; native shared-library platforms should emit the platform convention for `fdx`, such as `fdx.dll` on Windows and `libfdx.so` on Android/Linux.
 - `runtime/application` owns application lifecycle and the base `ApplicationConfig`. Backend-specific startup classes such as `DesktopApplicationConfig` should expose direct typed setters instead of requiring generic config keys in launcher code.
 - Backends should implement APIs instead of being depended on by foundation/runtime APIs.
 - Opt-in feature objects such as `AssetManager`, UI roots, and physics worlds should be created by user/framework feature code from explicit dependencies. Backends should not be forced to depend on those feature modules just because examples need them.
@@ -367,7 +368,7 @@ Normal game code should depend on API modules and high-level feature modules. Pr
 
 Use these Gradle dependency rules:
 
-- Use `implementation` for common APIs and feature modules that source code imports directly, such as `input`, `audio`, `graphics_api`, `g2d`, `g3d`, and `ui_kit`.
+- Use `implementation` for common APIs and feature modules that source code imports directly, such as `input`, `audio`, `graphics`, `g2d`, `g3d`, and `ui_kit`.
 - Use `implementation` for extension cores that expose user-facing APIs.
 - Use `implementation` in launcher/platform modules for selectable graphics stacks that the launcher intentionally enables, such as `gl_desktop`, `wgpu_core`, and `wgpu_desktop_jni`.
 - Use `runtimeOnly` for provider variant modules that only contribute runtime bindings or native libraries and are not directly selected by launcher source code, such as `miniaudio_desktop_jni` and other dependency-only variants.
@@ -402,11 +403,11 @@ dependencies {
 }
 ```
 
-The same rule applies to graphics. `graphics_api` provides the `Graphics` manager and `GraphicsContext` contract; provider modules supply concrete contexts:
+The same rule applies to graphics. `graphics` provides the `Graphics` manager and `GraphicsContext` contract; provider modules supply concrete contexts:
 
 ```kotlin
 dependencies {
-    implementation("io.github.libfdx:graphics_api:$libfdxVersion")
+    implementation("io.github.libfdx:graphics:$libfdxVersion")
     implementation("io.github.libfdx:g2d:$libfdxVersion")
     implementation("io.github.libfdx:wgpu_core:$libfdxVersion")
 
@@ -472,7 +473,7 @@ dependencies {
     implementation("io.github.libfdx:miniaudio_desktop_jni:$libfdxVersion")
     implementation("io.github.libfdx:openal_desktop_jni:$libfdxVersion")
 
-    implementation("io.github.libfdx:graphics_api:$libfdxVersion")
+    implementation("io.github.libfdx:graphics:$libfdxVersion")
     implementation("io.github.libfdx:wgpu_core:$libfdxVersion")
     implementation("io.github.libfdx:vulkan_core:$libfdxVersion")
     implementation("io.github.libfdx:vulkan_desktop:$libfdxVersion")
@@ -693,9 +694,9 @@ ComputePass
 
 ### 8.2. Core And Foundation Common Types
 
-Common type summary for `runtime/core`:
+Common type summary for `runtime/fdx/core`:
 
-`runtime/core` is the only public `core` module. It owns the tiny shared base contracts in package `io.github.libfdx.core` and shared runtime-service contracts in package `io.github.libfdx.runtime.core`. It is not only interfaces. It can contain interfaces, abstract contracts, small final value classes, exceptions, and lightweight helpers that every module can safely depend on.
+`runtime/fdx/core` is the only public `core` module. It owns the tiny shared base contracts in package `io.github.libfdx.core` and shared runtime-service contracts in package `io.github.libfdx.runtime.core`. It is not only interfaces. It can contain interfaces, abstract contracts, small final value classes, exceptions, and lightweight helpers that every module can safely depend on.
 
 It should not contain solution APIs such as graphics, audio, files, assets, application lifecycle, UI, or physics.
 
@@ -907,12 +908,12 @@ External binding APIs are not common provider-neutral APIs. Do not add generic s
 
 The coordinates below define the external Maven coordinate shape.
 
-The Maven group ID is configured in `libfdx.toml` as `release.fdxGroup`; the default group is `io.github.libfdx`. Artifact IDs should be as short as possible, but they must be unique inside that group. When an artifact ID has multiple name parts, use `_` instead of `-` so long coordinates are easy to select and copy as one word. The tiny foundation module should publish as `core`, runtime audio should publish as `audio`, and larger solution API modules use clearer artifact names:
+The Maven group ID is configured in `libfdx.toml` as `release.fdxGroup`; the default group is `io.github.libfdx`. Artifact IDs should be as short as possible, but they must be unique inside that group. When an artifact ID has multiple name parts, use `_` instead of `-` so long coordinates are easy to select and copy as one word. The fdx runtime module should publish as `fdx`, runtime audio should publish as `audio`, and larger solution API modules use clearer artifact names:
 
 ```text
-io.github.libfdx:core
+io.github.libfdx:fdx
 io.github.libfdx:audio
-io.github.libfdx:graphics_api
+io.github.libfdx:graphics
 ```
 
 Use `g2d` and `g3d` as complete user-facing toolkits, not as tiny rendering-only artifacts that force users to add many small dependencies.
@@ -935,11 +936,11 @@ In module names, `_native` means the native runtime family, not a specific compi
 
 Internal Gradle paths should remain the source of truth while the project is young.
 
-Maven publication wiring lives in the shared `buildSrc/src/main/kotlin/publish.gradle.kts` publish plugin. The root build applies it with the `LIBRARIES` target, and the included `libfdx/tools/gradle-plugin` build applies the same script with the `GRADLE_PLUGIN` target. It publishes `:libfdx:*` Java and Android library modules with group `libfdx.toml` `release.fdxGroup`, uses each module's `archivesName` as the artifact ID, and delegates Gradle plugin marker and implementation publication to the included build. The configured `libfdx.toml` `release.fdxVersion` is the upcoming release version without `-SNAPSHOT`; snapshot publish tasks derive Maven version `-SNAPSHOT`, while release publish tasks use the configured base version. The public root publish tasks are `prepareSnapshotDeploy`, `prepareReleaseDeploy`, `publishSnapshot`, and `publishRelease`.
+Maven publication wiring lives in the shared `buildSrc/src/main/kotlin/publish.gradle.kts` publish plugin. The root build applies it with the `LIBRARIES` target, and the included `libfdx/tools/gradle-plugin` build applies the same script with the `GRADLE_PLUGIN` target. It publishes only the explicit `libfdxPublishableProjectPaths` Java and Android library allowlist with group `libfdx.toml` `release.fdxGroup`, uses each module's `archivesName` as the artifact ID, and delegates Gradle plugin marker and implementation publication to the included build. Run `listMavenDeployProjects` to print the library deploy allowlist. The configured `libfdx.toml` `release.fdxVersion` is the upcoming release version without `-SNAPSHOT`; snapshot deploy tasks derive Maven version `-SNAPSHOT`, while release deploy tasks use the configured base version. The public root deploy tasks are `build_native_artifacts`, `prepareSnapshotDeploy`, `prepareReleaseDeploy`, `publishSnapshot`, and `publishRelease`: `build_native_artifacts` builds current-host runtime fdx desktop native-resource JAR inputs, runtime fdx web native-resource JAR inputs, the runtime fdx Android AAR, and Android release AARs; `prepareSnapshotDeploy` generates `build/snapshot-deploy`; `prepareReleaseDeploy` generates `build/staging-deploy` and `build/staging-deploy.zip`; `publishSnapshot` uploads only existing `build/snapshot-deploy` files; and `publishRelease` uploads only existing `build/staging-deploy.zip`. Deploy preparation uses generated native resources and must not compile C native artifacts. By default, runtime fdx native validation fails for missing current-host desktop or web resources and skips non-host desktop native-resource publications; CI release preparation passes `-Plibfdx.runtimeFdx.requireAllNativeResources=true` to require and publish every desktop classifier before packaging. Publish tasks do not generate deploy artifacts and fail when the prepared output is missing. `fdx_shared` is a published native-source/tooling artifact used by the Gradle plugin and standalone builders when a user project generates TeaVM/native builds from Maven artifacts.
 
 The configured `libfdx.toml` `development.usePublishedLibfdx` flag applies only to repository consumers: tests, samples, and benchmarks. When false, those consumers use local `:libfdx:*` project dependencies. When true, their libFDX dependencies resolve to published `<fdxGroup>:<artifact>:<publishedLibfdxVersion>` coordinates from `LibExt.fdxGroup` and `LibExt.publishedLibfdxVersion`. Internal libFDX modules remain source-project dependencies regardless of this flag.
 
-GitHub publish workflows build native runtime artifacts before Maven publication. Windows, Linux, macOS x64, macOS arm64, Android, and web jobs upload temporary artifacts. The final publish job downloads the runtime artifacts into `runtime_core` generated resource directories and runs Gradle with `-Plibfdx.runtimeCore.usePrebuiltNatives=true`, which validates the downloaded desktop and web native resources before packaging. Local publish tasks omit that property and build native resources from the local host/toolchain.
+GitHub publish workflows build native artifacts before Maven publication. Windows, Linux, macOS x64, macOS arm64, Android, and web jobs upload temporary artifacts. The final publish job downloads desktop runtime artifacts into the generated resource directory of `fdx_desktop`, web runtime artifacts into `fdx_web`, plus the Android AAR output directories, and deploy preparation validates those downloaded files before packaging with strict runtime fdx validation enabled. Native artifacts are built by explicit native/platform tasks before tests, samples, or deploy preparation use them. Deploy preparation does not compile C native artifacts; local deploy preparation requires current-host runtime fdx desktop resources, runtime fdx web resources, and Android release AARs to already exist, while strict CI preparation requires every desktop runtime fdx native classifier inside `fdx_desktop`.
 
 ### 9.1. Foundation Modules
 
@@ -952,7 +953,11 @@ GitHub publish workflows build native runtime artifacts before Maven publication
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:runtime:core` | `io.github.libfdx:core` | Single public core module: lifecycle primitives, resource ownership, errors, logging facade, provider identity, async primitives, and shared runtime services such as FreeType rasterization and optional native math helpers. This should not contain files, input, audio, assets, rendering, UI, physics, or backend code. |
+| `:libfdx:runtime:fdx:core` | `io.github.libfdx:fdx` | Single public fdx module: lifecycle primitives, resource ownership, errors, logging facade, provider identity, async primitives, and shared runtime services such as FreeType rasterization and optional native math helpers. This should not contain files, input, audio, assets, rendering, UI, physics, or backend code. |
+| `:libfdx:runtime:fdx:platform:shared` | `io.github.libfdx:fdx_shared` | Shared runtime fdx native-source/tooling artifact from `libfdx/runtime/fdx/platform/shared`. It packages `libfdx-native/...` C/C++ source resources used by the Gradle plugin and standalone builders when TeaVM/native output is generated in a user project. It is resolved transitively by native backend artifacts and is not a normal user `implementation` dependency. |
+| `:libfdx:runtime:fdx:platform:desktop` | `io.github.libfdx:fdx_desktop` | Desktop runtime fdx native-resource JAR from `libfdx/runtime/fdx/platform/desktop`; owns Windows, Linux, and macOS native generation tasks and packages `fdx.dll`, `libfdx.so`, and `libfdx.dylib` under `libfdx-native/desktop/<classifier>/` for the classifiers generated by the current build. |
+| `:libfdx:runtime:fdx:platform:android` | `io.github.libfdx:fdx_android` | Android runtime fdx native AAR from `libfdx/runtime/fdx/platform/android` that packages `libfdx.so` for Android ABIs. Android backends depend on this module instead of compiling runtime fdx native code themselves. |
+| `:libfdx:runtime:fdx:platform:web` | `io.github.libfdx:fdx_web` | Web runtime fdx native-resource JAR from `libfdx/runtime/fdx/platform/web`; packages `fdx.js` and `fdx.wasm`. |
 | `:libfdx:runtime:application` | `io.github.libfdx:application` | Application lifecycle API: create, resize, render, pause, resume, dispose, main loop contracts, application configuration, and platform capability discovery. |
 | `:libfdx:runtime:files` | `io.github.libfdx:files` | File abstraction: classpath/internal/local/external files, virtual file handles, path normalization, read/write capabilities, and storage rules per backend. |
 | `:libfdx:runtime:input` | `io.github.libfdx:input` | Keyboard, mouse, touch, gestures, text input, cursor state, gamepad/controller contracts, mappings, hotplugging events, vibration contracts, dead zones, and input routing primitives. |
@@ -1000,7 +1005,7 @@ Gamepad common contracts live in `runtime/input`. These modules provide platform
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:graphics:api` | `io.github.libfdx:graphics_api` | Low-level WebGPU-style graphics abstraction: adapters, devices, queues, buffers, textures, texture views, framebuffers, render targets, multi-render targets, samplers, shader modules, bind groups, pipelines, command encoders, command buffers, render passes, and surfaces. |
+| `:libfdx:graphics:api` | `io.github.libfdx:graphics` | Low-level WebGPU-style graphics abstraction: adapters, devices, queues, buffers, textures, texture views, framebuffers, render targets, multi-render targets, samplers, shader modules, bind groups, pipelines, command encoders, command buffers, render passes, and surfaces. |
 
 ### 9.7. wgpu/WebGPU Provider Modules
 
@@ -1189,16 +1194,16 @@ val libfdxVersion = "1.0"
 External users would normally use published coordinates:
 
 ```kotlin
-implementation("io.github.libfdx:core:$libfdxVersion")
+implementation("io.github.libfdx:fdx:$libfdxVersion")
 ```
 
 Inside this repository, tests, samples, and benchmarks should keep the source-versus-published dependency choice explicit:
 
 ```kotlin
 if (LibExt.usePublishedLibfdx) {
-    implementation("${LibExt.fdxGroup}:core:${LibExt.publishedLibfdxVersion}")
+    implementation("${LibExt.fdxGroup}:fdx:${LibExt.publishedLibfdxVersion}")
 } else {
-    implementation(project(":libfdx:runtime:core"))
+    implementation(project(":libfdx:runtime:fdx:core"))
 }
 ```
 
@@ -1208,7 +1213,10 @@ This is a reference list, not a recommendation to put every module in one game. 
 
 ```kotlin
 dependencies {
-    implementation("io.github.libfdx:core:$libfdxVersion")
+    implementation("io.github.libfdx:fdx:$libfdxVersion")
+    runtimeOnly("io.github.libfdx:fdx_desktop:$libfdxVersion")
+    runtimeOnly("io.github.libfdx:fdx_web:$libfdxVersion")
+    runtimeOnly("io.github.libfdx:fdx_android:$libfdxVersion")
     implementation("io.github.libfdx:math:$libfdxVersion")
     implementation("io.github.libfdx:collections:$libfdxVersion")
 
@@ -1239,7 +1247,7 @@ dependencies {
     implementation("io.github.libfdx:assets:$libfdxVersion")
     implementation("io.github.libfdx:asset_loaders:$libfdxVersion")
 
-    implementation("io.github.libfdx:graphics_api:$libfdxVersion")
+    implementation("io.github.libfdx:graphics:$libfdxVersion")
     runtimeOnly("io.github.libfdx:wgpu_core:$libfdxVersion")
     runtimeOnly("io.github.libfdx:wgpu_desktop_jni:$libfdxVersion")
     runtimeOnly("io.github.libfdx:wgpu_desktop_ffm:$libfdxVersion")
@@ -1302,7 +1310,7 @@ Useful for tests, command-line simulations, servers, or logic-only projects.
 
 ```kotlin
 dependencies {
-    implementation("io.github.libfdx:core:$libfdxVersion")
+    implementation("io.github.libfdx:fdx:$libfdxVersion")
     implementation("io.github.libfdx:application:$libfdxVersion")
     implementation("io.github.libfdx:files:$libfdxVersion")
 
@@ -1316,7 +1324,7 @@ This is the likely first real user-facing target.
 
 ```kotlin
 dependencies {
-    implementation("io.github.libfdx:core:$libfdxVersion")
+    implementation("io.github.libfdx:fdx:$libfdxVersion")
     implementation("io.github.libfdx:math:$libfdxVersion")
 
     implementation("io.github.libfdx:application:$libfdxVersion")
@@ -1328,7 +1336,7 @@ dependencies {
     implementation("io.github.libfdx:assets:$libfdxVersion")
     implementation("io.github.libfdx:asset_loaders:$libfdxVersion")
 
-    implementation("io.github.libfdx:graphics_api:$libfdxVersion")
+    implementation("io.github.libfdx:graphics:$libfdxVersion")
     implementation("io.github.libfdx:g2d:$libfdxVersion")
 
     runtimeOnly("io.github.libfdx:miniaudio_desktop_jni:$libfdxVersion")
@@ -1344,7 +1352,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("io.github.libfdx:core:$libfdxVersion")
+    implementation("io.github.libfdx:fdx:$libfdxVersion")
     implementation("io.github.libfdx:math:$libfdxVersion")
 
     implementation("io.github.libfdx:application:$libfdxVersion")
@@ -1355,7 +1363,7 @@ dependencies {
     implementation("io.github.libfdx:assets:$libfdxVersion")
     implementation("io.github.libfdx:asset_loaders:$libfdxVersion")
 
-    implementation("io.github.libfdx:graphics_api:$libfdxVersion")
+    implementation("io.github.libfdx:graphics:$libfdxVersion")
     implementation("io.github.libfdx:g3d:$libfdxVersion")
 
     runtimeOnly("io.github.libfdx:wgpu_core:$libfdxVersion")
@@ -1370,7 +1378,7 @@ If the selected desktop backend implementation does not bring the graphics provi
 
 ```kotlin
 dependencies {
-    implementation("io.github.libfdx:core:$libfdxVersion")
+    implementation("io.github.libfdx:fdx:$libfdxVersion")
     implementation("io.github.libfdx:math:$libfdxVersion")
 
     implementation("io.github.libfdx:application:$libfdxVersion")
@@ -1378,7 +1386,7 @@ dependencies {
     implementation("io.github.libfdx:input:$libfdxVersion")
     implementation("io.github.libfdx:files:$libfdxVersion")
 
-    implementation("io.github.libfdx:graphics_api:$libfdxVersion")
+    implementation("io.github.libfdx:graphics:$libfdxVersion")
     runtimeOnly("io.github.libfdx:wgpu_core:$libfdxVersion")
     runtimeOnly("io.github.libfdx:wgpu_desktop_jni:$libfdxVersion")
     implementation("io.github.libfdx:g2d:$libfdxVersion")
@@ -1389,11 +1397,11 @@ dependencies {
 
 ### 10.6. Desktop 2D Game With Explicit Vulkan Implementation
 
-The game code can still compile against `graphics_api` and `g2d`; only the selected provider changes.
+The game code can still compile against `graphics` and `g2d`; only the selected provider changes.
 
 ```kotlin
 dependencies {
-    implementation("io.github.libfdx:core:$libfdxVersion")
+    implementation("io.github.libfdx:fdx:$libfdxVersion")
     implementation("io.github.libfdx:math:$libfdxVersion")
 
     implementation("io.github.libfdx:application:$libfdxVersion")
@@ -1401,7 +1409,7 @@ dependencies {
     implementation("io.github.libfdx:input:$libfdxVersion")
     implementation("io.github.libfdx:files:$libfdxVersion")
 
-    implementation("io.github.libfdx:graphics_api:$libfdxVersion")
+    implementation("io.github.libfdx:graphics:$libfdxVersion")
     runtimeOnly("io.github.libfdx:vulkan_core:$libfdxVersion")
     runtimeOnly("io.github.libfdx:vulkan_desktop:$libfdxVersion")
     implementation("io.github.libfdx:g2d:$libfdxVersion")
@@ -1426,7 +1434,7 @@ dependencies {
 
 ```kotlin
 dependencies {
-    implementation("io.github.libfdx:core:$libfdxVersion")
+    implementation("io.github.libfdx:fdx:$libfdxVersion")
     implementation("io.github.libfdx:math:$libfdxVersion")
 
     implementation("io.github.libfdx:application:$libfdxVersion")
@@ -1437,7 +1445,7 @@ dependencies {
     implementation("io.github.libfdx:assets:$libfdxVersion")
     implementation("io.github.libfdx:asset_loaders:$libfdxVersion")
 
-    implementation("io.github.libfdx:graphics_api:$libfdxVersion")
+    implementation("io.github.libfdx:graphics:$libfdxVersion")
     implementation("io.github.libfdx:g2d:$libfdxVersion")
 
     implementation("io.github.libfdx:ui_kit:$libfdxVersion")
@@ -1456,7 +1464,7 @@ The web backend implementation should choose browser-specific runtime services a
 
 ```kotlin
 dependencies {
-    implementation("io.github.libfdx:core:$libfdxVersion")
+    implementation("io.github.libfdx:fdx:$libfdxVersion")
     implementation("io.github.libfdx:math:$libfdxVersion")
 
     implementation("io.github.libfdx:application:$libfdxVersion")
@@ -1467,7 +1475,7 @@ dependencies {
 
     implementation("io.github.libfdx:assets:$libfdxVersion")
 
-    implementation("io.github.libfdx:graphics_api:$libfdxVersion")
+    implementation("io.github.libfdx:graphics:$libfdxVersion")
     runtimeOnly("io.github.libfdx:wgpu_core:$libfdxVersion")
     runtimeOnly("io.github.libfdx:wgpu_web:$libfdxVersion")
     implementation("io.github.libfdx:g2d:$libfdxVersion")
@@ -1500,7 +1508,7 @@ Sample `core` modules should depend on public framework APIs and feature modules
 dependencies {
     if (LibExt.usePublishedLibfdx) {
         api("${LibExt.fdxGroup}:application:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:graphics_api:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:graphics:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:g2d:${LibExt.publishedLibfdxVersion}")
     } else {
         api(project(":libfdx:runtime:application"))
@@ -1879,7 +1887,7 @@ Core and runtime packages:
 
 | Gradle module | Java package root | What belongs there |
 | --- | --- | --- |
-| `:libfdx:runtime:core` | `io.github.libfdx.core`, `io.github.libfdx.runtime.core` | Minimal framework core types plus shared runtime services and native-service contracts. |
+| `:libfdx:runtime:fdx:core` | `io.github.libfdx.core`, `io.github.libfdx.runtime.core` | Minimal framework core types plus shared runtime services and native-service contracts. |
 | `:libfdx:foundation:math` | `io.github.libfdx.math` | Vectors, matrices, quaternions, bounds, and backend-independent color math. |
 | `:libfdx:foundation:collections` | `io.github.libfdx.collections` | Specialized collections and allocation-conscious data structures. |
 | `:libfdx:runtime:application` | `io.github.libfdx.application` | Application lifecycle, config, loop contracts, platform capabilities, and application startup contracts. |
@@ -1932,7 +1940,7 @@ Class placement examples:
 
 | Class | Module | Package |
 | --- | --- | --- |
-| `ProviderId` | `:libfdx:runtime:core` | `io.github.libfdx.core` |
+| `ProviderId` | `:libfdx:runtime:fdx:core` | `io.github.libfdx.core` |
 | `ApplicationConfig` | `:libfdx:runtime:application` | `io.github.libfdx.application` |
 | `FileHandle` | `:libfdx:runtime:files` | `io.github.libfdx.files` |
 | `Texture` | `:libfdx:graphics:api` | `io.github.libfdx.graphics` |
@@ -2007,8 +2015,11 @@ io.github.libfdx
 Use the shortest unique artifact ID that still makes the module clear:
 
 ```text
-io.github.libfdx:core
-io.github.libfdx:graphics_api
+io.github.libfdx:fdx
+io.github.libfdx:fdx_desktop
+io.github.libfdx:fdx_web
+io.github.libfdx:fdx_android
+io.github.libfdx:graphics
 io.github.libfdx:audio
 io.github.libfdx:display
 io.github.libfdx:g2d
@@ -2036,7 +2047,7 @@ io.github.libfdx:assets
 Use prefixes only when the short name would be ambiguous or collide with another module:
 
 ```text
-io.github.libfdx:graphics_api
+io.github.libfdx:graphics
 io.github.libfdx:gl_desktop
 io.github.libfdx:wgpu_desktop_jni
 io.github.libfdx:vulkan_desktop

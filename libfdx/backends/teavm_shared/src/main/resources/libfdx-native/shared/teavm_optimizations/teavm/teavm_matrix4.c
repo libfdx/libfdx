@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include "../../../src/core.h"
 #include "../../../src/exceptions.h"
-#include "../pure/matrix4.h"
+#include "../../native_optimizations/matrix4.h"
 
 static float* teavm_matrix4_array(void* array_obj) {
     TeaVM_Array* array = (TeaVM_Array*) teavm_nullCheck(array_obj);

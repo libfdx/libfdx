@@ -1,5 +1,3 @@
-import org.gradle.language.jvm.tasks.ProcessResources
-
 plugins {
     id("java-library")
 }
@@ -13,27 +11,6 @@ base {
     archivesName.set("backend_desktop")
 }
 
-val usePrebuiltRuntimeCoreNatives = providers.gradleProperty("libfdx.runtimeCore.usePrebuiltNatives")
-    .map { value ->
-        value.toBooleanStrictOrNull()
-            ?: throw GradleException("libfdx.runtimeCore.usePrebuiltNatives must be true or false, got '$value'")
-    }
-    .orElse(false)
-
-sourceSets {
-    named("main") {
-        resources.srcDir(project(":libfdx:runtime:core").layout.buildDirectory.dir("generated/resources/runtimeCoreDesktop"))
-    }
-}
-
-tasks.named<ProcessResources>("processResources") {
-    if (usePrebuiltRuntimeCoreNatives.get()) {
-        dependsOn(":libfdx:runtime:core:validate_runtime_core_prebuilt_natives")
-    } else {
-        dependsOn(":libfdx:runtime:core:copy_desktop_runtime_core_native")
-    }
-}
-
 dependencies {
     val osName = System.getProperty("os.name").lowercase()
     val osArch = System.getProperty("os.arch").lowercase()
@@ -45,7 +22,7 @@ dependencies {
         else -> throw GradleException("Unsupported LWJGL native platform: $osName/$osArch")
     }
 
-    api(project(":libfdx:runtime:core"))
+    api(project(":libfdx:runtime:fdx:core"))
     implementation(project(":libfdx:foundation:math"))
     api(project(":libfdx:assets:manager"))
     api(project(":libfdx:runtime:application"))
@@ -55,6 +32,8 @@ dependencies {
     api(project(":libfdx:graphics:api"))
     api(project(":libfdx:extensions:graphics:gl:core"))
     api(project(":libfdx:extensions:graphics:vulkan:core"))
+
+    runtimeOnly(project(":libfdx:runtime:fdx:platform:desktop"))
 
     implementation(libs.lwjgl)
     implementation(libs.lwjgl.freetype)
