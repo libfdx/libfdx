@@ -12,7 +12,7 @@ base {
 }
 
 dependencies {
-    api(project(":libfdx:foundation:core"))
+    api(project(":libfdx:runtime:core"))
     api(project(":libfdx:foundation:math"))
     api(project(":libfdx:runtime:display"))
 }

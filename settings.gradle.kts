@@ -8,7 +8,6 @@ pluginManagement {
     }
 }
 
-include(":libfdx:foundation:core")
 include(":libfdx:foundation:math")
 include(":libfdx:runtime:application")
 include(":libfdx:runtime:core")

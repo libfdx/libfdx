@@ -213,15 +213,15 @@ Dependencies should point from higher-level modules to lower-level contracts, ne
 Allowed dependency shape:
 
 ```text
-foundation/math, foundation/collections -> foundation/core
+foundation/math, foundation/collections -> runtime/core
 
-runtime/* -> foundation/core and selected foundation helpers
-runtime/application -> foundation/core only
-runtime/core -> foundation/core only
+runtime/core -> no lower libFDX module
+runtime/* -> runtime/core and selected foundation helpers
+runtime/application -> runtime/core only
 
-assets/* -> foundation/* and runtime/files when file access is needed
+assets/* -> runtime/core, foundation/*, and runtime/files when file access is needed
 
-graphics/api -> foundation/* and runtime/display for presentation handles
+graphics/api -> runtime/core, foundation/*, and runtime/display for presentation handles
 graphics/g2d, graphics/g3d -> graphics/api, foundation/*, assets/* when asset integration is needed
 
 ui/ui-kit -> runtime/display, runtime/files, runtime/input, assets/loaders, graphics/api, graphics/g2d
@@ -251,10 +251,10 @@ The arrows above mean "depends on". For example, `graphics/g2d` may depend on `g
 
 General rules:
 
-- `foundation/core` should stay very small.
-- Non-required systems must not be placed in `foundation/core`.
+- `runtime/core` is the single public `core` module and should stay small.
+- Non-required systems must not be placed in `runtime/core`.
 - Runtime APIs should be backend-neutral.
-- `runtime/core` owns default framework runtime services shared by all systems, such as FreeType font rasterization now and native math/image helpers later. User code normally reaches these services through higher-level APIs such as `UiFont`, `BitmapFontFiles`, or math classes, not by calling native runtime bindings directly.
+- `runtime/core` owns base framework contracts and default runtime services shared by all systems, such as framework exceptions, provider identity, logging, async primitives, FreeType font rasterization now, and native math/image helpers later. User code normally reaches runtime services through higher-level APIs such as `UiFont`, `BitmapFontFiles`, or math classes, not by calling native runtime bindings directly.
 - Backends and platform launchers register or package the platform implementation for `runtime/core`. Common modules consume the shared Java contracts and must not know the concrete native file layout.
 - `runtime/core` libFDX native bridge resources live under `src/main/resources/libfdx-native/...` so desktop_native, Android, web, and desktop packaging can consume the same source/resource model used by other native-backed modules. Current FreeType providers are desktop JVM through LWJGL FreeType, desktop_native and Android through the runtime-core C/C++ bridge, and web through an Emscripten-built JS/WASM bridge.
 - Third-party FreeType source is not committed into the repository. The pinned source archive is prepared under `runtime/core/build/third-party/...` for native artifact generation. Desktop_native generated CMake, Android CMake, and the runtime-core Emscripten task all use the same pinned FreeType source when compiling the native bridge.
@@ -691,11 +691,11 @@ RenderPass
 ComputePass
 ```
 
-### 8.2. Foundation Common Types
+### 8.2. Core And Foundation Common Types
 
-Common type summary for `foundation/core`:
+Common type summary for `runtime/core`:
 
-`foundation/core` is the tiny shared base of the framework. It is not only interfaces. It can contain interfaces, abstract contracts, small final value classes, exceptions, and lightweight helpers that every module can safely depend on.
+`runtime/core` is the only public `core` module. It owns the tiny shared base contracts in package `io.github.libfdx.core` and shared runtime-service contracts in package `io.github.libfdx.runtime.core`. It is not only interfaces. It can contain interfaces, abstract contracts, small final value classes, exceptions, and lightweight helpers that every module can safely depend on.
 
 It should not contain solution APIs such as graphics, audio, files, assets, application lifecycle, UI, or physics.
 
@@ -705,7 +705,6 @@ It should not contain solution APIs such as graphics, audio, files, assets, appl
 | `FdxService` | Internal marker available to backend/provider wiring code when an implementation keeps a private registry. |
 | `FdxException` | Base framework exception type. |
 | `Logger` | Logging facade independent from a logging implementation. |
-| `Capabilities` | Generic capability query shape used by providers. |
 | `ProviderId` | Stable provider identity value, such as `wgpu`, `vulkan`, `miniaudio`, or `desktop_gamepads`. |
 | `ProviderHandle` | Base contract for common handles that can expose provider-specific internals through `as()`. |
 | `FdxFuture<T>` and callbacks | Portable async result and callback contracts. |
@@ -946,7 +945,6 @@ GitHub publish workflows build native runtime artifacts before Maven publication
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:foundation:core` | `io.github.libfdx:core` | Minimal shared core foundation: lifecycle primitives, resource ownership, errors, logging facade, service/context lookup, provider identity, and small utility contracts. This should not contain files, input, audio, assets, rendering, UI, physics, or backend code. |
 | `:libfdx:foundation:math` | `io.github.libfdx:math` | Pure math primitives: vectors, matrices, quaternions, bounds, and backend-independent color math. Should be usable without an application or backend. |
 | `:libfdx:foundation:collections` | `io.github.libfdx:collections` | Specialized collections and allocation-conscious data structures. This should exist only if standard Java collections are not enough for engine hot paths. |
 
@@ -954,6 +952,7 @@ GitHub publish workflows build native runtime artifacts before Maven publication
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
+| `:libfdx:runtime:core` | `io.github.libfdx:core` | Single public core module: lifecycle primitives, resource ownership, errors, logging facade, provider identity, async primitives, and shared runtime services such as FreeType rasterization and optional native math helpers. This should not contain files, input, audio, assets, rendering, UI, physics, or backend code. |
 | `:libfdx:runtime:application` | `io.github.libfdx:application` | Application lifecycle API: create, resize, render, pause, resume, dispose, main loop contracts, application configuration, and platform capability discovery. |
 | `:libfdx:runtime:files` | `io.github.libfdx:files` | File abstraction: classpath/internal/local/external files, virtual file handles, path normalization, read/write capabilities, and storage rules per backend. |
 | `:libfdx:runtime:input` | `io.github.libfdx:input` | Keyboard, mouse, touch, gestures, text input, cursor state, gamepad/controller contracts, mappings, hotplugging events, vibration contracts, dead zones, and input routing primitives. |
@@ -1199,7 +1198,7 @@ Inside this repository, tests, samples, and benchmarks should keep the source-ve
 if (LibExt.usePublishedLibfdx) {
     implementation("${LibExt.fdxGroup}:core:${LibExt.publishedLibfdxVersion}")
 } else {
-    implementation(project(":libfdx:foundation:core"))
+    implementation(project(":libfdx:runtime:core"))
 }
 ```
 
@@ -1880,10 +1879,9 @@ Core and runtime packages:
 
 | Gradle module | Java package root | What belongs there |
 | --- | --- | --- |
-| `:libfdx:foundation:core` | `io.github.libfdx.core` | Minimal foundation types: ownership, errors, logging facade, provider identity, service/context lookup, and small utility contracts. |
+| `:libfdx:runtime:core` | `io.github.libfdx.core`, `io.github.libfdx.runtime.core` | Minimal framework core types plus shared runtime services and native-service contracts. |
 | `:libfdx:foundation:math` | `io.github.libfdx.math` | Vectors, matrices, quaternions, bounds, and backend-independent color math. |
 | `:libfdx:foundation:collections` | `io.github.libfdx.collections` | Specialized collections and allocation-conscious data structures. |
-| `:libfdx:runtime:core` | `io.github.libfdx.runtime.core` | Shared framework runtime services and native-service contracts, starting with default FreeType font rasterization. Framework-wide native helpers may contribute platform kernels, such as desktop AVX2+FMA and Android NEON bulk math, but `foundation/math` owns the scalar public contract and must keep backend-independent fallbacks. |
 | `:libfdx:runtime:application` | `io.github.libfdx.application` | Application lifecycle, config, loop contracts, platform capabilities, and application startup contracts. |
 | `:libfdx:runtime:files` | `io.github.libfdx.files` | File handles, storage locations, path normalization, and file read/write abstractions. |
 | `:libfdx:runtime:input` | `io.github.libfdx.input` | Keyboard, mouse, touch, gestures, text input, cursor state, gamepad contracts, and input routing primitives. |
@@ -1934,7 +1932,7 @@ Class placement examples:
 
 | Class | Module | Package |
 | --- | --- | --- |
-| `ProviderId` | `:libfdx:foundation:core` | `io.github.libfdx.core` |
+| `ProviderId` | `:libfdx:runtime:core` | `io.github.libfdx.core` |
 | `ApplicationConfig` | `:libfdx:runtime:application` | `io.github.libfdx.application` |
 | `FileHandle` | `:libfdx:runtime:files` | `io.github.libfdx.files` |
 | `Texture` | `:libfdx:graphics:api` | `io.github.libfdx.graphics` |

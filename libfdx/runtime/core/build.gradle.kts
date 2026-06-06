@@ -14,11 +14,7 @@ java {
 }
 
 base {
-    archivesName.set("runtime_core")
-}
-
-dependencies {
-    api(project(":libfdx:foundation:core"))
+    archivesName.set("core")
 }
 
 val freetypeVersion = "2.14.3"

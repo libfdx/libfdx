@@ -15,11 +15,10 @@ dependencies {
     implementation(project(":libfdx:backends:teavm_shared"))
     implementation(project(":libfdx:tools:font"))
 
-    api(project(":libfdx:foundation:core"))
+    api(project(":libfdx:runtime:core"))
     api(project(":libfdx:runtime:application"))
     api(project(":libfdx:runtime:display"))
     api(project(":libfdx:runtime:files"))
-    api(project(":libfdx:runtime:core"))
     api(project(":libfdx:graphics:api"))
 
     implementation(libs.teavm.jso)

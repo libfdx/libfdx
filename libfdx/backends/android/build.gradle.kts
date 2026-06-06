@@ -52,14 +52,13 @@ base {
 }
 
 dependencies {
-    api(project(":libfdx:foundation:core"))
+    api(project(":libfdx:runtime:core"))
     implementation(project(":libfdx:foundation:math"))
     api(project(":libfdx:assets:manager"))
     api(project(":libfdx:runtime:application"))
     api(project(":libfdx:runtime:display"))
     api(project(":libfdx:runtime:files"))
     api(project(":libfdx:runtime:input"))
-    api(project(":libfdx:runtime:core"))
     api(project(":libfdx:graphics:api"))
     api(project(":libfdx:extensions:graphics:gl:core"))
     api(project(":libfdx:extensions:graphics:vulkan:core"))

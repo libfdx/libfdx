@@ -67,7 +67,7 @@ Tests, samples, and benchmarks use local source modules by default. To validate 
 
 `publishSnapshot` uploads snapshot artifacts to the Central Portal snapshot repository. `publishRelease` prepares the release bundle and uploads it to Maven Central Portal. Remote publish tasks require `CENTRAL_PORTAL_USERNAME` and `CENTRAL_PORTAL_PASSWORD`; signed Central releases also require `SIGNING_KEY` and `SIGNING_PASSWORD`.
 
-The published `runtime_core` artifact includes generated desktop and web native resources. Local publish/deploy tasks build the current host desktop native and web FreeType bridge. GitHub publication uses platform jobs to build Windows, Linux, macOS, Android, and web artifacts first, then the final publish job downloads those artifacts and runs Gradle with `-Plibfdx.runtimeCore.usePrebuiltNatives=true`.
+The published `core` artifact includes generated desktop and web runtime-core native resources. Local publish/deploy tasks build the current host desktop native and web FreeType bridge. GitHub publication uses platform jobs to build Windows, Linux, macOS, Android, and web artifacts first, then the final publish job downloads those artifacts and runs Gradle with `-Plibfdx.runtimeCore.usePrebuiltNatives=true`.
 
 ## Standalone Builders
 

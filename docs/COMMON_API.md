@@ -221,12 +221,12 @@ UiScenarioWaits
 
 External binding extensions should not rename public binding classes just to match libfdx style.
 
-## 5. Foundation
+## 5. Core
 
 Module:
 
 ```text
-:libfdx:foundation:core
+:libfdx:runtime:core
 ```
 
 Package:
@@ -235,7 +235,7 @@ Package:
 io.github.libfdx.core
 ```
 
-Foundation owns tiny contracts and value types that every module can depend on.
+Core owns tiny framework contracts, base errors, logging, provider identity, async primitives, and shared runtime services that every module can depend on. It is the only public `core` module and publishes as `io.github.libfdx:core`.
 
 Defined types:
 
@@ -247,13 +247,12 @@ Defined types:
 | `Logger` | Logging facade independent from a concrete logging implementation. |
 | `ProviderId` | Stable logical provider identity, such as `wgpu`, `vulkan`, or `miniaudio`. |
 | `ProviderHandle` | Escape hatch contract for provider-backed common handles. |
-| `Capabilities` | Base shape for typed capability objects. |
 | `FdxFuture<T>` | Framework async result type for portable async operations across desktop, web, Android, iOS, and C-backed targets. |
-| `FdxSuccess<T>`, `FdxFailure`, `FdxCompletion<T>` | Callback contracts used by `FdxFuture<T>`. |
+| `Consumer<T>` and `Consumer<Throwable>` callbacks | Callback contracts used by `FdxFuture<T>`. |
 
-### 5.1. Foundation Base Contracts
+### 5.1. Core Base Contracts
 
-Foundation interfaces are intentionally small so every module can depend on them without pulling in runtime systems.
+Core interfaces are intentionally small so every module can depend on them without pulling in higher runtime systems.
 
 Defined shape:
 
@@ -264,9 +263,6 @@ public interface Disposable {
 }
 
 public interface FdxService {
-}
-
-public interface Capabilities {
 }
 
 public interface Logger extends FdxService {
@@ -290,30 +286,20 @@ public final class ProviderId {
     public String toString();
 }
 
-public interface FdxFuture<T> {
-    boolean isDone();
-    boolean isSuccess();
-    T result();
-    Throwable error();
-    FdxFuture<T> onSuccess(FdxSuccess<T> callback);
-    FdxFuture<T> onFailure(FdxFailure callback);
-    FdxFuture<T> onComplete(FdxCompletion<T> callback);
-}
-```
+public final class FdxFuture<T> {
+    public static <T> FdxFuture<T> pending();
+    public static <T> FdxFuture<T> completed(T value);
+    public static <T> FdxFuture<T> failed(Throwable error);
+    public static <T> FdxFuture<T> supply(FdxTask<T> task);
 
-Callback contracts:
-
-```java
-public interface FdxSuccess<T> {
-    void onSuccess(T value);
-}
-
-public interface FdxFailure {
-    void onFailure(Throwable error);
-}
-
-public interface FdxCompletion<T> {
-    void onComplete(FdxFuture<T> future);
+    public FdxFuture<T> onSuccess(Consumer<T> callback);
+    public FdxFuture<T> onFailure(Consumer<Throwable> callback);
+    public boolean isDone();
+    public boolean isFailed();
+    public T join();
+    public T get();
+    public void complete(T value);
+    public void completeExceptionally(Throwable error);
 }
 ```
 
@@ -330,14 +316,14 @@ Rules:
 
 - `Disposable.dispose()` should be safe to call more than once.
 - Using a disposed provider-backed object should fail clearly.
-- Foundation must not depend on runtime, assets, graphics, audio, UI, physics, extensions, or backends.
+- Core must not depend on assets, graphics, audio, UI, physics, extensions, or backends. Foundation modules may depend on `runtime/core` for shared base contracts, but not on higher runtime systems.
 - Async APIs should not assume blocking threads are available on every platform.
 - When a method returns an object and that object does not exist, it returns `null`.
-- `FdxFuture.result()` returns `null` until the future succeeds or when the future fails. `FdxFuture.error()` returns `null` until the future fails.
+- `FdxFuture.get()` and `FdxFuture.join()` return the completed value and fail clearly if the future has not completed or completed with an error.
 - A future completes at most once. Once completed, its result or error must not change.
-- `onSuccess`, `onFailure`, and `onComplete` return the same future so callback registration can be chained.
+- `onSuccess` and `onFailure` return the same future so callback registration can be chained.
 - Callbacks registered before completion run once when the future completes. Callbacks registered after completion still run once for the already completed result.
-- Callback order is registration order for callbacks of the same future.
+- Callback order is registration order for callbacks of the same future and same completion path.
 - Framework async APIs should dispatch callbacks on the application/main event loop when a running `Application` owns the operation. APIs used outside a running application must document their dispatch policy.
 - Callback exceptions should be reported through `Logger` or the provider's error reporting path. They must not change the completed future result or prevent later callbacks from running.
 - The initial `FdxFuture<T>` contract has no cancellation API. Cancellation can be added later through a separate type or explicit operation-specific method.
@@ -939,7 +925,7 @@ public interface Display extends ProviderHandle {
     void requestClose();
 }
 
-public interface DisplayCapabilities extends Capabilities {
+public interface DisplayCapabilities {
     boolean supportsTitle();
     boolean supportsFullscreen();
     boolean supportsResizable();
@@ -1046,7 +1032,7 @@ public interface AudioProvider {
     AudioDevice createDevice(AudioConfig config);
 }
 
-public interface AudioCapabilities extends Capabilities {
+public interface AudioCapabilities {
     boolean supportsSound();
     boolean supportsMusic();
     boolean supportsStreaming();
@@ -1177,7 +1163,7 @@ public interface NetworkProvider {
     Network createNetwork();
 }
 
-public interface NetworkCapabilities extends Capabilities {
+public interface NetworkCapabilities {
     boolean supportsHttp();
     boolean supportsWebSocket();
 }
