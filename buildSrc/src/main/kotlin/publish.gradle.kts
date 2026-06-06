@@ -1,7 +1,11 @@
 import io.github.libfdx.build.LibExt
+import java.util.Collections
 import java.net.URLEncoder
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ProjectDependency
@@ -117,38 +121,124 @@ fun Project.releaseStagingZipFile(): File {
     return rootProject.layout.buildDirectory.file("staging-deploy.zip").get().asFile
 }
 
+fun Project.intProperty(name: String, defaultValue: Int, minValue: Int, maxValue: Int): Int {
+    val rawValue = providers.gradleProperty(name).orNull ?: return defaultValue
+    val value = rawValue.toIntOrNull()
+        ?: throw GradleException("$name must be an integer, got '$rawValue'.")
+    if(value < minValue || value > maxValue) {
+        throw GradleException("$name must be between $minValue and $maxValue, got $value.")
+    }
+    return value
+}
+
+fun File.isSnapshotUploadSkippedFile(): Boolean {
+    val lowercaseName = name.lowercase()
+    return lowercaseName.endsWith(".asc")
+            || lowercaseName.endsWith(".md5")
+            || lowercaseName.endsWith(".sha1")
+            || lowercaseName.endsWith(".sha256")
+            || lowercaseName.endsWith(".sha512")
+}
+
 fun Project.uploadSnapshotDeployDirectory() {
     val snapshotDir = snapshotDeployDirectory()
     if(!snapshotDir.isDirectory) {
         throw GradleException("Snapshot deploy directory ${snapshotDir.absolutePath} does not exist. Run prepareSnapshotDeploy first.")
     }
-    val files = snapshotDir.walkTopDown()
+    val allFiles = snapshotDir.walkTopDown()
         .filter { it.isFile }
         .sortedBy { it.relativeTo(snapshotDir).invariantSeparatorsPath }
         .toList()
-    if(files.isEmpty()) {
+    if(allFiles.isEmpty()) {
         throw GradleException("Snapshot deploy directory ${snapshotDir.absolutePath} is empty. Run prepareSnapshotDeploy first.")
+    }
+    val files = allFiles.filterNot { it.isSnapshotUploadSkippedFile() }
+    if(files.isEmpty()) {
+        throw GradleException("Snapshot deploy directory ${snapshotDir.absolutePath} has no uploadable snapshot files.")
     }
 
     val username = requiredEnvironment("CENTRAL_PORTAL_USERNAME")
     val password = requiredEnvironment("CENTRAL_PORTAL_PASSWORD")
     val repositoryUrl = snapshotRepositoryUrl.trimEnd('/')
-    files.forEach { file ->
-        val relativePath = file.relativeTo(snapshotDir).invariantSeparatorsPath
-        providers.exec {
-            commandLine(
-                "curl",
-                "--fail",
-                "--silent",
-                "--show-error",
-                "-u",
-                "$username:$password",
-                "--upload-file",
-                file.absolutePath,
-                "$repositoryUrl/${encodeMavenPath(relativePath)}"
-            )
-        }.result.get()
+    val parallelism = intProperty("libfdx.snapshotUploadParallelism", 8, 1, 32)
+    val connectTimeoutSeconds = intProperty("libfdx.snapshotUploadConnectTimeoutSeconds", 15, 1, 120)
+    val maxTimeSeconds = intProperty("libfdx.snapshotUploadMaxTimeSeconds", 120, 1, 600)
+    val retryCount = intProperty("libfdx.snapshotUploadRetries", 3, 0, 10)
+    val retryDelaySeconds = intProperty("libfdx.snapshotUploadRetryDelaySeconds", 2, 0, 60)
+    val skippedCount = allFiles.size - files.size
+    println("Uploading ${files.size} snapshot files to $repositoryUrl with parallelism=$parallelism.")
+    if(skippedCount > 0) {
+        println("Skipping $skippedCount snapshot checksum/signature files; the snapshot repository can generate or ignore them.")
     }
+
+    val artifactFiles = files.filterNot { it.name == "maven-metadata.xml" }
+    val metadataFiles = files.filter { it.name == "maven-metadata.xml" }
+    val scheduledCount = AtomicInteger(0)
+    val completedCount = AtomicInteger(0)
+    fun uploadBatch(batchName: String, batchFiles: List<File>) {
+        if(batchFiles.isEmpty()) {
+            return
+        }
+        println("Uploading ${batchFiles.size} $batchName snapshot files.")
+        val executor = Executors.newFixedThreadPool(parallelism)
+        val failures = Collections.synchronizedList(mutableListOf<String>())
+        try {
+            batchFiles.forEach { file ->
+                executor.submit {
+                    val relativePath = file.relativeTo(snapshotDir).invariantSeparatorsPath
+                    try {
+                        val uploadNumber = scheduledCount.incrementAndGet()
+                        val targetUrl = "$repositoryUrl/${encodeMavenPath(relativePath)}"
+                        println("[$uploadNumber/${files.size}] Uploading $relativePath (${file.length()} bytes)")
+                        val process = ProcessBuilder(
+                            "curl",
+                            "--fail",
+                            "--silent",
+                            "--show-error",
+                            "--connect-timeout",
+                            connectTimeoutSeconds.toString(),
+                            "--max-time",
+                            maxTimeSeconds.toString(),
+                            "--retry",
+                            retryCount.toString(),
+                            "--retry-delay",
+                            retryDelaySeconds.toString(),
+                            "--retry-all-errors",
+                            "-u",
+                            "$username:$password",
+                            "--upload-file",
+                            file.absolutePath,
+                            targetUrl
+                        )
+                            .redirectErrorStream(true)
+                            .start()
+                        val output = process.inputStream.bufferedReader().readText()
+                        val exitCode = process.waitFor()
+                        if(exitCode == 0) {
+                            val uploadedCount = completedCount.incrementAndGet()
+                            println("[$uploadedCount/${files.size}] Uploaded $relativePath")
+                        } else {
+                            failures.add("Failed to upload $relativePath with exit code $exitCode.${System.lineSeparator()}$output")
+                        }
+                    } catch(error: Throwable) {
+                        failures.add("Failed to upload $relativePath.${System.lineSeparator()}${error.message ?: error.javaClass.name}")
+                    }
+                }
+            }
+            executor.shutdown()
+            if(!executor.awaitTermination(1, TimeUnit.HOURS)) {
+                executor.shutdownNow()
+                throw GradleException("Snapshot $batchName upload did not complete within 1 hour.")
+            }
+        } finally {
+            executor.shutdownNow()
+        }
+        if(failures.isNotEmpty()) {
+            throw GradleException("Snapshot $batchName upload failed for ${failures.size} file(s):${System.lineSeparator()}${failures.joinToString(System.lineSeparator())}")
+        }
+    }
+    uploadBatch("artifact", artifactFiles)
+    uploadBatch("metadata", metadataFiles)
 }
 
 fun Project.uploadReleaseStagingZip() {
@@ -310,6 +400,9 @@ fun Project.configureLibfdxMavenRepository(deployDir: String? = null) {
 }
 
 fun Project.configureLibfdxSigning() {
+    if(libfdxVersion.endsWith("-SNAPSHOT")) {
+        return
+    }
     val signingKey = System.getenv("SIGNING_KEY").orEmpty()
     val signingPassword = System.getenv("SIGNING_PASSWORD").orEmpty()
     if(signingKey.isNotEmpty() && signingPassword.isNotEmpty()) {

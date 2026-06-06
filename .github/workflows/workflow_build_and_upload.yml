@@ -28,8 +28,6 @@ permissions:
 env:
   CENTRAL_PORTAL_USERNAME: ${{ secrets.CENTRAL_PORTAL_USERNAME }}
   CENTRAL_PORTAL_PASSWORD: ${{ secrets.CENTRAL_PORTAL_PASSWORD }}
-  SIGNING_KEY: ${{ secrets.PGP_SECRET }}
-  SIGNING_PASSWORD: ${{ secrets.PGP_PASSPHRASE }}
 
 jobs:
   build_windows:
@@ -383,6 +381,9 @@ jobs:
 
       - name: Prepare release deploy files
         if: ${{ inputs.shouldUpload && inputs.isRelease }}
+        env:
+          SIGNING_KEY: ${{ secrets.PGP_SECRET }}
+          SIGNING_PASSWORD: ${{ secrets.PGP_PASSPHRASE }}
         run: ./gradlew prepareReleaseDeploy -Plibfdx.runtimeFdx.requireAllNativeResources=true
 
       - name: Upload release deploy files artifact
