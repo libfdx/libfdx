@@ -10,10 +10,9 @@ Use this document to decide what a common API type means, what module owns it, a
 2. [API Source Of Truth](#2-api-source-of-truth)
 3. [Common API Rules](#3-common-api-rules)
 4. [Naming Rules](#4-naming-rules)
-5. [Foundation](#5-foundation)
-    1. [Foundation Base Contracts](#51-foundation-base-contracts)
-    2. [Foundation Base Contracts](#52-foundation-base-contracts)
-    3. [Foundation Math Types](#53-foundation-math-types)
+5. [Core](#5-core)
+    1. [Core Base Contracts](#51-core-base-contracts)
+    2. [Foundation Math Types](#52-foundation-math-types)
 6. [Application](#6-application)
     1. [ApplicationListener Contract](#61-applicationlistener-contract)
     2. [Fdx Runtime Root Contract](#62-fdx-runtime-root-contract)
@@ -49,7 +48,7 @@ Use this document to decide what a common API type means, what module owns it, a
 17. [Scenario Validator](#17-scenario-validator)
     1. [Scenario Validator Contracts](#171-scenario-validator-contracts)
 18. [Initial API Decisions](#18-initial-api-decisions)
-19. [Runtime Core](#19-runtime fdx)
+19. [Runtime Core](#19-runtime-core)
 
 ## 1. Goals
 
@@ -75,7 +74,7 @@ If source code and this document disagree, treat it as an API design issue to re
 
 Common API types are the default types users should write game code against. They should expose portable concepts only.
 
-Provider-specific work should stay behind the implementation or be reached through the `ProviderHandle` escape hatch defined in [5.2. Foundation Base Contracts](#52-foundation-base-contracts).
+Provider-specific work should stay behind the implementation or be reached through the `ProviderHandle` escape hatch defined in [5.1. Core Base Contracts](#51-core-base-contracts).
 
 Interface documentation rule:
 
@@ -333,7 +332,7 @@ Rules:
 - `ProviderId` equality is value-based. Two `ProviderId` instances with the same `value()` must compare equal and have the same hash code.
 - Provider ID values should be stable lowercase identifiers such as `wgpu`, `vulkan`, `miniaudio`, or `desktop_gamepads`.
 
-### 5.3. Foundation Math Types
+### 5.2. Foundation Math Types
 
 Module:
 
