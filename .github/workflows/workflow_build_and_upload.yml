@@ -254,15 +254,15 @@ jobs:
           value=""
           if [ -f libfdx.toml ]; then
             value="$(python3 - <<'PY'
-import tomllib
-from pathlib import Path
+          import tomllib
+          from pathlib import Path
 
-path = Path("libfdx.toml")
-if path.is_file():
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
-    print(data.get("release", {}).get("fdxVersion", ""))
-PY
-)"
+          path = Path("libfdx.toml")
+          if path.is_file():
+              data = tomllib.loads(path.read_text(encoding="utf-8"))
+              print(data.get("release", {}).get("fdxVersion", ""))
+          PY
+            )"
           fi
           if [ -z "$value" ]; then
             value="1.0"
