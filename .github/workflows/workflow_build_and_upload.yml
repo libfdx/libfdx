@@ -37,10 +37,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 25
@@ -51,13 +51,13 @@ jobs:
           arch: x64
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Build runtime fdx Windows native
         run: .\gradlew.bat :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_windows_native
 
       - name: Upload runtime fdx Windows native
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: runtime-fdx-desktop-windows-x64
           path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/windows-x64/fdx.dll
@@ -68,16 +68,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 25
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
@@ -86,7 +86,7 @@ jobs:
         run: ./gradlew :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_linux_native
 
       - name: Upload runtime fdx Linux native
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: runtime-fdx-desktop-linux-x64
           path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/linux-x64/libfdx.so
@@ -97,16 +97,16 @@ jobs:
     runs-on: macos-26-intel
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 25
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
@@ -115,7 +115,7 @@ jobs:
         run: ./gradlew :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native
 
       - name: Upload runtime fdx macOS x64 native
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: runtime-fdx-desktop-macos-x64
           path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-x64/libfdx.dylib
@@ -126,16 +126,16 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 25
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
@@ -144,7 +144,7 @@ jobs:
         run: ./gradlew :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native
 
       - name: Upload runtime fdx macOS arm64 native
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: runtime-fdx-desktop-macos-arm64
           path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-arm64/libfdx.dylib
@@ -155,19 +155,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 25
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Set up Emscripten
-        uses: mymindstorm/setup-emsdk@v14
+        uses: mymindstorm/setup-emsdk@v16
         with:
           version: latest
 
@@ -178,7 +178,7 @@ jobs:
         run: ./gradlew :libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native
 
       - name: Upload runtime fdx web natives
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: runtime-fdx-web
           path: |
@@ -191,24 +191,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 25
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install Android native toolchain
         shell: bash
         run: |
+          set +o pipefail
           yes | sdkmanager --licenses
+          set -o pipefail
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.0.12077973" "cmake;3.22.1"
 
       - name: Change wrapper permissions
@@ -223,7 +225,7 @@ jobs:
             :libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease
 
       - name: Upload Android build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-native-artifacts
           path: |
@@ -245,7 +247,7 @@ jobs:
       - build_android
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Read fdxVersion
         id: version
@@ -281,58 +283,60 @@ jobs:
           fi
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 25
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install Android native toolchain
         shell: bash
         run: |
+          set +o pipefail
           yes | sdkmanager --licenses
+          set -o pipefail
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.0.12077973" "cmake;3.22.1"
 
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
 
       - name: Download runtime fdx Windows native
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: runtime-fdx-desktop-windows-x64
           path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/windows-x64
 
       - name: Download runtime fdx Linux native
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: runtime-fdx-desktop-linux-x64
           path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/linux-x64
 
       - name: Download runtime fdx macOS x64 native
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: runtime-fdx-desktop-macos-x64
           path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-x64
 
       - name: Download runtime fdx macOS arm64 native
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: runtime-fdx-desktop-macos-arm64
           path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-arm64
 
       - name: Download runtime fdx web natives
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: runtime-fdx-web
           path: libfdx/runtime/fdx/platform/web/build/generated/resources/runtimeFdxWeb
 
       - name: Download Android build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: android-native-artifacts
           path: .
@@ -368,7 +372,7 @@ jobs:
         run: ./gradlew prepareReleaseDeploy -Plibfdx.runtimeFdx.requireAllNativeResources=true
 
       - name: Upload release deploy files artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: ${{ inputs.shouldUpload && inputs.isRelease }}
         with:
           name: release-staging-deploy-${{ steps.version.outputs.value }}
@@ -377,7 +381,7 @@ jobs:
             ./build/staging-deploy.zip
 
       - name: Upload release to repository
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         if: ${{ inputs.shouldUpload && inputs.isRelease }}
         with:
           max_attempts: 6
@@ -390,14 +394,14 @@ jobs:
         run: ./gradlew prepareSnapshotDeploy -Plibfdx.runtimeFdx.requireAllNativeResources=true
 
       - name: Upload snapshot deploy files artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: ${{ inputs.shouldUpload && !inputs.isRelease }}
         with:
           name: snapshot-deploy-SNAPSHOT-${{ github.run_number }}
           path: ./build/snapshot-deploy/
 
       - name: Upload snapshot to repository
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         if: ${{ inputs.shouldUpload && !inputs.isRelease }}
         with:
           max_attempts: 6
@@ -406,7 +410,7 @@ jobs:
           command: ./gradlew publishSnapshot
 
       - name: Create Git tag
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         if: ${{ inputs.shouldUpload && inputs.isRelease }}
         with:
           script: |
