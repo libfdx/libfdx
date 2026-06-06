@@ -39,6 +39,12 @@ android {
         sourceCompatibility = JavaVersion.toVersion(25)
         targetCompatibility = JavaVersion.toVersion(25)
     }
+
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
 }
 
 base {

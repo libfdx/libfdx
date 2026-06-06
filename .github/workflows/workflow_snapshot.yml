@@ -1,0 +1,15 @@
+name: Snapshot
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  snapshot:
+    name: Build and Publish Snapshot
+    uses: ./.github/workflows/workflow_build_and_upload.yml
+    with:
+      isRelease: false
+      shouldUpload: true
+    secrets: inherit

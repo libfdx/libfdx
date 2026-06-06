@@ -1,3 +1,5 @@
+import io.github.libfdx.build.LibExt
+
 import java.io.File
 import java.util.Properties
 
@@ -9,7 +11,7 @@ val androidCompileSdkVersion = providers.gradleProperty("androidCompileSdk").get
 val androidMinSdkVersion = providers.gradleProperty("androidMinSdk").get().toInt()
 val androidTargetSdkVersion = providers.gradleProperty("androidTargetSdk").get().toInt()
 
-group = "io.github.libfdx.samples.basic"
+group = "${LibExt.fdxGroup}.samples.basic"
 
 android {
     namespace = "io.github.libfdx.samples.basic.android"
@@ -37,9 +39,15 @@ android {
 
 dependencies {
     implementation(project(":samples:basic:core"))
-    implementation(project(":libfdx:backends:android"))
-    implementation(project(":libfdx:extensions:graphics:wgpu:platform:android_jni"))
-    implementation(project(":libfdx:extensions:graphics:vulkan:platform:android_jni"))
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:backend_android:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:wgpu_android_jni:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:vulkan_android_jni:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(project(":libfdx:backends:android"))
+        implementation(project(":libfdx:extensions:graphics:wgpu:platform:android_jni"))
+        implementation(project(":libfdx:extensions:graphics:vulkan:platform:android_jni"))
+    }
 }
 
 base {

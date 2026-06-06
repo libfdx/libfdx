@@ -1,3 +1,5 @@
+import io.github.libfdx.build.LibExt
+
 import org.gradle.api.attributes.java.TargetJvmVersion
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 
@@ -5,7 +7,8 @@ plugins {
     id("java")
 }
 
-group = "io.github.libfdx.samples.basic"
+group = "${LibExt.fdxGroup}.samples.basic"
+
 
 java {
     sourceCompatibility = JavaVersion.toVersion(25)
@@ -36,14 +39,25 @@ base {
 
 dependencies {
     implementation(project(":samples:basic:core"))
-    implementation(project(":libfdx:runtime:application"))
-    implementation(project(":libfdx:runtime:display"))
-    implementation(project(":libfdx:extensions:graphics:wgpu:core"))
-    implementation(project(":libfdx:backends:desktop"))
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:application:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:display:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:wgpu_core:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_desktop:${LibExt.publishedLibfdxVersion}")
 
-    glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
-    vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
-    wgpuRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
+        glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.publishedLibfdxVersion}")
+        vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.publishedLibfdxVersion}")
+        wgpuRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(project(":libfdx:runtime:application"))
+        implementation(project(":libfdx:runtime:display"))
+        implementation(project(":libfdx:extensions:graphics:wgpu:core"))
+        implementation(project(":libfdx:backends:desktop"))
+
+        glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
+        vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
+        wgpuRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
+    }
 }
 
 val sampleMainClass = "io.github.libfdx.samples.basic.desktop.BasicDesktopLauncher"

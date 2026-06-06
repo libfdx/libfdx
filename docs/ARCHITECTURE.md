@@ -908,7 +908,7 @@ External binding APIs are not common provider-neutral APIs. Do not add generic s
 
 The coordinates below define the external Maven coordinate shape.
 
-The Maven group ID should stay `io.github.libfdx`. Artifact IDs should be as short as possible, but they must be unique inside that group. When an artifact ID has multiple name parts, use `_` instead of `-` so long coordinates are easy to select and copy as one word. The tiny foundation module should publish as `core`, runtime audio should publish as `audio`, and larger solution API modules use clearer artifact names:
+The Maven group ID is configured in `libfdx.toml` as `release.fdxGroup`; the default group is `io.github.libfdx`. Artifact IDs should be as short as possible, but they must be unique inside that group. When an artifact ID has multiple name parts, use `_` instead of `-` so long coordinates are easy to select and copy as one word. The tiny foundation module should publish as `core`, runtime audio should publish as `audio`, and larger solution API modules use clearer artifact names:
 
 ```text
 io.github.libfdx:core
@@ -935,6 +935,12 @@ Do not publish a default platform runtime artifact for an extension when there i
 In module names, `_native` means the native runtime family, not a specific compiler or translation tool. Do not expose a compiler/toolchain name in public module names unless a future module must distinguish between multiple native toolchains.
 
 Internal Gradle paths should remain the source of truth while the project is young.
+
+Maven publication wiring lives in the shared `buildSrc/src/main/kotlin/publish.gradle.kts` publish plugin. The root build applies it with the `LIBRARIES` target, and the included `libfdx/tools/gradle-plugin` build applies the same script with the `GRADLE_PLUGIN` target. It publishes `:libfdx:*` Java and Android library modules with group `libfdx.toml` `release.fdxGroup`, uses each module's `archivesName` as the artifact ID, and delegates Gradle plugin marker and implementation publication to the included build. The configured `libfdx.toml` `release.fdxVersion` is the upcoming release version without `-SNAPSHOT`; snapshot publish tasks derive Maven version `-SNAPSHOT`, while release publish tasks use the configured base version. The public root publish tasks are `prepareSnapshotDeploy`, `prepareReleaseDeploy`, `publishSnapshot`, and `publishRelease`.
+
+The configured `libfdx.toml` `development.usePublishedLibfdx` flag applies only to repository consumers: tests, samples, and benchmarks. When false, those consumers use local `:libfdx:*` project dependencies. When true, their libFDX dependencies resolve to published `<fdxGroup>:<artifact>:<publishedLibfdxVersion>` coordinates from `LibExt.fdxGroup` and `LibExt.publishedLibfdxVersion`. Internal libFDX modules remain source-project dependencies regardless of this flag.
+
+GitHub publish workflows build native runtime artifacts before Maven publication. Windows, Linux, macOS x64, macOS arm64, Android, and web jobs upload temporary artifacts. The final publish job downloads the runtime artifacts into `runtime_core` generated resource directories and runs Gradle with `-Plibfdx.runtimeCore.usePrebuiltNatives=true`, which validates the downloaded desktop and web native resources before packaging. Local publish tasks omit that property and build native resources from the local host/toolchain.
 
 ### 9.1. Foundation Modules
 
@@ -1104,7 +1110,7 @@ Additional backend implementations should be added as new flat variant folders o
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `tools/gradle-plugin` included build | `io.github.libfdx:libfdx-gradle-plugin` | Gradle plugin for libfdx platform targets. It is intentionally an included build under `tools/`, not `buildSrc`, so this repository and external projects can consume the same plugin with `pluginManagement { includeBuild("<libfdx>/tools/gradle-plugin") }`. The public plugin ID is `io.github.libfdx`, and builds should configure it with one `libfdx { ... }` block. |
+| `libfdx/tools/gradle-plugin` included build | `io.github.libfdx:libfdx-gradle-plugin` | Gradle plugin for libfdx platform targets. It is intentionally an included build under `libfdx/tools`, not `buildSrc`, so this repository and external projects can consume the same plugin with `pluginManagement { includeBuild("<libfdx>/libfdx/tools/gradle-plugin") }`. The public plugin ID is `io.github.libfdx`, and builds should configure it with one `libfdx { ... }` block. |
 | `:libfdx:tools:font` | `io.github.libfdx:font_tools` | Build-time font tools. The current tool generates AngelCode BMFont-style `.fnt` metadata and PNG atlases from TTF files for platforms that should ship prebuilt bitmap fonts, such as PSP. It is a general libfdx tooling module, not a TeaVM backend module. |
 | `:libfdx:tools:project-generator` | `io.github.libfdx:project_generator` | Generates new libfdx projects with selected modules and backend targets. |
 | `:libfdx:tools:texture-packer` | `io.github.libfdx:texture_packer` | Texture atlas packing tool and related asset pipeline helpers. |
@@ -1178,7 +1184,7 @@ Planned sample families:
 These examples use a placeholder version:
 
 ```kotlin
-val libfdxVersion = "0.1.0-SNAPSHOT"
+val libfdxVersion = "1.0"
 ```
 
 External users would normally use published coordinates:
@@ -1187,10 +1193,14 @@ External users would normally use published coordinates:
 implementation("io.github.libfdx:core:$libfdxVersion")
 ```
 
-Inside this repository, samples and tests should use project dependencies:
+Inside this repository, tests, samples, and benchmarks should keep the source-versus-published dependency choice explicit:
 
 ```kotlin
-implementation(project(":libfdx:foundation:core"))
+if (LibExt.usePublishedLibfdx) {
+    implementation("${LibExt.fdxGroup}:core:${LibExt.publishedLibfdxVersion}")
+} else {
+    implementation(project(":libfdx:foundation:core"))
+}
 ```
 
 ### 10.1. All Module Dependency Reference
@@ -1482,16 +1492,22 @@ dependencies {
 
 ### 10.11. Local Repository Sample Dependencies
 
-Samples inside this repository should use project paths instead of published coordinates.
+Tests, samples, and benchmarks inside this repository should use explicit `if (LibExt.usePublishedLibfdx)` branches for libFDX dependencies. By default the flag is false and those consumers use local project dependencies. When `libfdx.toml` `development.usePublishedLibfdx` is true, those branches use published coordinates from `LibExt.fdxGroup` and `LibExt.publishedLibfdxVersion`.
 
 Sample `core` modules should depend on public framework APIs and feature modules:
 
 ```kotlin
 // :samples:basic:core
 dependencies {
-    api(project(":libfdx:runtime:application"))
-    implementation(project(":libfdx:graphics:api"))
-    implementation(project(":libfdx:graphics:g2d"))
+    if (LibExt.usePublishedLibfdx) {
+        api("${LibExt.fdxGroup}:application:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:graphics_api:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:g2d:${LibExt.publishedLibfdxVersion}")
+    } else {
+        api(project(":libfdx:runtime:application"))
+        implementation(project(":libfdx:graphics:api"))
+        implementation(project(":libfdx:graphics:g2d"))
+    }
 }
 ```
 
@@ -1501,14 +1517,25 @@ Sample platform modules should depend on their sample `core` module and let Grad
 // :samples:basic:platform:desktop
 dependencies {
     implementation(project(":samples:basic:core"))
-    implementation(project(":libfdx:runtime:application"))
-    implementation(project(":libfdx:runtime:display"))
-    implementation(project(":libfdx:extensions:graphics:wgpu:core"))
-    implementation(project(":libfdx:backends:desktop"))
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:application:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:display:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:wgpu_core:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_desktop:${LibExt.publishedLibfdxVersion}")
 
-    glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
-    vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
-    wgpuRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
+        glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.publishedLibfdxVersion}")
+        vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.publishedLibfdxVersion}")
+        wgpuRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(project(":libfdx:runtime:application"))
+        implementation(project(":libfdx:runtime:display"))
+        implementation(project(":libfdx:extensions:graphics:wgpu:core"))
+        implementation(project(":libfdx:backends:desktop"))
+
+        glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
+        vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
+        wgpuRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
+    }
 }
 ```
 
@@ -1525,8 +1552,13 @@ Example desktop sample stack selection:
 dependencies {
     implementation(project(":samples:basic:core"))
 
-    implementation(project(":libfdx:backends:desktop_native"))
-    runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_native"))
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:backend_desktop_native:${LibExt.publishedLibfdxVersion}")
+        runtimeOnly("${LibExt.fdxGroup}:gl_desktop_native:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(project(":libfdx:backends:desktop_native"))
+        runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_native"))
+    }
 }
 ```
 
@@ -1535,8 +1567,13 @@ dependencies {
 dependencies {
     implementation(project(":samples:basic:core"))
 
-    implementation(project(":libfdx:backends:web"))
-    implementation(project(":libfdx:extensions:graphics:gl:platform:web"))
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:backend_web:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:gl_web:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(project(":libfdx:backends:web"))
+        implementation(project(":libfdx:extensions:graphics:gl:platform:web"))
+    }
 }
 ```
 
@@ -1545,9 +1582,15 @@ dependencies {
 dependencies {
     implementation(project(":samples:basic:core"))
 
-    implementation(project(":libfdx:backends:android"))
-    implementation(project(":libfdx:extensions:graphics:wgpu:platform:android_jni"))
-    implementation(project(":libfdx:extensions:graphics:vulkan:platform:android_jni"))
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:backend_android:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:wgpu_android_jni:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:vulkan_android_jni:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(project(":libfdx:backends:android"))
+        implementation(project(":libfdx:extensions:graphics:wgpu:platform:android_jni"))
+        implementation(project(":libfdx:extensions:graphics:vulkan:platform:android_jni"))
+    }
 }
 ```
 

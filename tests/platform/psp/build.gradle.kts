@@ -1,3 +1,5 @@
+import io.github.libfdx.build.LibExt
+
 import org.gradle.api.GradleException
 import org.teavm.gradle.api.OptimizationLevel
 
@@ -11,16 +13,23 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "io.github.libfdx.tests"
+group = "${LibExt.fdxGroup}.tests"
+
 
 base {
     archivesName.set("tests_psp")
 }
 
 dependencies {
-    implementation(project(":libfdx:backends:psp"))
-    implementation(project(":libfdx:graphics:g2d"))
-    implementation(project(":libfdx:ui:ui-kit"))
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:backend_psp:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:g2d:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:ui_kit:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(project(":libfdx:backends:psp"))
+        implementation(project(":libfdx:graphics:g2d"))
+        implementation(project(":libfdx:ui:ui-kit"))
+    }
 }
 
 val pspTestTasks = mapOf(

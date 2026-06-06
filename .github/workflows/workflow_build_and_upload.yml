@@ -1,0 +1,424 @@
+name: Build and Upload
+
+on:
+  workflow_call:
+    inputs:
+      isRelease:
+        required: true
+        type: boolean
+      shouldUpload:
+        required: true
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      isRelease:
+        description: "Publish as a release instead of a snapshot"
+        required: true
+        type: boolean
+        default: false
+      shouldUpload:
+        description: "Upload artifacts to Maven repositories"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  CENTRAL_PORTAL_USERNAME: ${{ secrets.CENTRAL_PORTAL_USERNAME }}
+  CENTRAL_PORTAL_PASSWORD: ${{ secrets.CENTRAL_PORTAL_PASSWORD }}
+  SIGNING_KEY: ${{ secrets.PGP_SECRET }}
+  SIGNING_PASSWORD: ${{ secrets.PGP_PASSPHRASE }}
+
+jobs:
+  build_windows:
+    name: Build Windows Natives
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up MSVC
+        uses: TheMrMilchmann/setup-msvc-dev@v4
+        with:
+          arch: x64
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build runtime_core Windows native
+        run: .\gradlew.bat :libfdx:runtime:core:copy_desktop_runtime_core_native
+
+      - name: Upload runtime_core Windows native
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-core-desktop-windows-x64
+          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/windows-x64/fdx.dll
+          if-no-files-found: error
+
+  build_linux:
+    name: Build Linux Natives
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Change wrapper permissions
+        run: chmod +x ./gradlew
+
+      - name: Build runtime_core Linux native
+        run: ./gradlew :libfdx:runtime:core:copy_desktop_runtime_core_native
+
+      - name: Upload runtime_core Linux native
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-core-desktop-linux-x64
+          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/linux-x64/libfdx.so
+          if-no-files-found: error
+
+  build_macos_x64:
+    name: Build macOS x64 Natives
+    runs-on: macos-26-intel
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Change wrapper permissions
+        run: chmod +x ./gradlew
+
+      - name: Build runtime_core macOS x64 native
+        run: ./gradlew :libfdx:runtime:core:copy_desktop_runtime_core_native
+
+      - name: Upload runtime_core macOS x64 native
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-core-desktop-macos-x64
+          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/macos-x64/libfdx.dylib
+          if-no-files-found: error
+
+  build_macos_arm64:
+    name: Build macOS arm64 Natives
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Change wrapper permissions
+        run: chmod +x ./gradlew
+
+      - name: Build runtime_core macOS arm64 native
+        run: ./gradlew :libfdx:runtime:core:copy_desktop_runtime_core_native
+
+      - name: Upload runtime_core macOS arm64 native
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-core-desktop-macos-arm64
+          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/macos-arm64/libfdx.dylib
+          if-no-files-found: error
+
+  build_web:
+    name: Build Web Natives
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
+      - name: Change wrapper permissions
+        run: chmod +x ./gradlew
+
+      - name: Build runtime_core web natives
+        run: ./gradlew :libfdx:runtime:core:build_web_freetype_emscripten
+
+      - name: Upload runtime_core web natives
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-core-web
+          path: |
+            libfdx/runtime/core/build/generated/resources/runtimeCoreWeb/fdx.js
+            libfdx/runtime/core/build/generated/resources/runtimeCoreWeb/fdx.wasm
+          if-no-files-found: error
+
+  build_android:
+    name: Build Android Natives
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android native toolchain
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.0.12077973" "cmake;3.22.1"
+
+      - name: Change wrapper permissions
+        run: chmod +x ./gradlew
+
+      - name: Build Android native artifacts
+        run: |
+          ./gradlew \
+            :libfdx:backends:android:assembleRelease \
+            :libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease \
+            :libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease
+
+      - name: Upload Android build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-native-artifacts
+          path: |
+            libfdx/backends/android/build/outputs/aar/*.aar
+            libfdx/extensions/graphics/vulkan/platform/android_jni/build/outputs/aar/*.aar
+            libfdx/extensions/graphics/wgpu/platform/android_jni/build/outputs/aar/*.aar
+          if-no-files-found: error
+
+  publish:
+    name: Build and Upload
+    runs-on: ubuntu-latest
+    needs:
+      - build_windows
+      - build_linux
+      - build_macos_x64
+      - build_macos_arm64
+      - build_web
+      - build_android
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Read fdxVersion
+        id: version
+        shell: bash
+        run: |
+          value=""
+          if [ -f libfdx.toml ]; then
+            value="$(python3 - <<'PY'
+import tomllib
+from pathlib import Path
+
+path = Path("libfdx.toml")
+if path.is_file():
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    print(data.get("release", {}).get("fdxVersion", ""))
+PY
+)"
+          fi
+          if [ -z "$value" ]; then
+            value="1.0"
+          fi
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+          echo "Version: $value"
+
+      - name: Validate publish mode
+        if: ${{ inputs.shouldUpload }}
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.value }}"
+          if [[ "$version" == *-SNAPSHOT ]]; then
+            echo "libfdx.toml release.fdxVersion must contain the upcoming base version without -SNAPSHOT, got $version"
+            exit 1
+          fi
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android native toolchain
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.0.12077973" "cmake;3.22.1"
+
+      - name: Change wrapper permissions
+        run: chmod +x ./gradlew
+
+      - name: Download runtime_core Windows native
+        uses: actions/download-artifact@v4
+        with:
+          name: runtime-core-desktop-windows-x64
+          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/windows-x64
+
+      - name: Download runtime_core Linux native
+        uses: actions/download-artifact@v4
+        with:
+          name: runtime-core-desktop-linux-x64
+          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/linux-x64
+
+      - name: Download runtime_core macOS x64 native
+        uses: actions/download-artifact@v4
+        with:
+          name: runtime-core-desktop-macos-x64
+          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/macos-x64
+
+      - name: Download runtime_core macOS arm64 native
+        uses: actions/download-artifact@v4
+        with:
+          name: runtime-core-desktop-macos-arm64
+          path: libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/macos-arm64
+
+      - name: Download runtime_core web natives
+        uses: actions/download-artifact@v4
+        with:
+          name: runtime-core-web
+          path: libfdx/runtime/core/build/generated/resources/runtimeCoreWeb
+
+      - name: Download Android build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-native-artifacts
+          path: build/ci-artifacts/android
+
+      - name: Verify downloaded native artifacts
+        shell: bash
+        run: |
+          required_files=(
+            "libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/windows-x64/fdx.dll"
+            "libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/linux-x64/libfdx.so"
+            "libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/macos-x64/libfdx.dylib"
+            "libfdx/runtime/core/build/generated/resources/runtimeCoreDesktop/libfdx-native/desktop/macos-arm64/libfdx.dylib"
+            "libfdx/runtime/core/build/generated/resources/runtimeCoreWeb/fdx.js"
+            "libfdx/runtime/core/build/generated/resources/runtimeCoreWeb/fdx.wasm"
+          )
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "Missing native artifact: $file"
+              exit 1
+            fi
+          done
+          if ! find build/ci-artifacts/android -name '*.aar' -print -quit | grep -q .; then
+            echo "Missing Android build artifacts"
+            exit 1
+          fi
+
+      - name: Build without upload
+        if: ${{ !inputs.shouldUpload }}
+        run: ./gradlew build -Plibfdx.runtimeCore.usePrebuiltNatives=true
+
+      - name: Prepare release deploy files
+        if: ${{ inputs.shouldUpload && inputs.isRelease }}
+        run: ./gradlew prepareReleaseDeploy -Plibfdx.runtimeCore.usePrebuiltNatives=true
+
+      - name: Upload release deploy files artifact
+        uses: actions/upload-artifact@v4
+        if: ${{ inputs.shouldUpload && inputs.isRelease }}
+        with:
+          name: release-staging-deploy-${{ steps.version.outputs.value }}
+          path: ./build/staging-deploy/
+
+      - name: Upload release to repository
+        uses: nick-fields/retry@v3
+        if: ${{ inputs.shouldUpload && inputs.isRelease }}
+        with:
+          max_attempts: 6
+          timeout_minutes: 20
+          retry_on: error
+          command: ./gradlew publishRelease -Plibfdx.runtimeCore.usePrebuiltNatives=true
+
+      - name: Prepare snapshot deploy files
+        if: ${{ inputs.shouldUpload && !inputs.isRelease }}
+        run: ./gradlew prepareSnapshotDeploy -Plibfdx.runtimeCore.usePrebuiltNatives=true
+
+      - name: Upload snapshot deploy files artifact
+        uses: actions/upload-artifact@v4
+        if: ${{ inputs.shouldUpload && !inputs.isRelease }}
+        with:
+          name: snapshot-deploy-SNAPSHOT-${{ github.run_number }}
+          path: ./build/snapshot-deploy/
+
+      - name: Upload snapshot to repository
+        uses: nick-fields/retry@v3
+        if: ${{ inputs.shouldUpload && !inputs.isRelease }}
+        with:
+          max_attempts: 6
+          timeout_minutes: 20
+          retry_on: error
+          command: ./gradlew publishSnapshot -Plibfdx.runtimeCore.usePrebuiltNatives=true
+
+      - name: Create Git tag
+        uses: actions/github-script@v7
+        if: ${{ inputs.shouldUpload && inputs.isRelease }}
+        with:
+          script: |
+            const version = "${{ steps.version.outputs.value }}";
+            const ref = "refs/tags/" + version;
+            try {
+              await github.rest.git.createRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref,
+                sha: context.sha
+              });
+            } catch (error) {
+              if (error.status === 422) {
+                core.info(`Tag ${version} already exists.`);
+              } else {
+                throw error;
+              }
+            }

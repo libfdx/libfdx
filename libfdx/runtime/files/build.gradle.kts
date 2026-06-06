@@ -1,3 +1,5 @@
+import io.github.libfdx.build.LibExt
+
 plugins {
     id("java-library")
 }
@@ -7,7 +9,7 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "io.github.libfdx.files"
+group = "${LibExt.fdxGroup}.files"
 
 base {
     archivesName.set("files")

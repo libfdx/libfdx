@@ -3,9 +3,6 @@ plugins {
     `java-gradle-plugin`
 }
 
-group = "io.github.libfdx"
-version = "1.0-SNAPSHOT"
-
 repositories {
     google()
     mavenCentral()
@@ -16,6 +13,9 @@ repositories {
     }
 }
 
+extra["libfdxPublishTarget"] = "GRADLE_PLUGIN"
+apply(from = "../../../buildSrc/src/main/kotlin/publish.gradle.kts")
+
 dependencies {
     implementation(libs.teavm.gradle.plugin)
 }
@@ -23,11 +23,11 @@ dependencies {
 sourceSets {
     main {
         java {
-            srcDir("../../libfdx/tools/font/src/main/java")
-            srcDir("../../libfdx/backends/teavm_shared/src/main/java")
-            srcDir("../../libfdx/backends/web/src/main/java")
-            srcDir("../../libfdx/backends/desktop_native/src/main/java")
-            srcDir("../../libfdx/backends/psp/src/main/java")
+            srcDir("../font/src/main/java")
+            srcDir("../../backends/teavm_shared/src/main/java")
+            srcDir("../../backends/web/src/main/java")
+            srcDir("../../backends/desktop_native/src/main/java")
+            srcDir("../../backends/psp/src/main/java")
             include("io/github/libfdx/tools/font/BitmapFontGenerator.java")
             include("io/github/libfdx/tools/font/BitmapFontResult.java")
             include("io/github/libfdx/tools/font/BitmapFontSpec.java")

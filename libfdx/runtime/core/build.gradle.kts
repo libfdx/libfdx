@@ -1,4 +1,5 @@
 import java.net.URI
+import org.gradle.api.GradleException
 import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.Exec
 import org.gradle.language.jvm.tasks.ProcessResources
@@ -33,6 +34,19 @@ val desktopRuntimeCoreGeneratedResources = layout.buildDirectory.dir("generated/
 val webFreetypeCmakeDir = layout.projectDirectory.dir("src/main/resources/libfdx-native/web/runtime_core")
 val webFreetypeBuildDir = layout.buildDirectory.dir("emscripten/freetype")
 val webFreetypeGeneratedResources = layout.buildDirectory.dir("generated/resources/runtimeCoreWeb")
+val usePrebuiltRuntimeCoreNatives = providers.gradleProperty("libfdx.runtimeCore.usePrebuiltNatives")
+    .map { value ->
+        value.toBooleanStrictOrNull()
+            ?: throw GradleException("libfdx.runtimeCore.usePrebuiltNatives must be true or false, got '$value'")
+    }
+    .orElse(false)
+val prebuiltDesktopRuntimeCoreNatives = mapOf(
+    "windows-x64" to "fdx.dll",
+    "linux-x64" to "libfdx.so",
+    "macos-x64" to "libfdx.dylib",
+    "macos-arm64" to "libfdx.dylib"
+)
+val prebuiltWebRuntimeCoreNatives = listOf("fdx.js", "fdx.wasm")
 
 fun deleteUnexpectedWebRuntimeArtifacts(directory: File) {
     if (!directory.isDirectory) {
@@ -46,6 +60,22 @@ fun deleteUnexpectedWebRuntimeArtifacts(directory: File) {
             file.delete()
         }
     }
+}
+
+fun hasValidEmscriptenCmakeCache(directory: File): Boolean {
+    val cache = File(directory, "CMakeCache.txt")
+    if (!cache.isFile) {
+        return false
+    }
+    val text = cache.readText()
+    val hasEmscriptenToolchain = text.contains("Emscripten.cmake")
+    val hasEmscriptenCCompiler = text.lineSequence().any { line ->
+        line.startsWith("CMAKE_C_COMPILER:") && line.contains("emcc")
+    }
+    val hasEmscriptenCxxCompiler = text.lineSequence().any { line ->
+        line.startsWith("CMAKE_CXX_COMPILER:") && line.contains("em++")
+    }
+    return hasEmscriptenToolchain && hasEmscriptenCCompiler && hasEmscriptenCxxCompiler
 }
 
 fun executableCommand(name: String): List<String> {
@@ -164,7 +194,7 @@ val buildDesktopRuntimeCoreNative = tasks.register<Exec>("build_desktop_runtime_
     ))
 }
 
-tasks.register<Copy>("copy_desktop_runtime_core_native") {
+val copyDesktopRuntimeCoreNative = tasks.register<Copy>("copy_desktop_runtime_core_native") {
     group = "libfdx native"
     description = "Copies the desktop runtime_core native library into generated runtime_core resources."
     dependsOn(buildDesktopRuntimeCoreNative)
@@ -174,13 +204,49 @@ tasks.register<Copy>("copy_desktop_runtime_core_native") {
     })
 }
 
+val validateRuntimeCorePrebuiltNatives = tasks.register("validate_runtime_core_prebuilt_natives") {
+    group = "libfdx native"
+    description = "Validates downloaded runtime_core native resources before packaging."
+    doLast {
+        val desktopRoot = desktopRuntimeCoreGeneratedResources.get().asFile
+        val webRoot = webFreetypeGeneratedResources.get().asFile
+        val missingFiles = mutableListOf<File>()
+        prebuiltDesktopRuntimeCoreNatives.forEach { (classifier, fileName) ->
+            val file = desktopRoot.resolve("libfdx-native/desktop/$classifier/$fileName")
+            if (!file.isFile) {
+                missingFiles += file
+            }
+        }
+        prebuiltWebRuntimeCoreNatives.forEach { fileName ->
+            val file = webRoot.resolve(fileName)
+            if (!file.isFile) {
+                missingFiles += file
+            }
+        }
+        if (missingFiles.isNotEmpty()) {
+            throw GradleException(
+                "Missing prebuilt runtime_core native resources:\n" +
+                        missingFiles.joinToString(separator = "\n") { " - ${it.absolutePath}" }
+            )
+        }
+    }
+}
+
 val configureWebFreetypeEmscripten = tasks.register<Exec>("configure_web_freetype_emscripten") {
     group = "libfdx native"
     description = "Configures the Emscripten FreeType build used by runtime_core web font support."
     dependsOn(extractFreetypeSource)
+    inputs.file(webFreetypeCmakeDir.file("CMakeLists.txt"))
     outputs.dir(webFreetypeBuildDir)
+    outputs.upToDateWhen {
+        hasValidEmscriptenCmakeCache(webFreetypeBuildDir.get().asFile)
+    }
     doFirst {
-        webFreetypeBuildDir.get().asFile.mkdirs()
+        val buildDir = webFreetypeBuildDir.get().asFile
+        if (buildDir.exists() && !hasValidEmscriptenCmakeCache(buildDir)) {
+            buildDir.deleteRecursively()
+        }
+        buildDir.mkdirs()
         webFreetypeGeneratedResources.get().asFile.mkdirs()
     }
     commandLine(executableCommand("emcmake") + listOf(
@@ -217,6 +283,11 @@ sourceSets {
 }
 
 tasks.named<ProcessResources>("processResources") {
+    if (usePrebuiltRuntimeCoreNatives.get()) {
+        dependsOn(validateRuntimeCorePrebuiltNatives)
+    } else {
+        dependsOn(copyDesktopRuntimeCoreNative)
+    }
     doFirst {
         deleteUnexpectedWebRuntimeArtifacts(webFreetypeGeneratedResources.get().asFile)
         deleteUnexpectedWebRuntimeArtifacts(destinationDir)

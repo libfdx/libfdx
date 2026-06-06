@@ -1,3 +1,5 @@
+import io.github.libfdx.build.LibExt
+
 plugins {
     id("java")
     id("io.github.libfdx")
@@ -8,7 +10,8 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "io.github.libfdx.tests"
+group = "${LibExt.fdxGroup}.tests"
+
 
 val nativeTargetFileName = "libfdx-tests-vulkan-desktop-native"
 val nativeOpenConsole = providers.gradleProperty("libfdx.desktopNative.openConsole")
@@ -21,9 +24,15 @@ base {
 
 dependencies {
     implementation(project(":tests:core"))
-    implementation(project(":libfdx:backends:desktop_native"))
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:backend_desktop_native:${LibExt.publishedLibfdxVersion}")
 
-    runtimeOnly(project(":libfdx:extensions:graphics:vulkan:platform:desktop_native"))
+        runtimeOnly("${LibExt.fdxGroup}:vulkan_desktop_native:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(project(":libfdx:backends:desktop_native"))
+
+        runtimeOnly(project(":libfdx:extensions:graphics:vulkan:platform:desktop_native"))
+    }
 }
 
 libfdx {

@@ -1,3 +1,5 @@
+import io.github.libfdx.build.LibExt
+
 plugins {
     alias(libs.plugins.android.library)
 }
@@ -5,7 +7,7 @@ plugins {
 val androidCompileSdkVersion = providers.gradleProperty("androidCompileSdk").get().toInt()
 val androidMinSdkVersion = providers.gradleProperty("androidMinSdk").get().toInt()
 
-group = "io.github.libfdx.vulkan"
+group = "${LibExt.fdxGroup}.vulkan"
 
 android {
     namespace = "io.github.libfdx.graphics.vulkan.android"
@@ -31,6 +33,12 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.toVersion(25)
         targetCompatibility = JavaVersion.toVersion(25)
+    }
+
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
     }
 }
 

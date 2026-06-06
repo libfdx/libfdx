@@ -2,9 +2,6 @@ plugins {
     id("java-library")
 }
 
-group = "io.github.libfdx"
-version = "1.0-SNAPSHOT"
-
 repositories {
     google()
     mavenCentral()

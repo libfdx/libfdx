@@ -1,5 +1,5 @@
 pluginManagement {
-    includeBuild("tools/gradle-plugin")
+    includeBuild("libfdx/tools/gradle-plugin")
 
     repositories {
         google()

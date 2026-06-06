@@ -1,3 +1,5 @@
+import io.github.libfdx.build.LibExt
+
 import org.gradle.api.attributes.java.TargetJvmVersion
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 
@@ -10,7 +12,8 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "io.github.libfdx.tests"
+group = "${LibExt.fdxGroup}.tests"
+
 
 val glRuntimeClasspath by configurations.creating {
     isCanBeConsumed = false
@@ -36,12 +39,21 @@ base {
 
 dependencies {
     implementation(project(":tests:core"))
-    implementation(project(":libfdx:backends:desktop"))
-    implementation(project(":libfdx:extensions:graphics:wgpu:core"))
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:backend_desktop:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:wgpu_core:${LibExt.publishedLibfdxVersion}")
 
-    glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
-    vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
-    wgpuRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
+        glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.publishedLibfdxVersion}")
+        vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.publishedLibfdxVersion}")
+        wgpuRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(project(":libfdx:backends:desktop"))
+        implementation(project(":libfdx:extensions:graphics:wgpu:core"))
+
+        glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
+        vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
+        wgpuRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
+    }
 }
 
 val desktopRuntimeClasspath = glRuntimeClasspath + wgpuRuntimeClasspath + vulkanRuntimeClasspath
@@ -50,7 +62,11 @@ val testLauncherMainClass = "io.github.libfdx.tests.desktop.DesktopTestLauncher"
 val applicationGroup = "application"
 val applicationTestGroup = "application_test"
 
-val desktopBackendResources = project(":libfdx:backends:desktop").layout.buildDirectory.dir("resources/main")
+val desktopBackendResources = if (LibExt.usePublishedLibfdx) {
+    files()
+} else {
+    files(project(":libfdx:backends:desktop").layout.buildDirectory.dir("resources/main"))
+}
 
 fun JavaExec.configureTestRun(
     descriptionText: String,
@@ -194,8 +210,10 @@ tasks.register<JavaExec>("test_wgpu") {
 tasks.register<JavaExec>("test_math_acceleration_desktop") {
     group = applicationTestGroup
     description = "Builds and validates desktop runtime_core SIMD math acceleration against scalar math."
-    dependsOn(":libfdx:backends:desktop:processResources")
-    classpath = sourceSets["main"].output + sourceSets["main"].compileClasspath + files(desktopBackendResources)
+    if (!LibExt.usePublishedLibfdx) {
+        dependsOn(":libfdx:backends:desktop:processResources")
+    }
+    classpath = sourceSets["main"].output + sourceSets["main"].compileClasspath + desktopBackendResources
     mainClass.set("io.github.libfdx.backend.desktop.DesktopMathAccelerationCheck")
     workingDir = rootProject.projectDir
     systemProperty("libfdx.math.requireNative", "true")

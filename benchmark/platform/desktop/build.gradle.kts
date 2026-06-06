@@ -1,3 +1,5 @@
+import io.github.libfdx.build.LibExt
+
 import org.gradle.api.attributes.java.TargetJvmVersion
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import java.time.Instant
@@ -13,7 +15,8 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "io.github.libfdx.benchmark"
+group = "${LibExt.fdxGroup}.benchmark"
+
 
 val glRuntimeClasspath by configurations.creating {
     isCanBeConsumed = false
@@ -44,13 +47,23 @@ base {
 
 dependencies {
     implementation(project(":benchmark:core"))
-    implementation(project(":libfdx:backends:desktop"))
-    implementation(project(":libfdx:extensions:graphics:wgpu:core"))
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:backend_desktop:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:wgpu_core:${LibExt.publishedLibfdxVersion}")
 
-    glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
-    vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
-    wgpuJniRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_jni"))
-    wgpuFfmRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
+        glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.publishedLibfdxVersion}")
+        vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.publishedLibfdxVersion}")
+        wgpuJniRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_jni:${LibExt.publishedLibfdxVersion}")
+        wgpuFfmRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(project(":libfdx:backends:desktop"))
+        implementation(project(":libfdx:extensions:graphics:wgpu:core"))
+
+        glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
+        vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
+        wgpuJniRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_jni"))
+        wgpuFfmRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
+    }
 }
 
 val benchmarkMainClass = "io.github.libfdx.benchmark.desktop.DesktopBenchmarkLauncher"

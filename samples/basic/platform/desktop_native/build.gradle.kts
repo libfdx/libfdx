@@ -1,3 +1,5 @@
+import io.github.libfdx.build.LibExt
+
 plugins {
     id("java")
     id("io.github.libfdx")
@@ -8,7 +10,8 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "io.github.libfdx.samples.basic"
+group = "${LibExt.fdxGroup}.samples.basic"
+
 
 val nativeTargetFileName = "libfdx-basic-gl-desktop-native"
 val nativeOpenConsole = providers.gradleProperty("libfdx.desktopNative.openConsole")
@@ -21,9 +24,15 @@ base {
 
 dependencies {
     implementation(project(":samples:basic:core"))
-    implementation(project(":libfdx:backends:desktop_native"))
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:backend_desktop_native:${LibExt.publishedLibfdxVersion}")
 
-    runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_native"))
+        runtimeOnly("${LibExt.fdxGroup}:gl_desktop_native:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(project(":libfdx:backends:desktop_native"))
+
+        runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_native"))
+    }
 }
 
 libfdx {

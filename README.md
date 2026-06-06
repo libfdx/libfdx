@@ -25,11 +25,11 @@ Modules target Java 25 source and bytecode compatibility. Use JDK 25 for builds 
 
 ## Gradle Plugin
 
-The libfdx Gradle plugin lives in `tools/gradle-plugin` and is consumed through an included build. This repository wires it in from `settings.gradle.kts`; external builds can do the same:
+The libfdx Gradle plugin lives in `libfdx/tools/gradle-plugin` and is consumed through an included build. This repository wires it in from `settings.gradle.kts`; external builds can do the same:
 
 ```kotlin
 pluginManagement {
-    includeBuild("<libfdx>/tools/gradle-plugin")
+    includeBuild("<libfdx>/libfdx/tools/gradle-plugin")
 }
 ```
 
@@ -49,6 +49,25 @@ libfdx {
     }
 }
 ```
+
+## Maven Publishing
+
+Set the Maven group in `libfdx.toml` as `release.fdxGroup`, and set the upcoming release version as `release.fdxVersion` without `-SNAPSHOT`. The publish tasks derive the Maven version from the task: release tasks publish the configured version, and snapshot tasks publish exactly `-SNAPSHOT`.
+
+Tests, samples, and benchmarks use local source modules by default. To validate those consumers against published libFDX artifacts, set `development.usePublishedLibfdx = true` in `libfdx.toml`; their dependency blocks use explicit `if (LibExt.usePublishedLibfdx)` branches and then resolve libFDX dependencies as `<fdxGroup>:<artifact>:<publishedLibfdxVersion>`. The default `development.publishedLibfdxVersion` is `-SNAPSHOT`. The Gradle override is `-Plibfdx.usePublishedLibfdx=true`, and `-Plibfdx.publishedVersion=<version>` can override the dependency version when needed.
+
+```powershell
+.\gradlew.bat prepareSnapshotDeploy
+.\gradlew.bat prepareReleaseDeploy
+.\gradlew.bat publishSnapshot
+.\gradlew.bat publishRelease
+```
+
+`prepareSnapshotDeploy` writes local snapshot artifacts with Maven version `-SNAPSHOT` to `build/snapshot-deploy`. `prepareReleaseDeploy` writes release artifacts with the configured base version to `build/staging-deploy` and creates `build/staging-deploy.zip` for Maven Central Portal upload.
+
+`publishSnapshot` uploads snapshot artifacts to the Central Portal snapshot repository. `publishRelease` prepares the release bundle and uploads it to Maven Central Portal. Remote publish tasks require `CENTRAL_PORTAL_USERNAME` and `CENTRAL_PORTAL_PASSWORD`; signed Central releases also require `SIGNING_KEY` and `SIGNING_PASSWORD`.
+
+The published `runtime_core` artifact includes generated desktop and web native resources. Local publish/deploy tasks build the current host desktop native and web FreeType bridge. GitHub publication uses platform jobs to build Windows, Linux, macOS, Android, and web artifacts first, then the final publish job downloads those artifacts and runs Gradle with `-Plibfdx.runtimeCore.usePrebuiltNatives=true`.
 
 ## Standalone Builders
 

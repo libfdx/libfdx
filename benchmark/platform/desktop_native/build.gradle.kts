@@ -1,3 +1,5 @@
+import io.github.libfdx.build.LibExt
+
 import org.gradle.api.tasks.TaskProvider
 import java.time.Instant
 import java.util.Locale
@@ -13,7 +15,8 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "io.github.libfdx.benchmark"
+group = "${LibExt.fdxGroup}.benchmark"
+
 
 val nativeTargetFileName = "libfdx-benchmark-desktop-native"
 val nativeOpenConsole = providers.gradleProperty("libfdx.desktopNative.openConsole")
@@ -26,10 +29,17 @@ base {
 
 dependencies {
     implementation(project(":benchmark:core"))
-    implementation(project(":libfdx:backends:desktop_native"))
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:backend_desktop_native:${LibExt.publishedLibfdxVersion}")
 
-    runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_native"))
-    runtimeOnly(project(":libfdx:extensions:graphics:vulkan:platform:desktop_native"))
+        runtimeOnly("${LibExt.fdxGroup}:gl_desktop_native:${LibExt.publishedLibfdxVersion}")
+        runtimeOnly("${LibExt.fdxGroup}:vulkan_desktop_native:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(project(":libfdx:backends:desktop_native"))
+
+        runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_native"))
+        runtimeOnly(project(":libfdx:extensions:graphics:vulkan:platform:desktop_native"))
+    }
 }
 
 libfdx {

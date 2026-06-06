@@ -13,6 +13,13 @@ base {
     archivesName.set("backend_desktop")
 }
 
+val usePrebuiltRuntimeCoreNatives = providers.gradleProperty("libfdx.runtimeCore.usePrebuiltNatives")
+    .map { value ->
+        value.toBooleanStrictOrNull()
+            ?: throw GradleException("libfdx.runtimeCore.usePrebuiltNatives must be true or false, got '$value'")
+    }
+    .orElse(false)
+
 sourceSets {
     named("main") {
         resources.srcDir(project(":libfdx:runtime:core").layout.buildDirectory.dir("generated/resources/runtimeCoreDesktop"))
@@ -20,7 +27,11 @@ sourceSets {
 }
 
 tasks.named<ProcessResources>("processResources") {
-    dependsOn(":libfdx:runtime:core:copy_desktop_runtime_core_native")
+    if (usePrebuiltRuntimeCoreNatives.get()) {
+        dependsOn(":libfdx:runtime:core:validate_runtime_core_prebuilt_natives")
+    } else {
+        dependsOn(":libfdx:runtime:core:copy_desktop_runtime_core_native")
+    }
 }
 
 dependencies {

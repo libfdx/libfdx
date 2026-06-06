@@ -1,3 +1,5 @@
+import io.github.libfdx.build.LibExt
+
 plugins {
     id("java")
     id("io.github.libfdx")
@@ -8,7 +10,8 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "io.github.libfdx.samples.basic"
+group = "${LibExt.fdxGroup}.samples.basic"
+
 
 base {
     archivesName.set("sample_basic_web")
@@ -16,8 +19,13 @@ base {
 
 dependencies {
     implementation(project(":samples:basic:core"))
-    implementation(project(":libfdx:backends:web"))
-    implementation(project(":libfdx:extensions:graphics:gl:platform:web"))
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:backend_web:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:gl_web:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(project(":libfdx:backends:web"))
+        implementation(project(":libfdx:extensions:graphics:gl:platform:web"))
+    }
 }
 
 libfdx {

@@ -1,10 +1,14 @@
+import io.github.libfdx.build.LibExt
+
 plugins {
     id("base")
 }
 
+LibExt.configure(rootProject.projectDir, gradle.startParameter.projectProperties)
+
 allprojects {
-    group = "io.github.libfdx"
-    version = "1.0-SNAPSHOT"
+    group = LibExt.fdxGroup
+    version = LibExt.fdxVersion
 
     repositories {
         google()
@@ -18,3 +22,6 @@ allprojects {
         }
     }
 }
+
+extra["libfdxPublishTarget"] = LibfdxPublishTarget.LIBRARIES
+apply(plugin = "publish")
