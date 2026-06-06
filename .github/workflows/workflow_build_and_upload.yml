@@ -52,6 +52,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          add-job-summary: never
 
       - name: Build runtime fdx Windows native
         run: .\gradlew.bat :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_windows_native
@@ -78,6 +80,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          add-job-summary: never
 
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
@@ -107,6 +111,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          add-job-summary: never
 
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
@@ -136,6 +142,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          add-job-summary: never
 
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
@@ -165,6 +173,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          add-job-summary: never
 
       - name: Set up Emscripten
         uses: mymindstorm/setup-emsdk@v16
@@ -201,6 +211,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          add-job-summary: never
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
@@ -290,6 +302,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          add-job-summary: never
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
@@ -339,7 +353,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: android-native-artifacts
-          path: .
+          path: libfdx
 
       - name: Verify downloaded native artifacts
         shell: bash
