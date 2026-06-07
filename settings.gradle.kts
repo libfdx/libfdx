@@ -1,10 +1,68 @@
 pluginManagement {
-    includeBuild("libfdx/tools/gradle-plugin")
+    val tomlFile = java.io.File(settingsDir, "libfdx.toml")
+    val localProperties = java.util.Properties().also { properties ->
+        val file = java.io.File(settingsDir, "local.properties")
+        if (file.isFile) {
+            file.inputStream().use { properties.load(it) }
+        }
+    }
+
+    fun tomlDevelopmentValue(key: String): String? {
+        var inDevelopmentSection = false
+        tomlFile.useLines { lines ->
+            for (rawLine in lines) {
+                val line = rawLine.substringBefore("#").trim()
+                if (line.isEmpty()) {
+                    continue
+                }
+                if (line.startsWith("[") && line.endsWith("]")) {
+                    inDevelopmentSection = line == "[development]"
+                    continue
+                }
+                val separator = line.indexOf('=')
+                if (!inDevelopmentSection || separator < 0 || line.substring(0, separator).trim() != key) {
+                    continue
+                }
+                val value = line.substring(separator + 1).trim()
+                return value.removeSurrounding("\"").removeSurrounding("'")
+            }
+        }
+        return null
+    }
+
+    fun developmentValue(key: String): String {
+        return localProperties.getProperty("development.$key")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: tomlDevelopmentValue(key)
+            ?: throw IllegalStateException("Missing development.$key in local.properties or libfdx.toml.")
+    }
+
+    val usePublishedLibfdx = when (val value = developmentValue("usePublishedLibfdx").lowercase()) {
+        "true" -> true
+        "false" -> false
+        else -> throw IllegalArgumentException("development.usePublishedLibfdx must be true or false, got '$value'.")
+    }
+    val publishedLibfdxVersion = developmentValue("publishedLibfdxVersion")
+    if (!usePublishedLibfdx) {
+        includeBuild("libfdx/tools/gradle-plugin")
+    }
+
+    plugins {
+        if (usePublishedLibfdx) {
+            id("io.github.libfdx") version publishedLibfdxVersion
+        }
+    }
 
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("https://central.sonatype.com/repository/maven-snapshots/")
+        }
         gradlePluginPortal()
+        maven {
+            url = uri("http://teavm.org/maven/repository/")
+            isAllowInsecureProtocol = true
+        }
     }
 }
 

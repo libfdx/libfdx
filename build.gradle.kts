@@ -21,6 +21,11 @@ allprojects {
             isAllowInsecureProtocol = true
         }
     }
+
+    configurations.configureEach {
+        // Check for updates every sync
+        resolutionStrategy.cacheChangingModulesFor(0, "seconds")
+    }
 }
 
 fun runtimeFdxHostNativeTaskPath(): String {
@@ -54,5 +59,7 @@ tasks.register("printFdxVersion") {
     }
 }
 
-extra["libfdxPublishTarget"] = LibfdxPublishTarget.LIBRARIES
-apply(plugin = "publish")
+if (!LibExt.usePublishedLibfdx) {
+    extra["libfdxPublishTarget"] = LibfdxPublishTarget.LIBRARIES
+    apply(plugin = "publish")
+}

@@ -14,7 +14,6 @@ java {
 
 group = "${LibExt.fdxGroup}.tests"
 
-
 base {
     archivesName.set("tests_web")
 }

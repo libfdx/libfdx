@@ -59,11 +59,13 @@ publishedLibfdxVersion = "-SNAPSHOT"
 ```
 
 This TOML default lets users run tests, samples, or benchmarks against artifacts
-that already exist in Maven repositories. In this mode, those consumers resolve
-libFDX dependencies as published coordinates such as
-`<fdxGroup>:<artifact>:<publishedLibfdxVersion>` instead of project
-dependencies. This avoids rebuilding local libFDX modules when the goal is to
-check consumers against a released or snapshot build.
+that already exist in Maven repositories. In this mode, settings resolves the
+libFDX Gradle plugin from Maven, and those consumers resolve libFDX dependencies
+as published coordinates such as
+`<fdxGroup>:<artifact>:<publishedLibfdxVersion>`. This avoids rebuilding local
+libFDX modules when the goal is to check consumers against a released or
+snapshot build. Settings still includes the local `:libfdx:*` source modules;
+the Maven-vs-local choice is made in each consumer dependency block.
 
 Use ignored `local.properties` overrides when developing libFDX itself:
 
@@ -72,13 +74,10 @@ development.usePublishedLibfdx=false
 development.publishedLibfdxVersion=-SNAPSHOT
 ```
 
-With `development.usePublishedLibfdx=false`, tests, samples, and benchmarks
-depend on the local `:libfdx:*` project modules, so changes in the current
-checkout are compiled and exercised. Delete the local override keys to use the
-`libfdx.toml` defaults again.
-
-This flag applies only to repository consumers: tests, samples, and benchmarks.
-Internal libFDX modules still use source-project dependencies.
+With `development.usePublishedLibfdx=false`, settings includes the local
+`libfdx/tools/gradle-plugin` build, and tests, samples, and benchmarks compile
+and exercise local `:libfdx:*` project dependencies from the current checkout.
+Delete the local override keys to use the `libfdx.toml` defaults again.
 
 To switch modes for one checkout, edit `local.properties` before running the
 launcher or validation task. Gradle `-P` overrides are not supported for libFDX
