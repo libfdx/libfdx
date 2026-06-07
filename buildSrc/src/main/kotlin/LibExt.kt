@@ -1,6 +1,7 @@
 package io.github.libfdx.build
 
 import java.io.File
+import java.util.Properties
 
 object LibExt {
     private var loadedConfig: Config? = null
@@ -37,15 +38,27 @@ object LibExt {
     private fun readConfig(startDirectory: File): Config {
         val file = findLibfdxTomlFile(startDirectory)
             ?: throw IllegalStateException("Could not find libfdx.toml from ${startDirectory.absolutePath}.")
+        val rootDirectory = file.parentFile
+        val localProperties = readLocalProperties(rootDirectory)
+        val usePublishedLibfdxValue = readDevelopmentValue(
+            file,
+            localProperties,
+            "usePublishedLibfdx"
+        )
+        val publishedLibfdxVersionValue = readDevelopmentValue(
+            file,
+            localProperties,
+            "publishedLibfdxVersion"
+        )
         return Config(
-            rootDirectory = file.parentFile,
+            rootDirectory = rootDirectory,
             fdxGroup = readRequiredTomlValue(file, "release", "fdxGroup"),
             fdxVersion = readRequiredTomlValue(file, "release", "fdxVersion"),
             usePublishedLibfdx = parseBooleanValue(
-                "libfdx.toml [development].usePublishedLibfdx",
-                readRequiredTomlValue(file, "development", "usePublishedLibfdx")
+                usePublishedLibfdxValue.source,
+                usePublishedLibfdxValue.value
             ),
-            publishedLibfdxVersion = readRequiredTomlValue(file, "development", "publishedLibfdxVersion")
+            publishedLibfdxVersion = publishedLibfdxVersionValue.value
         )
     }
 
@@ -64,6 +77,27 @@ object LibExt {
     private fun readRequiredTomlValue(file: File, section: String, key: String): String {
         return readTomlValue(file, section, key)
             ?: throw IllegalStateException("Missing required libfdx.toml value [$section].$key.")
+    }
+
+    private fun readDevelopmentValue(file: File, localProperties: Properties, key: String): ConfigValue {
+        val localKey = "development.$key"
+        val localValue = localProperties.getProperty(localKey)?.trim()?.takeIf { it.isNotEmpty() }
+        if (localValue != null) {
+            return ConfigValue("local.properties $localKey", localValue)
+        }
+        return ConfigValue(
+            "libfdx.toml [development].$key",
+            readRequiredTomlValue(file, "development", key)
+        )
+    }
+
+    private fun readLocalProperties(rootDirectory: File): Properties {
+        val properties = Properties()
+        val file = File(rootDirectory, "local.properties")
+        if (file.isFile) {
+            file.inputStream().use { properties.load(it) }
+        }
+        return properties
     }
 
     private fun readTomlValue(file: File, section: String, key: String): String? {
@@ -112,5 +146,10 @@ object LibExt {
         val fdxVersion: String,
         val usePublishedLibfdx: Boolean,
         val publishedLibfdxVersion: String
+    )
+
+    private data class ConfigValue(
+        val source: String,
+        val value: String
     )
 }

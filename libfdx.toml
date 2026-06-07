@@ -3,5 +3,5 @@ fdxGroup = "io.github.libfdx"
 fdxVersion = "0.0.1"
 
 [development]
-usePublishedLibfdx = false
+usePublishedLibfdx = true
 publishedLibfdxVersion = "-SNAPSHOT"
