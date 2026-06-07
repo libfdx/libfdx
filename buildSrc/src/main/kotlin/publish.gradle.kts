@@ -166,7 +166,20 @@ fun isCentralReleaseArtifact(file: File): Boolean {
         || name.endsWith(".module")
 }
 
-fun Project.verifyReleaseStagingSignatures() {
+fun isPrimaryCentralReleaseArtifact(file: File): Boolean {
+    if(!file.isFile) {
+        return false
+    }
+    val name = file.name
+    if(name.endsWith(".aar")) {
+        return true
+    }
+    return name.endsWith(".jar")
+        && !name.endsWith("-sources.jar")
+        && !name.endsWith("-javadoc.jar")
+}
+
+fun Project.verifyReleaseStagingArtifacts() {
     val stagingDirectory = releaseStagingDirectory()
     if(!stagingDirectory.isDirectory) {
         throw GradleException("Release staging directory ${stagingDirectory.absolutePath} does not exist. Run prepareReleaseDeploy first.")
@@ -177,21 +190,48 @@ fun Project.verifyReleaseStagingSignatures() {
     if(artifacts.isEmpty()) {
         throw GradleException("Release staging directory ${stagingDirectory.absolutePath} does not contain Maven Central artifacts.")
     }
+    val stagingPath = stagingDirectory.toPath()
+    fun relativePath(file: File): String {
+        return stagingPath.relativize(file.toPath()).toString().replace('\\', '/')
+    }
+
+    val errors = mutableListOf<String>()
     val missingSignatures = artifacts.filter { artifact ->
         !File("${artifact.absolutePath}.asc").isFile
     }
     if(missingSignatures.isNotEmpty()) {
-        val stagingPath = stagingDirectory.toPath()
         val listed = missingSignatures.take(40).joinToString(System.lineSeparator()) { artifact ->
-            val relative = stagingPath.relativize(artifact.toPath()).toString().replace('\\', '/')
-            " - $relative.asc"
+            " - ${relativePath(artifact)}.asc"
         }
         val suffix = if(missingSignatures.size > 40) {
             "${System.lineSeparator()} - ... ${missingSignatures.size - 40} more missing signatures"
         } else {
             ""
         }
-        throw GradleException("Release staging is missing ${missingSignatures.size} signature file(s):${System.lineSeparator()}$listed$suffix")
+        errors.add("Release staging is missing ${missingSignatures.size} signature file(s):${System.lineSeparator()}$listed$suffix")
+    }
+
+    val missingSources = artifacts.groupBy { it.parentFile }
+        .filter { (_, files) ->
+            files.any(::isPrimaryCentralReleaseArtifact)
+                && files.none { it.name.endsWith("-sources.jar") }
+        }
+        .keys
+        .toList()
+    if(missingSources.isNotEmpty()) {
+        val listed = missingSources.take(40).joinToString(System.lineSeparator()) { directory ->
+            " - ${relativePath(directory)}/*-sources.jar"
+        }
+        val suffix = if(missingSources.size > 40) {
+            "${System.lineSeparator()} - ... ${missingSources.size - 40} more missing sources jars"
+        } else {
+            ""
+        }
+        errors.add("Release staging is missing sources jar(s) for ${missingSources.size} component(s):${System.lineSeparator()}$listed$suffix")
+    }
+
+    if(errors.isNotEmpty()) {
+        throw GradleException(errors.joinToString("${System.lineSeparator()}${System.lineSeparator()}"))
     }
 }
 
@@ -473,7 +513,14 @@ fun Project.configureGradlePluginPublishing() {
     group = libfdxGroup
     version = libfdxVersion
 
-    configureLibfdxJavaPublishArtifacts()
+    val sourcesJar = configureLibfdxJavaPublishArtifacts()
+    extensions.configure<PublishingExtension> {
+        publications.withType(MavenPublication::class.java).configureEach {
+            if(name == "pluginMaven") {
+                artifact(sourcesJar)
+            }
+        }
+    }
     configureLibfdxMavenRepository()
     configureLibfdxGradlePluginPomMetadata()
     configureLibfdxSigning()
@@ -563,15 +610,15 @@ fun Project.configureLibraryPublishing() {
         tasks = listOf("prepareReleaseDeploy")
     }
 
-    val verifyReleaseStagingSignatures = tasks.register("verifyReleaseStagingSignatures") {
+    val verifyReleaseStagingArtifacts = tasks.register("verifyReleaseStagingArtifacts") {
         group = "publishing"
-        description = "Validates that every staged release artifact has a matching .asc signature."
+        description = "Validates that staged release artifacts have required sources jars and .asc signatures."
         dependsOn(libraryPublishTasks)
         dependsOn("prepareGradlePluginReleaseDeploy")
         mustRunAfter(cleanReleaseStagingDirectory)
         onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
         doLast {
-            verifyReleaseStagingSignatures()
+            verifyReleaseStagingArtifacts()
         }
     }
 
@@ -590,7 +637,7 @@ fun Project.configureLibraryPublishing() {
         description = "Zip staged libFDX release artifacts for Central Portal upload."
         dependsOn(cleanReleaseStagingDirectory)
         dependsOn(validateRuntimeFdxNativeResources)
-        dependsOn(verifyReleaseStagingSignatures)
+        dependsOn(verifyReleaseStagingArtifacts)
         from(releaseStagingDirectory())
         archiveFileName.set("staging-deploy.zip")
         destinationDirectory.set(releaseStagingZipFile().parentFile)
