@@ -2,6 +2,12 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      autoPublish:
+        description: Automatically publish the Central Portal deployment after validation.
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -13,4 +19,5 @@ jobs:
     with:
       isRelease: true
       shouldUpload: true
+      autoPublish: ${{ inputs.autoPublish }}
     secrets: inherit

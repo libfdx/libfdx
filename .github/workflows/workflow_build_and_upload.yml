@@ -9,6 +9,10 @@ on:
       shouldUpload:
         required: true
         type: boolean
+      autoPublish:
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -375,6 +379,7 @@ jobs:
         env:
           SIGNING_KEY: ${{ secrets.PGP_SECRET }}
           SIGNING_PASSWORD: ${{ secrets.PGP_PASSPHRASE }}
+          CENTRAL_PUBLISHING_TYPE: ${{ inputs.autoPublish && 'AUTOMATIC' || 'USER_MANAGED' }}
         with:
           max_attempts: 6
           timeout_minutes: 20

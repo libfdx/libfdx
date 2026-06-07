@@ -2,6 +2,7 @@ import io.github.libfdx.build.LibExt
 import java.net.URLEncoder
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.util.Locale
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ProjectDependency
@@ -127,6 +128,16 @@ fun releaseSigningPassword(): String? {
     return optionalEnvironment("SIGNING_PASSWORD", "PGP_PASSPHRASE")
 }
 
+fun centralPublishingType(): String {
+    val value = optionalEnvironment("CENTRAL_PUBLISHING_TYPE")
+        ?.uppercase(Locale.ROOT)
+        ?: "USER_MANAGED"
+    if(value != "AUTOMATIC" && value != "USER_MANAGED") {
+        throw GradleException("CENTRAL_PUBLISHING_TYPE must be AUTOMATIC or USER_MANAGED, got '$value'.")
+    }
+    return value
+}
+
 fun requireReleaseSigning(signingKey: String?, signingPassword: String?) {
     if(!isReleasePublishMode || libfdxVersion.endsWith("-SNAPSHOT")) {
         return
@@ -250,6 +261,7 @@ fun Project.uploadReleaseStagingZip() {
     val username = requiredEnvironment("CENTRAL_PORTAL_USERNAME")
     val password = requiredEnvironment("CENTRAL_PORTAL_PASSWORD")
     val bundleName = URLEncoder.encode("$libfdxName-$libfdxVersion", "UTF-8")
+    val publishingType = URLEncoder.encode(centralPublishingType(), "UTF-8")
     providers.exec {
         commandLine(
             "curl",
@@ -262,7 +274,7 @@ fun Project.uploadReleaseStagingZip() {
             "POST",
             "--form",
             "bundle=@${zipFile.absolutePath}",
-            "https://central.sonatype.com/api/v1/publisher/upload?name=$bundleName"
+            "https://central.sonatype.com/api/v1/publisher/upload?name=$bundleName&publishingType=$publishingType"
         )
     }.result.get()
 }
