@@ -17,6 +17,7 @@ desktop-native, or PSP project without applying the Gradle plugin.
 - [4. Standalone Web Builder](#4-standalone-web-builder)
 - [5. Standalone Desktop Native Builder](#5-standalone-desktop-native-builder)
 - [6. Standalone PSP Builder](#6-standalone-psp-builder)
+- [7. Project Generator](#7-project-generator)
 
 ## 1. Choosing A Builder
 
@@ -137,3 +138,45 @@ Building the EBOOT requires PSPDEV/psp-cmake on the native build machine. On
 Windows, set `PSPDEV` to the Windows PSP toolchain path, for example
 `E:\Dev\Env\Ubuntu\pspdev`; the generated `build.bat` converts it to a WSL path
 before running `build.sh`.
+
+## 7. Project Generator
+
+The project generator lives under `libfdx/tools/project-generator` and is split
+so generation logic can run on desktop or web:
+
+- `core`: validates settings and returns an in-memory generated project tree.
+- `ui`: shared UIKit screens and state; it delegates export to the platform.
+- `platform/desktop`: LWJGL3 desktop launcher that writes files to disk.
+- `platform/web`: browser launcher that packages the same generated project
+  tree as a ZIP download.
+
+Run the desktop generator UI with:
+
+```powershell
+.\gradlew.bat :libfdx:tools:project-generator:platform:desktop:run_gl
+```
+
+Build or serve the web generator UI with:
+
+```powershell
+.\gradlew.bat :libfdx:tools:project-generator:platform:web:build_web_js
+.\gradlew.bat :libfdx:tools:project-generator:platform:web:run_web_js
+```
+
+The web module also exposes `build_web_wasm` and `run_web_wasm` for the Wasm
+target.
+
+Publish the JavaScript web generator into a local `gh-pages` branch with:
+
+```powershell
+.\gradlew.bat :libfdx:tools:project-generator:platform:web:deploy_gh_pages
+```
+
+The deploy task writes the built webapp under `project-generator/` in a
+generated worktree at `build/gh-pages-worktree`, creates or updates the local
+`gh-pages` branch, and commits only when generated files changed. It does not
+push the branch.
+
+The core generator must stay independent from filesystem APIs. Desktop export
+writes generated files to a selected directory. Web export downloads an archive
+instead of assuming the browser can write a folder tree directly.

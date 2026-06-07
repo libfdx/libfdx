@@ -174,6 +174,11 @@ repo-root/
       font/
       gradle-plugin/
       project-generator/
+        core/
+        ui/
+        platform/
+          desktop/
+          web/
       texture-packer/
 
   tests/
@@ -1116,8 +1121,13 @@ Additional backend implementations should be added as new flat variant folders o
 | --- | --- | --- |
 | `libfdx/tools/gradle-plugin` included build | `io.github.libfdx:libfdx-gradle-plugin` | Gradle plugin for libfdx platform targets. It is intentionally an included build under `libfdx/tools`, not `buildSrc`, so this repository and external projects can consume the same plugin with `pluginManagement { includeBuild("<libfdx>/libfdx/tools/gradle-plugin") }`. The public plugin ID is `io.github.libfdx`, and builds should configure it with one `libfdx { ... }` block. |
 | `:libfdx:tools:font` | `io.github.libfdx:font_tools` | Build-time font tools. The current tool generates AngelCode BMFont-style `.fnt` metadata and PNG atlases from TTF files for platforms that should ship prebuilt bitmap fonts, such as PSP. It is a general libfdx tooling module, not a TeaVM backend module. |
-| `:libfdx:tools:project-generator` | `io.github.libfdx:project_generator` | Generates new libfdx projects with selected modules and backend targets. |
+| `:libfdx:tools:project-generator:core` | `io.github.libfdx:project_generator_core` | Project generator model, validation, template rendering, and in-memory generated project tree. It must not depend on desktop, web, UIKit, or filesystem APIs. |
+| `:libfdx:tools:project-generator:ui` | `io.github.libfdx:project_generator_ui` | Shared UIKit project generator UI. It depends on project-generator core and delegates persistence/download behavior to a platform export target. |
+| `:libfdx:tools:project-generator:platform:desktop` | internal | Desktop LWJGL3 runtime for the shared project generator UI. It writes generated project files to a selected directory. |
+| `:libfdx:tools:project-generator:platform:web` | internal | Web runtime for the shared project generator UI. It packages the generated in-memory file tree as a ZIP and starts a browser download instead of assuming direct folder writes. It uses the libfdx web Gradle plugin path for JS and Wasm builds and owns the `gh-pages` deployment task for the hosted generator. |
 | `:libfdx:tools:texture-packer` | `io.github.libfdx:texture_packer` | Texture atlas packing tool and related asset pipeline helpers. |
+
+Project-generator submodules are internal launch tooling in the first implementation. Add them to the Maven deploy allowlist only after the public distribution shape is decided.
 
 ### 9.16. Test Modules
 
@@ -1928,7 +1938,7 @@ Backend, tool, test, benchmark, and sample packages:
 | `:libfdx:backends:teavm_shared` | `io.github.libfdx.backend.teavm.shared` | Shared TeaVM build mechanics and native resource payloads used by TeaVM-backed platform backends. |
 | `:libfdx:backends:<platform>_<implementation>` | `io.github.libfdx.backend.<platform>[.<backend_name>]` | Named backend implementation classes. Include the implementation in the package only when it is a real backend technology, such as `desktop` mapping to `backend.desktop`. Artifact-only variants such as `c` should keep the platform package, such as `backend.headless` or `backend.desktop`, and use distinct class names. |
 | `:libfdx:backends:<platform>_<implementation>_resources` | none | Resource-only native payloads shared by provider/runtime modules for that backend family. These modules should not contain Java source. |
-| `:libfdx:tools:<tool>` | `io.github.libfdx.tools.<tool_package>` | Tool implementation code. Use normal Java package words, such as `tools.project.generator` or `tools.texture.packer`. |
+| `:libfdx:tools:<tool>` and `:libfdx:tools:<tool>:<part>` | `io.github.libfdx.tools.<tool_package>` | Tool implementation code. Use normal Java package words, such as `tools.project.generator` or `tools.texture.packer`. Tool platform adapters may add a platform package segment, such as `tools.project.generator.desktop`. |
 | `:tests:core` | `io.github.libfdx.tests` | Shared test registry, test helpers, contracts, and reusable tests. |
 | `:tests:platform:<platform_or_backend>` | `io.github.libfdx.tests.<platform_or_backend>` | Test runner and platform/backend test wiring. Follow the same package rule as backends: real backend names may appear in packages, but artifact-only variants such as `c`, `jni`, and `ffm` should not. |
 | `:benchmark:core` | `io.github.libfdx.benchmark` | Shared benchmark cases, result types, and benchmark helpers. |
