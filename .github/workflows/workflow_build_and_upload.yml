@@ -365,12 +365,8 @@ jobs:
             fi
           done
 
-      - name: Build without upload
-        if: ${{ !inputs.shouldUpload }}
-        run: ./gradlew build
-
       - name: Prepare release deploy files
-        if: ${{ inputs.shouldUpload && inputs.isRelease }}
+        if: ${{ inputs.isRelease }}
         env:
           SIGNING_KEY: ${{ secrets.PGP_SECRET }}
           SIGNING_PASSWORD: ${{ secrets.PGP_PASSPHRASE }}
@@ -395,7 +391,7 @@ jobs:
           command: ./gradlew publishRelease
 
       - name: Prepare snapshot deploy files
-        if: ${{ inputs.shouldUpload && !inputs.isRelease }}
+        if: ${{ !inputs.isRelease }}
         run: ./gradlew prepareSnapshotDeploy
 
       - name: Upload snapshot deploy files artifact
