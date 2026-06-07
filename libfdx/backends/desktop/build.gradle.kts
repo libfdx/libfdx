@@ -12,16 +12,6 @@ base {
 }
 
 dependencies {
-    val osName = System.getProperty("os.name").lowercase()
-    val osArch = System.getProperty("os.arch").lowercase()
-    val lwjglNatives = when {
-        osName.contains("windows") -> "natives-windows"
-        osName.contains("linux") -> "natives-linux"
-        osName.contains("mac") && (osArch.contains("aarch64") || osArch.contains("arm64")) -> "natives-macos-arm64"
-        osName.contains("mac") -> "natives-macos"
-        else -> throw GradleException("Unsupported LWJGL native platform: $osName/$osArch")
-    }
-
     api(project(":libfdx:runtime:fdx:core"))
     implementation(project(":libfdx:foundation:math"))
     api(project(":libfdx:assets:manager"))
@@ -35,13 +25,24 @@ dependencies {
 
     runtimeOnly(project(":libfdx:runtime:fdx:platform:desktop"))
 
-    implementation(libs.lwjgl)
-    implementation(libs.lwjgl.freetype)
-    implementation(libs.lwjgl.glfw)
+    api(libs.lwjgl)
+    api(libs.lwjgl.freetype)
+    api(libs.lwjgl.glfw)
     compileOnly(libs.lwjgl.opengl)
     compileOnly(libs.lwjgl.vulkan)
 
-    runtimeOnly(variantOf(libs.lwjgl) { classifier(lwjglNatives) })
-    runtimeOnly(variantOf(libs.lwjgl.freetype) { classifier(lwjglNatives) })
-    runtimeOnly(variantOf(libs.lwjgl.glfw) { classifier(lwjglNatives) })
+    api(variantOf(libs.lwjgl) { classifier("natives-windows") })
+    api(variantOf(libs.lwjgl) { classifier("natives-linux") })
+    api(variantOf(libs.lwjgl) { classifier("natives-macos") })
+    api(variantOf(libs.lwjgl) { classifier("natives-macos-arm64") })
+
+    api(variantOf(libs.lwjgl.freetype) { classifier("natives-windows") })
+    api(variantOf(libs.lwjgl.freetype) { classifier("natives-linux") })
+    api(variantOf(libs.lwjgl.freetype) { classifier("natives-macos") })
+    api(variantOf(libs.lwjgl.freetype) { classifier("natives-macos-arm64") })
+
+    api(variantOf(libs.lwjgl.glfw) { classifier("natives-windows") })
+    api(variantOf(libs.lwjgl.glfw) { classifier("natives-linux") })
+    api(variantOf(libs.lwjgl.glfw) { classifier("natives-macos") })
+    api(variantOf(libs.lwjgl.glfw) { classifier("natives-macos-arm64") })
 }

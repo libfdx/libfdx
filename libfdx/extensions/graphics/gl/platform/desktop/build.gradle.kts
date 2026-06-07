@@ -16,16 +16,9 @@ base {
 }
 
 dependencies {
-    val osName = System.getProperty("os.name").lowercase()
-    val osArch = System.getProperty("os.arch").lowercase()
-    val lwjglNatives = when {
-        osName.contains("windows") -> "natives-windows"
-        osName.contains("linux") -> "natives-linux"
-        osName.contains("mac") && (osArch.contains("aarch64") || osArch.contains("arm64")) -> "natives-macos-arm64"
-        osName.contains("mac") -> "natives-macos"
-        else -> throw GradleException("Unsupported LWJGL native platform: $osName/$osArch")
-    }
-
-    runtimeOnly(libs.lwjgl.opengl)
-    runtimeOnly(variantOf(libs.lwjgl.opengl) { classifier(lwjglNatives) })
+    api(libs.lwjgl.opengl)
+    api(variantOf(libs.lwjgl.opengl) { classifier("natives-windows") })
+    api(variantOf(libs.lwjgl.opengl) { classifier("natives-linux") })
+    api(variantOf(libs.lwjgl.opengl) { classifier("natives-macos") })
+    api(variantOf(libs.lwjgl.opengl) { classifier("natives-macos-arm64") })
 }

@@ -1499,7 +1499,7 @@ dependencies {
 
 ### 10.11. Local Repository Sample Dependencies
 
-Tests, samples, and benchmarks inside this repository should use explicit `if (LibExt.usePublishedLibfdx)` branches for libFDX dependencies. By default the checked-in TOML sets the flag true, so those consumers use published coordinates from `LibExt.fdxGroup` and `LibExt.publishedLibfdxVersion`. Developers can set `development.usePublishedLibfdx=false` in ignored root `local.properties` to use local project dependencies for the current checkout.
+Tests, samples, and benchmarks inside this repository should use explicit `if (LibExt.usePublishedLibfdx)` branches for libFDX dependencies. By default the checked-in TOML sets the flag true, so those consumers use published coordinates from `LibExt.fdxGroup` and `LibExt.publishedLibfdxVersion`. Developers can set `development.usePublishedLibfdx=false` in ignored root `local.properties` to use local project dependencies for the current checkout. Published desktop JVM artifacts must not encode only the publish host's LWJGL native classifier; they declare all supported LWJGL native artifacts as non-runtime-scope dependencies so LWJGL's loader can select the current runtime platform.
 
 Sample `core` modules should depend on public framework APIs and feature modules:
 
