@@ -1,23 +1,22 @@
-package io.github.libfdx.tools.project.generator.web;
+package io.github.libfdx.samples.basic.web;
 
 import io.github.libfdx.backend.web.WebApplicationBackend;
 import io.github.libfdx.backend.web.WebApplicationConfig;
 import io.github.libfdx.graphics.gl.web.WebGLProvider;
 import io.github.libfdx.graphics.wgpu.WebWGPUProvider;
-import io.github.libfdx.tools.project.generator.ui.ProjectGeneratorApplication;
+import io.github.libfdx.samples.basic.BasicApplication;
 
-final class ProjectGeneratorWebLauncherSupport {
+final class BasicWebLauncherSupport {
     private static final String CANVAS_ID = "libfdx-canvas";
 
-    private ProjectGeneratorWebLauncherSupport() {
+    private BasicWebLauncherSupport() {
     }
 
     static void start(String runtimeName, String[] args) {
         boolean webgpu = isWebGPU(graphics(args));
         String graphicsName = webgpu ? "WebGPU" : "WebGL";
-        String title = "libfdx Project Generator - " + graphicsName + " " + runtimeName;
         WebApplicationConfig config = new WebApplicationConfig()
-                .title(title)
+                .title("libfdx Basic - " + graphicsName + " " + runtimeName)
                 .size(0, 0)
                 .canvasId(CANVAS_ID);
         if (webgpu) {
@@ -26,7 +25,7 @@ final class ProjectGeneratorWebLauncherSupport {
             config.graphics(new WebGLProvider());
         }
 
-        new WebApplicationBackend().start(config, new ProjectGeneratorApplication(new WebProjectExportTarget()));
+        new WebApplicationBackend().start(config, new BasicApplication());
     }
 
     private static String graphics(String[] args) {

@@ -166,17 +166,6 @@ Build or serve the web generator UI with:
 The web module also exposes `build_web_wasm` and `run_web_wasm` for the Wasm
 target.
 
-Publish the JavaScript web generator into a local `gh-pages` branch with:
-
-```powershell
-.\gradlew.bat :libfdx:tools:project-generator:platform:web:deploy_gh_pages
-```
-
-The deploy task writes the built webapp under `project-generator/` in a
-generated worktree at `build/gh-pages-worktree`, creates or updates the local
-`gh-pages` branch, and commits only when generated files changed. It does not
-push the branch.
-
 The core generator must stay independent from filesystem APIs. Desktop export
 writes generated files to a selected directory. Web export downloads an archive
 instead of assuming the browser can write a folder tree directly.

@@ -22,9 +22,11 @@ dependencies {
     if (LibExt.usePublishedLibfdx) {
         implementation("${LibExt.fdxGroup}:backend_web:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:gl_web:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:wgpu_web:${LibExt.publishedLibfdxVersion}")
     } else {
         implementation(project(":libfdx:backends:web"))
         implementation(project(":libfdx:extensions:graphics:gl:platform:web"))
+        implementation(project(":libfdx:extensions:graphics:wgpu:platform:web"))
     }
 }
 

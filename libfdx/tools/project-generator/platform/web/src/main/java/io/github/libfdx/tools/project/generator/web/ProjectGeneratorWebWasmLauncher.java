@@ -5,6 +5,6 @@ public final class ProjectGeneratorWebWasmLauncher {
     }
 
     public static void main(String[] args) {
-        ProjectGeneratorWebLauncherSupport.start("WebGL Wasm");
+        ProjectGeneratorWebLauncherSupport.start("Wasm", args);
     }
 }

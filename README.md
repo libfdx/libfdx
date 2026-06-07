@@ -27,6 +27,12 @@ Modules target Java 25 source and bytecode compatibility.
 
 ## Quick Start
 
+Hosted web tools and demos:
+
+- [Project Generator](https://libfdx.github.io/project-generator/)
+- [Tests](https://libfdx.github.io/tests/)
+- [Basic Sample](https://libfdx.github.io/samples/basic/)
+
 From the repository root on Windows:
 
 ```powershell

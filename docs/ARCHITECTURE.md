@@ -1124,7 +1124,7 @@ Additional backend implementations should be added as new flat variant folders o
 | `:libfdx:tools:project-generator:core` | `io.github.libfdx:project_generator_core` | Project generator model, validation, template rendering, and in-memory generated project tree. It must not depend on desktop, web, UIKit, or filesystem APIs. |
 | `:libfdx:tools:project-generator:ui` | `io.github.libfdx:project_generator_ui` | Shared UIKit project generator UI. It depends on project-generator core and delegates persistence/download behavior to a platform export target. |
 | `:libfdx:tools:project-generator:platform:desktop` | internal | Desktop LWJGL3 runtime for the shared project generator UI. It writes generated project files to a selected directory. |
-| `:libfdx:tools:project-generator:platform:web` | internal | Web runtime for the shared project generator UI. It packages the generated in-memory file tree as a ZIP and starts a browser download instead of assuming direct folder writes. It uses the libfdx web Gradle plugin path for JS and Wasm builds and owns the `gh-pages` deployment task for the hosted generator. |
+| `:libfdx:tools:project-generator:platform:web` | internal | Web runtime for the shared project generator UI. It packages the generated in-memory file tree as a ZIP and starts a browser download instead of assuming direct folder writes. It uses the libfdx web Gradle plugin path for JS and Wasm builds. |
 | `:libfdx:tools:texture-packer` | `io.github.libfdx:texture_packer` | Texture atlas packing tool and related asset pipeline helpers. |
 
 Project-generator submodules are internal launch tooling in the first implementation. Add them to the Maven deploy allowlist only after the public distribution shape is decided.

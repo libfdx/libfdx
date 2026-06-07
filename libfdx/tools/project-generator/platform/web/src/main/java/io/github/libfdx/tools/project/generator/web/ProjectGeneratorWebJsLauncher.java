@@ -5,6 +5,6 @@ public final class ProjectGeneratorWebJsLauncher {
     }
 
     public static void main(String[] args) {
-        ProjectGeneratorWebLauncherSupport.start("WebGL JS");
+        ProjectGeneratorWebLauncherSupport.start("JS", args);
     }
 }
