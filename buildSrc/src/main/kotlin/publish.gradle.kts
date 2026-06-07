@@ -1,11 +1,7 @@
 import io.github.libfdx.build.LibExt
-import java.util.Collections
 import java.net.URLEncoder
 import java.nio.file.Files
 import java.nio.file.Paths
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ProjectDependency
@@ -27,9 +23,14 @@ import groovy.util.Node
 val libfdxName = "libfdx"
 val snapshotRepositoryUrl = "https://central.sonatype.com/repository/maven-snapshots/"
 val taskNames = gradle.startParameter.taskNames
-val requestedTaskBaseNames = taskNames.map { it.substringAfterLast(':') }
 val libfdxBaseVersion = LibExt.fdxVersion
 val libfdxGroup = LibExt.fdxGroup
+val publishTargetProperty = "libfdxPublishTarget"
+val publishTarget = if(extensions.extraProperties.has(publishTargetProperty)) {
+    extensions.extraProperties.get(publishTargetProperty).toString()
+} else {
+    throw GradleException("$publishTargetProperty must be configured before applying publish.gradle.kts")
+}
 
 val libfdxPublishableProjectPaths = listOf(
     ":libfdx:foundation:math",
@@ -89,9 +90,11 @@ val isPublishSnapshot = isTaskRequested("publishSnapshot")
 val isPublishRelease = isTaskRequested("publishRelease")
 val isUploadToMavenCentral = isTaskRequested("uploadToMavenCentral")
 val isZipStagingDeploy = isTaskRequested("zipStagingDeploy")
+val isPublish = isTaskRequested("publish")
 val isDeployPreparationTask = isPrepareSnapshotDeploy || isPrepareReleaseDeploy || isZipStagingDeploy
 val isReleaseLocalDeploy = isPrepareReleaseDeploy || isZipStagingDeploy
-val isSnapshotPublishMode = isPrepareSnapshotDeploy || isPublishSnapshot
+val isGradlePluginTarget = publishTarget == "GRADLE_PLUGIN"
+val isSnapshotPublishMode = isPrepareSnapshotDeploy || isPublishSnapshot || (isGradlePluginTarget && isPublish)
 val libfdxVersion = if(isSnapshotPublishMode) "-SNAPSHOT" else libfdxBaseVersion
 
 if(libfdxBaseVersion.endsWith("-SNAPSHOT")) {
@@ -103,142 +106,16 @@ fun requiredEnvironment(name: String): String {
         ?: throw GradleException("$name environment variable not set")
 }
 
-fun encodeMavenPath(relativePath: String): String {
-    return relativePath.split('/').joinToString("/") { part ->
-        URLEncoder.encode(part, "UTF-8").replace("+", "%20")
-    }
-}
-
 fun Project.snapshotDeployDirectory(): File {
-    return rootProject.layout.buildDirectory.dir("snapshot-deploy").get().asFile
+    return File(LibExt.rootDirectory, "build/snapshot-deploy")
 }
 
 fun Project.releaseStagingDirectory(): File {
-    return rootProject.layout.buildDirectory.dir("staging-deploy").get().asFile
+    return File(LibExt.rootDirectory, "build/staging-deploy")
 }
 
 fun Project.releaseStagingZipFile(): File {
-    return rootProject.layout.buildDirectory.file("staging-deploy.zip").get().asFile
-}
-
-fun Project.intProperty(name: String, defaultValue: Int, minValue: Int, maxValue: Int): Int {
-    val rawValue = providers.gradleProperty(name).orNull ?: return defaultValue
-    val value = rawValue.toIntOrNull()
-        ?: throw GradleException("$name must be an integer, got '$rawValue'.")
-    if(value < minValue || value > maxValue) {
-        throw GradleException("$name must be between $minValue and $maxValue, got $value.")
-    }
-    return value
-}
-
-fun File.isSnapshotUploadSkippedFile(): Boolean {
-    val lowercaseName = name.lowercase()
-    return lowercaseName.endsWith(".asc")
-            || lowercaseName.endsWith(".md5")
-            || lowercaseName.endsWith(".sha1")
-            || lowercaseName.endsWith(".sha256")
-            || lowercaseName.endsWith(".sha512")
-}
-
-fun Project.uploadSnapshotDeployDirectory() {
-    val snapshotDir = snapshotDeployDirectory()
-    if(!snapshotDir.isDirectory) {
-        throw GradleException("Snapshot deploy directory ${snapshotDir.absolutePath} does not exist. Run prepareSnapshotDeploy first.")
-    }
-    val allFiles = snapshotDir.walkTopDown()
-        .filter { it.isFile }
-        .sortedBy { it.relativeTo(snapshotDir).invariantSeparatorsPath }
-        .toList()
-    if(allFiles.isEmpty()) {
-        throw GradleException("Snapshot deploy directory ${snapshotDir.absolutePath} is empty. Run prepareSnapshotDeploy first.")
-    }
-    val files = allFiles.filterNot { it.isSnapshotUploadSkippedFile() }
-    if(files.isEmpty()) {
-        throw GradleException("Snapshot deploy directory ${snapshotDir.absolutePath} has no uploadable snapshot files.")
-    }
-
-    val username = requiredEnvironment("CENTRAL_PORTAL_USERNAME")
-    val password = requiredEnvironment("CENTRAL_PORTAL_PASSWORD")
-    val repositoryUrl = snapshotRepositoryUrl.trimEnd('/')
-    val parallelism = intProperty("libfdx.snapshotUploadParallelism", 8, 1, 32)
-    val connectTimeoutSeconds = intProperty("libfdx.snapshotUploadConnectTimeoutSeconds", 15, 1, 120)
-    val maxTimeSeconds = intProperty("libfdx.snapshotUploadMaxTimeSeconds", 120, 1, 600)
-    val retryCount = intProperty("libfdx.snapshotUploadRetries", 3, 0, 10)
-    val retryDelaySeconds = intProperty("libfdx.snapshotUploadRetryDelaySeconds", 2, 0, 60)
-    val skippedCount = allFiles.size - files.size
-    println("Uploading ${files.size} snapshot files to $repositoryUrl with parallelism=$parallelism.")
-    if(skippedCount > 0) {
-        println("Skipping $skippedCount snapshot checksum/signature files; the snapshot repository can generate or ignore them.")
-    }
-
-    val artifactFiles = files.filterNot { it.name == "maven-metadata.xml" }
-    val metadataFiles = files.filter { it.name == "maven-metadata.xml" }
-    val scheduledCount = AtomicInteger(0)
-    val completedCount = AtomicInteger(0)
-    fun uploadBatch(batchName: String, batchFiles: List<File>) {
-        if(batchFiles.isEmpty()) {
-            return
-        }
-        println("Uploading ${batchFiles.size} $batchName snapshot files.")
-        val executor = Executors.newFixedThreadPool(parallelism)
-        val failures = Collections.synchronizedList(mutableListOf<String>())
-        try {
-            batchFiles.forEach { file ->
-                executor.submit {
-                    val relativePath = file.relativeTo(snapshotDir).invariantSeparatorsPath
-                    try {
-                        val uploadNumber = scheduledCount.incrementAndGet()
-                        val targetUrl = "$repositoryUrl/${encodeMavenPath(relativePath)}"
-                        println("[$uploadNumber/${files.size}] Uploading $relativePath (${file.length()} bytes)")
-                        val process = ProcessBuilder(
-                            "curl",
-                            "--fail",
-                            "--silent",
-                            "--show-error",
-                            "--connect-timeout",
-                            connectTimeoutSeconds.toString(),
-                            "--max-time",
-                            maxTimeSeconds.toString(),
-                            "--retry",
-                            retryCount.toString(),
-                            "--retry-delay",
-                            retryDelaySeconds.toString(),
-                            "--retry-all-errors",
-                            "-u",
-                            "$username:$password",
-                            "--upload-file",
-                            file.absolutePath,
-                            targetUrl
-                        )
-                            .redirectErrorStream(true)
-                            .start()
-                        val output = process.inputStream.bufferedReader().readText()
-                        val exitCode = process.waitFor()
-                        if(exitCode == 0) {
-                            val uploadedCount = completedCount.incrementAndGet()
-                            println("[$uploadedCount/${files.size}] Uploaded $relativePath")
-                        } else {
-                            failures.add("Failed to upload $relativePath with exit code $exitCode.${System.lineSeparator()}$output")
-                        }
-                    } catch(error: Throwable) {
-                        failures.add("Failed to upload $relativePath.${System.lineSeparator()}${error.message ?: error.javaClass.name}")
-                    }
-                }
-            }
-            executor.shutdown()
-            if(!executor.awaitTermination(1, TimeUnit.HOURS)) {
-                executor.shutdownNow()
-                throw GradleException("Snapshot $batchName upload did not complete within 1 hour.")
-            }
-        } finally {
-            executor.shutdownNow()
-        }
-        if(failures.isNotEmpty()) {
-            throw GradleException("Snapshot $batchName upload failed for ${failures.size} file(s):${System.lineSeparator()}${failures.joinToString(System.lineSeparator())}")
-        }
-    }
-    uploadBatch("artifact", artifactFiles)
-    uploadBatch("metadata", metadataFiles)
+    return File(LibExt.rootDirectory, "build/staging-deploy.zip")
 }
 
 fun Project.uploadReleaseStagingZip() {
@@ -375,20 +252,18 @@ fun Project.configureManualPomDependencies(pom: MavenPom) {
     }
 }
 
-fun Project.configureLibfdxMavenRepository(deployDir: String? = null) {
+fun Project.configureLibfdxMavenRepository() {
     extensions.configure<PublishingExtension> {
         repositories {
             maven {
                 name = "libfdxDeploy"
                 url = when {
-                    deployDir != null -> uri(deployDir)
-                    isPrepareSnapshotDeploy -> uri(rootProject.layout.buildDirectory.dir("snapshot-deploy"))
-                    isReleaseLocalDeploy -> uri(rootProject.layout.buildDirectory.dir("staging-deploy"))
+                    isPrepareSnapshotDeploy -> uri(snapshotDeployDirectory())
+                    isReleaseLocalDeploy -> uri(releaseStagingDirectory())
                     libfdxVersion.endsWith("-SNAPSHOT") -> uri(snapshotRepositoryUrl)
-                    else -> uri(rootProject.layout.buildDirectory.dir("staging-deploy"))
+                    else -> uri(releaseStagingDirectory())
                 }
-                if(deployDir == null && !isPrepareSnapshotDeploy && !isReleaseLocalDeploy
-                        && libfdxVersion.endsWith("-SNAPSHOT")) {
+                if(!isPrepareSnapshotDeploy && !isReleaseLocalDeploy && libfdxVersion.endsWith("-SNAPSHOT")) {
                     credentials {
                         username = System.getenv("CENTRAL_PORTAL_USERNAME")
                         password = System.getenv("CENTRAL_PORTAL_PASSWORD")
@@ -519,10 +394,9 @@ fun Project.configureGradlePluginPublishing() {
 
     group = libfdxGroup
     version = libfdxVersion
-    val deployDirOverride = providers.gradleProperty("libfdx.deployDir").orNull
 
     configureLibfdxJavaPublishArtifacts()
-    configureLibfdxMavenRepository(deployDirOverride)
+    configureLibfdxMavenRepository()
     configureLibfdxGradlePluginPomMetadata()
     configureLibfdxSigning()
 
@@ -537,36 +411,7 @@ fun Project.configureGradlePluginPublishing() {
         group = "publishing"
         description = "Publish the libFDX Gradle plugin release marker and implementation artifacts to a local repository."
         dependsOn(tasks.withType(PublishToMavenRepository::class.java))
-        dependsOn("zipStagingDeploy")
         onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
-    }
-
-    tasks.register<Zip>("zipStagingDeploy") {
-        group = "publishing"
-        description = "Zip staged libFDX Gradle plugin release artifacts for Central Portal upload."
-        dependsOn(tasks.withType(PublishToMavenRepository::class.java))
-        from(deployDirOverride?.let { file(it) } ?: releaseStagingDirectory())
-        archiveFileName.set("staging-deploy.zip")
-        destinationDirectory.set(rootProject.layout.buildDirectory)
-        onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") && deployDirOverride == null }
-    }
-
-    tasks.register("publishSnapshot") {
-        group = "publishing"
-        description = "Upload existing libFDX Gradle plugin snapshot deploy files."
-        onlyIf { libfdxVersion.endsWith("-SNAPSHOT") }
-        doLast {
-            uploadSnapshotDeployDirectory()
-        }
-    }
-
-    tasks.register("publishRelease") {
-        group = "publishing"
-        description = "Upload existing libFDX Gradle plugin release staging zip."
-        onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
-        doLast {
-            uploadReleaseStagingZip()
-        }
     }
 }
 
@@ -629,9 +474,6 @@ fun Project.configureLibraryPublishing() {
         mustRunAfter(cleanSnapshotDeployDirectory)
         dir = gradlePluginBuildDir
         tasks = listOf("prepareSnapshotDeploy")
-        startParameter.projectProperties["libfdx.version"] = libfdxBaseVersion
-        startParameter.projectProperties["libfdx.deployDir"] =
-            rootProject.layout.buildDirectory.dir("snapshot-deploy").get().asFile.absolutePath
     }
 
     tasks.register<GradleBuild>("prepareGradlePluginReleaseDeploy") {
@@ -641,9 +483,6 @@ fun Project.configureLibraryPublishing() {
         mustRunAfter(cleanReleaseStagingDirectory)
         dir = gradlePluginBuildDir
         tasks = listOf("prepareReleaseDeploy")
-        startParameter.projectProperties["libfdx.version"] = libfdxBaseVersion
-        startParameter.projectProperties["libfdx.deployDir"] =
-            rootProject.layout.buildDirectory.dir("staging-deploy").get().asFile.absolutePath
     }
 
     tasks.register("prepareSnapshotDeploy") {
@@ -663,9 +502,9 @@ fun Project.configureLibraryPublishing() {
         dependsOn(validateRuntimeFdxNativeResources)
         dependsOn(libraryPublishTasks)
         dependsOn("prepareGradlePluginReleaseDeploy")
-        from(rootProject.layout.buildDirectory.dir("staging-deploy"))
+        from(releaseStagingDirectory())
         archiveFileName.set("staging-deploy.zip")
-        destinationDirectory.set(rootProject.layout.buildDirectory)
+        destinationDirectory.set(releaseStagingZipFile().parentFile)
         onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
     }
 
@@ -676,18 +515,26 @@ fun Project.configureLibraryPublishing() {
         onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
     }
 
+    tasks.register<GradleBuild>("publishGradlePluginSnapshot") {
+        group = "publishing"
+        description = "Publish the libFDX Gradle plugin snapshot marker and implementation artifacts."
+        dir = gradlePluginBuildDir
+        tasks = listOf("publish")
+    }
+
     tasks.register("publishSnapshot") {
         group = "publishing"
-        description = "Upload existing libFDX snapshot deploy files to the Central Portal snapshot repository."
+        description = "Publish all libFDX snapshot artifacts to the Central Portal snapshot repository."
+        dependsOn(validateRuntimeFdxNativeResources)
+        dependsOn(libraryPublishTasks)
+        dependsOn("publishGradlePluginSnapshot")
         onlyIf { libfdxVersion.endsWith("-SNAPSHOT") }
-        doLast {
-            uploadSnapshotDeployDirectory()
-        }
     }
 
     tasks.register("uploadToMavenCentral") {
         group = "publishing"
         description = "Upload build/staging-deploy.zip to Maven Central Portal."
+        dependsOn("zipStagingDeploy")
         onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
         doLast {
             uploadReleaseStagingZip()
@@ -696,17 +543,11 @@ fun Project.configureLibraryPublishing() {
 
     tasks.register("publishRelease") {
         group = "publishing"
-        description = "Upload existing libFDX release staging zip to Maven Central Portal."
-        dependsOn("uploadToMavenCentral")
+        description = "Prepare libFDX release deploy files and upload them to Maven Central Portal."
+        dependsOn("prepareReleaseDeploy")
+        finalizedBy("uploadToMavenCentral")
         onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
     }
-}
-
-val publishTargetProperty = "libfdxPublishTarget"
-val publishTarget = if(extensions.extraProperties.has(publishTargetProperty)) {
-    extensions.extraProperties.get(publishTargetProperty).toString()
-} else {
-    throw GradleException("$publishTargetProperty must be configured before applying publish.gradle.kts")
 }
 
 when(publishTarget) {

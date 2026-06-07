@@ -4,7 +4,7 @@ plugins {
     id("base")
 }
 
-LibExt.configure(rootProject.projectDir, gradle.startParameter.projectProperties)
+LibExt.configure(rootProject.projectDir)
 
 allprojects {
     group = LibExt.fdxGroup
@@ -44,6 +44,14 @@ tasks.register("build_native_artifacts") {
         ":libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease",
         ":libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease"
     )
+}
+
+tasks.register("printFdxVersion") {
+    group = "help"
+    description = "Prints the libFDX version configured by LibExt."
+    doLast {
+        println(LibExt.fdxVersion)
+    }
 }
 
 extra["libfdxPublishTarget"] = LibfdxPublishTarget.LIBRARIES

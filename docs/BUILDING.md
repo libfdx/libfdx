@@ -72,17 +72,12 @@ check consumers against a released or snapshot build.
 This flag applies only to repository consumers: tests, samples, and benchmarks.
 Internal libFDX modules still use source-project dependencies.
 
-For one command, use the Gradle override instead of editing `libfdx.toml`:
+To switch modes, edit `libfdx.toml` before running the launcher or validation
+task. `libfdx.toml` is the single source for this repository setting, so Gradle
+`-P` overrides are not supported for libFDX dependency mode.
 
-```powershell
-.\gradlew.bat "-Plibfdx.usePublishedLibfdx=true" :samples:basic:platform:desktop:run_gl
-```
-
-Override the published dependency version when needed:
-
-```powershell
-.\gradlew.bat "-Plibfdx.usePublishedLibfdx=true" "-Plibfdx.publishedVersion=-SNAPSHOT" :tests:platform:desktop:test_gl
-```
+Set `usePublishedLibfdx = true` and `publishedLibfdxVersion = "-SNAPSHOT"` for
+snapshot artifact checks, then run the normal sample or test task.
 
 ## 4. Native Artifacts
 

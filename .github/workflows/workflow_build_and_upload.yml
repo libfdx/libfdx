@@ -259,26 +259,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          add-job-summary: never
+
       - name: Read fdxVersion
         id: version
         shell: bash
         run: |
-          value=""
-          if [ -f libfdx.toml ]; then
-            value="$(python3 - <<'PY'
-          import tomllib
-          from pathlib import Path
-
-          path = Path("libfdx.toml")
-          if path.is_file():
-              data = tomllib.loads(path.read_text(encoding="utf-8"))
-              print(data.get("release", {}).get("fdxVersion", ""))
-          PY
-            )"
-          fi
-          if [ -z "$value" ]; then
-            value="1.0"
-          fi
+          chmod +x ./gradlew
+          value="$(./gradlew -q printFdxVersion)"
           echo "value=$value" >> "$GITHUB_OUTPUT"
           echo "Version: $value"
 
@@ -291,17 +288,6 @@ jobs:
             echo "libfdx.toml release.fdxVersion must contain the upcoming base version without -SNAPSHOT, got $version"
             exit 1
           fi
-
-      - name: Set up JDK
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 25
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          add-job-summary: never
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
@@ -384,7 +370,7 @@ jobs:
         env:
           SIGNING_KEY: ${{ secrets.PGP_SECRET }}
           SIGNING_PASSWORD: ${{ secrets.PGP_PASSPHRASE }}
-        run: ./gradlew prepareReleaseDeploy -Plibfdx.runtimeFdx.requireAllNativeResources=true
+        run: ./gradlew prepareReleaseDeploy
 
       - name: Upload release deploy files artifact
         uses: actions/upload-artifact@v7
@@ -406,7 +392,7 @@ jobs:
 
       - name: Prepare snapshot deploy files
         if: ${{ inputs.shouldUpload && !inputs.isRelease }}
-        run: ./gradlew prepareSnapshotDeploy -Plibfdx.runtimeFdx.requireAllNativeResources=true
+        run: ./gradlew prepareSnapshotDeploy
 
       - name: Upload snapshot deploy files artifact
         uses: actions/upload-artifact@v7

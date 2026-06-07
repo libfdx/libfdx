@@ -5,7 +5,7 @@ plugins {
     `java-gradle-plugin`
 }
 
-LibExt.configure(rootProject.projectDir, gradle.startParameter.projectProperties)
+LibExt.configure(rootProject.projectDir)
 
 repositories {
     google()

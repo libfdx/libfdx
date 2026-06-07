@@ -4,23 +4,23 @@ import java.io.File
 
 object LibExt {
     private var loadedConfig: Config? = null
-    private var projectProperties: Map<String, String> = emptyMap()
 
     val fdxGroup: String
-        get() = property("libfdx.group") ?: config().fdxGroup
+        get() = config().fdxGroup
 
     val fdxVersion: String
-        get() = property("libfdx.version") ?: config().fdxVersion
+        get() = config().fdxVersion
 
     val usePublishedLibfdx: Boolean
-        get() = property("libfdx.usePublishedLibfdx")?.let { parseBooleanValue("libfdx.usePublishedLibfdx", it) }
-            ?: config().usePublishedLibfdx
+        get() = config().usePublishedLibfdx
 
     val publishedLibfdxVersion: String
-        get() = property("libfdx.publishedVersion") ?: config().publishedLibfdxVersion
+        get() = config().publishedLibfdxVersion
 
-    fun configure(startDirectory: File, properties: Map<String, String>) {
-        projectProperties = properties
+    val rootDirectory: File
+        get() = config().rootDirectory
+
+    fun configure(startDirectory: File) {
         loadedConfig = readConfig(startDirectory)
     }
 
@@ -34,14 +34,11 @@ object LibExt {
         return config
     }
 
-    private fun property(name: String): String? {
-        return projectProperties[name]?.takeIf { it.isNotBlank() }
-    }
-
     private fun readConfig(startDirectory: File): Config {
         val file = findLibfdxTomlFile(startDirectory)
             ?: throw IllegalStateException("Could not find libfdx.toml from ${startDirectory.absolutePath}.")
         return Config(
+            rootDirectory = file.parentFile,
             fdxGroup = readRequiredTomlValue(file, "release", "fdxGroup"),
             fdxVersion = readRequiredTomlValue(file, "release", "fdxVersion"),
             usePublishedLibfdx = parseBooleanValue(
@@ -110,6 +107,7 @@ object LibExt {
     }
 
     private data class Config(
+        val rootDirectory: File,
         val fdxGroup: String,
         val fdxVersion: String,
         val usePublishedLibfdx: Boolean,
