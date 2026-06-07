@@ -2,6 +2,8 @@
 android-gradle-plugin = "8.12.0"
 jwebgpu = "0.2.3"
 jmultiplatform = "0.1.3"
+junit-jupiter = "5.13.4"
+junit-platform = "1.13.4"
 lwjgl = "3.4.1"
 teavm = "0.14.1"
 
@@ -19,6 +21,8 @@ jwebgpu-jni-desktop = { module = "com.github.xpenatan.jWebGPU:webgpu-jni_desktop
 jwebgpu-web = { module = "com.github.xpenatan.jWebGPU:webgpu-web", version.ref = "jwebgpu" }
 jwebgpu-web-wasm = { module = "com.github.xpenatan.jWebGPU:webgpu-web_wasm", version.ref = "jwebgpu" }
 jmultiplatform = { module = "com.github.xpenatan:jMultiplatform", version.ref = "jmultiplatform" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
 lwjgl = { module = "org.lwjgl:lwjgl", version.ref = "lwjgl" }
 lwjgl-freetype = { module = "org.lwjgl:lwjgl-freetype", version.ref = "lwjgl" }
 lwjgl-glfw = { module = "org.lwjgl:lwjgl-glfw", version.ref = "lwjgl" }

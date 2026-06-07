@@ -35,6 +35,7 @@ val publishTarget = if(extensions.extraProperties.has(publishTargetProperty)) {
 
 val libfdxPublishableProjectPaths = listOf(
     ":libfdx:foundation:math",
+    ":libfdx:foundation:json",
     ":libfdx:runtime:fdx:core",
     ":libfdx:runtime:fdx:platform:shared",
     ":libfdx:runtime:fdx:platform:desktop",

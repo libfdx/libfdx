@@ -67,6 +67,7 @@ pluginManagement {
 }
 
 include(":libfdx:foundation:math")
+include(":libfdx:foundation:json")
 include(":libfdx:runtime:application")
 include(":libfdx:runtime:fdx:core")
 include(":libfdx:runtime:fdx:platform:shared")

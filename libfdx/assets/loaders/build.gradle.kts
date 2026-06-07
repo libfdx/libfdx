@@ -19,6 +19,7 @@ base {
 
 dependencies {
     api(project(":libfdx:assets:manager"))
+    api(project(":libfdx:foundation:json"))
     compileOnly(libs.teavm.interop)
     compileOnly(libs.teavm.jso)
     compileOnly(libs.teavm.jso.apis)

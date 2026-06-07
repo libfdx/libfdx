@@ -18,6 +18,7 @@ base {
 dependencies {
     api(project(":libfdx:graphics:api"))
     api(project(":libfdx:foundation:math"))
+    implementation(project(":libfdx:foundation:json"))
     api(project(":libfdx:assets:manager"))
     api(project(":libfdx:assets:loaders"))
 }

@@ -13,6 +13,7 @@ Use this document to decide what a common API type means, what module owns it, a
 5. [Core](#5-core)
     1. [Core Base Contracts](#51-core-base-contracts)
     2. [Foundation Math Types](#52-foundation-math-types)
+    3. [Foundation JSON Types](#53-foundation-json-types)
 6. [Application](#6-application)
     1. [ApplicationListener Contract](#61-applicationlistener-contract)
     2. [Fdx Runtime Root Contract](#62-fdx-runtime-root-contract)
@@ -364,6 +365,87 @@ Rules:
 - Graphics, g2d, g3d, and ui-kit APIs may use math types in public signatures.
 - `Color` is the common color value used by rendering descriptors and 2D drawing helpers.
 - Scalar math behavior is the portable contract. Backend-installed acceleration may optimize bulk or in-place math operations, but every accelerated path must keep a scalar fallback with the same results. Desktop x86/x64 acceleration prefers AVX2+FMA for useful bulk work when supported, then falls back to SSE or native scalar paths. Android ARM64 uses NEON through the backend native `libfdx.so` when available.
+
+### 5.3. Foundation JSON Types
+
+Module:
+
+```text
+:libfdx:foundation:json
+```
+
+Package:
+
+```text
+io.github.libfdx.json
+```
+
+JSON owns provider-neutral data-tree parsing, writing, and manual class mapping. It is a small foundation library, not an asset-only API and not part of the runtime root.
+
+Defined types:
+
+| Type | Role |
+| --- | --- |
+| `Json` | Convenience facade for reading/writing JSON and using registered manual codecs. |
+| `JsonReader` | Strict JSON parser from `String` or UTF-8 bytes into `JsonValue`. |
+| `JsonValue` | Typed JSON tree for object, array, string, number, boolean, and null values. |
+| `JsonWriter` | Compact or pretty JSON writer, including object/array streaming helpers. |
+| `JsonCodec<T>` | User-provided callback that maps between `JsonValue`/`JsonWriter` and a Java type. |
+
+Defined shape:
+
+```java
+public final class Json {
+    JsonValue read(String text);
+    JsonValue read(byte[] bytes);
+    String write(JsonValue value);
+    String writePretty(JsonValue value);
+    <T> Json register(Class<T> type, JsonCodec<T> codec);
+    <T> T fromJson(Class<T> type, String text);
+    <T> T read(Class<T> type, JsonValue value);
+    <T> String toJson(Class<T> type, T value);
+    <T> void write(Class<T> type, JsonWriter writer, T value);
+}
+
+public interface JsonCodec<T> {
+    T read(Json json, JsonValue value);
+    void write(Json json, JsonWriter writer, T value);
+}
+```
+
+Example:
+
+```java
+Json json = new Json();
+json.register(Player.class, new JsonCodec<Player>() {
+    @Override
+    public Player read(Json json, JsonValue value) {
+        return new Player(value.requireString("name"), value.intValue("level", 1));
+    }
+
+    @Override
+    public void write(Json json, JsonWriter writer, Player player) {
+        writer.object()
+                .name("name").value(player.name())
+                .name("level").value(player.level())
+                .endObject();
+    }
+});
+
+Player player = json.fromJson(Player.class, "{\"name\":\"Ada\",\"level\":3}");
+String text = json.toJson(Player.class, player);
+```
+
+Rules:
+
+- JSON APIs must not use reflection, annotations, constructor discovery, field scanning, class-name lookup, or polymorphic type guessing.
+- `Class<T>` is allowed only as an explicit codec registry key selected by the caller.
+- `JsonCodec<T>` callbacks own object creation and field mapping. Missing values, defaults, and type tags must be handled explicitly by user code or by format-specific code.
+- `JsonValue` preserves JSON object member order.
+- `JsonReader` parses strict JSON and fails clearly for invalid syntax.
+- `JsonWriter` must emit valid JSON with correct string escaping.
+- `foundation/json` must not depend on files, assets, graphics, UI, extensions, backends, or platform APIs.
+- Asset workflows may use `JsonAssetLoader` from `assets/loaders` to load a `JsonValue`, but parsing and writing remain usable directly from `foundation/json`.
 
 ## 6. Application
 
@@ -1303,6 +1385,7 @@ Defined loader-facing types:
 | --- | --- |
 | `ImageData` | Provider-neutral decoded image data before GPU upload. |
 | `ImageAssetLoader` | Default provider-neutral PNG/JPG image loader that produces `ImageData`. |
+| `JsonAssetLoader` | Default provider-neutral JSON asset loader that produces `JsonValue`. |
 
 ### 12.1. Asset Contracts
 
@@ -1372,7 +1455,7 @@ Rules:
 - `AssetLoadContext` exposes file and asset-dependency loading support, not the root `Fdx` object.
 - `ImageData` is asset/source data. `Texture` is a GPU resource owned by `graphics/api`.
 - Future audio source data should stay provider-neutral. `Sound` and `Music` are provider-backed audio handles owned by `runtime/audio` and the selected audio provider.
-- `assets/loaders` may provide provider-neutral loaders such as image, JSON, properties, atlas metadata, font metadata, shader-source, and audio-source data.
+- `assets/loaders` may provide provider-neutral loaders such as image, JSON, properties, atlas metadata, font metadata, shader-source, and audio-source data. JSON loading produces the `JsonValue` tree owned by `foundation/json`.
 - `assets/loaders` must not create provider-backed `Texture`, `Sound`, or `Music` objects directly.
 - Graphics-aware loaders for `Texture`, `TextureRegion`, bitmap fonts, atlases, models, or other GPU-backed assets should live in a high-level module or explicit bridge that already depends on both `assets/manager` and the relevant graphics module.
 - Audio-aware loaders for `Sound` and `Music` should live in the selected audio provider module or an explicit audio asset bridge that depends on both `assets/manager` and `runtime/audio`.

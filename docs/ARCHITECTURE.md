@@ -38,7 +38,7 @@ Use a small number of broad folders. A new top-level folder should exist only wh
 
 | Folder | Rule |
 | --- | --- |
-| `foundation/` | Tiny backend-neutral foundation only: base contracts, math, collections. If a module talks to platform services, assets, graphics, audio devices, or user input, it does not belong here. |
+| `foundation/` | Tiny backend-neutral foundation only: base contracts, math, JSON, collections. If a module talks to platform services, assets, graphics, audio devices, or user input, it does not belong here. |
 | `runtime/` | Runtime-facing engine services: core native/runtime services, app lifecycle, files, input, display/presentation area, audio, networking. These are backend-neutral APIs implemented or supplied by backends. |
 | `assets/` | Asset management and asset loading. Assets are not foundation code because they involve lifetime, loading, dependencies, and often files or graphics resources. |
 | `graphics/` | Common GPU API plus built-in 2D/3D rendering toolkits. Platform-backed graphics providers such as wgpu and Vulkan belong in `extensions/graphics`. |
@@ -80,6 +80,7 @@ repo-root/
     foundation/
       core/
       math/
+      json/
       collections/
 
     runtime/
@@ -218,7 +219,7 @@ Dependencies should point from higher-level modules to lower-level contracts, ne
 Allowed dependency shape:
 
 ```text
-foundation/math, foundation/collections -> runtime/fdx/core
+foundation/math, foundation/json, foundation/collections -> runtime/fdx/core
 
 runtime/fdx/core -> no lower libFDX module
 runtime/* -> runtime/fdx/core and selected foundation helpers
@@ -952,6 +953,7 @@ GitHub publish workflows build native artifacts before Maven publication. Window
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
 | `:libfdx:foundation:math` | `io.github.libfdx:math` | Pure math primitives: vectors, matrices, quaternions, bounds, and backend-independent color math. Should be usable without an application or backend. |
+| `:libfdx:foundation:json` | `io.github.libfdx:json` | Strict provider-neutral JSON tree parsing, writing, and manual callback-based class mapping. It must not use reflection, annotations, files, assets, graphics, backend services, or platform APIs. |
 | `:libfdx:foundation:collections` | `io.github.libfdx:collections` | Specialized collections and allocation-conscious data structures. This should exist only if standard Java collections are not enough for engine hot paths. |
 
 ### 9.2. Runtime Modules
@@ -987,7 +989,7 @@ Gamepad common contracts live in `runtime/input`. These modules provide platform
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
 | `:libfdx:assets:manager` | `io.github.libfdx:assets` | Asset manager API: descriptors, handles, dependencies, async loading contracts, update-thread completion, and cache/lifetime rules. It should not force specific file formats. |
-| `:libfdx:assets:loaders` | `io.github.libfdx:asset_loaders` | Common provider-neutral loaders built on `assets/manager`: currently PNG/JPG image loading to `ImageData`, with future room for atlases, fonts, JSON, properties, shader sources, and audio source data. Format-specific heavy dependencies should stay optional. This module must not create provider-backed `Texture`, `Sound`, or `Music` handles directly. |
+| `:libfdx:assets:loaders` | `io.github.libfdx:asset_loaders` | Common provider-neutral loaders built on `assets/manager`: currently PNG/JPG image loading to `ImageData` and JSON loading to `JsonValue`, with future room for atlases, fonts, properties, shader sources, and audio source data. Format-specific heavy dependencies should stay optional. This module must not create provider-backed `Texture`, `Sound`, or `Music` handles directly. |
 
 ### 9.5. Audio Extension Modules
 
@@ -1228,6 +1230,7 @@ dependencies {
     runtimeOnly("io.github.libfdx:fdx_web:$libfdxVersion")
     runtimeOnly("io.github.libfdx:fdx_android:$libfdxVersion")
     implementation("io.github.libfdx:math:$libfdxVersion")
+    implementation("io.github.libfdx:json:$libfdxVersion")
     implementation("io.github.libfdx:collections:$libfdxVersion")
 
     implementation("io.github.libfdx:application:$libfdxVersion")
@@ -1899,6 +1902,7 @@ Core and runtime packages:
 | --- | --- | --- |
 | `:libfdx:runtime:fdx:core` | `io.github.libfdx.core`, `io.github.libfdx.runtime.core` | Minimal framework core types plus shared runtime services and native-service contracts. |
 | `:libfdx:foundation:math` | `io.github.libfdx.math` | Vectors, matrices, quaternions, bounds, and backend-independent color math. |
+| `:libfdx:foundation:json` | `io.github.libfdx.json` | Strict JSON value tree, reader, writer, and callback-based class codecs. |
 | `:libfdx:foundation:collections` | `io.github.libfdx.collections` | Specialized collections and allocation-conscious data structures. |
 | `:libfdx:runtime:application` | `io.github.libfdx.application` | Application lifecycle, config, loop contracts, platform capabilities, and application startup contracts. |
 | `:libfdx:runtime:files` | `io.github.libfdx.files` | File handles, storage locations, path normalization, and file read/write abstractions. |
