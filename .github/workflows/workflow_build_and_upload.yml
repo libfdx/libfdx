@@ -9,18 +9,6 @@ on:
       shouldUpload:
         required: true
         type: boolean
-  workflow_dispatch:
-    inputs:
-      isRelease:
-        description: "Publish as a release instead of a snapshot"
-        required: true
-        type: boolean
-        default: false
-      shouldUpload:
-        description: "Upload artifacts to Maven repositories"
-        required: true
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -384,6 +372,9 @@ jobs:
       - name: Upload release to repository
         uses: nick-fields/retry@v4
         if: ${{ inputs.shouldUpload && inputs.isRelease }}
+        env:
+          SIGNING_KEY: ${{ secrets.PGP_SECRET }}
+          SIGNING_PASSWORD: ${{ secrets.PGP_PASSPHRASE }}
         with:
           max_attempts: 6
           timeout_minutes: 20

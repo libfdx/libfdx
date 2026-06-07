@@ -93,6 +93,7 @@ val isZipStagingDeploy = isTaskRequested("zipStagingDeploy")
 val isPublish = isTaskRequested("publish")
 val isDeployPreparationTask = isPrepareSnapshotDeploy || isPrepareReleaseDeploy || isZipStagingDeploy
 val isReleaseLocalDeploy = isPrepareReleaseDeploy || isZipStagingDeploy
+val isReleasePublishMode = isPrepareReleaseDeploy || isPublishRelease || isUploadToMavenCentral || isZipStagingDeploy
 val isGradlePluginTarget = publishTarget == "GRADLE_PLUGIN"
 val isSnapshotPublishMode = isPrepareSnapshotDeploy || isPublishSnapshot || (isGradlePluginTarget && isPublish)
 val libfdxVersion = if(isSnapshotPublishMode) "-SNAPSHOT" else libfdxBaseVersion
@@ -106,6 +107,42 @@ fun requiredEnvironment(name: String): String {
         ?: throw GradleException("$name environment variable not set")
 }
 
+fun optionalEnvironment(vararg names: String): String? {
+    return names.firstNotNullOfOrNull { name ->
+        System.getenv(name)?.takeIf { it.isNotBlank() }
+    }
+}
+
+fun releaseSigningKey(): String? {
+    val value = optionalEnvironment("SIGNING_KEY", "PGP_SECRET") ?: return null
+    val file = File(value)
+    return if(file.isFile) {
+        file.readText(Charsets.UTF_8)
+    } else {
+        value
+    }
+}
+
+fun releaseSigningPassword(): String? {
+    return optionalEnvironment("SIGNING_PASSWORD", "PGP_PASSPHRASE")
+}
+
+fun requireReleaseSigning(signingKey: String?, signingPassword: String?) {
+    if(!isReleasePublishMode || libfdxVersion.endsWith("-SNAPSHOT")) {
+        return
+    }
+    val missing = mutableListOf<String>()
+    if(signingKey.isNullOrBlank()) {
+        missing.add("SIGNING_KEY or PGP_SECRET")
+    }
+    if(signingPassword.isNullOrBlank()) {
+        missing.add("SIGNING_PASSWORD or PGP_PASSPHRASE")
+    }
+    if(missing.isNotEmpty()) {
+        throw GradleException("Release publishing requires signing credentials: ${missing.joinToString(", ")}.")
+    }
+}
+
 fun Project.snapshotDeployDirectory(): File {
     return File(LibExt.rootDirectory, "build/snapshot-deploy")
 }
@@ -116,6 +153,46 @@ fun Project.releaseStagingDirectory(): File {
 
 fun Project.releaseStagingZipFile(): File {
     return File(LibExt.rootDirectory, "build/staging-deploy.zip")
+}
+
+fun isCentralReleaseArtifact(file: File): Boolean {
+    if(!file.isFile) {
+        return false
+    }
+    val name = file.name
+    return name.endsWith(".jar")
+        || name.endsWith(".aar")
+        || name.endsWith(".pom")
+        || name.endsWith(".module")
+}
+
+fun Project.verifyReleaseStagingSignatures() {
+    val stagingDirectory = releaseStagingDirectory()
+    if(!stagingDirectory.isDirectory) {
+        throw GradleException("Release staging directory ${stagingDirectory.absolutePath} does not exist. Run prepareReleaseDeploy first.")
+    }
+    val artifacts = stagingDirectory.walkTopDown()
+        .filter(::isCentralReleaseArtifact)
+        .toList()
+    if(artifacts.isEmpty()) {
+        throw GradleException("Release staging directory ${stagingDirectory.absolutePath} does not contain Maven Central artifacts.")
+    }
+    val missingSignatures = artifacts.filter { artifact ->
+        !File("${artifact.absolutePath}.asc").isFile
+    }
+    if(missingSignatures.isNotEmpty()) {
+        val stagingPath = stagingDirectory.toPath()
+        val listed = missingSignatures.take(40).joinToString(System.lineSeparator()) { artifact ->
+            val relative = stagingPath.relativize(artifact.toPath()).toString().replace('\\', '/')
+            " - $relative.asc"
+        }
+        val suffix = if(missingSignatures.size > 40) {
+            "${System.lineSeparator()} - ... ${missingSignatures.size - 40} more missing signatures"
+        } else {
+            ""
+        }
+        throw GradleException("Release staging is missing ${missingSignatures.size} signature file(s):${System.lineSeparator()}$listed$suffix")
+    }
 }
 
 fun Project.uploadReleaseStagingZip() {
@@ -278,9 +355,10 @@ fun Project.configureLibfdxSigning() {
     if(libfdxVersion.endsWith("-SNAPSHOT")) {
         return
     }
-    val signingKey = System.getenv("SIGNING_KEY").orEmpty()
-    val signingPassword = System.getenv("SIGNING_PASSWORD").orEmpty()
-    if(signingKey.isNotEmpty() && signingPassword.isNotEmpty()) {
+    val signingKey = releaseSigningKey()
+    val signingPassword = releaseSigningPassword()
+    requireReleaseSigning(signingKey, signingPassword)
+    if(signingKey != null && signingPassword != null) {
         extensions.configure<SigningExtension> {
             useInMemoryPgpKeys(signingKey, signingPassword)
             sign(extensions.getByType(PublishingExtension::class.java).publications)
@@ -485,6 +563,18 @@ fun Project.configureLibraryPublishing() {
         tasks = listOf("prepareReleaseDeploy")
     }
 
+    val verifyReleaseStagingSignatures = tasks.register("verifyReleaseStagingSignatures") {
+        group = "publishing"
+        description = "Validates that every staged release artifact has a matching .asc signature."
+        dependsOn(libraryPublishTasks)
+        dependsOn("prepareGradlePluginReleaseDeploy")
+        mustRunAfter(cleanReleaseStagingDirectory)
+        onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
+        doLast {
+            verifyReleaseStagingSignatures()
+        }
+    }
+
     tasks.register("prepareSnapshotDeploy") {
         group = "publishing"
         description = "Publish all libFDX snapshot artifacts to build/snapshot-deploy."
@@ -500,8 +590,7 @@ fun Project.configureLibraryPublishing() {
         description = "Zip staged libFDX release artifacts for Central Portal upload."
         dependsOn(cleanReleaseStagingDirectory)
         dependsOn(validateRuntimeFdxNativeResources)
-        dependsOn(libraryPublishTasks)
-        dependsOn("prepareGradlePluginReleaseDeploy")
+        dependsOn(verifyReleaseStagingSignatures)
         from(releaseStagingDirectory())
         archiveFileName.set("staging-deploy.zip")
         destinationDirectory.set(releaseStagingZipFile().parentFile)

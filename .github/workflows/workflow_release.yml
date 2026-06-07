@@ -1,0 +1,16 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Publish Release
+    uses: ./.github/workflows/workflow_build_and_upload.yml
+    with:
+      isRelease: true
+      shouldUpload: true
+    secrets: inherit
