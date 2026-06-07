@@ -6,6 +6,7 @@ import io.github.libfdx.backend.web.WebAssets
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.plugins.JavaPlugin
 import org.gradle.api.provider.MapProperty
 import org.gradle.api.tasks.SourceSetContainer
@@ -138,7 +139,9 @@ class LibfdxGradlePlugin : Plugin<Project> {
 
     private fun registerJsTasks(project: Project, extension: LibfdxExtension) {
         val runtimeClasspath = project.extensions.getByType<SourceSetContainer>().getByName("main").runtimeClasspath
-        val runtimeFdxWeb = project.rootProject.findProject(":libfdx:runtime:fdx:platform:web")
+        val runtimeFdxWeb = project.takeIf { usesLocalLibfdxRuntime(it) }
+            ?.rootProject
+            ?.findProject(":libfdx:runtime:fdx:platform:web")
         val runtimeFdxWebResources = runtimeFdxWeb?.tasks?.matching { it.name == "generate_runtime_fdx_web_native" }
         val runtimeFdxWebResourcesDir = runtimeFdxWeb?.layout?.buildDirectory?.dir("generated/resources/runtimeFdxWeb")
         val prepare = project.tasks.register<LibfdxWebAppTask>("libfdx_web_js_prepare") {
@@ -176,7 +179,9 @@ class LibfdxGradlePlugin : Plugin<Project> {
 
     private fun registerWasmTasks(project: Project, extension: LibfdxExtension) {
         val runtimeClasspath = project.extensions.getByType<SourceSetContainer>().getByName("main").runtimeClasspath
-        val runtimeFdxWeb = project.rootProject.findProject(":libfdx:runtime:fdx:platform:web")
+        val runtimeFdxWeb = project.takeIf { usesLocalLibfdxRuntime(it) }
+            ?.rootProject
+            ?.findProject(":libfdx:runtime:fdx:platform:web")
         val runtimeFdxWebResources = runtimeFdxWeb?.tasks?.matching { it.name == "generate_runtime_fdx_web_native" }
         val runtimeFdxWebResourcesDir = runtimeFdxWeb?.layout?.buildDirectory?.dir("generated/resources/runtimeFdxWeb")
         val prepare = project.tasks.register<LibfdxWebAppTask>("libfdx_web_wasm_prepare") {
@@ -210,6 +215,13 @@ class LibfdxGradlePlugin : Plugin<Project> {
             port.set(extension.wasm.serverPort)
             defaultPath.set("/")
         }
+    }
+
+    private fun usesLocalLibfdxRuntime(project: Project): Boolean {
+        val runtimeClasspath = project.configurations.findByName("runtimeClasspath") ?: return false
+        return runtimeClasspath.allDependencies
+            .withType(ProjectDependency::class.java)
+            .any { it.path.startsWith(":libfdx:") }
     }
 
     private fun registerDesktopNativeTasks(project: Project, extension: LibfdxExtension) {

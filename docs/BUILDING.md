@@ -66,6 +66,8 @@ as published coordinates such as
 libFDX modules when the goal is to check consumers against a released or
 snapshot build. Settings still includes the local `:libfdx:*` source modules;
 the Maven-vs-local choice is made in each consumer dependency block.
+Web plugin tasks use local generated runtime fdx web resources only when that
+consumer uses local `:libfdx:*` project dependencies.
 
 Use ignored `local.properties` overrides when developing libFDX itself:
 
