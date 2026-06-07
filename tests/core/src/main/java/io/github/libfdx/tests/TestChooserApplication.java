@@ -8,6 +8,9 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.Logger;
 import io.github.libfdx.display.Display;
 import io.github.libfdx.graphics.GraphicsContext;
+import io.github.libfdx.input.InputAdapter;
+import io.github.libfdx.input.Key;
+import io.github.libfdx.input.KeyEvent;
 import io.github.libfdx.tests.graphics.FramebufferCapture;
 import io.github.libfdx.ui.Ui;
 import io.github.libfdx.ui.UiBooleanState;
@@ -32,8 +35,17 @@ public final class TestChooserApplication extends ApplicationAdapter {
     private final String[] graphicsOptions;
     private final TestLaunchHandler launchHandler;
     private final boolean embeddedFallback;
-    private final boolean showRunOverlay;
     private final boolean compactLayout;
+    private final InputAdapter returnInputProcessor = new InputAdapter() {
+        @Override
+        public boolean keyDown(KeyEvent event) {
+            Key key = event.key();
+            if (key == Key.ESCAPE || key == Key.BACK) {
+                return requestReturnToList();
+            }
+            return false;
+        }
+    };
     private Fdx fdx;
     private Application application;
     private Display display;
@@ -58,15 +70,14 @@ public final class TestChooserApplication extends ApplicationAdapter {
 
     public TestChooserApplication(String[] graphicsOptions, String initialGraphics, TestLaunchHandler launchHandler,
             boolean embeddedFallback) {
-        this(graphicsOptions, initialGraphics, launchHandler, embeddedFallback, true, false);
+        this(graphicsOptions, initialGraphics, launchHandler, embeddedFallback, false);
     }
 
     public TestChooserApplication(String[] graphicsOptions, String initialGraphics, TestLaunchHandler launchHandler,
-            boolean embeddedFallback, boolean showRunOverlay, boolean compactLayout) {
+            boolean embeddedFallback, boolean compactLayout) {
         this.graphicsOptions = normalizedGraphicsOptions(graphicsOptions);
         this.launchHandler = launchHandler;
         this.embeddedFallback = embeddedFallback;
-        this.showRunOverlay = showRunOverlay;
         this.compactLayout = compactLayout;
         this.selectedGraphicsIndex = Ui.state(initialGraphicsIndex(this.graphicsOptions, initialGraphics));
     }
@@ -84,6 +95,7 @@ public final class TestChooserApplication extends ApplicationAdapter {
         capturePath = trim(System.getProperty("libfdx.test.capture"));
         testScroll = new UiScrollState();
         debugLines = Ui.state(Boolean.parseBoolean(System.getProperty("libfdx.test.uiDebugLines", "false")));
+        fdx.input().addProcessor(returnInputProcessor);
         root = new UiToolkit(fdx.files())
                 .theme(theme(compactLayout))
                 .root(display, graphics)
@@ -132,7 +144,7 @@ public final class TestChooserApplication extends ApplicationAdapter {
         } else if (graphics != null) {
             graphics.clear(0.02f, 0.025f, 0.032f, 1.0f);
         }
-        if (root != null && shouldRenderChooserUi()) {
+        if (root != null && currentTest == null) {
             root.update(deltaSeconds);
             root.debugLines(debugLines != null && debugLines.get());
             root.render();
@@ -173,6 +185,9 @@ public final class TestChooserApplication extends ApplicationAdapter {
     @Override
     public void dispose() {
         disposeCurrentTest();
+        if (fdx != null) {
+            fdx.input().removeProcessor(returnInputProcessor);
+        }
         if (root != null) {
             root.dispose();
             root = null;
@@ -279,16 +294,17 @@ public final class TestChooserApplication extends ApplicationAdapter {
         pendingLaunchName = testName;
     }
 
-    private void requestReturnToList() {
+    private boolean requestReturnToList() {
+        if (currentTest == null) {
+            return false;
+        }
         pendingReturnToList = true;
         pendingReturnStatus = "Returned to test list";
+        return true;
     }
 
     private void buildUi(UiScope ui) {
         if (currentTest != null) {
-            if (showRunOverlay) {
-                buildReturnOverlay(ui);
-            }
             return;
         }
         buildMenu(ui);
@@ -380,30 +396,6 @@ public final class TestChooserApplication extends ApplicationAdapter {
         });
     }
 
-    private void buildReturnOverlay(UiScope ui) {
-        ui.column(Ui.modifier().fill().padding(12.0f).gap(8.0f), page -> {
-            page.panel(Ui.modifier().fillWidth().padding(10.0f).gap(8.0f).style("overlay-panel"), panel -> {
-                panel.row(Ui.modifier().fillWidth().gap(8.0f), row -> {
-                    row.button("Back", Ui.modifier().width(108.0f).style("accent-button"), this::requestReturnToList);
-                    row.text(runningLabel(), Ui.modifier().style("muted").weight(1.0f));
-                });
-            });
-            page.spacer(Ui.modifier().weight(1.0f));
-        });
-    }
-
-    private String runningLabel() {
-        if (TestSelector.AUTO_TEST_NAME.equals(currentTestName)) {
-            return "auto";
-        }
-        TestSelector.TestDescriptor descriptor = TestSelector.descriptor(currentTestName);
-        return descriptor != null ? descriptor.displayName() : currentTestName;
-    }
-
-    private boolean shouldRenderChooserUi() {
-        return currentTest == null || showRunOverlay;
-    }
-
     private boolean shouldLogSelectorFps() {
         if (currentTest != null || fpsLogger == null) {
             return false;
@@ -416,7 +408,7 @@ public final class TestChooserApplication extends ApplicationAdapter {
             return;
         }
         root.requestCompose();
-        if (!shouldRenderChooserUi()) {
+        if (currentTest != null) {
             root.rootNode();
         }
     }
@@ -609,9 +601,6 @@ public final class TestChooserApplication extends ApplicationAdapter {
                 .style("test-row", UiStyle.style()
                         .padding(8.0f)
                         .background(UiDrawable.color(UiColor.rgba8888(0x101820ff))))
-                .style("overlay-panel", UiStyle.style()
-                        .padding(10.0f)
-                        .background(UiDrawable.color(UiColor.rgba8888(0x101820dd))))
                 .style("title", UiStyle.style().text(title))
                 .style("section", UiStyle.style().text(section))
                 .style("muted", UiStyle.style().text(muted));

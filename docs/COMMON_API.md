@@ -695,7 +695,7 @@ Defined types:
 | `Input` | Main input service. |
 | `InputProcessor` | Input event callback/routing contract. |
 | `InputEvent` | Base input event. |
-| `Key`, `KeyEvent` | Keyboard values and events. |
+| `Key`, `KeyEvent` | Keyboard and platform key values and events. |
 | `MouseButton`, `PointerEvent` | Mouse/pointer values and events. |
 | `TouchPoint`, `TouchEvent` | Touch values and events. |
 | `TextInputEvent` | Text input event for typed characters and IME-oriented text input. |
@@ -716,6 +716,8 @@ Defined types:
 ### 8.1. Input And Gamepad Contracts
 
 `Input` is the single runtime service for keyboard, pointer, touch, text input, cursor, and gamepad access. `Gamepads` is provider-backed because each platform discovers and maps controllers differently.
+
+Platform navigation Back is represented as `Key.BACK`. Keyboard Escape remains `Key.ESCAPE`; shared code that wants both behaviors should check both keys explicitly.
 
 Defined shape:
 

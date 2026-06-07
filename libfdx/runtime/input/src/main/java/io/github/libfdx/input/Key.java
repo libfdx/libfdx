@@ -69,5 +69,6 @@ public enum Key {
     F9,
     F10,
     F11,
-    F12
+    F12,
+    BACK
 }

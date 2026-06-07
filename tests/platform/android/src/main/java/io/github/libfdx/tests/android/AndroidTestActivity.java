@@ -39,8 +39,7 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
         configurePlatformTestProperties();
         String testName = selectedTestName();
         if (isSelector(testName)) {
-            return new TestChooserApplication(new String[] { graphicsName() }, graphicsName(), null, true, false,
-                    true);
+            return new TestChooserApplication(new String[] { graphicsName() }, graphicsName(), null, true, true);
         }
         if (TestSelector.AUTO_TEST_NAME.equalsIgnoreCase(testName)) {
             return new AutoTestApplication();

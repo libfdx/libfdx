@@ -512,8 +512,9 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
             case KeyEvent.KEYCODE_DPAD_CENTER:
                 return Key.ENTER;
             case KeyEvent.KEYCODE_ESCAPE:
-            case KeyEvent.KEYCODE_BACK:
                 return Key.ESCAPE;
+            case KeyEvent.KEYCODE_BACK:
+                return Key.BACK;
             case KeyEvent.KEYCODE_SPACE:
                 return Key.SPACE;
             case KeyEvent.KEYCODE_DPAD_LEFT:
@@ -622,6 +623,15 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         if (activity != null) {
             activity.finish();
         }
+    }
+
+    boolean handleBackNavigation() {
+        if (input == null) {
+            return false;
+        }
+        boolean handled = input.dispatchKeyDown(Key.BACK);
+        input.dispatchKeyUp(Key.BACK);
+        return handled;
     }
 
     @Override
