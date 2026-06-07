@@ -264,7 +264,29 @@ fun rewriteWebGpuPage(indexFile: File) {
     indexFile.writeText(rewritten, Charsets.UTF_8)
 }
 
-if (!LibExt.usePublishedLibfdx) {
+fun isMavenPublishingTaskRequested(): Boolean {
+    val explicitPublishingTasks = setOf(
+        "cleanReleaseStagingDirectory",
+        "cleanSnapshotDeployDirectory",
+        "listMavenDeployProjects",
+        "prepareGradlePluginReleaseDeploy",
+        "prepareGradlePluginSnapshotDeploy",
+        "prepareReleaseDeploy",
+        "prepareSnapshotDeploy",
+        "publishRelease",
+        "publishSnapshot",
+        "uploadToMavenCentral",
+        "validateRuntimeFdxNativeResources",
+        "zipStagingDeploy"
+    )
+    return gradle.startParameter.taskNames
+        .map { it.substringAfterLast(":") }
+        .any { taskName ->
+            taskName in explicitPublishingTasks || taskName.startsWith("publish")
+        }
+}
+
+if (isMavenPublishingTaskRequested()) {
     extra["libfdxPublishTarget"] = LibfdxPublishTarget.LIBRARIES
     apply(plugin = "publish")
 }
