@@ -47,8 +47,16 @@ fun JavaExec.configureGeneratorRun() {
     }
 }
 
-tasks.register<JavaExec>("run_gl") {
+tasks.register("project_generator_desktop_gl_build") {
+    group = "application"
+    description = "Builds the libfdx project generator desktop GL runtime inputs."
+    dependsOn("classes")
+    inputs.files(sourceSets["main"].runtimeClasspath)
+}
+
+tasks.register<JavaExec>("project_generator_desktop_gl_run") {
     configureGeneratorRun()
+    dependsOn("project_generator_desktop_gl_build")
 }
 
 tasks.register<JavaExec>("test_export_project") {

@@ -128,18 +128,30 @@ fun addSystemPropertyArg(args: MutableList<String>, option: String, property: St
     }
 }
 
+tasks.register("test_desktop_native_vulkan_debug_build") {
+    group = "application"
+    description = "Builds the desktop_native Vulkan graphics test Debug executable."
+    dependsOn("libfdx_desktop_native_build_debug")
+}
+
+tasks.register("test_desktop_native_vulkan_release_build") {
+    group = "application"
+    description = "Builds the desktop_native Vulkan graphics test Release executable."
+    dependsOn("libfdx_desktop_native_build_release")
+}
+
 registerDesktopNativeVulkanTestTask(
-        "test_vulkan_debug",
+        "test_desktop_native_vulkan_debug_run",
         "Runs graphics tests with desktop_native Vulkan using the Debug native executable.",
-        "libfdx_desktop_native_build_debug",
+        "test_desktop_native_vulkan_debug_build",
         "Debug",
         "",
         "0")
 
 registerDesktopNativeVulkanTestTask(
-        "test_vulkan_release",
+        "test_desktop_native_vulkan_release_run",
         "Runs graphics tests with desktop_native Vulkan using the Release native executable.",
-        "libfdx_desktop_native_build_release",
+        "test_desktop_native_vulkan_release_build",
         "Release",
         "",
         "0")

@@ -61,9 +61,9 @@ test is requested. The selector includes GL, WGPU, and Vulkan launch options,
 and selected tests open in separate desktop windows.
 
 ```powershell
-.\gradlew.bat :tests:platform:desktop:test_gl
-.\gradlew.bat :tests:platform:desktop:test_wgpu
-.\gradlew.bat :tests:platform:desktop:test_vulkan
+.\gradlew.bat :tests:platform:desktop:test_desktop_gl_run
+.\gradlew.bat :tests:platform:desktop:test_desktop_wgpu_run
+.\gradlew.bat :tests:platform:desktop:test_desktop_vulkan_run
 ```
 
 `test_gl_validate` and `test_gl_validate_visual` are the finite validation
@@ -82,7 +82,7 @@ baseline-enforced run, add `-Dlibfdx.test.visualRequireBaselines=true`.
 Use this PowerShell-safe form for system properties:
 
 ```powershell
-.\gradlew.bat "-Dlibfdx.test.name=ui" :tests:platform:desktop:test_gl
+.\gradlew.bat "-Dlibfdx.test.name=ui" :tests:platform:desktop:test_desktop_gl_run
 ```
 
 Desktop tests accept `-Dlibfdx.test.width=...`,
@@ -111,18 +111,22 @@ The desktop_native Vulkan test launcher uses the TeaVM C backend. It opens a
 window by default and keeps running until the window is closed:
 
 ```powershell
-.\gradlew.bat :tests:platform:desktop_native:test_vulkan_debug
-.\gradlew.bat :tests:platform:desktop_native:test_vulkan_release
+.\gradlew.bat :tests:platform:desktop_native:test_desktop_native_vulkan_debug_run
+.\gradlew.bat :tests:platform:desktop_native:test_desktop_native_vulkan_release_run
 ```
 
-Desktop native projects expose explicit native build modes:
+Desktop native projects expose explicit native build modes and app-facing test
+build aliases:
 
 ```powershell
+.\gradlew.bat :tests:platform:desktop_native:test_desktop_native_vulkan_debug_build
+.\gradlew.bat :tests:platform:desktop_native:test_desktop_native_vulkan_release_build
 .\gradlew.bat :tests:platform:desktop_native:libfdx_desktop_native_build_debug
 .\gradlew.bat :tests:platform:desktop_native:libfdx_desktop_native_build_release
 ```
 
-Desktop native sample and test task names must end in `_debug` or `_release`.
+Desktop native sample and test app-facing task names include the native build
+mode before the final `_build` or `_run` suffix.
 On Windows, native builds default to a console subsystem and sample/test run
 tasks open a separate console window by default so stdout/stderr logs stay
 visible.
@@ -134,8 +138,8 @@ executable is wanted.
 For finite smoke runs, pass a frame count:
 
 ```powershell
-.\gradlew.bat :tests:platform:desktop_native:test_vulkan_debug "-Plibfdx.desktopNative.openConsole=false" "-Dlibfdx.test.frames=60"
-.\gradlew.bat :tests:platform:desktop_native:test_vulkan_release "-Plibfdx.desktopNative.openConsole=false" "-Dlibfdx.test.frames=60"
+.\gradlew.bat :tests:platform:desktop_native:test_desktop_native_vulkan_debug_run "-Plibfdx.desktopNative.openConsole=false" "-Dlibfdx.test.frames=60"
+.\gradlew.bat :tests:platform:desktop_native:test_desktop_native_vulkan_release_run "-Plibfdx.desktopNative.openConsole=false" "-Dlibfdx.test.frames=60"
 ```
 
 ## 5. PSP Tests
@@ -239,9 +243,9 @@ Android test launchers open the selector by default. Selected tests run in the
 same activity and show a `Back` overlay to return to the list.
 
 ```powershell
-.\gradlew.bat :tests:platform:android:run_gles
-.\gradlew.bat :tests:platform:android:run_wgpu_jni
-.\gradlew.bat :tests:platform:android:run_vulkan
+.\gradlew.bat :tests:platform:android:test_android_gles_run
+.\gradlew.bat :tests:platform:android:test_android_wgpu_jni_run
+.\gradlew.bat :tests:platform:android:test_android_vulkan_run
 ```
 
 Android test launchers forward `-Dlibfdx.test.*` properties as activity extras,

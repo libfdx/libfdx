@@ -1548,9 +1548,9 @@ dependencies {
 Example desktop sample stack selection:
 
 ```bash
-./gradlew :samples:basic:platform:desktop:run_gl
-./gradlew :samples:basic:platform:desktop:run_wgpu
-./gradlew :samples:basic:platform:desktop:run_vulkan
+./gradlew :samples:basic:platform:desktop:basic_desktop_gl_run
+./gradlew :samples:basic:platform:desktop:basic_desktop_wgpu_run
+./gradlew :samples:basic:platform:desktop:basic_desktop_vulkan_run
 ```
 
 ```kotlin
@@ -1576,9 +1576,11 @@ dependencies {
     if (LibExt.usePublishedLibfdx) {
         implementation("${LibExt.fdxGroup}:backend_web:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:gl_web:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:wgpu_web:${LibExt.publishedLibfdxVersion}")
     } else {
         implementation(project(":libfdx:backends:web"))
         implementation(project(":libfdx:extensions:graphics:gl:platform:web"))
+        implementation(project(":libfdx:extensions:graphics:wgpu:platform:web"))
     }
 }
 ```
@@ -1798,21 +1800,21 @@ Test rules:
 Example provider stack selection:
 
 ```bash
-./gradlew :tests:platform:desktop:test_gl
-./gradlew :tests:platform:desktop:test_wgpu
-./gradlew :tests:platform:desktop:test_vulkan
+./gradlew :tests:platform:desktop:test_desktop_gl_run
+./gradlew :tests:platform:desktop:test_desktop_wgpu_run
+./gradlew :tests:platform:desktop:test_desktop_vulkan_run
 ./gradlew :tests:platform:desktop:test_gl_validate
 ./gradlew :tests:platform:desktop:test_wgpu_validate
 ./gradlew :tests:platform:desktop:test_gl_validate_visual
 ./gradlew :tests:platform:desktop:test_wgpu_validate_visual
 ./gradlew :tests:platform:desktop:test_ui_visual_parity_desktop
-./gradlew :tests:platform:desktop_native:test_vulkan_debug
-./gradlew :tests:platform:desktop_native:test_vulkan_release
+./gradlew :tests:platform:desktop_native:test_desktop_native_vulkan_debug_run
+./gradlew :tests:platform:desktop_native:test_desktop_native_vulkan_release_run
 ```
 
-Desktop JVM sample and test tasks select the graphics provider with unsuffixed provider names, such as `run_gl`, `run_wgpu`, `run_vulkan`, `test_gl`, `test_wgpu`, and `test_vulkan`. Binding implementation details such as FFM or JNI are dependency wiring inside the platform module and should not appear in desktop JVM task names. Each desktop interactive provider task should expose the same selector API options: `gl`, `wgpu`, and `vulkan`.
+Desktop JVM basic sample tasks start with the sample name and end with `_build` or `_run`, such as `basic_desktop_gl_run`, `basic_desktop_wgpu_run`, and `basic_desktop_vulkan_run`. Desktop JVM test runtime app aliases start with `test_desktop_` and end with `_build` or `_run`, such as `test_desktop_gl_run`, `test_desktop_wgpu_run`, and `test_desktop_vulkan_run`. Validation tasks can keep validation-specific suffixes such as `test_gl_validate` and `test_ui_visual_parity_desktop`. Binding implementation details such as FFM or JNI are dependency wiring inside the platform module and should not appear in desktop JVM sample/test task names. Each desktop interactive provider task should expose the same selector API options: `gl`, `wgpu`, and `vulkan`.
 
-Desktop-native sample and test tasks must name the native build mode explicitly by ending in `_debug` or `_release`. Expose native build modes through `libfdx_desktop_native_build_debug` and `libfdx_desktop_native_build_release`, native run modes through `libfdx_desktop_native_run_debug` and `libfdx_desktop_native_run_release`, sample modes through names such as `run_gl_debug` and `run_gl_release`, and test modes through names such as `test_vulkan_debug` and `test_vulkan_release`. Do not add unsuffixed desktop-native sample/test aliases that choose Debug or Release from a property. On Windows, `libfdx.desktopNative.openConsole` defaults to true and makes sample/test run tasks launch the executable in a separate console window; set it to false for inline/headless Gradle runs. The `libfdx.desktopNative.showConsole` property controls whether the generated Windows executable uses the console subsystem.
+Desktop-native sample and test tasks must name the native build mode explicitly. Expose native build modes through `libfdx_desktop_native_build_debug` and `libfdx_desktop_native_build_release`, native run modes through `libfdx_desktop_native_run_debug` and `libfdx_desktop_native_run_release`, sample modes through names such as `basic_desktop_native_gl_debug_build` and `basic_desktop_native_gl_debug_run`, and test modes through names such as `test_desktop_native_vulkan_debug_build` and `test_desktop_native_vulkan_debug_run`. Do not add unsuffixed desktop-native sample/test aliases that choose Debug or Release from a property. On Windows, `libfdx.desktopNative.openConsole` defaults to true and makes sample/test run tasks launch the executable in a separate console window; set it to false for inline/headless Gradle runs. The `libfdx.desktopNative.showConsole` property controls whether the generated Windows executable uses the console subsystem.
 
 PSP project-generation tasks use `libfdx_psp_generate`, `libfdx_psp_build`, and `libfdx_psp_ppsspp_capture`. Platform test aliases such as `test_cube_generate`, `test_cube_build`, `test_cube_ppsspp_capture`, `test_spritebatch_generate`, `test_spritebatch_build`, `test_spritebatch_ppsspp_capture`, `test_backend_spritebatch_generate`, `test_backend_spritebatch_build`, `test_backend_spritebatch_ppsspp_capture`, `test_backend_input_generate`, `test_backend_input_build`, `test_backend_input_ppsspp_capture`, `test_backend_uikit_generate`, `test_backend_uikit_build`, and `test_backend_uikit_ppsspp_capture` select the matching PSP test main class and output name for the current Gradle invocation. `libfdx_psp_generate` writes the TeaVM C PSP project shell. `libfdx_psp_build` executes the generated PSP build script and requires a PSPDEV/psp-cmake toolchain on `PATH` or through `PSPDEV`. On Windows, `PSPDEV` may be set to a Windows path; the generated `build.bat` converts it to a WSL path before invoking `build.sh`. `libfdx_psp_ppsspp_capture` builds the EBOOT, launches PPSSPP in windowed mode, waits `libfdx.psp.ppssppCaptureDelaySeconds`, asks PPSSPP to run its `Take Screenshot` command, also sends the F12 screenshot key, copies the screenshot to `build/reports/ppsspp`, and closes PPSSPP. If PPSSPP still does not write a screenshot, the task falls back to capturing the emulator client area. The emulator executable is resolved from `libfdx.psp.ppssppExecutable`, `PPSSPP_EXECUTABLE`, `PPSSPP_HOME`, `PATH`, standard Windows install locations, or the generated local `build/tools/ppsspp` directory. If no executable is found and `libfdx.psp.ppssppAutoDownload` is true, the task downloads the portable ZIP from `libfdx.psp.ppssppDownloadUrl` and extracts it into `build/tools/ppsspp`.
 

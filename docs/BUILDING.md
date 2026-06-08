@@ -114,11 +114,11 @@ From the repository root on Windows, use the task for the graphics stack you
 want:
 
 ```powershell
-.\gradlew.bat :samples:basic:platform:desktop:run_gl
-.\gradlew.bat :samples:basic:platform:desktop:run_wgpu
-.\gradlew.bat :samples:basic:platform:desktop:run_vulkan
-.\gradlew.bat :samples:basic:platform:desktop_native:run_gl_debug
-.\gradlew.bat :samples:basic:platform:desktop_native:run_gl_release
+.\gradlew.bat :samples:basic:platform:desktop:basic_desktop_gl_run
+.\gradlew.bat :samples:basic:platform:desktop:basic_desktop_wgpu_run
+.\gradlew.bat :samples:basic:platform:desktop:basic_desktop_vulkan_run
+.\gradlew.bat :samples:basic:platform:desktop_native:basic_desktop_native_gl_debug_run
+.\gradlew.bat :samples:basic:platform:desktop_native:basic_desktop_native_gl_release_run
 ```
 
 ## 6. Basic Android Sample
@@ -130,10 +130,10 @@ setup before Gradle can install or run the app.
 Use the task for the Android graphics stack you want:
 
 ```powershell
-.\gradlew.bat :samples:basic:platform:android:run_gles
-.\gradlew.bat :samples:basic:platform:android:run_wgpu_jni
-.\gradlew.bat :samples:basic:platform:android:run_vulkan
-.\gradlew.bat :samples:basic:platform:android:run_vulkan_fallback
+.\gradlew.bat :samples:basic:platform:android:basic_android_gles_run
+.\gradlew.bat :samples:basic:platform:android:basic_android_wgpu_jni_run
+.\gradlew.bat :samples:basic:platform:android:basic_android_vulkan_run
+.\gradlew.bat :samples:basic:platform:android:basic_android_vulkan_fallback_run
 ```
 
 ## 7. Basic Web Sample
@@ -142,11 +142,13 @@ The web sample tasks generate webapps for browser-based smoke checks. They are
 useful for validating the web build path and the browser launcher shell before
 running the fuller web test matrix.
 
-The web sample builds JavaScript and Wasm WebGL webapps:
+The web sample exposes explicit WebGL and WebGPU JavaScript/Wasm webapps:
 
 ```powershell
-.\gradlew.bat :samples:basic:platform:web:libfdx_web_js_run
-.\gradlew.bat :samples:basic:platform:web:libfdx_web_wasm_run
+.\gradlew.bat :samples:basic:platform:web:basic_webgl_js_run
+.\gradlew.bat :samples:basic:platform:web:basic_webgl_wasm_run
+.\gradlew.bat :samples:basic:platform:web:basic_webgpu_js_run
+.\gradlew.bat :samples:basic:platform:web:basic_webgpu_wasm_run
 ```
 
 For web launchers, a width or height of `0` or a negative value means the

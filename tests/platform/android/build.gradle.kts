@@ -99,9 +99,21 @@ fun registerAndroidRunTask(name: String, installTask: String, applicationId: Str
     }
 }
 
-registerAndroidRunTask("run_gles", "installDebug", "io.github.libfdx.tests.android",
+fun registerAndroidBuildTask(name: String, descriptionText: String) {
+    tasks.register(name) {
+        group = "application"
+        description = descriptionText
+        dependsOn("assembleDebug")
+    }
+}
+
+registerAndroidBuildTask("test_android_gles_build", "Builds the Android graphics test app for GLES.")
+registerAndroidBuildTask("test_android_wgpu_jni_build", "Builds the Android graphics test app for WGPU JNI.")
+registerAndroidBuildTask("test_android_vulkan_build", "Builds the Android graphics test app for Vulkan.")
+
+registerAndroidRunTask("test_android_gles_run", "installDebug", "io.github.libfdx.tests.android",
         "io.github.libfdx.tests.android.AndroidGlesTestActivity")
-registerAndroidRunTask("run_wgpu_jni", "installDebug", "io.github.libfdx.tests.android",
+registerAndroidRunTask("test_android_wgpu_jni_run", "installDebug", "io.github.libfdx.tests.android",
         "io.github.libfdx.tests.android.AndroidWgpuTestActivity")
-registerAndroidRunTask("run_vulkan", "installDebug", "io.github.libfdx.tests.android",
+registerAndroidRunTask("test_android_vulkan_run", "installDebug", "io.github.libfdx.tests.android",
         "io.github.libfdx.tests.android.AndroidVulkanTestActivity")

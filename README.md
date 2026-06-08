@@ -36,13 +36,13 @@ Hosted web tools and demos:
 From the repository root on Windows:
 
 ```powershell
-.\gradlew.bat :samples:basic:platform:desktop:run_gl
+.\gradlew.bat :samples:basic:platform:desktop:basic_desktop_gl_run
 ```
 
 To open the desktop test selector:
 
 ```powershell
-.\gradlew.bat :tests:platform:desktop:test_gl
+.\gradlew.bat :tests:platform:desktop:test_desktop_gl_run
 ```
 
 ## Documentation

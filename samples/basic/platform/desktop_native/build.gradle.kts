@@ -90,14 +90,26 @@ fun registerDesktopNativeSampleTask(taskName: String, descriptionText: String, n
     }
 }
 
+tasks.register("basic_desktop_native_gl_debug_build") {
+    group = "application"
+    description = "Builds the basic desktop_native GL sample Debug executable."
+    dependsOn("libfdx_desktop_native_build_debug")
+}
+
+tasks.register("basic_desktop_native_gl_release_build") {
+    group = "application"
+    description = "Builds the basic desktop_native GL sample Release executable."
+    dependsOn("libfdx_desktop_native_build_release")
+}
+
 registerDesktopNativeSampleTask(
-        "run_gl_debug",
+        "basic_desktop_native_gl_debug_run",
         "Runs the basic desktop_native GL sample using the Debug native executable.",
-        "libfdx_desktop_native_build_debug",
+        "basic_desktop_native_gl_debug_build",
         "Debug")
 
 registerDesktopNativeSampleTask(
-        "run_gl_release",
+        "basic_desktop_native_gl_release_run",
         "Runs the basic desktop_native GL sample using the Release native executable.",
-        "libfdx_desktop_native_build_release",
+        "basic_desktop_native_gl_release_build",
         "Release")

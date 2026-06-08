@@ -202,8 +202,33 @@ fun JavaExec.useJava25Launcher() {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
 
-tasks.register<JavaExec>("test_wgpu") {
+fun registerDesktopTestBuild(taskName: String, descriptionText: String, providerClasspath: FileCollection) {
+    tasks.register(taskName) {
+        group = applicationGroup
+        description = descriptionText
+        dependsOn("classes")
+        inputs.files(providerClasspath)
+    }
+}
+
+registerDesktopTestBuild(
+        "test_desktop_gl_build",
+        "Builds the desktop graphics test runtime inputs for GL.",
+        desktopRuntimeClasspath)
+
+registerDesktopTestBuild(
+        "test_desktop_wgpu_build",
+        "Builds the desktop graphics test runtime inputs for WGPU.",
+        desktopRuntimeClasspath)
+
+registerDesktopTestBuild(
+        "test_desktop_vulkan_build",
+        "Builds the desktop graphics test runtime inputs for Vulkan.",
+        desktopRuntimeClasspath)
+
+tasks.register<JavaExec>("test_desktop_wgpu_run") {
     configureTestRun("Runs graphics tests with WGPU.", "wgpu", "WGPU", desktopRuntimeClasspath, "0", defaultDriveInput = "false", defaultValidate = "false")
+    dependsOn("test_desktop_wgpu_build")
     useJava25Launcher()
 }
 
@@ -281,17 +306,19 @@ tasks.register<JavaExec>("test_gl_validate_baseline") {
     useJava25Launcher()
 }
 
-tasks.register<JavaExec>("test_gl") {
+tasks.register<JavaExec>("test_desktop_gl_run") {
     configureTestRun("Runs graphics tests with desktop GL.",
             "gl", "GL", desktopRuntimeClasspath,
             "0", defaultValidate = "false", defaultDriveInput = "false")
+    dependsOn("test_desktop_gl_build")
     useJava25Launcher()
 }
 
-tasks.register<JavaExec>("test_vulkan") {
+tasks.register<JavaExec>("test_desktop_vulkan_run") {
     configureTestRun("Runs graphics tests with desktop Vulkan.",
             "vulkan", "Vulkan", desktopRuntimeClasspath, "0", defaultValidate = "false",
             defaultDriveInput = "false")
+    dependsOn("test_desktop_vulkan_build")
     useJava25Launcher()
 }
 

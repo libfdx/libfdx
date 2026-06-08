@@ -67,27 +67,29 @@ tasks.register<Sync>("stage_pages") {
     into(pagesStagingDir)
     pagesWebapp(
         projectPath = ":libfdx:tools:project-generator:platform:web",
-        buildTaskName = "build_web_js",
+        buildTaskName = "project_generator_webgl_js_build",
         webappPath = "dist/web-js/webapp",
         pagesPath = "project-generator/webgl-js"
     )
     pagesWebapp(
         projectPath = ":libfdx:tools:project-generator:platform:web",
-        buildTaskName = "build_web_wasm",
+        buildTaskName = "project_generator_webgl_wasm_build",
         webappPath = "dist/web-wasm/webapp",
         pagesPath = "project-generator/webgl-wasm"
     )
     pagesWebapp(
         projectPath = ":libfdx:tools:project-generator:platform:web",
-        buildTaskName = "build_web_js",
+        buildTaskName = "project_generator_webgpu_js_build",
         webappPath = "dist/web-js/webapp",
-        pagesPath = "project-generator/webgpu-js"
+        pagesPath = "project-generator/webgpu-js",
+        indexFile = "webgpu.html"
     )
     pagesWebapp(
         projectPath = ":libfdx:tools:project-generator:platform:web",
-        buildTaskName = "build_web_wasm",
+        buildTaskName = "project_generator_webgpu_wasm_build",
         webappPath = "dist/web-wasm/webapp",
-        pagesPath = "project-generator/webgpu-wasm"
+        pagesPath = "project-generator/webgpu-wasm",
+        indexFile = "webgpu.html"
     )
     pagesWebapp(
         projectPath = ":tests:platform:web",
@@ -117,27 +119,29 @@ tasks.register<Sync>("stage_pages") {
     )
     pagesWebapp(
         projectPath = ":samples:basic:platform:web",
-        buildTaskName = "libfdx_web_js_build",
+        buildTaskName = "basic_webgl_js_build",
         webappPath = "dist/web-js/webapp",
         pagesPath = "samples/basic/webgl-js"
     )
     pagesWebapp(
         projectPath = ":samples:basic:platform:web",
-        buildTaskName = "libfdx_web_wasm_build",
+        buildTaskName = "basic_webgl_wasm_build",
         webappPath = "dist/web-wasm/webapp",
         pagesPath = "samples/basic/webgl-wasm"
     )
     pagesWebapp(
         projectPath = ":samples:basic:platform:web",
-        buildTaskName = "libfdx_web_js_build",
+        buildTaskName = "basic_webgpu_js_build",
         webappPath = "dist/web-js/webapp",
-        pagesPath = "samples/basic/webgpu-js"
+        pagesPath = "samples/basic/webgpu-js",
+        indexFile = "webgpu.html"
     )
     pagesWebapp(
         projectPath = ":samples:basic:platform:web",
-        buildTaskName = "libfdx_web_wasm_build",
+        buildTaskName = "basic_webgpu_wasm_build",
         webappPath = "dist/web-wasm/webapp",
-        pagesPath = "samples/basic/webgpu-wasm"
+        pagesPath = "samples/basic/webgpu-wasm",
+        indexFile = "webgpu.html"
     )
     doLast {
         val root = pagesStagingDir.get().asFile
@@ -171,10 +175,6 @@ tasks.register<Sync>("stage_pages") {
                 "WebGPU Wasm" to "webgpu-wasm/"
             )
         )
-        rewriteWebGpuPage(root.resolve("project-generator/webgpu-js/index.html"))
-        rewriteWebGpuPage(root.resolve("project-generator/webgpu-wasm/index.html"))
-        rewriteWebGpuPage(root.resolve("samples/basic/webgpu-js/index.html"))
-        rewriteWebGpuPage(root.resolve("samples/basic/webgpu-wasm/index.html"))
     }
 }
 
@@ -246,22 +246,6 @@ fun writeSelectorPage(output: File, title: String, links: List<Pair<String, Stri
         """.trimIndent(),
         Charsets.UTF_8
     )
-}
-
-fun rewriteWebGpuPage(indexFile: File) {
-    val source = indexFile.readText(Charsets.UTF_8)
-    val rewritten = when {
-        source.contains("main();") -> source.replace(
-            "main();",
-            "main([\"--graphics=webgpu\"]);"
-        )
-        source.contains("teavm.exports.main([]);") -> source.replace(
-            "teavm.exports.main([]);",
-            "teavm.exports.main([\"--graphics=webgpu\"]);"
-        )
-        else -> throw GradleException("Could not rewrite WebGPU launch page: ${indexFile.absolutePath}")
-    }
-    indexFile.writeText(rewritten, Charsets.UTF_8)
 }
 
 fun isMavenPublishingTaskRequested(): Boolean {

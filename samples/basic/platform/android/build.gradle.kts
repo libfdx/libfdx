@@ -89,11 +89,24 @@ fun registerAndroidRunTask(name: String, installTask: String, applicationId: Str
     }
 }
 
-registerAndroidRunTask("run_gles", "installDebug", "io.github.libfdx.samples.basic.android",
+fun registerAndroidBuildTask(name: String, descriptionText: String) {
+    tasks.register(name) {
+        group = "application"
+        description = descriptionText
+        dependsOn("assembleDebug")
+    }
+}
+
+registerAndroidBuildTask("basic_android_gles_build", "Builds the Android basic sample for GLES.")
+registerAndroidBuildTask("basic_android_wgpu_jni_build", "Builds the Android basic sample for WGPU JNI.")
+registerAndroidBuildTask("basic_android_vulkan_build", "Builds the Android basic sample for Vulkan.")
+registerAndroidBuildTask("basic_android_vulkan_fallback_build", "Builds the Android basic sample for Vulkan fallback.")
+
+registerAndroidRunTask("basic_android_gles_run", "installDebug", "io.github.libfdx.samples.basic.android",
         "io.github.libfdx.samples.basic.android.BasicAndroidGlesActivity")
-registerAndroidRunTask("run_wgpu_jni", "installDebug", "io.github.libfdx.samples.basic.android",
+registerAndroidRunTask("basic_android_wgpu_jni_run", "installDebug", "io.github.libfdx.samples.basic.android",
         "io.github.libfdx.samples.basic.android.BasicAndroidWgpuActivity")
-registerAndroidRunTask("run_vulkan", "installDebug", "io.github.libfdx.samples.basic.android",
+registerAndroidRunTask("basic_android_vulkan_run", "installDebug", "io.github.libfdx.samples.basic.android",
         "io.github.libfdx.samples.basic.android.BasicAndroidVulkanActivity")
-registerAndroidRunTask("run_vulkan_fallback", "installDebug", "io.github.libfdx.samples.basic.android",
+registerAndroidRunTask("basic_android_vulkan_fallback_run", "installDebug", "io.github.libfdx.samples.basic.android",
         "io.github.libfdx.samples.basic.android.BasicAndroidVulkanFallbackActivity")

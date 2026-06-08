@@ -53,18 +53,6 @@ libfdx {
 
 val jsWebappDir = layout.buildDirectory.dir("dist/web-js/webapp")
 val wasmWebappDir = layout.buildDirectory.dir("dist/web-wasm/webapp")
-val webGpuJsPage = registerWebGpuPage(
-    "test_webgpu_js_page",
-    "libfdx_web_js_build",
-    "dist/web-js/webapp",
-    "libfdx Tests - WebGPU JS"
-)
-val webGpuWasmPage = registerWebGpuPage(
-    "test_webgpu_wasm_page",
-    "libfdx_web_wasm_build",
-    "dist/web-wasm/webapp",
-    "libfdx Tests - WebGPU Wasm"
-)
 
 tasks.register("test_webgl_js_build") {
     group = "application"
@@ -81,13 +69,15 @@ tasks.register("test_webgl_wasm_build") {
 tasks.register("test_webgpu_js_build") {
     group = "application"
     description = "Builds the WebGPU JavaScript test web application."
-    dependsOn(webGpuJsPage)
+    dependsOn("libfdx_web_js_build")
+    configureWebGpuPage("dist/web-js/webapp", "libfdx Tests - WebGPU JS")
 }
 
 tasks.register("test_webgpu_wasm_build") {
     group = "application"
     description = "Builds the WebGPU Wasm test web application."
-    dependsOn(webGpuWasmPage)
+    dependsOn("libfdx_web_wasm_build")
+    configureWebGpuPage("dist/web-wasm/webapp", "libfdx Tests - WebGPU Wasm")
 }
 
 tasks.register<io.github.libfdx.gradle.LibfdxRunWebTask>("test_webgl_js_run") {
@@ -126,8 +116,7 @@ tasks.register<io.github.libfdx.gradle.LibfdxRunWebTask>("test_webgpu_wasm_run")
     defaultPath.set("/webgpu.html")
 }
 
-fun registerWebGpuPage(taskName: String, buildTaskName: String, webappPath: String, title: String) = tasks.register(taskName) {
-    dependsOn(buildTaskName)
+fun Task.configureWebGpuPage(webappPath: String, title: String) {
     val webappDir = layout.buildDirectory.dir(webappPath)
     val indexFile = webappDir.map { it.file("index.html") }
     val outputFile = webappDir.map { it.file("webgpu.html") }

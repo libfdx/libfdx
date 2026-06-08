@@ -92,17 +92,47 @@ fun JavaExec.useJava25Launcher() {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
 
-tasks.register<JavaExec>("run_wgpu") {
+fun registerDesktopSampleBuild(taskName: String, descriptionText: String, providerClasspath: FileCollection) {
+    tasks.register(taskName) {
+        group = "application"
+        description = descriptionText
+        dependsOn("classes")
+        inputs.files(providerClasspath)
+    }
+}
+
+registerDesktopSampleBuild(
+    "basic_desktop_gl_build",
+    "Builds the basic desktop sample runtime inputs for GL.",
+    glRuntimeClasspath
+)
+
+registerDesktopSampleBuild(
+    "basic_desktop_wgpu_build",
+    "Builds the basic desktop sample runtime inputs for WGPU.",
+    wgpuRuntimeClasspath
+)
+
+registerDesktopSampleBuild(
+    "basic_desktop_vulkan_build",
+    "Builds the basic desktop sample runtime inputs for Vulkan.",
+    vulkanRuntimeClasspath
+)
+
+tasks.register<JavaExec>("basic_desktop_wgpu_run") {
     configureSampleRun("Runs the basic desktop sample with WGPU.", "wgpu", "WGPU", wgpuRuntimeClasspath)
+    dependsOn("basic_desktop_wgpu_build")
     useJava25Launcher()
 }
 
-tasks.register<JavaExec>("run_gl") {
+tasks.register<JavaExec>("basic_desktop_gl_run") {
     configureSampleRun("Runs the basic desktop sample with GL.", "gl", "GL", glRuntimeClasspath)
+    dependsOn("basic_desktop_gl_build")
     useJava25Launcher()
 }
 
-tasks.register<JavaExec>("run_vulkan") {
+tasks.register<JavaExec>("basic_desktop_vulkan_run") {
     configureSampleRun("Runs the basic desktop sample with Vulkan.", "vulkan", "Vulkan", vulkanRuntimeClasspath)
+    dependsOn("basic_desktop_vulkan_build")
     useJava25Launcher()
 }

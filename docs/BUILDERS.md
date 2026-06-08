@@ -153,18 +153,21 @@ so generation logic can run on desktop or web:
 Run the desktop generator UI with:
 
 ```powershell
-.\gradlew.bat :libfdx:tools:project-generator:platform:desktop:run_gl
+.\gradlew.bat :libfdx:tools:project-generator:platform:desktop:project_generator_desktop_gl_run
 ```
 
 Build or serve the web generator UI with:
 
 ```powershell
-.\gradlew.bat :libfdx:tools:project-generator:platform:web:build_web_js
-.\gradlew.bat :libfdx:tools:project-generator:platform:web:run_web_js
+.\gradlew.bat :libfdx:tools:project-generator:platform:web:project_generator_webgl_js_build
+.\gradlew.bat :libfdx:tools:project-generator:platform:web:project_generator_webgl_js_run
+.\gradlew.bat :libfdx:tools:project-generator:platform:web:project_generator_webgpu_js_build
+.\gradlew.bat :libfdx:tools:project-generator:platform:web:project_generator_webgpu_js_run
 ```
 
-The web module also exposes `build_web_wasm` and `run_web_wasm` for the Wasm
-target.
+The web module also exposes `project_generator_webgl_wasm_build`,
+`project_generator_webgl_wasm_run`, `project_generator_webgpu_wasm_build`, and
+`project_generator_webgpu_wasm_run` for the Wasm target.
 
 The core generator must stay independent from filesystem APIs. Desktop export
 writes generated files to a selected directory. Web export downloads an archive
