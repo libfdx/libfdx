@@ -506,8 +506,8 @@ wiring is affected, and any affected task or user docs.
 - Scenario validation is not UI-only and not game-only.
 - UI Kit validation is an adapter capability, not the whole validator.
 - Scenario-owned catalogs replace hardcoded validation scripts inside screens.
-- Scenarios may be authored by libfdx tests, samples, benchmarks, tools, or
-  external projects.
+- Scenarios may be authored by libfdx tests, samples, tools, external
+  benchmark projects, or user projects.
 - Scenario selection, capture naming, failure reports, and visual baseline names
   use stable scenario names.
 - Public validator APIs stay provider-neutral. Provider-specific behavior enters

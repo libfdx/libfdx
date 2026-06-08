@@ -57,7 +57,9 @@ To open the desktop test selector:
 - [Building](docs/BUILDING.md): local setup, native artifacts, and sample
   launch commands.
 - [Testing](docs/TESTING.md): provider tests, platform test launchers, PSP
-  capture, and benchmarks.
+  capture, and validation tasks.
+- [Benchmarks](https://github.com/libfdx/benchmark): external performance
+  benchmark project.
 - [Builders](docs/BUILDERS.md): Gradle plugin usage, bitmap font generation,
   and standalone Java builders.
 

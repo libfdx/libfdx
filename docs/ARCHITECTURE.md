@@ -48,7 +48,6 @@ Use a small number of broad folders. A new top-level folder should exist only wh
 | `backends/` | Platform/runtime implementation families. Each concrete backend uses one flat folder segment, such as `headless`, `headless_native`, `desktop`, or `desktop_native`. Shared TeaVM build and native resource support belongs in `teavm_shared`. Do not make a backend folder both a source module and a parent namespace for more backend modules. |
 | `tools/` | Build-time and command-line tools. |
 | `tests/` | Cross-platform framework test projects: core tests plus platform/backend test runners. |
-| `benchmark/` | Performance benchmark project: one shared core plus platform/backend benchmark runners and report generation. |
 | `samples/` | Example applications. |
 
 Extension module shape:
@@ -196,12 +195,6 @@ repo-root/
       ios/
       ios_native/
 
-  benchmark/
-    core/
-    platform/
-      desktop/
-      desktop_native/
-
   samples/
     basic/
       core/
@@ -249,8 +242,6 @@ samples/*/platform/<platform> -> sample core, selected backend, selected platfor
 tests/core -> public modules being tested
 tests/platform/<backend_variant> -> tests/core, selected backend, selected platform providers chosen by dedicated Gradle tasks or platform build variants
 
-benchmark/core -> public modules being benchmarked
-benchmark/platform/<backend_variant> -> benchmark/core, selected backend, selected platform providers chosen by dedicated Gradle tasks or platform build variants
 ```
 
 The arrows above mean "depends on". For example, `graphics/g2d` may depend on `graphics/api`, but `graphics/api` must not depend on `graphics/g2d`.
@@ -944,7 +935,7 @@ Internal Gradle paths should remain the source of truth while the project is you
 
 Maven publication wiring lives in the shared `buildSrc/src/main/kotlin/publish.gradle.kts` publish plugin. The root build applies it with the `LIBRARIES` target, and the included `libfdx/tools/gradle-plugin` build applies the same script with the `GRADLE_PLUGIN` target. It publishes only the explicit `libfdxPublishableProjectPaths` Java and Android library allowlist with group `libfdx.toml` `release.fdxGroup`, uses each module's `archivesName` as the artifact ID, and delegates Gradle plugin marker and implementation publication to the included build. Run `listMavenDeployProjects` to print the library deploy allowlist. The configured `libfdx.toml` `release.fdxVersion` is the upcoming release version without `-SNAPSHOT`; snapshot deploy and publish tasks derive Maven version `-SNAPSHOT`, while release deploy and publish tasks use the configured base version. The public root deploy tasks are `build_native_artifacts`, `prepareSnapshotDeploy`, `prepareReleaseDeploy`, `publishSnapshot`, and `publishRelease`: `build_native_artifacts` builds current-host runtime fdx desktop native-resource JAR inputs, runtime fdx web native-resource JAR inputs, the runtime fdx Android AAR, and Android release AARs; `prepareSnapshotDeploy` publishes local snapshot files to `build/snapshot-deploy`; `prepareReleaseDeploy` publishes local release files to `build/staging-deploy` and creates `build/staging-deploy.zip`; `publishSnapshot` publishes directly to the Central Portal snapshot repository through Gradle's Maven publish tasks; and `publishRelease` prepares release deploy files, creates the staging zip, and uploads it to Central Portal. Deploy preparation uses generated native resources and must not compile C native artifacts. By default, runtime fdx native validation fails for missing current-host desktop or web resources and skips non-host desktop native-resource publications. `fdx_shared` is a published native-source/tooling artifact used by the Gradle plugin and standalone builders when a user project generates TeaVM/native builds from Maven artifacts.
 
-The configured dependency mode controls repository consumer wiring for tests, samples, and benchmarks. `LibExt` reads `libfdx.toml` `[development]` values, then lets ignored root `local.properties` keys `development.usePublishedLibfdx` and `development.publishedLibfdxVersion` override them for one checkout. Settings always includes the local `:libfdx:*` source modules. When false, settings also includes the local Gradle plugin build and consumers use project dependencies. When true, the Gradle plugin resolves from Maven and consumers resolve libFDX dependencies as published `<fdxGroup>:<artifact>:<publishedLibfdxVersion>` coordinates. Web plugin tasks attach local generated runtime fdx web resources only when the consumer runtime classpath has local `:libfdx:*` project dependencies; Maven-backed consumers must get those resources from the published artifacts.
+The configured dependency mode controls repository consumer wiring for tests and samples. `LibExt` reads `libfdx.toml` `[development]` values, then lets ignored root `local.properties` keys `development.usePublishedLibfdx` and `development.publishedLibfdxVersion` override them for one checkout. Settings always includes the local `:libfdx:*` source modules. When false, settings also includes the local Gradle plugin build and consumers use project dependencies. When true, the Gradle plugin resolves from Maven and consumers resolve libFDX dependencies as published `<fdxGroup>:<artifact>:<publishedLibfdxVersion>` coordinates. Web plugin tasks attach local generated runtime fdx web resources only when the consumer runtime classpath has local `:libfdx:*` project dependencies; Maven-backed consumers must get those resources from the published artifacts.
 
 GitHub publish workflows build native artifacts before Maven publication. Windows, Linux, macOS x64, macOS arm64, Android, and web jobs upload temporary artifacts. The final publish job downloads desktop runtime artifacts into the generated resource directory of `fdx_desktop`, web runtime artifacts into `fdx_web`, plus the Android AAR output directories, and verifies the downloaded files before deploy preparation. Native artifacts are built by explicit native/platform tasks before tests, samples, or deploy preparation use them. Deploy preparation does not compile C native artifacts; local deploy preparation requires current-host runtime fdx desktop resources, runtime fdx web resources, and Android release AARs to already exist, while CI verifies every desktop runtime fdx native classifier before packaging.
 
@@ -1147,14 +1138,9 @@ Project-generator submodules are internal launch tooling in the first implementa
 | `:tests:platform:ios` | internal | iOS test runner. Dedicated Gradle tasks or platform build variants select iOS backend/provider variants when iOS support is available. |
 | `:tests:platform:ios_native` | internal | iOS C runtime test runner when a C-backed iOS backend exists. |
 
-### 9.17. Benchmark Modules
+### 9.17. External Benchmark Repository
 
-Benchmark modules are repository-internal performance tools. They should not be used for correctness assertions, and correctness tests should not depend on benchmark modules.
-
-| Gradle path | Tentative coordinate | Purpose |
-| --- | --- | --- |
-| `:benchmark:core` | internal | Reusable benchmark cases and helpers. Benchmark cases should depend only on public framework APIs and feature modules they measure. |
-| `:benchmark:platform:desktop` | internal | Desktop benchmark runner using `backends/desktop`. Dedicated Gradle tasks select graphics stacks and generate Markdown reports under `build/reports/benchmark`. |
+Performance benchmarks live in the external `libfdx/benchmark` repository. Keep correctness assertions in this repository's tests and use the external benchmark repository only after correctness is established. The benchmark repository owns benchmark cases, platform runners, provider comparisons, and generated performance reports.
 
 ### 9.18. Sample Modules
 
@@ -1209,7 +1195,7 @@ External users would normally use published coordinates:
 implementation("io.github.libfdx:fdx:$libfdxVersion")
 ```
 
-Inside this repository, tests, samples, and benchmarks should keep the source-versus-published dependency choice explicit:
+Inside this repository, tests and samples should keep the source-versus-published dependency choice explicit:
 
 ```kotlin
 if (LibExt.usePublishedLibfdx) {
@@ -1512,7 +1498,7 @@ dependencies {
 
 ### 10.11. Local Repository Sample Dependencies
 
-Tests, samples, and benchmarks inside this repository should use explicit `if (LibExt.usePublishedLibfdx)` branches for libFDX dependencies. By default the checked-in TOML sets the flag true, so settings resolves the Gradle plugin from Maven and those consumers use published coordinates from `LibExt.fdxGroup` and `LibExt.publishedLibfdxVersion`. Settings still includes the local `:libfdx:*` modules so source projects remain available in the checkout; the Maven-vs-local choice belongs to each consumer dependency block. Web plugin tasks must not build local runtime fdx web native resources for Maven-backed consumers. Developers can set `development.usePublishedLibfdx=false` in ignored root `local.properties` to use local project dependencies and the local plugin build for the current checkout. Published desktop JVM artifacts must not encode only the publish host's LWJGL native classifier; they declare all supported LWJGL native artifacts as non-runtime-scope dependencies so LWJGL's loader can select the current runtime platform.
+Tests and samples inside this repository should use explicit `if (LibExt.usePublishedLibfdx)` branches for libFDX dependencies. By default the checked-in TOML sets the flag true, so settings resolves the Gradle plugin from Maven and those consumers use published coordinates from `LibExt.fdxGroup` and `LibExt.publishedLibfdxVersion`. Settings still includes the local `:libfdx:*` modules so source projects remain available in the checkout; the Maven-vs-local choice belongs to each consumer dependency block. Web plugin tasks must not build local runtime fdx web native resources for Maven-backed consumers. Developers can set `development.usePublishedLibfdx=false` in ignored root `local.properties` to use local project dependencies and the local plugin build for the current checkout. Published desktop JVM artifacts must not encode only the publish host's LWJGL native classifier; they declare all supported LWJGL native artifacts as non-runtime-scope dependencies so LWJGL's loader can select the current runtime platform.
 
 Sample `core` modules should depend on public framework APIs and feature modules:
 
@@ -1826,7 +1812,7 @@ Example provider stack selection:
 
 Desktop JVM sample and test tasks select the graphics provider with unsuffixed provider names, such as `run_gl`, `run_wgpu`, `run_vulkan`, `test_gl`, `test_wgpu`, and `test_vulkan`. Binding implementation details such as FFM or JNI are dependency wiring inside the platform module and should not appear in desktop JVM task names. Each desktop interactive provider task should expose the same selector API options: `gl`, `wgpu`, and `vulkan`.
 
-Desktop-native sample, test, and benchmark tasks must name the native build mode explicitly by ending in `_debug` or `_release`. Expose native build modes through `libfdx_desktop_native_build_debug` and `libfdx_desktop_native_build_release`, native run modes through `libfdx_desktop_native_run_debug` and `libfdx_desktop_native_run_release`, sample modes through names such as `run_gl_debug` and `run_gl_release`, test modes through names such as `test_vulkan_debug` and `test_vulkan_release`, and graphics-specific benchmark modes through names such as `benchmark_desktop_native_gl_debug` and `benchmark_desktop_native_vulkan_release`. Full-suite benchmark tasks such as `benchmark_desktop_native_debug` and `benchmark_desktop_native_release` may aggregate multiple graphics providers. Do not add unsuffixed desktop-native sample/test/benchmark aliases that choose Debug or Release from a property. On Windows, `libfdx.desktopNative.openConsole` defaults to true and makes sample/test/benchmark run tasks launch the executable in a separate console window; set it to false for inline/headless Gradle runs. The `libfdx.desktopNative.showConsole` property controls whether the generated Windows executable uses the console subsystem.
+Desktop-native sample and test tasks must name the native build mode explicitly by ending in `_debug` or `_release`. Expose native build modes through `libfdx_desktop_native_build_debug` and `libfdx_desktop_native_build_release`, native run modes through `libfdx_desktop_native_run_debug` and `libfdx_desktop_native_run_release`, sample modes through names such as `run_gl_debug` and `run_gl_release`, and test modes through names such as `test_vulkan_debug` and `test_vulkan_release`. Do not add unsuffixed desktop-native sample/test aliases that choose Debug or Release from a property. On Windows, `libfdx.desktopNative.openConsole` defaults to true and makes sample/test run tasks launch the executable in a separate console window; set it to false for inline/headless Gradle runs. The `libfdx.desktopNative.showConsole` property controls whether the generated Windows executable uses the console subsystem.
 
 PSP project-generation tasks use `libfdx_psp_generate`, `libfdx_psp_build`, and `libfdx_psp_ppsspp_capture`. Platform test aliases such as `test_cube_generate`, `test_cube_build`, `test_cube_ppsspp_capture`, `test_spritebatch_generate`, `test_spritebatch_build`, `test_spritebatch_ppsspp_capture`, `test_backend_spritebatch_generate`, `test_backend_spritebatch_build`, `test_backend_spritebatch_ppsspp_capture`, `test_backend_input_generate`, `test_backend_input_build`, `test_backend_input_ppsspp_capture`, `test_backend_uikit_generate`, `test_backend_uikit_build`, and `test_backend_uikit_ppsspp_capture` select the matching PSP test main class and output name for the current Gradle invocation. `libfdx_psp_generate` writes the TeaVM C PSP project shell. `libfdx_psp_build` executes the generated PSP build script and requires a PSPDEV/psp-cmake toolchain on `PATH` or through `PSPDEV`. On Windows, `PSPDEV` may be set to a Windows path; the generated `build.bat` converts it to a WSL path before invoking `build.sh`. `libfdx_psp_ppsspp_capture` builds the EBOOT, launches PPSSPP in windowed mode, waits `libfdx.psp.ppssppCaptureDelaySeconds`, asks PPSSPP to run its `Take Screenshot` command, also sends the F12 screenshot key, copies the screenshot to `build/reports/ppsspp`, and closes PPSSPP. If PPSSPP still does not write a screenshot, the task falls back to capturing the emulator client area. The emulator executable is resolved from `libfdx.psp.ppssppExecutable`, `PPSSPP_EXECUTABLE`, `PPSSPP_HOME`, `PATH`, standard Windows install locations, or the generated local `build/tools/ppsspp` directory. If no executable is found and `libfdx.psp.ppssppAutoDownload` is true, the task downloads the portable ZIP from `libfdx.psp.ppssppDownloadUrl` and extracts it into `build/tools/ppsspp`.
 
@@ -1851,34 +1837,7 @@ Each module should still keep its local unit tests in:
 module/src/test/java
 ```
 
-Benchmark code lives outside `tests/` because it measures performance instead of correctness. The `benchmark/` folder uses the same core plus platform runner shape:
-
-```text
-benchmark/
-  core/
-  platform/
-    desktop/
-    desktop_native/
-```
-
-Responsibilities:
-
-- `benchmark/core` contains reusable benchmark cases and result-writing helpers that depend only on the public APIs being measured.
-- `benchmark/platform/desktop` runs benchmark cases through `backends/desktop`, selects desktop graphics stacks with dedicated Gradle tasks, and writes Markdown reports under `build/reports/benchmark`.
-- `benchmark/platform/desktop_native` runs benchmark cases through `backends/desktop_native`, selects C-backed desktop graphics providers with dedicated Gradle tasks, launches the native process with the same `libfdx.desktopNative.openConsole` behavior as native tests on Windows, and writes Markdown reports under `build/reports/benchmark`.
-- Benchmark tasks should generate machine-readable raw results before producing human-readable reports.
-- Benchmark tasks may use visible platform windows when that best represents runtime behavior, but they should make duration, vSync, and frame limiter choices explicit in task configuration and reports.
-- Correctness tests should not depend on benchmark modules.
-
-Example desktop benchmark:
-
-```bash
-./gradlew :benchmark:platform:desktop:benchmark_desktop
-./gradlew :benchmark:platform:desktop_native:benchmark_desktop_native_gl_debug
-./gradlew :benchmark:platform:desktop_native:benchmark_desktop_native_vulkan_debug
-./gradlew :benchmark:platform:desktop_native:benchmark_desktop_native_debug
-./gradlew :benchmark:platform:desktop_native:benchmark_desktop_native_release
-```
+Benchmark code lives outside this repository because it measures performance instead of correctness. Use the external `libfdx/benchmark` repository for benchmark cases, platform runners, provider comparisons, and generated performance reports. Correctness tests in this repository should not depend on benchmark code.
 
 ## 16. Java Package Map
 
@@ -1934,7 +1893,7 @@ Provider and extension packages:
 | `:libfdx:extensions:graphics:<provider>:core` | `io.github.libfdx.graphics.<provider>` | Provider-specific graphics public types, escape hatches, and shared Java provider glue, such as `WGPUDevice`, `WGPUTexture`, `VkDevice`, `VkTexture`, or graphics attachment classes that depend only on provider-neutral SPI. |
 | `:libfdx:extensions:graphics:<provider>:platform:<platform_variant>` | `io.github.libfdx.graphics.<provider>.<platform>` when Java code is required | Platform graphics binding/runtime packaging. These modules may be dependency-only and should contain Java code only for variant-specific glue that cannot live in `core`. |
 
-Backend, tool, test, benchmark, and sample packages:
+Backend, tool, test, and sample packages:
 
 | Gradle module pattern | Java package root pattern | What belongs there |
 | --- | --- | --- |
@@ -1945,8 +1904,6 @@ Backend, tool, test, benchmark, and sample packages:
 | `:libfdx:tools:<tool>` and `:libfdx:tools:<tool>:<part>` | `io.github.libfdx.tools.<tool_package>` | Tool implementation code. Use normal Java package words, such as `tools.project.generator` or `tools.texture.packer`. Tool platform adapters may add a platform package segment, such as `tools.project.generator.desktop`. |
 | `:tests:core` | `io.github.libfdx.tests` | Shared test registry, test helpers, contracts, and reusable tests. |
 | `:tests:platform:<platform_or_backend>` | `io.github.libfdx.tests.<platform_or_backend>` | Test runner and platform/backend test wiring. Follow the same package rule as backends: real backend names may appear in packages, but artifact-only variants such as `c`, `jni`, and `ffm` should not. |
-| `:benchmark:core` | `io.github.libfdx.benchmark` | Shared benchmark cases, result types, and benchmark helpers. |
-| `:benchmark:platform:<platform_or_backend>` | `io.github.libfdx.benchmark.<platform_or_backend>` | Benchmark runner and report wiring. Follow the same package rule as test runners. |
 | `:samples:<name>:core` | `io.github.libfdx.samples.<name>` | Shared sample application code. |
 | `:samples:<name>:platform:<platform>` | `io.github.libfdx.samples.<name>.<platform>` | Platform sample launcher/wiring code. |
 
@@ -1982,8 +1939,6 @@ Class placement examples:
 | `DesktopApplicationConfig` | `:libfdx:backends:desktop` | `io.github.libfdx.backend.desktop` |
 | `DesktopOpenGLProvider` | `:libfdx:backends:desktop` | `io.github.libfdx.backend.desktop` |
 | `DesktopVulkanProvider` | `:libfdx:backends:desktop` | `io.github.libfdx.backend.desktop` |
-| `SpriteBatchStressBenchmark` | `:benchmark:core` | `io.github.libfdx.benchmark.graphics` |
-| `DesktopNativeBenchmarkLauncher` | `:benchmark:platform:desktop_native` | `io.github.libfdx.benchmark.desktopnative` |
 | `DesktopNativeApplicationBackend` | `:libfdx:backends:desktop_native` | `io.github.libfdx.backend.desktopnative` |
 | `DesktopNativeApplicationConfig` | `:libfdx:backends:desktop_native` | `io.github.libfdx.backend.desktopnative` |
 | `DesktopNativeOpenGLProvider` | `:libfdx:backends:desktop_native` | `io.github.libfdx.backend.desktopnative` |

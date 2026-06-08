@@ -2705,7 +2705,7 @@ UI Kit adapter package:
 io.github.libfdx.validation.scenario.ui.kit
 ```
 
-`scenario-validator` is an optional public validation engine for complete runtime scenarios. The detailed contract lives in [SCENARIO_VALIDATOR.md](SCENARIO_VALIDATOR.md). It is reusable by libfdx's own tests, samples, benchmarks, tools, and user projects, but it is not required for normal runtime execution or rendering. UI Kit validation is an optional adapter capability, not the whole validator.
+`scenario-validator` is an optional public validation engine for complete runtime scenarios. The detailed contract lives in [SCENARIO_VALIDATOR.md](SCENARIO_VALIDATOR.md). It is reusable by libfdx's own tests, samples, tools, external benchmark projects, and user projects, but it is not required for normal runtime execution or rendering. UI Kit validation is an optional adapter capability, not the whole validator.
 
 Defined types:
 

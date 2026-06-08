@@ -2,7 +2,8 @@
 
 This document explains how to run libFDX validation and smoke tests from a local
 checkout. It is for contributors who need to verify framework behavior across
-providers, platforms, UI paths, native backends, PSP output, and benchmarks.
+providers, platforms, UI paths, native backends, PSP output, and external
+benchmark work.
 
 The test launchers are not all the same type of test. Some open interactive
 windows or browser pages, some run finite scripted checks, some capture visual
@@ -33,8 +34,8 @@ Use this order when deciding what to run:
    the generated native output.
 4. For browser changes, use the web test launcher and query parameters for the
    smallest affected scenario.
-5. For performance changes, use benchmark tasks after correctness has already
-   been validated.
+5. For performance changes, use the external benchmark repository after
+   correctness has already been validated.
 
 Interactive launchers are useful for manual inspection. Validation tasks are
 better when a change needs deterministic pass/fail evidence.
@@ -121,10 +122,10 @@ Desktop native projects expose explicit native build modes:
 .\gradlew.bat :tests:platform:desktop_native:libfdx_desktop_native_build_release
 ```
 
-Desktop native sample, test, and benchmark task names must end in `_debug` or
-`_release`. On Windows, native builds default to a console subsystem and
-sample/test/benchmark run tasks open a separate console window by default so
-stdout/stderr logs stay visible.
+Desktop native sample and test task names must end in `_debug` or `_release`.
+On Windows, native builds default to a console subsystem and sample/test run
+tasks open a separate console window by default so stdout/stderr logs stay
+visible.
 
 Use `"-Plibfdx.desktopNative.openConsole=false"` for inline/headless Gradle
 runs, and `"-Plibfdx.desktopNative.showConsole=false"` only when a GUI-subsystem
@@ -279,38 +280,8 @@ Benchmarks measure performance after correctness is already established. They
 should not be used as the first validation step for a rendering or backend
 change, because a fast broken frame is still a failing frame.
 
-The desktop benchmark task runs the SpriteBatch stress benchmark across GL,
-WGPU, and Vulkan. It uses visible windows, vSync disabled, the frame limiter
-disabled, 8191 rotating/scaling 32x32 sprites, and 8 seconds per provider:
-
-```powershell
-.\gradlew.bat :benchmark:platform:desktop:benchmark_desktop
-```
-
-The generated Markdown report is written to
-`build/reports/benchmark/desktop-sprite-batch-stress.md`.
-
-The desktop native benchmark runs the same SpriteBatch stress benchmark through
-the TeaVM C desktop_native backend. Use the graphics-specific tasks when
-comparing providers:
-
-```powershell
-.\gradlew.bat :benchmark:platform:desktop_native:benchmark_desktop_native_gl_debug
-.\gradlew.bat :benchmark:platform:desktop_native:benchmark_desktop_native_gl_release
-.\gradlew.bat :benchmark:platform:desktop_native:benchmark_desktop_native_vulkan_debug
-.\gradlew.bat :benchmark:platform:desktop_native:benchmark_desktop_native_vulkan_release
-```
-
-The aggregate `benchmark_desktop_native_debug` and
-`benchmark_desktop_native_release` tasks run both GL and Vulkan. Generated
-Markdown reports are written to paths such as
-`build/reports/benchmark/desktop-native-gl-sprite-batch-stress-release.md` and
-`build/reports/benchmark/desktop-native-vulkan-sprite-batch-stress-release.md`.
-
-On Windows these tasks also open the native process in a separate console by
-default; use `"-Plibfdx.desktopNative.openConsole=false"` for inline/headless
-benchmark runs. If CMake finds `Vulkan::Vulkan`, the generated native project
-uses the installed Vulkan SDK for Vulkan tasks. If not, it falls back to the
-local narrow ABI shim and loads the system Vulkan runtime (`vulkan-1.dll` on
-Windows or `libvulkan.so.1` on Linux) at run time. A Vulkan-capable
-driver/runtime is still required to run Vulkan benchmarks.
+The benchmark project now lives outside this repository at
+`https://github.com/libfdx/benchmark`. Use that repository for SpriteBatch
+stress benchmark runs, provider comparisons, generated benchmark reports, and
+future libGDX comparison work. This repository no longer defines `:benchmark:*`
+Gradle tasks.

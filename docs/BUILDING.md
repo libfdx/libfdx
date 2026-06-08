@@ -40,7 +40,7 @@ proves the change:
 2. Use `build_native_artifacts` only when the changed target consumes generated
    native resources.
 3. Use the commands in [Testing](TESTING.md) when checking a specific provider,
-   widget, visual path, input path, benchmark, or PSP capture.
+   widget, visual path, input path, or PSP capture.
 
 The sample tasks in this document are interactive launchers. They are useful for
 manual checks and smoke runs, but they do not replace validation tasks when a
@@ -48,9 +48,9 @@ change needs deterministic pass/fail evidence.
 
 ## 3. Repository Dependency Mode
 
-Tests, samples, and benchmarks can run against either the local source modules
-or already published libFDX artifacts. This is controlled by the development
-block in `libfdx.toml`, with local overrides from ignored `local.properties`:
+Tests and samples can run against either the local source modules or already
+published libFDX artifacts. This is controlled by the development block in
+`libfdx.toml`, with local overrides from ignored `local.properties`:
 
 ```toml
 [development]
@@ -58,10 +58,10 @@ usePublishedLibfdx = true
 publishedLibfdxVersion = "-SNAPSHOT"
 ```
 
-This TOML default lets users run tests, samples, or benchmarks against artifacts
-that already exist in Maven repositories. In this mode, settings resolves the
-libFDX Gradle plugin from Maven, and those consumers resolve libFDX dependencies
-as published coordinates such as
+This TOML default lets users run tests and samples against artifacts that already
+exist in Maven repositories. In this mode, settings resolves the libFDX Gradle
+plugin from Maven, and those consumers resolve libFDX dependencies as published
+coordinates such as
 `<fdxGroup>:<artifact>:<publishedLibfdxVersion>`. This avoids rebuilding local
 libFDX modules when the goal is to check consumers against a released or
 snapshot build. Settings still includes the local `:libfdx:*` source modules;
@@ -77,9 +77,9 @@ development.publishedLibfdxVersion=-SNAPSHOT
 ```
 
 With `development.usePublishedLibfdx=false`, settings includes the local
-`libfdx/tools/gradle-plugin` build, and tests, samples, and benchmarks compile
-and exercise local `:libfdx:*` project dependencies from the current checkout.
-Delete the local override keys to use the `libfdx.toml` defaults again.
+`libfdx/tools/gradle-plugin` build, and tests and samples compile and exercise
+local `:libfdx:*` project dependencies from the current checkout. Delete the
+local override keys to use the `libfdx.toml` defaults again.
 
 To switch modes for one checkout, edit `local.properties` before running the
 launcher or validation task. Gradle `-P` overrides are not supported for libFDX
