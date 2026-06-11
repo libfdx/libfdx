@@ -87,8 +87,10 @@ import io.github.libfdx.graphics.VertexStepMode;
 import java.nio.ByteBuffer;
 
 final class WGPUGraphicsDevice implements GraphicsDevice {
+    private static final int COPY_BUFFER_WRITE_ALIGNMENT = 4;
     private static final int COPY_BYTES_PER_ROW_ALIGNMENT = 256;
     private final WGPUContext context;
+    private ByteBuffer paddedBufferUpload;
 
     WGPUGraphicsDevice(WGPUContext context) {
         this.context = context;
@@ -102,8 +104,9 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         if (descriptor.usage() != BufferUsage.VERTEX && descriptor.usage() != BufferUsage.INDEX) {
             throw new FdxException("WGPU currently supports vertex and index buffers only");
         }
-        WGPUBuffer buffer = createNativeBuffer(descriptor.label(), descriptor.size(), descriptor.usage());
-        return new WGPUBufferHandle(buffer, descriptor.label(), descriptor.size(), descriptor.usage());
+        int nativeSize = align(descriptor.size(), COPY_BUFFER_WRITE_ALIGNMENT);
+        WGPUBuffer buffer = createNativeBuffer(descriptor.label(), nativeSize, descriptor.usage());
+        return new WGPUBufferHandle(buffer, descriptor.label(), nativeSize, descriptor.usage());
     }
 
     @Override
@@ -115,7 +118,9 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
             throw new FdxException("Buffer data cannot be null");
         }
         WGPUBufferHandle wgpuBuffer = buffer.as();
-        if (data.remaining() > wgpuBuffer.size()) {
+        int byteCount = data.remaining();
+        int uploadByteCount = align(byteCount, COPY_BUFFER_WRITE_ALIGNMENT);
+        if (uploadByteCount > wgpuBuffer.size()) {
             throw new FdxException("Buffer data is larger than the destination buffer");
         }
         if (wgpuBuffer.usedByRecordedCommand()) {
@@ -124,7 +129,24 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
             wgpuBuffer.nativeBuffer(newBuffer);
             context.destroyAfterSubmit(oldBuffer);
         }
-        context.nativeQueue().writeBuffer(wgpuBuffer.nativeBuffer(), 0, data, data.remaining());
+        ByteBuffer uploadData = bufferUploadData(data, byteCount, uploadByteCount);
+        context.nativeQueue().writeBuffer(wgpuBuffer.nativeBuffer(), 0, uploadData, uploadByteCount);
+    }
+
+    private ByteBuffer bufferUploadData(ByteBuffer data, int byteCount, int uploadByteCount) {
+        if (byteCount == uploadByteCount) {
+            return data;
+        }
+        paddedBufferUpload = ensureBuffer(paddedBufferUpload, uploadByteCount);
+        paddedBufferUpload.clear();
+        ByteBuffer source = data.slice();
+        source.limit(byteCount);
+        paddedBufferUpload.put(source);
+        while (paddedBufferUpload.position() < uploadByteCount) {
+            paddedBufferUpload.put((byte)0);
+        }
+        paddedBufferUpload.flip();
+        return paddedBufferUpload;
     }
 
     private WGPUBuffer createNativeBuffer(String label, int size, BufferUsage usage) {
@@ -283,6 +305,13 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         }
         packed.flip();
         return packed;
+    }
+
+    private ByteBuffer ensureBuffer(ByteBuffer buffer, int byteCount) {
+        if (buffer != null && buffer.capacity() >= byteCount) {
+            return buffer;
+        }
+        return ByteBuffer.allocateDirect(byteCount);
     }
 
     private int align(int value, int alignment) {
@@ -579,6 +608,8 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
                 return WGPUVertexFormat.Float32x2;
             case FLOAT32X3:
                 return WGPUVertexFormat.Float32x3;
+            case UNORM8X4:
+                return WGPUVertexFormat.Unorm8x4;
             case FLOAT32X4:
             default:
                 return WGPUVertexFormat.Float32x4;

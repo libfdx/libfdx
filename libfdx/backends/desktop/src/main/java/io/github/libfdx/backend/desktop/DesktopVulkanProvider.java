@@ -2695,6 +2695,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                     return VK_FORMAT_R32G32_SFLOAT;
                 case FLOAT32X3:
                     return VK_FORMAT_R32G32B32_SFLOAT;
+                case UNORM8X4:
+                    return VK_FORMAT_R8G8B8A8_UNORM;
                 case FLOAT32X4:
                 default:
                     return VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -2877,6 +2879,20 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
             VulkanTextureHandle vulkanTexture = texture.as();
             textures[slot] = vulkanTexture;
+        }
+
+        @Override
+        public void setScissor(int x, int y, int width, int height) {
+            ensureOpen();
+            if (width <= 0 || height <= 0) {
+                throw new FdxException("Scissor size must be greater than zero");
+            }
+            try (MemoryStack stack = stackPush()) {
+                VkRect2D.Buffer scissor = VkRect2D.calloc(1, stack);
+                scissor.offset().set(x, y);
+                scissor.extent().set(width, height);
+                vkCmdSetScissor(context.commandBuffer(), 0, scissor);
+            }
         }
 
         @Override

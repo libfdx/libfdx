@@ -513,6 +513,13 @@ VkCompositeAlphaFlagBitsKHR chooseCompositeAlpha(VkSurfaceCapabilitiesKHR capabi
     return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 }
 
+VkSurfaceTransformFlagBitsKHR choosePreTransform(const VkSurfaceCapabilitiesKHR& capabilities) {
+    if ((capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) != 0) {
+        return VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    }
+    return capabilities.currentTransform;
+}
+
 VkRenderPass createRenderPass(Context* context, VkAttachmentLoadOp colorLoadOp,
         VkAttachmentStoreOp colorStoreOp, VkAttachmentLoadOp depthLoadOp) {
     VkAttachmentDescription attachments[2]{};
@@ -701,9 +708,11 @@ void createSwapchain(Context* context) {
     context->extent = chooseExtent(capabilities, context->requestedWidth, context->requestedHeight);
     VkPresentModeKHR presentMode = choosePresentMode(context->physicalDevice, context->surface, context->vSync,
             context->preferMailboxPresentMode);
-    LOGI("Android Vulkan swapchain selection: format=%d colorSpace=%d extent=%ux%u presentMode=%d minImages=%u maxImages=%u",
+    VkSurfaceTransformFlagBitsKHR preTransform = choosePreTransform(capabilities);
+    LOGI("Android Vulkan swapchain selection: format=%d colorSpace=%d extent=%ux%u presentMode=%d minImages=%u maxImages=%u currentTransform=%u preTransform=%u",
             context->surfaceFormat, context->colorSpace, context->extent.width, context->extent.height,
-            presentMode, capabilities.minImageCount, capabilities.maxImageCount);
+            presentMode, capabilities.minImageCount, capabilities.maxImageCount, capabilities.currentTransform,
+            preTransform);
 
     uint32_t imageCount = capabilities.minImageCount + 1;
     if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
@@ -736,7 +745,7 @@ void createSwapchain(Context* context) {
         createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     }
 
-    createInfo.preTransform = capabilities.currentTransform;
+    createInfo.preTransform = preTransform;
     createInfo.compositeAlpha = chooseCompositeAlpha(capabilities);
     createInfo.presentMode = presentMode;
     createInfo.clipped = VK_TRUE;
@@ -1268,8 +1277,7 @@ void submitAndPresentFrame(Context* context, bool waitForCompletion) {
             && presentResult != VK_SUBOPTIMAL_KHR) {
         throw std::runtime_error("Could not present Android Vulkan frame: " + std::to_string(presentResult));
     }
-    if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR
-            || context->pendingResize) {
+    if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || context->pendingResize) {
         createSwapchain(context);
     }
 }
@@ -2410,6 +2418,26 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_setIndexBuffer(JNIEnv*
             throw std::runtime_error("Cannot bind Android Vulkan index buffer outside a render pass");
         }
         vkCmdBindIndexBuffer(currentFrame(context).commandBuffer, buffer->buffer, 0, VK_INDEX_TYPE_UINT16);
+    } catch (const std::exception& error) {
+        throwFdx(env, error.what());
+    }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_libfdx_backend_android_AndroidVulkanNative_setScissor(JNIEnv* env, jclass,
+        jlong contextHandle, jint x, jint y, jint width, jint height) {
+    Context* context = ptr<Context>(contextHandle);
+    try {
+        if (!context->renderPassStarted) {
+            throw std::runtime_error("Cannot set Android Vulkan scissor outside a render pass");
+        }
+        if (width <= 0 || height <= 0) {
+            throw std::runtime_error("Android Vulkan scissor size must be greater than zero");
+        }
+        VkRect2D scissor{};
+        scissor.offset = {static_cast<int32_t>(x), static_cast<int32_t>(y)};
+        scissor.extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+        vkCmdSetScissor(currentFrame(context).commandBuffer, 0, 1, &scissor);
     } catch (const std::exception& error) {
         throwFdx(env, error.what());
     }

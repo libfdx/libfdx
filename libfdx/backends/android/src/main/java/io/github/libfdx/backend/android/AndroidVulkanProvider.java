@@ -488,6 +488,15 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         }
 
         @Override
+        public void setScissor(int x, int y, int width, int height) {
+            ensureOpen();
+            if (width <= 0 || height <= 0) {
+                throw new FdxException("Scissor size must be greater than zero");
+            }
+            AndroidVulkanNative.setScissor(attachment.context, x, y, width, height);
+        }
+
+        @Override
         public void setUniform1i(String name, int value) {
             if ("u_hasBaseColorTexture".equals(name)) {
                 setUniformFloat(TEXTURE_FLAGS_OFFSET, value);
@@ -1106,6 +1115,8 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                 return 103;
             case FLOAT32X3:
                 return 106;
+            case UNORM8X4:
+                return 37;
             case FLOAT32X4:
             default:
                 return 109;

@@ -4,7 +4,8 @@ public enum VertexFormat {
     FLOAT32(1, 4),
     FLOAT32X2(2, 8),
     FLOAT32X3(3, 12),
-    FLOAT32X4(4, 16);
+    FLOAT32X4(4, 16),
+    UNORM8X4(4, 4);
 
     private final int componentCount;
     private final int byteSize;

@@ -3,6 +3,7 @@ package io.github.libfdx.graphics.gl.web;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.TextureWrap;
+import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.gl.GLApi;
 import io.github.libfdx.graphics.gl.GLShaderType;
 import org.teavm.jso.JSBody;
@@ -51,6 +52,7 @@ final class WebGLApi implements GLApi {
     private static final int COLOR_BUFFER_BIT = 0x4000;
     private static final int DEPTH_BUFFER_BIT = 0x0100;
     private static final int DEPTH_TEST = 0x0B71;
+    private static final int SCISSOR_TEST = 0x0C11;
     private static final int LEQUAL = 0x0203;
     private static final int LINES = 0x0001;
     private static final int TRIANGLES = 0x0004;
@@ -369,6 +371,15 @@ final class WebGLApi implements GLApi {
     }
 
     @Override
+    public void vertexAttribPointer(int index, VertexFormat format, int stride, int offset) {
+        if (format == VertexFormat.UNORM8X4) {
+            gl.vertexAttribPointer(index, format.componentCount(), UNSIGNED_BYTE, true, stride, offset);
+            return;
+        }
+        gl.vertexAttribPointer(index, format.componentCount(), FLOAT, false, stride, offset);
+    }
+
+    @Override
     public void vertexAttribDivisor(int index, int divisor) {
         vertexAttribDivisor(gl, index, divisor);
     }
@@ -376,6 +387,20 @@ final class WebGLApi implements GLApi {
     @Override
     public void viewport(int x, int y, int width, int height) {
         gl.viewport(x, y, width, height);
+    }
+
+    @Override
+    public void enableScissorTest(boolean enabled) {
+        if (enabled) {
+            gl.enable(SCISSOR_TEST);
+        } else {
+            gl.disable(SCISSOR_TEST);
+        }
+    }
+
+    @Override
+    public void scissor(int x, int y, int width, int height) {
+        gl.scissor(x, y, width, height);
     }
 
     @Override

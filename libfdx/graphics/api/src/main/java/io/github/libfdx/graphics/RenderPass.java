@@ -21,6 +21,10 @@ public interface RenderPass extends ProviderHandle {
 
     void setTexture(int slot, Texture texture);
 
+    default void setScissor(int x, int y, int width, int height) {
+        throw new FdxException("Scissor rectangles are not supported by this render pass");
+    }
+
     default void setUniform1i(String name, int value) {
         throw new FdxException("Integer uniforms are not supported by this render pass");
     }

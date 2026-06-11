@@ -4,6 +4,7 @@ import android.opengl.GLES30;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.TextureWrap;
+import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.gl.GLApi;
 import io.github.libfdx.graphics.gl.GLShaderType;
 
@@ -266,8 +267,32 @@ final class AndroidGlesApi implements GLApi {
     }
 
     @Override
+    public void vertexAttribPointer(int index, VertexFormat format, int stride, int offset) {
+        if (format == VertexFormat.UNORM8X4) {
+            GLES30.glVertexAttribPointer(index, format.componentCount(), GLES30.GL_UNSIGNED_BYTE, true,
+                    stride, offset);
+            return;
+        }
+        GLES30.glVertexAttribPointer(index, format.componentCount(), GLES30.GL_FLOAT, false, stride, offset);
+    }
+
+    @Override
     public void viewport(int x, int y, int width, int height) {
         GLES30.glViewport(x, y, width, height);
+    }
+
+    @Override
+    public void enableScissorTest(boolean enabled) {
+        if (enabled) {
+            GLES30.glEnable(GLES30.GL_SCISSOR_TEST);
+        } else {
+            GLES30.glDisable(GLES30.GL_SCISSOR_TEST);
+        }
+    }
+
+    @Override
+    public void scissor(int x, int y, int width, int height) {
+        GLES30.glScissor(x, y, width, height);
     }
 
     @Override

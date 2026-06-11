@@ -54,6 +54,7 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:validation:scenario-validator",
     ":libfdx:validation:scenario-validator-ui-kit",
     ":libfdx:tools:font",
+    ":libfdx:tools:shader",
     ":libfdx:extensions:graphics:gl:core",
     ":libfdx:extensions:graphics:gl:platform:desktop",
     ":libfdx:extensions:graphics:gl:platform:desktop_native",
@@ -334,9 +335,17 @@ fun Project.androidReleaseAarFile(): File {
     return layout.buildDirectory.file("outputs/aar/${publishArtifactId()}-release.aar").get().asFile
 }
 
-fun Project.configureManualPomDependencies(pom: MavenPom) {
+fun Project.configurePomDependencies(pom: MavenPom, replaceExisting: Boolean) {
     pom.withXml {
-        val dependenciesNode = asNode().appendNode("dependencies")
+        val projectNode = asNode()
+        if(replaceExisting) {
+            val existingDependencies = projectNode.children()
+                .filterIsInstance<Node>()
+                .filter { it.name().toString().substringAfterLast('}').substringAfterLast(':') == "dependencies" }
+            existingDependencies.forEach { projectNode.remove(it) }
+        }
+
+        val dependenciesNode = projectNode.appendNode("dependencies")
         val seen = mutableSetOf<String>()
 
         fun addDependency(group: String, artifact: String, version: String, scope: String) {
@@ -378,8 +387,16 @@ fun Project.configureManualPomDependencies(pom: MavenPom) {
         if(!dependenciesNode.children().isEmpty()) {
             return@withXml
         }
-        (dependenciesNode.parent() as Node).remove(dependenciesNode)
+        projectNode.remove(dependenciesNode)
     }
+}
+
+fun Project.configureManualPomDependencies(pom: MavenPom) {
+    configurePomDependencies(pom, replaceExisting = false)
+}
+
+fun Project.configureGradlePluginImplementationPomDependencies(pom: MavenPom) {
+    configurePomDependencies(pom, replaceExisting = true)
 }
 
 fun Project.configureLibfdxMavenRepository() {
@@ -531,6 +548,7 @@ fun Project.configureGradlePluginPublishing() {
         publications.withType(MavenPublication::class.java).configureEach {
             if(name == "pluginMaven") {
                 artifact(sourcesJar)
+                configureGradlePluginImplementationPomDependencies(pom)
             }
         }
     }

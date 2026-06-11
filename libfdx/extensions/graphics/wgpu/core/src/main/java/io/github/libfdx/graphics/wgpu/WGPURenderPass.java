@@ -120,6 +120,15 @@ final class WGPURenderPass implements RenderPass {
     }
 
     @Override
+    public void setScissor(int x, int y, int width, int height) {
+        ensureOpen();
+        if (width <= 0 || height <= 0) {
+            throw new FdxException("Scissor size must be greater than zero");
+        }
+        nativePass.setScissorRect(x, y, width, height);
+    }
+
+    @Override
     public void setUniform1i(String name, int value) {
         if ("u_hasBaseColorTexture".equals(name)) {
             setUniformFloat(TEXTURE_FLAGS_OFFSET, value);

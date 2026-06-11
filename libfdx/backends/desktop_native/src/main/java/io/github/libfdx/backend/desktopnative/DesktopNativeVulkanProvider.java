@@ -1172,6 +1172,8 @@ public final class DesktopNativeVulkanProvider implements GraphicsAttachmentProv
                 return 103;
             case FLOAT32X3:
                 return 106;
+            case UNORM8X4:
+                return 37;
             case FLOAT32X4:
             default:
                 return 109;

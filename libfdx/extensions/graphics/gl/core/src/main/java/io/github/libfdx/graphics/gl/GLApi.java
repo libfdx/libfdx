@@ -2,6 +2,7 @@ package io.github.libfdx.graphics.gl;
 
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.TextureWrap;
+import io.github.libfdx.graphics.VertexFormat;
 
 import java.nio.ByteBuffer;
 
@@ -106,6 +107,10 @@ public interface GLApi {
 
     void vertexAttribPointer(int index, int size, int stride, int offset);
 
+    default void vertexAttribPointer(int index, VertexFormat format, int stride, int offset) {
+        vertexAttribPointer(index, format.componentCount(), stride, offset);
+    }
+
     default void vertexAttribDivisor(int index, int divisor) {
         if (divisor != 0) {
             throw new UnsupportedOperationException("Instanced vertex attributes are not supported");
@@ -113,6 +118,12 @@ public interface GLApi {
     }
 
     void viewport(int x, int y, int width, int height);
+
+    default void enableScissorTest(boolean enabled) {
+    }
+
+    default void scissor(int x, int y, int width, int height) {
+    }
 
     void clearColor(float red, float green, float blue, float alpha);
 
@@ -136,7 +147,22 @@ public interface GLApi {
         throw new UnsupportedOperationException("Indexed draws are not supported");
     }
 
+    default void drawElementsBaseVertex(PrimitiveTopology topology, int indexCount, int offsetBytes, int baseVertex) {
+        if (baseVertex != 0) {
+            throw new UnsupportedOperationException("Base-vertex indexed draws are not supported");
+        }
+        drawElements(topology, indexCount, offsetBytes);
+    }
+
     default void drawElementsInstanced(PrimitiveTopology topology, int indexCount, int offsetBytes, int instanceCount) {
         throw new UnsupportedOperationException("Indexed draws are not supported");
+    }
+
+    default void drawElementsInstancedBaseVertex(PrimitiveTopology topology, int indexCount, int offsetBytes,
+            int instanceCount, int baseVertex) {
+        if (baseVertex != 0) {
+            throw new UnsupportedOperationException("Base-vertex indexed draws are not supported");
+        }
+        drawElementsInstanced(topology, indexCount, offsetBytes, instanceCount);
     }
 }

@@ -3,6 +3,7 @@ package io.github.libfdx.backend.desktop;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.TextureWrap;
+import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.gl.GLApi;
 import io.github.libfdx.graphics.gl.GLShaderType;
 import org.lwjgl.opengl.GL11;
@@ -13,6 +14,7 @@ import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GL31;
+import org.lwjgl.opengl.GL32;
 import org.lwjgl.opengl.GL33;
 
 import java.nio.ByteBuffer;
@@ -252,6 +254,15 @@ final class DesktopGLApi implements GLApi {
     }
 
     @Override
+    public void vertexAttribPointer(int index, VertexFormat format, int stride, int offset) {
+        if (format == VertexFormat.UNORM8X4) {
+            GL20.glVertexAttribPointer(index, format.componentCount(), GL11.GL_UNSIGNED_BYTE, true, stride, offset);
+            return;
+        }
+        GL20.glVertexAttribPointer(index, format.componentCount(), GL11.GL_FLOAT, false, stride, offset);
+    }
+
+    @Override
     public void vertexAttribDivisor(int index, int divisor) {
         GL33.glVertexAttribDivisor(index, divisor);
     }
@@ -259,6 +270,20 @@ final class DesktopGLApi implements GLApi {
     @Override
     public void viewport(int x, int y, int width, int height) {
         GL11.glViewport(x, y, width, height);
+    }
+
+    @Override
+    public void enableScissorTest(boolean enabled) {
+        if (enabled) {
+            GL11.glEnable(GL11.GL_SCISSOR_TEST);
+        } else {
+            GL11.glDisable(GL11.GL_SCISSOR_TEST);
+        }
+    }
+
+    @Override
+    public void scissor(int x, int y, int width, int height) {
+        GL11.glScissor(x, y, width, height);
     }
 
     @Override
@@ -307,9 +332,21 @@ final class DesktopGLApi implements GLApi {
     }
 
     @Override
+    public void drawElementsBaseVertex(PrimitiveTopology topology, int indexCount, int offsetBytes, int baseVertex) {
+        GL32.glDrawElementsBaseVertex(toNative(topology), indexCount, GL11.GL_UNSIGNED_SHORT, offsetBytes, baseVertex);
+    }
+
+    @Override
     public void drawElementsInstanced(PrimitiveTopology topology, int indexCount, int offsetBytes, int instanceCount) {
         GL31.glDrawElementsInstanced(toNative(topology), indexCount, GL11.GL_UNSIGNED_SHORT,
                 offsetBytes, instanceCount);
+    }
+
+    @Override
+    public void drawElementsInstancedBaseVertex(PrimitiveTopology topology, int indexCount, int offsetBytes,
+            int instanceCount, int baseVertex) {
+        GL32.glDrawElementsInstancedBaseVertex(toNative(topology), indexCount, GL11.GL_UNSIGNED_SHORT, offsetBytes,
+                instanceCount, baseVertex);
     }
 
     private int toNative(PrimitiveTopology topology) {

@@ -37,6 +37,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
 
         project.afterEvaluate {
             registerBitmapFontTasks(project, extension)
+            registerShaderTasks(project, extension)
             configureTargets(project, extension)
             registerTasks(project, extension)
         }
@@ -134,6 +135,19 @@ class LibfdxGradlePlugin : Plugin<Project> {
             group = TASK_GROUP
             description = "Generate configured libfdx bitmap fonts."
             dependsOn(fontTasks)
+        }
+    }
+
+    private fun registerShaderTasks(project: Project, extension: LibfdxExtension) {
+        val validate = project.tasks.register<LibfdxValidateShadersTask>("libfdx_validate_shaders") {
+            group = TASK_GROUP
+            description = "Validate libfdx WGSL shader profiles under src/main/fdx-shaders."
+            sourceDir.set(extension.shaders.sourceDir)
+            defaultProfile.set(extension.shaders.defaultProfile)
+            reportFile.set(extension.shaders.reportFile)
+        }
+        project.tasks.named("check").configure {
+            dependsOn(validate)
         }
     }
 

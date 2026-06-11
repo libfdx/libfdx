@@ -101,6 +101,16 @@ final class GLRenderPass implements RenderPass {
     }
 
     @Override
+    public void setScissor(int x, int y, int width, int height) {
+        ensureOpen();
+        if (width <= 0 || height <= 0) {
+            throw new FdxException("Scissor size must be greater than zero");
+        }
+        gl.enableScissorTest(true);
+        gl.scissor(x, y, width, height);
+    }
+
+    @Override
     public void setUniform1i(String name, int value) {
         int location = uniformLocation(name);
         if (location >= 0) {
@@ -168,18 +178,16 @@ final class GLRenderPass implements RenderPass {
         if (indexBuffer == null) {
             throw new FdxException("Index buffer must be set before drawIndexed");
         }
-        if (baseVertex != 0) {
-            throw new FdxException("GL drawIndexed currently supports baseVertex=0 only");
-        }
         if (firstInstance != 0) {
             throw new FdxException("GL drawIndexed currently supports firstInstance=0 only");
         }
         int offsetBytes = firstIndex * 2;
         if (instanceCount <= 1) {
-            gl.drawElements(pipeline.primitiveTopology(), indexCount, offsetBytes);
+            gl.drawElementsBaseVertex(pipeline.primitiveTopology(), indexCount, offsetBytes, baseVertex);
             return;
         }
-        gl.drawElementsInstanced(pipeline.primitiveTopology(), indexCount, offsetBytes, instanceCount);
+        gl.drawElementsInstancedBaseVertex(pipeline.primitiveTopology(), indexCount, offsetBytes, instanceCount,
+                baseVertex);
     }
 
     @Override
@@ -188,6 +196,7 @@ final class GLRenderPass implements RenderPass {
             return;
         }
         ended = true;
+        gl.enableScissorTest(false);
         gl.useProgram(0);
         gl.bindArrayBuffer(0);
         gl.bindElementArrayBuffer(0);
@@ -218,8 +227,7 @@ final class GLRenderPass implements RenderPass {
         for (int i = 0; i < attributes.length; i++) {
             VertexAttribute attribute = attributes[i];
             gl.enableVertexAttribArray(attribute.location());
-            gl.vertexAttribPointer(attribute.location(), attribute.format().componentCount(),
-                    layout.arrayStride(), attribute.offset());
+            gl.vertexAttribPointer(attribute.location(), attribute.format(), layout.arrayStride(), attribute.offset());
             gl.vertexAttribDivisor(attribute.location(), divisor);
         }
     }

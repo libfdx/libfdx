@@ -34,6 +34,8 @@ open class LibfdxExtension @Inject constructor(
         objects.domainObjectContainer(LibfdxBitmapFontExtension::class.java) { name ->
             objects.newInstance(LibfdxBitmapFontExtension::class.java, name)
         }
+    val shaders: LibfdxShadersExtension =
+        objects.newInstance(LibfdxShadersExtension::class.java, project, objects)
 
     val js: LibfdxJsExtension by lazy {
         objects.newInstance(LibfdxJsExtension::class.java, project, jsConfig)
@@ -63,6 +65,10 @@ open class LibfdxExtension @Inject constructor(
         action.execute(bitmapFonts)
     }
 
+    fun shaders(action: Action<in LibfdxShadersExtension>) {
+        action.execute(shaders)
+    }
+
     fun js(action: Action<in LibfdxJsExtension>) {
         declaredTargets.add(LibfdxTarget.JS)
         action.execute(js)
@@ -86,6 +92,18 @@ open class LibfdxExtension @Inject constructor(
     internal fun isDeclared(target: LibfdxTarget): Boolean {
         return declaredTargets.contains(target)
     }
+}
+
+open class LibfdxShadersExtension @Inject constructor(
+    project: Project,
+    objects: ObjectFactory
+) {
+    val sourceDir: DirectoryProperty = objects.directoryProperty()
+        .convention(project.layout.projectDirectory.dir("src/main/fdx-shaders"))
+    val defaultProfile: Property<String> = objects.property(String::class.java)
+        .convention("webgpu")
+    val reportFile: RegularFileProperty = objects.fileProperty()
+        .convention(project.layout.buildDirectory.file("reports/libfdx/shaders/validation.md"))
 }
 
 open class LibfdxBitmapFontExtension @Inject constructor(

@@ -1003,7 +1003,37 @@ Gamepad common contracts live in `runtime/input`. These modules provide platform
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:graphics:api` | `io.github.libfdx:graphics` | Low-level WebGPU-style graphics abstraction: adapters, devices, queues, buffers, textures, texture views, framebuffers, render targets, multi-render targets, samplers, shader modules, bind groups, pipelines, command encoders, command buffers, render passes, and surfaces. |
+| `:libfdx:graphics:api` | `io.github.libfdx:graphics` | Low-level WebGPU-style graphics abstraction: adapters, devices, queues, buffers, textures, texture views, framebuffers, render targets, multi-render targets, samplers, shader modules, shader profiles/bundles, bind groups, pipelines, command encoders, command buffers, render passes, and surfaces. |
+
+Shader authoring is WGSL-first. Portable shader source belongs under
+`src/main/fdx-shaders/**/*.wgsl` in user projects or the owning libfdx module.
+The source file declares its intended profile with an optional leading comment
+such as `// @fdx.profile webgl2`, `// @fdx.profile webgpu`, or
+`// @fdx.profile native`. If absent, tools use the project default profile.
+
+The profiles mean:
+
+- `fdx-wgsl-webgl2`: lowest common profile for WebGL2/OpenGL ES 3 style targets. It excludes compute shaders, storage buffers/textures, atomics, WGSL extensions, subgroup operations, override constants, 16-bit float types, and 64-bit integer types.
+- `fdx-wgsl-webgpu`: WebGPU/wgpu baseline profile. It allows normal render and compute WGSL but excludes backend-specific WGSL extensions, `requires` directives, and subgroup operations unless a later capability-gated profile is added.
+- `fdx-native`: opt-in provider/native profile. It is not portable by default and must be documented by the owning module or app.
+
+Runtime providers do not translate shaders implicitly. A build or source module
+must provide the generated target artifacts needed by its supported providers:
+WGSL for WebGPU/wgpu, GLSL or GLSL ES for OpenGL/WebGL/GLES, SPIR-V words for
+Vulkan, and later MSL/HLSL for Metal/DirectX providers. Common runtime code uses
+`ShaderBundle` to validate the WGSL source profile once at setup time and select
+the already-generated target artifact for the active provider. Generated outputs
+belong under build output directories, not hand-edited source folders, unless a
+module intentionally carries checked-in generated shaders for bootstrapping.
+
+The libfdx Gradle plugin registers `libfdx_validate_shaders`. It scans
+`libfdx.shaders.sourceDir` (default `src/main/fdx-shaders`), applies
+`libfdx.shaders.defaultProfile` (default `webgpu`), and writes
+`build/reports/libfdx/shaders/validation.md`. Missing shader directories are a
+valid empty input. Full WGSL-to-GLSL/SPIR-V/MSL/HLSL generation must be wired
+through an explicit compiler tool such as Naga, Tint, SPIRV-Cross, shaderc, or
+platform SDK tools; do not claim generated target support until that tool path is
+implemented and validated.
 
 ### 9.7. wgpu/WebGPU Provider Modules
 
@@ -1114,6 +1144,7 @@ Additional backend implementations should be added as new flat variant folders o
 | --- | --- | --- |
 | `libfdx/tools/gradle-plugin` included build | `io.github.libfdx:libfdx-gradle-plugin` | Gradle plugin for libfdx platform targets. It is intentionally an included build under `libfdx/tools`, not `buildSrc`, so this repository and external projects can consume the same plugin with `pluginManagement { includeBuild("<libfdx>/libfdx/tools/gradle-plugin") }`. The public plugin ID is `io.github.libfdx`, and builds should configure it with one `libfdx { ... }` block. |
 | `:libfdx:tools:font` | `io.github.libfdx:font_tools` | Build-time font tools. The current tool generates AngelCode BMFont-style `.fnt` metadata and PNG atlases from TTF files for platforms that should ship prebuilt bitmap fonts, such as PSP. It is a general libfdx tooling module, not a TeaVM backend module. |
+| `:libfdx:tools:shader` | `io.github.libfdx:tools_shader` | Build-time shader tools for WGSL profile validation and generated shader bundle reports. It depends on `graphics/api` for the public shader profile contract and does not pull a native shader compiler into runtime code. |
 | `:libfdx:tools:project-generator:core` | `io.github.libfdx:project_generator_core` | Project generator model, validation, template rendering, and in-memory generated project tree. It must not depend on desktop, web, UIKit, or filesystem APIs. |
 | `:libfdx:tools:project-generator:ui` | `io.github.libfdx:project_generator_ui` | Shared UIKit project generator UI. It depends on project-generator core and delegates persistence/download behavior to a platform export target. |
 | `:libfdx:tools:project-generator:platform:desktop` | internal | Desktop LWJGL3 runtime for the shared project generator UI. It writes generated project files to a selected directory. |
@@ -1894,7 +1925,6 @@ Provider and extension packages:
 | `:libfdx:extensions:audio:<provider>:<platform_variant>` | `io.github.libfdx.audio.<provider>.<platform>` | Platform audio provider runtime code. For example, `miniaudio:desktop_jni` maps to `audio.miniaudio.desktop`. |
 | `:libfdx:extensions:graphics:<provider>:core` | `io.github.libfdx.graphics.<provider>` | Provider-specific graphics public types, escape hatches, and shared Java provider glue, such as `WGPUDevice`, `WGPUTexture`, `VkDevice`, `VkTexture`, or graphics attachment classes that depend only on provider-neutral SPI. |
 | `:libfdx:extensions:graphics:<provider>:platform:<platform_variant>` | `io.github.libfdx.graphics.<provider>.<platform>` when Java code is required | Platform graphics binding/runtime packaging. These modules may be dependency-only and should contain Java code only for variant-specific glue that cannot live in `core`. |
-
 Backend, tool, test, and sample packages:
 
 | Gradle module pattern | Java package root pattern | What belongs there |

@@ -1685,7 +1685,9 @@ Defined descriptor types:
 | --- | --- |
 | `BufferDescriptor` | Buffer creation label, size, usage, and dynamic/static update intent. |
 | `TextureDescriptor` | Texture creation label, size, format, usage, and sampler wrap state. |
-| `ShaderModuleDescriptor` | Shader source or bytecode plus shader language metadata. |
+| `ShaderModuleDescriptor` | Provider-facing shader source or bytecode plus shader language metadata. |
+| `ShaderBundle` | WGSL source-of-truth plus generated target artifacts, reflection metadata, profile validation, and provider-target descriptor selection. |
+| `ShaderReflection`, `ShaderBinding`, `ShaderAttribute` | Setup-time metadata for shader bindings and vertex inputs generated or declared with a shader bundle. |
 | `RenderPassDescriptor` | Color/depth attachments, load/store operations, clear values. |
 | `RenderPipelineDescriptor` | Shader module, entry points, target format, primitive topology, vertex layouts, sampled texture count, and debug label. |
 
@@ -1695,6 +1697,10 @@ Defined value/state types:
 | --- | --- |
 | `TextureFormat` | Portable texture/surface format. |
 | `ShaderLanguage` | Shader source family. WGSL, GLSL, and SPIR-V are available in the first rendering slice. |
+| `ShaderProfile` | WGSL portability profile: WebGL2-compatible, WebGPU-compatible, or provider-native. |
+| `ShaderTarget` | Provider target language/output selection, such as WebGPU WGSL, OpenGL GLSL, WebGL/GLES GLSL ES, Vulkan SPIR-V, Metal MSL, or DirectX HLSL. |
+| `ShaderStage`, `ShaderBindingType` | Shader metadata values for generated reflection and setup-time validation. |
+| `ShaderValidationResult`, `ShaderValidationDiagnostic`, `ShaderValidationSeverity` | Build/setup-time shader profile validation result types. |
 | `PrimitiveTopology` | Primitive assembly mode for first render pipelines. |
 | `BufferUsage` | Portable buffer usage. The first implementation defines vertex and index buffers. |
 | `TextureUsage` | Portable texture usage. The first implementation defines sampled textures. |
@@ -1715,6 +1721,51 @@ public final class ShaderModuleDescriptor {
     public ShaderModuleDescriptor glsl(String vertexSource, String fragmentSource);
     public ShaderModuleDescriptor spirv(int[] vertexWords, int[] fragmentWords);
     public boolean hasSource(ShaderLanguage language);
+}
+
+public enum ShaderProfile {
+    PORTABLE_WEBGL2, PORTABLE_WEBGPU, NATIVE;
+    public String id();
+    public static ShaderProfile fromId(String id, ShaderProfile fallback);
+}
+
+public enum ShaderTarget {
+    WEBGPU_WGSL, WGPU_WGSL, WEBGL_GLSL_ES, GLES_GLSL_ES,
+    OPENGL_GLSL, VULKAN_SPIRV, METAL_MSL, DIRECTX_HLSL;
+    public static ShaderTarget forProvider(ProviderId providerId);
+    public static ShaderTarget forProvider(String providerId);
+}
+
+public final class ShaderBundle {
+    public static ShaderBundle.Builder builder(String label);
+    public ShaderProfile profile();
+    public String wgslSource();
+    public String glslVertexSource();
+    public String glslFragmentSource();
+    public String glslEsVertexSource();
+    public String glslEsFragmentSource();
+    public int[] spirvVertexWords();
+    public int[] spirvFragmentWords();
+    public String mslSource();
+    public String hlslSource();
+    public ShaderReflection reflection();
+    public boolean hasTarget(ShaderTarget target);
+    public ShaderValidationResult validateProfile();
+    public ShaderModuleDescriptor descriptorForProvider(ProviderId providerId);
+    public ShaderModuleDescriptor descriptorForProvider(String providerId);
+    public ShaderModuleDescriptor descriptorForTarget(ShaderTarget target);
+
+    public static final class Builder {
+        public Builder profile(ShaderProfile profile);
+        public Builder wgsl(String source);
+        public Builder glsl(String vertexSource, String fragmentSource);
+        public Builder glslEs(String vertexSource, String fragmentSource);
+        public Builder spirv(int[] vertexWords, int[] fragmentWords);
+        public Builder msl(String source);
+        public Builder hlsl(String source);
+        public Builder reflection(ShaderReflection reflection);
+        public ShaderBundle build();
+    }
 }
 
 public final class RenderPassDescriptor {
@@ -1903,6 +1954,7 @@ public interface RenderPass extends ProviderHandle {
     void setVertexBuffer(int slot, Buffer buffer);
     void setIndexBuffer(Buffer buffer);
     void setTexture(int slot, Texture texture);
+    void setScissor(int x, int y, int width, int height);
     void draw(int vertexCount, int instanceCount, int firstVertex, int firstInstance);
     void drawIndexed(int indexCount, int instanceCount, int firstIndex, int baseVertex, int firstInstance);
     void end();
@@ -1914,6 +1966,10 @@ Rules:
 - Descriptor objects carry creation parameters; resource interfaces expose stable identity, metadata, lifecycle, and provider access.
 - Resource metadata methods should return the values the resource was created with.
 - `ShaderModuleDescriptor` may contain multiple source-language variants for the same shader intent. Providers select a supported source variant; they should not pretend to support a language by silently translating through provider-specific hacks unless that translation is an explicit provider feature. Vulkan providers should prefer SPIR-V bytecode for predictable startup and portability to Android later.
+- `ShaderBundle` is the common setup-time wrapper for WGSL-first shaders. It validates the WGSL profile when built, stores generated target artifacts, and returns the correct `ShaderModuleDescriptor` for the active provider through `descriptorForProvider(...)`.
+- Runtime shader creation must not perform hidden WGSL-to-GLSL/SPIR-V/MSL/HLSL translation. Translation belongs to build tooling, checked-in generated bootstrap code, or an explicitly documented provider feature. Missing generated output for the active provider is a setup error.
+- A shader that passes WebGPU/WGSL validation is not automatically portable to WebGL/OpenGL ES. Use `ShaderProfile.PORTABLE_WEBGL2` for shaders that must run on WebGL2/GLES-style targets and `ShaderProfile.PORTABLE_WEBGPU` for shaders that only need modern WebGPU/wgpu-class targets.
+- Metal and DirectX should be added as generated `ShaderTarget` outputs from the same WGSL source contract. They should not require a second authoring language unless the shader declares `ShaderProfile.NATIVE` and the owning module documents the native-only behavior.
 - `BufferDescriptor.vertex(label, size)` creates provider-backed vertex storage. `BufferDescriptor.index(label, size)` creates provider-backed index storage. Buffers are dynamic by default for frequent writes; `staticVertex(...)`, `staticIndex(...)`, or `dynamic(false)` mark storage that is optimized for infrequent uploads and repeated draws.
 - The first common indexed draw shape uses unsigned 16-bit indices. `GraphicsDevice.writeBuffer(buffer, data)` uploads the bytes in the provided `ByteBuffer` range.
 - `Mesh` is the single concrete graphics API mesh class, not a g3d type. It can be used by 2D, UI, custom renderers, and 3D. It owns static vertex and optional unsigned 16-bit index buffers, exposes its `VertexLayout`, counts, optional bounds metadata, and disposes the underlying buffers.
@@ -1923,6 +1979,7 @@ Rules:
 - `Mesh.sourcePositions()`, `sourceColors()`, `sourceBakedColors()`, `sourceNormals()`, `sourceTexCoords()`, `sourcePbr()`, `sourceBakedPbr()`, `sourceEmissive()`, and `sourceBakedEmissive()` return `null` when that source attribute was not retained or was not supplied.
 - A pipeline only needs a `VertexLayout` when shader inputs read vertex attributes. Procedural shaders may continue to use no vertex layout. Pipelines that read multiple vertex buffers use `RenderPipelineDescriptor.vertexLayouts(...)` and bind them with `RenderPass.setVertexBuffer(slot, buffer)`.
 - `VertexLayout.of(...)` creates per-vertex input by default. `VertexLayout.instance(...)` or `VertexLayout.of(..., VertexStepMode.INSTANCE, ...)` creates per-instance input for instanced draws.
+- `VertexFormat.UNORM8X4` is a packed four-component unsigned-byte normalized vertex format for colors and other compact attributes. Providers must map it to normalized attribute input, not four raw floats.
 - `TextureDescriptor.rgba8(label, width, height)` creates an RGBA8 sampled texture descriptor for the first sprite rendering slice.
 - Texture wrap defaults to `TextureWrap.CLAMP_TO_EDGE`. Call `TextureDescriptor.wrap(...)` to request `REPEAT` or `MIRRORED_REPEAT` sampled-texture addressing.
 - `GraphicsFrame.frameBuffer()` exposes the current drawable. `FrameBuffer.readPixelsRgba8()` is an end-of-frame capture operation: after it succeeds, no more commands should be recorded against that frame, and a later `GraphicsAttachment.endFrame()` for the same frame may be a no-op.
@@ -1930,6 +1987,7 @@ Rules:
 - Pipelines that sample textures declare the number of sampled textures they expect with `RenderPipelineDescriptor.sampledTextureCount(...)`.
 - `RenderPass.setTexture(slot, texture)` binds a sampled texture for subsequent draws in the active pass.
 - `RenderPass.setIndexBuffer(buffer)` binds an index buffer for subsequent `drawIndexed(...)` calls in the active pass.
+- `RenderPass.setScissor(x, y, width, height)` sets the active pass clip rectangle for subsequent draws. Coordinates are framebuffer pixel coordinates in the provider's render-target origin convention. Higher-level renderers that target multiple providers are responsible for converting their logical clip origin before calling this method.
 - The current `TextureView` shape is still a frame color attachment view. Texture-created views can be added when view descriptors are implemented.
 - Frame command encoders are owned by the backend/provider attachment. Game code records passes through `Graphics.currentFrame().commandEncoder()`.
 - Pass objects are scoped. Once `end()` is called, the pass should not accept more commands.
@@ -2763,7 +2821,7 @@ These decisions are part of the common API contract:
 - Use `HttpClient` as the HTTP entry point type.
 - Keep `AudioSource` as the advanced persistent playback source/channel type. Basic playback should still use `Sound`, `Music`, and `PlaybackHandle`.
 - Use descriptor names ending in `Descriptor` for graphics creation inputs, such as `TextureDescriptor`, `BufferDescriptor`, and `RenderPipelineDescriptor`.
-- Include `ShaderLanguage` from the start. WGSL is the first baseline shader language for the WebGPU/wgpu direction, GLSL is used by the GL/WebGL provider family, and SPIR-V is used by Vulkan.
+- Include `ShaderLanguage`, `ShaderProfile`, `ShaderTarget`, and `ShaderBundle` from the start. WGSL is the authoring source for portable shaders, GLSL/GLSL ES is used by the GL/WebGL/GLES provider family, SPIR-V is used by Vulkan, and MSL/HLSL are future generated targets for Metal/DirectX.
 - Keep `TextureView` as a required common graphics type. Advanced view behavior is capability-gated.
 
 ## 19. Runtime Core

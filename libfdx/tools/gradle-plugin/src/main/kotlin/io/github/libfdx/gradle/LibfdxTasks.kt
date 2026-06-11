@@ -10,7 +10,10 @@ import io.github.libfdx.backend.web.WebApp
 import io.github.libfdx.backend.web.WebAppWriter
 import io.github.libfdx.tools.font.BitmapFontGenerator
 import io.github.libfdx.tools.font.BitmapFontSpec
+import io.github.libfdx.tools.shader.FdxShaderValidator
+import io.github.libfdx.graphics.ShaderProfile
 import org.gradle.api.DefaultTask
+import org.gradle.api.GradleException
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
@@ -21,8 +24,10 @@ import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
@@ -131,6 +136,35 @@ abstract class LibfdxWebAppTask : DefaultTask() {
                 .runtimeClasspath(runtimeClasspath.files.map { it.toPath() })
                 .build()
         )
+    }
+}
+
+abstract class LibfdxValidateShadersTask : DefaultTask() {
+    @get:Internal
+    abstract val sourceDir: DirectoryProperty
+
+    @get:Input
+    val sourceDirPath: String
+        get() = sourceDir.get().asFile.absolutePath
+
+    @get:Input
+    abstract val defaultProfile: Property<String>
+
+    @get:OutputFile
+    abstract val reportFile: RegularFileProperty
+
+    @TaskAction
+    fun validate() {
+        val root = sourceDir.get().asFile.toPath()
+        val profile = FdxShaderValidator.profileFromId(defaultProfile.get(), ShaderProfile.PORTABLE_WEBGPU)
+        val report = FdxShaderValidator.validateDirectory(root, profile)
+        val output = reportFile.get().asFile
+        output.parentFile.mkdirs()
+        output.writeText(report.toMarkdown(root), Charsets.UTF_8)
+        if(!report.success()) {
+            throw GradleException("libFDX shader validation failed. See ${output.absolutePath}")
+        }
+        logger.lifecycle("Validated ${report.entries().size} libfdx shader source file(s): ${output.absolutePath}")
     }
 }
 

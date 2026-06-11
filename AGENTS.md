@@ -165,6 +165,10 @@ Never claim full validation for a platform/API that was not run.
 ### Platform requirements
 
 - Android changes in scope: run relevant Android assemble tasks and relevant Android run tasks against a connected device or emulator.
+- Before reporting Android as blocked, check the current device state with `adb devices -l` through the SDK or PATH that the repo uses. If at least one device or emulator is listed with state `device`, Android platform execution is available and must not be reported as blocked for missing emulator setup.
+- For Android graphics/UI validation, use the repository Android run tasks, not `assembleDebug` alone. The run tasks are `:tests:platform:android:test_android_gles_run`, `:tests:platform:android:test_android_wgpu_jni_run`, and `:tests:platform:android:test_android_vulkan_run`; each depends on `installDebug` and launches the matching Android activity.
+- Pass Android test selection and validation options as Gradle system properties, for example `-Dlibfdx.test.name=ui`, `-Dlibfdx.test.frames=<n>`, and any `-Dlibfdx.validation.*` values. The Android build script forwards those properties to the launched activity as intent extras.
+- If an Android run task fails before launch, classify the failure by its actual cause, such as dependency resolution, compile error, install failure, activity launch failure, runtime crash, or capture failure. Do not describe dependency resolution or wrong-task usage as an emulator blocker.
 - Desktop changes in scope: run relevant desktop compile/build tasks and relevant desktop run tasks.
 - Desktop native changes in scope: run relevant native build/run tasks and gather platform output.
 - Other platform changes in scope: run the closest supported build/run validation for that platform.
