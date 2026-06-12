@@ -2,6 +2,11 @@ package io.github.libfdx.tests.psp;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Represents a psp checker texture.
+ *
+ * @author xpenatan
+ */
 final class PspCheckerTexture {
     private PspCheckerTexture() {
     }

@@ -2,6 +2,11 @@ package io.github.libfdx.tests;
 
 import io.github.libfdx.core.Logger;
 
+/**
+ * Represents a test fps logger.
+ *
+ * @author xpenatan
+ */
 public final class TestFpsLogger {
     private static final String PROPERTY = "libfdx.test.fpsLogSeconds";
     private static final float DEFAULT_INTERVAL_SECONDS = 1.0f;
@@ -18,10 +23,23 @@ public final class TestFpsLogger {
         this.intervalSeconds = intervalSeconds;
     }
 
+    /**
+     * Creates a test fps logger.
+     *
+     * @param logger the logger
+     * @param label the debug label
+     * @return a new test fps logger
+     */
     public static TestFpsLogger create(Logger logger, String label) {
         return new TestFpsLogger(logger, label, intervalSeconds());
     }
 
+    /**
+     * Runs the frame step.
+     *
+     * @param deltaSeconds the delta seconds
+     * @param totalFrames the total frames
+     */
     public void frame(float deltaSeconds, long totalFrames) {
         if (intervalSeconds <= 0.0f || logger == null) {
             return;
@@ -42,6 +60,9 @@ public final class TestFpsLogger {
         frames = 0L;
     }
 
+    /**
+     * Runs the reset step.
+     */
     public void reset() {
         elapsedSeconds = 0.0f;
         frames = 0L;

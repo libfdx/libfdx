@@ -1,5 +1,10 @@
 package io.github.libfdx.ui;
 
+/**
+ * Represents an ui text field model.
+ *
+ * @author xpenatan
+ */
 final class UiTextFieldModel {
     private UiState<String> state;
     private int cursor;

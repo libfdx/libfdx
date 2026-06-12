@@ -16,6 +16,11 @@ import io.github.libfdx.graphics.TextureView;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Represents a GL graphics attachment.
+ *
+ * @author xpenatan
+ */
 public final class GLGraphicsAttachment implements GraphicsAttachment {
     private final ProviderId providerId;
     private final GLApi gl;
@@ -32,6 +37,16 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
     private boolean frameStarted;
     private boolean disposed;
 
+    /**
+     * Creates a GL graphics attachment.
+     *
+     * @param providerId the provider ID
+     * @param gl the GL
+     * @param surface the surface
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @param surfaceFormat the surface format
+     */
     public GLGraphicsAttachment(ProviderId providerId, GLApi gl, GLSurface surface, int width, int height,
             TextureFormat surfaceFormat) {
         if (providerId == null) {
@@ -54,16 +69,30 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         vertexArray = gl.genVertexArray();
     }
 
+    /**
+     * Handles a size change.
+     *
+     * @param framebufferWidth the framebuffer width
+     * @param framebufferHeight the framebuffer height
+     */
     @Override
     public void resize(int framebufferWidth, int framebufferHeight) {
         width = framebufferWidth;
         height = framebufferHeight;
     }
 
+    /**
+     * Runs the process events step.
+     */
     @Override
     public void processEvents() {
     }
 
+    /**
+     * Returns the begin frame.
+     *
+     * @return true if begin frame succeeds or is active; false otherwise
+     */
     @Override
     public boolean beginFrame() {
         if (disposed || width <= 0 || height <= 0) {
@@ -78,6 +107,9 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         return true;
     }
 
+    /**
+     * Ends frame.
+     */
     @Override
     public void endFrame() {
         if (!frameStarted) {
@@ -87,16 +119,31 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         surface.swapBuffers();
     }
 
+    /**
+     * Returns the device.
+     *
+     * @return the device
+     */
     @Override
     public GraphicsDevice device() {
         return device;
     }
 
+    /**
+     * Returns the surface format.
+     *
+     * @return the surface format
+     */
     @Override
     public TextureFormat surfaceFormat() {
         return surfaceFormat;
     }
 
+    /**
+     * Returns the current frame.
+     *
+     * @return the current frame
+     */
     @Override
     public GraphicsFrame currentFrame() {
         if (!frameStarted) {
@@ -105,6 +152,14 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         return currentFrame;
     }
 
+    /**
+     * Runs the clear step.
+     *
+     * @param red the red
+     * @param green the green
+     * @param blue the blue
+     * @param alpha the alpha
+     */
     @Override
     public void clear(float red, float green, float blue, float alpha) {
         if (!frameStarted) {
@@ -114,21 +169,40 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         gl.clearColorBuffer();
     }
 
+    /**
+     * Returns the read pixels RGBA8.
+     *
+     * @return the read pixels RGBA8
+     */
     public ByteBuffer readPixelsRgba8() {
         return frameBuffer.readPixelsRgba8();
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return providerId;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
         return (T) this;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -142,12 +216,28 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         }
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;
     }
 
+    /**
+     * Represents a GL command encoder.
+     *
+     * @author xpenatan
+     */
     private final class GLCommandEncoder implements CommandEncoder {
+        /**
+         * Begins render pass.
+         *
+         * @param descriptor the descriptor
+         * @return the begin render pass
+         */
         @Override
         public RenderPass beginRenderPass(RenderPassDescriptor descriptor) {
             if (descriptor == null) {
@@ -173,11 +263,22 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
             return new GLRenderPass(providerId, gl);
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return providerId;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -185,37 +286,78 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         }
     }
 
+    /**
+     * Represents a GL graphics frame.
+     *
+     * @author xpenatan
+     */
     private final class GLGraphicsFrame implements GraphicsFrame {
+        /**
+         * Returns the command encoder.
+         *
+         * @return the command encoder
+         */
         @Override
         public CommandEncoder commandEncoder() {
             return commandEncoder;
         }
 
+        /**
+         * Returns the frame buffer.
+         *
+         * @return the frame buffer
+         */
         @Override
         public FrameBuffer frameBuffer() {
             return frameBuffer;
         }
 
+        /**
+         * Returns the color attachment.
+         *
+         * @return the color attachment
+         */
         @Override
         public TextureView colorAttachment() {
             return colorAttachment;
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return width;
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return height;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return providerId;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -223,27 +365,57 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         }
     }
 
+    /**
+     * Represents a GL frame buffer.
+     *
+     * @author xpenatan
+     */
     private final class GLFrameBuffer implements FrameBuffer {
+        /**
+         * Returns the color attachment.
+         *
+         * @return the color attachment
+         */
         @Override
         public TextureView colorAttachment() {
             return colorAttachment;
         }
 
+        /**
+         * Returns the format.
+         *
+         * @return the format
+         */
         @Override
         public TextureFormat format() {
             return surfaceFormat;
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return width;
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return height;
         }
 
+        /**
+         * Returns the read pixels RGBA8.
+         *
+         * @return the read pixels RGBA8
+         */
         @Override
         public ByteBuffer readPixelsRgba8() {
             if (!frameStarted) {
@@ -255,11 +427,22 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
             return pixels;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return providerId;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {

@@ -3,68 +3,173 @@ package io.github.libfdx.math;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.math.internal.MathAcceleration;
 
+/**
+ * Represents a matrix4.
+ *
+ * @author xpenatan
+ */
 public final class Matrix4 {
     public static final int VALUE_COUNT = 16;
     public static final Matrix4 IDENTITY = identity();
 
     private final float[] values = new float[VALUE_COUNT];
 
+    /**
+     * Creates a matrix4.
+     */
     public Matrix4() {
         idt();
     }
 
+    /**
+     * Creates a matrix4.
+     *
+     * @param matrix the matrix
+     */
     public Matrix4(Matrix4 matrix) {
         set(matrix);
     }
 
+    /**
+     * Creates a matrix4.
+     *
+     * @param values the values
+     */
     public Matrix4(float[] values) {
         set(values);
     }
 
+    /**
+     * Creates a matrix4 from the supplied values.
+     *
+     * @param values the values
+     * @return a new matrix4
+     */
     public static Matrix4 of(float[] values) {
         return new Matrix4(values);
     }
 
+    /**
+     * Creates a matrix4.
+     *
+     * @return a new matrix4
+     */
     public static Matrix4 identity() {
         return new Matrix4();
     }
 
+    /**
+     * Creates a matrix4.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     * @return a new matrix4
+     */
     public static Matrix4 translation(float x, float y, float z) {
         return new Matrix4().setToTranslation(x, y, z);
     }
 
+    /**
+     * Creates a matrix4.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     * @return a new matrix4
+     */
     public static Matrix4 scale(float x, float y, float z) {
         return new Matrix4().setToScale(x, y, z);
     }
 
+    /**
+     * Creates a matrix4.
+     *
+     * @param radians the radians
+     * @return a new matrix4
+     */
     public static Matrix4 rotationX(float radians) {
         return new Matrix4().setToRotationX(radians);
     }
 
+    /**
+     * Creates a matrix4.
+     *
+     * @param radians the radians
+     * @return a new matrix4
+     */
     public static Matrix4 rotationY(float radians) {
         return new Matrix4().setToRotationY(radians);
     }
 
+    /**
+     * Creates a matrix4.
+     *
+     * @param radians the radians
+     * @return a new matrix4
+     */
     public static Matrix4 rotationZ(float radians) {
         return new Matrix4().setToRotationZ(radians);
     }
 
+    /**
+     * Creates a matrix4.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     * @param w the w
+     * @return a new matrix4
+     */
     public static Matrix4 rotationQuaternion(float x, float y, float z, float w) {
         return new Matrix4().setToRotationQuaternion(x, y, z, w);
     }
 
+    /**
+     * Creates a matrix4.
+     *
+     * @param fieldOfViewDegrees the field of view degrees
+     * @param aspectRatio the aspect ratio
+     * @param near the near
+     * @param far the far
+     * @return a new matrix4
+     */
     public static Matrix4 perspective(float fieldOfViewDegrees, float aspectRatio, float near, float far) {
         return new Matrix4().setToPerspective(fieldOfViewDegrees, aspectRatio, near, far);
     }
 
+    /**
+     * Creates a matrix4.
+     *
+     * @param left the left
+     * @param right the right
+     * @param bottom the bottom
+     * @param top the top
+     * @param near the near
+     * @param far the far
+     * @return a new matrix4
+     */
     public static Matrix4 orthographic(float left, float right, float bottom, float top, float near, float far) {
         return new Matrix4().setToOrthographic(left, right, bottom, top, near, far);
     }
 
+    /**
+     * Creates a matrix4.
+     *
+     * @param eye the eye
+     * @param center the center
+     * @param up the up
+     * @return a new matrix4
+     */
     public static Matrix4 lookAt(Vector3 eye, Vector3 center, Vector3 up) {
         return new Matrix4().setToLookAt(eye, center, up);
     }
 
+    /**
+     * Returns the idt.
+     *
+     * @return this matrix4 for chaining
+     */
     public Matrix4 idt() {
         for (int i = 0; i < VALUE_COUNT; i++) {
             values[i] = 0.0f;
@@ -76,6 +181,12 @@ public final class Matrix4 {
         return this;
     }
 
+    /**
+     * Sets the set and returns this matrix4.
+     *
+     * @param matrix the matrix
+     * @return this matrix4 for chaining
+     */
     public Matrix4 set(Matrix4 matrix) {
         if (matrix == null) {
             throw new FdxException("Matrix4 cannot be null");
@@ -84,6 +195,12 @@ public final class Matrix4 {
         return this;
     }
 
+    /**
+     * Sets the set and returns this matrix4.
+     *
+     * @param source the source value
+     * @return this matrix4 for chaining
+     */
     public Matrix4 set(float[] source) {
         if (source == null || source.length != VALUE_COUNT) {
             throw new FdxException("Matrix4 requires 16 values");
@@ -92,6 +209,14 @@ public final class Matrix4 {
         return this;
     }
 
+    /**
+     * Sets the to translation.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     * @return this matrix4 for chaining
+     */
     public Matrix4 setToTranslation(float x, float y, float z) {
         idt();
         values[12] = x;
@@ -100,6 +225,14 @@ public final class Matrix4 {
         return this;
     }
 
+    /**
+     * Sets the to scale.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     * @return this matrix4 for chaining
+     */
     public Matrix4 setToScale(float x, float y, float z) {
         idt();
         values[0] = x;
@@ -108,6 +241,12 @@ public final class Matrix4 {
         return this;
     }
 
+    /**
+     * Sets the to rotation x.
+     *
+     * @param radians the radians
+     * @return this matrix4 for chaining
+     */
     public Matrix4 setToRotationX(float radians) {
         float cos = (float)Math.cos(radians);
         float sin = (float)Math.sin(radians);
@@ -119,6 +258,12 @@ public final class Matrix4 {
         return this;
     }
 
+    /**
+     * Sets the to rotation y.
+     *
+     * @param radians the radians
+     * @return this matrix4 for chaining
+     */
     public Matrix4 setToRotationY(float radians) {
         float cos = (float)Math.cos(radians);
         float sin = (float)Math.sin(radians);
@@ -130,6 +275,12 @@ public final class Matrix4 {
         return this;
     }
 
+    /**
+     * Sets the to rotation z.
+     *
+     * @param radians the radians
+     * @return this matrix4 for chaining
+     */
     public Matrix4 setToRotationZ(float radians) {
         float cos = (float)Math.cos(radians);
         float sin = (float)Math.sin(radians);
@@ -141,6 +292,15 @@ public final class Matrix4 {
         return this;
     }
 
+    /**
+     * Sets the to rotation quaternion.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     * @param w the w
+     * @return this matrix4 for chaining
+     */
     public Matrix4 setToRotationQuaternion(float x, float y, float z, float w) {
         float len = (float)Math.sqrt(x * x + y * y + z * z + w * w);
         if (len == 0.0f) {
@@ -175,6 +335,15 @@ public final class Matrix4 {
         return this;
     }
 
+    /**
+     * Sets the to perspective.
+     *
+     * @param fieldOfViewDegrees the field of view degrees
+     * @param aspectRatio the aspect ratio
+     * @param near the near
+     * @param far the far
+     * @return this matrix4 for chaining
+     */
     public Matrix4 setToPerspective(float fieldOfViewDegrees, float aspectRatio, float near, float far) {
         if (aspectRatio == 0.0f) {
             throw new FdxException("Perspective camera aspect ratio cannot be zero");
@@ -194,6 +363,17 @@ public final class Matrix4 {
         return this;
     }
 
+    /**
+     * Sets the to orthographic.
+     *
+     * @param left the left
+     * @param right the right
+     * @param bottom the bottom
+     * @param top the top
+     * @param near the near
+     * @param far the far
+     * @return this matrix4 for chaining
+     */
     public Matrix4 setToOrthographic(float left, float right, float bottom, float top, float near, float far) {
         if (right == left || top == bottom || far == near) {
             throw new FdxException("Orthographic camera range is invalid");
@@ -208,6 +388,14 @@ public final class Matrix4 {
         return this;
     }
 
+    /**
+     * Sets the to look at.
+     *
+     * @param eye the eye
+     * @param center the center
+     * @param up the up
+     * @return this matrix4 for chaining
+     */
     public Matrix4 setToLookAt(Vector3 eye, Vector3 center, Vector3 up) {
         return setToLookAt(
                 eye.x(), eye.y(), eye.z(),
@@ -215,6 +403,20 @@ public final class Matrix4 {
                 up.x(), up.y(), up.z());
     }
 
+    /**
+     * Sets the to look at.
+     *
+     * @param eyeX the eye x
+     * @param eyeY the eye y
+     * @param eyeZ the eye z
+     * @param centerX the center x
+     * @param centerY the center y
+     * @param centerZ the center z
+     * @param upX the up x
+     * @param upY the up y
+     * @param upZ the up z
+     * @return this matrix4 for chaining
+     */
     public Matrix4 setToLookAt(float eyeX, float eyeY, float eyeZ, float centerX, float centerY, float centerZ,
             float upX, float upY, float upZ) {
         float forwardX = centerX - eyeX;
@@ -270,14 +472,33 @@ public final class Matrix4 {
         return this;
     }
 
+    /**
+     * Sets the multiply and returns this matrix4.
+     *
+     * @param other the other
+     * @return this matrix4 for chaining
+     */
     public Matrix4 multiply(Matrix4 other) {
         return new Matrix4(this).mul(other);
     }
 
+    /**
+     * Sets the mul and returns this matrix4.
+     *
+     * @param other the other
+     * @return this matrix4 for chaining
+     */
     public Matrix4 mul(Matrix4 other) {
         return setToMul(this, other);
     }
 
+    /**
+     * Sets the to mul.
+     *
+     * @param left the left
+     * @param right the right
+     * @return this matrix4 for chaining
+     */
     public Matrix4 setToMul(Matrix4 left, Matrix4 right) {
         if (MathAcceleration.matrix4Mul(left.values, right.values, values)) {
             return this;
@@ -365,14 +586,32 @@ public final class Matrix4 {
         return this;
     }
 
+    /**
+     * Returns the values.
+     *
+     * @return the values
+     */
     public float[] values() {
         return values.clone();
     }
 
+    /**
+     * Runs the transform position step.
+     *
+     * @param position the position
+     * @return the transform position
+     */
     public Vector3 transformPosition(Vector3 position) {
         return transformPosition(position, new Vector3());
     }
 
+    /**
+     * Runs the transform position step.
+     *
+     * @param position the position
+     * @param out the out
+     * @return the transform position
+     */
     public Vector3 transformPosition(Vector3 position, Vector3 out) {
         float x = position.x();
         float y = position.y();
@@ -383,6 +622,15 @@ public final class Matrix4 {
                 values[2] * x + values[6] * y + values[10] * z + values[14]);
     }
 
+    /**
+     * Sets the transform positions and returns this matrix4.
+     *
+     * @param positions the positions
+     * @param offset the offset
+     * @param count the count
+     * @param stride the stride
+     * @return this matrix4 for chaining
+     */
     public Matrix4 transformPositions(float[] positions, int offset, int count, int stride) {
         checkTransformArray(positions, offset, count, stride);
         if (count == 0) {
@@ -404,10 +652,23 @@ public final class Matrix4 {
         return this;
     }
 
+    /**
+     * Runs the transform direction step.
+     *
+     * @param direction the direction
+     * @return the transform direction
+     */
     public Vector3 transformDirection(Vector3 direction) {
         return transformDirection(direction, new Vector3());
     }
 
+    /**
+     * Runs the transform direction step.
+     *
+     * @param direction the direction
+     * @param out the out
+     * @return the transform direction
+     */
     public Vector3 transformDirection(Vector3 direction, Vector3 out) {
         float x = direction.x();
         float y = direction.y();

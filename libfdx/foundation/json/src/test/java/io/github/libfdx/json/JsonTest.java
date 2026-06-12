@@ -6,6 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Runs the json test scenario.
+ *
+ * @author xpenatan
+ */
 final class JsonTest {
     @Test
     void parsesTypedTree() {
@@ -66,6 +71,11 @@ final class JsonTest {
         assertEquals("{\"name\":\"Ada\",\"level\":4}", json.toJson(Player.class, player));
     }
 
+    /**
+     * Represents a player.
+     *
+     * @author xpenatan
+     */
     private static final class Player {
         private final String name;
         private final int level;

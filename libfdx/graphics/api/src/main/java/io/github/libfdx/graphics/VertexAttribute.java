@@ -2,6 +2,11 @@ package io.github.libfdx.graphics;
 
 import io.github.libfdx.core.FdxException;
 
+/**
+ * Represents a vertex attribute.
+ *
+ * @author xpenatan
+ */
 public final class VertexAttribute {
     private final int location;
     private final VertexFormat format;
@@ -22,18 +27,41 @@ public final class VertexAttribute {
         this.offset = offset;
     }
 
+    /**
+     * Creates a vertex attribute from the supplied values.
+     *
+     * @param location the location
+     * @param format the format
+     * @param offset the offset
+     * @return a new vertex attribute
+     */
     public static VertexAttribute of(int location, VertexFormat format, int offset) {
         return new VertexAttribute(location, format, offset);
     }
 
+    /**
+     * Returns the location.
+     *
+     * @return the location
+     */
     public int location() {
         return location;
     }
 
+    /**
+     * Returns the format.
+     *
+     * @return the format
+     */
     public VertexFormat format() {
         return format;
     }
 
+    /**
+     * Returns the offset.
+     *
+     * @return the offset
+     */
     public int offset() {
         return offset;
     }

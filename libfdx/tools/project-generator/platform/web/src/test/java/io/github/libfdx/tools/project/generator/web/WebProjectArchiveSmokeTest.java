@@ -10,10 +10,21 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+/**
+ * Runs the web project archive smoke test scenario.
+ *
+ * @author xpenatan
+ */
 public final class WebProjectArchiveSmokeTest {
     private WebProjectArchiveSmokeTest() {
     }
 
+    /**
+     * Runs the launcher entry point.
+     *
+     * @param args the args
+     * @throws Exception if the operation cannot be completed
+     */
     public static void main(String[] args) throws Exception {
         ProjectGenerationResult generation = new ProjectGenerator().generate(ProjectGenerationSettings.builder()
                 .projectName("web-smoke-game")

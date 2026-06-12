@@ -6,6 +6,11 @@ import com.github.xpenatan.webgpu.WGPUSurface;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.NativeWindow;
 
+/**
+ * Represents a WGPU native surface.
+ *
+ * @author xpenatan
+ */
 final class WGPUNativeSurface {
     private WGPUNativeSurface() {
     }
@@ -89,6 +94,11 @@ final class WGPUNativeSurface {
         }
     }
 
+    /**
+     * Represents a surface handle.
+     *
+     * @author xpenatan
+     */
     static final class SurfaceHandle {
         private final WGPUSurface surface;
         private final Object owner;

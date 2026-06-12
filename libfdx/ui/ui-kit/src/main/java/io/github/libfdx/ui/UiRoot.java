@@ -23,6 +23,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Represents an ui root.
+ *
+ * @author xpenatan
+ */
 public final class UiRoot implements Disposable, UiStateListener {
     private static final HitResult NO_HIT = new HitResult(null, false);
     private static final int WINDOW_POINTER_NONE = 0;
@@ -107,6 +112,11 @@ public final class UiRoot implements Disposable, UiStateListener {
     private float elapsedSeconds;
     private int layoutPass;
 
+    /**
+     * Represents the result of a hit operation.
+     *
+     * @author xpenatan
+     */
     private static final class HitResult {
         final UiNode node;
         final boolean blocked;
@@ -132,15 +142,28 @@ public final class UiRoot implements Disposable, UiStateListener {
         this.renderer = graphics != null ? new UiG2DRenderer(graphics) : null;
     }
 
+    /**
+     * Sets the content.
+     *
+     * @param content the content
+     */
     public void setContent(UiContent content) {
         this.content = content;
         requestCompose();
     }
 
+    /**
+     * Runs the request compose step.
+     */
     public void requestCompose() {
         dirty = true;
     }
 
+    /**
+     * Updates this instance.
+     *
+     * @param deltaSeconds the delta seconds
+     */
     public void update(float deltaSeconds) {
         ensureComposed();
         float previousElapsedSeconds = elapsedSeconds;
@@ -169,6 +192,9 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
     }
 
+    /**
+     * Renders the current content.
+     */
     public void render() {
         ensureComposed();
         if (renderer != null && rootNode != null) {
@@ -176,106 +202,231 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
     }
 
+    /**
+     * Handles a size change.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     public void resize(int width, int height) {
         this.width = Math.max(0, width);
         this.height = Math.max(0, height);
         layout();
     }
 
+    /**
+     * Returns the display.
+     *
+     * @return the display
+     */
     public Display display() {
         return display;
     }
 
+    /**
+     * Returns the files.
+     *
+     * @return the files
+     */
     public FileSystem files() {
         return files;
     }
 
+    /**
+     * Returns the graphics.
+     *
+     * @return the graphics
+     */
     public GraphicsContext graphics() {
         return graphics;
     }
 
+    /**
+     * Returns the theme.
+     *
+     * @return the theme
+     */
     public UiTheme theme() {
         return theme;
     }
 
+    /**
+     * Runs the theme step.
+     *
+     * @param theme the theme
+     */
     public void theme(UiTheme theme) {
         this.theme = theme != null ? theme : UiTheme.dark();
         requestCompose();
     }
 
+    /**
+     * Returns the safe area.
+     *
+     * @return the safe area
+     */
     public UiInsets safeArea() {
         return safeArea;
     }
 
+    /**
+     * Sets the safe area and returns this UI root.
+     *
+     * @param safeArea the safe area
+     * @return this UI root for chaining
+     */
     public UiRoot safeArea(UiInsets safeArea) {
         this.safeArea = safeArea != null ? safeArea : UiInsets.ZERO;
         layout();
         return this;
     }
 
+    /**
+     * Returns the UI scale.
+     *
+     * @return the UI scale
+     */
     public float uiScale() {
         return uiScale;
     }
 
+    /**
+     * Sets the UI scale and returns this UI root.
+     *
+     * @param uiScale the UI scale
+     * @return this UI root for chaining
+     */
     public UiRoot uiScale(float uiScale) {
         this.uiScale = uiScale > 0.0f ? uiScale : 1.0f;
         layout();
         return this;
     }
 
+    /**
+     * Returns the auto UI scale.
+     *
+     * @return true if auto UI scale succeeds or is active; false otherwise
+     */
     public boolean autoUiScale() {
         return autoUiScale;
     }
 
+    /**
+     * Sets the auto UI scale and returns this UI root.
+     *
+     * @param autoUiScale the auto UI scale
+     * @return this UI root for chaining
+     */
     public UiRoot autoUiScale(boolean autoUiScale) {
         this.autoUiScale = autoUiScale;
         layout();
         return this;
     }
 
+    /**
+     * Returns the debug lines.
+     *
+     * @return true if debug lines succeeds or is active; false otherwise
+     */
     public boolean debugLines() {
         return debugLines;
     }
 
+    /**
+     * Sets the debug lines and returns this UI root.
+     *
+     * @param debugLines the debug lines
+     * @return this UI root for chaining
+     */
     public UiRoot debugLines(boolean debugLines) {
         this.debugLines = debugLines;
         return this;
     }
 
+    /**
+     * Runs the display x step.
+     *
+     * @param uiX the UI x
+     * @return the display x
+     */
     public int displayX(float uiX) {
         return Math.round(uiX * effectiveUiScale());
     }
 
+    /**
+     * Runs the display y step.
+     *
+     * @param uiY the UI y
+     * @return the display y
+     */
     public int displayY(float uiY) {
         return Math.round(uiY * effectiveUiScale());
     }
 
+    /**
+     * Runs the UI x step.
+     *
+     * @param displayX the display x
+     * @return the UI x
+     */
     public float uiX(int displayX) {
         return displayX / effectiveUiScale();
     }
 
+    /**
+     * Runs the UI y step.
+     *
+     * @param displayY the display y
+     * @return the UI y
+     */
     public float uiY(int displayY) {
         return displayY / effectiveUiScale();
     }
 
+    /**
+     * Returns the animation scale.
+     *
+     * @return the animation scale
+     */
     public float animationScale() {
         return animationScale;
     }
 
+    /**
+     * Sets the animation scale and returns this UI root.
+     *
+     * @param animationScale the animation scale
+     * @return this UI root for chaining
+     */
     public UiRoot animationScale(float animationScale) {
         this.animationScale = Math.max(0.0f, animationScale);
         return this;
     }
 
+    /**
+     * Returns the root node.
+     *
+     * @return the root node
+     */
     public UiNode rootNode() {
         ensureComposed();
         return rootNode;
     }
 
+    /**
+     * Returns the renderer.
+     *
+     * @return the renderer
+     */
     public UiRenderer renderer() {
         return renderer;
     }
 
+    /**
+     * Renders er.
+     *
+     * @param renderer the renderer
+     */
     public void renderer(UiRenderer renderer) {
         if (this.renderer != null && this.renderer != renderer) {
             this.renderer.dispose();
@@ -283,6 +434,12 @@ public final class UiRoot implements Disposable, UiStateListener {
         this.renderer = renderer;
     }
 
+    /**
+     * Sets the input and returns this UI root.
+     *
+     * @param input the input
+     * @return this UI root for chaining
+     */
     public UiRoot input(Input input) {
         if (this.input == input) {
             return this;
@@ -299,6 +456,11 @@ public final class UiRoot implements Disposable, UiStateListener {
         return this;
     }
 
+    /**
+     * Returns the input.
+     *
+     * @return the input
+     */
     public Input input() {
         return input;
     }
@@ -370,12 +532,20 @@ public final class UiRoot implements Disposable, UiStateListener {
         return node;
     }
 
+    /**
+     * Runs the state changed step.
+     *
+     * @param state the state
+     */
     @Override
     public void stateChanged(UiObservableState state) {
         requestCompose();
         updatePlatformTextInput(focusedNode);
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -407,6 +577,11 @@ public final class UiRoot implements Disposable, UiStateListener {
         textEngine.dispose();
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;

@@ -19,10 +19,21 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Represents a bitmap font generator.
+ *
+ * @author xpenatan
+ */
 public final class BitmapFontGenerator {
     private BitmapFontGenerator() {
     }
 
+    /**
+     * Runs the generate step.
+     *
+     * @param spec the spec
+     * @return the generate
+     */
     public static BitmapFontResult generate(BitmapFontSpec spec) {
         Path source = spec.requireSourceFile();
         Path assetRoot = spec.requireOutputDirectory();
@@ -178,6 +189,11 @@ public final class BitmapFontGenerator {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
+    /**
+     * Represents a glyph cell.
+     *
+     * @author xpenatan
+     */
     private static final class GlyphCell {
         private final int codePoint;
         private final int width;
@@ -194,6 +210,11 @@ public final class BitmapFontGenerator {
         }
     }
 
+    /**
+     * Represents an atlas layout.
+     *
+     * @author xpenatan
+     */
     private record AtlasLayout(int width, int height) {
     }
 }

@@ -2,11 +2,24 @@ package io.github.libfdx.tests.graphics;
 
 import io.github.libfdx.graphics.g2d.ShapeRenderer2D;
 
+/**
+ * Runs the circle test scenario.
+ *
+ * @author xpenatan
+ */
 public final class CircleTest extends ShapeRenderTest {
+    /**
+     * Creates a circle test.
+     */
     public CircleTest() {
         this(0L);
     }
 
+    /**
+     * Creates a circle test.
+     *
+     * @param exitAfterFrames the exit after frames
+     */
     public CircleTest(long exitAfterFrames) {
         super("circle", exitAfterFrames);
     }

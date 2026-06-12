@@ -8,10 +8,20 @@ import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.wgpu.WGPUProvider;
 import io.github.libfdx.samples.basic.BasicApplication;
 
+/**
+ * Launches the basic desktop entry point.
+ *
+ * @author xpenatan
+ */
 public final class BasicDesktopLauncher {
     private BasicDesktopLauncher() {
     }
 
+    /**
+     * Runs the launcher entry point.
+     *
+     * @param args the args
+     */
     public static void main(String[] args) {
         String graphics = graphicsName(args);
         DesktopApplicationConfig config = new DesktopApplicationConfig()

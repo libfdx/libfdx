@@ -5,6 +5,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+/**
+ * Represents a tea VM asset properties.
+ *
+ * @author xpenatan
+ */
 public final class TeaVMAssetProperties {
     public static final String COUNT_PROPERTY = "libfdx.web.assets.count";
     public static final String ENTRY_PROPERTY_PREFIX = "libfdx.web.assets.";
@@ -12,6 +17,12 @@ public final class TeaVMAssetProperties {
     private TeaVMAssetProperties() {
     }
 
+    /**
+     * Runs the to map step.
+     *
+     * @param assets the assets
+     * @return the to map
+     */
     public static Map<String, String> toMap(List<WebAsset> assets) {
         LinkedHashMap<String, String> properties = new LinkedHashMap<>();
         properties.put(COUNT_PROPERTY, Integer.toString(assets.size()));
@@ -23,6 +34,12 @@ public final class TeaVMAssetProperties {
         return properties;
     }
 
+    /**
+     * Runs the put into step.
+     *
+     * @param target the target value
+     * @param assets the assets
+     */
     public static void putInto(Properties target, List<WebAsset> assets) {
         toMap(assets).forEach(target::setProperty);
     }

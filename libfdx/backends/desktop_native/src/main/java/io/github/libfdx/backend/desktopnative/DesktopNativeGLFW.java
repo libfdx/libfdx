@@ -4,6 +4,11 @@ import org.teavm.interop.Address;
 import org.teavm.interop.Import;
 import org.teavm.interop.c.Include;
 
+/**
+ * Represents a desktop native GLFW.
+ *
+ * @author xpenatan
+ */
 @Include("GLFW/glfw3.h")
 final class DesktopNativeGLFW {
     static final int TRUE = 1;

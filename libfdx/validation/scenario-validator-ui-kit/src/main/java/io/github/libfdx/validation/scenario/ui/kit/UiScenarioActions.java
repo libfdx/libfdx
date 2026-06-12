@@ -9,14 +9,31 @@ import io.github.libfdx.validation.scenario.ScenarioActions;
 import io.github.libfdx.validation.scenario.ScenarioContext;
 import io.github.libfdx.validation.scenario.ScenarioInputDriver;
 
+/**
+ * Represents an ui scenario actions.
+ *
+ * @author xpenatan
+ */
 public final class UiScenarioActions {
     private UiScenarioActions() {
     }
 
+    /**
+     * Runs the click step.
+     *
+     * @param validationId the validation ID
+     * @return the click
+     */
     public static ScenarioAction click(String validationId) {
         return click(UiScenarioTargets.id(validationId));
     }
 
+    /**
+     * Runs the click step.
+     *
+     * @param target the target value
+     * @return the click
+     */
     public static ScenarioAction click(UiScenarioTarget target) {
         return ScenarioActions.callback("ui.click(" + target.description() + ")", context -> {
             UiNode node = target.require(context);
@@ -33,10 +50,22 @@ public final class UiScenarioActions {
         });
     }
 
+    /**
+     * Runs the press step.
+     *
+     * @param validationId the validation ID
+     * @return the press
+     */
     public static ScenarioAction press(String validationId) {
         return press(UiScenarioTargets.id(validationId));
     }
 
+    /**
+     * Runs the press step.
+     *
+     * @param target the target value
+     * @return the press
+     */
     public static ScenarioAction press(UiScenarioTarget target) {
         return ScenarioActions.callback("ui.press(" + target.description() + ")", context -> {
             UiNode node = target.require(context);
@@ -51,10 +80,22 @@ public final class UiScenarioActions {
         });
     }
 
+    /**
+     * Runs the release step.
+     *
+     * @param validationId the validation ID
+     * @return the release
+     */
     public static ScenarioAction release(String validationId) {
         return release(UiScenarioTargets.id(validationId));
     }
 
+    /**
+     * Runs the release step.
+     *
+     * @param target the target value
+     * @return the release
+     */
     public static ScenarioAction release(UiScenarioTarget target) {
         return ScenarioActions.callback("ui.release(" + target.description() + ")", context -> {
             UiNode node = target.require(context);
@@ -68,10 +109,22 @@ public final class UiScenarioActions {
         });
     }
 
+    /**
+     * Runs the hover step.
+     *
+     * @param validationId the validation ID
+     * @return the hover
+     */
     public static ScenarioAction hover(String validationId) {
         return hover(UiScenarioTargets.id(validationId));
     }
 
+    /**
+     * Runs the hover step.
+     *
+     * @param target the target value
+     * @return the hover
+     */
     public static ScenarioAction hover(UiScenarioTarget target) {
         return ScenarioActions.callback("ui.hover(" + target.description() + ")", context -> {
             UiNode node = target.require(context);
@@ -83,10 +136,22 @@ public final class UiScenarioActions {
         });
     }
 
+    /**
+     * Runs the focus step.
+     *
+     * @param validationId the validation ID
+     * @return the focus
+     */
     public static ScenarioAction focus(String validationId) {
         return focus(UiScenarioTargets.id(validationId));
     }
 
+    /**
+     * Runs the focus step.
+     *
+     * @param target the target value
+     * @return the focus
+     */
     public static ScenarioAction focus(UiScenarioTarget target) {
         return ScenarioActions.callback("ui.focus(" + target.description() + ")", context -> {
             UiNode node = target.require(context);
@@ -103,10 +168,24 @@ public final class UiScenarioActions {
         });
     }
 
+    /**
+     * Runs the type step.
+     *
+     * @param validationId the validation ID
+     * @param text the text
+     * @return the type
+     */
     public static ScenarioAction type(String validationId, String text) {
         return type(UiScenarioTargets.id(validationId), text);
     }
 
+    /**
+     * Runs the type step.
+     *
+     * @param target the target value
+     * @param text the text
+     * @return the type
+     */
     public static ScenarioAction type(UiScenarioTarget target, String text) {
         return ScenarioActions.callback("ui.type(" + target.description() + ")", context -> {
             UiNode node = target.require(context);
@@ -117,10 +196,30 @@ public final class UiScenarioActions {
         });
     }
 
+    /**
+     * Runs the drag step.
+     *
+     * @param validationId the validation ID
+     * @param startX the start x
+     * @param startY the start y
+     * @param endX the end x
+     * @param endY the end y
+     * @return the drag
+     */
     public static ScenarioAction drag(String validationId, float startX, float startY, float endX, float endY) {
         return drag(UiScenarioTargets.id(validationId), startX, startY, endX, endY);
     }
 
+    /**
+     * Runs the drag step.
+     *
+     * @param target the target value
+     * @param startX the start x
+     * @param startY the start y
+     * @param endX the end x
+     * @param endY the end y
+     * @return the drag
+     */
     public static ScenarioAction drag(UiScenarioTarget target, float startX, float startY, float endX, float endY) {
         return ScenarioActions.callback("ui.drag(" + target.description() + ")", context -> {
             UiNode node = target.require(context);
@@ -140,10 +239,24 @@ public final class UiScenarioActions {
         });
     }
 
+    /**
+     * Runs the drag slider step.
+     *
+     * @param validationId the validation ID
+     * @param value the value
+     * @return the drag slider
+     */
     public static ScenarioAction dragSlider(String validationId, float value) {
         return dragSlider(UiScenarioTargets.id(validationId), value);
     }
 
+    /**
+     * Runs the drag slider step.
+     *
+     * @param target the target value
+     * @param value the value
+     * @return the drag slider
+     */
     public static ScenarioAction dragSlider(UiScenarioTarget target, float value) {
         return ScenarioActions.callback("ui.dragSlider(" + target.description() + "," + value + ")", context -> {
             UiNode node = target.require(context);
@@ -155,10 +268,26 @@ public final class UiScenarioActions {
         });
     }
 
+    /**
+     * Runs the drag slider step.
+     *
+     * @param validationId the validation ID
+     * @param startProgress the start progress
+     * @param endProgress the end progress
+     * @return the drag slider
+     */
     public static ScenarioAction dragSlider(String validationId, float startProgress, float endProgress) {
         return dragSlider(UiScenarioTargets.id(validationId), startProgress, endProgress);
     }
 
+    /**
+     * Runs the drag slider step.
+     *
+     * @param target the target value
+     * @param startProgress the start progress
+     * @param endProgress the end progress
+     * @return the drag slider
+     */
     public static ScenarioAction dragSlider(UiScenarioTarget target, float startProgress, float endProgress) {
         return ScenarioActions.callback("ui.dragSlider(" + target.description() + ")", context -> {
             UiNode node = target.require(context);
@@ -169,10 +298,24 @@ public final class UiScenarioActions {
         });
     }
 
+    /**
+     * Runs the click tab step.
+     *
+     * @param validationId the validation ID
+     * @param index the index
+     * @return the click tab
+     */
     public static ScenarioAction clickTab(String validationId, int index) {
         return clickTab(UiScenarioTargets.id(validationId), index);
     }
 
+    /**
+     * Runs the click tab step.
+     *
+     * @param target the target value
+     * @param index the index
+     * @return the click tab
+     */
     public static ScenarioAction clickTab(UiScenarioTarget target, int index) {
         return ScenarioActions.callback("ui.clickTab(" + target.description() + "," + index + ")", context -> {
             UiNode node = target.require(context);
@@ -183,10 +326,24 @@ public final class UiScenarioActions {
         });
     }
 
+    /**
+     * Runs the slider value step.
+     *
+     * @param validationId the validation ID
+     * @param value the value
+     * @return the slider value
+     */
     public static ScenarioAction sliderValue(String validationId, float value) {
         return sliderValue(UiScenarioTargets.id(validationId), value);
     }
 
+    /**
+     * Runs the slider value step.
+     *
+     * @param target the target value
+     * @param value the value
+     * @return the slider value
+     */
     public static ScenarioAction sliderValue(UiScenarioTarget target, float value) {
         return ScenarioActions.callback("ui.sliderValue(" + target.description() + "," + value + ")", context -> {
             UiNode node = target.require(context);
@@ -197,6 +354,12 @@ public final class UiScenarioActions {
         });
     }
 
+    /**
+     * Runs the capture step.
+     *
+     * @param name the name
+     * @return the capture
+     */
     public static ScenarioAction capture(String name) {
         return ScenarioActions.capture(name);
     }

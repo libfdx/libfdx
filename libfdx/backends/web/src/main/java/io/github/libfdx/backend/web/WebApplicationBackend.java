@@ -43,6 +43,11 @@ import org.teavm.jso.dom.events.WheelEvent;
 import org.teavm.jso.dom.html.HTMLCanvasElement;
 import org.teavm.runtime.Fiber;
 
+/**
+ * Implements the backend integration for web application.
+ *
+ * @author xpenatan
+ */
 public final class WebApplicationBackend implements ApplicationBackend, Application, AnimationFrameCallback {
     public static final ProviderId ID = ProviderId.of("web");
 
@@ -71,11 +76,22 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
     private long frameId;
     private double frameTimestamp;
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Runs the start step.
+     *
+     * @param config the configuration
+     * @param listener the listener
+     */
     @Override
     public void start(ApplicationConfig config, ApplicationListener listener) {
         if (listener == null) {
@@ -124,6 +140,12 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         Window.requestAnimationFrame(this);
     }
 
+    /**
+     * Runs the start step.
+     *
+     * @param config the configuration
+     * @param listener the listener
+     */
     public void start(WebApplicationConfig config, ApplicationListener listener) {
         start((ApplicationConfig) config, listener);
     }
@@ -292,6 +314,11 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         }
     }
 
+    /**
+     * Handles the animation frame event.
+     *
+     * @param timestamp the timestamp
+     */
     @Override
     public void onAnimationFrame(double timestamp) {
         frameTimestamp = timestamp;
@@ -373,20 +400,38 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         return display.size(cssWidth, cssHeight, framebufferWidth, framebufferHeight, scale, scale);
     }
 
+    /**
+     * Returns the lifecycle.
+     *
+     * @return the lifecycle
+     */
     public ApplicationLifecycle lifecycle() {
         return lifecycle;
     }
 
+    /**
+     * Returns the delta time.
+     *
+     * @return the delta time
+     */
     @Override
     public float deltaTime() {
         return deltaTime;
     }
 
+    /**
+     * Returns the frame ID.
+     *
+     * @return the frame ID
+     */
     @Override
     public long frameId() {
         return frameId;
     }
 
+    /**
+     * Runs the request exit step.
+     */
     @Override
     public void requestExit() {
         running = false;
@@ -395,6 +440,12 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         }
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
@@ -412,6 +463,9 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         lastFrameMillis = System.currentTimeMillis();
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -448,6 +502,11 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         }
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;
@@ -676,12 +735,22 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         }
     }
 
+    /**
+     * Lists the supported touch dispatch values.
+     *
+     * @author xpenatan
+     */
     private enum TouchDispatch {
         DOWN,
         MOVE,
         UP
     }
 
+    /**
+     * Represents a web graphics environment.
+     *
+     * @author xpenatan
+     */
     private static final class WebGraphicsEnvironment implements GraphicsEnvironment {
         private final Display display;
         private final NativeWindow nativeWindow;
@@ -691,17 +760,32 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             this.nativeWindow = nativeWindow;
         }
 
+        /**
+         * Returns the display.
+         *
+         * @return the display
+         */
         @Override
         public Display display() {
             return display;
         }
 
+        /**
+         * Returns the native window.
+         *
+         * @return the native window
+         */
         @Override
         public NativeWindow nativeWindow() {
             return nativeWindow;
         }
     }
 
+    /**
+     * Represents a web display.
+     *
+     * @author xpenatan
+     */
     private static final class WebDisplay implements Display {
         private String title;
         private int width;
@@ -730,62 +814,121 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             return changed;
         }
 
+        /**
+         * Returns the title.
+         *
+         * @return the title
+         */
         @Override
         public String title() {
             return title;
         }
 
+        /**
+         * Runs the title step.
+         *
+         * @param title the title
+         */
         @Override
         public void title(String title) {
             this.title = title != null ? title : "";
             setDocumentTitle(this.title);
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return width;
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return height;
         }
 
+        /**
+         * Returns the framebuffer width.
+         *
+         * @return the framebuffer width
+         */
         @Override
         public int framebufferWidth() {
             return framebufferWidth;
         }
 
+        /**
+         * Returns the framebuffer height.
+         *
+         * @return the framebuffer height
+         */
         @Override
         public int framebufferHeight() {
             return framebufferHeight;
         }
 
+        /**
+         * Returns the content scale x.
+         *
+         * @return the content scale x
+         */
         @Override
         public float contentScaleX() {
             return contentScaleX;
         }
 
+        /**
+         * Returns the content scale y.
+         *
+         * @return the content scale y
+         */
         @Override
         public float contentScaleY() {
             return contentScaleY;
         }
 
+        /**
+         * Returns the close requested.
+         *
+         * @return true if close requested succeeds or is active; false otherwise
+         */
         @Override
         public boolean closeRequested() {
             return closeRequested;
         }
 
+        /**
+         * Runs the request close step.
+         */
         @Override
         public void requestClose() {
             closeRequested = true;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {

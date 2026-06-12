@@ -1,5 +1,10 @@
 package io.github.libfdx.ui;
 
+/**
+ * Represents an ui float animatable.
+ *
+ * @author xpenatan
+ */
 public final class UiFloatAnimatable {
     private float value;
     private float start;
@@ -15,14 +20,29 @@ public final class UiFloatAnimatable {
         this.target = value;
     }
 
+    /**
+     * Returns the get.
+     *
+     * @return the get
+     */
     public float get() {
         return value;
     }
 
+    /**
+     * Returns the target.
+     *
+     * @return the target
+     */
     public float target() {
         return target;
     }
 
+    /**
+     * Runs the snap to step.
+     *
+     * @param value the value
+     */
     public void snapTo(float value) {
         this.value = value;
         this.start = value;
@@ -32,10 +52,21 @@ public final class UiFloatAnimatable {
         this.reverseDirection = false;
     }
 
+    /**
+     * Runs the animate to step.
+     *
+     * @param target the target value
+     */
     public void animateTo(float target) {
         animateTo(target, UiAnimationSpec.defaultSpec());
     }
 
+    /**
+     * Runs the animate to step.
+     *
+     * @param target the target value
+     * @param spec the spec
+     */
     public void animateTo(float target, UiAnimationSpec spec) {
         if (running && sameFloat(this.target, target)) {
             return;

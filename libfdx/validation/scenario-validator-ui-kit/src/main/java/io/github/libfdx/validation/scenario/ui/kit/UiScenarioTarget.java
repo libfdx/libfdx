@@ -7,6 +7,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Represents an ui scenario target.
+ *
+ * @author xpenatan
+ */
 public final class UiScenarioTarget {
     private final String description;
     private final String eventName;
@@ -22,14 +27,30 @@ public final class UiScenarioTarget {
         this.matcher = matcher;
     }
 
+    /**
+     * Returns the description.
+     *
+     * @return the description
+     */
     public String description() {
         return description;
     }
 
+    /**
+     * Returns the event name.
+     *
+     * @return the event name
+     */
     public String eventName() {
         return eventName;
     }
 
+    /**
+     * Runs the resolve step.
+     *
+     * @param root the root
+     * @return the resolve
+     */
     public UiNode resolve(UiRoot root) {
         if (root == null) {
             return null;
@@ -37,6 +58,12 @@ public final class UiScenarioTarget {
         return find(root.rootNode());
     }
 
+    /**
+     * Runs the require step.
+     *
+     * @param context the context
+     * @return the require
+     */
     public UiNode require(ScenarioContext context) {
         UiRoot root = context.requireProbe(UiRoot.class);
         UiNode node = resolve(root);
@@ -46,6 +73,12 @@ public final class UiScenarioTarget {
         return node;
     }
 
+    /**
+     * Runs the resolve all step.
+     *
+     * @param root the root
+     * @return the resolve all
+     */
     public List<UiNode> resolveAll(UiRoot root) {
         if (root == null) {
             return Collections.emptyList();
@@ -85,8 +118,19 @@ public final class UiScenarioTarget {
         }
     }
 
+    /**
+     * Defines the contract for node matcher implementations.
+     *
+     * @author xpenatan
+     */
     @FunctionalInterface
     interface NodeMatcher {
+        /**
+         * Runs the matches step.
+         *
+         * @param node the node
+         * @return true if matches succeeds or is active; false otherwise
+         */
         boolean matches(UiNode node);
     }
 }

@@ -1,5 +1,10 @@
 package io.github.libfdx.math;
 
+/**
+ * Represents a vector3.
+ *
+ * @author xpenatan
+ */
 public final class Vector3 {
     public static final Vector3 ZERO = new Vector3(0.0f, 0.0f, 0.0f);
     public static final Vector3 X = new Vector3(1.0f, 0.0f, 0.0f);
@@ -10,17 +15,43 @@ public final class Vector3 {
     private float y;
     private float z;
 
+    /**
+     * Creates a vector3.
+     */
     public Vector3() {
     }
 
+    /**
+     * Creates a vector3.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     */
     public Vector3(float x, float y, float z) {
         set(x, y, z);
     }
 
+    /**
+     * Creates a vector3 from the supplied values.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     * @return a new vector3
+     */
     public static Vector3 of(float x, float y, float z) {
         return new Vector3(x, y, z);
     }
 
+    /**
+     * Sets the set and returns this vector3.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     * @return this vector3 for chaining
+     */
     public Vector3 set(float x, float y, float z) {
         this.x = x;
         this.y = y;
@@ -28,38 +59,89 @@ public final class Vector3 {
         return this;
     }
 
+    /**
+     * Sets the set and returns this vector3.
+     *
+     * @param other the other
+     * @return this vector3 for chaining
+     */
     public Vector3 set(Vector3 other) {
         return set(other.x, other.y, other.z);
     }
 
+    /**
+     * Returns the x.
+     *
+     * @return the x
+     */
     public float x() {
         return x;
     }
 
+    /**
+     * Returns the y.
+     *
+     * @return the y
+     */
     public float y() {
         return y;
     }
 
+    /**
+     * Returns the z.
+     *
+     * @return the z
+     */
     public float z() {
         return z;
     }
 
+    /**
+     * Sets the add and returns this vector3.
+     *
+     * @param other the other
+     * @return this vector3 for chaining
+     */
     public Vector3 add(Vector3 other) {
         return new Vector3(x + other.x, y + other.y, z + other.z);
     }
 
+    /**
+     * Sets the subtract and returns this vector3.
+     *
+     * @param other the other
+     * @return this vector3 for chaining
+     */
     public Vector3 subtract(Vector3 other) {
         return new Vector3(x - other.x, y - other.y, z - other.z);
     }
 
+    /**
+     * Sets the scale and returns this vector3.
+     *
+     * @param scalar the scalar
+     * @return this vector3 for chaining
+     */
     public Vector3 scale(float scalar) {
         return new Vector3(x * scalar, y * scalar, z * scalar);
     }
 
+    /**
+     * Runs the dot step.
+     *
+     * @param other the other
+     * @return the dot
+     */
     public float dot(Vector3 other) {
         return x * other.x + y * other.y + z * other.z;
     }
 
+    /**
+     * Sets the cross and returns this vector3.
+     *
+     * @param other the other
+     * @return this vector3 for chaining
+     */
     public Vector3 cross(Vector3 other) {
         return new Vector3(
                 y * other.z - z * other.y,
@@ -67,10 +149,20 @@ public final class Vector3 {
                 x * other.y - y * other.x);
     }
 
+    /**
+     * Returns the length.
+     *
+     * @return the length
+     */
     public float length() {
         return (float)Math.sqrt(dot(this));
     }
 
+    /**
+     * Returns the normalize.
+     *
+     * @return this vector3 for chaining
+     */
     public Vector3 normalize() {
         float len = length();
         if (len == 0.0f) {

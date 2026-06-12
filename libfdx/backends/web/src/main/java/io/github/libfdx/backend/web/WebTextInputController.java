@@ -14,6 +14,11 @@ import org.teavm.jso.dom.html.HTMLCanvasElement;
 import org.teavm.jso.dom.html.HTMLDocument;
 import org.teavm.jso.dom.html.HTMLElement;
 
+/**
+ * Represents a web text input controller.
+ *
+ * @author xpenatan
+ */
 final class WebTextInputController implements TextInputController {
     private DefaultInput input;
     private HTMLCanvasElement canvas;
@@ -42,6 +47,11 @@ final class WebTextInputController implements TextInputController {
         return active && panel != null && event != null && eventTargetsPanel(panel, event);
     }
 
+    /**
+     * Runs the show text input step.
+     *
+     * @param request the request
+     */
     @Override
     public void showTextInput(TextInputRequest request) {
         applyRequest(request);
@@ -64,6 +74,11 @@ final class WebTextInputController implements TextInputController {
         active = true;
     }
 
+    /**
+     * Runs the update text input step.
+     *
+     * @param request the request
+     */
     @Override
     public void updateTextInput(TextInputRequest request) {
         if (committingEditor) {
@@ -78,6 +93,9 @@ final class WebTextInputController implements TextInputController {
         }
     }
 
+    /**
+     * Runs the hide text input step.
+     */
     @Override
     public void hideTextInput() {
         active = false;

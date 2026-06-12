@@ -8,22 +8,48 @@ import java.io.IOException;
 import java.util.Base64;
 import org.teavm.jso.JSBody;
 
+/**
+ * Represents a web project export target.
+ *
+ * @author xpenatan
+ */
 public final class WebProjectExportTarget implements ProjectExportTarget {
+    /**
+     * Returns the destination label.
+     *
+     * @return the destination label
+     */
     @Override
     public String destinationLabel() {
         return "Download file";
     }
 
+    /**
+     * Returns the default destination.
+     *
+     * @return the default destination
+     */
     @Override
     public String defaultDestination() {
         return "libfdx-game.zip";
     }
 
+    /**
+     * Returns the supports overwrite existing.
+     *
+     * @return true if supports overwrite existing succeeds or is active; false otherwise
+     */
     @Override
     public boolean supportsOverwriteExisting() {
         return false;
     }
 
+    /**
+     * Runs the export step.
+     *
+     * @param request the request
+     * @return the export
+     */
     @Override
     public ProjectExportResult export(ProjectExportRequest request) {
         if (request == null || request.project() == null) {

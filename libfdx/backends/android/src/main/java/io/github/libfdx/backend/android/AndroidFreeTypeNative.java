@@ -2,6 +2,11 @@ package io.github.libfdx.backend.android;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Provides native bindings for android free type.
+ *
+ * @author xpenatan
+ */
 final class AndroidFreeTypeNative {
     static {
         System.loadLibrary("fdx");

@@ -4,6 +4,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Represents a scenario.
+ *
+ * @author xpenatan
+ */
 public final class Scenario {
     private final String name;
     private final ArrayList<Step> steps = new ArrayList<Step>();
@@ -18,25 +23,56 @@ public final class Scenario {
         this.name = name;
     }
 
+    /**
+     * Creates a scenario.
+     *
+     * @param name the name
+     * @return a new scenario
+     */
     public static Scenario named(String name) {
         return new Scenario(name);
     }
 
+    /**
+     * Returns the name.
+     *
+     * @return the name
+     */
     public String name() {
         return name;
     }
 
+    /**
+     * Sets the up.
+     *
+     * @param <T> the value type
+     * @param setup the setup
+     * @return this scenario for chaining
+     */
     public <T> Scenario setup(ScenarioSetup<T> setup) {
         this.setup = setup;
         return this;
     }
 
+    /**
+     * Sets the content and returns this scenario.
+     *
+     * @param <T> the value type
+     * @param content the content
+     * @return this scenario for chaining
+     */
     @SuppressWarnings("unchecked")
     public <T> Scenario content(ScenarioContent<? super T> content) {
         this.content = (ScenarioContent<Object>) content;
         return this;
     }
 
+    /**
+     * Sets the action and returns this scenario.
+     *
+     * @param action the action
+     * @return this scenario for chaining
+     */
     public Scenario action(ScenarioAction action) {
         if (action == null) {
             throw new IllegalArgumentException("Scenario action cannot be null.");
@@ -45,6 +81,12 @@ public final class Scenario {
         return this;
     }
 
+    /**
+     * Sets the wait for and returns this scenario.
+     *
+     * @param wait the wait
+     * @return this scenario for chaining
+     */
     public Scenario waitFor(ScenarioWait wait) {
         if (wait == null) {
             throw new IllegalArgumentException("Scenario wait cannot be null.");
@@ -53,6 +95,12 @@ public final class Scenario {
         return this;
     }
 
+    /**
+     * Sets the expect and returns this scenario.
+     *
+     * @param assertion the assertion
+     * @return this scenario for chaining
+     */
     public Scenario expect(ScenarioAssertion assertion) {
         if (assertion == null) {
             throw new IllegalArgumentException("Scenario assertion cannot be null.");
@@ -61,11 +109,24 @@ public final class Scenario {
         return this;
     }
 
+    /**
+     * Sets the capture and returns this scenario.
+     *
+     * @param name the name
+     * @return this scenario for chaining
+     */
     public Scenario capture(String name) {
         steps.add(new CallbackStep("capture(" + name + ")", context -> context.requestCapture(name)));
         return this;
     }
 
+    /**
+     * Sets the custom and returns this scenario.
+     *
+     * @param name the name
+     * @param callback the callback to invoke
+     * @return this scenario for chaining
+     */
     public Scenario custom(String name, ScenarioCallback callback) {
         if (callback == null) {
             throw new IllegalArgumentException("Scenario callback cannot be null.");
@@ -74,15 +135,30 @@ public final class Scenario {
         return this;
     }
 
+    /**
+     * Returns the visual baseline required.
+     *
+     * @return this scenario for chaining
+     */
     public Scenario visualBaselineRequired() {
         this.visualBaselineRequired = true;
         return this;
     }
 
+    /**
+     * Returns the requires visual baseline.
+     *
+     * @return true if requires visual baseline succeeds or is active; false otherwise
+     */
     public boolean requiresVisualBaseline() {
         return visualBaselineRequired;
     }
 
+    /**
+     * Returns the operation names.
+     *
+     * @return the operation names
+     */
     public List<String> operationNames() {
         ArrayList<String> names = new ArrayList<String>(steps.size());
         for (int i = 0; i < steps.size(); i++) {
@@ -147,12 +223,32 @@ public final class Scenario {
                 operationNames(), host.events().recent(), host.captures(), visualBaselineRequired);
     }
 
+    /**
+     * Defines the contract for step implementations.
+     *
+     * @author xpenatan
+     */
     private interface Step {
+        /**
+         * Returns the name.
+         *
+         * @return the name
+         */
         String name();
 
+        /**
+         * Runs the run step.
+         *
+         * @param context the context
+         */
         void run(ScenarioContext context);
     }
 
+    /**
+     * Represents an action step.
+     *
+     * @author xpenatan
+     */
     private static final class ActionStep implements Step {
         private final ScenarioAction action;
 
@@ -160,17 +256,32 @@ public final class Scenario {
             this.action = action;
         }
 
+        /**
+         * Returns the name.
+         *
+         * @return the name
+         */
         @Override
         public String name() {
             return action.name();
         }
 
+        /**
+         * Runs the run step.
+         *
+         * @param context the context
+         */
         @Override
         public void run(ScenarioContext context) {
             action.perform(context);
         }
     }
 
+    /**
+     * Represents an assertion step.
+     *
+     * @author xpenatan
+     */
     private static final class AssertionStep implements Step {
         private final ScenarioAssertion assertion;
 
@@ -178,17 +289,32 @@ public final class Scenario {
             this.assertion = assertion;
         }
 
+        /**
+         * Returns the name.
+         *
+         * @return the name
+         */
         @Override
         public String name() {
             return assertion.name();
         }
 
+        /**
+         * Runs the run step.
+         *
+         * @param context the context
+         */
         @Override
         public void run(ScenarioContext context) {
             assertion.verify(context);
         }
     }
 
+    /**
+     * Represents a wait step.
+     *
+     * @author xpenatan
+     */
     private static final class WaitStep implements Step {
         private final ScenarioWait wait;
 
@@ -196,11 +322,21 @@ public final class Scenario {
             this.wait = wait;
         }
 
+        /**
+         * Returns the name.
+         *
+         * @return the name
+         */
         @Override
         public String name() {
             return wait.name();
         }
 
+        /**
+         * Runs the run step.
+         *
+         * @param context the context
+         */
         @Override
         public void run(ScenarioContext context) {
             long startMillis = context.elapsedMillis();
@@ -234,6 +370,11 @@ public final class Scenario {
         }
     }
 
+    /**
+     * Represents a callback step.
+     *
+     * @author xpenatan
+     */
     private static final class CallbackStep implements Step {
         private final String name;
         private final ScenarioCallback callback;
@@ -243,11 +384,21 @@ public final class Scenario {
             this.callback = callback;
         }
 
+        /**
+         * Returns the name.
+         *
+         * @return the name
+         */
         @Override
         public String name() {
             return name;
         }
 
+        /**
+         * Runs the run step.
+         *
+         * @param context the context
+         */
         @Override
         public void run(ScenarioContext context) {
             callback.run(context);

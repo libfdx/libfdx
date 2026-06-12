@@ -1,5 +1,10 @@
 package io.github.libfdx.validation.scenario;
 
+/**
+ * Stores configuration values for a scenario validation.
+ *
+ * @author xpenatan
+ */
 public final class ScenarioValidationConfig {
     public static final String PROPERTY_SCENARIO = "libfdx.validation.scenario";
     public static final String PROPERTY_MODE = "libfdx.validation.mode";
@@ -25,11 +30,21 @@ public final class ScenarioValidationConfig {
         this.stepDelaySeconds = Math.max(0.0f, stepDelaySeconds);
     }
 
+    /**
+     * Creates a scenario validation config.
+     *
+     * @return a new scenario validation config
+     */
     public static ScenarioValidationConfig defaults() {
         return new ScenarioValidationConfig("all", ScenarioValidationMode.MIXED, 1000L, true,
                 ScenarioCapturePolicy.SCENARIO_LISTED, 1.0f);
     }
 
+    /**
+     * Creates a scenario validation config.
+     *
+     * @return a new scenario validation config
+     */
     public static ScenarioValidationConfig fromSystemProperties() {
         ScenarioValidationConfig defaults = defaults();
         return new ScenarioValidationConfig(
@@ -41,56 +56,122 @@ public final class ScenarioValidationConfig {
                 parseFloat(System.getProperty(PROPERTY_STEP_DELAY_SECONDS), defaults.stepDelaySeconds()));
     }
 
+    /**
+     * Sets the selection and returns this scenario validation config.
+     *
+     * @param selection the selection
+     * @return this scenario validation config for chaining
+     */
     public ScenarioValidationConfig selection(String selection) {
         return new ScenarioValidationConfig(selection, mode, timeoutMillis, eventsEnabled, capturePolicy,
                 stepDelaySeconds);
     }
 
+    /**
+     * Sets the mode and returns this scenario validation config.
+     *
+     * @param mode the mode
+     * @return this scenario validation config for chaining
+     */
     public ScenarioValidationConfig mode(ScenarioValidationMode mode) {
         return new ScenarioValidationConfig(selection, mode, timeoutMillis, eventsEnabled, capturePolicy,
                 stepDelaySeconds);
     }
 
+    /**
+     * Sets the timeout millis and returns this scenario validation config.
+     *
+     * @param timeoutMillis the timeout millis
+     * @return this scenario validation config for chaining
+     */
     public ScenarioValidationConfig timeoutMillis(long timeoutMillis) {
         return new ScenarioValidationConfig(selection, mode, timeoutMillis, eventsEnabled, capturePolicy,
                 stepDelaySeconds);
     }
 
+    /**
+     * Sets the events enabled and returns this scenario validation config.
+     *
+     * @param eventsEnabled the events enabled
+     * @return this scenario validation config for chaining
+     */
     public ScenarioValidationConfig eventsEnabled(boolean eventsEnabled) {
         return new ScenarioValidationConfig(selection, mode, timeoutMillis, eventsEnabled, capturePolicy,
                 stepDelaySeconds);
     }
 
+    /**
+     * Sets the capture policy and returns this scenario validation config.
+     *
+     * @param capturePolicy the capture policy
+     * @return this scenario validation config for chaining
+     */
     public ScenarioValidationConfig capturePolicy(ScenarioCapturePolicy capturePolicy) {
         return new ScenarioValidationConfig(selection, mode, timeoutMillis, eventsEnabled, capturePolicy,
                 stepDelaySeconds);
     }
 
+    /**
+     * Sets the step delay seconds and returns this scenario validation config.
+     *
+     * @param stepDelaySeconds the step delay seconds
+     * @return this scenario validation config for chaining
+     */
     public ScenarioValidationConfig stepDelaySeconds(float stepDelaySeconds) {
         return new ScenarioValidationConfig(selection, mode, timeoutMillis, eventsEnabled, capturePolicy,
                 stepDelaySeconds);
     }
 
+    /**
+     * Returns the selection.
+     *
+     * @return the selection
+     */
     public String selection() {
         return selection;
     }
 
+    /**
+     * Returns the mode.
+     *
+     * @return the mode
+     */
     public ScenarioValidationMode mode() {
         return mode;
     }
 
+    /**
+     * Returns the timeout millis.
+     *
+     * @return the timeout millis
+     */
     public long timeoutMillis() {
         return timeoutMillis;
     }
 
+    /**
+     * Returns the events enabled.
+     *
+     * @return true if events enabled succeeds or is active; false otherwise
+     */
     public boolean eventsEnabled() {
         return eventsEnabled;
     }
 
+    /**
+     * Returns the capture policy.
+     *
+     * @return the capture policy
+     */
     public ScenarioCapturePolicy capturePolicy() {
         return capturePolicy;
     }
 
+    /**
+     * Returns the step delay seconds.
+     *
+     * @return the step delay seconds
+     */
     public float stepDelaySeconds() {
         return stepDelaySeconds;
     }

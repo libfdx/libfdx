@@ -1,5 +1,10 @@
 package io.github.libfdx.ui;
 
+/**
+ * Represents an ui progress bar model.
+ *
+ * @author xpenatan
+ */
 final class UiProgressBarModel {
     private final UiRange range;
     private final UiFloatState state;

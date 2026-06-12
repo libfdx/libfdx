@@ -13,22 +13,43 @@ import io.github.libfdx.graphics.gl.GLGraphicsAttachment;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GL;
 
+/**
+ * Provides desktop open GL services.
+ *
+ * @author xpenatan
+ */
 public final class DesktopOpenGLProvider implements GraphicsAttachmentProvider {
     public static final ProviderId ID = ProviderId.of("gl");
 
     private GLConfiguration configuration = new GLConfiguration();
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Returns the requirements.
+     *
+     * @return the requirements
+     */
     @Override
     public GraphicsAttachmentRequirements requirements() {
         return GraphicsAttachmentRequirements.openGL(configuration.majorVersion(), configuration.minorVersion(),
                 configuration.profile(), configuration.forwardCompatible());
     }
 
+    /**
+     * Creates a value.
+     *
+     * @param environment the environment
+     * @return the created value
+     */
     @Override
     public GraphicsAttachment create(GraphicsEnvironment environment) {
         if (environment == null) {
@@ -46,10 +67,21 @@ public final class DesktopOpenGLProvider implements GraphicsAttachmentProvider {
                 TextureFormat.RGBA8_UNORM);
     }
 
+    /**
+     * Returns the configuration.
+     *
+     * @return the configuration
+     */
     public GLConfiguration configuration() {
         return configuration;
     }
 
+    /**
+     * Sets the configuration and returns this desktop open GL provider.
+     *
+     * @param configuration the configuration
+     * @return this desktop open GL provider for chaining
+     */
     public DesktopOpenGLProvider configuration(GLConfiguration configuration) {
         this.configuration = configuration != null ? configuration : new GLConfiguration();
         return this;

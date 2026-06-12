@@ -11,21 +11,42 @@ import io.github.libfdx.graphics.GraphicsAttachmentRequirements;
 import io.github.libfdx.graphics.GraphicsEnvironment;
 import io.github.libfdx.graphics.NativeWindow;
 
+/**
+ * Provides WGPU services.
+ *
+ * @author xpenatan
+ */
 public final class WGPUProvider implements GraphicsAttachmentProvider {
     public static final ProviderId ID = ProviderId.of("wgpu");
     private static final long LOAD_TIMEOUT_NANOS = 10L * 1000L * 1000L * 1000L;
     private WGPUConfiguration configuration = new WGPUConfiguration();
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Returns the requirements.
+     *
+     * @return the requirements
+     */
     @Override
     public GraphicsAttachmentRequirements requirements() {
         return GraphicsAttachmentRequirements.noApi();
     }
 
+    /**
+     * Creates a value.
+     *
+     * @param environment the environment
+     * @return the created value
+     */
     @Override
     public GraphicsAttachment create(GraphicsEnvironment environment) {
         if (environment == null) {
@@ -40,6 +61,15 @@ public final class WGPUProvider implements GraphicsAttachmentProvider {
         return new WGPUGraphicsAttachment(context);
     }
 
+    /**
+     * Creates a context.
+     *
+     * @param nativeWindow the native window
+     * @param configuration the configuration
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @return the created value
+     */
     public WGPUContext createContext(NativeWindow nativeWindow, WGPUConfiguration configuration, int width, int height) {
         if (nativeWindow == null) {
             throw new FdxException("WGPU requires a native window from the backend");
@@ -59,30 +89,65 @@ public final class WGPUProvider implements GraphicsAttachmentProvider {
         return context;
     }
 
+    /**
+     * Returns the configuration.
+     *
+     * @return the configuration
+     */
     public WGPUConfiguration configuration() {
         return configuration;
     }
 
+    /**
+     * Sets the configuration and returns this WGPU provider.
+     *
+     * @param configuration the configuration
+     * @return this WGPU provider for chaining
+     */
     public WGPUProvider configuration(WGPUConfiguration configuration) {
         this.configuration = configuration != null ? configuration : new WGPUConfiguration();
         return this;
     }
 
+    /**
+     * Sets the loader backend and returns this WGPU provider.
+     *
+     * @param loaderBackend the loader backend
+     * @return this WGPU provider for chaining
+     */
     public WGPUProvider loaderBackend(WGPULoaderBackend loaderBackend) {
         configuration.loaderBackend(loaderBackend);
         return this;
     }
 
+    /**
+     * Sets the backend and returns this WGPU provider.
+     *
+     * @param backend the backend
+     * @return this WGPU provider for chaining
+     */
     public WGPUProvider backend(WGPUBackend backend) {
         configuration.backend(backend);
         return this;
     }
 
+    /**
+     * Sets the v sync and returns this WGPU provider.
+     *
+     * @param vSync the v sync
+     * @return this WGPU provider for chaining
+     */
     public WGPUProvider vSync(boolean vSync) {
         configuration.vSync(vSync);
         return this;
     }
 
+    /**
+     * Sets the process events each frame and returns this WGPU provider.
+     *
+     * @param processEventsEachFrame the process events each frame
+     * @return this WGPU provider for chaining
+     */
     public WGPUProvider processEventsEachFrame(boolean processEventsEachFrame) {
         configuration.processEventsEachFrame(processEventsEachFrame);
         return this;
@@ -114,6 +179,11 @@ public final class WGPUProvider implements GraphicsAttachmentProvider {
         }
     }
 
+    /**
+     * Represents a load state.
+     *
+     * @author xpenatan
+     */
     private static final class LoadState {
         boolean complete;
         Throwable error;

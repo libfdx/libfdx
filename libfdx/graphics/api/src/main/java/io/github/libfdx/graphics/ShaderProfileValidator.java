@@ -8,6 +8,11 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Represents a shader profile validator.
+ *
+ * @author xpenatan
+ */
 public final class ShaderProfileValidator {
     private static final Pattern GROUP_BINDING_PATTERN = Pattern.compile(
             "@group\\s*\\(\\s*(\\d+)\\s*\\)\\s*@binding\\s*\\(\\s*(\\d+)\\s*\\)");
@@ -15,6 +20,13 @@ public final class ShaderProfileValidator {
     private ShaderProfileValidator() {
     }
 
+    /**
+     * Runs the validate wgsl step.
+     *
+     * @param profile the profile
+     * @param source the source value
+     * @return the validate wgsl
+     */
     public static ShaderValidationResult validateWgsl(ShaderProfile profile, String source) {
         if (source == null || source.trim().isEmpty()) {
             return ShaderValidationResult.of(new ShaderValidationDiagnostic[] {

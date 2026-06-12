@@ -6,11 +6,19 @@ import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.g2d.SpriteBatch;
 
+/**
+ * Runs the psp sprite batch test scenario.
+ *
+ * @author xpenatan
+ */
 final class PspSpriteBatchTest implements PspTest {
     private PspGraphicsContext graphics;
     private SpriteBatch spriteBatch;
     private Texture checkerTexture;
 
+    /**
+     * Initializes this instance.
+     */
     @Override
     public void create() {
         graphics = new PspGraphicsContext();
@@ -19,6 +27,9 @@ final class PspSpriteBatchTest implements PspTest {
         graphics.device().writeTexture(checkerTexture, PspCheckerTexture.pixels(128, 16, 4));
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         spriteBatch.begin(LoadOp.clear(1.0f, 1.0f, 1.0f, 1.0f));

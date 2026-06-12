@@ -6,6 +6,11 @@ import com.github.xpenatan.webgpu.WGPURenderPipeline;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.RenderPipeline;
 
+/**
+ * Represents a WGPU render pipeline handle.
+ *
+ * @author xpenatan
+ */
 final class WGPURenderPipelineHandle implements RenderPipeline {
     private final WGPURenderPipeline nativePipeline;
     private final WGPUPipelineLayout nativeLayout;
@@ -46,17 +51,31 @@ final class WGPURenderPipelineHandle implements RenderPipeline {
         return uniformBindGroupIndex;
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return WGPUProvider.ID;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
         return (T) this;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -77,6 +96,11 @@ final class WGPURenderPipelineHandle implements RenderPipeline {
         }
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;

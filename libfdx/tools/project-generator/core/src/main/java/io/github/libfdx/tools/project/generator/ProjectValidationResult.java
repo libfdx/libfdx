@@ -4,6 +4,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Represents the result of a project validation operation.
+ *
+ * @author xpenatan
+ */
 public final class ProjectValidationResult {
     private static final String[] JAVA_KEYWORDS = {
             "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const",
@@ -20,6 +25,12 @@ public final class ProjectValidationResult {
         this.errors = Collections.unmodifiableList(new ArrayList<String>(errors));
     }
 
+    /**
+     * Creates a project validation result.
+     *
+     * @param settings the settings
+     * @return a new project validation result
+     */
     public static ProjectValidationResult validate(ProjectGenerationSettings settings) {
         ArrayList<String> errors = new ArrayList<String>();
         if (!safeProjectName(settings.projectName())) {
@@ -43,14 +54,29 @@ public final class ProjectValidationResult {
         return new ProjectValidationResult(errors);
     }
 
+    /**
+     * Returns the valid.
+     *
+     * @return true if valid succeeds or is active; false otherwise
+     */
     public boolean valid() {
         return errors.isEmpty();
     }
 
+    /**
+     * Returns the errors.
+     *
+     * @return the errors
+     */
     public List<String> errors() {
         return errors;
     }
 
+    /**
+     * Returns the joined errors.
+     *
+     * @return the joined errors
+     */
     public String joinedErrors() {
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < errors.size(); i++) {

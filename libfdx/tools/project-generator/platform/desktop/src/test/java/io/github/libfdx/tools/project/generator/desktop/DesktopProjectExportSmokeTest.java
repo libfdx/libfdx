@@ -12,10 +12,21 @@ import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.stream.Stream;
 
+/**
+ * Runs the desktop project export smoke test scenario.
+ *
+ * @author xpenatan
+ */
 public final class DesktopProjectExportSmokeTest {
     private DesktopProjectExportSmokeTest() {
     }
 
+    /**
+     * Runs the launcher entry point.
+     *
+     * @param args the args
+     * @throws Exception if the operation cannot be completed
+     */
     public static void main(String[] args) throws Exception {
         Path destination = exportSmokeDir();
         deleteRecursively(destination);

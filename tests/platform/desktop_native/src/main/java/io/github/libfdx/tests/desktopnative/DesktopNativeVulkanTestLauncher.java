@@ -6,10 +6,20 @@ import io.github.libfdx.backend.desktopnative.DesktopNativeApplicationConfig;
 import io.github.libfdx.backend.desktopnative.DesktopNativeVulkanProvider;
 import io.github.libfdx.tests.TestSelector;
 
+/**
+ * Launches the desktop native vulkan test entry point.
+ *
+ * @author xpenatan
+ */
 public final class DesktopNativeVulkanTestLauncher {
     private DesktopNativeVulkanTestLauncher() {
     }
 
+    /**
+     * Runs the launcher entry point.
+     *
+     * @param args the args
+     */
     public static void main(String[] args) {
         String testName = option(args, "test", System.getProperty("libfdx.test.name", TestSelector.DEFAULT_TEST_NAME));
         String frames = option(args, "frames", System.getProperty("libfdx.test.frames", "0"));

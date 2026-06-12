@@ -9,6 +9,11 @@ import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.wgpu.WGPUProvider;
 import io.github.libfdx.samples.basic.BasicApplication;
 
+/**
+ * Represents a basic android activity.
+ *
+ * @author xpenatan
+ */
 public class BasicAndroidActivity extends AndroidApplicationActivity {
     @Override
     protected AndroidApplicationConfig createApplicationConfig() {

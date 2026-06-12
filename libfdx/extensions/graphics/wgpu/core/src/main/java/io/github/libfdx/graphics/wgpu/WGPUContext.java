@@ -67,6 +67,11 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 
+/**
+ * Represents a WGPU context.
+ *
+ * @author xpenatan
+ */
 public final class WGPUContext implements GraphicsContext, Disposable {
     private static final long INIT_TIMEOUT_NANOS = 10L * 1000L * 1000L * 1000L;
     private static final long READBACK_TIMEOUT_NANOS = 10L * 1000L * 1000L * 1000L;
@@ -107,10 +112,25 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     private int pendingResizeWidth;
     private int pendingResizeHeight;
 
+    /**
+     * Creates a WGPU context.
+     *
+     * @param configuration the configuration
+     * @param instance the instance
+     * @param surface the surface
+     */
     public WGPUContext(WGPUConfiguration configuration, WGPUInstance instance, WGPUSurface surface) {
         this(configuration, instance, surface, null);
     }
 
+    /**
+     * Creates a WGPU context.
+     *
+     * @param configuration the configuration
+     * @param instance the instance
+     * @param surface the surface
+     * @param surfaceOwner the surface owner
+     */
     public WGPUContext(WGPUConfiguration configuration, WGPUInstance instance, WGPUSurface surface,
             Object surfaceOwner) {
         if (configuration == null) {
@@ -128,12 +148,18 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         this.surfaceOwner = surfaceOwner;
     }
 
+    /**
+     * Runs the initialize blocking step.
+     */
     public void initializeBlocking() {
         startInitialization();
         waitFor(initState);
         finishInitialization();
     }
 
+    /**
+     * Runs the initialize async step.
+     */
     public void initializeAsync() {
         startInitialization();
         finishInitializationIfReady();
@@ -267,6 +293,12 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         return fallback;
     }
 
+    /**
+     * Handles a size change.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     public void resize(int width, int height) {
         if (disposed || width <= 0 || height <= 0) {
             return;
@@ -361,6 +393,11 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         }
     }
 
+    /**
+     * Returns the begin frame.
+     *
+     * @return true if begin frame succeeds or is active; false otherwise
+     */
     public boolean beginFrame() {
         if (disposed || !ready || !surfaceConfigured || width <= 0 || height <= 0) {
             return false;
@@ -403,16 +440,31 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         return true;
     }
 
+    /**
+     * Returns the device.
+     *
+     * @return the device
+     */
     @Override
     public GraphicsDevice device() {
         return graphicsDevice;
     }
 
+    /**
+     * Returns the surface format.
+     *
+     * @return the surface format
+     */
     @Override
     public TextureFormat surfaceFormat() {
         return WGPUTextureFormats.toCommon(surfaceFormat);
     }
 
+    /**
+     * Returns the current frame.
+     *
+     * @return the current frame
+     */
     @Override
     public GraphicsFrame currentFrame() {
         if (!frameStarted) {
@@ -421,6 +473,14 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         return currentFrame;
     }
 
+    /**
+     * Runs the clear step.
+     *
+     * @param red the red
+     * @param green the green
+     * @param blue the blue
+     * @param alpha the alpha
+     */
     @Override
     public void clear(float red, float green, float blue, float alpha) {
         if (!frameStarted) {
@@ -454,6 +514,9 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         passEncoder.release();
     }
 
+    /**
+     * Ends frame.
+     */
     public void endFrame() {
         if (!frameStarted) {
             return;
@@ -461,6 +524,11 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         submitCurrentFrame();
     }
 
+    /**
+     * Returns the read pixels RGBA8.
+     *
+     * @return the read pixels RGBA8
+     */
     public ByteBuffer readPixelsRgba8() {
         if (!frameStarted) {
             throw new FdxException("Cannot read pixels before beginFrame()");
@@ -620,14 +688,29 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         return ((value + alignment - 1) / alignment) * alignment;
     }
 
+    /**
+     * Returns whether frame started is enabled or true.
+     *
+     * @return true if frame started is enabled or true; false otherwise
+     */
     public boolean isFrameStarted() {
         return frameStarted;
     }
 
+    /**
+     * Returns the frame encoder.
+     *
+     * @return the frame encoder
+     */
     public WGPUCommandEncoder frameEncoder() {
         return frameEncoder;
     }
 
+    /**
+     * Returns the frame texture view.
+     *
+     * @return the frame texture view
+     */
     public WGPUTextureView frameTextureView() {
         return frameTextureView;
     }
@@ -692,6 +775,9 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         configureSurface(resizeWidth, resizeHeight);
     }
 
+    /**
+     * Runs the process events step.
+     */
     public void processEvents() {
         if (disposed) {
             return;
@@ -705,61 +791,130 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         }
     }
 
+    /**
+     * Returns whether ready is enabled or true.
+     *
+     * @return true if ready is enabled or true; false otherwise
+     */
     public boolean isReady() {
         return ready && !disposed;
     }
 
+    /**
+     * Returns the configuration.
+     *
+     * @return the configuration
+     */
     public WGPUConfiguration configuration() {
         return configuration;
     }
 
+    /**
+     * Returns the instance.
+     *
+     * @return the instance
+     */
     public WGPUInstance instance() {
         return instance;
     }
 
+    /**
+     * Returns the surface.
+     *
+     * @return the surface
+     */
     public WGPUSurface surface() {
         return surface;
     }
 
+    /**
+     * Returns the surface owner.
+     *
+     * @return the surface owner
+     */
     public Object surfaceOwner() {
         return surfaceOwner;
     }
 
+    /**
+     * Returns the adapter.
+     *
+     * @return the adapter
+     */
     public WGPUAdapter adapter() {
         return adapter;
     }
 
+    /**
+     * Returns the native device.
+     *
+     * @return the native device
+     */
     public WGPUDevice nativeDevice() {
         return device;
     }
 
+    /**
+     * Returns the native queue.
+     *
+     * @return the native queue
+     */
     public WGPUQueue nativeQueue() {
         return queue;
     }
 
+    /**
+     * Returns the native surface format.
+     *
+     * @return the native surface format
+     */
     public WGPUTextureFormat nativeSurfaceFormat() {
         return surfaceFormat;
     }
 
+    /**
+     * Returns the width.
+     *
+     * @return the width
+     */
     public int width() {
         return width;
     }
 
+    /**
+     * Returns the height.
+     *
+     * @return the height
+     */
     public int height() {
         return height;
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return WGPUProvider.ID;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
         return (T) this;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -800,11 +955,21 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         }
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;
     }
 
+    /**
+     * Represents an init state.
+     *
+     * @author xpenatan
+     */
     private static final class InitState {
         boolean complete;
         String error;
@@ -818,6 +983,11 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         }
     }
 
+    /**
+     * Represents a map state.
+     *
+     * @author xpenatan
+     */
     private static final class MapState {
         boolean complete;
         WGPUMapAsyncStatus status;

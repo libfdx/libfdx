@@ -11,6 +11,11 @@ import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.g2d.ShapeRenderer2D;
 
+/**
+ * Runs the psp backend shape test scenario.
+ *
+ * @author xpenatan
+ */
 final class PspBackendShapeTest extends ApplicationAdapter {
     private final long exitAfterFrames;
     private Application application;
@@ -23,6 +28,11 @@ final class PspBackendShapeTest extends ApplicationAdapter {
         this.exitAfterFrames = exitAfterFrames;
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
@@ -30,6 +40,9 @@ final class PspBackendShapeTest extends ApplicationAdapter {
         shapes = new ShapeRenderer2D(graphics, 6);
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         GraphicsFrame frame = graphics.currentFrame();
@@ -52,6 +65,9 @@ final class PspBackendShapeTest extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (shapes != null) {

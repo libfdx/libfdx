@@ -19,27 +19,62 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 
+/**
+ * Loads image asset data.
+ *
+ * @author xpenatan
+ */
 @Include("libfdx_native_image.h")
 public final class ImageAssetLoader implements AssetLoader<ImageData> {
+    /**
+     * Runs the register step.
+     *
+     * @param assets the assets
+     */
     public static void register(AssetManager assets) {
         assets.registerLoader(ImageData.class, new ImageAssetLoader());
     }
 
+    /**
+     * Returns the type.
+     *
+     * @return the type
+     */
     @Override
     public Class<ImageData> type() {
         return ImageData.class;
     }
 
+    /**
+     * Loads the requested resource.
+     *
+     * @param context the context
+     * @param descriptor the descriptor
+     * @return the created value
+     */
     @Override
     public FdxFuture<ImageData> load(final AssetLoadContext context, final AssetDescriptor<ImageData> descriptor) {
         return FdxFuture.supply(() -> decode(descriptor.path(),
                 context.files().internal(descriptor.path()).readBytes().get()));
     }
 
+    /**
+     * Runs the decode step.
+     *
+     * @param bytes the bytes
+     * @return the decode
+     */
     public static ImageData decode(byte[] bytes) {
         return decode(null, bytes);
     }
 
+    /**
+     * Runs the decode step.
+     *
+     * @param path the asset or file path
+     * @param bytes the bytes
+     * @return the decode
+     */
     public static ImageData decode(String path, byte[] bytes) {
         ImageData browserImage = decodeWithBrowser(path);
         if (browserImage != null) {

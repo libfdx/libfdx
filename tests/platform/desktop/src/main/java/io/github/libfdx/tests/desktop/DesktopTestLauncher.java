@@ -17,10 +17,20 @@ import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Launches the desktop test entry point.
+ *
+ * @author xpenatan
+ */
 public final class DesktopTestLauncher {
     private DesktopTestLauncher() {
     }
 
+    /**
+     * Runs the launcher entry point.
+     *
+     * @param args the args
+     */
     public static void main(String[] args) {
         String graphics = graphicsName();
         String graphicsDisplayName = graphicsDisplayName(graphics);
@@ -198,9 +208,21 @@ public final class DesktopTestLauncher {
         return trimmed.length() > 0 ? trimmed : null;
     }
 
+    /**
+     * Represents a desktop process launch handler.
+     *
+     * @author xpenatan
+     */
     private static final class DesktopProcessLaunchHandler implements TestLaunchHandler {
         private Process activeProcess;
 
+        /**
+         * Runs the launch step.
+         *
+         * @param testName the test name
+         * @param graphicsName the graphics name
+         * @return true if launch succeeds or is active; false otherwise
+         */
         @Override
         public boolean launch(String testName, String graphicsName) {
             List<String> command = new ArrayList<String>();
@@ -238,6 +260,11 @@ public final class DesktopTestLauncher {
             }
         }
 
+        /**
+         * Returns whether this instance has active launch.
+         *
+         * @return true if this instance has active launch; false otherwise
+         */
         @Override
         public boolean hasActiveLaunch() {
             if (activeProcess == null) {

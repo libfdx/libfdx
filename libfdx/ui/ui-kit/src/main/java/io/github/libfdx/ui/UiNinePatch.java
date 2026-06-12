@@ -4,6 +4,11 @@ import io.github.libfdx.assets.loaders.ImageData;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 import java.nio.ByteBuffer;
 
+/**
+ * Represents an ui nine patch.
+ *
+ * @author xpenatan
+ */
 public final class UiNinePatch {
     private final TextureRegion region;
     private final String assetPath;
@@ -22,14 +27,35 @@ public final class UiNinePatch {
         this.markerBorder = markerBorder;
     }
 
+    /**
+     * Creates an UI nine patch.
+     *
+     * @param region the region
+     * @param splits the splits
+     * @param padding the padding
+     * @return a new UI nine patch
+     */
     public static UiNinePatch region(TextureRegion region, UiInsets splits, UiInsets padding) {
         return new UiNinePatch(region, null, splits, padding, null, false);
     }
 
+    /**
+     * Creates an UI nine patch.
+     *
+     * @param assetPath the asset path
+     * @return a new UI nine patch
+     */
     public static UiNinePatch asset(String assetPath) {
         return new UiNinePatch(null, assetPath, UiInsets.ZERO, UiInsets.ZERO, null, true);
     }
 
+    /**
+     * Creates an UI nine patch.
+     *
+     * @param region the region
+     * @param image the image
+     * @return a new UI nine patch
+     */
     public static UiNinePatch marker(TextureRegion region, ImageData image) {
         if (region == null || image == null || image.width() < 3 || image.height() < 3) {
             return new UiNinePatch(region, null, UiInsets.ZERO, UiInsets.ZERO, null, true);
@@ -41,30 +67,67 @@ public final class UiNinePatch {
         return new UiNinePatch(content, null, splits, padding, null, true);
     }
 
+    /**
+     * Sets the minimum size and returns this UI nine patch.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @return this UI nine patch for chaining
+     */
     public UiNinePatch minimumSize(float width, float height) {
         return new UiNinePatch(region, assetPath, splits, padding, new UiSize(width, height), markerBorder);
     }
 
+    /**
+     * Returns the region.
+     *
+     * @return the region
+     */
     public TextureRegion region() {
         return region;
     }
 
+    /**
+     * Returns the asset path.
+     *
+     * @return the asset path
+     */
     public String assetPath() {
         return assetPath;
     }
 
+    /**
+     * Returns the splits.
+     *
+     * @return the splits
+     */
     public UiInsets splits() {
         return splits;
     }
 
+    /**
+     * Returns the padding.
+     *
+     * @return the padding
+     */
     public UiInsets padding() {
         return padding;
     }
 
+    /**
+     * Returns the minimum size.
+     *
+     * @return the minimum size
+     */
     public UiSize minimumSize() {
         return minimumSize;
     }
 
+    /**
+     * Returns the marker border.
+     *
+     * @return true if marker border succeeds or is active; false otherwise
+     */
     public boolean markerBorder() {
         return markerBorder;
     }

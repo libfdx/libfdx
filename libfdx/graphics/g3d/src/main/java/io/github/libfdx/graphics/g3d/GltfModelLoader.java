@@ -30,6 +30,11 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Loads gltf model data.
+ *
+ * @author xpenatan
+ */
 final class GltfModelLoader implements AssetLoader<Model> {
     private static final int GLB_MAGIC = 0x46546c67;
     private static final int GLB_JSON_CHUNK = 0x4e4f534a;
@@ -45,11 +50,23 @@ final class GltfModelLoader implements AssetLoader<Model> {
         this.graphics = graphics;
     }
 
+    /**
+     * Returns the type.
+     *
+     * @return the type
+     */
     @Override
     public Class<Model> type() {
         return Model.class;
     }
 
+    /**
+     * Loads the requested resource.
+     *
+     * @param context the context
+     * @param descriptor the descriptor
+     * @return the created value
+     */
     @Override
     public FdxFuture<Model> load(final AssetLoadContext context, final AssetDescriptor<Model> descriptor) {
         final FileHandle file = context.files().internal(descriptor.path());
@@ -910,6 +927,11 @@ final class GltfModelLoader implements AssetLoader<Model> {
         return values;
     }
 
+    /**
+     * Represents a gltf document.
+     *
+     * @author xpenatan
+     */
     private static final class GltfDocument {
         private final JsonValue root;
         private final byte[] binaryChunk;
@@ -924,6 +946,11 @@ final class GltfModelLoader implements AssetLoader<Model> {
         }
     }
 
+    /**
+     * Represents a gltf material.
+     *
+     * @author xpenatan
+     */
     private static final class GltfMaterial {
         private static final GltfMaterial DEFAULT = new GltfMaterial(Color.WHITE, null, null, 1.0f, 1.0f,
                 null, null, Color.BLACK, null, null, null, null, null, null, MaterialAlphaMode.OPAQUE, 0.5f,
@@ -972,6 +999,11 @@ final class GltfModelLoader implements AssetLoader<Model> {
         }
     }
 
+    /**
+     * Represents a triangle basis.
+     *
+     * @author xpenatan
+     */
     private static final class TriangleBasis {
         private final Vector3 normal;
         private final Vector3 tangent;
@@ -984,6 +1016,11 @@ final class GltfModelLoader implements AssetLoader<Model> {
         }
     }
 
+    /**
+     * Builds geometry instances and related output.
+     *
+     * @author xpenatan
+     */
     private static final class GeometryBuilder {
         private final FloatList positions = new FloatList();
         private final FloatList normals = new FloatList();
@@ -1089,6 +1126,11 @@ final class GltfModelLoader implements AssetLoader<Model> {
         }
     }
 
+    /**
+     * Represents a float list.
+     *
+     * @author xpenatan
+     */
     private static final class FloatList {
         private float[] values = new float[64];
         private int size;
@@ -1109,6 +1151,11 @@ final class GltfModelLoader implements AssetLoader<Model> {
         }
     }
 
+    /**
+     * Represents an accessor.
+     *
+     * @author xpenatan
+     */
     private static final class Accessor {
         private final byte[] buffer;
         private final int byteOffset;

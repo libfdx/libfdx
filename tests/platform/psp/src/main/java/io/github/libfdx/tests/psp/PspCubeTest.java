@@ -33,6 +33,11 @@ import static io.github.libfdx.backend.psp.natives.PSPGraphicsApi.sceGumPerspect
 import static io.github.libfdx.backend.psp.natives.PSPGraphicsApi.sceGumRotateXYZ;
 import static io.github.libfdx.backend.psp.natives.PSPGraphicsApi.sceGumTranslate;
 
+/**
+ * Runs the psp cube test scenario.
+ *
+ * @author xpenatan
+ */
 final class PspCubeTest implements PspTest {
     private static final int VERTEX_COUNT = 36;
     private static final int VERTEX_SIZE = Integer.BYTES + 3 * Float.BYTES;
@@ -48,6 +53,9 @@ final class PspCubeTest implements PspTest {
     private ScePspFVector3 rotation;
     private ByteBuffer vertices;
 
+    /**
+     * Initializes this instance.
+     */
     @Override
     public void create() {
         position = ScePspFVector3.malloc();
@@ -88,6 +96,9 @@ final class PspCubeTest implements PspTest {
         vertices.flip();
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         sceGuClearColor(0xffffffff);

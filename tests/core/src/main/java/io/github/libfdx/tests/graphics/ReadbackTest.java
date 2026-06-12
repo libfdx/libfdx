@@ -16,6 +16,11 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.nio.ByteBuffer;
 
+/**
+ * Runs the readback test scenario.
+ *
+ * @author xpenatan
+ */
 public final class ReadbackTest extends ApplicationAdapter {
     private static final int COLOR_TOLERANCE = 28;
     private static final String DEFAULT_CAPTURE_PATH = "build/libfdx-readback/readback-orientation.ppm";
@@ -32,10 +37,20 @@ public final class ReadbackTest extends ApplicationAdapter {
     private boolean validated;
     private long renderedFrames;
 
+    /**
+     * Creates a readback test.
+     *
+     * @param exitAfterFrames the exit after frames
+     */
     public ReadbackTest(long exitAfterFrames) {
         this.exitAfterFrames = exitAfterFrames;
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         this.fdx = fdx;
@@ -50,6 +65,9 @@ public final class ReadbackTest extends ApplicationAdapter {
         logger.info("ReadbackTest created with graphics provider " + graphics.providerId());
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         float deltaSeconds = application.deltaTime();
@@ -70,6 +88,9 @@ public final class ReadbackTest extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (shapes != null) {

@@ -86,6 +86,11 @@ import io.github.libfdx.graphics.VertexStepMode;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Represents a WGPU graphics device.
+ *
+ * @author xpenatan
+ */
 final class WGPUGraphicsDevice implements GraphicsDevice {
     private static final int COPY_BUFFER_WRITE_ALIGNMENT = 4;
     private static final int COPY_BYTES_PER_ROW_ALIGNMENT = 256;
@@ -96,6 +101,12 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         this.context = context;
     }
 
+    /**
+     * Creates a buffer.
+     *
+     * @param descriptor the descriptor
+     * @return the created value
+     */
     @Override
     public Buffer createBuffer(BufferDescriptor descriptor) {
         if (descriptor == null) {
@@ -109,6 +120,12 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         return new WGPUBufferHandle(buffer, descriptor.label(), nativeSize, descriptor.usage());
     }
 
+    /**
+     * Runs the write buffer step.
+     *
+     * @param buffer the buffer
+     * @param data the data
+     */
     @Override
     public void writeBuffer(Buffer buffer, ByteBuffer data) {
         if (buffer == null) {
@@ -165,6 +182,12 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         return buffer;
     }
 
+    /**
+     * Creates a texture.
+     *
+     * @param descriptor the descriptor
+     * @return the created value
+     */
     @Override
     public Texture createTexture(TextureDescriptor descriptor) {
         if (descriptor == null) {
@@ -240,6 +263,12 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         return WGPUAddressMode.ClampToEdge;
     }
 
+    /**
+     * Runs the write texture step.
+     *
+     * @param texture the texture
+     * @param data the data
+     */
     @Override
     public void writeTexture(Texture texture, ByteBuffer data) {
         if (texture == null) {
@@ -373,6 +402,12 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         destination.put((byte) (alpha / count));
     }
 
+    /**
+     * Creates a shader module.
+     *
+     * @param descriptor the descriptor
+     * @return the created value
+     */
     @Override
     public ShaderModule createShaderModule(ShaderModuleDescriptor descriptor) {
         if (descriptor == null) {
@@ -396,6 +431,12 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         return new WGPUShaderModuleHandle(shaderModule, ShaderLanguage.WGSL);
     }
 
+    /**
+     * Creates a render pipeline.
+     *
+     * @param descriptor the descriptor
+     * @return the created value
+     */
     @Override
     public RenderPipeline createRenderPipeline(RenderPipelineDescriptor descriptor) {
         if (descriptor == null) {
@@ -628,11 +669,22 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         }
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return WGPUProvider.ID;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {

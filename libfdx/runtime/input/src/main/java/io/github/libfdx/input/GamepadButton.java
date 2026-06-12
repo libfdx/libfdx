@@ -1,5 +1,10 @@
 package io.github.libfdx.input;
 
+/**
+ * Lists the supported gamepad button values.
+ *
+ * @author xpenatan
+ */
 public enum GamepadButton {
     SOUTH,
     EAST,

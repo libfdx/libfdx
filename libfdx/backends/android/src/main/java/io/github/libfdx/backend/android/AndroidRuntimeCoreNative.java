@@ -1,5 +1,10 @@
 package io.github.libfdx.backend.android;
 
+/**
+ * Provides native bindings for android runtime core.
+ *
+ * @author xpenatan
+ */
 final class AndroidRuntimeCoreNative {
     private static final Object LOCK = new Object();
     private static boolean attempted;

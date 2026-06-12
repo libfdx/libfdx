@@ -16,29 +16,60 @@ import org.teavm.jso.JSBody;
 import org.teavm.jso.dom.html.HTMLCanvasElement;
 import org.teavm.jso.webgl.WebGLRenderingContext;
 
+/**
+ * Provides web GL services.
+ *
+ * @author xpenatan
+ */
 public final class WebGLProvider implements GraphicsAttachmentProvider, GraphicsProviderSupport {
     public static final ProviderId ID = ProviderId.of("webgl");
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Returns the requirements.
+     *
+     * @return the requirements
+     */
     @Override
     public GraphicsAttachmentRequirements requirements() {
         return GraphicsAttachmentRequirements.openGL(3, 0, GraphicsContextProfile.ANY, false);
     }
 
+    /**
+     * Returns whether supported is enabled or true.
+     *
+     * @return true if supported is enabled or true; false otherwise
+     */
     @Override
     public boolean isSupported() {
         return hasWebGL();
     }
 
+    /**
+     * Returns the support failure reason.
+     *
+     * @return the support failure reason
+     */
     @Override
     public String supportFailureReason() {
         return isSupported() ? null : "WebGL is not available in this browser";
     }
 
+    /**
+     * Creates a value.
+     *
+     * @param environment the environment
+     * @return the created value
+     */
     @Override
     public GraphicsAttachment create(GraphicsEnvironment environment) {
         if (environment == null) {

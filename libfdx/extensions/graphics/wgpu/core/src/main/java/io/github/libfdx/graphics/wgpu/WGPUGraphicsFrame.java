@@ -6,6 +6,11 @@ import io.github.libfdx.graphics.FrameBuffer;
 import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.TextureView;
 
+/**
+ * Represents a WGPU graphics frame.
+ *
+ * @author xpenatan
+ */
 final class WGPUGraphicsFrame implements GraphicsFrame {
     private final WGPUContext context;
     private final CommandEncoder commandEncoder;
@@ -20,36 +25,72 @@ final class WGPUGraphicsFrame implements GraphicsFrame {
         this.colorAttachment = colorAttachment;
     }
 
+    /**
+     * Returns the command encoder.
+     *
+     * @return the command encoder
+     */
     @Override
     public CommandEncoder commandEncoder() {
         return commandEncoder;
     }
 
+    /**
+     * Returns the frame buffer.
+     *
+     * @return the frame buffer
+     */
     @Override
     public FrameBuffer frameBuffer() {
         return frameBuffer;
     }
 
+    /**
+     * Returns the color attachment.
+     *
+     * @return the color attachment
+     */
     @Override
     public TextureView colorAttachment() {
         return colorAttachment;
     }
 
+    /**
+     * Returns the width.
+     *
+     * @return the width
+     */
     @Override
     public int width() {
         return context.width();
     }
 
+    /**
+     * Returns the height.
+     *
+     * @return the height
+     */
     @Override
     public int height() {
         return context.height();
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return WGPUProvider.ID;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {

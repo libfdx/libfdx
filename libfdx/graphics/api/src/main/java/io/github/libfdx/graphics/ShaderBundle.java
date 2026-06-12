@@ -3,6 +3,11 @@ package io.github.libfdx.graphics;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 
+/**
+ * Represents a shader bundle.
+ *
+ * @author xpenatan
+ */
 public final class ShaderBundle {
     private final String label;
     private final ShaderProfile profile;
@@ -32,66 +37,150 @@ public final class ShaderBundle {
         reflection = builder.reflection != null ? builder.reflection : ShaderReflection.empty();
     }
 
+    /**
+     * Runs the builder step.
+     *
+     * @param label the debug label
+     * @return the created value
+     */
     public static Builder builder(String label) {
         return new Builder(label);
     }
 
+    /**
+     * Returns the label.
+     *
+     * @return the label
+     */
     public String label() {
         return label;
     }
 
+    /**
+     * Returns the profile.
+     *
+     * @return the profile
+     */
     public ShaderProfile profile() {
         return profile;
     }
 
+    /**
+     * Returns the wgsl source.
+     *
+     * @return the wgsl source
+     */
     public String wgslSource() {
         return wgslSource;
     }
 
+    /**
+     * Returns the glsl vertex source.
+     *
+     * @return the glsl vertex source
+     */
     public String glslVertexSource() {
         return glslVertexSource;
     }
 
+    /**
+     * Returns the glsl fragment source.
+     *
+     * @return the glsl fragment source
+     */
     public String glslFragmentSource() {
         return glslFragmentSource;
     }
 
+    /**
+     * Returns the glsl es vertex source.
+     *
+     * @return the glsl es vertex source
+     */
     public String glslEsVertexSource() {
         return glslEsVertexSource;
     }
 
+    /**
+     * Returns the glsl es fragment source.
+     *
+     * @return the glsl es fragment source
+     */
     public String glslEsFragmentSource() {
         return glslEsFragmentSource;
     }
 
+    /**
+     * Returns the SPIR-V vertex words.
+     *
+     * @return the SPIR-V vertex words
+     */
     public int[] spirvVertexWords() {
         return cloneOrNull(spirvVertexWords);
     }
 
+    /**
+     * Returns the SPIR-V fragment words.
+     *
+     * @return the SPIR-V fragment words
+     */
     public int[] spirvFragmentWords() {
         return cloneOrNull(spirvFragmentWords);
     }
 
+    /**
+     * Returns the msl source.
+     *
+     * @return the msl source
+     */
     public String mslSource() {
         return mslSource;
     }
 
+    /**
+     * Returns the hlsl source.
+     *
+     * @return the hlsl source
+     */
     public String hlslSource() {
         return hlslSource;
     }
 
+    /**
+     * Returns the reflection.
+     *
+     * @return the reflection
+     */
     public ShaderReflection reflection() {
         return reflection;
     }
 
+    /**
+     * Runs the descriptor for provider step.
+     *
+     * @param providerId the provider ID
+     * @return the descriptor for provider
+     */
     public ShaderModuleDescriptor descriptorForProvider(ProviderId providerId) {
         return descriptorForTarget(ShaderTarget.forProvider(providerId));
     }
 
+    /**
+     * Runs the descriptor for provider step.
+     *
+     * @param providerId the provider ID
+     * @return the descriptor for provider
+     */
     public ShaderModuleDescriptor descriptorForProvider(String providerId) {
         return descriptorForTarget(ShaderTarget.forProvider(providerId));
     }
 
+    /**
+     * Runs the descriptor for target step.
+     *
+     * @param target the target value
+     * @return the descriptor for target
+     */
     public ShaderModuleDescriptor descriptorForTarget(ShaderTarget target) {
         if (target == null) {
             throw new FdxException("Shader target cannot be null");
@@ -134,6 +223,11 @@ public final class ShaderBundle {
         }
     }
 
+    /**
+     * Returns the validate profile.
+     *
+     * @return the validate profile
+     */
     public ShaderValidationResult validateProfile() {
         if (wgslSource == null || wgslSource.length() == 0) {
             return ShaderValidationResult.of(new ShaderValidationDiagnostic[] {
@@ -144,6 +238,12 @@ public final class ShaderBundle {
         return ShaderProfileValidator.validateWgsl(profile, wgslSource);
     }
 
+    /**
+     * Returns whether this instance has target.
+     *
+     * @param target the target value
+     * @return true if this instance has target; false otherwise
+     */
     public boolean hasTarget(ShaderTarget target) {
         if (target == null) {
             return false;
@@ -179,6 +279,11 @@ public final class ShaderBundle {
         return values != null ? values.clone() : null;
     }
 
+    /**
+     * Builds value instances and related output.
+     *
+     * @author xpenatan
+     */
     public static final class Builder {
         private final String label;
         private ShaderProfile profile = ShaderProfile.PORTABLE_WEBGPU;
@@ -200,28 +305,61 @@ public final class ShaderBundle {
             this.label = label;
         }
 
+        /**
+         * Sets the profile and returns this builder.
+         *
+         * @param profile the profile
+         * @return this builder for chaining
+         */
         public Builder profile(ShaderProfile profile) {
             this.profile = profile != null ? profile : ShaderProfile.PORTABLE_WEBGPU;
             return this;
         }
 
+        /**
+         * Sets the wgsl and returns this builder.
+         *
+         * @param source the source value
+         * @return this builder for chaining
+         */
         public Builder wgsl(String source) {
             wgslSource = requireSource(source, "WGSL shader source");
             return this;
         }
 
+        /**
+         * Sets the glsl and returns this builder.
+         *
+         * @param vertexSource the vertex source
+         * @param fragmentSource the fragment source
+         * @return this builder for chaining
+         */
         public Builder glsl(String vertexSource, String fragmentSource) {
             glslVertexSource = requireSource(vertexSource, "GLSL vertex shader source");
             glslFragmentSource = requireSource(fragmentSource, "GLSL fragment shader source");
             return this;
         }
 
+        /**
+         * Sets the glsl es and returns this builder.
+         *
+         * @param vertexSource the vertex source
+         * @param fragmentSource the fragment source
+         * @return this builder for chaining
+         */
         public Builder glslEs(String vertexSource, String fragmentSource) {
             glslEsVertexSource = requireSource(vertexSource, "GLSL ES vertex shader source");
             glslEsFragmentSource = requireSource(fragmentSource, "GLSL ES fragment shader source");
             return this;
         }
 
+        /**
+         * Sets the SPIR-V and returns this builder.
+         *
+         * @param vertexWords the vertex words
+         * @param fragmentWords the fragment words
+         * @return this builder for chaining
+         */
         public Builder spirv(int[] vertexWords, int[] fragmentWords) {
             if (vertexWords == null || vertexWords.length == 0) {
                 throw new FdxException("SPIR-V vertex shader words cannot be empty");
@@ -234,21 +372,44 @@ public final class ShaderBundle {
             return this;
         }
 
+        /**
+         * Sets the msl and returns this builder.
+         *
+         * @param source the source value
+         * @return this builder for chaining
+         */
         public Builder msl(String source) {
             mslSource = requireSource(source, "MSL shader source");
             return this;
         }
 
+        /**
+         * Sets the hlsl and returns this builder.
+         *
+         * @param source the source value
+         * @return this builder for chaining
+         */
         public Builder hlsl(String source) {
             hlslSource = requireSource(source, "HLSL shader source");
             return this;
         }
 
+        /**
+         * Sets the reflection and returns this builder.
+         *
+         * @param reflection the reflection
+         * @return this builder for chaining
+         */
         public Builder reflection(ShaderReflection reflection) {
             this.reflection = reflection != null ? reflection : ShaderReflection.empty();
             return this;
         }
 
+        /**
+         * Returns the build.
+         *
+         * @return the created value
+         */
         public ShaderBundle build() {
             ShaderBundle bundle = new ShaderBundle(this);
             bundle.validateProfile().throwIfFailed(label);

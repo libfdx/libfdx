@@ -22,10 +22,23 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * Represents a tea VM build runner.
+ *
+ * @author xpenatan
+ */
 public final class TeaVMBuildRunner {
     private TeaVMBuildRunner() {
     }
 
+    /**
+     * Runs the build step.
+     *
+     * @param request the request
+     * @param configureTarget the configure target
+     * @param failureMessage the failure message
+     * @return the created value
+     */
     public static Set<Path> build(Request request, Consumer<BuildStrategy> configureTarget, String failureMessage) {
         TeaVMToolLog actualLog = request.log != null ? request.log : new EmptyTeaVMToolLog();
         BuildStrategy strategy = new InProcessBuildStrategy();
@@ -84,6 +97,11 @@ public final class TeaVMBuildRunner {
         }
     }
 
+    /**
+     * Represents a request.
+     *
+     * @author xpenatan
+     */
     public static final class Request {
         private final TeaVMTargetType targetType;
         private final List<Path> classpath;
@@ -103,6 +121,27 @@ public final class TeaVMBuildRunner {
         private final boolean fastDependencyAnalysis;
         private final boolean incremental;
 
+        /**
+         * Creates a request.
+         *
+         * @param targetType the target type
+         * @param classpath the classpath
+         * @param targetDirectory the target directory
+         * @param cacheDirectory the cache directory
+         * @param mainClass the main class
+         * @param targetFileName the target file name
+         * @param entryPointName the entry point name
+         * @param optimization the optimization
+         * @param properties the properties
+         * @param log the log
+         * @param obfuscated the obfuscated
+         * @param strict the strict
+         * @param debugInformation the debug information
+         * @param sourceMaps the source maps
+         * @param sourceFilesCopied the source files copied
+         * @param fastDependencyAnalysis the fast dependency analysis
+         * @param incremental the incremental
+         */
         public Request(TeaVMTargetType targetType, List<Path> classpath, Path targetDirectory, Path cacheDirectory,
                 String mainClass, String targetFileName, String entryPointName, TeaVMOptimization optimization,
                 Properties properties, TeaVMToolLog log, boolean obfuscated, boolean strict, boolean debugInformation,

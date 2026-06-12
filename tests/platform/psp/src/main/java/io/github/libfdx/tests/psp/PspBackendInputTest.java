@@ -14,6 +14,11 @@ import io.github.libfdx.input.GamepadAxis;
 import io.github.libfdx.input.GamepadButton;
 import io.github.libfdx.input.Input;
 
+/**
+ * Runs the psp backend input test scenario.
+ *
+ * @author xpenatan
+ */
 final class PspBackendInputTest extends ApplicationAdapter {
     private final long exitAfterFrames;
     private Application application;
@@ -28,6 +33,11 @@ final class PspBackendInputTest extends ApplicationAdapter {
         this.exitAfterFrames = exitAfterFrames;
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
@@ -42,6 +52,9 @@ final class PspBackendInputTest extends ApplicationAdapter {
         graphics.device().writeTexture(marker, PspCheckerTexture.pixels(128, 16, 4));
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         boolean connected = input != null && input.capabilities().supportsGamepads()
@@ -115,6 +128,9 @@ final class PspBackendInputTest extends ApplicationAdapter {
         return value > max ? max : value;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (spriteBatch != null) {

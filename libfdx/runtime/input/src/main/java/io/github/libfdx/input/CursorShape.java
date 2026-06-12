@@ -1,5 +1,10 @@
 package io.github.libfdx.input;
 
+/**
+ * Lists the supported cursor shape values.
+ *
+ * @author xpenatan
+ */
 public enum CursorShape {
     DEFAULT,
     POINTER,

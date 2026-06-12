@@ -14,6 +14,11 @@ import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.TextureUsage;
 
+/**
+ * Represents a WGPU texture handle.
+ *
+ * @author xpenatan
+ */
 final class WGPUTextureHandle implements Texture {
     private final WGPUTexture nativeTexture;
     private final WGPUTextureView nativeView;
@@ -86,37 +91,71 @@ final class WGPUTextureHandle implements Texture {
         return cachedBindGroup;
     }
 
+    /**
+     * Returns the width.
+     *
+     * @return the width
+     */
     @Override
     public int width() {
         return width;
     }
 
+    /**
+     * Returns the height.
+     *
+     * @return the height
+     */
     @Override
     public int height() {
         return height;
     }
 
+    /**
+     * Returns the format.
+     *
+     * @return the format
+     */
     @Override
     public TextureFormat format() {
         return format;
     }
 
+    /**
+     * Returns the usage.
+     *
+     * @return the usage
+     */
     @Override
     public TextureUsage usage() {
         return usage;
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return WGPUProvider.ID;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
         return (T) this;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -133,6 +172,11 @@ final class WGPUTextureHandle implements Texture {
         nativeTexture.dispose();
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;

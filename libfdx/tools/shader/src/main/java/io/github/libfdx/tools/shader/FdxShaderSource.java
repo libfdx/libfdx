@@ -5,6 +5,11 @@ import io.github.libfdx.graphics.ShaderProfile;
 
 import java.nio.file.Path;
 
+/**
+ * Represents a fdx shader source.
+ *
+ * @author xpenatan
+ */
 public final class FdxShaderSource {
     private final Path path;
     private final ShaderProfile profile;
@@ -22,18 +27,41 @@ public final class FdxShaderSource {
         this.source = source;
     }
 
+    /**
+     * Creates a fdx shader source from the supplied values.
+     *
+     * @param path the asset or file path
+     * @param profile the profile
+     * @param source the source value
+     * @return a new fdx shader source
+     */
     public static FdxShaderSource of(Path path, ShaderProfile profile, String source) {
         return new FdxShaderSource(path, profile, source);
     }
 
+    /**
+     * Returns the path.
+     *
+     * @return the path
+     */
     public Path path() {
         return path;
     }
 
+    /**
+     * Returns the profile.
+     *
+     * @return the profile
+     */
     public ShaderProfile profile() {
         return profile;
     }
 
+    /**
+     * Returns the source.
+     *
+     * @return the source
+     */
     public String source() {
         return source;
     }

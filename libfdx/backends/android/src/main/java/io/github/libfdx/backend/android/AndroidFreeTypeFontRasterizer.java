@@ -9,7 +9,19 @@ import java.nio.ByteBuffer;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Represents an android free type font rasterizer.
+ *
+ * @author xpenatan
+ */
 final class AndroidFreeTypeFontRasterizer implements FontRasterizer {
+    /**
+     * Runs the rasterize step.
+     *
+     * @param fontBytes the font bytes
+     * @param options the options
+     * @return the rasterize
+     */
     @Override
     public RasterizedFont rasterize(byte[] fontBytes, FontRasterizerOptions options) {
         if (fontBytes == null || fontBytes.length == 0) {

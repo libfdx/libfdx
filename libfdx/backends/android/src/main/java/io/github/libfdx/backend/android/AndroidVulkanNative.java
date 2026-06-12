@@ -4,6 +4,11 @@ import android.view.Surface;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Provides native bindings for android vulkan.
+ *
+ * @author xpenatan
+ */
 final class AndroidVulkanNative {
     private static final String LIBRARY_NAME = "fdx_android_vulkan";
     private static boolean loaded;

@@ -6,6 +6,11 @@ import io.github.libfdx.graphics.gl.web.WebGLProvider;
 import io.github.libfdx.graphics.wgpu.WebWGPUProvider;
 import io.github.libfdx.samples.basic.BasicApplication;
 
+/**
+ * Represents a basic web launcher support.
+ *
+ * @author xpenatan
+ */
 final class BasicWebLauncherSupport {
     private static final String CANVAS_ID = "libfdx-canvas";
 

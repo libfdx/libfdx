@@ -5,9 +5,20 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Represents a project generator.
+ *
+ * @author xpenatan
+ */
 public final class ProjectGenerator {
     private final TemplateRenderer renderer = new TemplateRenderer();
 
+    /**
+     * Runs the generate step.
+     *
+     * @param settings the settings
+     * @return the generate
+     */
     public ProjectGenerationResult generate(ProjectGenerationSettings settings) {
         ProjectGenerationSettings resolved = settings != null ? settings : ProjectGenerationSettings.builder().build();
         ProjectValidationResult validation = ProjectValidationResult.validate(resolved);

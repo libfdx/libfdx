@@ -71,6 +71,11 @@ import static io.github.libfdx.backend.psp.natives.PSPGraphicsApi.sceGuTexOffset
 import static io.github.libfdx.backend.psp.natives.PSPGraphicsApi.sceGuTexScale;
 import static io.github.libfdx.backend.psp.natives.PSPGraphicsApi.sceGuTexWrap;
 
+/**
+ * Represents a psp graphics context.
+ *
+ * @author xpenatan
+ */
 public final class PspGraphicsContext implements GraphicsContext {
     public static final ProviderId ID = ProviderId.of("psp");
     public static final int SCREEN_WIDTH = 480;
@@ -79,21 +84,44 @@ public final class PspGraphicsContext implements GraphicsContext {
     private final PspGraphicsDevice device = new PspGraphicsDevice();
     private final PspGraphicsFrame frame = new PspGraphicsFrame();
 
+    /**
+     * Returns the device.
+     *
+     * @return the device
+     */
     @Override
     public GraphicsDevice device() {
         return device;
     }
 
+    /**
+     * Returns the surface format.
+     *
+     * @return the surface format
+     */
     @Override
     public TextureFormat surfaceFormat() {
         return TextureFormat.RGBA8_UNORM;
     }
 
+    /**
+     * Returns the current frame.
+     *
+     * @return the current frame
+     */
     @Override
     public GraphicsFrame currentFrame() {
         return frame;
     }
 
+    /**
+     * Runs the clear step.
+     *
+     * @param red the red
+     * @param green the green
+     * @param blue the blue
+     * @param alpha the alpha
+     */
     @Override
     public void clear(float red, float green, float blue, float alpha) {
         sceGuClearColor(color8888(red, green, blue, alpha));
@@ -101,11 +129,22 @@ public final class PspGraphicsContext implements GraphicsContext {
         sceGuClear(GU_COLOR_BUFFER_BIT | GU_DEPTH_BUFFER_BIT);
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
@@ -138,49 +177,100 @@ public final class PspGraphicsContext implements GraphicsContext {
         return value > 0 && (value & (value - 1)) == 0;
     }
 
+    /**
+     * Represents a psp graphics frame.
+     *
+     * @author xpenatan
+     */
     private final class PspGraphicsFrame implements GraphicsFrame, FrameBuffer, TextureView {
         private final PspCommandEncoder commandEncoder = new PspCommandEncoder();
 
+        /**
+         * Returns the command encoder.
+         *
+         * @return the command encoder
+         */
         @Override
         public CommandEncoder commandEncoder() {
             return commandEncoder;
         }
 
+        /**
+         * Returns the frame buffer.
+         *
+         * @return the frame buffer
+         */
         @Override
         public FrameBuffer frameBuffer() {
             return this;
         }
 
+        /**
+         * Returns the color attachment.
+         *
+         * @return the color attachment
+         */
         @Override
         public TextureView colorAttachment() {
             return this;
         }
 
+        /**
+         * Returns the format.
+         *
+         * @return the format
+         */
         @Override
         public TextureFormat format() {
             return TextureFormat.RGBA8_UNORM;
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return SCREEN_WIDTH;
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return SCREEN_HEIGHT;
         }
 
+        /**
+         * Returns the read pixels RGBA8.
+         *
+         * @return the read pixels RGBA8
+         */
         @Override
         public ByteBuffer readPixelsRgba8() {
             throw new FdxException("PSP framebuffer readback is not implemented yet");
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -192,7 +282,18 @@ public final class PspGraphicsContext implements GraphicsContext {
         }
     }
 
+    /**
+     * Represents a psp graphics device.
+     *
+     * @author xpenatan
+     */
     private static final class PspGraphicsDevice implements GraphicsDevice {
+        /**
+         * Creates a buffer.
+         *
+         * @param descriptor the descriptor
+         * @return the created value
+         */
         @Override
         public Buffer createBuffer(BufferDescriptor descriptor) {
             if (descriptor == null) {
@@ -201,6 +302,12 @@ public final class PspGraphicsContext implements GraphicsContext {
             return new PspBuffer(descriptor.size(), descriptor.usage());
         }
 
+        /**
+         * Runs the write buffer step.
+         *
+         * @param buffer the buffer
+         * @param data the data
+         */
         @Override
         public void writeBuffer(Buffer buffer, ByteBuffer data) {
             PspBuffer pspBuffer = checked(buffer, PspBuffer.class, "buffer");
@@ -223,6 +330,12 @@ public final class PspGraphicsContext implements GraphicsContext {
             pspBuffer.writtenSize = byteCount;
         }
 
+        /**
+         * Creates a texture.
+         *
+         * @param descriptor the descriptor
+         * @return the created value
+         */
         @Override
         public Texture createTexture(TextureDescriptor descriptor) {
             if (descriptor == null) {
@@ -244,6 +357,12 @@ public final class PspGraphicsContext implements GraphicsContext {
                     descriptor.wrapS(), descriptor.wrapT());
         }
 
+        /**
+         * Runs the write texture step.
+         *
+         * @param texture the texture
+         * @param data the data
+         */
         @Override
         public void writeTexture(Texture texture, ByteBuffer data) {
             PspTexture pspTexture = checked(texture, PspTexture.class, "texture");
@@ -262,6 +381,12 @@ public final class PspGraphicsContext implements GraphicsContext {
             copyTextureData(pspTexture.data, pspTexture.upload, byteCount);
         }
 
+        /**
+         * Creates a shader module.
+         *
+         * @param descriptor the descriptor
+         * @return the created value
+         */
         @Override
         public ShaderModule createShaderModule(ShaderModuleDescriptor descriptor) {
             if (descriptor == null) {
@@ -270,6 +395,12 @@ public final class PspGraphicsContext implements GraphicsContext {
             return new PspShaderModule(descriptor.label(), descriptor.language());
         }
 
+        /**
+         * Creates a render pipeline.
+         *
+         * @param descriptor the descriptor
+         * @return the created value
+         */
         @Override
         public RenderPipeline createRenderPipeline(RenderPipelineDescriptor descriptor) {
             if (descriptor == null) {
@@ -311,11 +442,22 @@ public final class PspGraphicsContext implements GraphicsContext {
             throw new FdxException("Unsupported PSP render pipeline: " + label);
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -344,11 +486,22 @@ public final class PspGraphicsContext implements GraphicsContext {
         }
     }
 
+    /**
+     * Represents a psp command encoder.
+     *
+     * @author xpenatan
+     */
     private static final class PspCommandEncoder implements CommandEncoder {
         private static final int RENDER_PASS_RING_SIZE = 4;
         private final PspRenderPass[] renderPasses = createRenderPassRing();
         private int renderPassIndex;
 
+        /**
+         * Begins render pass.
+         *
+         * @param descriptor the descriptor
+         * @return the begin render pass
+         */
         @Override
         public RenderPass beginRenderPass(RenderPassDescriptor descriptor) {
             PspRenderPass renderPass = renderPasses[renderPassIndex];
@@ -363,11 +516,22 @@ public final class PspGraphicsContext implements GraphicsContext {
             }
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -383,6 +547,11 @@ public final class PspGraphicsContext implements GraphicsContext {
         }
     }
 
+    /**
+     * Represents a psp render pass.
+     *
+     * @author xpenatan
+     */
     private static final class PspRenderPass implements RenderPass {
         private PspRenderPipeline pipeline;
         private PspBuffer vertexBuffer;
@@ -410,12 +579,22 @@ public final class PspGraphicsContext implements GraphicsContext {
             ended = false;
         }
 
+        /**
+         * Sets the pipeline.
+         *
+         * @param pipeline the pipeline
+         */
         @Override
         public void setPipeline(RenderPipeline pipeline) {
             ensureOpen();
             this.pipeline = checked(pipeline, PspRenderPipeline.class, "render pipeline");
         }
 
+        /**
+         * Sets the vertex buffer.
+         *
+         * @param buffer the buffer
+         */
         @Override
         public void setVertexBuffer(Buffer buffer) {
             ensureOpen();
@@ -425,6 +604,12 @@ public final class PspGraphicsContext implements GraphicsContext {
             }
         }
 
+        /**
+         * Sets the texture.
+         *
+         * @param slot the slot
+         * @param texture the texture
+         */
         @Override
         public void setTexture(int slot, Texture texture) {
             ensureOpen();
@@ -434,6 +619,14 @@ public final class PspGraphicsContext implements GraphicsContext {
             this.texture = checked(texture, PspTexture.class, "texture");
         }
 
+        /**
+         * Draws the current content.
+         *
+         * @param vertexCount the vertex count
+         * @param instanceCount the instance count
+         * @param firstVertex the first vertex
+         * @param firstInstance the first instance
+         */
         @Override
         public void draw(int vertexCount, int instanceCount, int firstVertex, int firstInstance) {
             ensureOpen();
@@ -456,6 +649,9 @@ public final class PspGraphicsContext implements GraphicsContext {
             }
         }
 
+        /**
+         * Ends the operation.
+         */
         @Override
         public void end() {
             ensureOpen();
@@ -465,11 +661,22 @@ public final class PspGraphicsContext implements GraphicsContext {
             texture = null;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -602,12 +809,22 @@ public final class PspGraphicsContext implements GraphicsContext {
         }
     }
 
+    /**
+     * Lists the supported psp pipeline kind values.
+     *
+     * @author xpenatan
+     */
     private enum PspPipelineKind {
         SPRITE,
         WHITE_SPRITE,
         SHAPE
     }
 
+    /**
+     * Represents a psp render pipeline.
+     *
+     * @author xpenatan
+     */
     private static final class PspRenderPipeline implements RenderPipeline {
         private final PspShaderModule shader;
         private final PspPipelineKind kind;
@@ -625,21 +842,40 @@ public final class PspGraphicsContext implements GraphicsContext {
             this.guPrimitive = guPrimitive;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             disposed = true;
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed || shader.isDisposed();
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -647,6 +883,11 @@ public final class PspGraphicsContext implements GraphicsContext {
         }
     }
 
+    /**
+     * Represents a psp shader module.
+     *
+     * @author xpenatan
+     */
     private static final class PspShaderModule implements ShaderModule {
         private final String label;
         private final ShaderLanguage language;
@@ -657,38 +898,72 @@ public final class PspGraphicsContext implements GraphicsContext {
             this.language = language != null ? language : ShaderLanguage.WGSL;
         }
 
+        /**
+         * Returns the language.
+         *
+         * @return the language
+         */
         @Override
         public ShaderLanguage language() {
             return language;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             disposed = true;
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
             return (T) this;
         }
 
+        /**
+         * Returns a readable string representation of this instance.
+         *
+         * @return the to string
+         */
         @Override
         public String toString() {
             return label;
         }
     }
 
+    /**
+     * Represents a psp buffer.
+     *
+     * @author xpenatan
+     */
     private static final class PspBuffer implements Buffer {
         private final int size;
         private final BufferUsage usage;
@@ -706,31 +981,60 @@ public final class PspGraphicsContext implements GraphicsContext {
             return floatData[byteOffset / Float.BYTES];
         }
 
+        /**
+         * Returns the size.
+         *
+         * @return the size
+         */
         @Override
         public int size() {
             return size;
         }
 
+        /**
+         * Returns the usage.
+         *
+         * @return the usage
+         */
         @Override
         public BufferUsage usage() {
             return usage;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             disposed = true;
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -738,6 +1042,11 @@ public final class PspGraphicsContext implements GraphicsContext {
         }
     }
 
+    /**
+     * Represents a psp texture.
+     *
+     * @author xpenatan
+     */
     private static final class PspTexture implements Texture {
         private final int width;
         private final int height;
@@ -766,26 +1075,49 @@ public final class PspGraphicsContext implements GraphicsContext {
             upload = ByteBuffer.allocateDirect(byteCount).order(ByteOrder.LITTLE_ENDIAN);
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return width;
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return height;
         }
 
+        /**
+         * Returns the format.
+         *
+         * @return the format
+         */
         @Override
         public TextureFormat format() {
             return format;
         }
 
+        /**
+         * Returns the usage.
+         *
+         * @return the usage
+         */
         @Override
         public TextureUsage usage() {
             return usage;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             if (!disposed) {
@@ -794,16 +1126,32 @@ public final class PspGraphicsContext implements GraphicsContext {
             }
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -811,6 +1159,11 @@ public final class PspGraphicsContext implements GraphicsContext {
         }
     }
 
+    /**
+     * Represents a psp sprite vertex.
+     *
+     * @author xpenatan
+     */
     private static final class PspSpriteVertex {
         private static final int BYTES = 2 * Float.BYTES + Integer.BYTES + 3 * Float.BYTES;
 
@@ -818,6 +1171,11 @@ public final class PspGraphicsContext implements GraphicsContext {
         }
     }
 
+    /**
+     * Represents a psp shape vertex.
+     *
+     * @author xpenatan
+     */
     private static final class PspShapeVertex {
         private static final int BYTES = Integer.BYTES + 3 * Float.BYTES;
 

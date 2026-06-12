@@ -1,5 +1,10 @@
 package io.github.libfdx.graphics;
 
+/**
+ * Lists the supported texture format values.
+ *
+ * @author xpenatan
+ */
 public enum TextureFormat {
     UNKNOWN,
     RGBA8_UNORM,

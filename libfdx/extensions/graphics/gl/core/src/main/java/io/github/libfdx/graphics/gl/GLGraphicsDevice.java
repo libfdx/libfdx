@@ -18,6 +18,11 @@ import io.github.libfdx.graphics.TextureUsage;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Represents a GL graphics device.
+ *
+ * @author xpenatan
+ */
 final class GLGraphicsDevice implements GraphicsDevice {
     private final ProviderId providerId;
     private final GLApi gl;
@@ -27,6 +32,12 @@ final class GLGraphicsDevice implements GraphicsDevice {
         this.gl = gl;
     }
 
+    /**
+     * Creates a buffer.
+     *
+     * @param descriptor the descriptor
+     * @return the created value
+     */
     @Override
     public Buffer createBuffer(BufferDescriptor descriptor) {
         if (descriptor == null) {
@@ -48,6 +59,12 @@ final class GLGraphicsDevice implements GraphicsDevice {
         return new GLBufferHandle(providerId, gl, buffer, descriptor.size(), descriptor.usage());
     }
 
+    /**
+     * Runs the write buffer step.
+     *
+     * @param buffer the buffer
+     * @param data the data
+     */
     @Override
     public void writeBuffer(Buffer buffer, ByteBuffer data) {
         if (buffer == null) {
@@ -71,6 +88,12 @@ final class GLGraphicsDevice implements GraphicsDevice {
         }
     }
 
+    /**
+     * Creates a texture.
+     *
+     * @param descriptor the descriptor
+     * @return the created value
+     */
     @Override
     public Texture createTexture(TextureDescriptor descriptor) {
         if (descriptor == null) {
@@ -91,6 +114,12 @@ final class GLGraphicsDevice implements GraphicsDevice {
                 descriptor.format(), descriptor.usage());
     }
 
+    /**
+     * Runs the write texture step.
+     *
+     * @param texture the texture
+     * @param data the data
+     */
     @Override
     public void writeTexture(Texture texture, ByteBuffer data) {
         if (texture == null) {
@@ -109,6 +138,12 @@ final class GLGraphicsDevice implements GraphicsDevice {
         gl.bindTexture2D(0);
     }
 
+    /**
+     * Creates a shader module.
+     *
+     * @param descriptor the descriptor
+     * @return the created value
+     */
     @Override
     public ShaderModule createShaderModule(ShaderModuleDescriptor descriptor) {
         if (descriptor == null) {
@@ -135,6 +170,12 @@ final class GLGraphicsDevice implements GraphicsDevice {
         return new GLShaderModuleHandle(providerId, gl, program);
     }
 
+    /**
+     * Creates a render pipeline.
+     *
+     * @param descriptor the descriptor
+     * @return the created value
+     */
     @Override
     public RenderPipeline createRenderPipeline(RenderPipelineDescriptor descriptor) {
         if (descriptor == null) {
@@ -158,11 +199,22 @@ final class GLGraphicsDevice implements GraphicsDevice {
         return shader;
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return providerId;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {

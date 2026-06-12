@@ -5,6 +5,11 @@ import io.github.libfdx.core.ProviderId;
 
 import java.util.Locale;
 
+/**
+ * Lists the supported shader target values.
+ *
+ * @author xpenatan
+ */
 public enum ShaderTarget {
     WEBGPU_WGSL,
     WGPU_WGSL,
@@ -15,6 +20,12 @@ public enum ShaderTarget {
     METAL_MSL,
     DIRECTX_HLSL;
 
+    /**
+     * Creates a shader target.
+     *
+     * @param providerId the provider ID
+     * @return a new shader target
+     */
     public static ShaderTarget forProvider(ProviderId providerId) {
         if (providerId == null) {
             throw new FdxException("Shader provider id cannot be null");
@@ -22,6 +33,12 @@ public enum ShaderTarget {
         return forProvider(providerId.value());
     }
 
+    /**
+     * Creates a shader target.
+     *
+     * @param providerId the provider ID
+     * @return a new shader target
+     */
     public static ShaderTarget forProvider(String providerId) {
         if (providerId == null || providerId.trim().isEmpty()) {
             throw new FdxException("Shader provider id cannot be empty");

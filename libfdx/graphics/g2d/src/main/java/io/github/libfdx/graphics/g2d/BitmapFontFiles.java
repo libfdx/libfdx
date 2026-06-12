@@ -18,12 +18,25 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Represents a bitmap font files.
+ *
+ * @author xpenatan
+ */
 public final class BitmapFontFiles {
     private static final String PSP_PROVIDER_ID = "psp";
 
     private BitmapFontFiles() {
     }
 
+    /**
+     * Loads the requested resource.
+     *
+     * @param graphics the graphics context
+     * @param files the files
+     * @param path the asset or file path
+     * @return the created value
+     */
     public static BitmapFont load(GraphicsContext graphics, FileSystem files, String path) {
         String extension = extension(path);
         if ("fnt".equals(extension)) {
@@ -35,6 +48,14 @@ public final class BitmapFontFiles {
         throw new FdxException("Unsupported font file extension: " + path);
     }
 
+    /**
+     * Loads bitmap.
+     *
+     * @param graphics the graphics context
+     * @param files the files
+     * @param path the asset or file path
+     * @return the created value
+     */
     public static BitmapFont loadBitmap(GraphicsContext graphics, FileSystem files, String path) {
         ensure(graphics, files, path);
         String text = files.internal(path).readString(StandardCharsets.UTF_8).get();
@@ -58,6 +79,15 @@ public final class BitmapFontFiles {
                 glyphs, definition.kernings, pages, true);
     }
 
+    /**
+     * Loads free type.
+     *
+     * @param graphics the graphics context
+     * @param files the files
+     * @param path the asset or file path
+     * @param options the options
+     * @return the created value
+     */
     public static BitmapFont loadFreeType(GraphicsContext graphics, FileSystem files, String path,
             FreeTypeFontOptions options) {
         ensure(graphics, files, path);
@@ -68,6 +98,13 @@ public final class BitmapFontFiles {
         return createFont(graphics, path, rasterized);
     }
 
+    /**
+     * Runs the generate free type step.
+     *
+     * @param graphics the graphics context
+     * @param options the options
+     * @return the generate free type
+     */
     public static BitmapFont generateFreeType(GraphicsContext graphics, FreeTypeFontOptions options) {
         ensureGraphics(graphics);
         throw unsupportedFamilyFreeType();
@@ -178,6 +215,11 @@ public final class BitmapFontFiles {
                 + "Use UiFont.freeType(path, size) with a .ttf/.otf asset or add a backend-specific system font provider.");
     }
 
+    /**
+     * Represents a bitmap font definition.
+     *
+     * @author xpenatan
+     */
     private static final class BitmapFontDefinition {
         final Map<Integer, String> pageFiles = new LinkedHashMap<Integer, String>();
         final Map<Integer, Glyph> glyphs = new LinkedHashMap<Integer, Glyph>();
@@ -306,6 +348,11 @@ public final class BitmapFontFiles {
             }
         }
 
+        /**
+         * Represents a glyph.
+         *
+         * @author xpenatan
+         */
         static final class Glyph {
             int id;
             int x;

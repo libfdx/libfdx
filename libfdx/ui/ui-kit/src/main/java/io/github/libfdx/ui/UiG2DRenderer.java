@@ -16,6 +16,11 @@ import io.github.libfdx.graphics.g2d.TextureRegion;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Represents an ui G2 d renderer.
+ *
+ * @author xpenatan
+ */
 public final class UiG2DRenderer implements UiRenderer {
     private static final int FALLBACK_GLYPH_COLUMNS = 5;
     private static final int FALLBACK_GLYPH_ROWS = 7;
@@ -50,11 +55,22 @@ public final class UiG2DRenderer implements UiRenderer {
     private UiRect currentClip;
     private boolean disposed;
 
+    /**
+     * Creates an UI G2 d renderer.
+     *
+     * @param graphics the graphics context
+     */
     public UiG2DRenderer(GraphicsContext graphics) {
         this.graphics = graphics;
         this.shapes = graphics != null ? new ShapeRenderer2D(graphics) : null;
     }
 
+    /**
+     * Renders the current content.
+     *
+     * @param root the root
+     * @param node the node
+     */
     @Override
     public void render(UiRoot root, UiNode node) {
         if (disposed || root == null || node == null || shapes == null) {
@@ -1363,6 +1379,9 @@ public final class UiG2DRenderer implements UiRenderer {
         return heightValue * root.effectiveUiScale() / height * 2.0f;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -1377,12 +1396,22 @@ public final class UiG2DRenderer implements UiRenderer {
         }
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;
     }
 
 
+    /**
+     * Represents a custom text draw.
+     *
+     * @author xpenatan
+     */
     private static final class CustomTextDraw {
         final UiNode node;
         final String text;

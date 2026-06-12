@@ -15,6 +15,11 @@ import io.github.libfdx.ui.UiScope;
 import io.github.libfdx.ui.UiState;
 import io.github.libfdx.ui.UiToolkit;
 
+/**
+ * Represents a project generator application.
+ *
+ * @author xpenatan
+ */
 public final class ProjectGeneratorApplication extends ApplicationAdapter {
     private final ProjectExportTarget exportTarget;
     private final long exitAfterFrames;
@@ -34,10 +39,21 @@ public final class ProjectGeneratorApplication extends ApplicationAdapter {
     private UiRoot root;
     private long renderedFrames;
 
+    /**
+     * Creates a project generator application.
+     *
+     * @param exportTarget the export target
+     */
     public ProjectGeneratorApplication(ProjectExportTarget exportTarget) {
         this(exportTarget, 0L);
     }
 
+    /**
+     * Creates a project generator application.
+     *
+     * @param exportTarget the export target
+     * @param exitAfterFrames the exit after frames
+     */
     public ProjectGeneratorApplication(ProjectExportTarget exportTarget, long exitAfterFrames) {
         if (exportTarget == null) {
             throw new IllegalArgumentException("exportTarget cannot be null.");
@@ -47,6 +63,11 @@ public final class ProjectGeneratorApplication extends ApplicationAdapter {
         destination = Ui.state(exportTarget.defaultDestination());
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
@@ -55,6 +76,12 @@ public final class ProjectGeneratorApplication extends ApplicationAdapter {
         root.setContent(this::buildUi);
     }
 
+    /**
+     * Handles a size change.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     @Override
     public void resize(int width, int height) {
         if (root != null) {
@@ -62,6 +89,9 @@ public final class ProjectGeneratorApplication extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         if (graphics != null) {
@@ -77,6 +107,9 @@ public final class ProjectGeneratorApplication extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (root != null) {

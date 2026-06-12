@@ -53,6 +53,11 @@ import static org.lwjgl.glfw.GLFWNativeWayland.glfwGetWaylandWindow;
 import static org.lwjgl.glfw.GLFWNativeX11.glfwGetX11Display;
 import static org.lwjgl.glfw.GLFWNativeX11.glfwGetX11Window;
 
+/**
+ * Implements the backend integration for desktop application.
+ *
+ * @author xpenatan
+ */
 public final class DesktopApplicationBackend implements ApplicationBackend, Application {
     public static final ProviderId ID = ProviderId.of("desktop");
 
@@ -78,11 +83,22 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
     private float deltaTime;
     private long frameId;
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Runs the start step.
+     *
+     * @param config the configuration
+     * @param listener the listener
+     */
     @Override
     public void start(ApplicationConfig config, ApplicationListener listener) {
         if (listener == null) {
@@ -135,6 +151,12 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         }
     }
 
+    /**
+     * Runs the start step.
+     *
+     * @param config the configuration
+     * @param listener the listener
+     */
     public void start(DesktopApplicationConfig config, ApplicationListener listener) {
         start((ApplicationConfig) config, listener);
     }
@@ -428,21 +450,39 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         }
     }
 
+    /**
+     * Returns the lifecycle.
+     *
+     * @return the lifecycle
+     */
     @Override
     public ApplicationLifecycle lifecycle() {
         return lifecycle;
     }
 
+    /**
+     * Returns the delta time.
+     *
+     * @return the delta time
+     */
     @Override
     public float deltaTime() {
         return deltaTime;
     }
 
+    /**
+     * Returns the frame ID.
+     *
+     * @return the frame ID
+     */
     @Override
     public long frameId() {
         return frameId;
     }
 
+    /**
+     * Runs the request exit step.
+     */
     @Override
     public void requestExit() {
         running = false;
@@ -451,17 +491,31 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         }
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
         return (T) this;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         requestExit();
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;
@@ -552,6 +606,11 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         }
     }
 
+    /**
+     * Represents a frame sync.
+     *
+     * @author xpenatan
+     */
     private static final class FrameSync {
         void sync(int fps) {
             if (fps <= 0) {
@@ -569,6 +628,11 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         }
     }
 
+    /**
+     * Represents a desktop graphics environment.
+     *
+     * @author xpenatan
+     */
     private static final class DesktopGraphicsEnvironment implements GraphicsEnvironment {
         private final Display display;
         private final NativeWindow nativeWindow;
@@ -578,17 +642,32 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             this.nativeWindow = nativeWindow;
         }
 
+        /**
+         * Returns the display.
+         *
+         * @return the display
+         */
         @Override
         public Display display() {
             return display;
         }
 
+        /**
+         * Returns the native window.
+         *
+         * @return the native window
+         */
         @Override
         public NativeWindow nativeWindow() {
             return nativeWindow;
         }
     }
 
+    /**
+     * Represents a desktop display.
+     *
+     * @author xpenatan
+     */
     private static final class DesktopDisplay implements Display {
         private final long windowHandle;
         private String title;
@@ -632,62 +711,121 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             contentScaleY = validScale(scaleYBuffer.get(0));
         }
 
+        /**
+         * Returns the title.
+         *
+         * @return the title
+         */
         @Override
         public String title() {
             return title;
         }
 
+        /**
+         * Runs the title step.
+         *
+         * @param title the title
+         */
         @Override
         public void title(String title) {
             this.title = title != null ? title : "";
             GLFW.glfwSetWindowTitle(windowHandle, this.title);
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return width;
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return height;
         }
 
+        /**
+         * Returns the framebuffer width.
+         *
+         * @return the framebuffer width
+         */
         @Override
         public int framebufferWidth() {
             return framebufferWidth;
         }
 
+        /**
+         * Returns the framebuffer height.
+         *
+         * @return the framebuffer height
+         */
         @Override
         public int framebufferHeight() {
             return framebufferHeight;
         }
 
+        /**
+         * Returns the content scale x.
+         *
+         * @return the content scale x
+         */
         @Override
         public float contentScaleX() {
             return contentScaleX;
         }
 
+        /**
+         * Returns the content scale y.
+         *
+         * @return the content scale y
+         */
         @Override
         public float contentScaleY() {
             return contentScaleY;
         }
 
+        /**
+         * Returns the close requested.
+         *
+         * @return true if close requested succeeds or is active; false otherwise
+         */
         @Override
         public boolean closeRequested() {
             return GLFW.glfwWindowShouldClose(windowHandle);
         }
 
+        /**
+         * Runs the request close step.
+         */
         @Override
         public void requestClose() {
             GLFW.glfwSetWindowShouldClose(windowHandle, true);
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {

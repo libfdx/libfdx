@@ -6,6 +6,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
+/**
+ * Provides native bindings for desktop runtime core.
+ *
+ * @author xpenatan
+ */
 final class DesktopRuntimeCoreNative {
     private static final Object LOCK = new Object();
     private static boolean attempted;

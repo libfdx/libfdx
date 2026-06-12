@@ -1,5 +1,10 @@
 package io.github.libfdx.ui;
 
+/**
+ * Represents an ui window model.
+ *
+ * @author xpenatan
+ */
 final class UiWindowModel {
     private final UiWindowState state;
     private UiRect layoutArea = UiRect.ZERO;

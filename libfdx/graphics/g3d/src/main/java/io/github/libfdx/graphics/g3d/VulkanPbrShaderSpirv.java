@@ -1,5 +1,10 @@
 package io.github.libfdx.graphics.g3d;
 
+/**
+ * Represents a vulkan pbr shader spirv.
+ *
+ * @author xpenatan
+ */
 final class VulkanPbrShaderSpirv {
         static final int[] VERTEX = {
                 0x07230203,0x00010000,0x000d000b,0x0000004a,0x00000000,0x00020011,0x00000001,0x0006000b,

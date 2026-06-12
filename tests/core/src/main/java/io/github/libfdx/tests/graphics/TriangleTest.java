@@ -2,11 +2,24 @@ package io.github.libfdx.tests.graphics;
 
 import io.github.libfdx.graphics.g2d.ShapeRenderer2D;
 
+/**
+ * Runs the triangle test scenario.
+ *
+ * @author xpenatan
+ */
 public final class TriangleTest extends ShapeRenderTest {
+    /**
+     * Creates a triangle test.
+     */
     public TriangleTest() {
         this(0L);
     }
 
+    /**
+     * Creates a triangle test.
+     *
+     * @param exitAfterFrames the exit after frames
+     */
     public TriangleTest(long exitAfterFrames) {
         super("triangle", exitAfterFrames);
     }

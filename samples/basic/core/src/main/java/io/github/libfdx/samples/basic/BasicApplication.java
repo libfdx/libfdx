@@ -12,6 +12,11 @@ import io.github.libfdx.ui.UiBooleanState;
 import io.github.libfdx.ui.UiRoot;
 import io.github.libfdx.ui.UiToolkit;
 
+/**
+ * Represents a basic application.
+ *
+ * @author xpenatan
+ */
 public final class BasicApplication extends ApplicationAdapter {
     private static final float BACKGROUND_RED = 1.0f;
     private static final float BACKGROUND_GREEN = 1.0f;
@@ -26,14 +31,27 @@ public final class BasicApplication extends ApplicationAdapter {
     private UiRoot ui;
     private UiBooleanState showDetails;
 
+    /**
+     * Creates a basic application.
+     */
     public BasicApplication() {
         this(0L);
     }
 
+    /**
+     * Creates a basic application.
+     *
+     * @param exitAfterFrames the exit after frames
+     */
     public BasicApplication(long exitAfterFrames) {
         this.exitAfterFrames = exitAfterFrames;
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
@@ -56,6 +74,12 @@ public final class BasicApplication extends ApplicationAdapter {
         logger.info("Basic sample renderer: ShapeRenderer2D");
     }
 
+    /**
+     * Handles a size change.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     @Override
     public void resize(int width, int height) {
         if (logger != null) {
@@ -66,6 +90,9 @@ public final class BasicApplication extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         if (application == null) {
@@ -89,6 +116,9 @@ public final class BasicApplication extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (shapes != null) {

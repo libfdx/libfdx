@@ -1,5 +1,10 @@
 package io.github.libfdx.ui;
 
+/**
+ * Represents an ui slider model.
+ *
+ * @author xpenatan
+ */
 final class UiSliderModel {
     private final UiRange range;
     private final UiFloatState state;

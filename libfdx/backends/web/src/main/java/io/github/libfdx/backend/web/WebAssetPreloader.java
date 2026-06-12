@@ -5,17 +5,28 @@ import org.teavm.jso.core.JSPromise;
 import org.teavm.jso.core.JSUndefined;
 import org.teavm.platform.metadata.ResourceArray;
 
+/**
+ * Represents a web asset preloader.
+ *
+ * @author xpenatan
+ */
 public final class WebAssetPreloader {
     private static boolean installed;
 
     private WebAssetPreloader() {
     }
 
+    /**
+     * Runs the install and preload step.
+     */
     public static void installAndPreload() {
         install();
         preloadAssets().await();
     }
 
+    /**
+     * Runs the install step.
+     */
     public static void install() {
         if (installed) {
             return;

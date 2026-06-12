@@ -8,6 +8,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+/**
+ * Represents a web project archive.
+ *
+ * @author xpenatan
+ */
 final class WebProjectArchive {
     private WebProjectArchive() {
     }

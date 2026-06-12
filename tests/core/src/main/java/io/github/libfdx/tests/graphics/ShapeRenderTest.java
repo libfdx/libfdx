@@ -10,6 +10,11 @@ import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.g2d.ShapeRenderer2D;
 import io.github.libfdx.tests.TestFpsLogger;
 
+/**
+ * Runs the shape render test scenario.
+ *
+ * @author xpenatan
+ */
 abstract class ShapeRenderTest extends ApplicationAdapter {
     private static final float BACKGROUND_RED = 1.0f;
     private static final float BACKGROUND_GREEN = 1.0f;
@@ -31,6 +36,11 @@ abstract class ShapeRenderTest extends ApplicationAdapter {
         this.exitAfterFrames = exitAfterFrames;
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
@@ -44,6 +54,9 @@ abstract class ShapeRenderTest extends ApplicationAdapter {
                 + " and ShapeRenderer2D");
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         float deltaSeconds = application.deltaTime();
@@ -60,6 +73,9 @@ abstract class ShapeRenderTest extends ApplicationAdapter {
 
     abstract void renderShape(ShapeRenderer2D shapes);
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (shapes != null) {

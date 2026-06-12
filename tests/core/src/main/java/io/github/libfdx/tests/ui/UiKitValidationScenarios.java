@@ -4,6 +4,11 @@ import io.github.libfdx.validation.scenario.Scenario;
 import io.github.libfdx.validation.scenario.ScenarioCatalog;
 import java.util.ArrayList;
 
+/**
+ * Represents an ui kit validation scenarios.
+ *
+ * @author xpenatan
+ */
 final class UiKitValidationScenarios {
     static final String BUTTON_PRESS = "buttons.press";
     static final String CHECKBOX_SECTION_OPTION = "checkboxes.sectionOption";
@@ -20,6 +25,11 @@ final class UiKitValidationScenarios {
     static final String TOOLTIP_CHECKBOX_TARGET = "tooltips.checkbox";
     static final String TOOLTIP_TEXT_FIELD_TARGET = "tooltips.textField";
 
+    /**
+     * Represents a plan.
+     *
+     * @author xpenatan
+     */
     static final class Plan {
         private final ScenarioCatalog catalog;
         private final Entry[] entries;
@@ -38,6 +48,11 @@ final class UiKitValidationScenarios {
         }
     }
 
+    /**
+     * Represents an entry.
+     *
+     * @author xpenatan
+     */
     static final class Entry {
         private final Scenario scenario;
         private final long frame;
@@ -72,6 +87,11 @@ final class UiKitValidationScenarios {
         }
     }
 
+    /**
+     * Builds value instances and related output.
+     *
+     * @author xpenatan
+     */
     static final class Builder {
         private final boolean active;
         private final ScenarioCatalog catalog = ScenarioCatalog.create();

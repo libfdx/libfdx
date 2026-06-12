@@ -7,11 +7,21 @@ import io.github.libfdx.core.FdxException;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Provides the default implementation of a model instance.
+ *
+ * @author xpenatan
+ */
 public final class DefaultModelInstance implements ModelInstance {
     private final Model model;
     private Matrix4 transform = Matrix4.IDENTITY;
     private final ArrayList<Renderable3D> renderables = new ArrayList<Renderable3D>();
 
+    /**
+     * Creates a default model instance.
+     *
+     * @param model the model
+     */
     public DefaultModelInstance(Model model) {
         if (model == null) {
             throw new FdxException("ModelInstance model cannot be null");
@@ -20,6 +30,12 @@ public final class DefaultModelInstance implements ModelInstance {
         rebuildRenderables();
     }
 
+    /**
+     * Sets the transform and returns this default model instance.
+     *
+     * @param transform the transform
+     * @return this default model instance for chaining
+     */
     public DefaultModelInstance transform(Matrix4 transform) {
         this.transform = transform != null ? transform : Matrix4.IDENTITY;
         rebuildRenderables();
@@ -48,16 +64,31 @@ public final class DefaultModelInstance implements ModelInstance {
         }
     }
 
+    /**
+     * Returns the model.
+     *
+     * @return the model
+     */
     @Override
     public Model model() {
         return model;
     }
 
+    /**
+     * Returns the transform.
+     *
+     * @return the transform
+     */
     @Override
     public Matrix4 transform() {
         return transform;
     }
 
+    /**
+     * Runs the collect renderables step.
+     *
+     * @param queue the queue
+     */
     @Override
     public void collectRenderables(RenderQueue3D queue) {
         if (queue == null) {

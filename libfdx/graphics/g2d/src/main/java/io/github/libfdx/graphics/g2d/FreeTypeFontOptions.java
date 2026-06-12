@@ -3,6 +3,11 @@ package io.github.libfdx.graphics.g2d;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
+/**
+ * Stores option values for a free type font.
+ *
+ * @author xpenatan
+ */
 public final class FreeTypeFontOptions {
     private final String family;
     private final float size;
@@ -18,46 +23,107 @@ public final class FreeTypeFontOptions {
         this.atlasWidth = Math.max(64, atlasWidth);
     }
 
+    /**
+     * Creates a free type font options.
+     *
+     * @param size the size
+     * @return a new free type font options
+     */
     public static FreeTypeFontOptions defaults(float size) {
         return new FreeTypeFontOptions("Dialog", size, defaultCharacters(), 2, 512);
     }
 
+    /**
+     * Sets the family and returns this free type font options.
+     *
+     * @param family the family
+     * @return this free type font options for chaining
+     */
     public FreeTypeFontOptions family(String family) {
         return new FreeTypeFontOptions(family, size, characters, padding, atlasWidth);
     }
 
+    /**
+     * Sets the size and returns this free type font options.
+     *
+     * @param size the size
+     * @return this free type font options for chaining
+     */
     public FreeTypeFontOptions size(float size) {
         return new FreeTypeFontOptions(family, size, characters, padding, atlasWidth);
     }
 
+    /**
+     * Sets the characters and returns this free type font options.
+     *
+     * @param characters the characters
+     * @return this free type font options for chaining
+     */
     public FreeTypeFontOptions characters(String characters) {
         return new FreeTypeFontOptions(family, size, characters, padding, atlasWidth);
     }
 
+    /**
+     * Sets the padding and returns this free type font options.
+     *
+     * @param padding the padding
+     * @return this free type font options for chaining
+     */
     public FreeTypeFontOptions padding(int padding) {
         return new FreeTypeFontOptions(family, size, characters, padding, atlasWidth);
     }
 
+    /**
+     * Sets the atlas width and returns this free type font options.
+     *
+     * @param atlasWidth the atlas width
+     * @return this free type font options for chaining
+     */
     public FreeTypeFontOptions atlasWidth(int atlasWidth) {
         return new FreeTypeFontOptions(family, size, characters, padding, atlasWidth);
     }
 
+    /**
+     * Returns the family.
+     *
+     * @return the family
+     */
     public String family() {
         return family;
     }
 
+    /**
+     * Returns the size.
+     *
+     * @return the size
+     */
     public float size() {
         return size;
     }
 
+    /**
+     * Returns the characters.
+     *
+     * @return the characters
+     */
     public String characters() {
         return characters;
     }
 
+    /**
+     * Returns the padding.
+     *
+     * @return the padding
+     */
     public int padding() {
         return padding;
     }
 
+    /**
+     * Returns the atlas width.
+     *
+     * @return the atlas width
+     */
     public int atlasWidth() {
         return atlasWidth;
     }

@@ -12,34 +12,76 @@ import io.github.libfdx.files.FileWatch;
 
 import java.nio.charset.Charset;
 
+/**
+ * Represents a psp file system.
+ *
+ * @author xpenatan
+ */
 final class PspFileSystem implements FileSystem {
     private static final ProviderId ID = ProviderId.of("psp_files");
 
+    /**
+     * Runs the classpath step.
+     *
+     * @param path the asset or file path
+     * @return the classpath
+     */
     @Override
     public FileHandle classpath(String path) {
         return assetHandle(FileLocation.CLASSPATH, path);
     }
 
+    /**
+     * Runs the internal step.
+     *
+     * @param path the asset or file path
+     * @return the internal
+     */
     @Override
     public FileHandle internal(String path) {
         return assetHandle(FileLocation.INTERNAL, path);
     }
 
+    /**
+     * Runs the local step.
+     *
+     * @param path the asset or file path
+     * @return the local
+     */
     @Override
     public FileHandle local(String path) {
         return handle(FileLocation.LOCAL, path);
     }
 
+    /**
+     * Runs the external step.
+     *
+     * @param path the asset or file path
+     * @return the external
+     */
     @Override
     public FileHandle external(String path) {
         return handle(FileLocation.EXTERNAL, path);
     }
 
+    /**
+     * Runs the cache step.
+     *
+     * @param path the asset or file path
+     * @return the cache
+     */
     @Override
     public FileHandle cache(String path) {
         return handle(FileLocation.CACHE, path);
     }
 
+    /**
+     * Runs the temp step.
+     *
+     * @param prefix the prefix
+     * @param suffix the suffix
+     * @return the temp
+     */
     @Override
     public FileHandle temp(String prefix, String suffix) {
         String actualPrefix = prefix != null ? prefix : "libfdx";
@@ -47,16 +89,33 @@ final class PspFileSystem implements FileSystem {
         return handle(FileLocation.TEMP, actualPrefix + actualSuffix);
     }
 
+    /**
+     * Runs the watch step.
+     *
+     * @param file the file handle or path
+     * @return the watch
+     */
     @Override
     public FdxFuture<FileWatch> watch(FileHandle file) {
         return FdxFuture.failed(unsupported(file != null ? file.location() : null, file != null ? file.path() : ""));
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
@@ -174,6 +233,11 @@ final class PspFileSystem implements FileSystem {
                 && path.charAt(6) == '/';
     }
 
+    /**
+     * Represents a psp file handle.
+     *
+     * @author xpenatan
+     */
     private static final class PspFileHandle implements FileHandle {
         private final FileLocation location;
         private final String path;
@@ -187,22 +251,42 @@ final class PspFileSystem implements FileSystem {
             this.nativePath = assetLocation ? nativeAssetPath(this.path) : this.path.toCharArray();
         }
 
+        /**
+         * Returns the location.
+         *
+         * @return the location
+         */
         @Override
         public FileLocation location() {
             return location;
         }
 
+        /**
+         * Returns the path.
+         *
+         * @return the path
+         */
         @Override
         public String path() {
             return path;
         }
 
+        /**
+         * Returns the name.
+         *
+         * @return the name
+         */
         @Override
         public String name() {
             int slash = path.lastIndexOf('/');
             return slash >= 0 ? path.substring(slash + 1) : path;
         }
 
+        /**
+         * Returns the extension.
+         *
+         * @return the extension
+         */
         @Override
         public String extension() {
             String name = name();
@@ -210,28 +294,54 @@ final class PspFileSystem implements FileSystem {
             return dot >= 0 ? name.substring(dot + 1) : "";
         }
 
+        /**
+         * Returns the parent.
+         *
+         * @return the parent
+         */
         @Override
         public FileHandle parent() {
             int slash = path.lastIndexOf('/');
             return new PspFileHandle(location, slash >= 0 ? path.substring(0, slash) : "", assetLocation);
         }
 
+        /**
+         * Runs the child step.
+         *
+         * @param relativePath the relative path
+         * @return the child
+         */
         @Override
         public FileHandle child(String relativePath) {
             String child = normalize(relativePath);
             return new PspFileHandle(location, path.length() == 0 ? child : path + "/" + child, assetLocation);
         }
 
+        /**
+         * Returns the exists.
+         *
+         * @return true if exists succeeds or is active; false otherwise
+         */
         @Override
         public boolean exists() {
             return assetLocation && assetSize(nativePath) >= 0;
         }
 
+        /**
+         * Returns whether directory is enabled or true.
+         *
+         * @return true if directory is enabled or true; false otherwise
+         */
         @Override
         public boolean isDirectory() {
             return false;
         }
 
+        /**
+         * Returns the metadata.
+         *
+         * @return the metadata
+         */
         @Override
         public FdxFuture<FileMetadata> metadata() {
             int size = assetLocation ? assetSize(nativePath) : -1;
@@ -241,6 +351,11 @@ final class PspFileSystem implements FileSystem {
             return FdxFuture.completed(new FileMetadata(size, 0L, false));
         }
 
+        /**
+         * Returns the read bytes.
+         *
+         * @return the read bytes
+         */
         @Override
         public FdxFuture<byte[]> readBytes() {
             if (!assetLocation) {
@@ -253,6 +368,12 @@ final class PspFileSystem implements FileSystem {
             return FdxFuture.completed(bytes);
         }
 
+        /**
+         * Runs the read string step.
+         *
+         * @param charset the charset
+         * @return the read string
+         */
         @Override
         public FdxFuture<String> readString(Charset charset) {
             if (charset == null) {
@@ -281,11 +402,26 @@ final class PspFileSystem implements FileSystem {
             return bytes;
         }
 
+        /**
+         * Runs the write bytes step.
+         *
+         * @param bytes the bytes
+         * @param append the append
+         * @return the write bytes
+         */
         @Override
         public FdxFuture<Void> writeBytes(byte[] bytes, boolean append) {
             return FdxFuture.failed(unsupported(location, path));
         }
 
+        /**
+         * Runs the write string step.
+         *
+         * @param text the text
+         * @param charset the charset
+         * @param append the append
+         * @return the write string
+         */
         @Override
         public FdxFuture<Void> writeString(String text, Charset charset, boolean append) {
             return FdxFuture.failed(unsupported(location, path));

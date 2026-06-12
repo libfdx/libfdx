@@ -21,8 +21,24 @@ import io.github.libfdx.ui.UiToolkit;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Represents an auto test application.
+ *
+ * @author xpenatan
+ */
 public final class AutoTestApplication extends ApplicationAdapter {
+    /**
+     * Defines the contract for completion handler implementations.
+     *
+     * @author xpenatan
+     */
     public interface CompletionHandler {
+        /**
+         * Runs the completed step.
+         *
+         * @param totalTests the total tests
+         * @param failedTests the failed tests
+         */
         void completed(int totalTests, int failedTests);
     }
 
@@ -58,15 +74,29 @@ public final class AutoTestApplication extends ApplicationAdapter {
     private long renderedFrames;
     private final List<String> failures = new ArrayList<String>();
 
+    /**
+     * Creates an auto test application.
+     */
     public AutoTestApplication() {
         this(null, true);
     }
 
+    /**
+     * Creates an auto test application.
+     *
+     * @param completionHandler the completion handler
+     * @param failOnComplete the fail on complete
+     */
     public AutoTestApplication(CompletionHandler completionHandler, boolean failOnComplete) {
         this.completionHandler = completionHandler;
         this.failOnComplete = failOnComplete;
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         this.fdx = fdx;
@@ -92,6 +122,12 @@ public final class AutoTestApplication extends ApplicationAdapter {
         nextTest();
     }
 
+    /**
+     * Handles a size change.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     @Override
     public void resize(int width, int height) {
         if (currentTest != null) {
@@ -107,6 +143,9 @@ public final class AutoTestApplication extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         float deltaSeconds = application.deltaTime();
@@ -156,6 +195,9 @@ public final class AutoTestApplication extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Handles the frame end event.
+     */
     @Override
     public void onFrameEnd() {
         if (currentTest != null) {
@@ -163,6 +205,9 @@ public final class AutoTestApplication extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Handles application pause.
+     */
     @Override
     public void pause() {
         if (currentTest != null) {
@@ -174,6 +219,9 @@ public final class AutoTestApplication extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Handles application resume.
+     */
     @Override
     public void resume() {
         if (currentTest != null) {
@@ -185,6 +233,9 @@ public final class AutoTestApplication extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         disposeCurrentTest();

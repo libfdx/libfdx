@@ -362,6 +362,11 @@ import static org.lwjgl.vulkan.VK10.vkGetImageMemoryRequirements;
 import static org.lwjgl.vulkan.VK10.vkQueueWaitIdle;
 import static org.lwjgl.vulkan.VK10.vkUpdateDescriptorSets;
 
+/**
+ * Provides desktop vulkan services.
+ *
+ * @author xpenatan
+ */
 public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
     public static final ProviderId ID = VulkanProvider.ID;
     private static final String VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
@@ -380,16 +385,32 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
 
     private VulkanConfiguration configuration = new VulkanConfiguration();
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Returns the requirements.
+     *
+     * @return the requirements
+     */
     @Override
     public GraphicsAttachmentRequirements requirements() {
         return GraphicsAttachmentRequirements.vulkan();
     }
 
+    /**
+     * Creates a value.
+     *
+     * @param environment the environment
+     * @return the created value
+     */
     @Override
     public GraphicsAttachment create(GraphicsEnvironment environment) {
         if (environment == null) {
@@ -405,25 +426,54 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         return context;
     }
 
+    /**
+     * Returns the configuration.
+     *
+     * @return the configuration
+     */
     public VulkanConfiguration configuration() {
         return configuration;
     }
 
+    /**
+     * Sets the configuration and returns this desktop vulkan provider.
+     *
+     * @param configuration the configuration
+     * @return this desktop vulkan provider for chaining
+     */
     public DesktopVulkanProvider configuration(VulkanConfiguration configuration) {
         this.configuration = configuration != null ? configuration : new VulkanConfiguration();
         return this;
     }
 
+    /**
+     * Sets the v sync and returns this desktop vulkan provider.
+     *
+     * @param vSync the v sync
+     * @return this desktop vulkan provider for chaining
+     */
     public DesktopVulkanProvider vSync(boolean vSync) {
         configuration.vSync(vSync);
         return this;
     }
 
+    /**
+     * Sets the validation and returns this desktop vulkan provider.
+     *
+     * @param validation the validation
+     * @return this desktop vulkan provider for chaining
+     */
     public DesktopVulkanProvider validation(boolean validation) {
         configuration.validation(validation);
         return this;
     }
 
+    /**
+     * Sets the frames in flight and returns this desktop vulkan provider.
+     *
+     * @param framesInFlight the frames in flight
+     * @return this desktop vulkan provider for chaining
+     */
     public DesktopVulkanProvider framesInFlight(int framesInFlight) {
         configuration.framesInFlight(framesInFlight);
         return this;
@@ -483,6 +533,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
     }
 
+    /**
+     * Represents a vulkan context.
+     *
+     * @author xpenatan
+     */
     private static final class VulkanContext implements GraphicsAttachment {
         private final VulkanConfiguration configuration;
         private final long windowHandle;
@@ -1204,6 +1259,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
+        /**
+         * Handles a size change.
+         *
+         * @param framebufferWidth the framebuffer width
+         * @param framebufferHeight the framebuffer height
+         */
         @Override
         public void resize(int framebufferWidth, int framebufferHeight) {
             if (disposed || framebufferWidth <= 0 || framebufferHeight <= 0) {
@@ -1227,10 +1288,18 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             createSwapchain(framebufferWidth, framebufferHeight);
         }
 
+        /**
+         * Runs the process events step.
+         */
         @Override
         public void processEvents() {
         }
 
+        /**
+         * Returns the begin frame.
+         *
+         * @return true if begin frame succeeds or is active; false otherwise
+         */
         @Override
         public boolean beginFrame() {
             if (disposed || swapchain == VK_NULL_HANDLE || width <= 0 || height <= 0) {
@@ -1285,6 +1354,9 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
+        /**
+         * Ends frame.
+         */
         @Override
         public void endFrame() {
             if (!frameStarted) {
@@ -1459,16 +1531,31 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             recreateSwapchain(resizeWidth, resizeHeight);
         }
 
+        /**
+         * Returns the device.
+         *
+         * @return the device
+         */
         @Override
         public GraphicsDevice device() {
             return graphicsDevice;
         }
 
+        /**
+         * Returns the surface format.
+         *
+         * @return the surface format
+         */
         @Override
         public TextureFormat surfaceFormat() {
             return surfaceFormat;
         }
 
+        /**
+         * Returns the current frame.
+         *
+         * @return the current frame
+         */
         @Override
         public GraphicsFrame currentFrame() {
             if (!frameStarted) {
@@ -1477,6 +1564,14 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return currentFrame;
         }
 
+        /**
+         * Runs the clear step.
+         *
+         * @param red the red
+         * @param green the green
+         * @param blue the blue
+         * @param alpha the alpha
+         */
         @Override
         public void clear(float red, float green, float blue, float alpha) {
             RenderPass pass = commandEncoder.beginRenderPass(RenderPassDescriptor
@@ -1798,17 +1893,31 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             throw new FdxException("Could not find suitable Vulkan memory type");
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
             return (T) this;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             if (disposed) {
@@ -1944,12 +2053,22 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;
         }
     }
 
+    /**
+     * Represents a texture descriptor set key.
+     *
+     * @author xpenatan
+     */
     private static final class TextureDescriptorSetKey {
         private final long[] handles;
         private final int hashCode;
@@ -1963,18 +2082,34 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             hashCode = Arrays.hashCode(handles);
         }
 
+        /**
+         * Compares this instance with another object for equality.
+         *
+         * @param other the other
+         * @return true if equals succeeds or is active; false otherwise
+         */
         @Override
         public boolean equals(Object other) {
             return other instanceof TextureDescriptorSetKey
                     && Arrays.equals(handles, ((TextureDescriptorSetKey)other).handles);
         }
 
+        /**
+         * Returns the hash code for this instance.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return hashCode;
         }
     }
 
+    /**
+     * Represents a vulkan graphics device.
+     *
+     * @author xpenatan
+     */
     private static final class VulkanGraphicsDevice implements GraphicsDevice {
         private final VulkanContext context;
 
@@ -1982,6 +2117,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             this.context = context;
         }
 
+        /**
+         * Creates a buffer.
+         *
+         * @param descriptor the descriptor
+         * @return the created value
+         */
         @Override
         public Buffer createBuffer(BufferDescriptor descriptor) {
             if (descriptor == null) {
@@ -2055,6 +2196,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
+        /**
+         * Runs the write buffer step.
+         *
+         * @param buffer the buffer
+         * @param data the data
+         */
         @Override
         public void writeBuffer(Buffer buffer, ByteBuffer data) {
             if (buffer == null) {
@@ -2087,6 +2234,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             writeStaticBuffer(vulkanBuffer, source);
         }
 
+        /**
+         * Creates a texture.
+         *
+         * @param descriptor the descriptor
+         * @return the created value
+         */
         @Override
         public Texture createTexture(TextureDescriptor descriptor) {
             if (descriptor == null) {
@@ -2165,6 +2318,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
+        /**
+         * Runs the write texture step.
+         *
+         * @param texture the texture
+         * @param data the data
+         */
         @Override
         public void writeTexture(Texture texture, ByteBuffer data) {
             if (texture == null) {
@@ -2489,6 +2648,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             throw new FdxException("Could not find suitable Vulkan memory type");
         }
 
+        /**
+         * Creates a shader module.
+         *
+         * @param descriptor the descriptor
+         * @return the created value
+         */
         @Override
         public ShaderModule createShaderModule(ShaderModuleDescriptor descriptor) {
             if (descriptor == null) {
@@ -2516,6 +2681,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
+        /**
+         * Creates a render pipeline.
+         *
+         * @param descriptor the descriptor
+         * @return the created value
+         */
         @Override
         public RenderPipeline createRenderPipeline(RenderPipelineDescriptor descriptor) {
             if (descriptor == null) {
@@ -2713,11 +2884,22 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -2725,6 +2907,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
     }
 
+    /**
+     * Represents a vulkan command encoder.
+     *
+     * @author xpenatan
+     */
     private static final class VulkanCommandEncoder implements CommandEncoder {
         private final VulkanContext context;
 
@@ -2732,6 +2919,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             this.context = context;
         }
 
+        /**
+         * Begins render pass.
+         *
+         * @param descriptor the descriptor
+         * @return the begin render pass
+         */
         @Override
         public RenderPass beginRenderPass(RenderPassDescriptor descriptor) {
             if (descriptor == null) {
@@ -2776,11 +2969,22 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return new VulkanRenderPass(context);
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -2788,6 +2992,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
     }
 
+    /**
+     * Represents a vulkan render pass.
+     *
+     * @author xpenatan
+     */
     private static final class VulkanRenderPass implements RenderPass {
         private static final int MATRIX_FLOAT_COUNT = 16;
         private static final int MODEL_OFFSET = 0;
@@ -2817,6 +3026,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             resetUniformData();
         }
 
+        /**
+         * Sets the pipeline.
+         *
+         * @param pipeline the pipeline
+         */
         @Override
         public void setPipeline(RenderPipeline pipeline) {
             ensureOpen();
@@ -2828,11 +3042,22 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             vkCmdBindPipeline(context.commandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, this.pipeline.pipeline());
         }
 
+        /**
+         * Sets the vertex buffer.
+         *
+         * @param buffer the buffer
+         */
         @Override
         public void setVertexBuffer(Buffer buffer) {
             setVertexBuffer(0, buffer);
         }
 
+        /**
+         * Sets the vertex buffer.
+         *
+         * @param slot the slot
+         * @param buffer the buffer
+         */
         @Override
         public void setVertexBuffer(int slot, Buffer buffer) {
             ensureOpen();
@@ -2851,6 +3076,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             context.markBufferUsedByRecordedCommand(vertexBuffer);
         }
 
+        /**
+         * Sets the index buffer.
+         *
+         * @param buffer the buffer
+         */
         @Override
         public void setIndexBuffer(Buffer buffer) {
             ensureOpen();
@@ -2865,6 +3095,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             context.markBufferUsedByRecordedCommand(indexBuffer);
         }
 
+        /**
+         * Sets the texture.
+         *
+         * @param slot the slot
+         * @param texture the texture
+         */
         @Override
         public void setTexture(int slot, Texture texture) {
             ensureOpen();
@@ -2881,6 +3117,14 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             textures[slot] = vulkanTexture;
         }
 
+        /**
+         * Sets the scissor.
+         *
+         * @param x the x coordinate
+         * @param y the y coordinate
+         * @param width the width in pixels
+         * @param height the height in pixels
+         */
         @Override
         public void setScissor(int x, int y, int width, int height) {
             ensureOpen();
@@ -2895,6 +3139,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
+        /**
+         * Sets the uniform1i.
+         *
+         * @param name the name
+         * @param value the value
+         */
         @Override
         public void setUniform1i(String name, int value) {
             if ("u_hasBaseColorTexture".equals(name)) {
@@ -2914,6 +3164,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
+        /**
+         * Sets the uniform1f.
+         *
+         * @param name the name
+         * @param value the value
+         */
         @Override
         public void setUniform1f(String name, float value) {
             if ("u_lightIntensity".equals(name)) {
@@ -2921,6 +3177,14 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
+        /**
+         * Sets the uniform3f.
+         *
+         * @param name the name
+         * @param x the x coordinate
+         * @param y the y coordinate
+         * @param z the z coordinate
+         */
         @Override
         public void setUniform3f(String name, float x, float y, float z) {
             if ("u_cameraPosition".equals(name)) {
@@ -2938,6 +3202,15 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
+        /**
+         * Sets the uniform4f.
+         *
+         * @param name the name
+         * @param x the x coordinate
+         * @param y the y coordinate
+         * @param z the z coordinate
+         * @param w the w
+         */
         @Override
         public void setUniform4f(String name, float x, float y, float z, float w) {
             if ("u_cameraPosition".equals(name)) {
@@ -2954,6 +3227,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
+        /**
+         * Sets the uniform matrix4.
+         *
+         * @param name the name
+         * @param values the values
+         */
         @Override
         public void setUniformMatrix4(String name, float[] values) {
             ensureOpen();
@@ -2968,6 +3247,14 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
+        /**
+         * Draws the current content.
+         *
+         * @param vertexCount the vertex count
+         * @param instanceCount the instance count
+         * @param firstVertex the first vertex
+         * @param firstInstance the first instance
+         */
         @Override
         public void draw(int vertexCount, int instanceCount, int firstVertex, int firstInstance) {
             ensureOpen();
@@ -2979,6 +3266,15 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             vkCmdDraw(context.commandBuffer(), vertexCount, instanceCount, firstVertex, firstInstance);
         }
 
+        /**
+         * Draws indexed.
+         *
+         * @param indexCount the index count
+         * @param instanceCount the instance count
+         * @param firstIndex the first index
+         * @param baseVertex the base vertex
+         * @param firstInstance the first instance
+         */
         @Override
         public void drawIndexed(int indexCount, int instanceCount, int firstIndex, int baseVertex, int firstInstance) {
             ensureOpen();
@@ -2993,6 +3289,9 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             vkCmdDrawIndexed(context.commandBuffer(), indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
         }
 
+        /**
+         * Ends the operation.
+         */
         @Override
         public void end() {
             if (ended) {
@@ -3085,11 +3384,22 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             uniformFloats.put(VIEW_PROJECTION_OFFSET + 15, 1.0f);
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -3097,6 +3407,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
     }
 
+    /**
+     * Represents a vulkan buffer handle.
+     *
+     * @author xpenatan
+     */
     private static final class VulkanBufferHandle implements Buffer {
         private final VkDevice device;
         private long buffer;
@@ -3158,27 +3473,51 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return usedByRecordedCommand;
         }
 
+        /**
+         * Returns the size.
+         *
+         * @return the size
+         */
         @Override
         public int size() {
             return size;
         }
 
+        /**
+         * Returns the usage.
+         *
+         * @return the usage
+         */
         @Override
         public BufferUsage usage() {
             return usage;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
             return (T) this;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             if (disposed) {
@@ -3193,12 +3532,22 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             vkFreeMemory(device, memory, null);
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;
         }
     }
 
+    /**
+     * Represents a vulkan buffer allocation.
+     *
+     * @author xpenatan
+     */
     private static final class VulkanBufferAllocation {
         private final long buffer;
         private final long memory;
@@ -3235,6 +3584,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
     }
 
+    /**
+     * Represents a vulkan uniform allocation.
+     *
+     * @author xpenatan
+     */
     private static final class VulkanUniformAllocation {
         private final VulkanBufferAllocation buffer;
         private final long descriptorSet;
@@ -3257,6 +3611,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
     }
 
+    /**
+     * Represents a vulkan texture handle.
+     *
+     * @author xpenatan
+     */
     private static final class VulkanTextureHandle implements Texture {
         private final VkDevice device;
         private final long image;
@@ -3309,37 +3668,71 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             this.layout = layout;
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return width;
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return height;
         }
 
+        /**
+         * Returns the format.
+         *
+         * @return the format
+         */
         @Override
         public TextureFormat format() {
             return format;
         }
 
+        /**
+         * Returns the usage.
+         *
+         * @return the usage
+         */
         @Override
         public TextureUsage usage() {
             return usage;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
             return (T) this;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             if (disposed) {
@@ -3353,12 +3746,22 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             vkFreeMemory(device, memory, null);
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;
         }
     }
 
+    /**
+     * Represents a vulkan graphics frame.
+     *
+     * @author xpenatan
+     */
     private static final class VulkanGraphicsFrame implements GraphicsFrame {
         private final VulkanContext context;
         private final CommandEncoder commandEncoder;
@@ -3373,36 +3776,72 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             this.colorAttachment = colorAttachment;
         }
 
+        /**
+         * Returns the command encoder.
+         *
+         * @return the command encoder
+         */
         @Override
         public CommandEncoder commandEncoder() {
             return commandEncoder;
         }
 
+        /**
+         * Returns the frame buffer.
+         *
+         * @return the frame buffer
+         */
         @Override
         public FrameBuffer frameBuffer() {
             return frameBuffer;
         }
 
+        /**
+         * Returns the color attachment.
+         *
+         * @return the color attachment
+         */
         @Override
         public TextureView colorAttachment() {
             return colorAttachment;
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return context.width();
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return context.height();
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -3410,6 +3849,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
     }
 
+    /**
+     * Represents a vulkan frame buffer.
+     *
+     * @author xpenatan
+     */
     private static final class VulkanFrameBuffer implements FrameBuffer {
         private final VulkanContext context;
         private final TextureView colorAttachment;
@@ -3419,36 +3863,72 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             this.colorAttachment = colorAttachment;
         }
 
+        /**
+         * Returns the color attachment.
+         *
+         * @return the color attachment
+         */
         @Override
         public TextureView colorAttachment() {
             return colorAttachment;
         }
 
+        /**
+         * Returns the format.
+         *
+         * @return the format
+         */
         @Override
         public TextureFormat format() {
             return context.surfaceFormat();
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return context.width();
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return context.height();
         }
 
+        /**
+         * Returns the read pixels RGBA8.
+         *
+         * @return the read pixels RGBA8
+         */
         @Override
         public ByteBuffer readPixelsRgba8() {
             return context.readPixelsRgba8();
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -3456,6 +3936,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
     }
 
+    /**
+     * Represents a vulkan texture view handle.
+     *
+     * @author xpenatan
+     */
     private static final class VulkanTextureViewHandle implements TextureView {
         private final VulkanContext context;
 
@@ -3467,16 +3952,32 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return context.currentImageView();
         }
 
+        /**
+         * Returns the format.
+         *
+         * @return the format
+         */
         @Override
         public TextureFormat format() {
             return context.surfaceFormat();
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -3484,6 +3985,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
     }
 
+    /**
+     * Represents a vulkan shader module handle.
+     *
+     * @author xpenatan
+     */
     private static final class VulkanShaderModuleHandle implements ShaderModule {
         private final VkDevice device;
         private final long vertexModule;
@@ -3504,22 +4010,41 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return fragmentModule;
         }
 
+        /**
+         * Returns the language.
+         *
+         * @return the language
+         */
         @Override
         public ShaderLanguage language() {
             return ShaderLanguage.SPIRV;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
             return (T) this;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             if (disposed) {
@@ -3531,12 +4056,22 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             vkDestroyShaderModule(device, vertexModule, null);
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;
         }
     }
 
+    /**
+     * Represents a vulkan render pipeline handle.
+     *
+     * @author xpenatan
+     */
     private static final class VulkanRenderPipelineHandle implements RenderPipeline {
         private final VkDevice device;
         private final long pipeline;
@@ -3583,17 +4118,31 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return primitiveTopology;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
             return (T) this;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             if (disposed) {
@@ -3605,12 +4154,22 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             vkDestroyPipelineLayout(device, pipelineLayout, null);
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;
         }
     }
 
+    /**
+     * Represents a queue family indices.
+     *
+     * @author xpenatan
+     */
     private static final class QueueFamilyIndices {
         int graphicsFamily = -1;
         int presentFamily = -1;

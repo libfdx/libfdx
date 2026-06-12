@@ -13,6 +13,11 @@ import io.github.libfdx.graphics.VertexStepMode;
 
 import java.util.Arrays;
 
+/**
+ * Represents a GL render pass.
+ *
+ * @author xpenatan
+ */
 final class GLRenderPass implements RenderPass {
     private final ProviderId providerId;
     private final GLApi gl;
@@ -26,6 +31,11 @@ final class GLRenderPass implements RenderPass {
         this.gl = gl;
     }
 
+    /**
+     * Sets the pipeline.
+     *
+     * @param pipeline the pipeline
+     */
     @Override
     public void setPipeline(RenderPipeline pipeline) {
         ensureOpen();
@@ -46,11 +56,22 @@ final class GLRenderPass implements RenderPass {
         applyVertexLayouts();
     }
 
+    /**
+     * Sets the vertex buffer.
+     *
+     * @param buffer the buffer
+     */
     @Override
     public void setVertexBuffer(Buffer buffer) {
         setVertexBuffer(0, buffer);
     }
 
+    /**
+     * Sets the vertex buffer.
+     *
+     * @param slot the slot
+     * @param buffer the buffer
+     */
     @Override
     public void setVertexBuffer(int slot, Buffer buffer) {
         ensureOpen();
@@ -70,6 +91,11 @@ final class GLRenderPass implements RenderPass {
         applyVertexLayout(slot);
     }
 
+    /**
+     * Sets the index buffer.
+     *
+     * @param buffer the buffer
+     */
     @Override
     public void setIndexBuffer(Buffer buffer) {
         ensureOpen();
@@ -83,6 +109,12 @@ final class GLRenderPass implements RenderPass {
         gl.bindElementArrayBuffer(indexBuffer.buffer());
     }
 
+    /**
+     * Sets the texture.
+     *
+     * @param slot the slot
+     * @param texture the texture
+     */
     @Override
     public void setTexture(int slot, Texture texture) {
         ensureOpen();
@@ -100,6 +132,14 @@ final class GLRenderPass implements RenderPass {
         }
     }
 
+    /**
+     * Sets the scissor.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     @Override
     public void setScissor(int x, int y, int width, int height) {
         ensureOpen();
@@ -110,6 +150,12 @@ final class GLRenderPass implements RenderPass {
         gl.scissor(x, y, width, height);
     }
 
+    /**
+     * Sets the uniform1i.
+     *
+     * @param name the name
+     * @param value the value
+     */
     @Override
     public void setUniform1i(String name, int value) {
         int location = uniformLocation(name);
@@ -118,6 +164,12 @@ final class GLRenderPass implements RenderPass {
         }
     }
 
+    /**
+     * Sets the uniform1f.
+     *
+     * @param name the name
+     * @param value the value
+     */
     @Override
     public void setUniform1f(String name, float value) {
         int location = uniformLocation(name);
@@ -126,6 +178,14 @@ final class GLRenderPass implements RenderPass {
         }
     }
 
+    /**
+     * Sets the uniform3f.
+     *
+     * @param name the name
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     */
     @Override
     public void setUniform3f(String name, float x, float y, float z) {
         int location = uniformLocation(name);
@@ -134,6 +194,15 @@ final class GLRenderPass implements RenderPass {
         }
     }
 
+    /**
+     * Sets the uniform4f.
+     *
+     * @param name the name
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     * @param w the w
+     */
     @Override
     public void setUniform4f(String name, float x, float y, float z, float w) {
         int location = uniformLocation(name);
@@ -142,6 +211,12 @@ final class GLRenderPass implements RenderPass {
         }
     }
 
+    /**
+     * Sets the uniform matrix4.
+     *
+     * @param name the name
+     * @param values the values
+     */
     @Override
     public void setUniformMatrix4(String name, float[] values) {
         if (values == null || values.length < 16) {
@@ -153,6 +228,14 @@ final class GLRenderPass implements RenderPass {
         }
     }
 
+    /**
+     * Draws the current content.
+     *
+     * @param vertexCount the vertex count
+     * @param instanceCount the instance count
+     * @param firstVertex the first vertex
+     * @param firstInstance the first instance
+     */
     @Override
     public void draw(int vertexCount, int instanceCount, int firstVertex, int firstInstance) {
         ensureOpen();
@@ -169,6 +252,15 @@ final class GLRenderPass implements RenderPass {
         gl.drawArraysInstanced(pipeline.primitiveTopology(), firstVertex, vertexCount, instanceCount);
     }
 
+    /**
+     * Draws indexed.
+     *
+     * @param indexCount the index count
+     * @param instanceCount the instance count
+     * @param firstIndex the first index
+     * @param baseVertex the base vertex
+     * @param firstInstance the first instance
+     */
     @Override
     public void drawIndexed(int indexCount, int instanceCount, int firstIndex, int baseVertex, int firstInstance) {
         ensureOpen();
@@ -190,6 +282,9 @@ final class GLRenderPass implements RenderPass {
                 baseVertex);
     }
 
+    /**
+     * Ends the operation.
+     */
     @Override
     public void end() {
         if (ended) {
@@ -260,11 +355,22 @@ final class GLRenderPass implements RenderPass {
         return gl.uniformLocation(pipeline.program(), name);
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return providerId;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {

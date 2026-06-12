@@ -5,6 +5,11 @@ import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.VertexLayout;
 
+/**
+ * Represents a GL render pipeline handle.
+ *
+ * @author xpenatan
+ */
 final class GLRenderPipelineHandle implements RenderPipeline {
     private final ProviderId providerId;
     private final int program;
@@ -55,22 +60,41 @@ final class GLRenderPipelineHandle implements RenderPipeline {
         return depthWriteEnabled;
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return providerId;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
         return (T) this;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         disposed = true;
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;

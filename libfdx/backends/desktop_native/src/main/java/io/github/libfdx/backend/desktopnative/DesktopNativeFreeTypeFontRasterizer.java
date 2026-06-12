@@ -12,8 +12,20 @@ import org.teavm.interop.Address;
 import org.teavm.interop.Import;
 import org.teavm.interop.c.Include;
 
+/**
+ * Represents a desktop native free type font rasterizer.
+ *
+ * @author xpenatan
+ */
 @Include("libfdx_freetype.h")
 final class DesktopNativeFreeTypeFontRasterizer implements FontRasterizer {
+    /**
+     * Runs the rasterize step.
+     *
+     * @param fontBytes the font bytes
+     * @param options the options
+     * @return the rasterize
+     */
     @Override
     public RasterizedFont rasterize(byte[] fontBytes, FontRasterizerOptions options) {
         if (fontBytes == null || fontBytes.length == 0) {

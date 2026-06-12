@@ -11,6 +11,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Represents a bitmap font.
+ *
+ * @author xpenatan
+ */
 public final class BitmapFont implements Disposable {
     private static final int ASCII_CACHE_SIZE = 128;
     private static final int NO_KERNING = Integer.MIN_VALUE;
@@ -28,6 +33,18 @@ public final class BitmapFont implements Disposable {
     private final boolean ownsPages;
     private boolean disposed;
 
+    /**
+     * Creates a bitmap font.
+     *
+     * @param name the name
+     * @param nativeSize the native size
+     * @param lineHeight the line height
+     * @param baseLine the base line
+     * @param glyphs the glyphs
+     * @param kernings the kernings
+     * @param pages the pages
+     * @param ownsPages the owns pages
+     */
     public BitmapFont(String name, float nativeSize, float lineHeight, float baseLine,
             Map<Integer, BitmapFontGlyph> glyphs, Map<Long, Integer> kernings, List<Texture> pages,
             boolean ownsPages) {
@@ -61,6 +78,15 @@ public final class BitmapFont implements Disposable {
         this.ownsPages = ownsPages;
     }
 
+    /**
+     * Creates a bitmap font.
+     *
+     * @param texture the texture
+     * @param characters the characters
+     * @param glyphWidth the glyph width
+     * @param glyphHeight the glyph height
+     * @return a new bitmap font
+     */
     public static BitmapFont fromGrid(Texture texture, String characters, int glyphWidth, int glyphHeight) {
         String text = characters != null ? characters : "";
         Map<Integer, BitmapFontGlyph> glyphs = new LinkedHashMap<Integer, BitmapFontGlyph>();
@@ -86,22 +112,48 @@ public final class BitmapFont implements Disposable {
                 new LinkedHashMap<Long, Integer>(), pages, false);
     }
 
+    /**
+     * Returns the name.
+     *
+     * @return the name
+     */
     public String name() {
         return name;
     }
 
+    /**
+     * Returns the native size.
+     *
+     * @return the native size
+     */
     public float nativeSize() {
         return nativeSize;
     }
 
+    /**
+     * Returns the line height.
+     *
+     * @return the line height
+     */
     public float lineHeight() {
         return lineHeight;
     }
 
+    /**
+     * Returns the base line.
+     *
+     * @return the base line
+     */
     public float baseLine() {
         return baseLine;
     }
 
+    /**
+     * Runs the glyph step.
+     *
+     * @param codePoint the code point
+     * @return the glyph
+     */
     public BitmapFontGlyph glyph(int codePoint) {
         BitmapFontGlyph glyph = codePoint >= 0 && codePoint < ASCII_CACHE_SIZE
                 ? asciiGlyphs[codePoint]
@@ -113,6 +165,12 @@ public final class BitmapFont implements Disposable {
         return glyph != null ? glyph : fallbackGlyph;
     }
 
+    /**
+     * Returns whether this instance has glyph.
+     *
+     * @param codePoint the code point
+     * @return true if this instance has glyph; false otherwise
+     */
     public boolean hasGlyph(int codePoint) {
         if (codePoint >= 0 && codePoint < ASCII_CACHE_SIZE && asciiGlyphs[codePoint] != null) {
             return true;
@@ -120,6 +178,13 @@ public final class BitmapFont implements Disposable {
         return glyphs.containsKey(Integer.valueOf(codePoint));
     }
 
+    /**
+     * Runs the kerning step.
+     *
+     * @param first the first
+     * @param second the second
+     * @return the kerning
+     */
     public int kerning(int first, int second) {
         if (first >= 0 && first < ASCII_CACHE_SIZE && second >= 0 && second < ASCII_CACHE_SIZE) {
             int value = asciiKernings[first * ASCII_CACHE_SIZE + second];
@@ -129,14 +194,33 @@ public final class BitmapFont implements Disposable {
         return value != null ? value.intValue() : 0;
     }
 
+    /**
+     * Runs the scale step.
+     *
+     * @param size the size
+     * @return the scale
+     */
     public float scale(float size) {
         return (size > 0.0f ? size : nativeSize) / nativeSize;
     }
 
+    /**
+     * Runs the line height step.
+     *
+     * @param size the size
+     * @return the line height
+     */
     public float lineHeight(float size) {
         return lineHeight * scale(size);
     }
 
+    /**
+     * Runs the width step.
+     *
+     * @param text the text
+     * @param size the size
+     * @return the width
+     */
     public float width(String text, float size) {
         if (text == null || text.length() == 0) {
             return 0.0f;
@@ -161,6 +245,16 @@ public final class BitmapFont implements Disposable {
         return width;
     }
 
+    /**
+     * Runs the layout step.
+     *
+     * @param text the text
+     * @param size the size
+     * @param maxWidth the max width
+     * @param wrap the wrap
+     * @param ellipsis the ellipsis
+     * @return the layout
+     */
     public BitmapFontLayout layout(String text, float size, float maxWidth, boolean wrap, boolean ellipsis) {
         List<String> lines = new ArrayList<String>();
         List<Float> widths = new ArrayList<Float>();
@@ -184,10 +278,18 @@ public final class BitmapFont implements Disposable {
         return new BitmapFontLayout(lines, widths, max, actualLineHeight * lines.size(), actualLineHeight);
     }
 
+    /**
+     * Returns the pages.
+     *
+     * @return the pages
+     */
     public List<Texture> pages() {
         return pages;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -204,6 +306,11 @@ public final class BitmapFont implements Disposable {
         }
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;

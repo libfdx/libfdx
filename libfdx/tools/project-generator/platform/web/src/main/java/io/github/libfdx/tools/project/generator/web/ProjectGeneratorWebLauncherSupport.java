@@ -6,6 +6,11 @@ import io.github.libfdx.graphics.gl.web.WebGLProvider;
 import io.github.libfdx.graphics.wgpu.WebWGPUProvider;
 import io.github.libfdx.tools.project.generator.ui.ProjectGeneratorApplication;
 
+/**
+ * Represents a project generator web launcher support.
+ *
+ * @author xpenatan
+ */
 final class ProjectGeneratorWebLauncherSupport {
     private static final String CANVAS_ID = "libfdx-canvas";
 

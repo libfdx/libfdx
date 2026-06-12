@@ -1,5 +1,10 @@
 package io.github.libfdx.ui;
 
+/**
+ * Lists the supported ui node type values.
+ *
+ * @author xpenatan
+ */
 public enum UiNodeType {
     ROOT,
     COLUMN,

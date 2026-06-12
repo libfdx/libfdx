@@ -14,6 +14,11 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+/**
+ * Writes web app output.
+ *
+ * @author xpenatan
+ */
 public final class WebAppWriter {
     private static final Set<String> RUNTIME_SCRIPT_NAMES = Set.of("jWebGPU.js", "jWebGPU.wasm", "fdx.js",
             "fdx-loader.js", "fdx.wasm", "runtime.js", "runtime.wasm");
@@ -21,6 +26,13 @@ public final class WebAppWriter {
     private WebAppWriter() {
     }
 
+    /**
+     * Runs the write step.
+     *
+     * @param app the app
+     * @return the write
+     * @throws IOException if the operation cannot be completed
+     */
     public static List<WebAsset> write(WebApp app) throws IOException {
         Objects.requireNonNull(app, "app");
         Path root = app.getWebappDirectory();
@@ -35,6 +47,14 @@ public final class WebAppWriter {
         return assets;
     }
 
+    /**
+     * Runs the copy Wasm runtime step.
+     *
+     * @param outputFile the output file
+     * @param modular the modular
+     * @param obfuscated the obfuscated
+     * @throws IOException if the operation cannot be completed
+     */
     public static void copyWasmRuntime(Path outputFile, boolean modular, boolean obfuscated) throws IOException {
         StringBuilder resource = new StringBuilder("org/teavm/backend/wasm/wasm-gc");
         if (modular) {
@@ -228,6 +248,12 @@ public final class WebAppWriter {
                 .replace(">", "&gt;");
     }
 
+    /**
+     * Runs the JS step.
+     *
+     * @param value the value
+     * @return the JS
+     */
     public static String js(String value) {
         return value
                 .replace("\\", "\\\\")

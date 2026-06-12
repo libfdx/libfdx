@@ -10,10 +10,20 @@ import io.github.libfdx.graphics.Mesh;
 
 import java.util.ArrayList;
 
+/**
+ * Builds model instances and related output.
+ *
+ * @author xpenatan
+ */
 public final class ModelBuilder {
     private final GraphicsContext graphics;
     private Material material = new PbrMaterial("default");
 
+    /**
+     * Creates a model builder.
+     *
+     * @param graphics the graphics context
+     */
     public ModelBuilder(GraphicsContext graphics) {
         if (graphics == null) {
             throw new FdxException("GraphicsContext cannot be null");
@@ -21,6 +31,12 @@ public final class ModelBuilder {
         this.graphics = graphics;
     }
 
+    /**
+     * Sets the material and returns this model builder.
+     *
+     * @param material the material
+     * @return this model builder for chaining
+     */
     public ModelBuilder material(Material material) {
         if (material == null) {
             throw new FdxException("ModelBuilder material cannot be null");
@@ -29,18 +45,48 @@ public final class ModelBuilder {
         return this;
     }
 
+    /**
+     * Runs the cube step.
+     *
+     * @param size the size
+     * @return the cube
+     */
     public Model cube(float size) {
         return cube("cube", size);
     }
 
+    /**
+     * Runs the cube step.
+     *
+     * @param id the identifier
+     * @param size the size
+     * @return the cube
+     */
     public Model cube(String id, float size) {
         return box(id, size, size, size);
     }
 
+    /**
+     * Runs the box step.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @param depth the depth
+     * @return the box
+     */
     public Model box(float width, float height, float depth) {
         return box("box", width, height, depth);
     }
 
+    /**
+     * Runs the box step.
+     *
+     * @param id the identifier
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @param depth the depth
+     * @return the box
+     */
     public Model box(String id, float width, float height, float depth) {
         if (width <= 0.0f || height <= 0.0f || depth <= 0.0f) {
             throw new FdxException("Box dimensions must be greater than zero");
@@ -71,10 +117,26 @@ public final class ModelBuilder {
         return triangles(id, toFloatArray(positions), null, toFloatArray(colors));
     }
 
+    /**
+     * Runs the sphere step.
+     *
+     * @param radius the radius
+     * @param divisions the divisions
+     * @return the sphere
+     */
     public Model sphere(float radius, int divisions) {
         return sphere("sphere", radius, divisions, Math.max(2, divisions / 2));
     }
 
+    /**
+     * Runs the sphere step.
+     *
+     * @param id the identifier
+     * @param radius the radius
+     * @param slices the slices
+     * @param stacks the stacks
+     * @return the sphere
+     */
     public Model sphere(String id, float radius, int slices, int stacks) {
         if (radius <= 0.0f) {
             throw new FdxException("Sphere radius must be greater than zero");
@@ -129,6 +191,15 @@ public final class ModelBuilder {
         return triangles(id, positions, indices, colors);
     }
 
+    /**
+     * Runs the triangles step.
+     *
+     * @param id the identifier
+     * @param positions the positions
+     * @param indices the indices
+     * @param colors the colors
+     * @return the triangles
+     */
     public Model triangles(String id, float[] positions, int[] indices, float[] colors) {
         if (positions == null || positions.length == 0 || positions.length % 3 != 0) {
             throw new FdxException("Triangle positions must be xyz triples");
@@ -262,6 +333,11 @@ public final class ModelBuilder {
         return result;
     }
 
+    /**
+     * Represents a triangle vertices.
+     *
+     * @author xpenatan
+     */
     static final class TriangleVertices {
         private final float[] positions;
         private final float[] colors;

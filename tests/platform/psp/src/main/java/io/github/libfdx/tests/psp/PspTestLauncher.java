@@ -3,6 +3,11 @@ package io.github.libfdx.tests.psp;
 import io.github.libfdx.backend.psp.natives.PSPCoreApi;
 import io.github.libfdx.backend.psp.natives.PSPGraphicsApi;
 
+/**
+ * Launches the psp test entry point.
+ *
+ * @author xpenatan
+ */
 final class PspTestLauncher {
     private PspTestLauncher() {
     }

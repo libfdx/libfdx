@@ -4,10 +4,22 @@ import io.github.libfdx.files.FileHandle;
 import io.github.libfdx.files.FileSystem;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * Loads ui skin data.
+ *
+ * @author xpenatan
+ */
 public final class UiSkinLoader {
     private UiSkinLoader() {
     }
 
+    /**
+     * Loads the requested resource.
+     *
+     * @param files the files
+     * @param path the asset or file path
+     * @return the created value
+     */
     public static UiTheme load(FileSystem files, String path) {
         if (files == null) {
             return UiTheme.dark();
@@ -17,6 +29,13 @@ public final class UiSkinLoader {
         return parse(UiTheme.dark(), text);
     }
 
+    /**
+     * Runs the parse step.
+     *
+     * @param base the base
+     * @param text the text
+     * @return the parse
+     */
     public static UiTheme parse(UiTheme base, String text) {
         UiTheme theme = base != null ? base : UiTheme.dark();
         if (text == null) {

@@ -8,6 +8,11 @@ import io.github.libfdx.math.Vector3;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+/**
+ * Represents a mesh.
+ *
+ * @author xpenatan
+ */
 public final class Mesh implements Disposable {
     public static final int POSITION_COLOR_FLOATS_PER_VERTEX = 7;
     public static final int POSITION_COLOR_BYTES_PER_VERTEX = POSITION_COLOR_FLOATS_PER_VERTEX * 4;
@@ -44,15 +49,46 @@ public final class Mesh implements Disposable {
     private Buffer indexBuffer;
     private boolean disposed;
 
+    /**
+     * Creates a mesh.
+     *
+     * @param graphics the graphics context
+     * @param id the identifier
+     * @param vertexLayout the vertex layout
+     * @param vertices the vertices
+     * @param vertexCount the vertex count
+     */
     public Mesh(GraphicsContext graphics, String id, VertexLayout vertexLayout, float[] vertices, int vertexCount) {
         this(graphics, id, vertexLayout, vertices, vertexCount, null, 0, BoundingBox.empty());
     }
 
+    /**
+     * Creates a mesh.
+     *
+     * @param graphics the graphics context
+     * @param id the identifier
+     * @param vertexLayout the vertex layout
+     * @param vertices the vertices
+     * @param vertexCount the vertex count
+     * @param bounds the bounds
+     */
     public Mesh(GraphicsContext graphics, String id, VertexLayout vertexLayout, float[] vertices, int vertexCount,
             BoundingBox bounds) {
         this(graphics, id, vertexLayout, vertices, vertexCount, null, 0, bounds);
     }
 
+    /**
+     * Creates a mesh.
+     *
+     * @param graphics the graphics context
+     * @param id the identifier
+     * @param vertexLayout the vertex layout
+     * @param vertices the vertices
+     * @param vertexCount the vertex count
+     * @param indices the indices
+     * @param indexCount the index count
+     * @param bounds the bounds
+     */
     public Mesh(GraphicsContext graphics, String id, VertexLayout vertexLayout, float[] vertices, int vertexCount,
             short[] indices, int indexCount, BoundingBox bounds) {
         this(graphics, id, vertexLayout, vertices, vertexCount, indices, indexCount, bounds, null, null, null,
@@ -109,6 +145,13 @@ public final class Mesh implements Disposable {
         }
     }
 
+    /**
+     * Creates a mesh.
+     *
+     * @param graphics the graphics context
+     * @param id the identifier
+     * @return a new mesh
+     */
     public static Mesh coloredTriangle(GraphicsContext graphics, String id) {
         float[] vertices = {
                 0.0f, 0.65f, 0.0f, 0.95f, 0.33f, 0.28f, 1.0f,
@@ -119,11 +162,35 @@ public final class Mesh implements Disposable {
                 BoundingBox.of(new Vector3(-0.65f, -0.55f, 0.0f), new Vector3(0.65f, 0.65f, 0.0f)));
     }
 
+    /**
+     * Creates a mesh.
+     *
+     * @param graphics the graphics context
+     * @param id the identifier
+     * @param sourcePositions the source positions
+     * @param sourceColors the source colors
+     * @param bounds the bounds
+     * @return a new mesh
+     */
     public static Mesh positionColor3D(GraphicsContext graphics, String id, float[] sourcePositions,
             float[] sourceColors, BoundingBox bounds) {
         return positionColor3D(graphics, id, sourcePositions, sourceColors, null, null, null, null, bounds);
     }
 
+    /**
+     * Creates a mesh.
+     *
+     * @param graphics the graphics context
+     * @param id the identifier
+     * @param sourcePositions the source positions
+     * @param sourceColors the source colors
+     * @param sourceNormals the source normals
+     * @param sourceTexCoords the source tex coords
+     * @param sourcePbr the source PBR
+     * @param sourceEmissive the source emissive
+     * @param bounds the bounds
+     * @return a new mesh
+     */
     public static Mesh positionColor3D(GraphicsContext graphics, String id, float[] sourcePositions,
             float[] sourceColors, float[] sourceNormals, float[] sourceTexCoords, float[] sourcePbr,
             float[] sourceEmissive, BoundingBox bounds) {
@@ -131,6 +198,23 @@ public final class Mesh implements Disposable {
                 sourcePbr, null, sourceEmissive, null, bounds);
     }
 
+    /**
+     * Creates a mesh.
+     *
+     * @param graphics the graphics context
+     * @param id the identifier
+     * @param sourcePositions the source positions
+     * @param sourceColors the source colors
+     * @param sourceBakedColors the source baked colors
+     * @param sourceNormals the source normals
+     * @param sourceTexCoords the source tex coords
+     * @param sourcePbr the source PBR
+     * @param sourceBakedPbr the source baked PBR
+     * @param sourceEmissive the source emissive
+     * @param sourceBakedEmissive the source baked emissive
+     * @param bounds the bounds
+     * @return a new mesh
+     */
     public static Mesh positionColor3D(GraphicsContext graphics, String id, float[] sourcePositions,
             float[] sourceColors, float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords,
             float[] sourcePbr, float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive,
@@ -139,6 +223,24 @@ public final class Mesh implements Disposable {
                 sourceTexCoords, sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, bounds, true);
     }
 
+    /**
+     * Creates a mesh.
+     *
+     * @param graphics the graphics context
+     * @param id the identifier
+     * @param sourcePositions the source positions
+     * @param sourceColors the source colors
+     * @param sourceBakedColors the source baked colors
+     * @param sourceNormals the source normals
+     * @param sourceTexCoords the source tex coords
+     * @param sourcePbr the source PBR
+     * @param sourceBakedPbr the source baked PBR
+     * @param sourceEmissive the source emissive
+     * @param sourceBakedEmissive the source baked emissive
+     * @param bounds the bounds
+     * @param retainSourceData the retain source data
+     * @return a new mesh
+     */
     public static Mesh positionColor3D(GraphicsContext graphics, String id, float[] sourcePositions,
             float[] sourceColors, float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords,
             float[] sourcePbr, float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive,
@@ -211,74 +313,162 @@ public final class Mesh implements Disposable {
                 sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, retainSourceData);
     }
 
+    /**
+     * Returns the ID.
+     *
+     * @return the ID
+     */
     public String id() {
         return id;
     }
 
+    /**
+     * Returns the vertex buffer.
+     *
+     * @return the vertex buffer
+     */
     public Buffer vertexBuffer() {
         return vertexBuffer;
     }
 
+    /**
+     * Returns the index buffer.
+     *
+     * @return the index buffer
+     */
     public Buffer indexBuffer() {
         return indexBuffer;
     }
 
+    /**
+     * Returns the vertex layout.
+     *
+     * @return the vertex layout
+     */
     public VertexLayout vertexLayout() {
         return vertexLayout;
     }
 
+    /**
+     * Returns the vertex count.
+     *
+     * @return the vertex count
+     */
     public int vertexCount() {
         return vertexCount;
     }
 
+    /**
+     * Returns the index count.
+     *
+     * @return the index count
+     */
     public int indexCount() {
         return indexCount;
     }
 
+    /**
+     * Returns the bounds.
+     *
+     * @return the bounds
+     */
     public BoundingBox bounds() {
         return bounds;
     }
 
+    /**
+     * Returns whether this instance has position color3 d source.
+     *
+     * @return true if this instance has position color3 d source; false otherwise
+     */
     public boolean hasPositionColor3DSource() {
         return sourcePositions != null && sourceColors != null;
     }
 
+    /**
+     * Returns the source positions.
+     *
+     * @return the source positions
+     */
     public float[] sourcePositions() {
         return sourcePositions;
     }
 
+    /**
+     * Returns the source colors.
+     *
+     * @return the source colors
+     */
     public float[] sourceColors() {
         return sourceColors;
     }
 
+    /**
+     * Returns the source baked colors.
+     *
+     * @return the source baked colors
+     */
     public float[] sourceBakedColors() {
         return sourceBakedColors;
     }
 
+    /**
+     * Returns the source normals.
+     *
+     * @return the source normals
+     */
     public float[] sourceNormals() {
         return sourceNormals;
     }
 
+    /**
+     * Returns the source tex coords.
+     *
+     * @return the source tex coords
+     */
     public float[] sourceTexCoords() {
         return sourceTexCoords;
     }
 
+    /**
+     * Returns the source PBR.
+     *
+     * @return the source PBR
+     */
     public float[] sourcePbr() {
         return sourcePbr;
     }
 
+    /**
+     * Returns the source baked PBR.
+     *
+     * @return the source baked PBR
+     */
     public float[] sourceBakedPbr() {
         return sourceBakedPbr;
     }
 
+    /**
+     * Returns the source emissive.
+     *
+     * @return the source emissive
+     */
     public float[] sourceEmissive() {
         return sourceEmissive;
     }
 
+    /**
+     * Returns the source baked emissive.
+     *
+     * @return the source baked emissive
+     */
     public float[] sourceBakedEmissive() {
         return sourceBakedEmissive;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -295,6 +485,11 @@ public final class Mesh implements Disposable {
         }
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;

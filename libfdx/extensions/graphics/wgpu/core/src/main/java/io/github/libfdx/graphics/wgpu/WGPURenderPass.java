@@ -23,6 +23,11 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.util.Arrays;
 
+/**
+ * Represents a WGPU render pass.
+ *
+ * @author xpenatan
+ */
 final class WGPURenderPass implements RenderPass {
     static final int PBR_UNIFORM_BYTE_COUNT = 224;
     private static final int MATRIX_FLOAT_COUNT = 16;
@@ -56,6 +61,11 @@ final class WGPURenderPass implements RenderPass {
         resetUniformData();
     }
 
+    /**
+     * Sets the pipeline.
+     *
+     * @param pipeline the pipeline
+     */
     @Override
     public void setPipeline(RenderPipeline pipeline) {
         ensureOpen();
@@ -67,11 +77,22 @@ final class WGPURenderPass implements RenderPass {
         nativePass.setPipeline(this.pipeline.nativePipeline());
     }
 
+    /**
+     * Sets the vertex buffer.
+     *
+     * @param buffer the buffer
+     */
     @Override
     public void setVertexBuffer(Buffer buffer) {
         setVertexBuffer(0, buffer);
     }
 
+    /**
+     * Sets the vertex buffer.
+     *
+     * @param slot the slot
+     * @param buffer the buffer
+     */
     @Override
     public void setVertexBuffer(int slot, Buffer buffer) {
         ensureOpen();
@@ -86,6 +107,11 @@ final class WGPURenderPass implements RenderPass {
         context.markBufferUsedByRecordedCommand(wgpuBuffer);
     }
 
+    /**
+     * Sets the index buffer.
+     *
+     * @param buffer the buffer
+     */
     @Override
     public void setIndexBuffer(Buffer buffer) {
         ensureOpen();
@@ -100,6 +126,12 @@ final class WGPURenderPass implements RenderPass {
         context.markBufferUsedByRecordedCommand(wgpuBuffer);
     }
 
+    /**
+     * Sets the texture.
+     *
+     * @param slot the slot
+     * @param texture the texture
+     */
     @Override
     public void setTexture(int slot, Texture texture) {
         ensureOpen();
@@ -119,6 +151,14 @@ final class WGPURenderPass implements RenderPass {
         }
     }
 
+    /**
+     * Sets the scissor.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     @Override
     public void setScissor(int x, int y, int width, int height) {
         ensureOpen();
@@ -128,6 +168,12 @@ final class WGPURenderPass implements RenderPass {
         nativePass.setScissorRect(x, y, width, height);
     }
 
+    /**
+     * Sets the uniform1i.
+     *
+     * @param name the name
+     * @param value the value
+     */
     @Override
     public void setUniform1i(String name, int value) {
         if ("u_hasBaseColorTexture".equals(name)) {
@@ -147,6 +193,12 @@ final class WGPURenderPass implements RenderPass {
         }
     }
 
+    /**
+     * Sets the uniform1f.
+     *
+     * @param name the name
+     * @param value the value
+     */
     @Override
     public void setUniform1f(String name, float value) {
         if ("u_lightIntensity".equals(name)) {
@@ -154,6 +206,14 @@ final class WGPURenderPass implements RenderPass {
         }
     }
 
+    /**
+     * Sets the uniform3f.
+     *
+     * @param name the name
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     */
     @Override
     public void setUniform3f(String name, float x, float y, float z) {
         if ("u_cameraPosition".equals(name)) {
@@ -171,6 +231,15 @@ final class WGPURenderPass implements RenderPass {
         }
     }
 
+    /**
+     * Sets the uniform4f.
+     *
+     * @param name the name
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     * @param w the w
+     */
     @Override
     public void setUniform4f(String name, float x, float y, float z, float w) {
         if ("u_cameraPosition".equals(name)) {
@@ -187,6 +256,12 @@ final class WGPURenderPass implements RenderPass {
         }
     }
 
+    /**
+     * Sets the uniform matrix4.
+     *
+     * @param name the name
+     * @param values the values
+     */
     @Override
     public void setUniformMatrix4(String name, float[] values) {
         ensureOpen();
@@ -201,6 +276,14 @@ final class WGPURenderPass implements RenderPass {
         }
     }
 
+    /**
+     * Draws the current content.
+     *
+     * @param vertexCount the vertex count
+     * @param instanceCount the instance count
+     * @param firstVertex the first vertex
+     * @param firstInstance the first instance
+     */
     @Override
     public void draw(int vertexCount, int instanceCount, int firstVertex, int firstInstance) {
         ensureOpen();
@@ -208,6 +291,15 @@ final class WGPURenderPass implements RenderPass {
         nativePass.draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
+    /**
+     * Draws indexed.
+     *
+     * @param indexCount the index count
+     * @param instanceCount the instance count
+     * @param firstIndex the first index
+     * @param baseVertex the base vertex
+     * @param firstInstance the first instance
+     */
     @Override
     public void drawIndexed(int indexCount, int instanceCount, int firstIndex, int baseVertex, int firstInstance) {
         ensureOpen();
@@ -215,6 +307,9 @@ final class WGPURenderPass implements RenderPass {
         nativePass.drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
     }
 
+    /**
+     * Ends the operation.
+     */
     @Override
     public void end() {
         if (ended) {
@@ -415,11 +510,22 @@ final class WGPURenderPass implements RenderPass {
         }
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return WGPUProvider.ID;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {

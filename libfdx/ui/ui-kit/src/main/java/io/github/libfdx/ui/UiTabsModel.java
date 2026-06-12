@@ -1,5 +1,10 @@
 package io.github.libfdx.ui;
 
+/**
+ * Represents an ui tabs model.
+ *
+ * @author xpenatan
+ */
 final class UiTabsModel {
     private final UiIntState activeIndex;
     private final String[] labels;

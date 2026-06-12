@@ -1,5 +1,12 @@
 package io.github.libfdx.ui;
 
+/**
+ * Represents an ui state.
+ *
+ * @param <T> the value type
+ *
+ * @author xpenatan
+ */
 public final class UiState<T> extends UiObservableState {
     private T value;
 
@@ -8,11 +15,21 @@ public final class UiState<T> extends UiObservableState {
         this.value = value;
     }
 
+    /**
+     * Returns the get.
+     *
+     * @return the get
+     */
     public T get() {
         observeRead();
         return value;
     }
 
+    /**
+     * Runs the set step.
+     *
+     * @param value the value
+     */
     public void set(T value) {
         rejectPrimitiveWrapper(value);
         if (this.value == value || (this.value != null && this.value.equals(value))) {

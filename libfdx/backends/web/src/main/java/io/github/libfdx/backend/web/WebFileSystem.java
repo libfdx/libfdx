@@ -15,36 +15,78 @@ import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Represents a web file system.
+ *
+ * @author xpenatan
+ */
 public final class WebFileSystem implements FileSystem {
     public static final ProviderId ID = ProviderId.of("web-files");
 
     private final Map<String, byte[]> writableFiles = new HashMap<String, byte[]>();
 
+    /**
+     * Runs the classpath step.
+     *
+     * @param path the asset or file path
+     * @return the classpath
+     */
     @Override
     public FileHandle classpath(String path) {
         return new WebFileHandle(this, FileLocation.CLASSPATH, normalize(path));
     }
 
+    /**
+     * Runs the internal step.
+     *
+     * @param path the asset or file path
+     * @return the internal
+     */
     @Override
     public FileHandle internal(String path) {
         return new WebFileHandle(this, FileLocation.INTERNAL, normalize(path));
     }
 
+    /**
+     * Runs the local step.
+     *
+     * @param path the asset or file path
+     * @return the local
+     */
     @Override
     public FileHandle local(String path) {
         return new WebFileHandle(this, FileLocation.LOCAL, normalize(path));
     }
 
+    /**
+     * Runs the external step.
+     *
+     * @param path the asset or file path
+     * @return the external
+     */
     @Override
     public FileHandle external(String path) {
         return new WebFileHandle(this, FileLocation.EXTERNAL, normalize(path));
     }
 
+    /**
+     * Runs the cache step.
+     *
+     * @param path the asset or file path
+     * @return the cache
+     */
     @Override
     public FileHandle cache(String path) {
         return new WebFileHandle(this, FileLocation.CACHE, normalize(path));
     }
 
+    /**
+     * Runs the temp step.
+     *
+     * @param prefix the prefix
+     * @param suffix the suffix
+     * @return the temp
+     */
     @Override
     public FileHandle temp(String prefix, String suffix) {
         String name = (prefix != null && prefix.length() > 0 ? prefix : "libfdx")
@@ -53,6 +95,12 @@ public final class WebFileSystem implements FileSystem {
         return new WebFileHandle(this, FileLocation.TEMP, normalize(name));
     }
 
+    /**
+     * Runs the watch step.
+     *
+     * @param file the file handle or path
+     * @return the watch
+     */
     @Override
     public FdxFuture<FileWatch> watch(FileHandle file) {
         return FdxFuture.failed(new FdxException("File watching is not supported by WebFileSystem"));
@@ -148,11 +196,22 @@ public final class WebFileSystem implements FileSystem {
         return normalized;
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
@@ -239,6 +298,11 @@ public final class WebFileSystem implements FileSystem {
             "}")
     private static native int webAssetLength(String path);
 
+    /**
+     * Represents a web file handle.
+     *
+     * @author xpenatan
+     */
     static final class WebFileHandle implements FileHandle {
         private final WebFileSystem files;
         private final FileLocation location;
@@ -250,22 +314,42 @@ public final class WebFileSystem implements FileSystem {
             this.path = path != null ? path : "";
         }
 
+        /**
+         * Returns the location.
+         *
+         * @return the location
+         */
         @Override
         public FileLocation location() {
             return location;
         }
 
+        /**
+         * Returns the path.
+         *
+         * @return the path
+         */
         @Override
         public String path() {
             return path;
         }
 
+        /**
+         * Returns the name.
+         *
+         * @return the name
+         */
         @Override
         public String name() {
             int slash = path.lastIndexOf('/');
             return slash >= 0 ? path.substring(slash + 1) : path;
         }
 
+        /**
+         * Returns the extension.
+         *
+         * @return the extension
+         */
         @Override
         public String extension() {
             String name = name();
@@ -273,12 +357,23 @@ public final class WebFileSystem implements FileSystem {
             return dot >= 0 ? name.substring(dot + 1) : "";
         }
 
+        /**
+         * Returns the parent.
+         *
+         * @return the parent
+         */
         @Override
         public FileHandle parent() {
             int slash = path.lastIndexOf('/');
             return new WebFileHandle(files, location, slash >= 0 ? path.substring(0, slash) : "");
         }
 
+        /**
+         * Runs the child step.
+         *
+         * @param relativePath the relative path
+         * @return the child
+         */
         @Override
         public FileHandle child(String relativePath) {
             String child = files.normalize(relativePath);
@@ -286,26 +381,52 @@ public final class WebFileSystem implements FileSystem {
             return new WebFileHandle(files, location, files.normalize(joined));
         }
 
+        /**
+         * Returns the exists.
+         *
+         * @return true if exists succeeds or is active; false otherwise
+         */
         @Override
         public boolean exists() {
             return files.exists(this);
         }
 
+        /**
+         * Returns whether directory is enabled or true.
+         *
+         * @return true if directory is enabled or true; false otherwise
+         */
         @Override
         public boolean isDirectory() {
             return files.isDirectory(this);
         }
 
+        /**
+         * Returns the metadata.
+         *
+         * @return the metadata
+         */
         @Override
         public FdxFuture<FileMetadata> metadata() {
             return FdxFuture.completed(files.metadata(this));
         }
 
+        /**
+         * Returns the read bytes.
+         *
+         * @return the read bytes
+         */
         @Override
         public FdxFuture<byte[]> readBytes() {
             return files.readBytes(this);
         }
 
+        /**
+         * Runs the read string step.
+         *
+         * @param charset the charset
+         * @return the read string
+         */
         @Override
         public FdxFuture<String> readString(Charset charset) {
             FdxFuture<byte[]> bytes = readBytes();
@@ -319,11 +440,26 @@ public final class WebFileSystem implements FileSystem {
             return FdxFuture.completed(new String(bytes.get(), charset != null ? charset : Charset.defaultCharset()));
         }
 
+        /**
+         * Runs the write bytes step.
+         *
+         * @param bytes the bytes
+         * @param append the append
+         * @return the write bytes
+         */
         @Override
         public FdxFuture<Void> writeBytes(byte[] bytes, boolean append) {
             return files.writeBytes(this, bytes, append);
         }
 
+        /**
+         * Runs the write string step.
+         *
+         * @param text the text
+         * @param charset the charset
+         * @param append the append
+         * @return the write string
+         */
         @Override
         public FdxFuture<Void> writeString(String text, Charset charset, boolean append) {
             byte[] bytes = (text != null ? text : "").getBytes(charset != null ? charset : Charset.defaultCharset());

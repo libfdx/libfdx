@@ -10,10 +10,22 @@ import org.teavm.platform.metadata.builders.ResourceBuilder;
 
 import java.util.Properties;
 
+/**
+ * Represents a web asset metadata generator.
+ *
+ * @author xpenatan
+ */
 public final class WebAssetMetadataGenerator implements MetadataGenerator {
     private static final String COUNT_PROPERTY = "libfdx.web.assets.count";
     private static final String ASSET_PROPERTY_PREFIX = "libfdx.web.assets.";
 
+    /**
+     * Runs the generate metadata step.
+     *
+     * @param context the context
+     * @param method the method
+     * @return the generate metadata
+     */
     @Override
     public ResourceBuilder generateMetadata(MetadataGeneratorContext context, MethodReference method) {
         Properties properties = context.getProperties();
@@ -62,12 +74,23 @@ public final class WebAssetMetadataGenerator implements MetadataGenerator {
         }
     }
 
+    /**
+     * Builds web asset instances and related output.
+     *
+     * @author xpenatan
+     */
     public static final class WebAssetBuilder extends ObjectResourceBuilder {
         private static final String[] FIELD_NAMES = { "path", "size" };
 
         String path;
         int size;
 
+        /**
+         * Returns the value.
+         *
+         * @param index the index
+         * @return the get value
+         */
         @Override
         public Object getValue(int index) {
             return switch (index) {
@@ -77,11 +100,21 @@ public final class WebAssetMetadataGenerator implements MetadataGenerator {
             };
         }
 
+        /**
+         * Returns the field names.
+         *
+         * @return the field names
+         */
         @Override
         public String[] fieldNames() {
             return FIELD_NAMES;
         }
 
+        /**
+         * Returns the output class.
+         *
+         * @return the get output class
+         */
         @Override
         public Class<? extends Resource> getOutputClass() {
             return WebGeneratedAsset.class;

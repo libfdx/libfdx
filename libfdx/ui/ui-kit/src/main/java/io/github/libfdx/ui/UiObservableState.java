@@ -3,6 +3,11 @@ package io.github.libfdx.ui;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
+/**
+ * Represents an ui observable state.
+ *
+ * @author xpenatan
+ */
 abstract class UiObservableState {
     private final Set<UiStateListener> listeners = new LinkedHashSet<UiStateListener>();
     private Object[] notifySnapshot = new Object[0];

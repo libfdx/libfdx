@@ -6,6 +6,11 @@ import org.teavm.interop.c.Include;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Represents a desktop native open GL.
+ *
+ * @author xpenatan
+ */
 @Include("GL/glew.h")
 final class DesktopNativeOpenGL {
     static final int FALSE = 0;

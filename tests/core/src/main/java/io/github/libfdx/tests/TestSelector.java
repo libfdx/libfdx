@@ -13,11 +13,32 @@ import io.github.libfdx.tests.ui.UiKitTest;
 
 import java.util.Locale;
 
+/**
+ * Represents a test selector.
+ *
+ * @author xpenatan
+ */
 public final class TestSelector {
+    /**
+     * Defines the factory contract for test instances.
+     *
+     * @author xpenatan
+     */
     public interface TestFactory {
+        /**
+         * Creates a value.
+         *
+         * @param exitAfterFrames the exit after frames
+         * @return the created value
+         */
         ApplicationListener create(long exitAfterFrames);
     }
 
+    /**
+     * Describes the values used to create or identify a test.
+     *
+     * @author xpenatan
+     */
     public static final class TestDescriptor {
         private final String name;
         private final String displayName;
@@ -36,22 +57,47 @@ public final class TestSelector {
             this.factory = factory;
         }
 
+        /**
+         * Returns the name.
+         *
+         * @return the name
+         */
         public String name() {
             return name;
         }
 
+        /**
+         * Returns the display name.
+         *
+         * @return the display name
+         */
         public String displayName() {
             return displayName;
         }
 
+        /**
+         * Returns the category.
+         *
+         * @return the category
+         */
         public String category() {
             return category;
         }
 
+        /**
+         * Returns the default width.
+         *
+         * @return the default width
+         */
         public int defaultWidth() {
             return defaultWidth;
         }
 
+        /**
+         * Returns the default height.
+         *
+         * @return the default height
+         */
         public int defaultHeight() {
             return defaultHeight;
         }
@@ -126,6 +172,13 @@ public final class TestSelector {
     private TestSelector() {
     }
 
+    /**
+     * Creates a value.
+     *
+     * @param name the name
+     * @param exitAfterFrames the exit after frames
+     * @return the created value
+     */
     public static ApplicationListener create(String name, long exitAfterFrames) {
         TestDescriptor descriptor = descriptor(name);
         if (descriptor != null) {
@@ -134,10 +187,21 @@ public final class TestSelector {
         throw new FdxException("Unknown test '" + name + "'. Available tests: " + availableTests());
     }
 
+    /**
+     * Returns the descriptors.
+     *
+     * @return the descriptors
+     */
     public static TestDescriptor[] descriptors() {
         return TESTS.clone();
     }
 
+    /**
+     * Runs the descriptor step.
+     *
+     * @param name the name
+     * @return the descriptor
+     */
     public static TestDescriptor descriptor(String name) {
         String testName = normalize(name);
         for (int i = 0; i < TESTS.length; i++) {
@@ -148,10 +212,21 @@ public final class TestSelector {
         return null;
     }
 
+    /**
+     * Runs the contains step.
+     *
+     * @param name the name
+     * @return true if contains succeeds or is active; false otherwise
+     */
     public static boolean contains(String name) {
         return descriptor(name) != null;
     }
 
+    /**
+     * Returns the test names.
+     *
+     * @return the test names
+     */
     public static String[] testNames() {
         String[] names = new String[TESTS.length];
         for (int i = 0; i < TESTS.length; i++) {
@@ -160,6 +235,11 @@ public final class TestSelector {
         return names;
     }
 
+    /**
+     * Returns the available tests.
+     *
+     * @return the available tests
+     */
     public static String availableTests() {
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < TESTS.length; i++) {
@@ -171,16 +251,34 @@ public final class TestSelector {
         return builder.toString();
     }
 
+    /**
+     * Runs the default width step.
+     *
+     * @param name the name
+     * @return the default width
+     */
     public static int defaultWidth(String name) {
         TestDescriptor descriptor = descriptor(name);
         return descriptor != null ? descriptor.defaultWidth() : 640;
     }
 
+    /**
+     * Runs the default height step.
+     *
+     * @param name the name
+     * @return the default height
+     */
     public static int defaultHeight(String name) {
         TestDescriptor descriptor = descriptor(name);
         return descriptor != null ? descriptor.defaultHeight() : 480;
     }
 
+    /**
+     * Runs the normalize step.
+     *
+     * @param name the name
+     * @return the normalize
+     */
     public static String normalize(String name) {
         if (name == null || name.trim().length() == 0) {
             return DEFAULT_TEST_NAME;

@@ -4,6 +4,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Represents a bitmap font layout.
+ *
+ * @author xpenatan
+ */
 public final class BitmapFontLayout {
     private final List<String> lines;
     private final List<Float> lineWidths;
@@ -19,22 +24,48 @@ public final class BitmapFontLayout {
         this.lineHeight = lineHeight;
     }
 
+    /**
+     * Returns the lines.
+     *
+     * @return the lines
+     */
     public List<String> lines() {
         return lines;
     }
 
+    /**
+     * Runs the line width step.
+     *
+     * @param index the index
+     * @return the line width
+     */
     public float lineWidth(int index) {
         return lineWidths.get(index).floatValue();
     }
 
+    /**
+     * Returns the width.
+     *
+     * @return the width
+     */
     public float width() {
         return width;
     }
 
+    /**
+     * Returns the height.
+     *
+     * @return the height
+     */
     public float height() {
         return height;
     }
 
+    /**
+     * Returns the line height.
+     *
+     * @return the line height
+     */
     public float lineHeight() {
         return lineHeight;
     }

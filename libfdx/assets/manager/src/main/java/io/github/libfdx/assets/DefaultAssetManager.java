@@ -12,6 +12,11 @@ import java.util.ArrayDeque;
 import java.util.Iterator;
 import java.util.Queue;
 
+/**
+ * Manages default asset resources.
+ *
+ * @author xpenatan
+ */
 public final class DefaultAssetManager implements AssetManager {
     private final Map<Class<?>, AssetLoader<?>> loaders = new LinkedHashMap<Class<?>, AssetLoader<?>>();
     private final Map<String, DefaultAssetHandle<?>> handles = new LinkedHashMap<String, DefaultAssetHandle<?>>();
@@ -19,6 +24,11 @@ public final class DefaultAssetManager implements AssetManager {
     private final FileSystem files;
     private boolean disposed;
 
+    /**
+     * Creates a default asset manager.
+     *
+     * @param files the files
+     */
     public DefaultAssetManager(FileSystem files) {
         if (files == null) {
             throw new FdxException("FileSystem cannot be null");
@@ -26,6 +36,13 @@ public final class DefaultAssetManager implements AssetManager {
         this.files = files;
     }
 
+    /**
+     * Loads the requested resource.
+     *
+     * @param <T> the value type
+     * @param descriptor the descriptor
+     * @return the created value
+     */
     @Override
     public synchronized <T> AssetHandle<T> load(AssetDescriptor<T> descriptor) {
         ensureNotDisposed();
@@ -40,11 +57,23 @@ public final class DefaultAssetManager implements AssetManager {
         return handle;
     }
 
+    /**
+     * Starts loading the requested resource asynchronously.
+     *
+     * @param <T> the value type
+     * @param descriptor the descriptor
+     * @return the created value
+     */
     @Override
     public <T> FdxFuture<T> loadAsync(AssetDescriptor<T> descriptor) {
         return load(descriptor).future();
     }
 
+    /**
+     * Updates this instance and reports whether work remains.
+     *
+     * @return true if more work remains; false otherwise
+     */
     @Override
     public boolean update() {
         ensureNotDisposed();
@@ -60,6 +89,9 @@ public final class DefaultAssetManager implements AssetManager {
         return true;
     }
 
+    /**
+     * Finishes pending load work before returning.
+     */
     @Override
     public void finishLoading() {
         ensureNotDisposed();
@@ -73,6 +105,14 @@ public final class DefaultAssetManager implements AssetManager {
         }
     }
 
+    /**
+     * Returns the loaded asset at the given path.
+     *
+     * @param <T> the value type
+     * @param path the asset or file path
+     * @param type the expected Java type
+     * @return the loaded asset
+     */
     @Override
     public synchronized <T> T get(String path, Class<T> type) {
         T asset = find(path, type);
@@ -82,6 +122,14 @@ public final class DefaultAssetManager implements AssetManager {
         return asset;
     }
 
+    /**
+     * Finds a matching value.
+     *
+     * @param <T> the value type
+     * @param path the asset or file path
+     * @param type the expected Java type
+     * @return the matching value, or null if none is available
+     */
     @Override
     public synchronized <T> T find(String path, Class<T> type) {
         DefaultAssetHandle<?> handle = handles.get(key(path, type));
@@ -92,6 +140,11 @@ public final class DefaultAssetManager implements AssetManager {
         return type.isInstance(asset) ? type.cast(asset) : null;
     }
 
+    /**
+     * Unloads the resource at the given path.
+     *
+     * @param path the asset or file path
+     */
     @Override
     public synchronized void unload(String path) {
         Iterator<Map.Entry<String, DefaultAssetHandle<?>>> iterator = handles.entrySet().iterator();
@@ -108,6 +161,12 @@ public final class DefaultAssetManager implements AssetManager {
         }
     }
 
+    /**
+     * Registers an asset loader for a Java type.
+     *
+     * @param type the expected Java type
+     * @param loader the loader to register
+     */
     @Override
     public synchronized void registerLoader(Class<?> type, AssetLoader<?> loader) {
         if (type == null) {
@@ -119,6 +178,9 @@ public final class DefaultAssetManager implements AssetManager {
         loaders.put(type, loader);
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public synchronized void dispose() {
         if (disposed) {
@@ -135,6 +197,11 @@ public final class DefaultAssetManager implements AssetManager {
         handles.clear();
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;
@@ -189,17 +256,41 @@ public final class DefaultAssetManager implements AssetManager {
         }
     }
 
+    /**
+     * Provides the default implementation of an asset load context.
+     *
+     * @author xpenatan
+     */
     private final class DefaultAssetLoadContext implements AssetLoadContext {
+        /**
+         * Returns the files.
+         *
+         * @return the files
+         */
         @Override
         public FileSystem files() {
             return files;
         }
 
+        /**
+         * Runs the dependency step.
+         *
+         * @param <T> the value type
+         * @param descriptor the descriptor
+         * @return the dependency
+         */
         @Override
         public <T> FdxFuture<T> dependency(AssetDescriptor<T> descriptor) {
             return load(descriptor).future();
         }
 
+        /**
+         * Runs the complete on update step.
+         *
+         * @param <T> the value type
+         * @param task the task
+         * @return the complete on update
+         */
         @Override
         public <T> FdxFuture<T> completeOnUpdate(final FdxTask<T> task) {
             final FdxFuture<T> future = FdxFuture.pending();
@@ -219,6 +310,13 @@ public final class DefaultAssetManager implements AssetManager {
         }
     }
 
+    /**
+     * Provides the default implementation of an asset handle.
+     *
+     * @param <T> the value type
+     *
+     * @author xpenatan
+     */
     private static final class DefaultAssetHandle<T> implements AssetHandle<T> {
         private final AssetDescriptor<T> descriptor;
         private final FdxFuture<T> future = FdxFuture.pending();
@@ -229,26 +327,51 @@ public final class DefaultAssetManager implements AssetManager {
             this.descriptor = descriptor;
         }
 
+        /**
+         * Returns the descriptor.
+         *
+         * @return the descriptor
+         */
         @Override
         public AssetDescriptor<T> descriptor() {
             return descriptor;
         }
 
+        /**
+         * Returns the status.
+         *
+         * @return the status
+         */
         @Override
         public AssetStatus status() {
             return status;
         }
 
+        /**
+         * Returns whether loaded is enabled or true.
+         *
+         * @return true if loaded is enabled or true; false otherwise
+         */
         @Override
         public boolean isLoaded() {
             return status == AssetStatus.LOADED;
         }
 
+        /**
+         * Returns the asset.
+         *
+         * @return the asset
+         */
         @Override
         public T asset() {
             return asset;
         }
 
+        /**
+         * Returns the future.
+         *
+         * @return the future
+         */
         @Override
         public FdxFuture<T> future() {
             return future;

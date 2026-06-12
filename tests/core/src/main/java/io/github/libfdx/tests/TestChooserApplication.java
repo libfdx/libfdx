@@ -28,6 +28,11 @@ import io.github.libfdx.ui.UiTheme;
 import io.github.libfdx.ui.UiToolkit;
 import java.nio.ByteBuffer;
 
+/**
+ * Represents a test chooser application.
+ *
+ * @author xpenatan
+ */
 public final class TestChooserApplication extends ApplicationAdapter {
     private static final String FREETYPE_FONT_ASSET = "font/freetype/lsans.ttf";
     private static final String[] DEFAULT_GRAPHICS = { "wgpu" };
@@ -68,11 +73,28 @@ public final class TestChooserApplication extends ApplicationAdapter {
     private boolean pendingReturnToList;
     private String status = "Ready";
 
+    /**
+     * Creates a test chooser application.
+     *
+     * @param graphicsOptions the graphics options
+     * @param initialGraphics the initial graphics
+     * @param launchHandler the launch handler
+     * @param embeddedFallback the embedded fallback
+     */
     public TestChooserApplication(String[] graphicsOptions, String initialGraphics, TestLaunchHandler launchHandler,
             boolean embeddedFallback) {
         this(graphicsOptions, initialGraphics, launchHandler, embeddedFallback, false);
     }
 
+    /**
+     * Creates a test chooser application.
+     *
+     * @param graphicsOptions the graphics options
+     * @param initialGraphics the initial graphics
+     * @param launchHandler the launch handler
+     * @param embeddedFallback the embedded fallback
+     * @param compactLayout the compact layout
+     */
     public TestChooserApplication(String[] graphicsOptions, String initialGraphics, TestLaunchHandler launchHandler,
             boolean embeddedFallback, boolean compactLayout) {
         this.graphicsOptions = normalizedGraphicsOptions(graphicsOptions);
@@ -82,6 +104,11 @@ public final class TestChooserApplication extends ApplicationAdapter {
         this.selectedGraphicsIndex = Ui.state(initialGraphicsIndex(this.graphicsOptions, initialGraphics));
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         this.fdx = fdx;
@@ -106,6 +133,12 @@ public final class TestChooserApplication extends ApplicationAdapter {
         System.out.println("[info] TestChooserApplication ready, graphicsOptions=" + graphicsOptionList());
     }
 
+    /**
+     * Handles a size change.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     @Override
     public void resize(int width, int height) {
         if (currentTest != null) {
@@ -116,6 +149,9 @@ public final class TestChooserApplication extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         float deltaSeconds = application.deltaTime();
@@ -161,6 +197,9 @@ public final class TestChooserApplication extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Handles the frame end event.
+     */
     @Override
     public void onFrameEnd() {
         if (currentTest != null) {
@@ -168,6 +207,9 @@ public final class TestChooserApplication extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Handles application pause.
+     */
     @Override
     public void pause() {
         if (currentTest != null) {
@@ -175,6 +217,9 @@ public final class TestChooserApplication extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Handles application resume.
+     */
     @Override
     public void resume() {
         if (currentTest != null) {
@@ -182,6 +227,9 @@ public final class TestChooserApplication extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         disposeCurrentTest();

@@ -15,6 +15,11 @@ import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+/**
+ * Writes native project output.
+ *
+ * @author xpenatan
+ */
 public final class NativeProjectWriter {
     private static final List<String> NATIVE_RESOURCE_PREFIXES = List.of(
             "libfdx-native/shared/",
@@ -23,6 +28,13 @@ public final class NativeProjectWriter {
     private NativeProjectWriter() {
     }
 
+    /**
+     * Runs the write step.
+     *
+     * @param project the project
+     * @return the write
+     * @throws IOException if the operation cannot be completed
+     */
     public static Set<Path> write(NativeProject project) throws IOException {
         Objects.requireNonNull(project, "project");
         LinkedHashSet<Path> written = new LinkedHashSet<>();

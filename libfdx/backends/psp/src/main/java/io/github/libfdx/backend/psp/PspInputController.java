@@ -13,6 +13,11 @@ import io.github.libfdx.input.GamepadMapping;
 import io.github.libfdx.input.GamepadState;
 import io.github.libfdx.input.Key;
 
+/**
+ * Represents a psp input controller.
+ *
+ * @author xpenatan
+ */
 final class PspInputController {
     private static final float ANALOG_CENTER = 128.0f;
     private static final float ANALOG_RANGE = 127.0f;

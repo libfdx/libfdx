@@ -42,22 +42,43 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
+/**
+ * Provides android vulkan services.
+ *
+ * @author xpenatan
+ */
 public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, GraphicsProviderSupport {
     public static final ProviderId ID = VulkanProvider.ID;
     private static final int PBR_TEXTURE_DESCRIPTOR_COUNT = 5;
 
     private VulkanConfiguration configuration = new VulkanConfiguration();
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Returns the requirements.
+     *
+     * @return the requirements
+     */
     @Override
     public GraphicsAttachmentRequirements requirements() {
         return GraphicsAttachmentRequirements.vulkan();
     }
 
+    /**
+     * Creates a value.
+     *
+     * @param environment the environment
+     * @return the created value
+     */
     @Override
     public GraphicsAttachment create(GraphicsEnvironment environment) {
         if (environment == null) {
@@ -75,40 +96,84 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                 environment.display().framebufferWidth(), environment.display().framebufferHeight());
     }
 
+    /**
+     * Returns whether supported is enabled or true.
+     *
+     * @return true if supported is enabled or true; false otherwise
+     */
     @Override
     public boolean isSupported() {
         return supportFailureReason() == null;
     }
 
+    /**
+     * Returns the support failure reason.
+     *
+     * @return the support failure reason
+     */
     @Override
     public String supportFailureReason() {
         return AndroidVulkanNative.instanceProbeFailure();
     }
 
+    /**
+     * Returns the configuration.
+     *
+     * @return the configuration
+     */
     public VulkanConfiguration configuration() {
         return configuration;
     }
 
+    /**
+     * Sets the configuration and returns this android vulkan provider.
+     *
+     * @param configuration the configuration
+     * @return this android vulkan provider for chaining
+     */
     public AndroidVulkanProvider configuration(VulkanConfiguration configuration) {
         this.configuration = configuration != null ? configuration : new VulkanConfiguration();
         return this;
     }
 
+    /**
+     * Sets the v sync and returns this android vulkan provider.
+     *
+     * @param vSync the v sync
+     * @return this android vulkan provider for chaining
+     */
     public AndroidVulkanProvider vSync(boolean vSync) {
         configuration.vSync(vSync);
         return this;
     }
 
+    /**
+     * Sets the validation and returns this android vulkan provider.
+     *
+     * @param validation the validation
+     * @return this android vulkan provider for chaining
+     */
     public AndroidVulkanProvider validation(boolean validation) {
         configuration.validation(validation);
         return this;
     }
 
+    /**
+     * Sets the frames in flight and returns this android vulkan provider.
+     *
+     * @param framesInFlight the frames in flight
+     * @return this android vulkan provider for chaining
+     */
     public AndroidVulkanProvider framesInFlight(int framesInFlight) {
         configuration.framesInFlight(framesInFlight);
         return this;
     }
 
+    /**
+     * Represents an android vulkan graphics attachment.
+     *
+     * @author xpenatan
+     */
     private static final class AndroidVulkanGraphicsAttachment implements GraphicsAttachment {
         private final long context;
         private final AndroidVulkanGraphicsDevice device = new AndroidVulkanGraphicsDevice(this);
@@ -135,6 +200,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             surfaceFormat = toCommonFormat(AndroidVulkanNative.surfaceFormat(context));
         }
 
+        /**
+         * Handles a size change.
+         *
+         * @param framebufferWidth the framebuffer width
+         * @param framebufferHeight the framebuffer height
+         */
         @Override
         public void resize(int framebufferWidth, int framebufferHeight) {
             int nextWidth = Math.max(1, framebufferWidth);
@@ -151,10 +222,18 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             }
         }
 
+        /**
+         * Runs the process events step.
+         */
         @Override
         public void processEvents() {
         }
 
+        /**
+         * Returns the begin frame.
+         *
+         * @return true if begin frame succeeds or is active; false otherwise
+         */
         @Override
         public boolean beginFrame() {
             if (disposed || width <= 0 || height <= 0) {
@@ -170,6 +249,9 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             return frameStarted;
         }
 
+        /**
+         * Ends frame.
+         */
         @Override
         public void endFrame() {
             if (!frameStarted) {
@@ -183,16 +265,31 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             }
         }
 
+        /**
+         * Returns the device.
+         *
+         * @return the device
+         */
         @Override
         public GraphicsDevice device() {
             return device;
         }
 
+        /**
+         * Returns the surface format.
+         *
+         * @return the surface format
+         */
         @Override
         public TextureFormat surfaceFormat() {
             return surfaceFormat;
         }
 
+        /**
+         * Returns the current frame.
+         *
+         * @return the current frame
+         */
         @Override
         public GraphicsFrame currentFrame() {
             if (!frameStarted) {
@@ -201,6 +298,14 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             return currentFrame;
         }
 
+        /**
+         * Runs the clear step.
+         *
+         * @param red the red
+         * @param green the green
+         * @param blue the blue
+         * @param alpha the alpha
+         */
         @Override
         public void clear(float red, float green, float blue, float alpha) {
             if (!frameStarted) {
@@ -226,17 +331,31 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             return pixels;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
             return (T) this;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             if (disposed) {
@@ -246,6 +365,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             AndroidVulkanNative.destroy(context);
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;
@@ -261,6 +385,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         }
     }
 
+    /**
+     * Represents an android vulkan graphics device.
+     *
+     * @author xpenatan
+     */
     private static final class AndroidVulkanGraphicsDevice implements GraphicsDevice {
         private final AndroidVulkanGraphicsAttachment attachment;
 
@@ -268,6 +397,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             this.attachment = attachment;
         }
 
+        /**
+         * Creates a buffer.
+         *
+         * @param descriptor the descriptor
+         * @return the created value
+         */
         @Override
         public Buffer createBuffer(BufferDescriptor descriptor) {
             if (descriptor == null) {
@@ -277,6 +412,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                     descriptor.size(), toNativeBufferUsage(descriptor.usage())), descriptor.size(), descriptor.usage());
         }
 
+        /**
+         * Runs the write buffer step.
+         *
+         * @param buffer the buffer
+         * @param data the data
+         */
         @Override
         public void writeBuffer(Buffer buffer, ByteBuffer data) {
             if (buffer == null) {
@@ -293,6 +434,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             AndroidVulkanNative.writeBuffer(vulkanBuffer.handle(), source, source.remaining());
         }
 
+        /**
+         * Creates a texture.
+         *
+         * @param descriptor the descriptor
+         * @return the created value
+         */
         @Override
         public Texture createTexture(TextureDescriptor descriptor) {
             if (descriptor == null) {
@@ -310,6 +457,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                     descriptor.width(), descriptor.height(), descriptor.format(), descriptor.usage());
         }
 
+        /**
+         * Runs the write texture step.
+         *
+         * @param texture the texture
+         * @param data the data
+         */
         @Override
         public void writeTexture(Texture texture, ByteBuffer data) {
             if (texture == null) {
@@ -327,6 +480,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             AndroidVulkanNative.writeTexture(vulkanTexture.handle(), source, source.remaining());
         }
 
+        /**
+         * Creates a shader module.
+         *
+         * @param descriptor the descriptor
+         * @return the created value
+         */
         @Override
         public ShaderModule createShaderModule(ShaderModuleDescriptor descriptor) {
             if (descriptor == null) {
@@ -339,6 +498,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                     descriptor.spirvVertexWords(), descriptor.spirvFragmentWords()));
         }
 
+        /**
+         * Creates a render pipeline.
+         *
+         * @param descriptor the descriptor
+         * @return the created value
+         */
         @Override
         public RenderPipeline createRenderPipeline(RenderPipelineDescriptor descriptor) {
             if (descriptor == null) {
@@ -359,11 +524,22 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                     pbrUniformsEnabled, descriptor.sampledTextureCount() > 0 ? 1 : 0);
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -376,6 +552,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         return descriptor.sampledTextureCount() == PBR_TEXTURE_DESCRIPTOR_COUNT;
     }
 
+    /**
+     * Represents an android vulkan command encoder.
+     *
+     * @author xpenatan
+     */
     private static final class AndroidVulkanCommandEncoder implements CommandEncoder {
         private final AndroidVulkanGraphicsAttachment attachment;
 
@@ -383,6 +564,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             this.attachment = attachment;
         }
 
+        /**
+         * Begins render pass.
+         *
+         * @param descriptor the descriptor
+         * @return the begin render pass
+         */
         @Override
         public RenderPass beginRenderPass(RenderPassDescriptor descriptor) {
             if (descriptor == null) {
@@ -396,11 +583,22 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             return new AndroidVulkanRenderPass(attachment);
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -408,6 +606,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         }
     }
 
+    /**
+     * Represents an android vulkan render pass.
+     *
+     * @author xpenatan
+     */
     private static final class AndroidVulkanRenderPass implements RenderPass {
         private static final int PBR_UNIFORM_BYTE_COUNT = 224;
         private static final int MATRIX_FLOAT_COUNT = 16;
@@ -437,6 +640,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             resetUniformData();
         }
 
+        /**
+         * Sets the pipeline.
+         *
+         * @param pipeline the pipeline
+         */
         @Override
         public void setPipeline(RenderPipeline pipeline) {
             ensureOpen();
@@ -446,6 +654,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             AndroidVulkanNative.setPipeline(attachment.context, this.pipeline.handle());
         }
 
+        /**
+         * Sets the vertex buffer.
+         *
+         * @param buffer the buffer
+         */
         @Override
         public void setVertexBuffer(Buffer buffer) {
             ensureOpen();
@@ -459,6 +672,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             AndroidVulkanNative.setVertexBuffer(attachment.context, vulkanBuffer.handle());
         }
 
+        /**
+         * Sets the index buffer.
+         *
+         * @param buffer the buffer
+         */
         @Override
         public void setIndexBuffer(Buffer buffer) {
             ensureOpen();
@@ -472,6 +690,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             AndroidVulkanNative.setIndexBuffer(attachment.context, indexBuffer.handle());
         }
 
+        /**
+         * Sets the texture.
+         *
+         * @param slot the slot
+         * @param texture the texture
+         */
         @Override
         public void setTexture(int slot, Texture texture) {
             ensureOpen();
@@ -487,6 +711,14 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             textures[slot] = texture.as();
         }
 
+        /**
+         * Sets the scissor.
+         *
+         * @param x the x coordinate
+         * @param y the y coordinate
+         * @param width the width in pixels
+         * @param height the height in pixels
+         */
         @Override
         public void setScissor(int x, int y, int width, int height) {
             ensureOpen();
@@ -496,6 +728,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             AndroidVulkanNative.setScissor(attachment.context, x, y, width, height);
         }
 
+        /**
+         * Sets the uniform1i.
+         *
+         * @param name the name
+         * @param value the value
+         */
         @Override
         public void setUniform1i(String name, int value) {
             if ("u_hasBaseColorTexture".equals(name)) {
@@ -515,6 +753,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             }
         }
 
+        /**
+         * Sets the uniform1f.
+         *
+         * @param name the name
+         * @param value the value
+         */
         @Override
         public void setUniform1f(String name, float value) {
             if ("u_lightIntensity".equals(name)) {
@@ -522,6 +766,14 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             }
         }
 
+        /**
+         * Sets the uniform3f.
+         *
+         * @param name the name
+         * @param x the x coordinate
+         * @param y the y coordinate
+         * @param z the z coordinate
+         */
         @Override
         public void setUniform3f(String name, float x, float y, float z) {
             if ("u_cameraPosition".equals(name)) {
@@ -539,6 +791,15 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             }
         }
 
+        /**
+         * Sets the uniform4f.
+         *
+         * @param name the name
+         * @param x the x coordinate
+         * @param y the y coordinate
+         * @param z the z coordinate
+         * @param w the w
+         */
         @Override
         public void setUniform4f(String name, float x, float y, float z, float w) {
             if ("u_cameraPosition".equals(name)) {
@@ -555,6 +816,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             }
         }
 
+        /**
+         * Sets the uniform matrix4.
+         *
+         * @param name the name
+         * @param values the values
+         */
         @Override
         public void setUniformMatrix4(String name, float[] values) {
             ensureOpen();
@@ -569,6 +836,14 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             }
         }
 
+        /**
+         * Draws the current content.
+         *
+         * @param vertexCount the vertex count
+         * @param instanceCount the instance count
+         * @param firstVertex the first vertex
+         * @param firstInstance the first instance
+         */
         @Override
         public void draw(int vertexCount, int instanceCount, int firstVertex, int firstInstance) {
             ensureOpen();
@@ -580,6 +855,15 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             AndroidVulkanNative.draw(attachment.context, vertexCount, instanceCount, firstVertex, firstInstance);
         }
 
+        /**
+         * Draws indexed.
+         *
+         * @param indexCount the index count
+         * @param instanceCount the instance count
+         * @param firstIndex the first index
+         * @param baseVertex the base vertex
+         * @param firstInstance the first instance
+         */
         @Override
         public void drawIndexed(int indexCount, int instanceCount, int firstIndex, int baseVertex, int firstInstance) {
             ensureOpen();
@@ -595,6 +879,9 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                     baseVertex, firstInstance);
         }
 
+        /**
+         * Ends the operation.
+         */
         @Override
         public void end() {
             if (ended) {
@@ -696,11 +983,22 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             uniformFloats.put(VIEW_PROJECTION_OFFSET + 15, 1.0f);
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -708,6 +1006,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         }
     }
 
+    /**
+     * Represents an android vulkan buffer handle.
+     *
+     * @author xpenatan
+     */
     private static final class AndroidVulkanBufferHandle implements Buffer {
         private final long handle;
         private final int size;
@@ -724,27 +1027,51 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             return handle;
         }
 
+        /**
+         * Returns the size.
+         *
+         * @return the size
+         */
         @Override
         public int size() {
             return size;
         }
 
+        /**
+         * Returns the usage.
+         *
+         * @return the usage
+         */
         @Override
         public BufferUsage usage() {
             return usage;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
             return (T) this;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             if (disposed) {
@@ -754,12 +1081,22 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             AndroidVulkanNative.destroyBuffer(handle);
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;
         }
     }
 
+    /**
+     * Represents an android vulkan texture handle.
+     *
+     * @author xpenatan
+     */
     private static final class AndroidVulkanTextureHandle implements Texture {
         private final long handle;
         private final int width;
@@ -780,37 +1117,71 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             return handle;
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return width;
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return height;
         }
 
+        /**
+         * Returns the format.
+         *
+         * @return the format
+         */
         @Override
         public TextureFormat format() {
             return format;
         }
 
+        /**
+         * Returns the usage.
+         *
+         * @return the usage
+         */
         @Override
         public TextureUsage usage() {
             return usage;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
             return (T) this;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             if (disposed) {
@@ -820,12 +1191,22 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             AndroidVulkanNative.destroyTexture(handle);
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;
         }
     }
 
+    /**
+     * Represents an android vulkan graphics frame.
+     *
+     * @author xpenatan
+     */
     private static final class AndroidVulkanGraphicsFrame implements GraphicsFrame {
         private final AndroidVulkanGraphicsAttachment attachment;
         private final CommandEncoder commandEncoder;
@@ -840,36 +1221,72 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             this.colorAttachment = colorAttachment;
         }
 
+        /**
+         * Returns the command encoder.
+         *
+         * @return the command encoder
+         */
         @Override
         public CommandEncoder commandEncoder() {
             return commandEncoder;
         }
 
+        /**
+         * Returns the frame buffer.
+         *
+         * @return the frame buffer
+         */
         @Override
         public FrameBuffer frameBuffer() {
             return frameBuffer;
         }
 
+        /**
+         * Returns the color attachment.
+         *
+         * @return the color attachment
+         */
         @Override
         public TextureView colorAttachment() {
             return colorAttachment;
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return attachment.width;
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return attachment.height;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -877,6 +1294,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         }
     }
 
+    /**
+     * Represents an android vulkan frame buffer.
+     *
+     * @author xpenatan
+     */
     private static final class AndroidVulkanFrameBuffer implements FrameBuffer {
         private final AndroidVulkanGraphicsAttachment attachment;
         private final TextureView colorAttachment;
@@ -886,36 +1308,72 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             this.colorAttachment = colorAttachment;
         }
 
+        /**
+         * Returns the color attachment.
+         *
+         * @return the color attachment
+         */
         @Override
         public TextureView colorAttachment() {
             return colorAttachment;
         }
 
+        /**
+         * Returns the format.
+         *
+         * @return the format
+         */
         @Override
         public TextureFormat format() {
             return attachment.surfaceFormat;
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return attachment.width;
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return attachment.height;
         }
 
+        /**
+         * Returns the read pixels RGBA8.
+         *
+         * @return the read pixels RGBA8
+         */
         @Override
         public ByteBuffer readPixelsRgba8() {
             return attachment.readPixelsRgba8();
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -923,6 +1381,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         }
     }
 
+    /**
+     * Represents an android vulkan texture view handle.
+     *
+     * @author xpenatan
+     */
     private static final class AndroidVulkanTextureViewHandle implements TextureView {
         private final AndroidVulkanGraphicsAttachment attachment;
 
@@ -930,16 +1393,32 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             this.attachment = attachment;
         }
 
+        /**
+         * Returns the format.
+         *
+         * @return the format
+         */
         @Override
         public TextureFormat format() {
             return attachment.surfaceFormat;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -947,6 +1426,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         }
     }
 
+    /**
+     * Represents an android vulkan shader module handle.
+     *
+     * @author xpenatan
+     */
     private static final class AndroidVulkanShaderModuleHandle implements ShaderModule {
         private final long handle;
         private boolean disposed;
@@ -959,22 +1443,41 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             return handle;
         }
 
+        /**
+         * Returns the language.
+         *
+         * @return the language
+         */
         @Override
         public ShaderLanguage language() {
             return ShaderLanguage.SPIRV;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
             return (T) this;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             if (disposed) {
@@ -984,12 +1487,22 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             AndroidVulkanNative.destroyShaderModule(handle);
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;
         }
     }
 
+    /**
+     * Represents an android vulkan render pipeline handle.
+     *
+     * @author xpenatan
+     */
     private static final class AndroidVulkanRenderPipelineHandle implements RenderPipeline {
         private final long handle;
         private final PrimitiveTopology primitiveTopology;
@@ -1027,17 +1540,31 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             return uniformDescriptorSetIndex;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
             return (T) this;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             if (disposed) {
@@ -1047,6 +1574,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             AndroidVulkanNative.destroyRenderPipeline(handle);
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;

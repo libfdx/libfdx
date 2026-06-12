@@ -12,6 +12,11 @@ import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.StoreOp;
 
+/**
+ * Represents a model batch.
+ *
+ * @author xpenatan
+ */
 public final class ModelBatch implements Batch3D {
     private final GraphicsContext graphics;
     private final DefaultRenderQueue3D queue = new DefaultRenderQueue3D();
@@ -24,10 +29,21 @@ public final class ModelBatch implements Batch3D {
     private boolean drawing;
     private boolean disposed;
 
+    /**
+     * Creates a model batch.
+     *
+     * @param graphics the graphics context
+     */
     public ModelBatch(GraphicsContext graphics) {
         this(graphics, new ModelBatchConfig());
     }
 
+    /**
+     * Creates a model batch.
+     *
+     * @param graphics the graphics context
+     * @param config the configuration
+     */
     public ModelBatch(GraphicsContext graphics, ModelBatchConfig config) {
         if (graphics == null) {
             throw new FdxException("GraphicsContext cannot be null");
@@ -48,11 +64,22 @@ public final class ModelBatch implements Batch3D {
         }
     }
 
+    /**
+     * Begins the operation.
+     *
+     * @param camera the camera
+     */
     @Override
     public void begin(Camera camera) {
         begin(LoadOp.load(), camera);
     }
 
+    /**
+     * Begins the operation.
+     *
+     * @param loadOp the load op
+     * @param camera the camera
+     */
     @Override
     public void begin(LoadOp loadOp, Camera camera) {
         ensureNotDisposed();
@@ -67,6 +94,12 @@ public final class ModelBatch implements Batch3D {
         drawing = true;
     }
 
+    /**
+     * Begins the operation.
+     *
+     * @param pass the pass
+     * @param camera the camera
+     */
     @Override
     public void begin(RenderPass pass, Camera camera) {
         ensureNotDisposed();
@@ -80,6 +113,12 @@ public final class ModelBatch implements Batch3D {
         drawing = true;
     }
 
+    /**
+     * Begins the operation.
+     *
+     * @param target the target value
+     * @param camera the camera
+     */
     @Override
     public void begin(RenderTarget3D target, Camera camera) {
         ensureNotDisposed();
@@ -97,12 +136,24 @@ public final class ModelBatch implements Batch3D {
         drawing = true;
     }
 
+    /**
+     * Sets the environment and returns this model batch.
+     *
+     * @param environment the environment
+     * @return this model batch for chaining
+     */
     @Override
     public ModelBatch environment(Environment3D environment) {
         this.environment = environment != null ? environment : new Environment3D();
         return this;
     }
 
+    /**
+     * Sets the shader provider and returns this model batch.
+     *
+     * @param shaderProvider the shader provider
+     * @return this model batch for chaining
+     */
     @Override
     public ModelBatch shaderProvider(ShaderProvider3D shaderProvider) {
         if (shaderProvider == null) {
@@ -112,6 +163,11 @@ public final class ModelBatch implements Batch3D {
         return this;
     }
 
+    /**
+     * Renders the current content.
+     *
+     * @param instance the instance
+     */
     @Override
     public void render(ModelInstance instance) {
         ensureDrawing();
@@ -121,6 +177,11 @@ public final class ModelBatch implements Batch3D {
         instance.collectRenderables(queue);
     }
 
+    /**
+     * Renders the current content.
+     *
+     * @param renderable the renderable
+     */
     @Override
     public void render(Renderable3D renderable) {
         ensureDrawing();
@@ -130,6 +191,11 @@ public final class ModelBatch implements Batch3D {
         queue.add(renderable);
     }
 
+    /**
+     * Renders the current content.
+     *
+     * @param instances the instances
+     */
     @Override
     public void render(Iterable<? extends ModelInstance> instances) {
         ensureDrawing();
@@ -141,6 +207,9 @@ public final class ModelBatch implements Batch3D {
         }
     }
 
+    /**
+     * Runs the flush step.
+     */
     @Override
     public void flush() {
         ensureDrawing();
@@ -168,6 +237,9 @@ public final class ModelBatch implements Batch3D {
         queue.clear();
     }
 
+    /**
+     * Ends the operation.
+     */
     @Override
     public void end() {
         ensureDrawing();
@@ -200,6 +272,9 @@ public final class ModelBatch implements Batch3D {
         }
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -211,6 +286,11 @@ public final class ModelBatch implements Batch3D {
         }
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;

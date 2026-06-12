@@ -7,6 +7,11 @@ import io.github.libfdx.core.FdxFuture;
 import io.github.libfdx.core.FdxTask;
 import io.github.libfdx.graphics.GraphicsContext;
 
+/**
+ * Loads bitmap font asset data.
+ *
+ * @author xpenatan
+ */
 final class BitmapFontAssetLoader implements AssetLoader<BitmapFont> {
     private final GraphicsContext graphics;
 
@@ -14,11 +19,23 @@ final class BitmapFontAssetLoader implements AssetLoader<BitmapFont> {
         this.graphics = graphics;
     }
 
+    /**
+     * Returns the type.
+     *
+     * @return the type
+     */
     @Override
     public Class<BitmapFont> type() {
         return BitmapFont.class;
     }
 
+    /**
+     * Loads the requested resource.
+     *
+     * @param context the context
+     * @param descriptor the descriptor
+     * @return the created value
+     */
     @Override
     public FdxFuture<BitmapFont> load(final AssetLoadContext context, final AssetDescriptor<BitmapFont> descriptor) {
         return context.completeOnUpdate(new FdxTask<BitmapFont>() {

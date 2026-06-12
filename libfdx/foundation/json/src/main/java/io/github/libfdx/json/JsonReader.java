@@ -4,16 +4,33 @@ import io.github.libfdx.core.FdxException;
 
 import java.nio.charset.StandardCharsets;
 
+/**
+ * Represents a json reader.
+ *
+ * @author xpenatan
+ */
 public final class JsonReader {
     private String text;
     private int index;
     private int line;
     private int column;
 
+    /**
+     * Runs the parse step.
+     *
+     * @param bytes the bytes
+     * @return the parse
+     */
     public JsonValue parse(byte[] bytes) {
         return parse(new String(bytes != null ? bytes : new byte[0], StandardCharsets.UTF_8));
     }
 
+    /**
+     * Runs the parse step.
+     *
+     * @param text the text
+     * @return the parse
+     */
     public JsonValue parse(String text) {
         this.text = text != null ? text : "";
         index = 0;

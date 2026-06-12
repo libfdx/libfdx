@@ -10,6 +10,11 @@ import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 
+/**
+ * Loads texture asset data.
+ *
+ * @author xpenatan
+ */
 final class TextureAssetLoader implements AssetLoader<Texture> {
     private final GraphicsContext graphics;
 
@@ -17,11 +22,23 @@ final class TextureAssetLoader implements AssetLoader<Texture> {
         this.graphics = graphics;
     }
 
+    /**
+     * Returns the type.
+     *
+     * @return the type
+     */
     @Override
     public Class<Texture> type() {
         return Texture.class;
     }
 
+    /**
+     * Loads the requested resource.
+     *
+     * @param context the context
+     * @param descriptor the descriptor
+     * @return the created value
+     */
     @Override
     public FdxFuture<Texture> load(AssetLoadContext context, AssetDescriptor<Texture> descriptor) {
         final FdxFuture<Texture> future = FdxFuture.pending();

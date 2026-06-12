@@ -34,7 +34,19 @@ import static org.lwjgl.util.freetype.FreeType.FT_RENDER_MODE_NORMAL;
 import static org.lwjgl.util.freetype.FreeType.FT_Render_Glyph;
 import static org.lwjgl.util.freetype.FreeType.FT_Set_Pixel_Sizes;
 
+/**
+ * Represents a desktop free type font rasterizer.
+ *
+ * @author xpenatan
+ */
 final class DesktopFreeTypeFontRasterizer implements FontRasterizer {
+    /**
+     * Runs the rasterize step.
+     *
+     * @param fontBytes the font bytes
+     * @param options the options
+     * @return the rasterize
+     */
     @Override
     public RasterizedFont rasterize(byte[] fontBytes, FontRasterizerOptions options) {
         if (fontBytes == null || fontBytes.length == 0) {
@@ -248,6 +260,11 @@ final class DesktopFreeTypeFontRasterizer implements FontRasterizer {
         return ((long) first << 32) ^ (second & 0xffffffffL);
     }
 
+    /**
+     * Represents a font metrics.
+     *
+     * @author xpenatan
+     */
     private static final class FontMetrics {
         final float lineHeight;
         final float baseLine;
@@ -258,6 +275,11 @@ final class DesktopFreeTypeFontRasterizer implements FontRasterizer {
         }
     }
 
+    /**
+     * Represents a glyph bitmap.
+     *
+     * @author xpenatan
+     */
     private static final class GlyphBitmap {
         int codePoint;
         int glyphIndex;

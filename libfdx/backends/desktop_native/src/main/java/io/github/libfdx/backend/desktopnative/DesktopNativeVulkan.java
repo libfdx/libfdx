@@ -7,6 +7,11 @@ import org.teavm.interop.c.Include;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Represents a desktop native vulkan.
+ *
+ * @author xpenatan
+ */
 @Include("libfdx_desktop_vulkan.h")
 final class DesktopNativeVulkan {
     private DesktopNativeVulkan() {

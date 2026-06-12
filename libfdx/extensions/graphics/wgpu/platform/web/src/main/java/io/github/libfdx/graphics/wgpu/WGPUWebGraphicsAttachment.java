@@ -12,6 +12,11 @@ import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.NativeWindow;
 import io.github.libfdx.graphics.TextureFormat;
 
+/**
+ * Represents a WGPU web graphics attachment.
+ *
+ * @author xpenatan
+ */
 final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAttachmentReadiness {
     private final NativeWindow nativeWindow;
     private final WGPUConfiguration configuration;
@@ -37,6 +42,12 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
         });
     }
 
+    /**
+     * Handles a size change.
+     *
+     * @param framebufferWidth the framebuffer width
+     * @param framebufferHeight the framebuffer height
+     */
     @Override
     public void resize(int framebufferWidth, int framebufferHeight) {
         width = framebufferWidth;
@@ -46,6 +57,9 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
         }
     }
 
+    /**
+     * Runs the process events step.
+     */
     @Override
     public void processEvents() {
         if (disposed) {
@@ -76,16 +90,29 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
         context.resize(width, height);
     }
 
+    /**
+     * Returns the begin frame.
+     *
+     * @return true if begin frame succeeds or is active; false otherwise
+     */
     @Override
     public boolean beginFrame() {
         return context != null && context.beginFrame();
     }
 
+    /**
+     * Returns whether ready is enabled or true.
+     *
+     * @return true if ready is enabled or true; false otherwise
+     */
     @Override
     public boolean isReady() {
         return context != null && context.isReady();
     }
 
+    /**
+     * Ends frame.
+     */
     @Override
     public void endFrame() {
         if (context != null) {
@@ -93,37 +120,74 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
         }
     }
 
+    /**
+     * Returns the device.
+     *
+     * @return the device
+     */
     @Override
     public GraphicsDevice device() {
         return readyContext().device();
     }
 
+    /**
+     * Returns the surface format.
+     *
+     * @return the surface format
+     */
     @Override
     public TextureFormat surfaceFormat() {
         return readyContext().surfaceFormat();
     }
 
+    /**
+     * Returns the current frame.
+     *
+     * @return the current frame
+     */
     @Override
     public GraphicsFrame currentFrame() {
         return readyContext().currentFrame();
     }
 
+    /**
+     * Runs the clear step.
+     *
+     * @param red the red
+     * @param green the green
+     * @param blue the blue
+     * @param alpha the alpha
+     */
     @Override
     public void clear(float red, float green, float blue, float alpha) {
         readyContext().clear(red, green, blue, alpha);
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return WGPUProvider.ID;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
         return (T) readyContext();
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         disposed = true;
@@ -133,6 +197,11 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
         }
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;
@@ -145,6 +214,11 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
         return context;
     }
 
+    /**
+     * Represents a load state.
+     *
+     * @author xpenatan
+     */
     private static final class LoadState {
         boolean complete;
         Throwable error;

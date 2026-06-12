@@ -5,10 +5,20 @@ import io.github.libfdx.backend.desktop.DesktopApplicationConfig;
 import io.github.libfdx.backend.desktop.DesktopOpenGLProvider;
 import io.github.libfdx.tools.project.generator.ui.ProjectGeneratorApplication;
 
+/**
+ * Launches the project generator desktop entry point.
+ *
+ * @author xpenatan
+ */
 public final class ProjectGeneratorDesktopLauncher {
     private ProjectGeneratorDesktopLauncher() {
     }
 
+    /**
+     * Runs the launcher entry point.
+     *
+     * @param args the args
+     */
     public static void main(String[] args) {
         DesktopApplicationConfig config = new DesktopApplicationConfig()
                 .title("libfdx Project Generator")

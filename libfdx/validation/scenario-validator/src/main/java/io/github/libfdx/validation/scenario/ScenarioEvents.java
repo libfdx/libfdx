@@ -4,15 +4,28 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Represents a scenario events.
+ *
+ * @author xpenatan
+ */
 public final class ScenarioEvents {
     private final String[] events;
     private int writeIndex;
     private int size;
 
+    /**
+     * Creates a scenario events.
+     */
     public ScenarioEvents() {
         this(64);
     }
 
+    /**
+     * Creates a scenario events.
+     *
+     * @param capacity the capacity
+     */
     public ScenarioEvents(int capacity) {
         if (capacity <= 0) {
             throw new IllegalArgumentException("Event capacity must be positive.");
@@ -20,6 +33,11 @@ public final class ScenarioEvents {
         this.events = new String[capacity];
     }
 
+    /**
+     * Runs the emit step.
+     *
+     * @param event the event
+     */
     public void emit(String event) {
         if (event == null || event.length() == 0) {
             throw new IllegalArgumentException("Event name cannot be empty.");
@@ -31,6 +49,9 @@ public final class ScenarioEvents {
         }
     }
 
+    /**
+     * Runs the clear step.
+     */
     public void clear() {
         for (int i = 0; i < events.length; i++) {
             events[i] = null;
@@ -39,6 +60,12 @@ public final class ScenarioEvents {
         size = 0;
     }
 
+    /**
+     * Runs the contains step.
+     *
+     * @param event the event
+     * @return true if contains succeeds or is active; false otherwise
+     */
     public boolean contains(String event) {
         if (event == null) {
             return false;
@@ -52,6 +79,11 @@ public final class ScenarioEvents {
         return false;
     }
 
+    /**
+     * Returns the latest.
+     *
+     * @return the latest
+     */
     public String latest() {
         if (size == 0) {
             return null;
@@ -63,6 +95,11 @@ public final class ScenarioEvents {
         return events[index];
     }
 
+    /**
+     * Returns the recent.
+     *
+     * @return the recent
+     */
     public List<String> recent() {
         if (size == 0) {
             return Collections.emptyList();
@@ -74,6 +111,11 @@ public final class ScenarioEvents {
         return Collections.unmodifiableList(recent);
     }
 
+    /**
+     * Returns the size.
+     *
+     * @return the size
+     */
     public int size() {
         return size;
     }

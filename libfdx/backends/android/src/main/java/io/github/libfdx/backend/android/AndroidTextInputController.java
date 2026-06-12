@@ -28,6 +28,11 @@ import io.github.libfdx.input.TextInputController;
 import io.github.libfdx.input.TextInputRequest;
 import io.github.libfdx.input.TextInputType;
 
+/**
+ * Represents an android text input controller.
+ *
+ * @author xpenatan
+ */
 final class AndroidTextInputController implements TextInputController {
     private final Activity activity;
     private final AndroidApplicationBackend backend;
@@ -68,6 +73,11 @@ final class AndroidTextInputController implements TextInputController {
         return active;
     }
 
+    /**
+     * Runs the show text input step.
+     *
+     * @param request the request
+     */
     @Override
     public void showTextInput(TextInputRequest request) {
         applyRequest(request);
@@ -94,6 +104,11 @@ final class AndroidTextInputController implements TextInputController {
         });
     }
 
+    /**
+     * Runs the update text input step.
+     *
+     * @param request the request
+     */
     @Override
     public void updateTextInput(TextInputRequest request) {
         if (!active) {
@@ -119,6 +134,9 @@ final class AndroidTextInputController implements TextInputController {
         });
     }
 
+    /**
+     * Runs the hide text input step.
+     */
     @Override
     public void hideTextInput() {
         active = false;
@@ -703,6 +721,11 @@ final class AndroidTextInputController implements TextInputController {
         }
     }
 
+    /**
+     * Represents an android text input connection.
+     *
+     * @author xpenatan
+     */
     private static final class AndroidTextInputConnection extends BaseInputConnection {
         private final AndroidTextInputController controller;
 
@@ -711,31 +734,69 @@ final class AndroidTextInputController implements TextInputController {
             this.controller = controller;
         }
 
+        /**
+         * Returns the editable.
+         *
+         * @return the get editable
+         */
         @Override
         public Editable getEditable() {
             return controller.editable();
         }
 
+        /**
+         * Runs the commit text step.
+         *
+         * @param text the text
+         * @param newCursorPosition the new cursor position
+         * @return true if commit text succeeds or is active; false otherwise
+         */
         @Override
         public boolean commitText(CharSequence text, int newCursorPosition) {
             return controller.commitText(text);
         }
 
+        /**
+         * Runs the delete surrounding text step.
+         *
+         * @param beforeLength the before length
+         * @param afterLength the after length
+         * @return true if delete surrounding text succeeds or is active; false otherwise
+         */
         @Override
         public boolean deleteSurroundingText(int beforeLength, int afterLength) {
             return controller.deleteSurroundingText(beforeLength, afterLength);
         }
 
+        /**
+         * Runs the delete surrounding text in code points step.
+         *
+         * @param beforeLength the before length
+         * @param afterLength the after length
+         * @return true if delete surrounding text in code points succeeds or is active; false otherwise
+         */
         @Override
         public boolean deleteSurroundingTextInCodePoints(int beforeLength, int afterLength) {
             return controller.deleteSurroundingText(beforeLength, afterLength);
         }
 
+        /**
+         * Runs the send key event step.
+         *
+         * @param event the event
+         * @return true if send key event succeeds or is active; false otherwise
+         */
         @Override
         public boolean sendKeyEvent(KeyEvent event) {
             return controller.sendKeyEvent(event);
         }
 
+        /**
+         * Runs the perform editor action step.
+         *
+         * @param actionCode the action code
+         * @return true if perform editor action succeeds or is active; false otherwise
+         */
         @Override
         public boolean performEditorAction(int actionCode) {
             return controller.performEditorAction(actionCode);

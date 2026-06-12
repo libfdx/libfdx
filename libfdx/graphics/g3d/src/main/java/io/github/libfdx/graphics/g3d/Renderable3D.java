@@ -5,12 +5,25 @@ import io.github.libfdx.math.Matrix4;
 
 import io.github.libfdx.core.FdxException;
 
+/**
+ * Represents a renderable3 d.
+ *
+ * @author xpenatan
+ */
 public final class Renderable3D {
     private final MeshPart meshPart;
     private final Material material;
     private final Matrix4 worldTransform;
     private final BoundingBox bounds;
 
+    /**
+     * Creates a renderable3 d.
+     *
+     * @param meshPart the mesh part
+     * @param material the material
+     * @param worldTransform the world transform
+     * @param bounds the bounds
+     */
     public Renderable3D(MeshPart meshPart, Material material, Matrix4 worldTransform, BoundingBox bounds) {
         if (meshPart == null) {
             throw new FdxException("Renderable3D mesh part cannot be null");
@@ -24,18 +37,38 @@ public final class Renderable3D {
         this.bounds = bounds != null ? bounds : meshPart.mesh().bounds();
     }
 
+    /**
+     * Returns the mesh part.
+     *
+     * @return the mesh part
+     */
     public MeshPart meshPart() {
         return meshPart;
     }
 
+    /**
+     * Returns the material.
+     *
+     * @return the material
+     */
     public Material material() {
         return material;
     }
 
+    /**
+     * Returns the world transform.
+     *
+     * @return the world transform
+     */
     public Matrix4 worldTransform() {
         return worldTransform;
     }
 
+    /**
+     * Returns the bounds.
+     *
+     * @return the bounds
+     */
     public BoundingBox bounds() {
         return bounds;
     }

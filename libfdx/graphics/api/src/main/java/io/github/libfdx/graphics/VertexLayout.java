@@ -2,6 +2,11 @@ package io.github.libfdx.graphics;
 
 import io.github.libfdx.core.FdxException;
 
+/**
+ * Represents a vertex layout.
+ *
+ * @author xpenatan
+ */
 public final class VertexLayout {
     private final int arrayStride;
     private final VertexStepMode stepMode;
@@ -27,26 +32,63 @@ public final class VertexLayout {
         this.attributes = copy(attributes);
     }
 
+    /**
+     * Creates a vertex layout from the supplied values.
+     *
+     * @param arrayStride the array stride
+     * @param attributes the attributes
+     * @return a new vertex layout
+     */
     public static VertexLayout of(int arrayStride, VertexAttribute... attributes) {
         return new VertexLayout(arrayStride, VertexStepMode.VERTEX, attributes);
     }
 
+    /**
+     * Creates a vertex layout from the supplied values.
+     *
+     * @param arrayStride the array stride
+     * @param stepMode the step mode
+     * @param attributes the attributes
+     * @return a new vertex layout
+     */
     public static VertexLayout of(int arrayStride, VertexStepMode stepMode, VertexAttribute... attributes) {
         return new VertexLayout(arrayStride, stepMode, attributes);
     }
 
+    /**
+     * Creates a vertex layout.
+     *
+     * @param arrayStride the array stride
+     * @param attributes the attributes
+     * @return a new vertex layout
+     */
     public static VertexLayout instance(int arrayStride, VertexAttribute... attributes) {
         return new VertexLayout(arrayStride, VertexStepMode.INSTANCE, attributes);
     }
 
+    /**
+     * Returns the array stride.
+     *
+     * @return the array stride
+     */
     public int arrayStride() {
         return arrayStride;
     }
 
+    /**
+     * Returns the step mode.
+     *
+     * @return the step mode
+     */
     public VertexStepMode stepMode() {
         return stepMode;
     }
 
+    /**
+     * Returns the attributes.
+     *
+     * @return the attributes
+     */
     public VertexAttribute[] attributes() {
         return copy(attributes);
     }

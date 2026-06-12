@@ -24,6 +24,11 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
+/**
+ * Represents a sprite batch.
+ *
+ * @author xpenatan
+ */
 public final class SpriteBatch implements Batch2D {
     private static final int FLOATS_PER_VERTEX = 8;
     private static final int BYTES_PER_VERTEX = FLOATS_PER_VERTEX * 4;
@@ -563,10 +568,21 @@ public final class SpriteBatch implements Batch2D {
     private float compactBlue;
     private float compactAlpha;
 
+    /**
+     * Creates a sprite batch.
+     *
+     * @param graphicsSystem the graphics system
+     */
     public SpriteBatch(GraphicsContext graphicsSystem) {
         this(graphicsSystem, DEFAULT_MAX_SPRITES);
     }
 
+    /**
+     * Creates a sprite batch.
+     *
+     * @param graphicsSystem the graphics system
+     * @param initialMaxSprites the initial max sprites
+     */
     public SpriteBatch(GraphicsContext graphicsSystem, int initialMaxSprites) {
         if (graphicsSystem == null) {
             throw new FdxException("GraphicsContext cannot be null");
@@ -659,11 +675,19 @@ public final class SpriteBatch implements Batch2D {
         }
     }
 
+    /**
+     * Begins the operation.
+     */
     @Override
     public void begin() {
         begin(LoadOp.load());
     }
 
+    /**
+     * Begins the operation.
+     *
+     * @param loadOp the load op
+     */
     @Override
     public void begin(LoadOp loadOp) {
         ensureNotDisposed();
@@ -678,6 +702,11 @@ public final class SpriteBatch implements Batch2D {
         flushSlotPass = pass;
     }
 
+    /**
+     * Begins the operation.
+     *
+     * @param pass the pass
+     */
     @Override
     public void begin(RenderPass pass) {
         ensureNotDisposed();
@@ -693,6 +722,15 @@ public final class SpriteBatch implements Batch2D {
         drawing = true;
     }
 
+    /**
+     * Sets the color and returns this sprite batch.
+     *
+     * @param red the red
+     * @param green the green
+     * @param blue the blue
+     * @param alpha the alpha
+     * @return this sprite batch for chaining
+     */
     @Override
     public SpriteBatch color(float red, float green, float blue, float alpha) {
         this.red = red;
@@ -702,6 +740,13 @@ public final class SpriteBatch implements Batch2D {
         return this;
     }
 
+    /**
+     * Sets the viewport and returns this sprite batch.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @return this sprite batch for chaining
+     */
     @Override
     public SpriteBatch viewport(int width, int height) {
         viewportWidth = Math.max(0, width);
@@ -709,22 +754,64 @@ public final class SpriteBatch implements Batch2D {
         return this;
     }
 
+    /**
+     * Draws the current content.
+     *
+     * @param texture the texture
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     @Override
     public void draw(Texture texture, float x, float y, float width, float height) {
         draw(new TextureRegion(texture), x, y, width, height);
     }
 
+    /**
+     * Draws the current content.
+     *
+     * @param texture the texture
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @param originX the origin x
+     * @param originY the origin y
+     * @param rotationDegrees the rotation degrees
+     */
     @Override
     public void draw(Texture texture, float x, float y, float width, float height,
             float originX, float originY, float rotationDegrees) {
         draw(new TextureRegion(texture), x, y, width, height, originX, originY, rotationDegrees);
     }
 
+    /**
+     * Draws the current content.
+     *
+     * @param region the region
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     @Override
     public void draw(TextureRegion region, float x, float y, float width, float height) {
         draw(region, x, y, width, height, 0.0f, 0.0f, 0.0f);
     }
 
+    /**
+     * Draws the current content.
+     *
+     * @param region the region
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @param originX the origin x
+     * @param originY the origin y
+     * @param rotationDegrees the rotation degrees
+     */
     @Override
     public void draw(TextureRegion region, float x, float y, float width, float height,
             float originX, float originY, float rotationDegrees) {
@@ -771,6 +858,19 @@ public final class SpriteBatch implements Batch2D {
         appendQuad(x1, y1, x2, y2, x3, y3, x4, y4, u, v, u2, v2);
     }
 
+    /**
+     * Draws the current content.
+     *
+     * @param region the region
+     * @param centerX the center x
+     * @param centerY the center y
+     * @param count the count
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @param originX the origin x
+     * @param originY the origin y
+     * @param rotationDegrees the rotation degrees
+     */
     @Override
     public void draw(TextureRegion region, float[] centerX, float[] centerY, int count, float width, float height,
             float originX, float originY, float rotationDegrees) {
@@ -808,6 +908,9 @@ public final class SpriteBatch implements Batch2D {
         appendCompactInstances(centerX, centerY, count);
     }
 
+    /**
+     * Ends the operation.
+     */
     @Override
     public void end() {
         ensureDrawing();
@@ -1421,6 +1524,9 @@ public final class SpriteBatch implements Batch2D {
         }
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -1468,6 +1574,11 @@ public final class SpriteBatch implements Batch2D {
         shader.dispose();
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;

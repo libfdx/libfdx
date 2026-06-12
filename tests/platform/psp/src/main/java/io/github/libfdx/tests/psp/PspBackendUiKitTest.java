@@ -23,6 +23,11 @@ import io.github.libfdx.ui.UiTextStyle;
 import io.github.libfdx.ui.UiTheme;
 import io.github.libfdx.ui.UiToolkit;
 
+/**
+ * Runs the psp backend ui kit test scenario.
+ *
+ * @author xpenatan
+ */
 final class PspBackendUiKitTest extends ApplicationAdapter {
     private static final String PSP_BITMAP_FONT_ASSET = "font/bitmap/psp_test_bitmap.fnt";
 
@@ -45,6 +50,11 @@ final class PspBackendUiKitTest extends ApplicationAdapter {
         this.scriptedSmokeInput = scriptedSmokeInput;
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
@@ -66,6 +76,12 @@ final class PspBackendUiKitTest extends ApplicationAdapter {
         root.setContent(this::buildUi);
     }
 
+    /**
+     * Handles a size change.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     @Override
     public void resize(int width, int height) {
         if (root != null) {
@@ -73,6 +89,9 @@ final class PspBackendUiKitTest extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         graphics.clear(0.055f, 0.070f, 0.090f, 1.0f);
@@ -192,6 +211,9 @@ final class PspBackendUiKitTest extends ApplicationAdapter {
         return theme.style(styleName, style.text(textStyle));
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (root != null) {

@@ -18,6 +18,11 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 
+/**
+ * Builds psp instances and related output.
+ *
+ * @author xpenatan
+ */
 public final class PspBuilder {
     private static final int BYTES_PER_MEGABYTE = 1024 * 1024;
 
@@ -47,64 +52,144 @@ public final class PspBuilder {
     private PspBuilder() {
     }
 
+    /**
+     * Creates a PSP builder.
+     *
+     * @return a new PSP builder
+     */
     public static PspBuilder psp() {
         return new PspBuilder();
     }
 
+    /**
+     * Sets the classpath and returns this PSP builder.
+     *
+     * @param entry the entry
+     * @return this PSP builder for chaining
+     */
     public PspBuilder classpath(Path entry) {
         classpath.add(Objects.requireNonNull(entry, "entry"));
         return this;
     }
 
+    /**
+     * Sets the classpath and returns this PSP builder.
+     *
+     * @param entries the entries
+     * @return this PSP builder for chaining
+     */
     public PspBuilder classpath(Collection<Path> entries) {
         classpath.addAll(Objects.requireNonNull(entries, "entries"));
         return this;
     }
 
+    /**
+     * Returns the classpath from current jvm.
+     *
+     * @return this PSP builder for chaining
+     */
     public PspBuilder classpathFromCurrentJvm() {
         addCurrentJvmClasspath(classpath);
         return this;
     }
 
+    /**
+     * Sets the native resource classpath and returns this PSP builder.
+     *
+     * @param entry the entry
+     * @return this PSP builder for chaining
+     */
     public PspBuilder nativeResourceClasspath(Path entry) {
         nativeResourceClasspath.add(Objects.requireNonNull(entry, "entry"));
         return this;
     }
 
+    /**
+     * Sets the native resource classpath and returns this PSP builder.
+     *
+     * @param entries the entries
+     * @return this PSP builder for chaining
+     */
     public PspBuilder nativeResourceClasspath(Collection<Path> entries) {
         nativeResourceClasspath.addAll(Objects.requireNonNull(entries, "entries"));
         return this;
     }
 
+    /**
+     * Returns the native resource classpath from current jvm.
+     *
+     * @return this PSP builder for chaining
+     */
     public PspBuilder nativeResourceClasspathFromCurrentJvm() {
         addCurrentJvmClasspath(nativeResourceClasspath);
         return this;
     }
 
+    /**
+     * Sets the asset and returns this PSP builder.
+     *
+     * @param asset the asset
+     * @return this PSP builder for chaining
+     */
     public PspBuilder asset(Path asset) {
         assets.add(Objects.requireNonNull(asset, "asset"));
         return this;
     }
 
+    /**
+     * Sets the assets and returns this PSP builder.
+     *
+     * @param assets the assets
+     * @return this PSP builder for chaining
+     */
     public PspBuilder assets(Collection<Path> assets) {
         this.assets.addAll(Objects.requireNonNull(assets, "assets"));
         return this;
     }
 
+    /**
+     * Sets the bitmap font and returns this PSP builder.
+     *
+     * @param bitmapFont the bitmap font
+     * @return this PSP builder for chaining
+     */
     public PspBuilder bitmapFont(BitmapFontSpec bitmapFont) {
         bitmapFonts.add(Objects.requireNonNull(bitmapFont, "bitmapFont"));
         return this;
     }
 
+    /**
+     * Sets the bitmap fonts and returns this PSP builder.
+     *
+     * @param bitmapFonts the bitmap fonts
+     * @return this PSP builder for chaining
+     */
     public PspBuilder bitmapFonts(Collection<BitmapFontSpec> bitmapFonts) {
         this.bitmapFonts.addAll(Objects.requireNonNull(bitmapFonts, "bitmapFonts"));
         return this;
     }
 
+    /**
+     * Sets the bitmap font and returns this PSP builder.
+     *
+     * @param sourceFile the source file
+     * @param name the name
+     * @param size the size
+     * @return this PSP builder for chaining
+     */
     public PspBuilder bitmapFont(Path sourceFile, String name, int size) {
         return bitmapFont(sourceFile, name, size, BitmapFontSpec.DEFAULT_ASSET_PATH);
     }
 
+    /**
+     * Sets the bitmap font and returns this PSP builder.
+     *
+     * @param sourceFile the source file
+     * @param name the name
+     * @param size the size
+     * @param assetPath the asset path
+     * @return this PSP builder for chaining
+     */
     public PspBuilder bitmapFont(Path sourceFile, String name, int size, String assetPath) {
         return bitmapFont(BitmapFontSpec.builder()
                 .sourceFile(sourceFile)
@@ -114,105 +199,231 @@ public final class PspBuilder {
                 .build());
     }
 
+    /**
+     * Sets the build root and returns this PSP builder.
+     *
+     * @param buildRoot the build root
+     * @return this PSP builder for chaining
+     */
     public PspBuilder buildRoot(Path buildRoot) {
         this.buildRoot = buildRoot;
         return this;
     }
 
+    /**
+     * Sets the output directory and returns this PSP builder.
+     *
+     * @param outputDirectory the output directory
+     * @return this PSP builder for chaining
+     */
     public PspBuilder outputDirectory(Path outputDirectory) {
         return buildRoot(outputDirectory);
     }
 
+    /**
+     * Sets the generated sources directory and returns this PSP builder.
+     *
+     * @param generatedSourcesDirectory the generated sources directory
+     * @return this PSP builder for chaining
+     */
     public PspBuilder generatedSourcesDirectory(Path generatedSourcesDirectory) {
         this.generatedSourcesDirectory = generatedSourcesDirectory;
         return this;
     }
 
+    /**
+     * Sets the release directory and returns this PSP builder.
+     *
+     * @param releaseDirectory the release directory
+     * @return this PSP builder for chaining
+     */
     public PspBuilder releaseDirectory(Path releaseDirectory) {
         this.releaseDirectory = releaseDirectory;
         return this;
     }
 
+    /**
+     * Sets the cache directory and returns this PSP builder.
+     *
+     * @param cacheDirectory the cache directory
+     * @return this PSP builder for chaining
+     */
     public PspBuilder cacheDirectory(Path cacheDirectory) {
         this.cacheDirectory = cacheDirectory;
         return this;
     }
 
+    /**
+     * Sets the main class and returns this PSP builder.
+     *
+     * @param mainClass the main class
+     * @return this PSP builder for chaining
+     */
     public PspBuilder mainClass(String mainClass) {
         this.mainClass = Objects.requireNonNull(mainClass, "mainClass");
         return this;
     }
 
+    /**
+     * Sets the target file name and returns this PSP builder.
+     *
+     * @param targetFileName the target file name
+     * @return this PSP builder for chaining
+     */
     public PspBuilder targetFileName(String targetFileName) {
         this.targetFileName = Objects.requireNonNull(targetFileName, "targetFileName");
         return this;
     }
 
+    /**
+     * Sets the optimization and returns this PSP builder.
+     *
+     * @param optimization the optimization
+     * @return this PSP builder for chaining
+     */
     public PspBuilder optimization(TeaVMOptimization optimization) {
         this.optimization = Objects.requireNonNull(optimization, "optimization");
         return this;
     }
 
+    /**
+     * Sets the obfuscated and returns this PSP builder.
+     *
+     * @param obfuscated the obfuscated
+     * @return this PSP builder for chaining
+     */
     public PspBuilder obfuscated(boolean obfuscated) {
         this.obfuscated = obfuscated;
         return this;
     }
 
+    /**
+     * Sets the debug information and returns this PSP builder.
+     *
+     * @param debugInformation the debug information
+     * @return this PSP builder for chaining
+     */
     public PspBuilder debugInformation(boolean debugInformation) {
         this.debugInformation = debugInformation;
         return this;
     }
 
+    /**
+     * Sets the fast dependency analysis and returns this PSP builder.
+     *
+     * @param fastDependencyAnalysis the fast dependency analysis
+     * @return this PSP builder for chaining
+     */
     public PspBuilder fastDependencyAnalysis(boolean fastDependencyAnalysis) {
         this.fastDependencyAnalysis = fastDependencyAnalysis;
         return this;
     }
 
+    /**
+     * Sets the incremental and returns this PSP builder.
+     *
+     * @param incremental the incremental
+     * @return this PSP builder for chaining
+     */
     public PspBuilder incremental(boolean incremental) {
         this.incremental = incremental;
         return this;
     }
 
+    /**
+     * Sets the heap dump and returns this PSP builder.
+     *
+     * @param heapDump the heap dump
+     * @return this PSP builder for chaining
+     */
     public PspBuilder heapDump(boolean heapDump) {
         this.heapDump = heapDump;
         return this;
     }
 
+    /**
+     * Sets the short file names and returns this PSP builder.
+     *
+     * @param shortFileNames the short file names
+     * @return this PSP builder for chaining
+     */
     public PspBuilder shortFileNames(boolean shortFileNames) {
         this.shortFileNames = shortFileNames;
         return this;
     }
 
+    /**
+     * Sets the debug memory and returns this PSP builder.
+     *
+     * @param debugMemory the debug memory
+     * @return this PSP builder for chaining
+     */
     public PspBuilder debugMemory(boolean debugMemory) {
         this.debugMemory = debugMemory;
         return this;
     }
 
+    /**
+     * Sets the min heap size and returns this PSP builder.
+     *
+     * @param minHeapSize the min heap size
+     * @return this PSP builder for chaining
+     */
     public PspBuilder minHeapSize(int minHeapSize) {
         this.minHeapSize = minHeapSize;
         return this;
     }
 
+    /**
+     * Sets the max heap size and returns this PSP builder.
+     *
+     * @param maxHeapSize the max heap size
+     * @return this PSP builder for chaining
+     */
     public PspBuilder maxHeapSize(int maxHeapSize) {
         this.maxHeapSize = maxHeapSize;
         return this;
     }
 
+    /**
+     * Sets the property and returns this PSP builder.
+     *
+     * @param key the key
+     * @param value the value
+     * @return this PSP builder for chaining
+     */
     public PspBuilder property(String key, String value) {
         properties.put(Objects.requireNonNull(key, "key"), Objects.requireNonNull(value, "value"));
         return this;
     }
 
+    /**
+     * Sets the properties and returns this PSP builder.
+     *
+     * @param properties the properties
+     * @return this PSP builder for chaining
+     */
     public PspBuilder properties(Map<String, String> properties) {
         this.properties.putAll(Objects.requireNonNull(properties, "properties"));
         return this;
     }
 
+    /**
+     * Sets the log and returns this PSP builder.
+     *
+     * @param log the log
+     * @return this PSP builder for chaining
+     */
     public PspBuilder log(TeaVMToolLog log) {
         this.log = log;
         return this;
     }
 
+    /**
+     * Returns the build.
+     *
+     * @return the created value
+     */
     public PspBuildResult build() {
         Path root = requirePath(buildRoot, "buildRoot");
         Path sources = generatedSourcesDirectory != null

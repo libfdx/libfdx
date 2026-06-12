@@ -25,6 +25,8 @@ import java.nio.ByteOrder;
 /**
  * Immediate 2D shape renderer. The first slice uses normalized device coordinates:
  * x/y values are expected in the -1..1 range.
+ *
+ * @author xpenatan
  */
 public final class ShapeRenderer2D implements Disposable {
     private static final int FLOATS_PER_VERTEX = 6;
@@ -153,10 +155,21 @@ public final class ShapeRenderer2D implements Disposable {
     private float blue = 1.0f;
     private float alpha = 1.0f;
 
+    /**
+     * Creates a shape renderer2 d.
+     *
+     * @param graphicsSystem the graphics system
+     */
     public ShapeRenderer2D(GraphicsContext graphicsSystem) {
         this(graphicsSystem, DEFAULT_MAX_VERTICES);
     }
 
+    /**
+     * Creates a shape renderer2 d.
+     *
+     * @param graphicsSystem the graphics system
+     * @param initialMaxVertices the initial max vertices
+     */
     public ShapeRenderer2D(GraphicsContext graphicsSystem, int initialMaxVertices) {
         if (graphicsSystem == null) {
             throw new FdxException("GraphicsContext cannot be null");
@@ -187,10 +200,18 @@ public final class ShapeRenderer2D implements Disposable {
                 .vertexLayout(SHAPE_VERTEX_LAYOUT));
     }
 
+    /**
+     * Begins the operation.
+     */
     public void begin() {
         begin(LoadOp.load());
     }
 
+    /**
+     * Begins the operation.
+     *
+     * @param loadOp the load op
+     */
     public void begin(LoadOp loadOp) {
         ensureNotDisposed();
         GraphicsFrame frame = graphics.currentFrame();
@@ -204,6 +225,11 @@ public final class ShapeRenderer2D implements Disposable {
         flushSlotPass = pass;
     }
 
+    /**
+     * Begins the operation.
+     *
+     * @param pass the pass
+     */
     public void begin(RenderPass pass) {
         ensureNotDisposed();
         if (pass == null) {
@@ -218,6 +244,15 @@ public final class ShapeRenderer2D implements Disposable {
         drawing = true;
     }
 
+    /**
+     * Sets the color and returns this shape renderer2 d.
+     *
+     * @param red the red
+     * @param green the green
+     * @param blue the blue
+     * @param alpha the alpha
+     * @return this shape renderer2 d for chaining
+     */
     public ShapeRenderer2D color(float red, float green, float blue, float alpha) {
         this.red = red;
         this.green = green;
@@ -226,20 +261,64 @@ public final class ShapeRenderer2D implements Disposable {
         return this;
     }
 
+    /**
+     * Runs the line step.
+     *
+     * @param x1 the x1
+     * @param y1 the y1
+     * @param x2 the x2
+     * @param y2 the y2
+     */
     public void line(float x1, float y1, float x2, float y2) {
         line(x1, y1, x2, y2, red, green, blue, alpha);
     }
 
+    /**
+     * Runs the line step.
+     *
+     * @param x1 the x1
+     * @param y1 the y1
+     * @param x2 the x2
+     * @param y2 the y2
+     * @param red the red
+     * @param green the green
+     * @param blue the blue
+     * @param alpha the alpha
+     */
     public void line(float x1, float y1, float x2, float y2, float red, float green, float blue, float alpha) {
         ensureDrawing();
         appendLineVertex(x1, y1, red, green, blue, alpha);
         appendLineVertex(x2, y2, red, green, blue, alpha);
     }
 
+    /**
+     * Runs the triangle step.
+     *
+     * @param x1 the x1
+     * @param y1 the y1
+     * @param x2 the x2
+     * @param y2 the y2
+     * @param x3 the x3
+     * @param y3 the y3
+     */
     public void triangle(float x1, float y1, float x2, float y2, float x3, float y3) {
         triangle(x1, y1, x2, y2, x3, y3, red, green, blue, alpha);
     }
 
+    /**
+     * Runs the triangle step.
+     *
+     * @param x1 the x1
+     * @param y1 the y1
+     * @param x2 the x2
+     * @param y2 the y2
+     * @param x3 the x3
+     * @param y3 the y3
+     * @param red the red
+     * @param green the green
+     * @param blue the blue
+     * @param alpha the alpha
+     */
     public void triangle(float x1, float y1, float x2, float y2, float x3, float y3,
             float red, float green, float blue, float alpha) {
         line(x1, y1, x2, y2, red, green, blue, alpha);
@@ -247,10 +326,34 @@ public final class ShapeRenderer2D implements Disposable {
         line(x3, y3, x1, y1, red, green, blue, alpha);
     }
 
+    /**
+     * Runs the filled triangle step.
+     *
+     * @param x1 the x1
+     * @param y1 the y1
+     * @param x2 the x2
+     * @param y2 the y2
+     * @param x3 the x3
+     * @param y3 the y3
+     */
     public void filledTriangle(float x1, float y1, float x2, float y2, float x3, float y3) {
         filledTriangle(x1, y1, x2, y2, x3, y3, red, green, blue, alpha);
     }
 
+    /**
+     * Runs the filled triangle step.
+     *
+     * @param x1 the x1
+     * @param y1 the y1
+     * @param x2 the x2
+     * @param y2 the y2
+     * @param x3 the x3
+     * @param y3 the y3
+     * @param red the red
+     * @param green the green
+     * @param blue the blue
+     * @param alpha the alpha
+     */
     public void filledTriangle(float x1, float y1, float x2, float y2, float x3, float y3,
             float red, float green, float blue, float alpha) {
         ensureDrawing();
@@ -259,10 +362,30 @@ public final class ShapeRenderer2D implements Disposable {
         appendTriangleVertex(x3, y3, red, green, blue, alpha);
     }
 
+    /**
+     * Runs the rect step.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     public void rect(float x, float y, float width, float height) {
         rect(x, y, width, height, red, green, blue, alpha);
     }
 
+    /**
+     * Runs the rect step.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @param red the red
+     * @param green the green
+     * @param blue the blue
+     * @param alpha the alpha
+     */
     public void rect(float x, float y, float width, float height, float red, float green, float blue, float alpha) {
         float x2 = x + width;
         float y2 = y + height;
@@ -272,10 +395,30 @@ public final class ShapeRenderer2D implements Disposable {
         line(x, y2, x, y, red, green, blue, alpha);
     }
 
+    /**
+     * Runs the filled rect step.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     public void filledRect(float x, float y, float width, float height) {
         filledRect(x, y, width, height, red, green, blue, alpha);
     }
 
+    /**
+     * Runs the filled rect step.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @param red the red
+     * @param green the green
+     * @param blue the blue
+     * @param alpha the alpha
+     */
     public void filledRect(float x, float y, float width, float height, float red, float green, float blue,
             float alpha) {
         float x2 = x + width;
@@ -284,10 +427,29 @@ public final class ShapeRenderer2D implements Disposable {
         filledTriangle(x, y, x2, y2, x2, y, red, green, blue, alpha);
     }
 
+    /**
+     * Runs the circle step.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param radius the radius
+     */
     public void circle(float x, float y, float radius) {
         circle(x, y, radius, DEFAULT_CIRCLE_SEGMENTS, red, green, blue, alpha);
     }
 
+    /**
+     * Runs the circle step.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param radius the radius
+     * @param segments the segments
+     * @param red the red
+     * @param green the green
+     * @param blue the blue
+     * @param alpha the alpha
+     */
     public void circle(float x, float y, float radius, int segments, float red, float green, float blue, float alpha) {
         ensureSegments(segments);
         float previousX = x + radius;
@@ -302,10 +464,29 @@ public final class ShapeRenderer2D implements Disposable {
         }
     }
 
+    /**
+     * Runs the filled circle step.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param radius the radius
+     */
     public void filledCircle(float x, float y, float radius) {
         filledCircle(x, y, radius, DEFAULT_CIRCLE_SEGMENTS, red, green, blue, alpha);
     }
 
+    /**
+     * Runs the filled circle step.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param radius the radius
+     * @param segments the segments
+     * @param red the red
+     * @param green the green
+     * @param blue the blue
+     * @param alpha the alpha
+     */
     public void filledCircle(float x, float y, float radius, int segments, float red, float green, float blue,
             float alpha) {
         ensureSegments(segments);
@@ -321,6 +502,9 @@ public final class ShapeRenderer2D implements Disposable {
         }
     }
 
+    /**
+     * Ends the operation.
+     */
     public void end() {
         ensureDrawing();
         flush(trianglePipeline, triangleVertices, triangleFloatCount);
@@ -464,6 +648,9 @@ public final class ShapeRenderer2D implements Disposable {
     }
 
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -484,6 +671,11 @@ public final class ShapeRenderer2D implements Disposable {
         shader.dispose();
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;

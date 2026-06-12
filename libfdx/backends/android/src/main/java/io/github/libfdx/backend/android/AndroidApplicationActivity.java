@@ -8,6 +8,11 @@ import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 import io.github.libfdx.application.ApplicationListener;
 
+/**
+ * Represents an android application activity.
+ *
+ * @author xpenatan
+ */
 public abstract class AndroidApplicationActivity extends Activity {
     private AndroidApplicationBackend backend;
     private boolean backCallbackRegistered;
@@ -54,6 +59,12 @@ public abstract class AndroidApplicationActivity extends Activity {
         return backend;
     }
 
+    /**
+     * Runs the dispatch key event step.
+     *
+     * @param event the event
+     * @return true if dispatch key event succeeds or is active; false otherwise
+     */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU && event != null

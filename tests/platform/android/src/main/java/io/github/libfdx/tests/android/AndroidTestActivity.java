@@ -16,6 +16,11 @@ import io.github.libfdx.tests.AutoTestApplication;
 import io.github.libfdx.tests.TestChooserApplication;
 import io.github.libfdx.tests.TestSelector;
 
+/**
+ * Represents an android test activity.
+ *
+ * @author xpenatan
+ */
 public class AndroidTestActivity extends AndroidApplicationActivity {
     @Override
     protected AndroidApplicationConfig createApplicationConfig() {

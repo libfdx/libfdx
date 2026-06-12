@@ -17,6 +17,11 @@ import io.github.libfdx.graphics.g2d.SpriteBatch;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 import io.github.libfdx.tests.TestFpsLogger;
 
+/**
+ * Runs the sprite batch test scenario.
+ *
+ * @author xpenatan
+ */
 public final class SpriteBatchTest extends ApplicationAdapter {
     private static final String PLAYER_ASSET = "player.png";
     private static final int PLAYER_FRAME_WIDTH = 256;
@@ -32,10 +37,20 @@ public final class SpriteBatchTest extends ApplicationAdapter {
     private boolean created;
     private long renderedFrames;
 
+    /**
+     * Creates a sprite batch test.
+     *
+     * @param exitAfterFrames the exit after frames
+     */
     public SpriteBatchTest(long exitAfterFrames) {
         this.exitAfterFrames = exitAfterFrames;
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
@@ -56,6 +71,9 @@ public final class SpriteBatchTest extends ApplicationAdapter {
                 + " player texture and " + frameCount() + " regions");
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         float deltaSeconds = application.deltaTime();
@@ -74,6 +92,9 @@ public final class SpriteBatchTest extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (batch != null) {

@@ -2,6 +2,11 @@ package io.github.libfdx.graphics.wgpu;
 
 import com.github.xpenatan.webgpu.WGPUBackendType;
 
+/**
+ * Lists the supported WGPU backend values.
+ *
+ * @author xpenatan
+ */
 public enum WGPUBackend {
     DEFAULT,
     D3D11,
@@ -13,6 +18,11 @@ public enum WGPUBackend {
     WEBGPU,
     HEADLESS;
 
+    /**
+     * Returns the to native.
+     *
+     * @return the to native
+     */
     public WGPUBackendType toNative() {
         switch (this) {
             case D3D11:

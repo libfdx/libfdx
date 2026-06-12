@@ -15,6 +15,11 @@ import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+/**
+ * Writes psp project output.
+ *
+ * @author xpenatan
+ */
 public final class PspProjectWriter {
     private static final List<String> NATIVE_RESOURCE_PREFIXES = List.of(
             "libfdx-native/shared/",
@@ -23,6 +28,13 @@ public final class PspProjectWriter {
     private PspProjectWriter() {
     }
 
+    /**
+     * Runs the write step.
+     *
+     * @param project the project
+     * @return the write
+     * @throws IOException if the operation cannot be completed
+     */
     public static Set<Path> write(PspProject project) throws IOException {
         Objects.requireNonNull(project, "project");
         LinkedHashSet<Path> written = new LinkedHashSet<>();

@@ -1,5 +1,10 @@
 package io.github.libfdx.ui;
 
+/**
+ * Represents an ui float state.
+ *
+ * @author xpenatan
+ */
 public final class UiFloatState extends UiObservableState {
     private float value;
 
@@ -7,11 +12,21 @@ public final class UiFloatState extends UiObservableState {
         this.value = value;
     }
 
+    /**
+     * Returns the get.
+     *
+     * @return the get
+     */
     public float get() {
         observeRead();
         return value;
     }
 
+    /**
+     * Runs the set step.
+     *
+     * @param value the value
+     */
     public void set(float value) {
         if (same(this.value, value)) {
             return;

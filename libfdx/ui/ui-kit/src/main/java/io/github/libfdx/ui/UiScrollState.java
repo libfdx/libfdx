@@ -1,5 +1,10 @@
 package io.github.libfdx.ui;
 
+/**
+ * Represents an ui scroll state.
+ *
+ * @author xpenatan
+ */
 public final class UiScrollState {
     private float x;
     private float y;
@@ -10,51 +15,113 @@ public final class UiScrollState {
     private float maxX = Float.NaN;
     private float maxY = Float.NaN;
 
+    /**
+     * Returns the x.
+     *
+     * @return the x
+     */
     public float x() {
         return x;
     }
 
+    /**
+     * Returns the y.
+     *
+     * @return the y
+     */
     public float y() {
         return y;
     }
 
+    /**
+     * Returns the viewport width.
+     *
+     * @return the viewport width
+     */
     public float viewportWidth() {
         return viewportWidth;
     }
 
+    /**
+     * Returns the viewport height.
+     *
+     * @return the viewport height
+     */
     public float viewportHeight() {
         return viewportHeight;
     }
 
+    /**
+     * Returns the content width.
+     *
+     * @return the content width
+     */
     public float contentWidth() {
         return contentWidth;
     }
 
+    /**
+     * Returns the content height.
+     *
+     * @return the content height
+     */
     public float contentHeight() {
         return contentHeight;
     }
 
+    /**
+     * Returns the max x.
+     *
+     * @return the max x
+     */
     public float maxX() {
         return Float.isNaN(maxX) ? 0.0f : maxX;
     }
 
+    /**
+     * Returns the max y.
+     *
+     * @return the max y
+     */
     public float maxY() {
         return Float.isNaN(maxY) ? 0.0f : maxY;
     }
 
+    /**
+     * Returns whether this instance can scroll x.
+     *
+     * @return true if can scroll x succeeds or is active; false otherwise
+     */
     public boolean canScrollX() {
         return maxX() > 0.0f;
     }
 
+    /**
+     * Returns whether this instance can scroll y.
+     *
+     * @return true if can scroll y succeeds or is active; false otherwise
+     */
     public boolean canScrollY() {
         return maxY() > 0.0f;
     }
 
+    /**
+     * Runs the scroll to step.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     */
     public void scrollTo(float x, float y) {
         this.x = clamp(x, maxX);
         this.y = clamp(y, maxY);
     }
 
+    /**
+     * Runs the scroll by step.
+     *
+     * @param deltaX the delta x
+     * @param deltaY the delta y
+     */
     public void scrollBy(float deltaX, float deltaY) {
         scrollTo(x + deltaX, y + deltaY);
     }

@@ -43,6 +43,11 @@ import io.github.libfdx.input.Key;
 import io.github.libfdx.math.internal.MathAcceleration;
 import io.github.libfdx.runtime.core.RuntimeCore;
 
+/**
+ * Implements the backend integration for android application.
+ *
+ * @author xpenatan
+ */
 public final class AndroidApplicationBackend implements ApplicationBackend, Application,
         SurfaceHolder.Callback, Choreographer.FrameCallback, View.OnTouchListener, View.OnKeyListener {
     public static final ProviderId ID = ProviderId.of("android");
@@ -110,16 +115,34 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
     private float deltaTime;
     private long frameId;
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Runs the start step.
+     *
+     * @param config the configuration
+     * @param listener the listener
+     */
     @Override
     public void start(ApplicationConfig config, ApplicationListener listener) {
         throw new FdxException("AndroidApplicationBackend must be attached to an Android Activity");
     }
 
+    /**
+     * Runs the attach step.
+     *
+     * @param activity the activity
+     * @param config the configuration
+     * @param listener the listener
+     */
     public void attach(Activity activity, AndroidApplicationConfig config, ApplicationListener listener) {
         if (activity == null) {
             throw new FdxException("Android Activity cannot be null");
@@ -172,6 +195,11 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
                 | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
     }
 
+    /**
+     * Runs the surface created step.
+     *
+     * @param holder the holder
+     */
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
         surface = holder.getSurface();
@@ -182,6 +210,14 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         createSessionIfNeeded();
     }
 
+    /**
+     * Runs the surface changed step.
+     *
+     * @param holder the holder
+     * @param format the format
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         surface = holder.getSurface();
@@ -196,6 +232,11 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         listener.resize(display.width(), display.height());
     }
 
+    /**
+     * Runs the surface destroyed step.
+     *
+     * @param holder the holder
+     */
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
         removeFrameCallbackIfNeeded();
@@ -328,6 +369,11 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         activity.setContentView(errorView);
     }
 
+    /**
+     * Runs the do frame step.
+     *
+     * @param frameTimeNanos the frame time nanos
+     */
     @Override
     public void doFrame(long frameTimeNanos) {
         frameCallbackPosted = false;
@@ -356,6 +402,9 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         postFrameCallbackIfNeeded();
     }
 
+    /**
+     * Handles application pause.
+     */
     public void pause() {
         if (paused || disposed) {
             return;
@@ -368,6 +417,9 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         }
     }
 
+    /**
+     * Handles application resume.
+     */
     public void resume() {
         if (disposed) {
             return;
@@ -397,6 +449,13 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         frameCallbackPosted = false;
     }
 
+    /**
+     * Handles the touch event.
+     *
+     * @param view the view
+     * @param event the event
+     * @return true if on touch succeeds or is active; false otherwise
+     */
     @Override
     public boolean onTouch(View view, MotionEvent event) {
         if (view != null) {
@@ -430,6 +489,14 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         return false;
     }
 
+    /**
+     * Handles the key event.
+     *
+     * @param view the view
+     * @param keyCode the key code
+     * @param event the event
+     * @return true if on key succeeds or is active; false otherwise
+     */
     @Override
     public boolean onKey(View view, int keyCode, KeyEvent event) {
         if (input == null || event == null) {
@@ -599,21 +666,39 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         MathAcceleration.register(null);
     }
 
+    /**
+     * Returns the lifecycle.
+     *
+     * @return the lifecycle
+     */
     @Override
     public ApplicationLifecycle lifecycle() {
         return lifecycle;
     }
 
+    /**
+     * Returns the delta time.
+     *
+     * @return the delta time
+     */
     @Override
     public float deltaTime() {
         return deltaTime;
     }
 
+    /**
+     * Returns the frame ID.
+     *
+     * @return the frame ID
+     */
     @Override
     public long frameId() {
         return frameId;
     }
 
+    /**
+     * Runs the request exit step.
+     */
     @Override
     public void requestExit() {
         running = false;
@@ -634,12 +719,21 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         return handled;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
         return (T) this;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -663,11 +757,21 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         lifecycle = ApplicationLifecycle.DISPOSED;
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;
     }
 
+    /**
+     * Represents an android graphics environment.
+     *
+     * @author xpenatan
+     */
     private static final class AndroidGraphicsEnvironment implements GraphicsEnvironment {
         private final Display display;
         private final NativeWindow nativeWindow;
@@ -677,17 +781,32 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
             this.nativeWindow = nativeWindow;
         }
 
+        /**
+         * Returns the display.
+         *
+         * @return the display
+         */
         @Override
         public Display display() {
             return display;
         }
 
+        /**
+         * Returns the native window.
+         *
+         * @return the native window
+         */
         @Override
         public NativeWindow nativeWindow() {
             return nativeWindow;
         }
     }
 
+    /**
+     * Represents a graphics failure collector.
+     *
+     * @author xpenatan
+     */
     private static final class GraphicsFailureCollector {
         private final StringBuilder message = new StringBuilder();
 
@@ -703,6 +822,11 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         }
     }
 
+    /**
+     * Represents an android display.
+     *
+     * @author xpenatan
+     */
     private static final class AndroidDisplay implements Display {
         private final Activity activity;
         private String title;
@@ -734,62 +858,121 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
             this.contentScaleY = scale;
         }
 
+        /**
+         * Returns the title.
+         *
+         * @return the title
+         */
         @Override
         public String title() {
             return title;
         }
 
+        /**
+         * Runs the title step.
+         *
+         * @param title the title
+         */
         @Override
         public void title(String title) {
             this.title = title != null ? title : "";
             activity.setTitle(this.title);
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return width;
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return height;
         }
 
+        /**
+         * Returns the framebuffer width.
+         *
+         * @return the framebuffer width
+         */
         @Override
         public int framebufferWidth() {
             return framebufferWidth;
         }
 
+        /**
+         * Returns the framebuffer height.
+         *
+         * @return the framebuffer height
+         */
         @Override
         public int framebufferHeight() {
             return framebufferHeight;
         }
 
+        /**
+         * Returns the content scale x.
+         *
+         * @return the content scale x
+         */
         @Override
         public float contentScaleX() {
             return contentScaleX;
         }
 
+        /**
+         * Returns the content scale y.
+         *
+         * @return the content scale y
+         */
         @Override
         public float contentScaleY() {
             return contentScaleY;
         }
 
+        /**
+         * Returns the close requested.
+         *
+         * @return true if close requested succeeds or is active; false otherwise
+         */
         @Override
         public boolean closeRequested() {
             return closeRequested;
         }
 
+        /**
+         * Runs the request close step.
+         */
         @Override
         public void requestClose() {
             closeRequested = true;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {

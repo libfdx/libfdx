@@ -7,6 +7,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Represents an ui node.
+ *
+ * @author xpenatan
+ */
 public final class UiNode implements Disposable {
     private final List<UiNode> children = new ArrayList<UiNode>();
     private final List<UiNode> readOnlyChildren = Collections.unmodifiableList(children);
@@ -160,14 +165,29 @@ public final class UiNode implements Disposable {
         this.bounds = bounds != null ? bounds : UiRect.ZERO;
     }
 
+    /**
+     * Returns the type.
+     *
+     * @return the type
+     */
     public UiNodeType type() {
         return type;
     }
 
+    /**
+     * Returns the identity.
+     *
+     * @return the identity
+     */
     public String identity() {
         return identity;
     }
 
+    /**
+     * Returns the key.
+     *
+     * @return the key
+     */
     public String key() {
         return key;
     }
@@ -176,70 +196,155 @@ public final class UiNode implements Disposable {
         return parent;
     }
 
+    /**
+     * Returns the modifier.
+     *
+     * @return the modifier
+     */
     public UiModifier modifier() {
         return modifier;
     }
 
+    /**
+     * Returns the text.
+     *
+     * @return the text
+     */
     public String text() {
         return text;
     }
 
+    /**
+     * Returns the value.
+     *
+     * @return the value
+     */
     public Object value() {
         return value;
     }
 
+    /**
+     * Returns the int value.
+     *
+     * @return the int value
+     */
     public int intValue() {
         return intValue;
     }
 
+    /**
+     * Returns the float value.
+     *
+     * @return the float value
+     */
     public float floatValue() {
         return floatValue;
     }
 
+    /**
+     * Returns the action.
+     *
+     * @return the action
+     */
     public Runnable action() {
         return action;
     }
 
+    /**
+     * Returns the image.
+     *
+     * @return the image
+     */
     public TextureRegion image() {
         return image;
     }
 
+    /**
+     * Returns the animation spec.
+     *
+     * @return the animation spec
+     */
     public UiAnimationSpec animationSpec() {
         return animationSpec;
     }
 
+    /**
+     * Returns the scroll state.
+     *
+     * @return the scroll state
+     */
     public UiScrollState scrollState() {
         return scrollState;
     }
 
+    /**
+     * Returns the list state.
+     *
+     * @return the list state
+     */
     public UiListState listState() {
         return listState;
     }
 
+    /**
+     * Returns the custom context.
+     *
+     * @return the custom context
+     */
     public UiCustomContext customContext() {
         return customContext;
     }
 
+    /**
+     * Returns the descriptor.
+     *
+     * @return the descriptor
+     */
     public Object descriptor() {
         return descriptor;
     }
 
+    /**
+     * Returns the visible.
+     *
+     * @return true if visible succeeds or is active; false otherwise
+     */
     public boolean visible() {
         return visible;
     }
 
+    /**
+     * Returns the hovered.
+     *
+     * @return true if hovered succeeds or is active; false otherwise
+     */
     public boolean hovered() {
         return hovered;
     }
 
+    /**
+     * Returns the pressed.
+     *
+     * @return true if pressed succeeds or is active; false otherwise
+     */
     public boolean pressed() {
         return pressed;
     }
 
+    /**
+     * Returns the focused.
+     *
+     * @return true if focused succeeds or is active; false otherwise
+     */
     public boolean focused() {
         return focused;
     }
 
+    /**
+     * Returns the checked.
+     *
+     * @return true if checked succeeds or is active; false otherwise
+     */
     public boolean checked() {
         return checked;
     }
@@ -248,10 +353,20 @@ public final class UiNode implements Disposable {
         return checkboxLabel;
     }
 
+    /**
+     * Returns the invalid.
+     *
+     * @return true if invalid succeeds or is active; false otherwise
+     */
     public boolean invalid() {
         return invalid;
     }
 
+    /**
+     * Returns the bounds.
+     *
+     * @return the bounds
+     */
     public UiRect bounds() {
         return bounds;
     }
@@ -364,10 +479,18 @@ public final class UiNode implements Disposable {
         return a == b || (a != null && a.equals(b));
     }
 
+    /**
+     * Returns the children.
+     *
+     * @return the children
+     */
     public List<UiNode> children() {
         return readOnlyChildren;
     }
 
+    /**
+     * Runs the activate step.
+     */
     public void activate() {
         if (action != null) {
             action.run();
@@ -384,6 +507,12 @@ public final class UiNode implements Disposable {
         return action != null || type == UiNodeType.CHECKBOX;
     }
 
+    /**
+     * Runs the select tab step.
+     *
+     * @param index the index
+     * @return true if select tab succeeds or is active; false otherwise
+     */
     public boolean selectTab(int index) {
         if (type != UiNodeType.TABS || !(descriptor instanceof UiTabsModel)) {
             return false;
@@ -398,18 +527,35 @@ public final class UiNode implements Disposable {
         return true;
     }
 
+    /**
+     * Returns the tab count.
+     *
+     * @return the tab count
+     */
     public int tabCount() {
         return type == UiNodeType.TABS && descriptor instanceof UiTabsModel
                 ? ((UiTabsModel) descriptor).count()
                 : 0;
     }
 
+    /**
+     * Runs the tab label step.
+     *
+     * @param index the index
+     * @return the tab label
+     */
     public String tabLabel(int index) {
         return type == UiNodeType.TABS && descriptor instanceof UiTabsModel
                 ? ((UiTabsModel) descriptor).label(index)
                 : "";
     }
 
+    /**
+     * Sets the slider value.
+     *
+     * @param value the value
+     * @return true if set slider value succeeds or is active; false otherwise
+     */
     public boolean setSliderValue(float value) {
         if (type != UiNodeType.SLIDER || !(descriptor instanceof UiSliderModel)) {
             return false;
@@ -423,6 +569,11 @@ public final class UiNode implements Disposable {
         return true;
     }
 
+    /**
+     * Returns the slider minimum.
+     *
+     * @return the slider minimum
+     */
     public float sliderMinimum() {
         if (type != UiNodeType.SLIDER || !(descriptor instanceof UiSliderModel)) {
             return 0.0f;
@@ -431,6 +582,11 @@ public final class UiNode implements Disposable {
         return range != null ? range.minimum() : 0.0f;
     }
 
+    /**
+     * Returns the slider maximum.
+     *
+     * @return the slider maximum
+     */
     public float sliderMaximum() {
         if (type != UiNodeType.SLIDER || !(descriptor instanceof UiSliderModel)) {
             return 1.0f;
@@ -439,6 +595,9 @@ public final class UiNode implements Disposable {
         return range != null ? range.maximum() : 1.0f;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -449,6 +608,11 @@ public final class UiNode implements Disposable {
         children.clear();
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;

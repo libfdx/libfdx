@@ -4,13 +4,38 @@ import io.github.libfdx.core.ProviderHandle;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Defines the contract for frame buffer implementations.
+ *
+ * @author xpenatan
+ */
 public interface FrameBuffer extends ProviderHandle {
+    /**
+     * Returns the color attachment.
+     *
+     * @return the color attachment
+     */
     TextureView colorAttachment();
 
+    /**
+     * Returns the format.
+     *
+     * @return the format
+     */
     TextureFormat format();
 
+    /**
+     * Returns the width.
+     *
+     * @return the width
+     */
     int width();
 
+    /**
+     * Returns the height.
+     *
+     * @return the height
+     */
     int height();
 
     /**

@@ -79,6 +79,11 @@ import java.util.Locale;
 import java.util.zip.CRC32;
 import java.util.zip.Deflater;
 
+/**
+ * Runs the ui kit test scenario.
+ *
+ * @author xpenatan
+ */
 public final class UiKitTest extends ApplicationAdapter {
     private static final String LOGO_ASSET = "fdx_logo_dark.png";
     private static final String PATCH_ASSET = "ui_panel_patch.png";
@@ -258,10 +263,20 @@ public final class UiKitTest extends ApplicationAdapter {
     private RecordingTextInputController textInputController;
     private final LinkedHashMap<String, Integer> pendingValidationCaptures = new LinkedHashMap<>();
 
+    /**
+     * Creates an UI kit test.
+     *
+     * @param exitAfterFrames the exit after frames
+     */
     public UiKitTest(long exitAfterFrames) {
         this.exitAfterFrames = exitAfterFrames;
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
@@ -449,6 +464,12 @@ public final class UiKitTest extends ApplicationAdapter {
         return input != null && input.gamepads() != null ? input.gamepads() : new DefaultGamepads();
     }
 
+    /**
+     * Handles a size change.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     @Override
     public void resize(int width, int height) {
         if (root != null) {
@@ -456,6 +477,9 @@ public final class UiKitTest extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         if (assets != null) {
@@ -501,6 +525,9 @@ public final class UiKitTest extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Handles the frame end event.
+     */
     @Override
     public void onFrameEnd() {
     }
@@ -513,6 +540,9 @@ public final class UiKitTest extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (root != null) {
@@ -1658,37 +1688,81 @@ public final class UiKitTest extends ApplicationAdapter {
         settleValidationLayout();
     }
 
+    /**
+     * Represents an ui kit scenario input driver.
+     *
+     * @author xpenatan
+     */
     private final class UiKitScenarioInputDriver implements ScenarioInputDriver {
+        /**
+         * Runs the key down step.
+         *
+         * @param key the key
+         */
         @Override
         public void keyDown(Key key) {
             input.dispatchKeyDown(key);
         }
 
+        /**
+         * Runs the key up step.
+         *
+         * @param key the key
+         */
         @Override
         public void keyUp(Key key) {
             input.dispatchKeyUp(key);
         }
 
+        /**
+         * Runs the pointer move step.
+         *
+         * @param x the x coordinate
+         * @param y the y coordinate
+         */
         @Override
         public void pointerMove(float x, float y) {
             input.dispatchPointerMoved(Math.round(x), Math.round(y));
         }
 
+        /**
+         * Runs the pointer down step.
+         *
+         * @param x the x coordinate
+         * @param y the y coordinate
+         */
         @Override
         public void pointerDown(float x, float y) {
             input.dispatchPointerDown(MouseButton.LEFT, Math.round(x), Math.round(y));
         }
 
+        /**
+         * Runs the pointer up step.
+         *
+         * @param x the x coordinate
+         * @param y the y coordinate
+         */
         @Override
         public void pointerUp(float x, float y) {
             input.dispatchPointerUp(MouseButton.LEFT, Math.round(x), Math.round(y));
         }
 
+        /**
+         * Runs the text step.
+         *
+         * @param text the text
+         */
         @Override
         public void text(String text) {
             input.dispatchTextInput(text);
         }
 
+        /**
+         * Runs the scroll step.
+         *
+         * @param amountX the amount x
+         * @param amountY the amount y
+         */
         @Override
         public void scroll(float amountX, float amountY) {
             int x = display != null ? Math.max(0, display.width() / 2) : 0;
@@ -2489,6 +2563,11 @@ public final class UiKitTest extends ApplicationAdapter {
         png.writeInt((int) crc.getValue());
     }
 
+    /**
+     * Represents a captured frame.
+     *
+     * @author xpenatan
+     */
     private static final class CapturedFrame {
         final int width;
         final int height;
@@ -2501,6 +2580,11 @@ public final class UiKitTest extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Represents a recording text input controller.
+     *
+     * @author xpenatan
+     */
     private static final class RecordingTextInputController implements TextInputController {
         private TextInputRequest lastRequest = TextInputRequest.builder().build();
         private int showCount;
@@ -2508,6 +2592,11 @@ public final class UiKitTest extends ApplicationAdapter {
         private int hideCount;
         private boolean visible;
 
+        /**
+         * Runs the show text input step.
+         *
+         * @param request the request
+         */
         @Override
         public void showTextInput(TextInputRequest request) {
             lastRequest = request != null ? request : TextInputRequest.builder().build();
@@ -2515,12 +2604,20 @@ public final class UiKitTest extends ApplicationAdapter {
             visible = true;
         }
 
+        /**
+         * Runs the update text input step.
+         *
+         * @param request the request
+         */
         @Override
         public void updateTextInput(TextInputRequest request) {
             lastRequest = request != null ? request : TextInputRequest.builder().build();
             updateCount++;
         }
 
+        /**
+         * Runs the hide text input step.
+         */
         @Override
         public void hideTextInput() {
             hideCount++;

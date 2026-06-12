@@ -1,5 +1,12 @@
 package io.github.libfdx.ui;
 
+/**
+ * Represents an ui animatable.
+ *
+ * @param <T> the value type
+ *
+ * @author xpenatan
+ */
 public final class UiAnimatable<T> {
     private T value;
     private T start;
@@ -15,14 +22,29 @@ public final class UiAnimatable<T> {
         this.target = value;
     }
 
+    /**
+     * Returns the get.
+     *
+     * @return the get
+     */
     public T get() {
         return value;
     }
 
+    /**
+     * Returns the target.
+     *
+     * @return the target
+     */
     public T target() {
         return target;
     }
 
+    /**
+     * Runs the snap to step.
+     *
+     * @param value the value
+     */
     public void snapTo(T value) {
         this.value = value;
         this.start = value;
@@ -32,10 +54,21 @@ public final class UiAnimatable<T> {
         this.reverseDirection = false;
     }
 
+    /**
+     * Runs the animate to step.
+     *
+     * @param target the target value
+     */
     public void animateTo(T target) {
         animateTo(target, UiAnimationSpec.defaultSpec());
     }
 
+    /**
+     * Runs the animate to step.
+     *
+     * @param target the target value
+     * @param spec the spec
+     */
     public void animateTo(T target, UiAnimationSpec spec) {
         if (running && sameValue(this.target, target)) {
             return;

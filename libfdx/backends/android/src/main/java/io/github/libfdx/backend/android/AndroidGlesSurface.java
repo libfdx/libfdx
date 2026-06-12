@@ -10,6 +10,11 @@ import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.gl.GLSurface;
 
+/**
+ * Represents an android gles surface.
+ *
+ * @author xpenatan
+ */
 final class AndroidGlesSurface implements GLSurface, Disposable {
     private static final int EGL_OPENGL_ES3_BIT_KHR = 0x00000040;
 
@@ -69,6 +74,9 @@ final class AndroidGlesSurface implements GLSurface, Disposable {
         return configs[0];
     }
 
+    /**
+     * Runs the make current step.
+     */
     @Override
     public void makeCurrent() {
         if (!EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) {
@@ -76,6 +84,9 @@ final class AndroidGlesSurface implements GLSurface, Disposable {
         }
     }
 
+    /**
+     * Runs the swap buffers step.
+     */
     @Override
     public void swapBuffers() {
         if (!EGL14.eglSwapBuffers(eglDisplay, eglSurface)) {
@@ -83,12 +94,18 @@ final class AndroidGlesSurface implements GLSurface, Disposable {
         }
     }
 
+    /**
+     * Runs the release current step.
+     */
     @Override
     public void releaseCurrent() {
         EGL14.eglMakeCurrent(eglDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE,
                 EGL14.EGL_NO_CONTEXT);
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -101,6 +118,11 @@ final class AndroidGlesSurface implements GLSurface, Disposable {
         EGL14.eglTerminate(eglDisplay);
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;

@@ -1,5 +1,10 @@
 package io.github.libfdx.graphics;
 
+/**
+ * Lists the supported vertex format values.
+ *
+ * @author xpenatan
+ */
 public enum VertexFormat {
     FLOAT32(1, 4),
     FLOAT32X2(2, 8),
@@ -15,10 +20,20 @@ public enum VertexFormat {
         this.byteSize = byteSize;
     }
 
+    /**
+     * Returns the component count.
+     *
+     * @return the component count
+     */
     public int componentCount() {
         return componentCount;
     }
 
+    /**
+     * Returns the byte size.
+     *
+     * @return the byte size
+     */
     public int byteSize() {
         return byteSize;
     }

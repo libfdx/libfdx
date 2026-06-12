@@ -2,6 +2,11 @@ package io.github.libfdx.graphics;
 
 import io.github.libfdx.core.FdxException;
 
+/**
+ * Represents a shader attribute.
+ *
+ * @author xpenatan
+ */
 public final class ShaderAttribute {
     private final int location;
     private final String name;
@@ -22,18 +27,41 @@ public final class ShaderAttribute {
         this.format = format;
     }
 
+    /**
+     * Creates a shader attribute from the supplied values.
+     *
+     * @param location the location
+     * @param name the name
+     * @param format the format
+     * @return a new shader attribute
+     */
     public static ShaderAttribute of(int location, String name, VertexFormat format) {
         return new ShaderAttribute(location, name, format);
     }
 
+    /**
+     * Returns the location.
+     *
+     * @return the location
+     */
     public int location() {
         return location;
     }
 
+    /**
+     * Returns the name.
+     *
+     * @return the name
+     */
     public String name() {
         return name;
     }
 
+    /**
+     * Returns the format.
+     *
+     * @return the format
+     */
     public VertexFormat format() {
         return format;
     }

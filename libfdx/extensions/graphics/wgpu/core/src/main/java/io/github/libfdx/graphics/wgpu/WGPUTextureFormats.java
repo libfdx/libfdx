@@ -4,6 +4,11 @@ import com.github.xpenatan.webgpu.WGPUTextureFormat;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.TextureFormat;
 
+/**
+ * Represents a WGPU texture formats.
+ *
+ * @author xpenatan
+ */
 final class WGPUTextureFormats {
     private WGPUTextureFormats() {
     }

@@ -31,15 +31,31 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
+/**
+ * Provides pbr shader services.
+ *
+ * @author xpenatan
+ */
 public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
     private final PositionColorShader shader;
     private final GpuPbrShader gpuShader;
     private boolean disposed;
 
+    /**
+     * Creates a PBR shader provider.
+     *
+     * @param graphics the graphics context
+     */
     public PbrShaderProvider(GraphicsContext graphics) {
         this(graphics, new PbrShaderConfig());
     }
 
+    /**
+     * Creates a PBR shader provider.
+     *
+     * @param graphics the graphics context
+     * @param config the configuration
+     */
     public PbrShaderProvider(GraphicsContext graphics, PbrShaderConfig config) {
         if (graphics == null) {
             throw new FdxException("GraphicsContext cannot be null");
@@ -56,6 +72,13 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 || "wgpu".equals(providerId) || "vulkan".equals(providerId);
     }
 
+    /**
+     * Runs the shader step.
+     *
+     * @param renderable the renderable
+     * @param context the context
+     * @return the shader
+     */
     @Override
     public Shader3D shader(Renderable3D renderable, RenderContext3D context) {
         if (disposed) {
@@ -70,6 +93,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         return shader;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -82,11 +108,21 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         shader.dispose();
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;
     }
 
+    /**
+     * Represents a position color shader.
+     *
+     * @author xpenatan
+     */
     private static final class PositionColorShader implements Shader3D {
         private static final String WGSL =
                 "struct VertexInput {\n" +
@@ -202,6 +238,12 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     .spirv(VERTEX_SPIRV, FRAGMENT_SPIRV));
         }
 
+        /**
+         * Returns whether this instance can render.
+         *
+         * @param renderable the renderable
+         * @return true if can render succeeds or is active; false otherwise
+         */
         @Override
         public boolean canRender(Renderable3D renderable) {
             if (renderable == null || renderable.meshPart() == null) {
@@ -212,6 +254,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     || mesh.hasPositionColor3DSource();
         }
 
+        /**
+         * Begins the operation.
+         *
+         * @param context the context
+         */
         @Override
         public void begin(RenderContext3D context) {
             if (disposed) {
@@ -221,6 +268,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             scratchCursor = 0;
         }
 
+        /**
+         * Renders the current content.
+         *
+         * @param renderable the renderable
+         */
         @Override
         public void render(Renderable3D renderable) {
             if (context == null) {
@@ -254,6 +306,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
         }
 
+        /**
+         * Ends the operation.
+         */
         @Override
         public void end() {
             context = null;
@@ -286,6 +341,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     && attributes[1].format() == VertexFormat.FLOAT32X4;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             if (disposed) {
@@ -306,6 +364,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             shaderModule.dispose();
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;
@@ -605,6 +668,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             return buffer;
         }
 
+        /**
+         * Represents a scratch buffer.
+         *
+         * @author xpenatan
+         */
         private static final class ScratchBuffer {
             private final Buffer buffer;
             private final int byteCount;
@@ -615,6 +683,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
         }
 
+        /**
+         * Represents a world vertex.
+         *
+         * @author xpenatan
+         */
         private static final class WorldVertex {
             private final float x;
             private final float y;
@@ -631,6 +704,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
         }
 
+        /**
+         * Represents a color vertex.
+         *
+         * @author xpenatan
+         */
         private static final class ColorVertex {
             private final float red;
             private final float green;
@@ -645,6 +723,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
         }
 
+        /**
+         * Represents a projected mesh.
+         *
+         * @author xpenatan
+         */
         private static final class ProjectedMesh {
             private final float[] vertices;
             private final int vertexCount;
@@ -655,6 +738,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
         }
 
+        /**
+         * Represents a projected triangle.
+         *
+         * @author xpenatan
+         */
         private static final class ProjectedTriangle {
             private final ProjectedVertex v0;
             private final ProjectedVertex v1;
@@ -669,6 +757,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
         }
 
+        /**
+         * Represents a projected vertex.
+         *
+         * @author xpenatan
+         */
         private static final class ProjectedVertex {
             private final float x;
             private final float y;
@@ -690,6 +783,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         }
     }
 
+    /**
+     * Represents a gpu pbr shader.
+     *
+     * @author xpenatan
+     */
     private static final class GpuPbrShader implements Shader3D {
         private static final String VERTEX_GLSL =
                 "#version 330 core\n" +
@@ -990,6 +1088,12 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             normalTexture = solidTexture("model batch normal", 128, 128, 255, 255);
         }
 
+        /**
+         * Returns whether this instance can render.
+         *
+         * @param renderable the renderable
+         * @return true if can render succeeds or is active; false otherwise
+         */
         @Override
         public boolean canRender(Renderable3D renderable) {
             return renderable != null
@@ -997,6 +1101,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     && renderable.meshPart().mesh().vertexLayout() == Mesh.PBR_LAYOUT;
         }
 
+        /**
+         * Begins the operation.
+         *
+         * @param context the context
+         */
         @Override
         public void begin(RenderContext3D context) {
             if (disposed) {
@@ -1005,6 +1114,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             this.context = context;
         }
 
+        /**
+         * Renders the current content.
+         *
+         * @param renderable the renderable
+         */
         @Override
         public void render(Renderable3D renderable) {
             if (context == null) {
@@ -1031,6 +1145,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             pass.draw(vertexCount, 1, meshPart.firstVertex(), 0);
         }
 
+        /**
+         * Ends the operation.
+         */
         @Override
         public void end() {
             context = null;
@@ -1137,6 +1254,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             return texture;
         }
 
+        /**
+         * Releases resources held by this instance.
+         */
         @Override
         public void dispose() {
             if (disposed) {
@@ -1153,12 +1273,22 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             shaderModule.dispose();
         }
 
+        /**
+         * Returns whether this instance has already been disposed.
+         *
+         * @return true if disposed is enabled or true; false otherwise
+         */
         @Override
         public boolean isDisposed() {
             return disposed;
         }
     }
 
+    /**
+     * Represents a pipeline key.
+     *
+     * @author xpenatan
+     */
     private static final class PipelineKey {
         private final VertexLayout vertexLayout;
         private final PrimitiveTopology topology;
@@ -1168,6 +1298,12 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             this.topology = topology != null ? topology : PrimitiveTopology.TRIANGLE_LIST;
         }
 
+        /**
+         * Compares this instance with another object for equality.
+         *
+         * @param other the other
+         * @return true if equals succeeds or is active; false otherwise
+         */
         @Override
         public boolean equals(Object other) {
             if (this == other) {
@@ -1180,6 +1316,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             return vertexLayout == key.vertexLayout && topology == key.topology;
         }
 
+        /**
+         * Returns the hash code for this instance.
+         *
+         * @return the hash code
+         */
         @Override
         public int hashCode() {
             return System.identityHashCode(vertexLayout) * 31 + topology.hashCode();

@@ -4,6 +4,11 @@ import io.github.libfdx.core.FdxException;
 
 import java.util.Locale;
 
+/**
+ * Lists the supported shader profile values.
+ *
+ * @author xpenatan
+ */
 public enum ShaderProfile {
     PORTABLE_WEBGL2("fdx-wgsl-webgl2"),
     PORTABLE_WEBGPU("fdx-wgsl-webgpu"),
@@ -15,10 +20,22 @@ public enum ShaderProfile {
         this.id = id;
     }
 
+    /**
+     * Returns the ID.
+     *
+     * @return the ID
+     */
     public String id() {
         return id;
     }
 
+    /**
+     * Creates a shader profile.
+     *
+     * @param id the identifier
+     * @param fallback the fallback
+     * @return a new shader profile
+     */
     public static ShaderProfile fromId(String id, ShaderProfile fallback) {
         if (id == null || id.trim().isEmpty()) {
             return fallback != null ? fallback : PORTABLE_WEBGPU;

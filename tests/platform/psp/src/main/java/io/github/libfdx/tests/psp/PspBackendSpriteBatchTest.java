@@ -18,6 +18,11 @@ import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.g2d.G2DAssetLoaders;
 import io.github.libfdx.graphics.g2d.SpriteBatch;
 
+/**
+ * Runs the psp backend sprite batch test scenario.
+ *
+ * @author xpenatan
+ */
 final class PspBackendSpriteBatchTest extends ApplicationAdapter {
     private static final String LOGO_ASSET = "fdx.png";
     private static final int LOADING_TEXTURE_SIZE = 128;
@@ -43,6 +48,11 @@ final class PspBackendSpriteBatchTest extends ApplicationAdapter {
         this.exitAfterFrames = exitAfterFrames;
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
@@ -57,6 +67,9 @@ final class PspBackendSpriteBatchTest extends ApplicationAdapter {
         logger.info("PspBackendSpriteBatchTest initialized backend SpriteBatch loading texture");
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         if (!logoQueued && renderedFrames >= LOGO_QUEUE_DELAY_FRAMES) {
@@ -114,6 +127,9 @@ final class PspBackendSpriteBatchTest extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (spriteBatch != null) {

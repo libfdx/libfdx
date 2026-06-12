@@ -14,6 +14,11 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Provides the default implementation of a file system.
+ *
+ * @author xpenatan
+ */
 public final class DefaultFileSystem implements FileSystem {
     public static final ProviderId ID = ProviderId.of("default-files");
 
@@ -22,10 +27,20 @@ public final class DefaultFileSystem implements FileSystem {
     private final File cacheRoot;
     private final List<File> internalRoots = new ArrayList<File>();
 
+    /**
+     * Creates a default file system.
+     */
     public DefaultFileSystem() {
         this(new File("."), new File("."), new File(System.getProperty("java.io.tmpdir")));
     }
 
+    /**
+     * Creates a default file system.
+     *
+     * @param localRoot the local root
+     * @param externalRoot the external root
+     * @param cacheRoot the cache root
+     */
     public DefaultFileSystem(File localRoot, File externalRoot, File cacheRoot) {
         this.localRoot = localRoot != null ? localRoot : new File(".");
         this.externalRoot = externalRoot != null ? externalRoot : this.localRoot;
@@ -35,6 +50,12 @@ public final class DefaultFileSystem implements FileSystem {
         addInternalRoot(this.localRoot);
     }
 
+    /**
+     * Adds the internal root.
+     *
+     * @param root the root
+     * @return this default file system for chaining
+     */
     public DefaultFileSystem addInternalRoot(File root) {
         if (root != null) {
             internalRoots.add(root);
@@ -42,31 +63,68 @@ public final class DefaultFileSystem implements FileSystem {
         return this;
     }
 
+    /**
+     * Runs the classpath step.
+     *
+     * @param path the asset or file path
+     * @return the classpath
+     */
     @Override
     public FileHandle classpath(String path) {
         return new DefaultFileHandle(this, FileLocation.CLASSPATH, normalize(path), null);
     }
 
+    /**
+     * Runs the internal step.
+     *
+     * @param path the asset or file path
+     * @return the internal
+     */
     @Override
     public FileHandle internal(String path) {
         return new DefaultFileHandle(this, FileLocation.INTERNAL, normalize(path), null);
     }
 
+    /**
+     * Runs the local step.
+     *
+     * @param path the asset or file path
+     * @return the local
+     */
     @Override
     public FileHandle local(String path) {
         return new DefaultFileHandle(this, FileLocation.LOCAL, normalize(path), new File(localRoot, normalize(path)));
     }
 
+    /**
+     * Runs the external step.
+     *
+     * @param path the asset or file path
+     * @return the external
+     */
     @Override
     public FileHandle external(String path) {
         return new DefaultFileHandle(this, FileLocation.EXTERNAL, normalize(path), new File(externalRoot, normalize(path)));
     }
 
+    /**
+     * Runs the cache step.
+     *
+     * @param path the asset or file path
+     * @return the cache
+     */
     @Override
     public FileHandle cache(String path) {
         return new DefaultFileHandle(this, FileLocation.CACHE, normalize(path), new File(cacheRoot, normalize(path)));
     }
 
+    /**
+     * Runs the temp step.
+     *
+     * @param prefix the prefix
+     * @param suffix the suffix
+     * @return the temp
+     */
     @Override
     public FileHandle temp(String prefix, String suffix) {
         try {
@@ -77,6 +135,12 @@ public final class DefaultFileSystem implements FileSystem {
         }
     }
 
+    /**
+     * Runs the watch step.
+     *
+     * @param file the file handle or path
+     * @return the watch
+     */
     @Override
     public FdxFuture<FileWatch> watch(FileHandle file) {
         return FdxFuture.failed(new FdxException("File watching is not supported by DefaultFileSystem"));
@@ -212,17 +276,33 @@ public final class DefaultFileSystem implements FileSystem {
         return output.toByteArray();
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
         return (T) this;
     }
 
+    /**
+     * Provides the default implementation of a file handle.
+     *
+     * @author xpenatan
+     */
     static final class DefaultFileHandle implements FileHandle {
         private final DefaultFileSystem files;
         private final FileLocation location;
@@ -236,22 +316,42 @@ public final class DefaultFileSystem implements FileSystem {
             this.file = file;
         }
 
+        /**
+         * Returns the location.
+         *
+         * @return the location
+         */
         @Override
         public FileLocation location() {
             return location;
         }
 
+        /**
+         * Returns the path.
+         *
+         * @return the path
+         */
         @Override
         public String path() {
             return path;
         }
 
+        /**
+         * Returns the name.
+         *
+         * @return the name
+         */
         @Override
         public String name() {
             int slash = path.lastIndexOf('/');
             return slash >= 0 ? path.substring(slash + 1) : path;
         }
 
+        /**
+         * Returns the extension.
+         *
+         * @return the extension
+         */
         @Override
         public String extension() {
             String name = name();
@@ -259,12 +359,23 @@ public final class DefaultFileSystem implements FileSystem {
             return dot >= 0 ? name.substring(dot + 1) : "";
         }
 
+        /**
+         * Returns the parent.
+         *
+         * @return the parent
+         */
         @Override
         public FileHandle parent() {
             int slash = path.lastIndexOf('/');
             return new DefaultFileHandle(files, location, slash >= 0 ? path.substring(0, slash) : "", file != null ? file.getParentFile() : null);
         }
 
+        /**
+         * Runs the child step.
+         *
+         * @param relativePath the relative path
+         * @return the child
+         */
         @Override
         public FileHandle child(String relativePath) {
             String child = relativePath != null ? relativePath.replace('\\', '/') : "";
@@ -272,27 +383,53 @@ public final class DefaultFileSystem implements FileSystem {
             return new DefaultFileHandle(files, location, joined, file != null ? new File(file, child) : null);
         }
 
+        /**
+         * Returns the exists.
+         *
+         * @return true if exists succeeds or is active; false otherwise
+         */
         @Override
         public boolean exists() {
             return files.exists(this);
         }
 
+        /**
+         * Returns whether directory is enabled or true.
+         *
+         * @return true if directory is enabled or true; false otherwise
+         */
         @Override
         public boolean isDirectory() {
             File resolved = files.resolveFile(this);
             return resolved != null && resolved.isDirectory();
         }
 
+        /**
+         * Returns the metadata.
+         *
+         * @return the metadata
+         */
         @Override
         public FdxFuture<FileMetadata> metadata() {
             return FdxFuture.completed(files.metadata(this));
         }
 
+        /**
+         * Returns the read bytes.
+         *
+         * @return the read bytes
+         */
         @Override
         public FdxFuture<byte[]> readBytes() {
             return files.readBytes(this);
         }
 
+        /**
+         * Runs the read string step.
+         *
+         * @param charset the charset
+         * @return the read string
+         */
         @Override
         public FdxFuture<String> readString(final Charset charset) {
             FdxFuture<byte[]> bytes = readBytes();
@@ -306,11 +443,26 @@ public final class DefaultFileSystem implements FileSystem {
             return FdxFuture.completed(new String(bytes.get(), charset != null ? charset : Charset.defaultCharset()));
         }
 
+        /**
+         * Runs the write bytes step.
+         *
+         * @param bytes the bytes
+         * @param append the append
+         * @return the write bytes
+         */
         @Override
         public FdxFuture<Void> writeBytes(byte[] bytes, boolean append) {
             return files.writeBytes(this, bytes, append);
         }
 
+        /**
+         * Runs the write string step.
+         *
+         * @param text the text
+         * @param charset the charset
+         * @param append the append
+         * @return the write string
+         */
         @Override
         public FdxFuture<Void> writeString(String text, Charset charset, boolean append) {
             byte[] bytes = (text != null ? text : "").getBytes(charset != null ? charset : Charset.defaultCharset());

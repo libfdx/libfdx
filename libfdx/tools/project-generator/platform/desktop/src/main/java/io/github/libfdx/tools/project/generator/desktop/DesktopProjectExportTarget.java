@@ -11,23 +11,49 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+/**
+ * Represents a desktop project export target.
+ *
+ * @author xpenatan
+ */
 public final class DesktopProjectExportTarget implements ProjectExportTarget {
     private final String defaultDestination;
 
+    /**
+     * Creates a desktop project export target.
+     *
+     * @param defaultDestination the default destination
+     */
     public DesktopProjectExportTarget(String defaultDestination) {
         this.defaultDestination = defaultDestination != null ? defaultDestination : "";
     }
 
+    /**
+     * Returns the destination label.
+     *
+     * @return the destination label
+     */
     @Override
     public String destinationLabel() {
         return "Output directory";
     }
 
+    /**
+     * Returns the default destination.
+     *
+     * @return the default destination
+     */
     @Override
     public String defaultDestination() {
         return defaultDestination;
     }
 
+    /**
+     * Runs the export step.
+     *
+     * @param request the request
+     * @return the export
+     */
     @Override
     public ProjectExportResult export(ProjectExportRequest request) {
         if (request == null || request.project() == null) {

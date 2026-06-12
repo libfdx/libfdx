@@ -6,7 +6,17 @@ import org.teavm.platform.plugin.MetadataRegistration;
 import org.teavm.vm.spi.TeaVMHost;
 import org.teavm.vm.spi.TeaVMPlugin;
 
+/**
+ * Represents a web tea VM plugin.
+ *
+ * @author xpenatan
+ */
 public final class WebTeaVMPlugin implements TeaVMPlugin {
+    /**
+     * Runs the install step.
+     *
+     * @param host the host
+     */
     @Override
     public void install(TeaVMHost host) {
         MetadataRegistration registration = host.getService(MetadataRegistration.class);

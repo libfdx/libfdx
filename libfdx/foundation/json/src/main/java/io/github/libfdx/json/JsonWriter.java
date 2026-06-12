@@ -5,6 +5,11 @@ import io.github.libfdx.core.FdxException;
 import java.util.ArrayList;
 import java.util.Map;
 
+/**
+ * Writes json output.
+ *
+ * @author xpenatan
+ */
 public final class JsonWriter {
     private final StringBuilder builder = new StringBuilder();
     private final ArrayList<Context> stack = new ArrayList<Context>();
@@ -12,30 +17,60 @@ public final class JsonWriter {
     private int indent;
     private boolean rootWritten;
 
+    /**
+     * Creates a JSON writer.
+     */
     public JsonWriter() {
         this(false);
     }
 
+    /**
+     * Creates a JSON writer.
+     *
+     * @param pretty the pretty
+     */
     public JsonWriter(boolean pretty) {
         this.pretty = pretty;
     }
 
+    /**
+     * Creates a JSON writer.
+     *
+     * @return a new JSON writer
+     */
     public static JsonWriter prettyWriter() {
         return new JsonWriter(true);
     }
 
+    /**
+     * Runs the compact step.
+     *
+     * @param value the value
+     * @return the compact
+     */
     public static String compact(JsonValue value) {
         JsonWriter writer = new JsonWriter();
         writer.value(value);
         return writer.toString();
     }
 
+    /**
+     * Runs the pretty step.
+     *
+     * @param value the value
+     * @return the pretty
+     */
     public static String pretty(JsonValue value) {
         JsonWriter writer = prettyWriter();
         writer.value(value);
         return writer.toString();
     }
 
+    /**
+     * Returns the object.
+     *
+     * @return this JSON writer for chaining
+     */
     public JsonWriter object() {
         beforeValue();
         builder.append('{');
@@ -44,6 +79,11 @@ public final class JsonWriter {
         return this;
     }
 
+    /**
+     * Returns the end object.
+     *
+     * @return this JSON writer for chaining
+     */
     public JsonWriter endObject() {
         Context context = current();
         if (!context.object) {
@@ -61,6 +101,11 @@ public final class JsonWriter {
         return this;
     }
 
+    /**
+     * Returns the array.
+     *
+     * @return this JSON writer for chaining
+     */
     public JsonWriter array() {
         beforeValue();
         builder.append('[');
@@ -69,6 +114,11 @@ public final class JsonWriter {
         return this;
     }
 
+    /**
+     * Returns the end array.
+     *
+     * @return this JSON writer for chaining
+     */
     public JsonWriter endArray() {
         Context context = current();
         if (context.object) {
@@ -83,6 +133,12 @@ public final class JsonWriter {
         return this;
     }
 
+    /**
+     * Sets the name and returns this JSON writer.
+     *
+     * @param name the name
+     * @return this JSON writer for chaining
+     */
     public JsonWriter name(String name) {
         Context context = current();
         if (!context.object) {
@@ -108,11 +164,23 @@ public final class JsonWriter {
         return this;
     }
 
+    /**
+     * Sets the value and returns this JSON writer.
+     *
+     * @param value the value
+     * @return this JSON writer for chaining
+     */
     public JsonWriter value(JsonValue value) {
         writeTree(value != null ? value : JsonValue.nullValue());
         return this;
     }
 
+    /**
+     * Sets the value and returns this JSON writer.
+     *
+     * @param value the value
+     * @return this JSON writer for chaining
+     */
     public JsonWriter value(String value) {
         if (value == null) {
             return nullValue();
@@ -122,14 +190,32 @@ public final class JsonWriter {
         return this;
     }
 
+    /**
+     * Sets the value and returns this JSON writer.
+     *
+     * @param value the value
+     * @return this JSON writer for chaining
+     */
     public JsonWriter value(int value) {
         return number(Integer.toString(value));
     }
 
+    /**
+     * Sets the value and returns this JSON writer.
+     *
+     * @param value the value
+     * @return this JSON writer for chaining
+     */
     public JsonWriter value(long value) {
         return number(Long.toString(value));
     }
 
+    /**
+     * Sets the value and returns this JSON writer.
+     *
+     * @param value the value
+     * @return this JSON writer for chaining
+     */
     public JsonWriter value(float value) {
         if (Float.isNaN(value) || Float.isInfinite(value)) {
             throw new FdxException("JSON number must be finite: " + value);
@@ -137,6 +223,12 @@ public final class JsonWriter {
         return number(Float.toString(value));
     }
 
+    /**
+     * Sets the value and returns this JSON writer.
+     *
+     * @param value the value
+     * @return this JSON writer for chaining
+     */
     public JsonWriter value(double value) {
         if (Double.isNaN(value) || Double.isInfinite(value)) {
             throw new FdxException("JSON number must be finite: " + value);
@@ -144,18 +236,34 @@ public final class JsonWriter {
         return number(Double.toString(value));
     }
 
+    /**
+     * Sets the value and returns this JSON writer.
+     *
+     * @param value the value
+     * @return this JSON writer for chaining
+     */
     public JsonWriter value(boolean value) {
         beforeValue();
         builder.append(value ? "true" : "false");
         return this;
     }
 
+    /**
+     * Returns the null value.
+     *
+     * @return this JSON writer for chaining
+     */
     public JsonWriter nullValue() {
         beforeValue();
         builder.append("null");
         return this;
     }
 
+    /**
+     * Returns a readable string representation of this instance.
+     *
+     * @return the to string
+     */
     @Override
     public String toString() {
         if (!stack.isEmpty()) {
@@ -277,6 +385,11 @@ public final class JsonWriter {
         builder.append('"');
     }
 
+    /**
+     * Represents a context.
+     *
+     * @author xpenatan
+     */
     private static final class Context {
         private final boolean object;
         private boolean first = true;

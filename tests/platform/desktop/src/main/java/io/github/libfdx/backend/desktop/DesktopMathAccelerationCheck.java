@@ -3,12 +3,22 @@ package io.github.libfdx.backend.desktop;
 import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.math.internal.MathAcceleration;
 
+/**
+ * Represents a desktop math acceleration check.
+ *
+ * @author xpenatan
+ */
 public final class DesktopMathAccelerationCheck {
     private static final float TOLERANCE = 0.00001f;
 
     private DesktopMathAccelerationCheck() {
     }
 
+    /**
+     * Runs the launcher entry point.
+     *
+     * @param args the args
+     */
     public static void main(String[] args) {
         boolean requireNative = Boolean.parseBoolean(System.getProperty("libfdx.math.requireNative", "false"));
         MathAcceleration.register(new DesktopNativeMathAccelerator());

@@ -10,6 +10,11 @@ import io.github.libfdx.ui.UiRoot;
 import io.github.libfdx.ui.UiScope;
 import io.github.libfdx.ui.UiToolkit;
 
+/**
+ * Runs the psp backend ui panel test scenario.
+ *
+ * @author xpenatan
+ */
 final class PspBackendUiPanelTest extends ApplicationAdapter {
     private final long exitAfterFrames;
     private Application application;
@@ -21,6 +26,11 @@ final class PspBackendUiPanelTest extends ApplicationAdapter {
         this.exitAfterFrames = exitAfterFrames;
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
@@ -33,6 +43,12 @@ final class PspBackendUiPanelTest extends ApplicationAdapter {
         root.setContent(this::buildUi);
     }
 
+    /**
+     * Handles a size change.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     @Override
     public void resize(int width, int height) {
         if (root != null) {
@@ -40,6 +56,9 @@ final class PspBackendUiPanelTest extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         graphics.clear(0.04f, 0.05f, 0.07f, 1.0f);
@@ -58,6 +77,9 @@ final class PspBackendUiPanelTest extends ApplicationAdapter {
         });
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (root != null) {

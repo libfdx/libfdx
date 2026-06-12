@@ -16,6 +16,11 @@ import io.github.libfdx.graphics.CommandEncoder;
 import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 
+/**
+ * Represents a WGPU command encoder handle.
+ *
+ * @author xpenatan
+ */
 final class WGPUCommandEncoderHandle implements CommandEncoder {
     private final WGPUContext context;
 
@@ -23,6 +28,12 @@ final class WGPUCommandEncoderHandle implements CommandEncoder {
         this.context = context;
     }
 
+    /**
+     * Begins render pass.
+     *
+     * @param descriptor the descriptor
+     * @return the begin render pass
+     */
     @Override
     public RenderPass beginRenderPass(RenderPassDescriptor descriptor) {
         if (descriptor == null) {
@@ -74,11 +85,22 @@ final class WGPUCommandEncoderHandle implements CommandEncoder {
         return new WGPURenderPass(context, passEncoder);
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return WGPUProvider.ID;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {

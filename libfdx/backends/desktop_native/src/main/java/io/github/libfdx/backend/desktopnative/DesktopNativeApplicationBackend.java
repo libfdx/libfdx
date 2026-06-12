@@ -29,6 +29,11 @@ import io.github.libfdx.input.DefaultInput;
 import io.github.libfdx.input.DefaultInputCapabilities;
 import io.github.libfdx.runtime.core.RuntimeCore;
 
+/**
+ * Implements the backend integration for desktop native application.
+ *
+ * @author xpenatan
+ */
 public final class DesktopNativeApplicationBackend implements ApplicationBackend, Application {
     public static final ProviderId ID = ProviderId.of("desktop_native");
 
@@ -44,11 +49,22 @@ public final class DesktopNativeApplicationBackend implements ApplicationBackend
     private float deltaTime;
     private long frameId;
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Runs the start step.
+     *
+     * @param config the configuration
+     * @param listener the listener
+     */
     @Override
     public void start(ApplicationConfig config, ApplicationListener listener) {
         if (listener == null) {
@@ -119,6 +135,12 @@ public final class DesktopNativeApplicationBackend implements ApplicationBackend
         }
     }
 
+    /**
+     * Runs the start step.
+     *
+     * @param config the configuration
+     * @param listener the listener
+     */
     public void start(DesktopNativeApplicationConfig config, ApplicationListener listener) {
         start((ApplicationConfig) config, listener);
     }
@@ -280,21 +302,39 @@ public final class DesktopNativeApplicationBackend implements ApplicationBackend
         }
     }
 
+    /**
+     * Returns the lifecycle.
+     *
+     * @return the lifecycle
+     */
     @Override
     public ApplicationLifecycle lifecycle() {
         return lifecycle;
     }
 
+    /**
+     * Returns the delta time.
+     *
+     * @return the delta time
+     */
     @Override
     public float deltaTime() {
         return deltaTime;
     }
 
+    /**
+     * Returns the frame ID.
+     *
+     * @return the frame ID
+     */
     @Override
     public long frameId() {
         return frameId;
     }
 
+    /**
+     * Runs the request exit step.
+     */
     @Override
     public void requestExit() {
         running = false;
@@ -303,22 +343,41 @@ public final class DesktopNativeApplicationBackend implements ApplicationBackend
         }
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
         return (T) this;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         requestExit();
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;
     }
 
+    /**
+     * Represents a desktop native graphics environment.
+     *
+     * @author xpenatan
+     */
     private static final class DesktopNativeGraphicsEnvironment implements GraphicsEnvironment {
         private final Display display;
         private final NativeWindow nativeWindow;
@@ -328,17 +387,32 @@ public final class DesktopNativeApplicationBackend implements ApplicationBackend
             this.nativeWindow = nativeWindow;
         }
 
+        /**
+         * Returns the display.
+         *
+         * @return the display
+         */
         @Override
         public Display display() {
             return display;
         }
 
+        /**
+         * Returns the native window.
+         *
+         * @return the native window
+         */
         @Override
         public NativeWindow nativeWindow() {
             return nativeWindow;
         }
     }
 
+    /**
+     * Represents a desktop native display.
+     *
+     * @author xpenatan
+     */
     private static final class DesktopNativeDisplay implements Display {
         private final long windowHandle;
         private final int[] widthBuffer = new int[1];
@@ -374,62 +448,121 @@ public final class DesktopNativeApplicationBackend implements ApplicationBackend
             contentScaleY = validScale(scaleYBuffer[0]);
         }
 
+        /**
+         * Returns the title.
+         *
+         * @return the title
+         */
         @Override
         public String title() {
             return title;
         }
 
+        /**
+         * Runs the title step.
+         *
+         * @param title the title
+         */
         @Override
         public void title(String title) {
             this.title = title != null ? title : "";
             DesktopNativeGLFW.setWindowTitle(windowHandle, this.title);
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return width;
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return height;
         }
 
+        /**
+         * Returns the framebuffer width.
+         *
+         * @return the framebuffer width
+         */
         @Override
         public int framebufferWidth() {
             return framebufferWidth;
         }
 
+        /**
+         * Returns the framebuffer height.
+         *
+         * @return the framebuffer height
+         */
         @Override
         public int framebufferHeight() {
             return framebufferHeight;
         }
 
+        /**
+         * Returns the content scale x.
+         *
+         * @return the content scale x
+         */
         @Override
         public float contentScaleX() {
             return contentScaleX;
         }
 
+        /**
+         * Returns the content scale y.
+         *
+         * @return the content scale y
+         */
         @Override
         public float contentScaleY() {
             return contentScaleY;
         }
 
+        /**
+         * Returns the close requested.
+         *
+         * @return true if close requested succeeds or is active; false otherwise
+         */
         @Override
         public boolean closeRequested() {
             return DesktopNativeGLFW.windowShouldClose(windowHandle);
         }
 
+        /**
+         * Runs the request close step.
+         */
         @Override
         public void requestClose() {
             DesktopNativeGLFW.setWindowShouldClose(windowHandle, true);
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {

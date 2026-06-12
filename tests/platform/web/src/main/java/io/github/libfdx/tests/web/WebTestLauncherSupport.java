@@ -11,6 +11,11 @@ import io.github.libfdx.tests.TestSelector;
 import io.github.libfdx.tests.graphics.ModelBatchTest;
 import org.teavm.jso.JSBody;
 
+/**
+ * Represents a web test launcher support.
+ *
+ * @author xpenatan
+ */
 final class WebTestLauncherSupport {
     private WebTestLauncherSupport() {
     }

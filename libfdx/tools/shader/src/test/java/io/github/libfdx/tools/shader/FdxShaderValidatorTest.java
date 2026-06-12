@@ -20,6 +20,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Runs the fdx shader validator test scenario.
+ *
+ * @author xpenatan
+ */
 final class FdxShaderValidatorTest {
     private static final String SIMPLE_WGSL = """
             @vertex

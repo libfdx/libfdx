@@ -10,6 +10,11 @@ import io.github.libfdx.graphics.g2d.FreeTypeFontOptions;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Represents an ui text engine.
+ *
+ * @author xpenatan
+ */
 final class UiTextEngine implements Disposable {
     private static final int LAYOUT_CACHE_LIMIT = 512;
     private static final float MIN_RASTER_SCALE = 1.0f;
@@ -179,6 +184,9 @@ final class UiTextEngine implements Disposable {
         lastResolvedUnavailable = false;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -196,6 +204,11 @@ final class UiTextEngine implements Disposable {
         clearLastResolvedFont();
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;

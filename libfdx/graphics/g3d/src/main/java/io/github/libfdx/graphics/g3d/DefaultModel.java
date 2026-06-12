@@ -9,6 +9,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Provides the default implementation of a model.
+ *
+ * @author xpenatan
+ */
 public final class DefaultModel implements Model {
     private final ArrayList<ModelNode> nodes;
     private final ArrayList<Material> materials;
@@ -16,6 +21,14 @@ public final class DefaultModel implements Model {
     private final ArrayList<Mesh> meshes;
     private boolean disposed;
 
+    /**
+     * Creates a default model.
+     *
+     * @param nodes the nodes
+     * @param materials the materials
+     * @param animations the animations
+     * @param meshes the meshes
+     */
     public DefaultModel(List<ModelNode> nodes, List<Material> materials, List<AnimationClip> animations,
             List<Mesh> meshes) {
         this.nodes = copy(nodes);
@@ -24,6 +37,14 @@ public final class DefaultModel implements Model {
         this.meshes = copy(meshes);
     }
 
+    /**
+     * Creates a default model.
+     *
+     * @param id the identifier
+     * @param meshPart the mesh part
+     * @param material the material
+     * @return a new default model
+     */
     public static DefaultModel singleNode(String id, MeshPart meshPart, Material material) {
         ModelNodePart nodePart = new ModelNodePart(meshPart, material);
         ModelNode node = new ModelNode(id).addPart(nodePart);
@@ -40,21 +61,39 @@ public final class DefaultModel implements Model {
         return values != null ? new ArrayList<T>(values) : new ArrayList<T>();
     }
 
+    /**
+     * Returns the nodes.
+     *
+     * @return the nodes
+     */
     @Override
     public List<ModelNode> nodes() {
         return Collections.unmodifiableList(nodes);
     }
 
+    /**
+     * Returns the materials.
+     *
+     * @return the materials
+     */
     @Override
     public List<Material> materials() {
         return Collections.unmodifiableList(materials);
     }
 
+    /**
+     * Returns the animations.
+     *
+     * @return the animations
+     */
     @Override
     public List<AnimationClip> animations() {
         return Collections.unmodifiableList(animations);
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (disposed) {
@@ -77,6 +116,11 @@ public final class DefaultModel implements Model {
         }
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;

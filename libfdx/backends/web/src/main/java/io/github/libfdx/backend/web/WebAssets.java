@@ -14,10 +14,21 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Stream;
 
+/**
+ * Represents a web assets.
+ *
+ * @author xpenatan
+ */
 public final class WebAssets {
     private WebAssets() {
     }
 
+    /**
+     * Runs the collect step.
+     *
+     * @param assetRoots the asset roots
+     * @return the collect
+     */
     public static List<WebAsset> collect(Collection<Path> assetRoots) {
         Objects.requireNonNull(assetRoots, "assetRoots");
         LinkedHashMap<String, WebAsset> assets = new LinkedHashMap<>();
@@ -29,6 +40,14 @@ public final class WebAssets {
         return List.copyOf(sorted);
     }
 
+    /**
+     * Runs the copy step.
+     *
+     * @param assetRoots the asset roots
+     * @param assetsDirectory the assets directory
+     * @return the copy
+     * @throws IOException if the operation cannot be completed
+     */
     public static List<WebAsset> copy(Collection<Path> assetRoots, Path assetsDirectory) throws IOException {
         Objects.requireNonNull(assetsDirectory, "assetsDirectory");
         List<WebAsset> assets = collect(assetRoots);

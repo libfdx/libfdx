@@ -5,10 +5,20 @@ import io.github.libfdx.backend.desktopnative.DesktopNativeApplicationConfig;
 import io.github.libfdx.backend.desktopnative.DesktopNativeOpenGLProvider;
 import io.github.libfdx.samples.basic.BasicApplication;
 
+/**
+ * Launches the basic desktop native entry point.
+ *
+ * @author xpenatan
+ */
 public final class BasicDesktopNativeLauncher {
     private BasicDesktopNativeLauncher() {
     }
 
+    /**
+     * Runs the launcher entry point.
+     *
+     * @param args the args
+     */
     public static void main(String[] args) {
         DesktopNativeApplicationConfig config = new DesktopNativeApplicationConfig()
                 .title("libfdx Basic - GL Desktop Native")

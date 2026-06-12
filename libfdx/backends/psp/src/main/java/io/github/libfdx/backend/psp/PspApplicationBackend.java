@@ -20,6 +20,11 @@ import io.github.libfdx.display.DisplayConfig;
 import io.github.libfdx.graphics.DefaultGraphics;
 import io.github.libfdx.input.DefaultInput;
 
+/**
+ * Implements the backend integration for psp application.
+ *
+ * @author xpenatan
+ */
 public final class PspApplicationBackend implements ApplicationBackend, Application {
     public static final ProviderId ID = ProviderId.of("psp");
     private static final long FATAL_ERROR_HOLD_MILLIS = 30000L;
@@ -38,11 +43,22 @@ public final class PspApplicationBackend implements ApplicationBackend, Applicat
     private float deltaTime;
     private long frameId;
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Runs the start step.
+     *
+     * @param config the configuration
+     * @param listener the listener
+     */
     @Override
     public void start(ApplicationConfig config, ApplicationListener listener) {
         clearLogFile();
@@ -123,6 +139,12 @@ public final class PspApplicationBackend implements ApplicationBackend, Applicat
         return value != null ? value : "";
     }
 
+    /**
+     * Runs the start step.
+     *
+     * @param config the configuration
+     * @param listener the listener
+     */
     public void start(PspApplicationConfig config, ApplicationListener listener) {
         start((ApplicationConfig) config, listener);
     }
@@ -244,21 +266,39 @@ public final class PspApplicationBackend implements ApplicationBackend, Applicat
         }
     }
 
+    /**
+     * Returns the lifecycle.
+     *
+     * @return the lifecycle
+     */
     @Override
     public ApplicationLifecycle lifecycle() {
         return lifecycle;
     }
 
+    /**
+     * Returns the delta time.
+     *
+     * @return the delta time
+     */
     @Override
     public float deltaTime() {
         return deltaTime;
     }
 
+    /**
+     * Returns the frame ID.
+     *
+     * @return the frame ID
+     */
     @Override
     public long frameId() {
         return frameId;
     }
 
+    /**
+     * Runs the request exit step.
+     */
     @Override
     public void requestExit() {
         running = false;
@@ -267,22 +307,41 @@ public final class PspApplicationBackend implements ApplicationBackend, Applicat
         }
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
         return (T) this;
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         requestExit();
     }
 
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
     @Override
     public boolean isDisposed() {
         return disposed;
     }
 
+    /**
+     * Represents a psp display.
+     *
+     * @author xpenatan
+     */
     private static final class PspDisplay implements Display {
         private String title;
         private boolean closeRequested;
@@ -291,51 +350,100 @@ public final class PspApplicationBackend implements ApplicationBackend, Applicat
             this.title = title != null ? title : "";
         }
 
+        /**
+         * Returns the title.
+         *
+         * @return the title
+         */
         @Override
         public String title() {
             return title;
         }
 
+        /**
+         * Runs the title step.
+         *
+         * @param title the title
+         */
         @Override
         public void title(String title) {
             this.title = title != null ? title : "";
         }
 
+        /**
+         * Returns the width.
+         *
+         * @return the width
+         */
         @Override
         public int width() {
             return PspGraphicsContext.SCREEN_WIDTH;
         }
 
+        /**
+         * Returns the height.
+         *
+         * @return the height
+         */
         @Override
         public int height() {
             return PspGraphicsContext.SCREEN_HEIGHT;
         }
 
+        /**
+         * Returns the framebuffer width.
+         *
+         * @return the framebuffer width
+         */
         @Override
         public int framebufferWidth() {
             return PspGraphicsContext.SCREEN_WIDTH;
         }
 
+        /**
+         * Returns the framebuffer height.
+         *
+         * @return the framebuffer height
+         */
         @Override
         public int framebufferHeight() {
             return PspGraphicsContext.SCREEN_HEIGHT;
         }
 
+        /**
+         * Returns the close requested.
+         *
+         * @return true if close requested succeeds or is active; false otherwise
+         */
         @Override
         public boolean closeRequested() {
             return closeRequested;
         }
 
+        /**
+         * Runs the request close step.
+         */
         @Override
         public void requestClose() {
             closeRequested = true;
         }
 
+        /**
+         * Returns the identifier of the provider backing this object.
+         *
+         * @return the provider ID
+         */
         @Override
         public ProviderId providerId() {
             return ID;
         }
 
+        /**
+         * Returns the provider-specific representation requested by the caller.
+         *
+         * @param <T> the value type
+         * @return the as
+         */
         @Override
         @SuppressWarnings("unchecked")
         public <T> T as() {
@@ -343,31 +451,62 @@ public final class PspApplicationBackend implements ApplicationBackend, Applicat
         }
     }
 
+    /**
+     * Represents a psp logger.
+     *
+     * @author xpenatan
+     */
     private static final class PspLogger implements Logger {
+        /**
+         * Runs the debug step.
+         *
+         * @param message the message
+         */
         @Override
         public void debug(String message) {
             logFileLine("[debug] " + safe(message));
             debugPrintLine("[debug] " + safe(message));
         }
 
+        /**
+         * Runs the info step.
+         *
+         * @param message the message
+         */
         @Override
         public void info(String message) {
             logFileLine("[info] " + safe(message));
             debugPrintLine("[info] " + safe(message));
         }
 
+        /**
+         * Runs the warn step.
+         *
+         * @param message the message
+         */
         @Override
         public void warn(String message) {
             logFileLine("[warn] " + safe(message));
             debugPrintLine("[warn] " + safe(message));
         }
 
+        /**
+         * Runs the error step.
+         *
+         * @param message the message
+         */
         @Override
         public void error(String message) {
             logFileLine("[error] " + safe(message));
             debugPrintLine("[error] " + safe(message));
         }
 
+        /**
+         * Runs the error step.
+         *
+         * @param message the message
+         * @param error the error
+         */
         @Override
         public void error(String message, Throwable error) {
             logFileLine("[error] " + safe(message));

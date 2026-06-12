@@ -26,6 +26,11 @@ import io.github.libfdx.tests.TestFpsLogger;
 import java.nio.ByteBuffer;
 import java.util.Locale;
 
+/**
+ * Runs the model batch test scenario.
+ *
+ * @author xpenatan
+ */
 public final class ModelBatchTest extends ApplicationAdapter {
     public static final String DEFAULT_GLTF_ASSET = "data/g3d/gltf/DamagedHelmet/DamagedHelmet.gltf";
 
@@ -48,10 +53,21 @@ public final class ModelBatchTest extends ApplicationAdapter {
     private boolean captured;
     private long renderedFrames;
 
+    /**
+     * Creates a model batch test.
+     *
+     * @param exitAfterFrames the exit after frames
+     */
     public ModelBatchTest(long exitAfterFrames) {
         this(exitAfterFrames, System.getProperty("libfdx.test.modelAsset", DEFAULT_GLTF_ASSET));
     }
 
+    /**
+     * Creates a model batch test.
+     *
+     * @param exitAfterFrames the exit after frames
+     * @param gltfAsset the glTF asset
+     */
     public ModelBatchTest(long exitAfterFrames, String gltfAsset) {
         this.exitAfterFrames = exitAfterFrames;
         this.gltfAsset = gltfAsset != null && gltfAsset.trim().length() > 0
@@ -59,6 +75,11 @@ public final class ModelBatchTest extends ApplicationAdapter {
                 : DEFAULT_GLTF_ASSET;
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
@@ -93,6 +114,9 @@ public final class ModelBatchTest extends ApplicationAdapter {
                 + ", glTF asset " + gltfAsset + ", and ModelBatch");
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         float deltaSeconds = application.deltaTime();
@@ -122,6 +146,9 @@ public final class ModelBatchTest extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (batch != null) {

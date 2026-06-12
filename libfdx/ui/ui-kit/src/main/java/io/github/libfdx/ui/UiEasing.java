@@ -1,5 +1,10 @@
 package io.github.libfdx.ui;
 
+/**
+ * Represents an ui easing.
+ *
+ * @author xpenatan
+ */
 public final class UiEasing {
     private static final int LINEAR = 0;
     private static final int IN_QUAD = 1;
@@ -16,38 +21,84 @@ public final class UiEasing {
         this.type = type;
     }
 
+    /**
+     * Creates an UI easing.
+     *
+     * @return a new UI easing
+     */
     public static UiEasing linear() {
         return new UiEasing(LINEAR);
     }
 
+    /**
+     * Creates an UI easing.
+     *
+     * @return a new UI easing
+     */
     public static UiEasing inQuad() {
         return new UiEasing(IN_QUAD);
     }
 
+    /**
+     * Creates an UI easing.
+     *
+     * @return a new UI easing
+     */
     public static UiEasing outQuad() {
         return new UiEasing(OUT_QUAD);
     }
 
+    /**
+     * Creates an UI easing.
+     *
+     * @return a new UI easing
+     */
     public static UiEasing inCubic() {
         return new UiEasing(IN_CUBIC);
     }
 
+    /**
+     * Creates an UI easing.
+     *
+     * @return a new UI easing
+     */
     public static UiEasing outCubic() {
         return new UiEasing(OUT_CUBIC);
     }
 
+    /**
+     * Creates an UI easing.
+     *
+     * @return a new UI easing
+     */
     public static UiEasing outBack() {
         return new UiEasing(OUT_BACK);
     }
 
+    /**
+     * Creates an UI easing.
+     *
+     * @return a new UI easing
+     */
     public static UiEasing outElastic() {
         return new UiEasing(OUT_ELASTIC);
     }
 
+    /**
+     * Creates an UI easing.
+     *
+     * @return a new UI easing
+     */
     public static UiEasing stepEnd() {
         return new UiEasing(STEP_END);
     }
 
+    /**
+     * Runs the apply step.
+     *
+     * @param progress the progress
+     * @return the apply
+     */
     public float apply(float progress) {
         float t = clamp(progress);
         switch (type) {

@@ -5,11 +5,21 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * Provides the default implementation of a gamepads.
+ *
+ * @author xpenatan
+ */
 public final class DefaultGamepads implements Gamepads {
     private final ProviderId providerId = ProviderId.of("default_gamepads");
     private final List<Gamepad> connected = new ArrayList<Gamepad>();
     private final List<GamepadListener> listeners = new ArrayList<GamepadListener>();
 
+    /**
+     * Runs the connect step.
+     *
+     * @param gamepad the gamepad
+     */
     public void connect(Gamepad gamepad) {
         if (gamepad == null || connected.contains(gamepad)) {
             return;
@@ -20,6 +30,11 @@ public final class DefaultGamepads implements Gamepads {
         }
     }
 
+    /**
+     * Runs the disconnect step.
+     *
+     * @param gamepad the gamepad
+     */
     public void disconnect(Gamepad gamepad) {
         if (gamepad == null || !connected.remove(gamepad)) {
             return;
@@ -29,11 +44,22 @@ public final class DefaultGamepads implements Gamepads {
         }
     }
 
+    /**
+     * Returns the connected.
+     *
+     * @return the connected
+     */
     @Override
     public List<Gamepad> connected() {
         return Collections.unmodifiableList(connected);
     }
 
+    /**
+     * Finds a matching value.
+     *
+     * @param index the index
+     * @return the matching value, or null if none is available
+     */
     @Override
     public Gamepad find(int index) {
         for (int i = 0; i < connected.size(); i++) {
@@ -45,6 +71,11 @@ public final class DefaultGamepads implements Gamepads {
         return null;
     }
 
+    /**
+     * Adds the listener.
+     *
+     * @param listener the listener
+     */
     @Override
     public void addListener(GamepadListener listener) {
         if (listener != null && !listeners.contains(listener)) {
@@ -52,16 +83,32 @@ public final class DefaultGamepads implements Gamepads {
         }
     }
 
+    /**
+     * Removes the listener.
+     *
+     * @param listener the listener
+     */
     @Override
     public void removeListener(GamepadListener listener) {
         listeners.remove(listener);
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return providerId;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {

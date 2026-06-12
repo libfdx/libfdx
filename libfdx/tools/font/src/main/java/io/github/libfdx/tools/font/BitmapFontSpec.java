@@ -5,6 +5,11 @@ import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 
+/**
+ * Represents a bitmap font spec.
+ *
+ * @author xpenatan
+ */
 public final class BitmapFontSpec {
     public static final String DEFAULT_ASSET_PATH = "font/bitmap";
 
@@ -30,42 +35,93 @@ public final class BitmapFontSpec {
                 : defaultCharacters();
     }
 
+    /**
+     * Returns the builder.
+     *
+     * @return the created value
+     */
     public static Builder builder() {
         return new Builder();
     }
 
+    /**
+     * Returns the source file.
+     *
+     * @return the source file
+     */
     public Path sourceFile() {
         return sourceFile;
     }
 
+    /**
+     * Returns the output directory.
+     *
+     * @return the output directory
+     */
     public Path outputDirectory() {
         return outputDirectory;
     }
 
+    /**
+     * Returns the name.
+     *
+     * @return the name
+     */
     public String name() {
         return name;
     }
 
+    /**
+     * Returns the asset path.
+     *
+     * @return the asset path
+     */
     public String assetPath() {
         return assetPath;
     }
 
+    /**
+     * Returns the size.
+     *
+     * @return the size
+     */
     public int size() {
         return size;
     }
 
+    /**
+     * Returns the padding.
+     *
+     * @return the padding
+     */
     public int padding() {
         return padding;
     }
 
+    /**
+     * Returns the max texture size.
+     *
+     * @return the max texture size
+     */
     public int maxTextureSize() {
         return maxTextureSize;
     }
 
+    /**
+     * Returns the characters.
+     *
+     * @return the characters
+     */
     public String characters() {
         return characters;
     }
 
+    /**
+     * Sets the with output directory and returns this bitmap font spec.
+     *
+     * @param outputDirectory the output directory
+     * @return this bitmap font spec for chaining
+     */
     public BitmapFontSpec withOutputDirectory(Path outputDirectory) {
         return builder()
                 .sourceFile(sourceFile)
@@ -147,6 +203,11 @@ public final class BitmapFontSpec {
         return builder.toString();
     }
 
+    /**
+     * Builds value instances and related output.
+     *
+     * @author xpenatan
+     */
     public static final class Builder {
         private Path sourceFile;
         private Path outputDirectory;
@@ -160,46 +221,99 @@ public final class BitmapFontSpec {
         private Builder() {
         }
 
+        /**
+         * Sets the source file and returns this builder.
+         *
+         * @param sourceFile the source file
+         * @return this builder for chaining
+         */
         public Builder sourceFile(Path sourceFile) {
             this.sourceFile = Objects.requireNonNull(sourceFile, "sourceFile");
             return this;
         }
 
+        /**
+         * Sets the output directory and returns this builder.
+         *
+         * @param outputDirectory the output directory
+         * @return this builder for chaining
+         */
         public Builder outputDirectory(Path outputDirectory) {
             this.outputDirectory = Objects.requireNonNull(outputDirectory, "outputDirectory");
             return this;
         }
 
+        /**
+         * Sets the name and returns this builder.
+         *
+         * @param name the name
+         * @return this builder for chaining
+         */
         public Builder name(String name) {
             this.name = Objects.requireNonNull(name, "name");
             return this;
         }
 
+        /**
+         * Sets the asset path and returns this builder.
+         *
+         * @param assetPath the asset path
+         * @return this builder for chaining
+         */
         public Builder assetPath(String assetPath) {
             this.assetPath = Objects.requireNonNull(assetPath, "assetPath");
             return this;
         }
 
+        /**
+         * Sets the size and returns this builder.
+         *
+         * @param size the size
+         * @return this builder for chaining
+         */
         public Builder size(int size) {
             this.size = size;
             return this;
         }
 
+        /**
+         * Sets the padding and returns this builder.
+         *
+         * @param padding the padding
+         * @return this builder for chaining
+         */
         public Builder padding(int padding) {
             this.padding = padding;
             return this;
         }
 
+        /**
+         * Sets the max texture size and returns this builder.
+         *
+         * @param maxTextureSize the max texture size
+         * @return this builder for chaining
+         */
         public Builder maxTextureSize(int maxTextureSize) {
             this.maxTextureSize = maxTextureSize;
             return this;
         }
 
+        /**
+         * Sets the characters and returns this builder.
+         *
+         * @param characters the characters
+         * @return this builder for chaining
+         */
         public Builder characters(String characters) {
             this.characters = Objects.requireNonNull(characters, "characters");
             return this;
         }
 
+        /**
+         * Returns the build.
+         *
+         * @return the created value
+         */
         public BitmapFontSpec build() {
             return new BitmapFontSpec(this);
         }

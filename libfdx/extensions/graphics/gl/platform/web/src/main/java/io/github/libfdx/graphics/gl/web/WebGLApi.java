@@ -22,6 +22,11 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Exposes API access for web GL.
+ *
+ * @author xpenatan
+ */
 final class WebGLApi implements GLApi {
     private static final int ARRAY_BUFFER = 0x8892;
     private static final int ELEMENT_ARRAY_BUFFER = 0x8893;
@@ -60,6 +65,13 @@ final class WebGLApi implements GLApi {
     private static final int UNPACK_ALIGNMENT = 0x0CF5;
     private static final int UNPACK_PREMULTIPLY_ALPHA_WEBGL = 0x9241;
 
+    /**
+     * Represents a handle map.
+     *
+     * @param <T> the value type
+     *
+     * @author xpenatan
+     */
     @JSClass(transparent = true)
     static class HandleMap<T extends JSObject> implements JSObject {
         @JSBody(script = "return [undefined];")
@@ -93,11 +105,22 @@ final class WebGLApi implements GLApi {
         this.gl.pixelStorei(UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
     }
 
+    /**
+     * Returns the create program.
+     *
+     * @return the created value
+     */
     @Override
     public int createProgram() {
         return programs.add(gl.createProgram());
     }
 
+    /**
+     * Creates a shader.
+     *
+     * @param type the expected Java type
+     * @return the created value
+     */
     @Override
     public int createShader(GLShaderType type) {
         int nativeType;
@@ -113,127 +136,260 @@ final class WebGLApi implements GLApi {
         return shader;
     }
 
+    /**
+     * Runs the shader source step.
+     *
+     * @param shader the shader
+     * @param source the source value
+     */
     @Override
     public void shaderSource(int shader, String source) {
         gl.shaderSource(shaders.get(shader), toGlesSource(shaderTypes.get(shader), source));
     }
 
+    /**
+     * Runs the compile shader step.
+     *
+     * @param shader the shader
+     */
     @Override
     public void compileShader(int shader) {
         gl.compileShader(shaders.get(shader));
     }
 
+    /**
+     * Runs the shader compile status step.
+     *
+     * @param shader the shader
+     * @return true if shader compile status succeeds or is active; false otherwise
+     */
     @Override
     public boolean shaderCompileStatus(int shader) {
         return gl.getShaderParameterb(shaders.get(shader), COMPILE_STATUS);
     }
 
+    /**
+     * Runs the shader info log step.
+     *
+     * @param shader the shader
+     * @return the shader info log
+     */
     @Override
     public String shaderInfoLog(int shader) {
         return gl.getShaderInfoLog(shaders.get(shader));
     }
 
+    /**
+     * Runs the delete shader step.
+     *
+     * @param shader the shader
+     */
     @Override
     public void deleteShader(int shader) {
         shaderTypes.remove(shader);
         gl.deleteShader(shaders.remove(shader));
     }
 
+    /**
+     * Runs the attach shader step.
+     *
+     * @param program the program
+     * @param shader the shader
+     */
     @Override
     public void attachShader(int program, int shader) {
         gl.attachShader(programs.get(program), shaders.get(shader));
     }
 
+    /**
+     * Runs the link program step.
+     *
+     * @param program the program
+     */
     @Override
     public void linkProgram(int program) {
         gl.linkProgram(programs.get(program));
     }
 
+    /**
+     * Runs the program link status step.
+     *
+     * @param program the program
+     * @return true if program link status succeeds or is active; false otherwise
+     */
     @Override
     public boolean programLinkStatus(int program) {
         return gl.getProgramParameterb(programs.get(program), LINK_STATUS);
     }
 
+    /**
+     * Runs the program info log step.
+     *
+     * @param program the program
+     * @return the program info log
+     */
     @Override
     public String programInfoLog(int program) {
         return gl.getProgramInfoLog(programs.get(program));
     }
 
+    /**
+     * Runs the delete program step.
+     *
+     * @param program the program
+     */
     @Override
     public void deleteProgram(int program) {
         uniforms.remove(program);
         gl.deleteProgram(programs.remove(program));
     }
 
+    /**
+     * Runs the use program step.
+     *
+     * @param program the program
+     */
     @Override
     public void useProgram(int program) {
         currentProgram = program;
         gl.useProgram(programs.get(program));
     }
 
+    /**
+     * Returns the gen vertex array.
+     *
+     * @return the gen vertex array
+     */
     @Override
     public int genVertexArray() {
         return 1;
     }
 
+    /**
+     * Runs the bind vertex array step.
+     *
+     * @param vertexArray the vertex array
+     */
     @Override
     public void bindVertexArray(int vertexArray) {
     }
 
+    /**
+     * Runs the delete vertex array step.
+     *
+     * @param vertexArray the vertex array
+     */
     @Override
     public void deleteVertexArray(int vertexArray) {
     }
 
+    /**
+     * Returns the gen buffer.
+     *
+     * @return the gen buffer
+     */
     @Override
     public int genBuffer() {
         return buffers.add(gl.createBuffer());
     }
 
+    /**
+     * Runs the bind array buffer step.
+     *
+     * @param buffer the buffer
+     */
     @Override
     public void bindArrayBuffer(int buffer) {
         gl.bindBuffer(ARRAY_BUFFER, buffers.get(buffer));
     }
 
+    /**
+     * Runs the bind element array buffer step.
+     *
+     * @param buffer the buffer
+     */
     @Override
     public void bindElementArrayBuffer(int buffer) {
         gl.bindBuffer(ELEMENT_ARRAY_BUFFER, buffers.get(buffer));
     }
 
+    /**
+     * Runs the buffer data step.
+     *
+     * @param size the size
+     */
     @Override
     public void bufferData(int size) {
         gl.bufferData(ARRAY_BUFFER, size, DYNAMIC_DRAW);
     }
 
+    /**
+     * Runs the element buffer data step.
+     *
+     * @param size the size
+     */
     @Override
     public void elementBufferData(int size) {
         gl.bufferData(ELEMENT_ARRAY_BUFFER, size, STATIC_DRAW);
     }
 
+    /**
+     * Runs the buffer sub data step.
+     *
+     * @param data the data
+     */
     @Override
     public void bufferSubData(ByteBuffer data) {
         gl.bufferSubData(ARRAY_BUFFER, 0, activeBytes(data));
     }
 
+    /**
+     * Runs the element buffer sub data step.
+     *
+     * @param data the data
+     */
     @Override
     public void elementBufferSubData(ByteBuffer data) {
         gl.bufferSubData(ELEMENT_ARRAY_BUFFER, 0, activeBytes(data));
     }
 
+    /**
+     * Runs the delete buffer step.
+     *
+     * @param buffer the buffer
+     */
     @Override
     public void deleteBuffer(int buffer) {
         gl.deleteBuffer(buffers.remove(buffer));
     }
 
+    /**
+     * Returns the gen texture.
+     *
+     * @return the gen texture
+     */
     @Override
     public int genTexture() {
         return textures.add(gl.createTexture());
     }
 
+    /**
+     * Runs the bind texture2 d step.
+     *
+     * @param texture the texture
+     */
     @Override
     public void bindTexture2D(int texture) {
         gl.bindTexture(TEXTURE_2D, textures.get(texture));
     }
 
+    /**
+     * Runs the tex image2 d step.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @param data the data
+     */
     @Override
     public void texImage2D(int width, int height, ByteBuffer data) {
         gl.texParameterf(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR);
@@ -244,28 +400,58 @@ final class WebGLApi implements GLApi {
                 data != null ? activeBytes(data) : (ArrayBufferView) null);
     }
 
+    /**
+     * Runs the tex sub image2 d step.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @param data the data
+     */
     @Override
     public void texSubImage2D(int width, int height, ByteBuffer data) {
         gl.texSubImage2D(TEXTURE_2D, 0, 0, 0, width, height, RGBA, UNSIGNED_BYTE,
                 activeBytes(data));
     }
 
+    /**
+     * Runs the texture wrap2 d step.
+     *
+     * @param wrapS the horizontal wrap mode
+     * @param wrapT the vertical wrap mode
+     */
     @Override
     public void textureWrap2D(TextureWrap wrapS, TextureWrap wrapT) {
         gl.texParameterf(TEXTURE_2D, TEXTURE_WRAP_S, toNative(wrapS));
         gl.texParameterf(TEXTURE_2D, TEXTURE_WRAP_T, toNative(wrapT));
     }
 
+    /**
+     * Runs the delete texture step.
+     *
+     * @param texture the texture
+     */
     @Override
     public void deleteTexture(int texture) {
         gl.deleteTexture(textures.remove(texture));
     }
 
+    /**
+     * Runs the active texture step.
+     *
+     * @param slot the slot
+     */
     @Override
     public void activeTexture(int slot) {
         gl.activeTexture(TEXTURE0 + slot);
     }
 
+    /**
+     * Runs the uniform location step.
+     *
+     * @param program the program
+     * @param name the name
+     * @return the uniform location
+     */
     @Override
     public int uniformLocation(int program, String name) {
         WebGLUniformLocation location = gl.getUniformLocation(programs.get(program), name);
@@ -280,6 +466,12 @@ final class WebGLApi implements GLApi {
         return programUniforms.add(location);
     }
 
+    /**
+     * Runs the uniform1i step.
+     *
+     * @param location the location
+     * @param value the value
+     */
     @Override
     public void uniform1i(int location, int value) {
         if (location < 0 || currentProgram == 0) {
@@ -291,6 +483,12 @@ final class WebGLApi implements GLApi {
         }
     }
 
+    /**
+     * Runs the uniform1f step.
+     *
+     * @param location the location
+     * @param value the value
+     */
     @Override
     public void uniform1f(int location, float value) {
         if (location < 0 || currentProgram == 0) {
@@ -302,6 +500,14 @@ final class WebGLApi implements GLApi {
         }
     }
 
+    /**
+     * Runs the uniform3f step.
+     *
+     * @param location the location
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     */
     @Override
     public void uniform3f(int location, float x, float y, float z) {
         if (location < 0 || currentProgram == 0) {
@@ -313,6 +519,15 @@ final class WebGLApi implements GLApi {
         }
     }
 
+    /**
+     * Runs the uniform4f step.
+     *
+     * @param location the location
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param z the z coordinate
+     * @param w the w
+     */
     @Override
     public void uniform4f(int location, float x, float y, float z, float w) {
         if (location < 0 || currentProgram == 0) {
@@ -324,6 +539,13 @@ final class WebGLApi implements GLApi {
         }
     }
 
+    /**
+     * Runs the uniform matrix4fv step.
+     *
+     * @param location the location
+     * @param transpose the transpose
+     * @param values the values
+     */
     @Override
     public void uniformMatrix4fv(int location, boolean transpose, float[] values) {
         if (location < 0 || currentProgram == 0) {
@@ -335,12 +557,20 @@ final class WebGLApi implements GLApi {
         }
     }
 
+    /**
+     * Runs the enable alpha blending step.
+     */
     @Override
     public void enableAlphaBlending() {
         gl.enable(BLEND);
         gl.blendFunc(SRC_ALPHA, ONE_MINUS_SRC_ALPHA);
     }
 
+    /**
+     * Runs the enable depth test step.
+     *
+     * @param enabled the enabled
+     */
     @Override
     public void enableDepthTest(boolean enabled) {
         if (enabled) {
@@ -350,26 +580,55 @@ final class WebGLApi implements GLApi {
         }
     }
 
+    /**
+     * Runs the depth mask step.
+     *
+     * @param enabled the enabled
+     */
     @Override
     public void depthMask(boolean enabled) {
         gl.depthMask(enabled);
     }
 
+    /**
+     * Runs the depth func less equal step.
+     */
     @Override
     public void depthFuncLessEqual() {
         gl.depthFunc(LEQUAL);
     }
 
+    /**
+     * Runs the enable vertex attrib array step.
+     *
+     * @param index the index
+     */
     @Override
     public void enableVertexAttribArray(int index) {
         gl.enableVertexAttribArray(index);
     }
 
+    /**
+     * Runs the vertex attrib pointer step.
+     *
+     * @param index the index
+     * @param size the size
+     * @param stride the stride
+     * @param offset the offset
+     */
     @Override
     public void vertexAttribPointer(int index, int size, int stride, int offset) {
         gl.vertexAttribPointer(index, size, FLOAT, false, stride, offset);
     }
 
+    /**
+     * Runs the vertex attrib pointer step.
+     *
+     * @param index the index
+     * @param format the format
+     * @param stride the stride
+     * @param offset the offset
+     */
     @Override
     public void vertexAttribPointer(int index, VertexFormat format, int stride, int offset) {
         if (format == VertexFormat.UNORM8X4) {
@@ -379,16 +638,35 @@ final class WebGLApi implements GLApi {
         gl.vertexAttribPointer(index, format.componentCount(), FLOAT, false, stride, offset);
     }
 
+    /**
+     * Runs the vertex attrib divisor step.
+     *
+     * @param index the index
+     * @param divisor the divisor
+     */
     @Override
     public void vertexAttribDivisor(int index, int divisor) {
         vertexAttribDivisor(gl, index, divisor);
     }
 
+    /**
+     * Runs the viewport step.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     @Override
     public void viewport(int x, int y, int width, int height) {
         gl.viewport(x, y, width, height);
     }
 
+    /**
+     * Runs the enable scissor test step.
+     *
+     * @param enabled the enabled
+     */
     @Override
     public void enableScissorTest(boolean enabled) {
         if (enabled) {
@@ -398,46 +676,103 @@ final class WebGLApi implements GLApi {
         }
     }
 
+    /**
+     * Runs the scissor step.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
     @Override
     public void scissor(int x, int y, int width, int height) {
         gl.scissor(x, y, width, height);
     }
 
+    /**
+     * Runs the clear color step.
+     *
+     * @param red the red
+     * @param green the green
+     * @param blue the blue
+     * @param alpha the alpha
+     */
     @Override
     public void clearColor(float red, float green, float blue, float alpha) {
         gl.clearColor(red, green, blue, alpha);
     }
 
+    /**
+     * Runs the clear color buffer step.
+     */
     @Override
     public void clearColorBuffer() {
         gl.clear(COLOR_BUFFER_BIT);
     }
 
+    /**
+     * Runs the clear depth step.
+     *
+     * @param depth the depth
+     */
     @Override
     public void clearDepth(float depth) {
         gl.clearDepth(depth);
     }
 
+    /**
+     * Runs the clear depth buffer step.
+     */
     @Override
     public void clearDepthBuffer() {
         gl.clear(DEPTH_BUFFER_BIT);
     }
 
+    /**
+     * Draws arrays.
+     *
+     * @param topology the topology
+     * @param firstVertex the first vertex
+     * @param vertexCount the vertex count
+     */
     @Override
     public void drawArrays(PrimitiveTopology topology, int firstVertex, int vertexCount) {
         gl.drawArrays(toNative(topology), firstVertex, vertexCount);
     }
 
+    /**
+     * Draws arrays instanced.
+     *
+     * @param topology the topology
+     * @param firstVertex the first vertex
+     * @param vertexCount the vertex count
+     * @param instanceCount the instance count
+     */
     @Override
     public void drawArraysInstanced(PrimitiveTopology topology, int firstVertex, int vertexCount, int instanceCount) {
         drawArraysInstanced(gl, toNative(topology), firstVertex, vertexCount, instanceCount);
     }
 
+    /**
+     * Draws elements.
+     *
+     * @param topology the topology
+     * @param indexCount the index count
+     * @param offsetBytes the offset bytes
+     */
     @Override
     public void drawElements(PrimitiveTopology topology, int indexCount, int offsetBytes) {
         gl.drawElements(toNative(topology), indexCount, UNSIGNED_SHORT, offsetBytes);
     }
 
+    /**
+     * Draws elements instanced.
+     *
+     * @param topology the topology
+     * @param indexCount the index count
+     * @param offsetBytes the offset bytes
+     * @param instanceCount the instance count
+     */
     @Override
     public void drawElementsInstanced(PrimitiveTopology topology, int indexCount, int offsetBytes, int instanceCount) {
         drawElementsInstanced(gl, toNative(topology), indexCount, UNSIGNED_SHORT, offsetBytes, instanceCount);

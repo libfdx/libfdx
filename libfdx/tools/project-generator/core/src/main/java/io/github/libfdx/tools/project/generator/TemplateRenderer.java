@@ -2,6 +2,11 @@ package io.github.libfdx.tools.project.generator;
 
 import java.util.Map;
 
+/**
+ * Represents a template renderer.
+ *
+ * @author xpenatan
+ */
 final class TemplateRenderer {
     String render(String template, Map<String, String> values) {
         String result = template != null ? template : "";

@@ -3,6 +3,11 @@ package io.github.libfdx.samples.basic.android;
 import io.github.libfdx.backend.android.AndroidGlesProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 
+/**
+ * Represents a basic android vulkan fallback activity.
+ *
+ * @author xpenatan
+ */
 public final class BasicAndroidVulkanFallbackActivity extends BasicAndroidActivity {
     @Override
     protected String graphicsName() {

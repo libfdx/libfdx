@@ -15,7 +15,19 @@ import org.teavm.jso.typedarrays.Float32Array;
 import org.teavm.jso.typedarrays.Int32Array;
 import org.teavm.jso.typedarrays.Int8Array;
 
+/**
+ * Represents a web free type font rasterizer.
+ *
+ * @author xpenatan
+ */
 final class WebFreeTypeFontRasterizer implements FontRasterizer {
+    /**
+     * Runs the rasterize step.
+     *
+     * @param fontBytes the font bytes
+     * @param options the options
+     * @return the rasterize
+     */
     @Override
     public RasterizedFont rasterize(byte[] fontBytes, FontRasterizerOptions options) {
         if (fontBytes == null || fontBytes.length == 0) {
@@ -92,37 +104,97 @@ final class WebFreeTypeFontRasterizer implements FontRasterizer {
     private static native WebFreeTypeResult rasterizeNative(byte[] fontBytes, int[] codePoints,
             float pixelSize, int padding, int atlasWidth);
 
+    /**
+     * Defines the contract for web free type result implementations.
+     *
+     * @author xpenatan
+     */
     interface WebFreeTypeResult extends JSObject {
+        /**
+         * Returns the native size.
+         *
+         * @return the get native size
+         */
         @JSProperty
         float getNativeSize();
 
+        /**
+         * Returns the line height.
+         *
+         * @return the get line height
+         */
         @JSProperty
         float getLineHeight();
 
+        /**
+         * Returns the base line.
+         *
+         * @return the get base line
+         */
         @JSProperty
         float getBaseLine();
 
+        /**
+         * Returns the atlas width.
+         *
+         * @return the get atlas width
+         */
         @JSProperty
         int getAtlasWidth();
 
+        /**
+         * Returns the atlas height.
+         *
+         * @return the get atlas height
+         */
         @JSProperty
         int getAtlasHeight();
 
+        /**
+         * Returns the glyph count.
+         *
+         * @return the get glyph count
+         */
         @JSProperty
         int getGlyphCount();
 
+        /**
+         * Returns the kerning count.
+         *
+         * @return the get kerning count
+         */
         @JSProperty
         int getKerningCount();
 
+        /**
+         * Returns the RGBA.
+         *
+         * @return the get RGBA
+         */
         @JSProperty
         Int8Array getRgba();
 
+        /**
+         * Returns the glyph ints.
+         *
+         * @return the get glyph ints
+         */
         @JSProperty
         Int32Array getGlyphInts();
 
+        /**
+         * Returns the glyph floats.
+         *
+         * @return the get glyph floats
+         */
         @JSProperty
         Float32Array getGlyphFloats();
 
+        /**
+         * Returns the kerning ints.
+         *
+         * @return the get kerning ints
+         */
         @JSProperty
         Int32Array getKerningInts();
     }

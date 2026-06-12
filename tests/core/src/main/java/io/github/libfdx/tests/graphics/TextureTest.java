@@ -19,6 +19,11 @@ import io.github.libfdx.tests.TestFpsLogger;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Runs the texture test scenario.
+ *
+ * @author xpenatan
+ */
 public final class TextureTest extends ApplicationAdapter {
     private static final String LOGO_ASSET = "fdx_logo_dark.png";
     private static final float MAX_WIDTH = 1.55f;
@@ -38,10 +43,20 @@ public final class TextureTest extends ApplicationAdapter {
     private boolean captured;
     private long renderedFrames;
 
+    /**
+     * Creates a texture test.
+     *
+     * @param exitAfterFrames the exit after frames
+     */
     public TextureTest(long exitAfterFrames) {
         this.exitAfterFrames = exitAfterFrames;
     }
 
+    /**
+     * Initializes the application with the libFDX runtime root.
+     *
+     * @param fdx the libFDX runtime root
+     */
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
@@ -63,6 +78,9 @@ public final class TextureTest extends ApplicationAdapter {
                 + " texture and SpriteBatch");
     }
 
+    /**
+     * Renders the current content.
+     */
     @Override
     public void render() {
         float deltaSeconds = application.deltaTime();
@@ -88,6 +106,9 @@ public final class TextureTest extends ApplicationAdapter {
         }
     }
 
+    /**
+     * Releases resources held by this instance.
+     */
     @Override
     public void dispose() {
         if (batch != null) {

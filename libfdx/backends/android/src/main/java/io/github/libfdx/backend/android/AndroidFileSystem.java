@@ -18,6 +18,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.Charset;
 
+/**
+ * Represents an android file system.
+ *
+ * @author xpenatan
+ */
 final class AndroidFileSystem implements FileSystem {
     private static final ProviderId ID = ProviderId.of("android-files");
 
@@ -35,46 +40,100 @@ final class AndroidFileSystem implements FileSystem {
         defaultFiles = new DefaultFileSystem(localRoot, externalRoot != null ? externalRoot : localRoot, cacheRoot);
     }
 
+    /**
+     * Runs the classpath step.
+     *
+     * @param path the asset or file path
+     * @return the classpath
+     */
     @Override
     public FileHandle classpath(String path) {
         return defaultFiles.classpath(path);
     }
 
+    /**
+     * Runs the internal step.
+     *
+     * @param path the asset or file path
+     * @return the internal
+     */
     @Override
     public FileHandle internal(String path) {
         return new AndroidAssetFileHandle(normalize(path));
     }
 
+    /**
+     * Runs the local step.
+     *
+     * @param path the asset or file path
+     * @return the local
+     */
     @Override
     public FileHandle local(String path) {
         return defaultFiles.local(path);
     }
 
+    /**
+     * Runs the external step.
+     *
+     * @param path the asset or file path
+     * @return the external
+     */
     @Override
     public FileHandle external(String path) {
         return defaultFiles.external(path);
     }
 
+    /**
+     * Runs the cache step.
+     *
+     * @param path the asset or file path
+     * @return the cache
+     */
     @Override
     public FileHandle cache(String path) {
         return defaultFiles.cache(path);
     }
 
+    /**
+     * Runs the temp step.
+     *
+     * @param prefix the prefix
+     * @param suffix the suffix
+     * @return the temp
+     */
     @Override
     public FileHandle temp(String prefix, String suffix) {
         return defaultFiles.temp(prefix, suffix);
     }
 
+    /**
+     * Runs the watch step.
+     *
+     * @param file the file handle or path
+     * @return the watch
+     */
     @Override
     public FdxFuture<FileWatch> watch(FileHandle file) {
         return FdxFuture.failed(new FdxException("File watching is not supported on Android yet"));
     }
 
+    /**
+     * Returns the identifier of the provider backing this object.
+     *
+     * @return the provider ID
+     */
     @Override
     public ProviderId providerId() {
         return ID;
     }
 
+    /**
+     * Returns the provider-specific representation requested by the caller.
+     *
+     * @param <T> the value type
+     * @return the as
+     */
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
@@ -102,6 +161,11 @@ final class AndroidFileSystem implements FileSystem {
         return output.toByteArray();
     }
 
+    /**
+     * Represents an android asset file handle.
+     *
+     * @author xpenatan
+     */
     private final class AndroidAssetFileHandle implements FileHandle {
         private final String path;
 
@@ -109,22 +173,42 @@ final class AndroidFileSystem implements FileSystem {
             this.path = path != null ? path : "";
         }
 
+        /**
+         * Returns the location.
+         *
+         * @return the location
+         */
         @Override
         public FileLocation location() {
             return FileLocation.INTERNAL;
         }
 
+        /**
+         * Returns the path.
+         *
+         * @return the path
+         */
         @Override
         public String path() {
             return path;
         }
 
+        /**
+         * Returns the name.
+         *
+         * @return the name
+         */
         @Override
         public String name() {
             int slash = path.lastIndexOf('/');
             return slash >= 0 ? path.substring(slash + 1) : path;
         }
 
+        /**
+         * Returns the extension.
+         *
+         * @return the extension
+         */
         @Override
         public String extension() {
             String name = name();
@@ -132,18 +216,34 @@ final class AndroidFileSystem implements FileSystem {
             return dot >= 0 ? name.substring(dot + 1) : "";
         }
 
+        /**
+         * Returns the parent.
+         *
+         * @return the parent
+         */
         @Override
         public FileHandle parent() {
             int slash = path.lastIndexOf('/');
             return new AndroidAssetFileHandle(slash >= 0 ? path.substring(0, slash) : "");
         }
 
+        /**
+         * Runs the child step.
+         *
+         * @param relativePath the relative path
+         * @return the child
+         */
         @Override
         public FileHandle child(String relativePath) {
             String child = normalize(relativePath);
             return new AndroidAssetFileHandle(path.length() == 0 ? child : path + "/" + child);
         }
 
+        /**
+         * Returns the exists.
+         *
+         * @return true if exists succeeds or is active; false otherwise
+         */
         @Override
         public boolean exists() {
             InputStream input = null;
@@ -167,6 +267,11 @@ final class AndroidFileSystem implements FileSystem {
             }
         }
 
+        /**
+         * Returns whether directory is enabled or true.
+         *
+         * @return true if directory is enabled or true; false otherwise
+         */
         @Override
         public boolean isDirectory() {
             try {
@@ -177,11 +282,21 @@ final class AndroidFileSystem implements FileSystem {
             }
         }
 
+        /**
+         * Returns the metadata.
+         *
+         * @return the metadata
+         */
         @Override
         public FdxFuture<FileMetadata> metadata() {
             return FdxFuture.completed(new FileMetadata(-1L, 0L, isDirectory()));
         }
 
+        /**
+         * Returns the read bytes.
+         *
+         * @return the read bytes
+         */
         @Override
         public FdxFuture<byte[]> readBytes() {
             try {
@@ -196,6 +311,12 @@ final class AndroidFileSystem implements FileSystem {
             }
         }
 
+        /**
+         * Runs the read string step.
+         *
+         * @param charset the charset
+         * @return the read string
+         */
         @Override
         public FdxFuture<String> readString(final Charset charset) {
             FdxFuture<byte[]> bytes = readBytes();
@@ -209,11 +330,26 @@ final class AndroidFileSystem implements FileSystem {
             return FdxFuture.completed(new String(bytes.get(), charset != null ? charset : Charset.defaultCharset()));
         }
 
+        /**
+         * Runs the write bytes step.
+         *
+         * @param bytes the bytes
+         * @param append the append
+         * @return the write bytes
+         */
         @Override
         public FdxFuture<Void> writeBytes(byte[] bytes, boolean append) {
             return FdxFuture.failed(new FdxException("Android internal assets are read-only: " + path));
         }
 
+        /**
+         * Runs the write string step.
+         *
+         * @param text the text
+         * @param charset the charset
+         * @param append the append
+         * @return the write string
+         */
         @Override
         public FdxFuture<Void> writeString(String text, Charset charset, boolean append) {
             return FdxFuture.failed(new FdxException("Android internal assets are read-only: " + path));

@@ -1,9 +1,19 @@
 package io.github.libfdx.tools.project.generator;
 
+/**
+ * Runs the project generator smoke test scenario.
+ *
+ * @author xpenatan
+ */
 public final class ProjectGeneratorSmokeTest {
     private ProjectGeneratorSmokeTest() {
     }
 
+    /**
+     * Runs the launcher entry point.
+     *
+     * @param args the args
+     */
     public static void main(String[] args) {
         ProjectGenerationSettings settings = ProjectGenerationSettings.builder()
                 .projectName("demo-game")
