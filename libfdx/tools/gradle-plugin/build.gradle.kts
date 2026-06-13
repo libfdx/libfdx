@@ -41,11 +41,45 @@ apply(from = "../../../buildSrc/src/main/kotlin/publish.gradle.kts")
 
 dependencies {
     implementation(libs.teavm.gradle.plugin)
-    implementation("${LibExt.fdxGroup}:tools_font:${LibExt.publishedLibfdxVersion}")
-    implementation("${LibExt.fdxGroup}:tools_shader:${LibExt.publishedLibfdxVersion}")
-    implementation("${LibExt.fdxGroup}:backend_web:${LibExt.publishedLibfdxVersion}")
-    implementation("${LibExt.fdxGroup}:backend_desktop_native:${LibExt.publishedLibfdxVersion}")
-    implementation("${LibExt.fdxGroup}:backend_psp:${LibExt.publishedLibfdxVersion}")
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:tools_font:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:tools_shader:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_web:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_desktop_c:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_psp:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(libs.teavm.tooling)
+        implementation(libs.teavm.classlib)
+        implementation(libs.teavm.interop)
+        implementation(libs.teavm.jso)
+        implementation(libs.teavm.jso.apis)
+        implementation(libs.teavm.jso.impl)
+        implementation("org.teavm:teavm-platform:${libs.versions.teavm.get()}")
+    }
+}
+
+if (!LibExt.usePublishedLibfdx) {
+    sourceSets {
+        main {
+            java.srcDirs(
+                "../../../libfdx/foundation/math/src/main/java",
+                "../../../libfdx/runtime/fdx/core/src/main/java",
+                "../../../libfdx/runtime/display/src/main/java",
+                "../../../libfdx/runtime/files/src/main/java",
+                "../../../libfdx/runtime/input/src/main/java",
+                "../../../libfdx/runtime/application/src/main/java",
+                "../../../libfdx/graphics/api/src/main/java",
+                "../../../libfdx/extensions/graphics/gl/core/src/main/java",
+                "../../../libfdx/extensions/graphics/vulkan/core/src/main/java",
+                "../../../libfdx/tools/font/src/main/java",
+                "../../../libfdx/tools/shader/src/main/java",
+                "../../../libfdx/backends/c_shared/src/main/java",
+                "../../../libfdx/backends/web/src/main/java",
+                "../../../libfdx/backends/desktop_c/src/main/java",
+                "../../../libfdx/backends/psp/src/main/java"
+            )
+        }
+    }
 }
 
 tasks.withType<GenerateModuleMetadata>().configureEach {

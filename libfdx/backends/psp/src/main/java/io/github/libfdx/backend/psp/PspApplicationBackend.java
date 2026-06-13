@@ -161,12 +161,15 @@ public final class PspApplicationBackend implements ApplicationBackend, Applicat
 
     private void loop(ApplicationListener listener, DisplayConfig displayConfig) {
         long lastTimeMillis = System.currentTimeMillis();
+        int endFrameVsync = displayConfig.vSync() ? PSPGraphicsApi.GU_TRUE : PSPGraphicsApi.GU_FALSE;
         while (true) {
             boolean nativeRunning = PSPCoreApi.isRunning();
             boolean closeRequested = display.closeRequested();
+            int javaRunningFlag = nativeFlag(running);
+            int nativeRunningFlag = nativeFlag(nativeRunning);
+            int closeRequestedFlag = nativeFlag(closeRequested);
             if (!running || !nativeRunning || closeRequested) {
-                PSPDebugApi.debugLoopLog((int) frameId, 9, running ? 1 : 0, nativeRunning ? 1 : 0,
-                        closeRequested ? 1 : 0);
+                PSPDebugApi.debugLoopLog((int) frameId, 9, javaRunningFlag, nativeRunningFlag, closeRequestedFlag);
                 break;
             }
             long nowMillis = System.currentTimeMillis();
@@ -174,8 +177,7 @@ public final class PspApplicationBackend implements ApplicationBackend, Applicat
             lastTimeMillis = nowMillis;
             frameId++;
             if (frameId == 1L || frameId % 60L == 0L) {
-                PSPDebugApi.debugLoopLog((int) frameId, 1, running ? 1 : 0, nativeRunning ? 1 : 0,
-                        closeRequested ? 1 : 0);
+                PSPDebugApi.debugLoopLog((int) frameId, 1, javaRunningFlag, nativeRunningFlag, closeRequestedFlag);
             }
 
             inputController.poll();
@@ -189,18 +191,23 @@ public final class PspApplicationBackend implements ApplicationBackend, Applicat
                         ? (RuntimeException) error
                         : new FdxException("PSP application frame failed", error);
             } finally {
-                PSPGraphicsApi.endFrame(displayConfig.vSync() ? PSPGraphicsApi.GU_TRUE : PSPGraphicsApi.GU_FALSE,
-                        PSPGraphicsApi.GU_FALSE);
+                PSPGraphicsApi.endFrame(endFrameVsync, PSPGraphicsApi.GU_FALSE);
             }
             if (frameId % 60L == 0L) {
                 System.gc();
                 PSPDebugApi.debugHeapLog((int) frameId);
-                PSPDebugApi.debugLoopLog((int) frameId, 4, running ? 1 : 0, PSPCoreApi.isRunning() ? 1 : 0,
-                        display.closeRequested() ? 1 : 0);
+                javaRunningFlag = nativeFlag(running);
+                nativeRunningFlag = nativeFlag(PSPCoreApi.isRunning());
+                closeRequestedFlag = nativeFlag(display.closeRequested());
+                PSPDebugApi.debugLoopLog((int) frameId, 4, javaRunningFlag, nativeRunningFlag, closeRequestedFlag);
             }
         }
         logger.warn("PSP application loop ended running=" + running + " native=" + PSPCoreApi.isRunning()
                 + " close=" + (display != null && display.closeRequested()) + " frame=" + frameId);
+    }
+
+    private static int nativeFlag(boolean value) {
+        return value ? 1 : 0;
     }
 
     private void shutdown(ApplicationListener listener) {

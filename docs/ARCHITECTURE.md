@@ -45,7 +45,7 @@ Use a small number of broad folders. A new top-level folder should exist only wh
 | `ui/` | Built-in libfdx UI modules, starting with `ui-kit`. |
 | `validation/` | Reusable scenario validation engines and domain adapters. |
 | `extensions/` | Platform-backed provider/library families such as input, graphics, audio, and optional external bindings. Use this for modules that need desktop/web/android/iOS variants. |
-| `backends/` | Platform/runtime implementation families. Each concrete backend uses one flat folder segment, such as `headless`, `headless_native`, `desktop`, or `desktop_native`. Shared TeaVM build and native resource support belongs in `teavm_shared`. Do not make a backend folder both a source module and a parent namespace for more backend modules. |
+| `backends/` | Platform/runtime implementation families. Each concrete backend uses one flat folder segment, such as `headless`, `headless_native`, `desktop`, or `desktop_c`. Shared TeaVM build and native resource support belongs in `c_shared`. Do not make a backend folder both a source module and a parent namespace for more backend modules. |
 | `tools/` | Build-time and command-line tools. |
 | `tests/` | Cross-platform framework test projects: core tests plus platform/backend test runners. |
 | `samples/` | Example applications. |
@@ -60,8 +60,8 @@ Extension module shape:
 - Use lowercase `<platform>_<implementation>` when the platform has multiple provider variants, such as `desktop_jni`, `desktop_ffm`, `android_jni`, or `ios_native`.
 - Web provider variant folders stop at `web`; use one `_web` artifact when the same module supports JavaScript and Wasm, and split into `_web_js` or `_web_wasm` only when the runtimes need separate artifacts.
 - `_native` identifies the native runtime family. A launcher that uses a `_native` backend must use matching `_native` provider/runtime modules for graphics, audio, input, UI, and native-backed extensions. It must not mix normal platform modules such as `desktop`, `desktop_jni`, `desktop_ffm`, or `android_jni` into the same runtime.
-- Backend folders use one flat segment per concrete backend. Use the runtime/library name when it uniquely identifies the backend, such as `desktop`; use `<platform>` for default platform backends, such as `web`, `android`, or `ios`; use `<platform>_<implementation>` for alternate platform runtimes, such as `headless_native` or `desktop_native`.
-- Shared TeaVM build and native resource support belongs in the flat `teavm_shared` sibling rather than in a backend-specific resource-only module.
+- Backend folders use one flat segment per concrete backend. Use the runtime/library name when it uniquely identifies the backend, such as `desktop`; use `<platform>` for default platform backends, such as `web`, `android`, or `ios`; use `<platform>_<implementation>` for alternate platform runtimes, such as `headless_native` or `desktop_c`.
+- Shared TeaVM build and native resource support belongs in the flat `c_shared` sibling rather than in a backend-specific resource-only module.
 
 ## 3. Repository Layout
 
@@ -111,7 +111,7 @@ repo-root/
       input/
         gamepads/
           desktop/
-          desktop_native/
+          desktop_c/
           web/
           android/
           ios/
@@ -120,7 +120,7 @@ repo-root/
           core/
           desktop_jni/
           desktop_ffm/
-          desktop_native/
+          desktop_c/
           web/
           android_jni/
           android_native/
@@ -137,7 +137,7 @@ repo-root/
           platform/
             desktop_jni/
             desktop_ffm/
-            desktop_native/
+            desktop_c/
             web/
             android_jni/
             android_native/
@@ -146,13 +146,13 @@ repo-root/
           core/
           platform/
             desktop/
-            desktop_native/
+            desktop_c/
             web/
         vulkan/
           core/
           platform/
             desktop/
-            desktop_native/
+            desktop_c/
             web/
             android_jni/
             android_native/
@@ -161,8 +161,8 @@ repo-root/
       headless/
       headless_native/
       desktop/
-      teavm_shared/
-      desktop_native/
+      c_shared/
+      desktop_c/
       psp/
       web/
       android/
@@ -187,7 +187,7 @@ repo-root/
       headless/
       headless_native/
       desktop/
-      desktop_native/
+      desktop_c/
       web/
       android/
       android_native/
@@ -200,7 +200,7 @@ repo-root/
       core/
       platform/
         desktop/
-        desktop_native/
+        desktop_c/
         web/
         android/
 ```
@@ -324,14 +324,14 @@ Extension provider modules implement those contracts:
 
 ```text
 extensions/input/gamepads/desktop
-extensions/input/gamepads/desktop_native
+extensions/input/gamepads/desktop_c
 extensions/input/gamepads/web
 extensions/input/gamepads/android
 extensions/input/gamepads/ios
 extensions/audio/miniaudio/core
 extensions/audio/miniaudio/desktop_jni
 extensions/audio/miniaudio/desktop_ffm
-extensions/audio/miniaudio/desktop_native
+extensions/audio/miniaudio/desktop_c
 extensions/audio/miniaudio/web
 extensions/audio/miniaudio/android_jni
 extensions/audio/miniaudio/android_native
@@ -343,18 +343,18 @@ extensions/audio/openal/desktop_ffm
 extensions/graphics/wgpu/core
 extensions/graphics/gl/core
 extensions/graphics/gl/platform/desktop
-extensions/graphics/gl/platform/desktop_native
+extensions/graphics/gl/platform/desktop_c
 extensions/graphics/gl/platform/web
 extensions/graphics/wgpu/platform/desktop_jni
 extensions/graphics/wgpu/platform/desktop_ffm
-extensions/graphics/wgpu/platform/desktop_native
+extensions/graphics/wgpu/platform/desktop_c
 extensions/graphics/wgpu/platform/web
 extensions/graphics/wgpu/platform/android_jni
 extensions/graphics/wgpu/platform/android_native
 extensions/graphics/wgpu/platform/ios_native
 extensions/graphics/vulkan/core
 extensions/graphics/vulkan/platform/desktop
-extensions/graphics/vulkan/platform/desktop_native
+extensions/graphics/vulkan/platform/desktop_c
 extensions/graphics/vulkan/platform/web
 extensions/graphics/vulkan/platform/android_jni
 extensions/graphics/vulkan/platform/android_native
@@ -370,11 +370,11 @@ Use these Gradle dependency rules:
 - Use `implementation` in launcher/platform modules for selectable graphics stacks that the launcher intentionally enables, such as `gl_desktop`, `wgpu_core`, and `wgpu_desktop_jni`.
 - Use `runtimeOnly` for provider variant modules that only contribute runtime bindings or native libraries and are not directly selected by launcher source code, such as `miniaudio_desktop_jni` and other dependency-only variants.
 - Use `implementation` instead of `runtimeOnly` for any module whose provider-specific classes are imported directly by user code or launcher code.
-- Keep runtime families consistent. For example, `backends/desktop_native` may use `gl_desktop_native` or future `wgpu_desktop_native`, but it must not mix in `gl_desktop`, `wgpu_desktop_jni`, or `wgpu_desktop_ffm`.
+- Keep runtime families consistent. For example, `backends/desktop_c` may use `gl_desktop_c` or future `wgpu_desktop_c`, but it must not mix in `gl_desktop`, `wgpu_desktop_jni`, or `wgpu_desktop_ffm`.
 
 Gamepad support is part of the `runtime/input` API because gamepads are input devices. Platform-specific gamepad providers belong under `extensions/input/gamepads` because desktop, web, Android, and iOS use different native APIs and may have more than one valid implementation path.
 
-Audio provider runtime modules should use concrete platform variant folders under `extensions/audio`. A root module such as `extensions/audio/miniaudio` is not enough because audio bindings and packaging differ between desktop, web, Android, and iOS. Use one segment such as `desktop_jni`, `desktop_ffm`, `desktop_native`, `android_jni`, or `ios_native` when the platform has multiple implementation choices. For web, use `extensions/audio/<provider>/web` as the Gradle module and put `js` or `wasm` only in the published artifact ID.
+Audio provider runtime modules should use concrete platform variant folders under `extensions/audio`. A root module such as `extensions/audio/miniaudio` is not enough because audio bindings and packaging differ between desktop, web, Android, and iOS. Use one segment such as `desktop_jni`, `desktop_ffm`, `desktop_c`, `android_jni`, or `ios_native` when the platform has multiple implementation choices. For web, use `extensions/audio/<provider>/web` as the Gradle module and put `js` or `wasm` only in the published artifact ID.
 
 Graphics provider runtime modules should use a provider root with `core` directly under it and concrete platform variants under `platform/`. Avoid a generic `native` module or a plain platform module when there are multiple implementation choices because it does not say which binding/runtime owns the binaries or packaging. Shared Java provider classes should live in the provider `core` module and depend only on provider-neutral APIs, not concrete backends. If a backend technology already owns the graphics binding and context model, such as desktop GL, the backend may expose a selectable `GraphicsAttachmentProvider` while reusing the provider-neutral shared implementation from the extension `core` module. The matching graphics extension platform module, such as `extensions/graphics/gl/platform/desktop`, still owns the optional runtime/native dependencies. For web, use `extensions/graphics/<provider>/platform/web` as the Gradle module and put `js` or `wasm` only in the published artifact ID.
 
@@ -933,7 +933,7 @@ In module names, `_native` means the native runtime family, not a specific compi
 
 Internal Gradle paths should remain the source of truth while the project is young.
 
-Maven publication wiring lives in the shared `buildSrc/src/main/kotlin/publish.gradle.kts` publish plugin. The root build applies it with the `LIBRARIES` target, and the included `libfdx/tools/gradle-plugin` build applies the same script with the `GRADLE_PLUGIN` target. It publishes only the explicit `libfdxPublishableProjectPaths` Java and Android library allowlist with group `libfdx.toml` `release.fdxGroup`, uses each module's `archivesName` as the artifact ID, and delegates Gradle plugin marker and implementation publication to the included build. Run `listMavenDeployProjects` to print the library deploy allowlist. The configured `libfdx.toml` `release.fdxVersion` is the upcoming release version without `-SNAPSHOT`; snapshot deploy and publish tasks derive Maven version `-SNAPSHOT`, while release deploy and publish tasks use the configured base version. The public root deploy tasks are `build_native_artifacts`, `prepareSnapshotDeploy`, `prepareReleaseDeploy`, `publishSnapshot`, and `publishRelease`: `build_native_artifacts` builds current-host runtime fdx desktop native-resource JAR inputs, runtime fdx web native-resource JAR inputs, the runtime fdx Android AAR, and Android release AARs; `prepareSnapshotDeploy` publishes local snapshot files to `build/snapshot-deploy`; `prepareReleaseDeploy` publishes local release files to `build/staging-deploy` and creates `build/staging-deploy.zip`; `publishSnapshot` publishes directly to the Central Portal snapshot repository through Gradle's Maven publish tasks; and `publishRelease` prepares release deploy files, creates the staging zip, and uploads it to Central Portal. Deploy preparation uses generated native resources and must not compile C native artifacts. By default, runtime fdx native validation fails for missing current-host desktop or web resources and skips non-host desktop native-resource publications. `fdx_shared` is a published native-source/tooling artifact used by the Gradle plugin and standalone builders when a user project generates TeaVM/native builds from Maven artifacts.
+Maven publication wiring lives in the shared `buildSrc/src/main/kotlin/publish.gradle.kts` publish plugin. The root build applies it with the `LIBRARIES` target, and the included `libfdx/tools/gradle-plugin` build applies the same script with the `GRADLE_PLUGIN` target. It publishes only the explicit `libfdxPublishableProjectPaths` Java and Android library allowlist with group `libfdx.toml` `release.fdxGroup`, uses each module's `archivesName` as the artifact ID, and delegates Gradle plugin marker and implementation publication to the included build. Run `listMavenDeployProjects` to print the library deploy allowlist. The configured `libfdx.toml` `release.fdxVersion` is the upcoming release version without `-SNAPSHOT`; snapshot deploy and publish tasks derive Maven version `-SNAPSHOT`, while release deploy and publish tasks use the configured base version. The public root deploy tasks are `build_native_artifacts`, `prepareSnapshotDeploy`, `prepareReleaseDeploy`, `publishSnapshot`, and `publishRelease`: `build_native_artifacts` builds current-host runtime fdx desktop C-resource JAR inputs, runtime fdx web native-resource JAR inputs, the runtime fdx Android AAR, and Android release AARs; `prepareSnapshotDeploy` publishes local snapshot files to `build/snapshot-deploy`; `prepareReleaseDeploy` publishes local release files to `build/staging-deploy` and creates `build/staging-deploy.zip`; `publishSnapshot` publishes directly to the Central Portal snapshot repository through Gradle's Maven publish tasks; and `publishRelease` prepares release deploy files, creates the staging zip, and uploads it to Central Portal. Deploy preparation uses generated native resources and must not compile C native artifacts. By default, runtime fdx native validation fails for missing current-host desktop or web resources and skips non-host desktop C-resource publications. `fdx_shared` is a published native-source/tooling artifact used by the Gradle plugin and standalone builders when a user project generates TeaVM/native builds from Maven artifacts.
 
 The configured dependency mode controls repository consumer wiring for tests and samples. `LibExt` reads `libfdx.toml` `[development]` values, then lets ignored root `local.properties` keys `development.usePublishedLibfdx` and `development.publishedLibfdxVersion` override them for one checkout. Settings always includes the local `:libfdx:*` source modules. When false, settings also includes the local Gradle plugin build for the dedicated plugin-use modules and consumers use project dependencies. That included plugin build must stay isolated to the plugin project; it must not include or remap root `:libfdx:*` source modules under the plugin build id. When true, plugin-use modules resolve the Gradle plugin from Maven and consumers resolve libFDX dependencies as published `<fdxGroup>:<artifact>:<publishedLibfdxVersion>` coordinates. Builder-backed web tasks attach local generated runtime fdx web resources only when the consumer runtime classpath has direct or transitive local `:libfdx:*` project dependencies; Maven-backed consumers must get those resources from the published artifacts.
 
@@ -970,7 +970,7 @@ Gamepad common contracts live in `runtime/input`. These modules provide platform
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
 | `:libfdx:extensions:input:gamepads:desktop` | `io.github.libfdx:gamepads_desktop` | Desktop gamepad provider using the selected desktop GLFW input path. |
-| `:libfdx:extensions:input:gamepads:desktop_native` | `io.github.libfdx:gamepads_desktop_native` | Desktop gamepad provider for the native runtime stack if feasible. |
+| `:libfdx:extensions:input:gamepads:desktop_c` | `io.github.libfdx:gamepads_desktop_c` | Desktop gamepad provider for the native runtime stack if feasible. |
 | `:libfdx:extensions:input:gamepads:web` | `io.github.libfdx:gamepads_web_js` | Browser gamepad provider using the JavaScript Gamepad API. |
 | `:libfdx:extensions:input:gamepads:android` | `io.github.libfdx:gamepads_android` | Android gamepad provider using Android input/controller APIs. |
 | `:libfdx:extensions:input:gamepads:ios` | `io.github.libfdx:gamepads_ios` | iOS gamepad provider using iOS controller APIs. |
@@ -989,7 +989,7 @@ Gamepad common contracts live in `runtime/input`. These modules provide platform
 | `:libfdx:extensions:audio:miniaudio:core` | `io.github.libfdx:miniaudio_core` | Provider-specific miniaudio Java types and shared provider glue. Normal game code should not need this unless it directly uses miniaudio-specific classes. |
 | `:libfdx:extensions:audio:miniaudio:desktop_jni` | `io.github.libfdx:miniaudio_desktop_jni` | Desktop miniaudio runtime using JNI bindings. |
 | `:libfdx:extensions:audio:miniaudio:desktop_ffm` | `io.github.libfdx:miniaudio_desktop_ffm` | Desktop miniaudio runtime using Java FFM bindings if this becomes useful. |
-| `:libfdx:extensions:audio:miniaudio:desktop_native` | `io.github.libfdx:miniaudio_desktop_native` | Desktop miniaudio runtime for the native runtime stack if feasible. |
+| `:libfdx:extensions:audio:miniaudio:desktop_c` | `io.github.libfdx:miniaudio_desktop_c` | Desktop miniaudio runtime for the native runtime stack if feasible. |
 | `:libfdx:extensions:audio:miniaudio:web` | `io.github.libfdx:miniaudio_web_wasm` | Web miniaudio runtime for Wasm targets if feasible. |
 | `:libfdx:extensions:audio:miniaudio:android_jni` | `io.github.libfdx:miniaudio_android_jni` | Android miniaudio runtime using Android JNI/ABI packaging. |
 | `:libfdx:extensions:audio:miniaudio:android_native` | `io.github.libfdx:miniaudio_android_native` | Android miniaudio runtime for the native runtime stack if feasible. |
@@ -1042,7 +1042,7 @@ implemented and validated.
 | `:libfdx:extensions:graphics:wgpu:core` | `io.github.libfdx:wgpu_core` | Base WebGPU/wgpu provider. It implements `graphics/api`, owns WebGPU-specific public classes such as `WGPUDevice`, `WGPUTexture`, and other wgpu escape-hatch types, and contains backend-neutral Java attachment code that consumes the `graphics/api` native-window bridge. |
 | `:libfdx:extensions:graphics:wgpu:platform:desktop_jni` | `io.github.libfdx:wgpu_desktop_jni` | Desktop jWebGPU JNI runtime dependency module. It contributes the JNI binding/native libraries and should not contain WGPU provider Java classes unless the JNI binding requires variant-specific Java code. |
 | `:libfdx:extensions:graphics:wgpu:platform:desktop_ffm` | `io.github.libfdx:wgpu_desktop_ffm` | Desktop WebGPU/wgpu runtime dependency module using Java FFM bindings. This module requires Java 25 because the current jWebGPU FFM runtime is Java 25-only. |
-| `:libfdx:extensions:graphics:wgpu:platform:desktop_native` | `io.github.libfdx:wgpu_desktop_native` | Desktop WebGPU/wgpu runtime dependency module for the native runtime stack if feasible. |
+| `:libfdx:extensions:graphics:wgpu:platform:desktop_c` | `io.github.libfdx:wgpu_desktop_c` | Desktop WebGPU/wgpu runtime dependency module for the native runtime stack if feasible. |
 | `:libfdx:extensions:graphics:wgpu:platform:web` | `io.github.libfdx:wgpu_web` | WebGPU integration for JavaScript and Wasm web targets. |
 | `:libfdx:extensions:graphics:wgpu:platform:android_jni` | `io.github.libfdx:wgpu_android_jni` | Android WebGPU/wgpu runtime packaging and surface integration using Android JNI/ABI packaging. |
 | `:libfdx:extensions:graphics:wgpu:platform:android_native` | `io.github.libfdx:wgpu_android_native` | Android WebGPU/wgpu runtime packaging for the native runtime stack if feasible. |
@@ -1054,7 +1054,7 @@ implemented and validated.
 | --- | --- | --- |
 | `:libfdx:extensions:graphics:gl:core` | `io.github.libfdx:gl_core` | Shared GL-family configuration, GL command abstraction, and common graphics API implementation classes. It must not depend on LWJGL, WebGL, or a concrete backend. The desktop backend exposes GL through `DesktopOpenGLProvider` in `:libfdx:backends:desktop`. |
 | `:libfdx:extensions:graphics:gl:platform:desktop` | `io.github.libfdx:gl_desktop` | Desktop GL runtime dependency module for the desktop backend. It contributes the LWJGL GL API and native artifacts and should not contain GL provider Java classes. |
-| `:libfdx:extensions:graphics:gl:platform:desktop_native` | `io.github.libfdx:gl_desktop_native` | Desktop GL native resource module for the desktop_native backend. It contributes GLEW headers and Windows libraries for generated C builds, reuses shared TeaVM native resources from `:libfdx:backends:teavm_shared`, and should not contain GL provider Java classes. |
+| `:libfdx:extensions:graphics:gl:platform:desktop_c` | `io.github.libfdx:gl_desktop_c` | Desktop GL native resource module for the desktop_c backend. It contributes GLEW headers and Windows libraries for generated C builds, reuses shared C native resources from `:libfdx:backends:c_shared`, and should not contain GL provider Java classes. |
 | `:libfdx:extensions:graphics:gl:platform:web` | `io.github.libfdx:gl_web_js` | Browser WebGL provider for web JS/Wasm targets. It adapts the shared GL-family implementation to WebGL semantics directly, not by forcing desktop GL assumptions onto WebGL. |
 
 ### 9.9. Vulkan Provider Modules
@@ -1063,7 +1063,7 @@ implemented and validated.
 | --- | --- | --- |
 | `:libfdx:extensions:graphics:vulkan:core` | `io.github.libfdx:vulkan_core` | Shared Vulkan provider configuration, provider ID, and public Vulkan-facing setup types that do not depend on LWJGL or a concrete backend. The desktop backend exposes Vulkan through `DesktopVulkanProvider` in `:libfdx:backends:desktop`. |
 | `:libfdx:extensions:graphics:vulkan:platform:desktop` | `io.github.libfdx:vulkan_desktop` | Desktop Vulkan runtime dependency module for the desktop backend. It contributes the LWJGL Vulkan artifact and should not contain Vulkan provider Java classes. |
-| `:libfdx:extensions:graphics:vulkan:platform:desktop_native` | `io.github.libfdx:vulkan_desktop_native` | Desktop Vulkan bridge resources for the native runtime stack. It contributes the libfdx C/C++ bridge, prefers CMake `Vulkan::Vulkan` when a Vulkan SDK is installed, and otherwise uses a narrow local ABI shim while loading the system Vulkan runtime at run time. |
+| `:libfdx:extensions:graphics:vulkan:platform:desktop_c` | `io.github.libfdx:vulkan_desktop_c` | Desktop Vulkan bridge resources for the native runtime stack. It contributes the libfdx C/C++ bridge, prefers CMake `Vulkan::Vulkan` when a Vulkan SDK is installed, and otherwise uses a narrow local ABI shim while loading the system Vulkan runtime at run time. |
 | `:libfdx:extensions:graphics:vulkan:platform:web` | `io.github.libfdx:vulkan_web_wasm` | Future web Vulkan-family target if feasible through a supported web graphics path. |
 | `:libfdx:extensions:graphics:vulkan:platform:android_jni` | `io.github.libfdx:vulkan_android_jni` | Android Vulkan runtime packaging and surface integration using Android JNI/ABI packaging. |
 | `:libfdx:extensions:graphics:vulkan:platform:android_native` | `io.github.libfdx:vulkan_android_native` | Android Vulkan-family runtime packaging for the native runtime stack if feasible. |
@@ -1116,7 +1116,7 @@ The concrete backend module owns the launcher, lifecycle wiring, platform event 
 
 Backends should attach graphics through the provider-neutral `graphics/api` attachment SPI instead of constructing one graphics provider directly. For example, `backends/desktop` creates the GLFW window, exports a generic `NativeWindow`, and drives a `GraphicsAttachment` supplied by the launcher. `extensions/graphics/wgpu/core` consumes that generic native-window bridge, and `extensions/graphics/wgpu/platform/desktop_jni` supplies only the JNI runtime libraries. Shared game code still sees only `Graphics`.
 
-Do not create a backend module that is also a parent folder for another backend module. For example, use `backends/android` and `backends/android_native`, not `backends/android` plus `backends/android/c`. Shared TeaVM build and native resource payloads belong in the flat `backends/teavm_shared` sibling.
+Do not create a backend module that is also a parent folder for another backend module. For example, use `backends/android` and `backends/android_native`, not `backends/android` plus `backends/android/c`. Shared TeaVM build and native resource payloads belong in the flat `backends/c_shared` sibling.
 
 Backend artifacts should be `implementation` dependencies in launcher/platform modules, not `runtimeOnly` dependencies. The platform launcher compiles against the selected backend implementation because it creates and configures the actual application runtime. Resource-only backend support artifacts are the exception: provider modules may depend on them as `runtimeOnly` because they carry native build resources and no Java API. Graphics, audio, and other providers may still be `runtimeOnly` when game code compiles only against their common APIs.
 
@@ -1127,8 +1127,8 @@ Artifact IDs should include the implementation name unless the implementation is
 | `:libfdx:backends:headless` | `io.github.libfdx:backend_headless` | JVM headless backend for tests, servers, simulations, and tools. Provides lifecycle and file services without display or graphics services. |
 | `:libfdx:backends:headless_native` | `io.github.libfdx:backend_headless_native` | Headless backend for native runtime targets if that runtime is supported. |
 | `:libfdx:backends:desktop` | `io.github.libfdx:backend_desktop` | Default desktop backend using LWJGL3 internally for application lifecycle, OS display/window creation, input, and files. It can expose desktop-owned provider setup classes such as `DesktopOpenGLProvider`, but graphics runtime/native modules such as `gl_desktop` and `wgpu_desktop_jni` are still selected by launcher dependencies. |
-| `:libfdx:backends:teavm_shared` | `io.github.libfdx:backend_teavm_shared` | Flat shared TeaVM build and native resource support, including TeaVM build execution, shared builder errors, optimization settings, and classpath resources copied into generated native projects. It is not a parent folder for web or native backend modules. |
-| `:libfdx:backends:desktop_native` | `io.github.libfdx:backend_desktop_native` | Desktop backend for native runtime desktop targets. It owns GLFW window/lifecycle wiring, `NativeBuilder`, desktop-native project generation, and currently exposes `DesktopNativeOpenGLProvider` and `DesktopNativeVulkanProvider` while keeping graphics attached through the common `graphics/api` SPI. |
+| `:libfdx:backends:c_shared` | `io.github.libfdx:backend_c_shared` | Flat shared C build and native resource support, including TeaVM build execution, shared builder errors, optimization settings, and classpath resources copied into generated native projects. It is not a parent folder for web or native backend modules. |
+| `:libfdx:backends:desktop_c` | `io.github.libfdx:backend_desktop_c` | Desktop backend for native runtime desktop targets. It owns GLFW window/lifecycle wiring, `NativeBuilder`, desktop-c project generation, and currently exposes `DesktopCOpenGLProvider` and `DesktopCVulkanProvider` while keeping graphics attached through the common `graphics/api` SPI. |
 | `:libfdx:backends:psp` | `io.github.libfdx:backend_psp` | PSP TeaVM C backend module. It owns `PspBuilder`, PSP project generation, PSP native import declarations, PSP native resource payloads, `PspApplicationBackend`, `PspApplicationConfig`, and the first constrained PSP common graphics API slice for clear, non-indexed SpriteBatch-style rendering, and RGBA8 power-of-two sampled textures. The current application backend exposes fixed 480x272 display metadata, `PspGraphicsContext`, read-only internal/classpath assets staged through `libfdx.assets` or `PspBuilder.asset(...)`, and PSP controls as one standard-mapped gamepad plus controller-backed portable key events for focus/navigation. Physical keyboard, pointer, touch, text input, cursor, writable files, audio, and broader graphics runtime behavior belong here only when implemented as PSP backend classes. |
 | `:libfdx:backends:web` | `io.github.libfdx:backend_web` | Default browser backend using TeaVM internally for canvas/display integration, browser input and text-editor bridging, browser lifecycle, `WebBuilder`, and webapp asset metadata generation. It supports JS and Wasm build targets through the libfdx Gradle plugin and should not hard-code one graphics, audio, or gamepad provider. |
 | `:libfdx:backends:android` | `io.github.libfdx:backend_android` | Default Android backend: activity/view integration, Android input/files, and mobile lifecycle. Graphics, audio, and gamepad providers should remain replaceable. |
@@ -1142,7 +1142,7 @@ Additional backend implementations should be added as new flat variant folders o
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `libfdx/tools/gradle-plugin` included build | `io.github.libfdx:libfdx-gradle-plugin` | Gradle plugin for libfdx platform targets. It is intentionally an included build under `libfdx/tools`, not `buildSrc`, so this repository and external projects can consume the same plugin with `pluginManagement { includeBuild("<libfdx>/libfdx/tools/gradle-plugin") }`. The public plugin ID is `io.github.libfdx`, and external builds should configure it with one `libfdx { ... }` block. The target blocks are `desktopJvm`, `js`, `wasm`, `desktopNative`, and `psp`. Inside this repository, plugin DSL usage is isolated to the dedicated `:samples:basic:platform:plugin` and `:tests:platform:plugin` modules; runtime launcher modules use explicit tasks that call the standalone builders directly. |
+| `libfdx/tools/gradle-plugin` included build | `io.github.libfdx:libfdx-gradle-plugin` | Gradle plugin for libfdx platform targets. It is intentionally an included build under `libfdx/tools`, not `buildSrc`, so this repository and external projects can consume the same plugin with `pluginManagement { includeBuild("<libfdx>/libfdx/tools/gradle-plugin") }`. The public plugin ID is `io.github.libfdx`, and external builds should configure it with one `libfdx { ... }` block. The target blocks are `desktopJvm`, `js`, `wasm`, `desktopC`, and `psp`. Inside this repository, plugin DSL usage is isolated to the dedicated `:samples:basic:platform:plugin` and `:tests:platform:plugin` modules. Runtime launcher modules stay focused on source sets, dependencies, and direct JVM/Android run tasks where no generated plugin target is required. |
 | `:libfdx:tools:font` | `io.github.libfdx:font_tools` | Build-time font tools. The current tool generates AngelCode BMFont-style `.fnt` metadata and PNG atlases from TTF files for platforms that should ship prebuilt bitmap fonts, such as PSP. It is a general libfdx tooling module, not a TeaVM backend module. |
 | `:libfdx:tools:shader` | `io.github.libfdx:tools_shader` | Build-time shader tools for WGSL profile validation and generated shader bundle reports. It depends on `graphics/api` for the public shader profile contract and does not pull a native shader compiler into runtime code. |
 | `:libfdx:tools:project-generator:core` | `io.github.libfdx:project_generator_core` | Project generator model, validation, template rendering, and in-memory generated project tree. It must not depend on desktop, web, UIKit, or filesystem APIs. |
@@ -1161,11 +1161,11 @@ Project-generator submodules are internal launch tooling in the first implementa
 | `:tests:platform:headless` | internal | JVM headless test runner for logic-only tests and provider contracts that do not need a real platform surface, audio device, or input device. |
 | `:tests:platform:headless_native` | internal | Headless C runtime test runner when a C-backed headless backend exists. |
 | `:tests:platform:desktop` | internal | Desktop test runner using `backends/desktop`. Dedicated Gradle tasks select provider stacks such as GL, WGPU JNI, or WGPU FFM. |
-| `:tests:platform:desktop_native` | internal | Desktop test runner using `backends/desktop_native` with selected C-backed provider implementations. |
-| `:tests:platform:web` | internal | Web test runner for selected web provider implementations. |
+| `:tests:platform:desktop_c` | internal | Desktop test runner using `backends/desktop_c` with selected C-backed provider implementations. |
+| `:tests:platform:web` | internal | Web test runner source set for selected web provider implementations. It exposes thin `test_web*` task aliases while the plugin-use test module owns the generated web target implementation. |
 | `:tests:platform:android` | internal | Android test runner. Gradle tasks select Android backend/provider variants such as GLES or WGPU. |
-| `:tests:platform:psp` | internal | PSP TeaVM C smoke-test runner. The cube smoke uses PSP backend native declarations for direct GU 3D rendering, the separate SpriteBatch smoke validates the constrained PSP common graphics/SpriteBatch path, the backend SpriteBatch smoke validates `PspApplicationBackend`, typed `Fdx` wiring, PSP internal asset reads, image loading, texture upload, and SpriteBatch rendering, the backend input smoke validates PSP control polling through the common gamepad API, the backend UIKit manual test renders `UiRoot` widgets through the PSP application backend, and the backend UIKit smoke variant validates scripted focus/activation. |
-| `:tests:platform:plugin` | internal | Dedicated test-side Gradle plugin DSL coverage module. It mirrors desktop JVM, web, desktop-native, and PSP test launch aliases through the libFDX Gradle plugin and must stay one module instead of splitting into platform-suffixed plugin folders. |
+| `:tests:platform:psp` | internal | PSP TeaVM C platform launcher for the shared `tests/core` selector. It exposes thin `test_psp_generate`, `test_psp_build`, and `test_psp_ppsspp_capture` task entrypoints while the plugin-use module owns the generated PSP target implementation. |
+| `:tests:platform:plugin` | internal | Dedicated test-side Gradle plugin DSL coverage module. It mirrors desktop JVM, web, desktop-c, and PSP test launch tasks through the libFDX Gradle plugin and must stay one module instead of splitting into platform-suffixed plugin folders. |
 | `:tests:platform:android_native` | internal | Android C runtime test runner when a C-backed Android backend exists. |
 | `:tests:platform:ios` | internal | iOS test runner. Dedicated Gradle tasks or platform build variants select iOS backend/provider variants when iOS support is available. |
 | `:tests:platform:ios_native` | internal | iOS C runtime test runner when a C-backed iOS backend exists. |
@@ -1183,13 +1183,13 @@ samples/<sample-name>/
   core/
   platform/
     desktop/
-    desktop_native/
+    desktop_c/
     web/
     android/
     ios/
 ```
 
-The sample `core` module contains the shared sample application code. Platform modules are launchers/wiring modules only: they select the backend, platform packaging, and platform-specific configuration. Provider stacks such as JNI or FFM should be selected by dedicated Gradle tasks or platform build variants inside the platform sample module, not by adding more sample folders. A different backend/runtime family such as desktop native uses its own platform module because it has different compiler output and native build tasks. These modules should be created when the sample is created so every sample starts cross-platform by default.
+The sample `core` module contains the shared sample application code. Platform modules are launchers/wiring modules only: they select the backend, platform packaging, and platform-specific configuration. Provider stacks such as JNI or FFM should be selected by dedicated Gradle tasks or platform build variants inside the platform sample module, not by adding more sample folders. A different backend/runtime family such as desktop C uses its own platform module because it has different compiler output and native build tasks. These modules should be created when the sample is created so every sample starts cross-platform by default.
 
 Required module shape for every sample:
 
@@ -1197,7 +1197,7 @@ Required module shape for every sample:
 | --- | --- |
 | `:samples:<name>:core` | Shared sample logic and assets references. No platform launcher code belongs here. |
 | `:samples:<name>:platform:desktop` | Desktop launcher for the sample. Depends on `<name>:core`, one desktop backend implementation, and provider stacks selected by Gradle. |
-| `:samples:<name>:platform:desktop_native` | desktop_native launcher for the sample. Depends on `<name>:core`, `backends/desktop_native`, and desktop_native provider/native-resource modules selected by Gradle. |
+| `:samples:<name>:platform:desktop_c` | desktop_c launcher for the sample. Depends on `<name>:core`, `backends/desktop_c`, and desktop_c provider/native-resource modules selected by Gradle. |
 | `:samples:<name>:platform:web` | Web launcher for the sample. Depends on `<name>:core`, one web backend implementation, and browser providers selected by Gradle. |
 | `:samples:<name>:platform:android` | Android launcher for the sample. Depends on `<name>:core`, one Android backend implementation, and Android provider stacks selected by Gradle. |
 | `:samples:<name>:platform:ios` | iOS launcher for the sample. Depends on `<name>:core`, one iOS backend implementation, and iOS provider stacks selected by Gradle when iOS support is available. |
@@ -1210,14 +1210,14 @@ shape and should not be copied into new sample families unless a dedicated
 plugin-use sample is explicitly needed.
 
 The internal `:tests:platform:plugin` module is the analogous test-side plugin
-DSL coverage module. It owns plugin-use test aliases and should stay one module;
-do not split it into `plugin_web`, `plugin_desktop_native`, or `plugin_psp`
+DSL coverage module. It owns plugin-use test target tasks and should stay one module;
+do not split it into `plugin_web`, `plugin_desktop_c`, or `plugin_psp`
 folders.
 
 Combined plugin-use modules may set `desktopJvm.runtimeClasspath(...)` to the
 desktop launcher dependency path. That keeps desktop JVM plugin tasks from
 loading web or TeaVM C runtime jars that are present only for the same module's
-web, desktop-native, or PSP plugin aliases.
+web, desktop-c, or PSP plugin target tasks.
 
 Planned sample families:
 
@@ -1270,7 +1270,7 @@ dependencies {
     implementation("io.github.libfdx:files:$libfdxVersion")
     implementation("io.github.libfdx:input:$libfdxVersion")
     runtimeOnly("io.github.libfdx:gamepads_desktop:$libfdxVersion")
-    runtimeOnly("io.github.libfdx:gamepads_desktop_native:$libfdxVersion")
+    runtimeOnly("io.github.libfdx:gamepads_desktop_c:$libfdxVersion")
     runtimeOnly("io.github.libfdx:gamepads_web_js:$libfdxVersion")
     runtimeOnly("io.github.libfdx:gamepads_android:$libfdxVersion")
     runtimeOnly("io.github.libfdx:gamepads_ios:$libfdxVersion")
@@ -1279,7 +1279,7 @@ dependencies {
     runtimeOnly("io.github.libfdx:miniaudio_core:$libfdxVersion")
     runtimeOnly("io.github.libfdx:miniaudio_desktop_jni:$libfdxVersion")
     runtimeOnly("io.github.libfdx:miniaudio_desktop_ffm:$libfdxVersion")
-    runtimeOnly("io.github.libfdx:miniaudio_desktop_native:$libfdxVersion")
+    runtimeOnly("io.github.libfdx:miniaudio_desktop_c:$libfdxVersion")
     runtimeOnly("io.github.libfdx:miniaudio_web_wasm:$libfdxVersion")
     runtimeOnly("io.github.libfdx:miniaudio_android_jni:$libfdxVersion")
     runtimeOnly("io.github.libfdx:miniaudio_android_native:$libfdxVersion")
@@ -1297,14 +1297,14 @@ dependencies {
     runtimeOnly("io.github.libfdx:wgpu_core:$libfdxVersion")
     runtimeOnly("io.github.libfdx:wgpu_desktop_jni:$libfdxVersion")
     runtimeOnly("io.github.libfdx:wgpu_desktop_ffm:$libfdxVersion")
-    runtimeOnly("io.github.libfdx:wgpu_desktop_native:$libfdxVersion")
+    runtimeOnly("io.github.libfdx:wgpu_desktop_c:$libfdxVersion")
     runtimeOnly("io.github.libfdx:wgpu_web:$libfdxVersion")
     runtimeOnly("io.github.libfdx:wgpu_android_jni:$libfdxVersion")
     runtimeOnly("io.github.libfdx:wgpu_android_native:$libfdxVersion")
     runtimeOnly("io.github.libfdx:wgpu_ios_native:$libfdxVersion")
     runtimeOnly("io.github.libfdx:vulkan_core:$libfdxVersion")
     runtimeOnly("io.github.libfdx:vulkan_desktop:$libfdxVersion")
-    runtimeOnly("io.github.libfdx:vulkan_desktop_native:$libfdxVersion")
+    runtimeOnly("io.github.libfdx:vulkan_desktop_c:$libfdxVersion")
     runtimeOnly("io.github.libfdx:vulkan_web_wasm:$libfdxVersion")
     runtimeOnly("io.github.libfdx:vulkan_android_jni:$libfdxVersion")
     runtimeOnly("io.github.libfdx:vulkan_android_native:$libfdxVersion")
@@ -1319,7 +1319,7 @@ dependencies {
     implementation("io.github.libfdx:backend_headless:$libfdxVersion")
     implementation("io.github.libfdx:backend_headless_native:$libfdxVersion")
     implementation("io.github.libfdx:backend_desktop:$libfdxVersion")
-    implementation("io.github.libfdx:backend_desktop_native:$libfdxVersion")
+    implementation("io.github.libfdx:backend_desktop_c:$libfdxVersion")
     implementation("io.github.libfdx:backend_psp:$libfdxVersion")
     implementation("io.github.libfdx:backend_web:$libfdxVersion")
     implementation("io.github.libfdx:backend_android:$libfdxVersion")
@@ -1343,7 +1343,7 @@ Sample modules are source examples, not artifacts that normal users should depen
 ```text
 :samples:basic:core
 :samples:basic:platform:desktop
-:samples:basic:platform:desktop_native
+:samples:basic:platform:desktop_c
 :samples:basic:platform:web
 :samples:basic:platform:android
 :samples:basic:platform:plugin
@@ -1602,16 +1602,16 @@ Example desktop sample stack selection:
 ```
 
 ```kotlin
-// :samples:basic:platform:desktop_native
+// :samples:basic:platform:desktop_c
 dependencies {
     implementation(project(":samples:basic:core"))
 
     if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_desktop_native:${LibExt.publishedLibfdxVersion}")
-        runtimeOnly("${LibExt.fdxGroup}:gl_desktop_native:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_desktop_c:${LibExt.publishedLibfdxVersion}")
+        runtimeOnly("${LibExt.fdxGroup}:gl_desktop_c:${LibExt.publishedLibfdxVersion}")
     } else {
-        implementation(project(":libfdx:backends:desktop_native"))
-        runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_native"))
+        implementation(project(":libfdx:backends:desktop_c"))
+        runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_c"))
     }
 }
 ```
@@ -1686,7 +1686,7 @@ The low-level GPU API should not contain SpriteBatch-style 2D concepts or model/
 
 Backends should wire runtime, input, graphics, and audio providers together without forcing one provider choice. A backend may expose providers for APIs owned by its implementation library, such as `DesktopOpenGLProvider`, but those providers should still be selected explicitly through backend configuration.
 
-The backend module name must identify both the platform and the runtime technology only when there can be more than one backend choice for that platform. `desktop` and `desktop_native` are different desktop backend implementations. The default web backend is just `web`; TeaVM is an internal implementation detail until another web backend exists.
+The backend module name must identify both the platform and the runtime technology only when there can be more than one backend choice for that platform. `desktop` and `desktop_c` are different desktop backend implementations. The default web backend is just `web`; TeaVM is an internal implementation detail until another web backend exists.
 
 Game and sample code should not depend on a platform namespace such as `backends/desktop`; it should depend on a concrete implementation such as `backends/desktop`.
 
@@ -1697,7 +1697,7 @@ Input common API belongs in `runtime/input`. Keyboard, mouse, touch, text input,
 Gamepad implementation is provider-backed because each platform has different native APIs:
 
 - `extensions/input/gamepads/desktop` for the desktop GLFW input path.
-- `extensions/input/gamepads/desktop_native` for the native runtime stack if feasible.
+- `extensions/input/gamepads/desktop_c` for the native runtime stack if feasible.
 - `extensions/input/gamepads/web` for the browser Gamepad API.
 - `extensions/input/gamepads/android` for Android controller APIs.
 - `extensions/input/gamepads/ios` for iOS controller APIs.
@@ -1742,7 +1742,7 @@ Common `runtime/audio` concepts:
 Provider modules:
 
 - `extensions/audio/miniaudio/core` for provider-specific miniaudio Java types if they are needed.
-- `extensions/audio/miniaudio/desktop_jni`, `extensions/audio/miniaudio/desktop_ffm`, and `extensions/audio/miniaudio/desktop_native` for desktop miniaudio runtimes.
+- `extensions/audio/miniaudio/desktop_jni`, `extensions/audio/miniaudio/desktop_ffm`, and `extensions/audio/miniaudio/desktop_c` for desktop miniaudio runtimes.
 - `extensions/audio/miniaudio/android_jni`, `extensions/audio/miniaudio/android_native`, and `extensions/audio/miniaudio/ios_native` for mobile miniaudio runtimes.
 - `extensions/audio/miniaudio/web` for a web miniaudio runtime if it is useful.
 - `extensions/audio/webaudio/web` for browser WebAudio.
@@ -1776,7 +1776,7 @@ tests/
     headless/
     headless_native/
     desktop/
-    desktop_native/
+    desktop_c/
     web/
     android/
     android_native/
@@ -1790,11 +1790,11 @@ Responsibilities:
 - `tests/platform/headless` runs logic-only tests and provider contracts that do not need a real platform surface, audio device, or input device.
 - `tests/platform/headless_native` runs the same headless test registry through a C-backed headless runtime when that backend exists.
 - `tests/platform/desktop` runs `tests/core` through `backends/desktop`. Gradle selects the provider stack, such as JNI or FFM, for each test task or CI matrix entry.
-- `tests/platform/desktop_native` runs `tests/core` through `backends/desktop_native` with selected C-backed desktop providers, such as `extensions/input/gamepads/desktop_native`.
+- `tests/platform/desktop_c` runs `tests/core` through `backends/desktop_c` with selected C-backed desktop providers, such as `extensions/input/gamepads/desktop_c`.
 - `tests/platform/web` runs `tests/core` with `backends/web` plus selected web providers, such as `extensions/input/gamepads/web`, `extensions/graphics/wgpu/platform/web`, or `extensions/audio/webaudio/web`.
 - `tests/platform/android` runs `tests/core` on Android. Gradle selects Android provider variants such as GLES or WGPU.
 - `tests/platform/android_native` runs `tests/core` through `backends/android_native` when that backend exists.
-- `tests/platform/psp` runs PSP smoke tests through `backends/psp`. The cube smoke is drawn with direct GU calls only. The separate SpriteBatch smoke renders a checker texture through the first PSP common graphics/SpriteBatch path. The backend SpriteBatch smoke runs an `ApplicationListener` through `PspApplicationBackend` and renders through `fdx.graphics().main()`. The backend input smoke reads `fdx.input().gamepads().find(0)` and renders a marker from PSP d-pad, analog, and face-button state. The backend UIKit manual test creates a `UiRoot` and renders basic widgets through `ui-kit` without scripted input. The separate backend UIKit smoke variant validates scripted focus and activation. `test_cube_generate`, `test_spritebatch_generate`, `test_backend_spritebatch_generate`, `test_backend_input_generate`, and `test_backend_uikit_generate` validate TeaVM C and PSP project generation; their matching `*_build` tasks require PSPDEV/psp-cmake and produce the PSP EBOOT/PRX artifacts when the toolchain is available.
+- `tests/platform/psp` runs the shared `tests/core` selector through `backends/psp`. The PSP module keeps only the platform launcher and thin task aliases; the actual selectable tests live in `tests/core` alongside the desktop tests. PSP TeaVM C project generation, native build, and PPSSPP capture entrypoints are exposed by `:tests:platform:psp` as `test_psp_*` tasks and by `:tests:platform:plugin` as the plugin coverage `libfdx_psp_test_*` tasks.
 - `tests/platform/ios` runs `tests/core` on iOS when iOS support is available. Gradle selects iOS backend/provider variants.
 - `tests/platform/ios_native` runs `tests/core` through `backends/ios_native` when that backend exists.
 
@@ -1822,7 +1822,7 @@ Platform test projects should select the same test registry:
 :tests:platform:headless
 :tests:platform:headless_native
 :tests:platform:desktop
-:tests:platform:desktop_native
+:tests:platform:desktop_c
 :tests:platform:web
 :tests:platform:android
 :tests:platform:android_native
@@ -1851,20 +1851,16 @@ Example provider stack selection:
 ./gradlew :tests:platform:desktop:test_desktop_gl_run
 ./gradlew :tests:platform:desktop:test_desktop_wgpu_run
 ./gradlew :tests:platform:desktop:test_desktop_vulkan_run
-./gradlew :tests:platform:desktop:test_gl_validate
-./gradlew :tests:platform:desktop:test_wgpu_validate
-./gradlew :tests:platform:desktop:test_gl_validate_visual
-./gradlew :tests:platform:desktop:test_wgpu_validate_visual
-./gradlew :tests:platform:desktop:test_ui_visual_parity_desktop
-./gradlew :tests:platform:desktop_native:test_desktop_native_vulkan_debug_run
-./gradlew :tests:platform:desktop_native:test_desktop_native_vulkan_release_run
+./gradlew -Dlibfdx.test.name=ui -Dlibfdx.test.frames=19 -Dlibfdx.test.validate=true -Dlibfdx.test.driveInput=true :tests:platform:desktop:test_desktop_gl_run
 ```
 
-Desktop JVM basic sample tasks start with the sample name and end with `_build` or `_run`, such as `basic_desktop_gl_build`, `basic_desktop_gl_run`, `basic_desktop_wgpu_build`, `basic_desktop_wgpu_run`, `basic_desktop_vulkan_build`, and `basic_desktop_vulkan_run`. Desktop JVM `_build` aliases must create runnable release jars under the module's `build/dist/desktop-jvm` directory; they must not be aliases that only compile classes or runtime inputs. Runtime launcher modules wire these aliases explicitly so they stay separate from Gradle plugin DSL coverage. The dedicated sample plugin-use module validates the plugin `desktopJvm { ... }` target with `plugin_basic_desktop_*` aliases, and the test plugin-use module validates it with `plugin_test_desktop_*` aliases. Desktop JVM test runtime app aliases start with `test_desktop_` and end with `_build` or `_run`, such as `test_desktop_gl_build`, `test_desktop_gl_run`, `test_desktop_wgpu_build`, `test_desktop_wgpu_run`, `test_desktop_vulkan_build`, and `test_desktop_vulkan_run`. Validation tasks can keep validation-specific suffixes such as `test_gl_validate` and `test_ui_visual_parity_desktop`. Binding implementation details such as FFM or JNI are dependency wiring inside the platform module and should not appear in desktop JVM sample/test task names. Each desktop interactive provider task should expose the same selector API options: `gl`, `wgpu`, and `vulkan`.
+Desktop JVM basic sample runtime tasks start with the sample name and end with `_run`, such as `basic_desktop_gl_run`, `basic_desktop_wgpu_run`, and `basic_desktop_vulkan_run`. Runtime sample modules should keep those tasks as direct `JavaExec` declarations for each graphics API. Packaged desktop JVM `_build` tasks belong to the dedicated plugin-use modules, which validate the plugin `desktopJvm { ... }` target with `libfdx_desktop_jvm_*` tasks under the `libfdx` task group. Desktop JVM test runtime app tasks start with `test_desktop_` and keep direct `_run` tasks such as `test_desktop_gl_run`, `test_desktop_wgpu_run`, and `test_desktop_vulkan_run`; plugin-use modules own the matching packaged `_build` tasks. Finite desktop test validation uses the same direct `_run` tasks with `-Dlibfdx.test.*` properties instead of extra runtime Gradle tasks. Binding implementation details such as FFM or JNI are dependency wiring inside the platform module and should not appear in desktop JVM sample/test task names. Each desktop interactive provider task should expose the same selector API options: `gl`, `wgpu`, and `vulkan`.
 
-Desktop-native sample and test tasks must name the native build mode explicitly. Runtime launcher modules call `NativeBuilder` directly and expose sample modes through names such as `basic_desktop_native_gl_debug_generate`, `basic_desktop_native_gl_debug_build`, and `basic_desktop_native_gl_debug_run`, and test modes through names such as `test_desktop_native_vulkan_debug_generate`, `test_desktop_native_vulkan_debug_build`, and `test_desktop_native_vulkan_debug_run`. Plugin-use aliases mirror that shape with `plugin_basic_desktop_native_*` and `plugin_test_desktop_native_*` names inside the single `plugin` modules. Do not add unsuffixed desktop-native sample/test aliases that choose Debug or Release from a property. On Windows, `libfdx.desktopNative.openConsole` defaults to true and makes sample/test run tasks launch the executable in a separate console window; set it to false for inline/headless Gradle runs. The `libfdx.desktopNative.showConsole` property controls whether the generated Windows executable uses the console subsystem.
+Desktop C runtime sample and test modules keep Gradle minimal and do not apply the libFDX Gradle plugin or define local native build helper classes. Runtime modules may expose thin app-facing tasks such as `basic_desktop_c_opengl_generate_debug`, `basic_desktop_c_opengl_build_debug`, `test_desktop_c_opengl_generate_debug`, `test_desktop_c_opengl_build_debug`, `test_desktop_c_vulkan_generate_debug`, and `test_desktop_c_vulkan_build_debug` so contributors can run the C-backed desktop samples and tests from the platform modules. The single plugin-use modules own the actual plugin DSL generate/build/run implementation and expose plugin coverage tasks such as `libfdx_desktop_c_opengl_generate_debug`, `libfdx_desktop_c_opengl_build_debug`, `libfdx_desktop_c_vulkan_generate_debug`, and `libfdx_desktop_c_vulkan_build_debug`.
 
-PSP platform test aliases such as `test_cube_generate`, `test_cube_build`, `test_cube_ppsspp_capture`, `test_spritebatch_generate`, `test_spritebatch_build`, `test_spritebatch_ppsspp_capture`, `test_backend_spritebatch_generate`, `test_backend_spritebatch_build`, `test_backend_spritebatch_ppsspp_capture`, `test_backend_input_generate`, `test_backend_input_build`, `test_backend_input_ppsspp_capture`, `test_backend_uikit_generate`, `test_backend_uikit_build`, and `test_backend_uikit_ppsspp_capture` select the matching PSP test main class and output name. Generate tasks call `PspBuilder` directly; build tasks execute the generated PSP build script and require a PSPDEV/psp-cmake toolchain on `PATH` or through `PSPDEV`. The test plugin-use module exposes matching `plugin_test_*` PSP aliases from `:tests:platform:plugin`; because the Gradle plugin has one TeaVM C task, that module selects the PSP plugin target only for requested PSP aliases and otherwise defaults to desktop-native plugin tasks. On Windows, `PSPDEV` may be set to a Windows path; the generated `build.bat` converts it to a WSL path before invoking `build.sh`. PPSSPP capture tasks build the EBOOT, launch PPSSPP in windowed mode, wait `libfdx.psp.ppssppCaptureDelaySeconds`, and write a capture under `build/reports/ppsspp`. The emulator executable is resolved from `libfdx.psp.ppssppExecutable`, `PPSSPP_EXECUTABLE`, `PPSSPP_HOME`, `PATH`, standard Windows install locations, or the generated local `build/tools/ppsspp` directory. If no executable is found and `libfdx.psp.ppssppAutoDownload` is true, the task downloads the portable ZIP from `libfdx.psp.ppssppDownloadUrl` and extracts it into `build/tools/ppsspp`.
+Web runtime sample and test modules keep Gradle minimal and do not apply the libFDX Gradle plugin. They may expose thin app-facing aliases such as `basic_webgl_js_run`, `basic_webgpu_wasm_run`, `test_webgl_js_run`, and `test_webgpu_wasm_run`; the single plugin-use modules own the generated web build/server implementation.
+
+PSP platform test tasks live in `:tests:platform:psp` as the shared selector entrypoints `test_psp_generate`, `test_psp_build`, and `test_psp_ppsspp_capture`. The PSP module does not apply the libFDX Gradle plugin; those tasks are thin runtime entrypoints for the single plugin-use module's `test` PSP target. Build tasks execute the generated PSP build script and require a PSPDEV/psp-cmake toolchain on `PATH` or through `PSPDEV`. Because the Gradle plugin has one TeaVM C task, the plugin-use module selects the PSP plugin target only for requested PSP target tasks and otherwise defaults to desktop-c plugin tasks. On Windows, `PSPDEV` may be set to a Windows path; the generated `build.bat` converts it to a WSL path before invoking `build.sh`. PPSSPP capture tasks build the EBOOT, launch PPSSPP in windowed mode, wait `libfdx.psp.ppssppCaptureDelaySeconds`, and write a capture under `build/reports/ppsspp`. The emulator executable is resolved from `libfdx.psp.ppssppExecutable`, `PPSSPP_EXECUTABLE`, `PPSSPP_HOME`, `PATH`, standard Windows install locations, or the generated local `build/tools/ppsspp` directory. If no executable is found and `libfdx.psp.ppssppAutoDownload` is true, the task downloads the portable ZIP from `libfdx.psp.ppssppDownloadUrl` and extracts it into `build/tools/ppsspp`.
 
 Example registry shape:
 
@@ -1899,7 +1895,7 @@ Package rules:
 - Do not add another `fdx` or `libfdx` segment after `io.github.libfdx`.
 - Java package names use dots, not underscores.
 - Binding and packaging mechanisms such as `jni`, `ffm`, and `c` are Gradle/artifact variant names only. Do not add `.jni`, `.ffm`, or `.c` package segments.
-- A platform variant such as `desktop_jni`, `desktop_ffm`, or `desktop_native` should use the same platform package, such as `desktop`. A variant such as `android_jni` or `android_native` should use `android`.
+- A platform variant such as `desktop_jni`, `desktop_ffm`, or `desktop_c` should use the same platform package, such as `desktop`. A variant such as `android_jni` or `android_native` should use `android`.
 - Java package names should be user-facing. Repository organization folders such as `foundation`, `runtime`, and `extensions` do not need to appear in public package names when a shorter package is clearer.
 - Provider-specific packages should still name the provider, such as `graphics.wgpu`, `graphics.vulkan`, or `audio.miniaudio`.
 - Platform runtime implementation code should live under provider/backend platform packages, such as `desktop`, `android`, `ios`, or `web`, only when the platform variant module owns Java code. Dependency-only platform variant modules have no Java package. Shared Java provider code should remain in the provider `core` package, such as `io.github.libfdx.graphics.wgpu`.
@@ -1937,7 +1933,7 @@ Provider and extension packages:
 
 | Gradle module pattern | Java package root pattern | What belongs there |
 | --- | --- | --- |
-| `:libfdx:extensions:input:gamepads:<variant>` | `io.github.libfdx.input.gamepads.<platform_or_provider>` | Platform gamepad providers and provider IDs. For example, `desktop` maps to `input.gamepads.desktop`; `desktop_native` maps to `input.gamepads.desktop`. |
+| `:libfdx:extensions:input:gamepads:<variant>` | `io.github.libfdx.input.gamepads.<platform_or_provider>` | Platform gamepad providers and provider IDs. For example, `desktop` maps to `input.gamepads.desktop`; `desktop_c` maps to `input.gamepads.desktop`. |
 | `:libfdx:extensions:audio:<provider>:core` | `io.github.libfdx.audio.<provider>` | Provider-specific audio public types and shared provider glue. |
 | `:libfdx:extensions:audio:<provider>:<platform_variant>` | `io.github.libfdx.audio.<provider>.<platform>` | Platform audio provider runtime code. For example, `miniaudio:desktop_jni` maps to `audio.miniaudio.desktop`. |
 | `:libfdx:extensions:graphics:<provider>:core` | `io.github.libfdx.graphics.<provider>` | Provider-specific graphics public types, escape hatches, and shared Java provider glue, such as `WGPUDevice`, `WGPUTexture`, `VkDevice`, `VkTexture`, or graphics attachment classes that depend only on provider-neutral SPI. |
@@ -1947,7 +1943,7 @@ Backend, tool, test, and sample packages:
 | Gradle module pattern | Java package root pattern | What belongs there |
 | --- | --- | --- |
 | `:libfdx:backends:<platform>` | `io.github.libfdx.backend.<platform>` | Default platform backend launcher/runtime classes. For example, `backends:web` maps to `backend.web`, and `backends:android` maps to `backend.android`. |
-| `:libfdx:backends:teavm_shared` | `io.github.libfdx.backend.teavm.shared` | Shared TeaVM build mechanics and native resource payloads used by TeaVM-backed platform backends. |
+| `:libfdx:backends:c_shared` | `io.github.libfdx.backend.cshared` | Shared TeaVM build mechanics and native resource payloads used by TeaVM-backed platform backends. |
 | `:libfdx:backends:<platform>_<implementation>` | `io.github.libfdx.backend.<platform>[.<backend_name>]` | Named backend implementation classes. Include the implementation in the package only when it is a real backend technology, such as `desktop` mapping to `backend.desktop`. Artifact-only variants such as `c` should keep the platform package, such as `backend.headless` or `backend.desktop`, and use distinct class names. |
 | `:libfdx:backends:<platform>_<implementation>_resources` | none | Resource-only native payloads shared by provider/runtime modules for that backend family. These modules should not contain Java source. |
 | `:libfdx:tools:<tool>` and `:libfdx:tools:<tool>:<part>` | `io.github.libfdx.tools.<tool_package>` | Tool implementation code. Use normal Java package words, such as `tools.project.generator` or `tools.texture.packer`. Tool platform adapters may add a platform package segment, such as `tools.project.generator.desktop`. |
@@ -1988,10 +1984,10 @@ Class placement examples:
 | `DesktopApplicationConfig` | `:libfdx:backends:desktop` | `io.github.libfdx.backend.desktop` |
 | `DesktopOpenGLProvider` | `:libfdx:backends:desktop` | `io.github.libfdx.backend.desktop` |
 | `DesktopVulkanProvider` | `:libfdx:backends:desktop` | `io.github.libfdx.backend.desktop` |
-| `DesktopNativeApplicationBackend` | `:libfdx:backends:desktop_native` | `io.github.libfdx.backend.desktopnative` |
-| `DesktopNativeApplicationConfig` | `:libfdx:backends:desktop_native` | `io.github.libfdx.backend.desktopnative` |
-| `DesktopNativeOpenGLProvider` | `:libfdx:backends:desktop_native` | `io.github.libfdx.backend.desktopnative` |
-| `DesktopNativeVulkanProvider` | `:libfdx:backends:desktop_native` | `io.github.libfdx.backend.desktopnative` |
+| `DesktopCApplicationBackend` | `:libfdx:backends:desktop_c` | `io.github.libfdx.backend.desktopc` |
+| `DesktopCApplicationConfig` | `:libfdx:backends:desktop_c` | `io.github.libfdx.backend.desktopc` |
+| `DesktopCOpenGLProvider` | `:libfdx:backends:desktop_c` | `io.github.libfdx.backend.desktopc` |
+| `DesktopCVulkanProvider` | `:libfdx:backends:desktop_c` | `io.github.libfdx.backend.desktopc` |
 | `PspBuilder` | `:libfdx:backends:psp` | `io.github.libfdx.backend.psp` |
 | `PspProject` / `PspProjectWriter` | `:libfdx:backends:psp` | `io.github.libfdx.backend.psp` |
 | `PspApplicationBackend` / `PspApplicationConfig` | `:libfdx:backends:psp` | `io.github.libfdx.backend.psp` |

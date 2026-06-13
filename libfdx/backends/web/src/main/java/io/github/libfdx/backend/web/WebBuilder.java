@@ -1,8 +1,8 @@
 package io.github.libfdx.backend.web;
 
-import io.github.libfdx.backend.teavm.shared.BuilderException;
-import io.github.libfdx.backend.teavm.shared.TeaVMBuildRunner;
-import io.github.libfdx.backend.teavm.shared.TeaVMOptimization;
+import io.github.libfdx.backend.cshared.BuilderException;
+import io.github.libfdx.backend.cshared.TeaVMBuildRunner;
+import io.github.libfdx.backend.cshared.TeaVMOptimization;
 import io.github.libfdx.tools.font.BitmapFontGenerator;
 import io.github.libfdx.tools.font.BitmapFontSpec;
 import org.teavm.tooling.TeaVMToolLog;

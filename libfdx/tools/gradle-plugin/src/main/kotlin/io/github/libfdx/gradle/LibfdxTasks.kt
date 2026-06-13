@@ -2,8 +2,8 @@ package io.github.libfdx.gradle
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
-import io.github.libfdx.backend.desktopnative.NativeProject
-import io.github.libfdx.backend.desktopnative.NativeProjectWriter
+import io.github.libfdx.backend.desktopc.NativeProject
+import io.github.libfdx.backend.desktopc.NativeProjectWriter
 import io.github.libfdx.backend.psp.PspProject
 import io.github.libfdx.backend.psp.PspProjectWriter
 import io.github.libfdx.backend.web.WebApp
@@ -244,7 +244,7 @@ abstract class LibfdxRunWebTask : DefaultTask() {
     }
 }
 
-abstract class LibfdxDesktopNativeProjectTask : DefaultTask() {
+abstract class LibfdxDesktopCProjectTask : DefaultTask() {
     @get:OutputDirectory
     abstract val buildRoot: DirectoryProperty
 
@@ -924,7 +924,7 @@ abstract class LibfdxPspPpssppCaptureTask : DefaultTask() {
     }
 }
 
-abstract class LibfdxDesktopNativeRunTask : DefaultTask() {
+abstract class LibfdxDesktopCRunTask : DefaultTask() {
     @get:InputDirectory
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val releaseDir: DirectoryProperty

@@ -12,7 +12,7 @@ base {
 }
 
 dependencies {
-    implementation(project(":libfdx:backends:teavm_shared"))
+    implementation(project(":libfdx:backends:c_shared"))
     implementation(project(":libfdx:tools:font"))
     api(project(":libfdx:runtime:application"))
     api(project(":libfdx:graphics:api"))

@@ -128,7 +128,7 @@ fun runWebBuilder(classpath: FileCollection, target: String, mainClassName: Stri
         builder = invokeBuilder(builder, "title", listOf(String::class.java), listOf(title))
         builder = invokeBuilder(builder, "canvasId", listOf(String::class.java), listOf("libfdx-canvas"))
         builder = invokeBuilder(builder, "size", listOf(Integer.TYPE, Integer.TYPE), listOf(0, 0))
-        val optimizationClass = classLoader.loadClass("io.github.libfdx.backend.teavm.shared.TeaVMOptimization")
+        val optimizationClass = classLoader.loadClass("io.github.libfdx.backend.cshared.TeaVMOptimization")
         builder = invokeBuilder(builder, "optimization", listOf(optimizationClass), listOf(enumValue(optimizationClass, optimization)))
         if (assets.isNotEmpty()) {
             builder = invokeBuilder(builder, "assets", listOf(Collection::class.java), listOf(assets.map { it.toPath() }))

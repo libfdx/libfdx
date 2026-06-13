@@ -7,7 +7,7 @@ project shells.
 
 Use the Gradle plugin when an external Gradle project wants libFDX-managed
 platform tasks. Use the standalone Java builders when a runtime launcher,
-tool, editor, or custom pipeline needs to generate a web, desktop-native, or
+tool, editor, or custom pipeline needs to generate a web, desktop-c, or
 PSP project without applying the Gradle plugin.
 
 ## Index
@@ -16,7 +16,7 @@ PSP project without applying the Gradle plugin.
 - [2. Gradle Plugin](#2-gradle-plugin)
 - [3. Bitmap Font Tasks](#3-bitmap-font-tasks)
 - [4. Standalone Web Builder](#4-standalone-web-builder)
-- [5. Standalone Desktop Native Builder](#5-standalone-desktop-native-builder)
+- [5. Standalone Desktop C Builder](#5-standalone-desktop-c-builder)
 - [6. Standalone PSP Builder](#6-standalone-psp-builder)
 - [7. Project Generator](#7-project-generator)
 
@@ -29,18 +29,17 @@ the target platform needs.
 - Gradle plugin: best for external Gradle game projects and the dedicated
   plugin-use sample/test modules.
 - `WebBuilder`: best for editor/export flows that need a browser webapp output.
-- `NativeBuilder`: best for custom desktop-native TeaVM C output generation.
+- `NativeBuilder`: best for custom desktop-c TeaVM C output generation.
 - `PspBuilder`: best for custom PSP EBOOT project generation.
 
 The builder should not hide platform requirements. If a target needs a native
 toolchain, Android SDK, PSPDEV, CMake, or browser-specific setup, the generated
 project still depends on those tools being present.
 
-Inside this repository, runtime launcher modules use explicit Gradle tasks plus
-the standalone builders instead of applying the libFDX Gradle plugin. The
-runtime Gradle tasks call `WebBuilder`, `NativeBuilder`, and `PspBuilder`
-directly from their runtime classpaths. The dedicated plugin-use modules are
-`:samples:basic:platform:plugin` and `:tests:platform:plugin`.
+Inside this repository, runtime launcher modules keep their Gradle files small
+and do not apply the libFDX Gradle plugin. Dedicated plugin-use modules own the
+plugin-managed generated targets: `:samples:basic:platform:plugin` and
+`:tests:platform:plugin`.
 
 ## 2. Gradle Plugin
 
@@ -61,35 +60,42 @@ classes; call the builders directly instead.
 
 The plugin target blocks are:
 
-- `desktopJvm { ... }`: creates app-name-first desktop JVM `_build` and `_run`
-  tasks. Each provider entry creates a runnable release jar under
-  `build/dist/desktop-jvm` and a matching `JavaExec` run task.
-- `js { ... }`: creates TeaVM JavaScript web output tasks.
-- `wasm { ... }`: creates TeaVM Wasm web output tasks.
-- `desktopNative { ... }`: creates TeaVM C desktop-native generate, build, and
-  run tasks.
+- `desktopJvm { ... }`: creates `libfdx_desktop_jvm_build` and
+  `libfdx_desktop_jvm_run` when no explicit target is declared. Each
+  `target("name")` entry creates `libfdx_desktop_jvm_<name>_build` and
+  `libfdx_desktop_jvm_<name>_run`, with no default desktop JVM tasks.
+- `js { ... }`: creates TeaVM JavaScript web output tasks. Add
+  `target("name")` entries for public `libfdx_web_js_<name>_build` and
+  `libfdx_web_js_<name>_run` tasks.
+- `wasm { ... }`: creates TeaVM Wasm web output tasks. Add `target("name")`
+  entries for public `libfdx_web_wasm_<name>_build` and
+  `libfdx_web_wasm_<name>_run` tasks.
+- `desktopC { ... }`: creates TeaVM C desktop-c generate, build, and
+  run tasks. Add `target("name")` entries for public
+  `libfdx_desktop_c_<name>_generate_debug`,
+  `libfdx_desktop_c_<name>_generate_release`,
+  `libfdx_desktop_c_<name>_build_debug`,
+  `libfdx_desktop_c_<name>_build_release`,
+  `libfdx_desktop_c_<name>_run_debug`, and
+  `libfdx_desktop_c_<name>_run_release` tasks.
+  Each target may set `mainClass` and `targetFileName` for target-specific
+  native apps such as OpenGL and Vulkan launchers.
 - `psp { ... }`: creates TeaVM C PSP generate, build, and PPSSPP capture tasks.
+  Add `target("name")` entries for public `libfdx_psp_<name>_generate`,
+  `libfdx_psp_<name>_build`, and `libfdx_psp_<name>_ppsspp_capture` tasks.
+
+When one plugin-use module declares both `desktopC` and `psp`, the plugin
+selects the TeaVM C target from the requested target task. Do not request PSP
+and desktop-c target tasks from the same project in one Gradle invocation.
 
 Example desktop JVM target:
 
 ```kotlin
-val desktopApplicationRuntimeClasspath by configurations.creating {
-    isCanBeConsumed = false
-    isCanBeResolved = true
-}
-
-dependencies {
-    desktopApplicationRuntimeClasspath(project(":samples:basic:platform:desktop"))
-}
-
 libfdx {
     desktopJvm {
-        taskNamePrefix.set("basic_desktop")
         mainClass.set("com.example.desktop.BasicDesktopLauncher")
-        runtimeClasspath(desktopApplicationRuntimeClasspath)
-        provider("gl") {
+        target("gl") {
             displayName.set("GL")
-            runtimeClasspath(configurations.named("glRuntimeClasspath"))
             systemProperty("libfdx.sample.graphics", "gl")
             launchProperty("graphics", "gl")
         }
@@ -97,17 +103,16 @@ libfdx {
 }
 ```
 
-If one Gradle project declares multiple platform targets, set
-`desktopJvm.runtimeClasspath(...)` to the desktop launcher/runtime classpath so
-desktop JVM `_build` and `_run` tasks do not package unrelated web or native
-runtime jars.
+If one Gradle project declares multiple platform targets, keep desktop provider
+dependencies on the normal runtime classpath. The plugin packages
+`runtimeClasspath` into the desktop JVM release jars.
 
 ## 3. Bitmap Font Tasks
 
 The plugin can register explicit bitmap-font generation tasks from TTF files. A
 `bitmapFont("ui_24")` block creates `libfdx_bitmap_font_ui_24` and the
-aggregate `libfdx_generate_bitmap_fonts`; it does not run during target builds
-and does not add generated files to `libfdx.assets`.
+hidden aggregate `libfdx_generate_bitmap_fonts`; it does not run during target
+builds and does not add generated files to `libfdx.assets`.
 
 This is intentional. Bitmap font generation is a source-asset authoring step,
 not an implicit build side effect. Developers choose when to regenerate the
@@ -115,7 +120,7 @@ bitmap font files, then commit or manage the resulting assets according to their
 project workflow.
 
 Set `outputDir` to the asset root when you intentionally want the task to write
-source assets, then run the task yourself:
+source assets, then run the visible per-font task yourself:
 
 ```kotlin
 libfdx {
@@ -154,7 +159,7 @@ Use this builder when an application needs to export a playable web build from
 inside a custom tool or from explicit Gradle wiring. The caller is responsible
 for passing the correct classpath and choosing the output directory.
 
-## 5. Standalone Desktop Native Builder
+## 5. Standalone Desktop C Builder
 
 ```java
 NativeBuilder.desktop()
@@ -165,7 +170,7 @@ NativeBuilder.desktop()
     .build();
 ```
 
-The native builder compiles TeaVM C output and writes the same desktop-native
+The native builder compiles TeaVM C output and writes the same desktop-c
 CMake project shell used by the Gradle plugin.
 
 Use this builder when a non-Gradle pipeline needs the generated C output and

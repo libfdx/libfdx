@@ -1819,7 +1819,7 @@ public final class RenderPipelineDescriptor {
 
 The current graphics provider contract separates backend window ownership from graphics provider attachment. A backend creates the display and native window handles, then a graphics extension creates a `GraphicsAttachment` for that environment.
 
-This shape lets desktop, desktop_native, web, Android, and iOS backends attach the same graphics provider without the provider depending on a concrete backend module.
+This shape lets desktop, desktop_c, web, Android, and iOS backends attach the same graphics provider without the provider depending on a concrete backend module.
 
 Defined interface roles:
 

@@ -28,7 +28,7 @@ open class LibfdxExtension @Inject constructor(
     private val project: Project,
     private val jsConfig: TeaVMJSConfiguration,
     private val wasmConfig: TeaVMWasmGCConfiguration,
-    private val cConfig: TeaVMCConfiguration
+    internal val cConfig: TeaVMCConfiguration
 ) {
     internal val declaredTargets = linkedSetOf<LibfdxTarget>()
 
@@ -48,8 +48,8 @@ open class LibfdxExtension @Inject constructor(
         objects.newInstance(LibfdxWasmExtension::class.java, project, wasmConfig)
     }
 
-    val desktopNative: LibfdxDesktopNativeExtension by lazy {
-        objects.newInstance(LibfdxDesktopNativeExtension::class.java, project, cConfig)
+    val desktopC: LibfdxDesktopCExtension by lazy {
+        objects.newInstance(LibfdxDesktopCExtension::class.java, project, objects)
     }
 
     val desktopJvm: LibfdxDesktopJvmExtension by lazy {
@@ -57,7 +57,7 @@ open class LibfdxExtension @Inject constructor(
     }
 
     val psp: LibfdxPspExtension by lazy {
-        objects.newInstance(LibfdxPspExtension::class.java, project, cConfig)
+        objects.newInstance(LibfdxPspExtension::class.java, project, objects)
     }
 
     fun assets(vararg paths: Any) {
@@ -86,9 +86,9 @@ open class LibfdxExtension @Inject constructor(
         action.execute(wasm)
     }
 
-    fun desktopNative(action: Action<in LibfdxDesktopNativeExtension>) {
-        declaredTargets.add(LibfdxTarget.DESKTOP_NATIVE)
-        action.execute(desktopNative)
+    fun desktopC(action: Action<in LibfdxDesktopCExtension>) {
+        declaredTargets.add(LibfdxTarget.DESKTOP_C)
+        action.execute(desktopC)
     }
 
     fun desktopJvm(action: Action<in LibfdxDesktopJvmExtension>) {
@@ -110,13 +110,11 @@ open class LibfdxDesktopJvmExtension @Inject constructor(
     project: Project,
     objects: ObjectFactory
 ) {
-    val taskNamePrefix: Property<String> = objects.property(String::class.java).convention(project.name)
     val mainClass: Property<String> = objects.property(String::class.java)
     val outputDir: DirectoryProperty = objects.directoryProperty()
         .convention(project.layout.buildDirectory.dir("dist/desktop-jvm"))
     val workingDir: DirectoryProperty = objects.directoryProperty()
         .convention(project.rootProject.layout.projectDirectory)
-    val taskGroup: Property<String> = objects.property(String::class.java).convention("application")
     val javaLanguageVersion: Property<Int> = objects.property(Int::class.javaObjectType).convention(25)
     val enableNativeAccess: Property<Boolean> = objects.property(Boolean::class.java).convention(true)
     val runtimeClasspath: ConfigurableFileCollection = project.files()
@@ -134,17 +132,13 @@ open class LibfdxDesktopJvmExtension @Inject constructor(
         .convention(emptySet())
     val forwardedSystemPropertyPrefixes: SetProperty<String> = objects.setProperty(String::class.java)
         .convention(emptySet())
-    val providers: NamedDomainObjectContainer<LibfdxDesktopJvmProviderExtension> =
-        objects.domainObjectContainer(LibfdxDesktopJvmProviderExtension::class.java) { name ->
-            objects.newInstance(LibfdxDesktopJvmProviderExtension::class.java, name, project, objects)
+    val targets: NamedDomainObjectContainer<LibfdxDesktopJvmTargetExtension> =
+        objects.domainObjectContainer(LibfdxDesktopJvmTargetExtension::class.java) { name ->
+            objects.newInstance(LibfdxDesktopJvmTargetExtension::class.java, name, project, objects)
         }
 
-    fun provider(name: String, action: Action<in LibfdxDesktopJvmProviderExtension>) {
-        providers.create(name, action)
-    }
-
-    fun providers(action: Action<in NamedDomainObjectContainer<LibfdxDesktopJvmProviderExtension>>) {
-        action.execute(providers)
+    fun target(name: String, action: Action<in LibfdxDesktopJvmTargetExtension>) {
+        targets.create(name, action)
     }
 
     fun jvmArg(value: String) {
@@ -176,12 +170,12 @@ open class LibfdxDesktopJvmExtension @Inject constructor(
     }
 }
 
-open class LibfdxDesktopJvmProviderExtension @Inject constructor(
-    private val providerName: String,
+open class LibfdxDesktopJvmTargetExtension @Inject constructor(
+    private val targetName: String,
     project: Project,
     objects: ObjectFactory
 ) : Named {
-    val displayName: Property<String> = objects.property(String::class.java).convention(providerName)
+    val displayName: Property<String> = objects.property(String::class.java).convention(targetName)
     val runtimeClasspath: ConfigurableFileCollection = project.files()
     val buildDescription: Property<String> = objects.property(String::class.java)
     val runDescription: Property<String> = objects.property(String::class.java)
@@ -197,7 +191,7 @@ open class LibfdxDesktopJvmProviderExtension @Inject constructor(
         .convention(emptySet())
 
     override fun getName(): String {
-        return providerName
+        return targetName
     }
 
     fun runtimeClasspath(vararg paths: Any) {
@@ -302,7 +296,7 @@ open class LibfdxTargetExtension internal constructor(
 }
 
 open class LibfdxWebExtension @Inject constructor(
-    objects: ObjectFactory,
+    private val objects: ObjectFactory,
     project: Project,
     teavmConfig: TeaVMConfiguration
 ) : LibfdxTargetExtension(teavmConfig) {
@@ -314,9 +308,30 @@ open class LibfdxWebExtension @Inject constructor(
     val canvasId: Property<String> = objects.property(String::class.java).convention("libfdx-canvas")
     val serverPort: Property<Int> = objects.property(Int::class.javaObjectType)
         .convention(project.providers.gradleProperty("libfdx.web.port").map(String::toInt).orElse(8080))
+    val targets: NamedDomainObjectContainer<LibfdxWebTargetExtension> =
+        objects.domainObjectContainer(LibfdxWebTargetExtension::class.java) { name ->
+            objects.newInstance(LibfdxWebTargetExtension::class.java, name, objects)
+        }
+
+    fun target(name: String, action: Action<in LibfdxWebTargetExtension>) {
+        targets.create(name, action)
+    }
 
     internal fun webappDir(): Provider<Directory> {
         return outputSubDir()
+    }
+}
+
+open class LibfdxWebTargetExtension @Inject constructor(
+    private val targetName: String,
+    objects: ObjectFactory
+) : Named {
+    val defaultPath: Property<String> = objects.property(String::class.java).convention("/")
+    val buildDescription: Property<String> = objects.property(String::class.java)
+    val runDescription: Property<String> = objects.property(String::class.java)
+
+    override fun getName(): String {
+        return targetName
     }
 }
 
@@ -405,67 +420,80 @@ open class LibfdxWasmExtension @Inject constructor(
         get() = wasmConfig.sourceFilePolicy as Property<SourceFilePolicy>
 }
 
-@Suppress("UNCHECKED_CAST")
-open class LibfdxDesktopNativeExtension @Inject constructor(
-    objects: ObjectFactory,
+open class LibfdxDesktopCExtension @Inject constructor(
     project: Project,
-    private val cConfig: TeaVMCConfiguration
-) : LibfdxTargetExtension(cConfig) {
+    objects: ObjectFactory
+) {
+    val outputDir: DirectoryProperty = objects.directoryProperty()
+        .convention(project.layout.buildDirectory.dir("dist/desktop-c"))
+    val mainClass: Property<String> = objects.property(String::class.java)
+    val relativePathInOutputDir: Property<String> = objects.property(String::class.java).convention("c/src")
+    val optimization: Property<OptimizationLevel> = objects.property(OptimizationLevel::class.java)
+        .convention(OptimizationLevel.AGGRESSIVE)
+    val debugInformation: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val fastGlobalAnalysis: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val outOfProcess: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val processMemory: Property<Int> = objects.property(Int::class.javaObjectType).convention(512)
     val targetFileName: Property<String> = objects.property(String::class.java).convention("app")
     val buildType: Property<String> = objects.property(String::class.java).convention("Debug")
     val showConsole: Property<Boolean> = objects.property(Boolean::class.java)
-        .convention(project.providers.gradleProperty("libfdx.desktopNative.showConsole")
+        .convention(project.providers.gradleProperty("libfdx.desktopC.showConsole")
             .map { value -> value.toBooleanStrictOrNull() ?: value.toBoolean() }
             .orElse(true))
     val openConsole: Property<Boolean> = objects.property(Boolean::class.java)
-        .convention(project.providers.gradleProperty("libfdx.desktopNative.openConsole")
+        .convention(project.providers.gradleProperty("libfdx.desktopC.openConsole")
             .map { value -> value.toBooleanStrictOrNull() ?: value.toBoolean() }
             .orElse(true))
     val releasePath: DirectoryProperty = objects.directoryProperty()
         .convention(outputDir.map { it.dir("c/release") })
+    val minHeapSize: Property<Int> = objects.property(Int::class.javaObjectType).convention(4)
+    val maxHeapSize: Property<Int> = objects.property(Int::class.javaObjectType).convention(128)
+    val heapDump: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val shortFileNames: Property<Boolean> = objects.property(Boolean::class.java).convention(true)
+    val obfuscated: Property<Boolean> = objects.property(Boolean::class.java).convention(true)
+    val targets: NamedDomainObjectContainer<LibfdxDesktopCTargetExtension> =
+        objects.domainObjectContainer(LibfdxDesktopCTargetExtension::class.java) { name ->
+            objects.newInstance(LibfdxDesktopCTargetExtension::class.java, name, objects)
+        }
 
-    init {
-        outputDir.convention(project.layout.buildDirectory.dir("dist/desktop-native"))
-        relativePathInOutputDir.convention("c/src")
-        targetFileName.convention("app")
-        optimization.convention(OptimizationLevel.AGGRESSIVE)
-        debugInformation.convention(false)
-        fastGlobalAnalysis.convention(false)
-        outOfProcess.convention(false)
-        processMemory.convention(512)
-        minHeapSize.convention(4)
-        maxHeapSize.convention(128)
-        heapDump.convention(false)
-        shortFileNames.convention(true)
-        obfuscated.convention(true)
+    fun target(name: String, action: Action<in LibfdxDesktopCTargetExtension>) {
+        targets.create(name, action)
     }
 
-    val minHeapSize: Property<Int>
-        get() = cConfig.minHeapSize as Property<Int>
-
-    val maxHeapSize: Property<Int>
-        get() = cConfig.maxHeapSize as Property<Int>
-
-    val heapDump: Property<Boolean>
-        get() = cConfig.heapDump as Property<Boolean>
-
-    val shortFileNames: Property<Boolean>
-        get() = cConfig.shortFileNames as Property<Boolean>
-
-    val obfuscated: Property<Boolean>
-        get() = cConfig.obfuscated as Property<Boolean>
-
     internal fun generatedSourcesDir(): Provider<Directory> {
-        return outputSubDir()
+        return outputDir.flatMap { output ->
+            relativePathInOutputDir.map { relativePath -> output.dir(relativePath) }
+        }
     }
 }
 
-@Suppress("UNCHECKED_CAST")
+open class LibfdxDesktopCTargetExtension @Inject constructor(
+    private val targetName: String,
+    objects: ObjectFactory
+) : Named {
+    val mainClass: Property<String> = objects.property(String::class.java)
+    val targetFileName: Property<String> = objects.property(String::class.java).convention(targetName)
+    val displayName: Property<String> = objects.property(String::class.java).convention(targetName)
+
+    override fun getName(): String {
+        return targetName
+    }
+}
+
 open class LibfdxPspExtension @Inject constructor(
-    objects: ObjectFactory,
     project: Project,
-    private val cConfig: TeaVMCConfiguration
-) : LibfdxTargetExtension(cConfig) {
+    objects: ObjectFactory
+) {
+    val outputDir: DirectoryProperty = objects.directoryProperty()
+        .convention(project.layout.buildDirectory.dir("dist/psp"))
+    val mainClass: Property<String> = objects.property(String::class.java)
+    val relativePathInOutputDir: Property<String> = objects.property(String::class.java).convention("c/src")
+    val optimization: Property<OptimizationLevel> = objects.property(OptimizationLevel::class.java)
+        .convention(OptimizationLevel.BALANCED)
+    val debugInformation: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val fastGlobalAnalysis: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val outOfProcess: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val processMemory: Property<Int> = objects.property(Int::class.javaObjectType).convention(512)
     val targetFileName: Property<String> = objects.property(String::class.java).convention("app")
     val debugMemory: Property<Boolean> = objects.property(Boolean::class.java)
         .convention(project.providers.gradleProperty("libfdx.psp.debugMemory")
@@ -489,40 +517,37 @@ open class LibfdxPspExtension @Inject constructor(
             .orElse("https://www.ppsspp.org/files/1_20_4/ppsspp_win.zip"))
     val releasePath: DirectoryProperty = objects.directoryProperty()
         .convention(outputDir.map { it.dir("c/release") })
+    val minHeapSize: Property<Int> = objects.property(Int::class.javaObjectType).convention(2)
+    val maxHeapSize: Property<Int> = objects.property(Int::class.javaObjectType).convention(8)
+    val heapDump: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val shortFileNames: Property<Boolean> = objects.property(Boolean::class.java).convention(true)
+    val obfuscated: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val targets: NamedDomainObjectContainer<LibfdxPspTargetExtension> =
+        objects.domainObjectContainer(LibfdxPspTargetExtension::class.java) { name ->
+            objects.newInstance(LibfdxPspTargetExtension::class.java, name, objects)
+        }
 
-    init {
-        outputDir.convention(project.layout.buildDirectory.dir("dist/psp"))
-        relativePathInOutputDir.convention("c/src")
-        targetFileName.convention("app")
-        optimization.convention(OptimizationLevel.BALANCED)
-        debugInformation.convention(false)
-        fastGlobalAnalysis.convention(false)
-        outOfProcess.convention(false)
-        processMemory.convention(512)
-        minHeapSize.convention(2)
-        maxHeapSize.convention(8)
-        heapDump.convention(false)
-        shortFileNames.convention(true)
-        obfuscated.convention(false)
+    fun target(name: String, action: Action<in LibfdxPspTargetExtension>) {
+        targets.create(name, action)
     }
 
-    val minHeapSize: Property<Int>
-        get() = cConfig.minHeapSize as Property<Int>
-
-    val maxHeapSize: Property<Int>
-        get() = cConfig.maxHeapSize as Property<Int>
-
-    val heapDump: Property<Boolean>
-        get() = cConfig.heapDump as Property<Boolean>
-
-    val shortFileNames: Property<Boolean>
-        get() = cConfig.shortFileNames as Property<Boolean>
-
-    val obfuscated: Property<Boolean>
-        get() = cConfig.obfuscated as Property<Boolean>
-
     internal fun generatedSourcesDir(): Provider<Directory> {
-        return outputSubDir()
+        return outputDir.flatMap { output ->
+            relativePathInOutputDir.map { relativePath -> output.dir(relativePath) }
+        }
+    }
+}
+
+open class LibfdxPspTargetExtension @Inject constructor(
+    private val targetName: String,
+    objects: ObjectFactory
+) : Named {
+    val mainClass: Property<String> = objects.property(String::class.java)
+    val targetFileName: Property<String> = objects.property(String::class.java).convention(targetName)
+    val displayName: Property<String> = objects.property(String::class.java).convention(targetName)
+
+    override fun getName(): String {
+        return targetName
     }
 }
 
@@ -530,6 +555,6 @@ internal enum class LibfdxTarget {
     JS,
     WASM,
     DESKTOP_JVM,
-    DESKTOP_NATIVE,
+    DESKTOP_C,
     PSP
 }

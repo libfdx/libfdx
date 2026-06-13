@@ -3,17 +3,17 @@
 #include <jni.h>
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_io_github_libfdx_backend_desktop_DesktopNativeMathAccelerator_nativeSimdAvailable(JNIEnv*, jclass) {
+Java_io_github_libfdx_backend_desktop_DesktopMathAccelerator_nativeSimdAvailable(JNIEnv*, jclass) {
     return fdx_math_simd_available() != 0 ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_io_github_libfdx_backend_desktop_DesktopNativeMathAccelerator_nativeAccelerationName(JNIEnv* env, jclass) {
+Java_io_github_libfdx_backend_desktop_DesktopMathAccelerator_nativeAccelerationName(JNIEnv* env, jclass) {
     return env->NewStringUTF(fdx_math_acceleration_name());
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_io_github_libfdx_backend_desktop_DesktopNativeMathAccelerator_nativeMatrix4Mul(JNIEnv* env, jclass,
+Java_io_github_libfdx_backend_desktop_DesktopMathAccelerator_nativeMatrix4Mul(JNIEnv* env, jclass,
         jfloatArray left_array, jfloatArray right_array, jfloatArray out_array) {
     if (left_array == nullptr || right_array == nullptr || out_array == nullptr
             || env->GetArrayLength(left_array) < 16
@@ -44,7 +44,7 @@ Java_io_github_libfdx_backend_desktop_DesktopNativeMathAccelerator_nativeMatrix4
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_io_github_libfdx_backend_desktop_DesktopNativeMathAccelerator_nativeMatrix4TransformPositions(JNIEnv* env,
+Java_io_github_libfdx_backend_desktop_DesktopMathAccelerator_nativeMatrix4TransformPositions(JNIEnv* env,
         jclass, jfloatArray matrix_array, jfloatArray values_array, jint offset, jint count, jint stride) {
     if (matrix_array == nullptr || values_array == nullptr || env->GetArrayLength(matrix_array) < 16
             || offset < 0 || count < 0 || stride < 3) {

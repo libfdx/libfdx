@@ -1,8 +1,5 @@
 import io.github.libfdx.build.LibExt
 
-import java.io.File
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
 }
@@ -54,59 +51,34 @@ base {
     archivesName.set("sample_basic_android")
 }
 
-fun adbExecutable(): String {
-    val executable = if (System.getProperty("os.name").lowercase().contains("win")) "adb.exe" else "adb"
-    val sdkRoots = mutableListOf<String>()
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.isFile) {
-        val localProperties = Properties()
-        localPropertiesFile.inputStream().use { localProperties.load(it) }
-        localProperties.getProperty("sdk.dir")?.let { sdkRoots += it }
-    }
-    System.getenv("ANDROID_HOME")?.let { sdkRoots += it }
-    System.getenv("ANDROID_SDK_ROOT")?.let { sdkRoots += it }
-    sdkRoots.asSequence()
-            .map { file("$it/platform-tools/$executable") }
-            .firstOrNull { it.isFile }
-            ?.let { return it.absolutePath }
-
-    System.getenv("PATH").orEmpty().split(File.pathSeparator)
-            .asSequence()
-            .map { File(it, executable) }
-            .firstOrNull { it.isFile }
-            ?.let { return it.absolutePath }
-
-    throw GradleException("Could not find $executable. Set sdk.dir in local.properties, set ANDROID_HOME or ANDROID_SDK_ROOT, or add adb to PATH.")
+tasks.register<Exec>("basic_android_gles_run") {
+    group = "application"
+    description = "Installs and launches the Android GLES basic sample."
+    dependsOn("installDebug")
+    commandLine(android.adbExecutable.absolutePath, "shell", "am", "start", "-n",
+            "io.github.libfdx.samples.basic.android/io.github.libfdx.samples.basic.android.BasicAndroidGlesActivity")
 }
 
-fun registerAndroidRunTask(name: String, installTask: String, applicationId: String, activityName: String) {
-    tasks.register<Exec>(name) {
-        group = "application"
-        description = "Installs and launches the Android basic sample."
-        dependsOn(installTask)
-        commandLine(adbExecutable(), "shell", "am", "start", "-n",
-                "$applicationId/$activityName")
-    }
+tasks.register<Exec>("basic_android_wgpu_jni_run") {
+    group = "application"
+    description = "Installs and launches the Android WGPU JNI basic sample."
+    dependsOn("installDebug")
+    commandLine(android.adbExecutable.absolutePath, "shell", "am", "start", "-n",
+            "io.github.libfdx.samples.basic.android/io.github.libfdx.samples.basic.android.BasicAndroidWgpuActivity")
 }
 
-fun registerAndroidBuildTask(name: String, descriptionText: String) {
-    tasks.register(name) {
-        group = "application"
-        description = descriptionText
-        dependsOn("assembleDebug")
-    }
+tasks.register<Exec>("basic_android_vulkan_run") {
+    group = "application"
+    description = "Installs and launches the Android Vulkan basic sample."
+    dependsOn("installDebug")
+    commandLine(android.adbExecutable.absolutePath, "shell", "am", "start", "-n",
+            "io.github.libfdx.samples.basic.android/io.github.libfdx.samples.basic.android.BasicAndroidVulkanActivity")
 }
 
-registerAndroidBuildTask("basic_android_gles_build", "Builds the Android basic sample for GLES.")
-registerAndroidBuildTask("basic_android_wgpu_jni_build", "Builds the Android basic sample for WGPU JNI.")
-registerAndroidBuildTask("basic_android_vulkan_build", "Builds the Android basic sample for Vulkan.")
-registerAndroidBuildTask("basic_android_vulkan_fallback_build", "Builds the Android basic sample for Vulkan fallback.")
-
-registerAndroidRunTask("basic_android_gles_run", "installDebug", "io.github.libfdx.samples.basic.android",
-        "io.github.libfdx.samples.basic.android.BasicAndroidGlesActivity")
-registerAndroidRunTask("basic_android_wgpu_jni_run", "installDebug", "io.github.libfdx.samples.basic.android",
-        "io.github.libfdx.samples.basic.android.BasicAndroidWgpuActivity")
-registerAndroidRunTask("basic_android_vulkan_run", "installDebug", "io.github.libfdx.samples.basic.android",
-        "io.github.libfdx.samples.basic.android.BasicAndroidVulkanActivity")
-registerAndroidRunTask("basic_android_vulkan_fallback_run", "installDebug", "io.github.libfdx.samples.basic.android",
-        "io.github.libfdx.samples.basic.android.BasicAndroidVulkanFallbackActivity")
+tasks.register<Exec>("basic_android_vulkan_fallback_run") {
+    group = "application"
+    description = "Installs and launches the Android Vulkan fallback basic sample."
+    dependsOn("installDebug")
+    commandLine(android.adbExecutable.absolutePath, "shell", "am", "start", "-n",
+            "io.github.libfdx.samples.basic.android/io.github.libfdx.samples.basic.android.BasicAndroidVulkanFallbackActivity")
+}

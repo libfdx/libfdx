@@ -240,9 +240,9 @@ tasks.named<ProcessResources>("processResources") {
     mustRunAfter(generateRuntimeFdxWindowsNative, generateRuntimeFdxLinuxNative, generateRuntimeFdxMacosNative)
 }
 
-tasks.register("validate_runtime_fdx_desktop_native_resources") {
+tasks.register("validate_runtime_fdx_desktop_c_resources") {
     group = "libfdx native"
-    description = "Validates generated fdx_desktop native resources before packaging."
+    description = "Validates generated fdx_desktop C resources before packaging."
     doLast {
         val desktopRoot = runtimeFdxDesktopGeneratedResources.get().asFile
         val missingRequiredFiles = mutableListOf<File>()
@@ -261,14 +261,14 @@ tasks.register("validate_runtime_fdx_desktop_native_resources") {
         }
         if (missingWarnedFiles.isNotEmpty()) {
             logger.warn(
-                "Missing non-host fdx_desktop native resources; continuing because " +
+                "Missing non-host fdx_desktop C resources; continuing because " +
                         "libfdx.runtimeFdx.requireAllNativeResources=false:\n" +
                         missingWarnedFiles.joinToString(separator = "\n") { " - ${it.absolutePath}" }
             )
         }
         if (missingRequiredFiles.isNotEmpty()) {
             throw GradleException(
-                "Missing generated fdx_desktop native resources:\n" +
+                "Missing generated fdx_desktop C resources:\n" +
                         missingRequiredFiles.joinToString(separator = "\n") { " - ${it.absolutePath}" }
             )
         }

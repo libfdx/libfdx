@@ -1,6 +1,6 @@
 package io.github.libfdx.backend.psp;
 
-import io.github.libfdx.backend.teavm.shared.BuilderException;
+import io.github.libfdx.backend.cshared.BuilderException;
 
 import java.nio.file.Path;
 import java.util.ArrayList;

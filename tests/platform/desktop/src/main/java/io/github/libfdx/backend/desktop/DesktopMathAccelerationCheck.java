@@ -21,13 +21,13 @@ public final class DesktopMathAccelerationCheck {
      */
     public static void main(String[] args) {
         boolean requireNative = Boolean.parseBoolean(System.getProperty("libfdx.math.requireNative", "false"));
-        MathAcceleration.register(new DesktopNativeMathAccelerator());
+        MathAcceleration.register(new DesktopMathAccelerator());
         boolean nativeAvailable = MathAcceleration.available();
         if (requireNative && !nativeAvailable) {
-            throw new AssertionError("Desktop native SIMD math is unavailable: "
-                    + DesktopNativeMathAccelerator.diagnostic());
+            throw new AssertionError("Desktop SIMD math is unavailable: "
+                    + DesktopMathAccelerator.diagnostic());
         }
-        String accelerationName = DesktopNativeMathAccelerator.accelerationName();
+        String accelerationName = DesktopMathAccelerator.accelerationName();
 
         checkMatrixMultiply(nativeAvailable);
         checkTransformPositions(nativeAvailable);
@@ -45,12 +45,12 @@ public final class DesktopMathAccelerationCheck {
 
         float[] scalar = new Matrix4().setToMul(left, right).values();
 
-        MathAcceleration.register(new DesktopNativeMathAccelerator());
+        MathAcceleration.register(new DesktopMathAccelerator());
         float[] accelerated = new Matrix4().setToMul(left, right).values();
         compare("matrix4Mul", scalar, accelerated);
 
         if (nativeAvailable && !MathAcceleration.available()) {
-            throw new AssertionError("Desktop native SIMD math was disabled during matrix multiply");
+            throw new AssertionError("Desktop SIMD math was disabled during matrix multiply");
         }
     }
 
@@ -68,12 +68,12 @@ public final class DesktopMathAccelerationCheck {
 
         transform.transformPositions(scalar, 2, 10, 5);
 
-        MathAcceleration.register(new DesktopNativeMathAccelerator());
+        MathAcceleration.register(new DesktopMathAccelerator());
         transform.transformPositions(accelerated, 2, 10, 5);
         compare("matrix4TransformPositions", scalar, accelerated);
 
         if (nativeAvailable && !MathAcceleration.available()) {
-            throw new AssertionError("Desktop native SIMD math was disabled during position transform");
+            throw new AssertionError("Desktop SIMD math was disabled during position transform");
         }
     }
 

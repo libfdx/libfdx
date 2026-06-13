@@ -103,7 +103,7 @@ the current machine:
 .\gradlew.bat build_native_artifacts
 ```
 
-On Windows, this builds the current host runtime fdx desktop native file, the
+On Windows, this builds the current host runtime fdx desktop C file, the
 runtime fdx web JS/WASM files, and Android AAR outputs when the Android SDK is
 available. It does not prove that Linux or macOS native files were built; those
 must be built on their matching platform jobs or machines.
@@ -121,17 +121,23 @@ want:
 .\gradlew.bat :samples:basic:platform:desktop:basic_desktop_gl_run
 .\gradlew.bat :samples:basic:platform:desktop:basic_desktop_wgpu_run
 .\gradlew.bat :samples:basic:platform:desktop:basic_desktop_vulkan_run
-.\gradlew.bat :samples:basic:platform:desktop_native:basic_desktop_native_gl_debug_run
-.\gradlew.bat :samples:basic:platform:desktop_native:basic_desktop_native_gl_release_run
 ```
 
-The desktop JVM `_build` aliases create runnable release jars in
-`samples/basic/platform/desktop/build/dist/desktop-jvm`:
+The desktop-c sample exposes platform-module aliases backed by the
+plugin-use module's generated project:
 
 ```powershell
-.\gradlew.bat :samples:basic:platform:desktop:basic_desktop_gl_build
-.\gradlew.bat :samples:basic:platform:desktop:basic_desktop_wgpu_build
-.\gradlew.bat :samples:basic:platform:desktop:basic_desktop_vulkan_build
+.\gradlew.bat :samples:basic:platform:desktop_c:basic_desktop_c_opengl_generate_debug
+.\gradlew.bat :samples:basic:platform:desktop_c:basic_desktop_c_opengl_build_debug
+.\gradlew.bat :samples:basic:platform:desktop_c:basic_desktop_c_opengl_run_debug
+```
+
+Packaged desktop JVM `_build` aliases are part of the plugin-use sample module:
+
+```powershell
+.\gradlew.bat :samples:basic:platform:plugin:libfdx_desktop_jvm_gl_build
+.\gradlew.bat :samples:basic:platform:plugin:libfdx_desktop_jvm_wgpu_build
+.\gradlew.bat :samples:basic:platform:plugin:libfdx_desktop_jvm_vulkan_build
 ```
 
 ## 6. Basic Android Sample
@@ -151,11 +157,8 @@ Use the task for the Android graphics stack you want:
 
 ## 7. Basic Web Sample
 
-The web sample tasks generate webapps for browser-based smoke checks. They are
-useful for validating the web build path and the browser launcher shell before
-running the fuller web test matrix.
-
-The web sample exposes explicit WebGL and WebGPU JavaScript/Wasm webapps:
+The basic web launchers live in `:samples:basic:platform:web`. The runtime web
+module exposes WebGL and WebGPU JavaScript/Wasm aliases:
 
 ```powershell
 .\gradlew.bat :samples:basic:platform:web:basic_webgl_js_run

@@ -57,11 +57,11 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:tools:shader",
     ":libfdx:extensions:graphics:gl:core",
     ":libfdx:extensions:graphics:gl:platform:desktop",
-    ":libfdx:extensions:graphics:gl:platform:desktop_native",
+    ":libfdx:extensions:graphics:gl:platform:desktop_c",
     ":libfdx:extensions:graphics:gl:platform:web",
     ":libfdx:extensions:graphics:vulkan:core",
     ":libfdx:extensions:graphics:vulkan:platform:desktop",
-    ":libfdx:extensions:graphics:vulkan:platform:desktop_native",
+    ":libfdx:extensions:graphics:vulkan:platform:desktop_c",
     ":libfdx:extensions:graphics:vulkan:platform:android_jni",
     ":libfdx:extensions:graphics:wgpu:core",
     ":libfdx:extensions:graphics:wgpu:platform:desktop_jni",
@@ -69,11 +69,11 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:extensions:graphics:wgpu:platform:android_jni",
     ":libfdx:extensions:graphics:wgpu:platform:web",
     ":libfdx:backends:desktop",
-    ":libfdx:backends:desktop_native",
+    ":libfdx:backends:desktop_c",
     ":libfdx:backends:psp",
     ":libfdx:backends:android",
     ":libfdx:backends:web",
-    ":libfdx:backends:teavm_shared"
+    ":libfdx:backends:c_shared"
 )
 
 fun Project.libfdxPublishableProjects(): List<Project> {
@@ -326,7 +326,7 @@ fun Project.publishDescription(): String {
 
 fun runtimeFdxNativeValidationTaskPaths(): List<String> {
     return listOf(
-        ":libfdx:runtime:fdx:platform:desktop:validate_runtime_fdx_desktop_native_resources",
+        ":libfdx:runtime:fdx:platform:desktop:validate_runtime_fdx_desktop_c_resources",
         ":libfdx:runtime:fdx:platform:web:validate_runtime_fdx_web_native_resources"
     )
 }
@@ -470,7 +470,7 @@ fun Project.configureLibfdxGradlePluginPomMetadata() {
             version = libfdxVersion
             pom.configureLibfdxPom(
                 "libFDX Gradle plugin",
-                "Gradle plugin for building libFDX web, desktop_native, PSP, and asset tasks."
+                "Gradle plugin for building libFDX web, desktop_c, PSP, and asset tasks."
             )
         }
     }

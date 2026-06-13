@@ -13,7 +13,7 @@ final class DesktopRuntimeCoreProvider implements RuntimeCoreProvider {
     private final FontRasterizer fontRasterizer = new DesktopFreeTypeFontRasterizer();
 
     DesktopRuntimeCoreProvider() {
-        MathAcceleration.register(new DesktopNativeMathAccelerator());
+        MathAcceleration.register(new DesktopMathAccelerator());
     }
 
     /**

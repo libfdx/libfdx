@@ -5,6 +5,7 @@ import io.github.libfdx.backend.web.WebApplicationConfig;
 import io.github.libfdx.graphics.gl.web.WebGLProvider;
 import io.github.libfdx.graphics.wgpu.WebWGPUProvider;
 import io.github.libfdx.samples.basic.BasicApplication;
+import org.teavm.jso.JSBody;
 
 /**
  * Represents a basic web launcher support.
@@ -34,20 +35,25 @@ final class BasicWebLauncherSupport {
     }
 
     private static String graphics(String[] args) {
-        if (args == null) {
-            return "webgl";
-        }
         String prefix = "--graphics=";
-        for (int i = 0; i < args.length; i++) {
-            String arg = args[i];
-            if (arg != null && arg.startsWith(prefix)) {
-                return arg.substring(prefix.length());
+        if (args != null) {
+            for (int i = 0; i < args.length; i++) {
+                String arg = args[i];
+                if (arg != null && arg.startsWith(prefix)) {
+                    return arg.substring(prefix.length());
+                }
             }
         }
-        return "webgl";
+        return query("graphics", "webgl");
     }
 
     private static boolean isWebGPU(String graphics) {
         return "webgpu".equalsIgnoreCase(graphics) || "wgpu".equalsIgnoreCase(graphics);
     }
+
+    @JSBody(params = { "name", "fallback" }, script =
+            "var params = new URLSearchParams(window.location.search || '');\n" +
+                    "var value = params.get(name);\n" +
+                    "return value || fallback;")
+    private static native String query(String name, String fallback);
 }
