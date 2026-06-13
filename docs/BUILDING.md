@@ -59,15 +59,15 @@ publishedLibfdxVersion = "-SNAPSHOT"
 ```
 
 This TOML default lets users run tests and samples against artifacts that already
-exist in Maven repositories. In this mode, settings resolves the libFDX Gradle
-plugin from Maven, and those consumers resolve libFDX dependencies as published
-coordinates such as
+exist in Maven repositories. In this mode, the dedicated plugin-use modules can
+resolve the libFDX Gradle plugin from Maven, and consumers resolve libFDX
+dependencies as published coordinates such as
 `<fdxGroup>:<artifact>:<publishedLibfdxVersion>`. This avoids rebuilding local
 libFDX modules when the goal is to check consumers against a released or
 snapshot build. Settings still includes the local `:libfdx:*` source modules;
 the Maven-vs-local choice is made in each consumer dependency block.
-Web plugin tasks use local generated runtime fdx web resources only when that
-consumer uses local `:libfdx:*` project dependencies.
+Builder-backed web tasks use local generated runtime fdx web resources only
+when that consumer uses local `:libfdx:*` project dependencies.
 
 Use ignored `local.properties` overrides when developing libFDX itself:
 
@@ -77,9 +77,13 @@ development.publishedLibfdxVersion=-SNAPSHOT
 ```
 
 With `development.usePublishedLibfdx=false`, settings includes the local
-`libfdx/tools/gradle-plugin` build, and tests and samples compile and exercise
-local `:libfdx:*` project dependencies from the current checkout. Delete the
-local override keys to use the `libfdx.toml` defaults again.
+`libfdx/tools/gradle-plugin` build for the plugin-use modules, and tests and
+samples compile and exercise local `:libfdx:*` project dependencies from the
+current checkout. Runtime launcher modules use explicit Gradle tasks and
+standalone builders instead of applying the plugin. The included plugin build
+must stay isolated to the plugin project; it must not include or remap root
+`:libfdx:*` source modules under the plugin build id. Delete the local override
+keys to use the `libfdx.toml` defaults again.
 
 To switch modes for one checkout, edit `local.properties` before running the
 launcher or validation task. Gradle `-P` overrides are not supported for libFDX
@@ -119,6 +123,15 @@ want:
 .\gradlew.bat :samples:basic:platform:desktop:basic_desktop_vulkan_run
 .\gradlew.bat :samples:basic:platform:desktop_native:basic_desktop_native_gl_debug_run
 .\gradlew.bat :samples:basic:platform:desktop_native:basic_desktop_native_gl_release_run
+```
+
+The desktop JVM `_build` aliases create runnable release jars in
+`samples/basic/platform/desktop/build/dist/desktop-jvm`:
+
+```powershell
+.\gradlew.bat :samples:basic:platform:desktop:basic_desktop_gl_build
+.\gradlew.bat :samples:basic:platform:desktop:basic_desktop_wgpu_build
+.\gradlew.bat :samples:basic:platform:desktop:basic_desktop_vulkan_build
 ```
 
 ## 6. Basic Android Sample

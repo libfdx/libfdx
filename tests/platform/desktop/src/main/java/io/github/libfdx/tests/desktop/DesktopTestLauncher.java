@@ -13,9 +13,11 @@ import io.github.libfdx.tests.TestLaunchHandler;
 import io.github.libfdx.tests.TestSelector;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 
 /**
  * Launches the desktop test entry point.
@@ -23,6 +25,9 @@ import java.util.List;
  * @author xpenatan
  */
 public final class DesktopTestLauncher {
+    private static final String LAUNCH_PROPERTIES_PATH = "libfdx-desktop-launch.properties";
+    private static final Properties LAUNCH_PROPERTIES = loadLaunchProperties();
+
     private DesktopTestLauncher() {
     }
 
@@ -131,11 +136,11 @@ public final class DesktopTestLauncher {
     }
 
     private static String graphicsName() {
-        return System.getProperty("libfdx.test.graphics", "wgpu");
+        return System.getProperty("libfdx.test.graphics", launchProperty("graphics", "wgpu"));
     }
 
     private static String graphicsDisplayName(String graphics) {
-        String configured = System.getProperty("libfdx.test.graphicsLabel");
+        String configured = System.getProperty("libfdx.test.graphicsLabel", launchProperty("graphicsLabel", null));
         if (configured != null && configured.trim().length() > 0) {
             return configured.trim();
         }
@@ -316,5 +321,26 @@ public final class DesktopTestLauncher {
                     ? "java.exe" : "java";
             return new File(new File(System.getProperty("java.home"), "bin"), executable).getAbsolutePath();
         }
+    }
+
+    private static String launchProperty(String name, String fallback) {
+        String value = LAUNCH_PROPERTIES.getProperty(name);
+        if (value != null && value.trim().length() > 0) {
+            return value.trim();
+        }
+        return fallback;
+    }
+
+    private static Properties loadLaunchProperties() {
+        Properties properties = new Properties();
+        try (InputStream stream = DesktopTestLauncher.class.getClassLoader()
+                .getResourceAsStream(LAUNCH_PROPERTIES_PATH)) {
+            if (stream != null) {
+                properties.load(stream);
+            }
+        } catch (IOException ignored) {
+            // Launch properties are optional outside release jars.
+        }
+        return properties;
     }
 }

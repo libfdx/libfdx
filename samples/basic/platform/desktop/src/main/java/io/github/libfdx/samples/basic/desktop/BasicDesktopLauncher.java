@@ -7,6 +7,9 @@ import io.github.libfdx.backend.desktop.DesktopVulkanProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.wgpu.WGPUProvider;
 import io.github.libfdx.samples.basic.BasicApplication;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
 
 /**
  * Launches the basic desktop entry point.
@@ -14,6 +17,9 @@ import io.github.libfdx.samples.basic.BasicApplication;
  * @author xpenatan
  */
 public final class BasicDesktopLauncher {
+    private static final String LAUNCH_PROPERTIES_PATH = "libfdx-desktop-launch.properties";
+    private static final Properties LAUNCH_PROPERTIES = loadLaunchProperties();
+
     private BasicDesktopLauncher() {
     }
 
@@ -45,11 +51,13 @@ public final class BasicDesktopLauncher {
     }
 
     private static String graphicsName(String[] args) {
-        return option(args, "--graphics=", System.getProperty("libfdx.sample.graphics", "wgpu"));
+        return option(args, "--graphics=",
+                System.getProperty("libfdx.sample.graphics", launchProperty("graphics", "wgpu")));
     }
 
     private static String graphicsDisplayName(String[] args, String graphics) {
-        String configured = option(args, "--graphics-label=", System.getProperty("libfdx.sample.graphicsLabel"));
+        String configured = option(args, "--graphics-label=",
+                System.getProperty("libfdx.sample.graphicsLabel", launchProperty("graphicsLabel", null)));
         if (configured != null && configured.trim().length() > 0) {
             return configured.trim();
         }
@@ -80,5 +88,26 @@ public final class BasicDesktopLauncher {
             }
         }
         return fallback;
+    }
+
+    private static String launchProperty(String name, String fallback) {
+        String value = LAUNCH_PROPERTIES.getProperty(name);
+        if (value != null && value.trim().length() > 0) {
+            return value.trim();
+        }
+        return fallback;
+    }
+
+    private static Properties loadLaunchProperties() {
+        Properties properties = new Properties();
+        try (InputStream stream = BasicDesktopLauncher.class.getClassLoader()
+                .getResourceAsStream(LAUNCH_PROPERTIES_PATH)) {
+            if (stream != null) {
+                properties.load(stream);
+            }
+        } catch (IOException ignored) {
+            // Launch properties are optional outside release jars.
+        }
+        return properties;
     }
 }

@@ -41,11 +41,11 @@ apply(from = "../../../buildSrc/src/main/kotlin/publish.gradle.kts")
 
 dependencies {
     implementation(libs.teavm.gradle.plugin)
-    implementation(project(":libfdx:tools:font"))
-    implementation(project(":libfdx:tools:shader"))
-    implementation(project(":libfdx:backends:web"))
-    implementation(project(":libfdx:backends:desktop_native"))
-    implementation(project(":libfdx:backends:psp"))
+    implementation("${LibExt.fdxGroup}:tools_font:${LibExt.publishedLibfdxVersion}")
+    implementation("${LibExt.fdxGroup}:tools_shader:${LibExt.publishedLibfdxVersion}")
+    implementation("${LibExt.fdxGroup}:backend_web:${LibExt.publishedLibfdxVersion}")
+    implementation("${LibExt.fdxGroup}:backend_desktop_native:${LibExt.publishedLibfdxVersion}")
+    implementation("${LibExt.fdxGroup}:backend_psp:${LibExt.publishedLibfdxVersion}")
 }
 
 tasks.withType<GenerateModuleMetadata>().configureEach {

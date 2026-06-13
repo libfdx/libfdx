@@ -1,6 +1,8 @@
 import io.github.libfdx.build.LibExt
 
+import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.attributes.java.TargetJvmVersion
+import org.gradle.jvm.tasks.Jar
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 
 plugins {
@@ -61,12 +63,89 @@ val desktopGraphicsOptions = "gl,wgpu,vulkan"
 val testLauncherMainClass = "io.github.libfdx.tests.desktop.DesktopTestLauncher"
 val applicationGroup = "application"
 val applicationTestGroup = "application_test"
+val desktopJvmDistDir = layout.buildDirectory.dir("dist/desktop-jvm")
 
 val desktopBackendResources = if (LibExt.usePublishedLibfdx) {
     files()
 } else {
     files(project(":libfdx:backends:desktop").layout.buildDirectory.dir("resources/main"))
 }
+
+val desktopForwardedTestProperties = listOf(
+        "libfdx.test.name",
+        "libfdx.test.mode",
+        "libfdx.test.frames",
+        "libfdx.test.validate",
+        "libfdx.test.driveInput",
+        "libfdx.test.visualValidate",
+        "libfdx.test.visible",
+        "libfdx.test.vsync",
+        "libfdx.test.foregroundFps",
+        "libfdx.test.fpsLogSeconds",
+        "libfdx.test.width",
+        "libfdx.test.height",
+        "libfdx.test.capture",
+        "libfdx.test.captureEvery",
+        "libfdx.test.captureFrame",
+        "libfdx.test.visualBaselineDir",
+        "libfdx.test.visualRequireBaselines",
+        "libfdx.test.visualMismatchRatio",
+        "libfdx.test.visualChannelTolerance",
+        "libfdx.test.visualBaselineTemplate",
+        "libfdx.test.uiScale",
+        "libfdx.test.safeArea",
+        "libfdx.test.uiDebugLines",
+        "libfdx.test.uiSection",
+        "libfdx.test.hoverLabel",
+        "libfdx.test.reportEveryFrames",
+        "libfdx.test.stallFrameMs",
+        "libfdx.test.stallLimit"
+)
+
+fun registerDesktopTestBuild(providerName: String, displayName: String) {
+    val taskBaseName = "test_desktop_$providerName"
+    val releaseClasspath = sourceSets["main"].runtimeClasspath + desktopRuntimeClasspath
+    val launchDefaults = layout.buildDirectory.file(
+            "generated/desktop-jvm/$taskBaseName/libfdx-desktop-launch.properties")
+    val writeLaunchDefaults = tasks.register("${taskBaseName}_write_launch_defaults") {
+        outputs.file(launchDefaults)
+        doLast {
+            val output = launchDefaults.get().asFile
+            output.parentFile.mkdirs()
+            output.writeText(
+                    "graphics=$providerName${System.lineSeparator()}graphicsLabel=$displayName${System.lineSeparator()}",
+                    Charsets.UTF_8)
+        }
+    }
+    tasks.register<Jar>("${taskBaseName}_build") {
+        group = applicationGroup
+        description = "Builds the desktop graphics test $displayName release jar."
+        dependsOn("classes", releaseClasspath, writeLaunchDefaults)
+        archiveFileName.set("$taskBaseName.jar")
+        destinationDirectory.set(desktopJvmDistDir)
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        isZip64 = true
+        manifest {
+            attributes(
+                    "Main-Class" to testLauncherMainClass,
+                    "Multi-Release" to "true",
+                    "Enable-Native-Access" to "ALL-UNNAMED")
+        }
+        exclude("META-INF/*.DSA", "META-INF/*.RSA", "META-INF/*.SF")
+        from({
+            releaseClasspath.files
+                    .filter { it.exists() }
+                    .map { if (it.isDirectory) it else zipTree(it) }
+        })
+        from(launchDefaults.map { it.asFile }) {
+            rename { "libfdx-desktop-launch.properties" }
+        }
+    }
+}
+
+registerDesktopTestBuild("gl", "GL")
+registerDesktopTestBuild("wgpu", "WGPU")
+registerDesktopTestBuild("vulkan", "Vulkan")
 
 fun JavaExec.configureTestRun(
     descriptionText: String,
@@ -202,33 +281,27 @@ fun JavaExec.useJava25Launcher() {
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
 
-fun registerDesktopTestBuild(taskName: String, descriptionText: String, providerClasspath: FileCollection) {
-    tasks.register(taskName) {
-        group = applicationGroup
-        description = descriptionText
-        dependsOn("classes")
-        inputs.files(providerClasspath)
-    }
+tasks.register<JavaExec>("test_desktop_gl_run") {
+    configureTestRun("Runs graphics tests with desktop GL.",
+            "gl", "GL", desktopRuntimeClasspath,
+            "0", defaultValidate = "false")
+    dependsOn("test_desktop_gl_build")
+    useJava25Launcher()
 }
 
-registerDesktopTestBuild(
-        "test_desktop_gl_build",
-        "Builds the desktop graphics test runtime inputs for GL.",
-        desktopRuntimeClasspath)
-
-registerDesktopTestBuild(
-        "test_desktop_wgpu_build",
-        "Builds the desktop graphics test runtime inputs for WGPU.",
-        desktopRuntimeClasspath)
-
-registerDesktopTestBuild(
-        "test_desktop_vulkan_build",
-        "Builds the desktop graphics test runtime inputs for Vulkan.",
-        desktopRuntimeClasspath)
-
 tasks.register<JavaExec>("test_desktop_wgpu_run") {
-    configureTestRun("Runs graphics tests with WGPU.", "wgpu", "WGPU", desktopRuntimeClasspath, "0", defaultDriveInput = "false", defaultValidate = "false")
+    configureTestRun("Runs graphics tests with WGPU.",
+            "wgpu", "WGPU", desktopRuntimeClasspath,
+            "0", defaultValidate = "false")
     dependsOn("test_desktop_wgpu_build")
+    useJava25Launcher()
+}
+
+tasks.register<JavaExec>("test_desktop_vulkan_run") {
+    configureTestRun("Runs graphics tests with desktop Vulkan.",
+            "vulkan", "Vulkan", desktopRuntimeClasspath,
+            "0", defaultValidate = "false")
+    dependsOn("test_desktop_vulkan_build")
     useJava25Launcher()
 }
 
@@ -303,22 +376,6 @@ tasks.register<JavaExec>("test_gl_validate_baseline") {
     systemProperty("libfdx.test.visualBaselineDir", "build/reports/uikit/gl-baseline")
     systemProperty("libfdx.test.visualBaselineTemplate", "{scenario}.png")
     systemProperty("libfdx.test.visualCaptureAllScenarios", "true")
-    useJava25Launcher()
-}
-
-tasks.register<JavaExec>("test_desktop_gl_run") {
-    configureTestRun("Runs graphics tests with desktop GL.",
-            "gl", "GL", desktopRuntimeClasspath,
-            "0", defaultValidate = "false", defaultDriveInput = "false")
-    dependsOn("test_desktop_gl_build")
-    useJava25Launcher()
-}
-
-tasks.register<JavaExec>("test_desktop_vulkan_run") {
-    configureTestRun("Runs graphics tests with desktop Vulkan.",
-            "vulkan", "Vulkan", desktopRuntimeClasspath, "0", defaultValidate = "false",
-            defaultDriveInput = "false")
-    dependsOn("test_desktop_vulkan_build")
     useJava25Launcher()
 }
 

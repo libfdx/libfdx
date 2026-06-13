@@ -950,7 +950,7 @@ abstract class LibfdxDesktopNativeRunTask : DefaultTask() {
         }
         val command = mutableListOf(executable.absolutePath)
         command.addAll(runArgs.get())
-        val workingDirectory = releaseDir.get().asFile
+        val workingDirectory = project.rootDir
         val processCommand = if(isWindows() && openConsole.get()) {
             windowsPowerShellStartCommand(executable, runArgs.get(), workingDirectory)
         }

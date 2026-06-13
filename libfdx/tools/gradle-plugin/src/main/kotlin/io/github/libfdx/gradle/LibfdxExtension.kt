@@ -10,8 +10,11 @@ import org.gradle.api.file.Directory
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.model.ObjectFactory
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
+import org.gradle.api.provider.SetProperty
 import org.teavm.gradle.api.OptimizationLevel
 import org.teavm.gradle.api.SourceFilePolicy
 import org.teavm.gradle.api.TeaVMConfiguration
@@ -49,6 +52,10 @@ open class LibfdxExtension @Inject constructor(
         objects.newInstance(LibfdxDesktopNativeExtension::class.java, project, cConfig)
     }
 
+    val desktopJvm: LibfdxDesktopJvmExtension by lazy {
+        objects.newInstance(LibfdxDesktopJvmExtension::class.java, project, objects)
+    }
+
     val psp: LibfdxPspExtension by lazy {
         objects.newInstance(LibfdxPspExtension::class.java, project, cConfig)
     }
@@ -84,6 +91,11 @@ open class LibfdxExtension @Inject constructor(
         action.execute(desktopNative)
     }
 
+    fun desktopJvm(action: Action<in LibfdxDesktopJvmExtension>) {
+        declaredTargets.add(LibfdxTarget.DESKTOP_JVM)
+        action.execute(desktopJvm)
+    }
+
     fun psp(action: Action<in LibfdxPspExtension>) {
         declaredTargets.add(LibfdxTarget.PSP)
         action.execute(psp)
@@ -91,6 +103,125 @@ open class LibfdxExtension @Inject constructor(
 
     internal fun isDeclared(target: LibfdxTarget): Boolean {
         return declaredTargets.contains(target)
+    }
+}
+
+open class LibfdxDesktopJvmExtension @Inject constructor(
+    project: Project,
+    objects: ObjectFactory
+) {
+    val taskNamePrefix: Property<String> = objects.property(String::class.java).convention(project.name)
+    val mainClass: Property<String> = objects.property(String::class.java)
+    val outputDir: DirectoryProperty = objects.directoryProperty()
+        .convention(project.layout.buildDirectory.dir("dist/desktop-jvm"))
+    val workingDir: DirectoryProperty = objects.directoryProperty()
+        .convention(project.rootProject.layout.projectDirectory)
+    val taskGroup: Property<String> = objects.property(String::class.java).convention("application")
+    val javaLanguageVersion: Property<Int> = objects.property(Int::class.javaObjectType).convention(25)
+    val enableNativeAccess: Property<Boolean> = objects.property(Boolean::class.java).convention(true)
+    val runtimeClasspath: ConfigurableFileCollection = project.files()
+    val launchPropertiesResourceName: Property<String> = objects.property(String::class.java)
+        .convention("libfdx-desktop-launch.properties")
+    val jvmArgs: ListProperty<String> = objects.listProperty(String::class.java)
+        .convention(listOf("-Dorg.lwjgl.system.stackSize=1048576"))
+    val systemProperties: MapProperty<String, String> = objects.mapProperty(String::class.java, String::class.java)
+        .convention(emptyMap())
+    val defaultSystemProperties: MapProperty<String, String> =
+        objects.mapProperty(String::class.java, String::class.java).convention(emptyMap())
+    val launchProperties: MapProperty<String, String> = objects.mapProperty(String::class.java, String::class.java)
+        .convention(emptyMap())
+    val forwardedSystemProperties: SetProperty<String> = objects.setProperty(String::class.java)
+        .convention(emptySet())
+    val forwardedSystemPropertyPrefixes: SetProperty<String> = objects.setProperty(String::class.java)
+        .convention(emptySet())
+    val providers: NamedDomainObjectContainer<LibfdxDesktopJvmProviderExtension> =
+        objects.domainObjectContainer(LibfdxDesktopJvmProviderExtension::class.java) { name ->
+            objects.newInstance(LibfdxDesktopJvmProviderExtension::class.java, name, project, objects)
+        }
+
+    fun provider(name: String, action: Action<in LibfdxDesktopJvmProviderExtension>) {
+        providers.create(name, action)
+    }
+
+    fun providers(action: Action<in NamedDomainObjectContainer<LibfdxDesktopJvmProviderExtension>>) {
+        action.execute(providers)
+    }
+
+    fun jvmArg(value: String) {
+        jvmArgs.add(value)
+    }
+
+    fun runtimeClasspath(vararg paths: Any) {
+        runtimeClasspath.from(*paths)
+    }
+
+    fun systemProperty(name: String, value: String) {
+        systemProperties.put(name, value)
+    }
+
+    fun defaultSystemProperty(name: String, value: String) {
+        defaultSystemProperties.put(name, value)
+    }
+
+    fun launchProperty(name: String, value: String) {
+        launchProperties.put(name, value)
+    }
+
+    fun forwardSystemProperty(name: String) {
+        forwardedSystemProperties.add(name)
+    }
+
+    fun forwardSystemPropertyPrefix(prefix: String) {
+        forwardedSystemPropertyPrefixes.add(prefix)
+    }
+}
+
+open class LibfdxDesktopJvmProviderExtension @Inject constructor(
+    private val providerName: String,
+    project: Project,
+    objects: ObjectFactory
+) : Named {
+    val displayName: Property<String> = objects.property(String::class.java).convention(providerName)
+    val runtimeClasspath: ConfigurableFileCollection = project.files()
+    val buildDescription: Property<String> = objects.property(String::class.java)
+    val runDescription: Property<String> = objects.property(String::class.java)
+    val systemProperties: MapProperty<String, String> = objects.mapProperty(String::class.java, String::class.java)
+        .convention(emptyMap())
+    val defaultSystemProperties: MapProperty<String, String> =
+        objects.mapProperty(String::class.java, String::class.java).convention(emptyMap())
+    val launchProperties: MapProperty<String, String> = objects.mapProperty(String::class.java, String::class.java)
+        .convention(emptyMap())
+    val forwardedSystemProperties: SetProperty<String> = objects.setProperty(String::class.java)
+        .convention(emptySet())
+    val forwardedSystemPropertyPrefixes: SetProperty<String> = objects.setProperty(String::class.java)
+        .convention(emptySet())
+
+    override fun getName(): String {
+        return providerName
+    }
+
+    fun runtimeClasspath(vararg paths: Any) {
+        runtimeClasspath.from(*paths)
+    }
+
+    fun systemProperty(name: String, value: String) {
+        systemProperties.put(name, value)
+    }
+
+    fun defaultSystemProperty(name: String, value: String) {
+        defaultSystemProperties.put(name, value)
+    }
+
+    fun launchProperty(name: String, value: String) {
+        launchProperties.put(name, value)
+    }
+
+    fun forwardSystemProperty(name: String) {
+        forwardedSystemProperties.add(name)
+    }
+
+    fun forwardSystemPropertyPrefix(prefix: String) {
+        forwardedSystemPropertyPrefixes.add(prefix)
     }
 }
 
@@ -398,6 +529,7 @@ open class LibfdxPspExtension @Inject constructor(
 internal enum class LibfdxTarget {
     JS,
     WASM,
+    DESKTOP_JVM,
     DESKTOP_NATIVE,
     PSP
 }

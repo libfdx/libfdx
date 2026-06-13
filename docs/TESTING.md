@@ -121,8 +121,8 @@ build aliases:
 ```powershell
 .\gradlew.bat :tests:platform:desktop_native:test_desktop_native_vulkan_debug_build
 .\gradlew.bat :tests:platform:desktop_native:test_desktop_native_vulkan_release_build
-.\gradlew.bat :tests:platform:desktop_native:libfdx_desktop_native_build_debug
-.\gradlew.bat :tests:platform:desktop_native:libfdx_desktop_native_build_release
+.\gradlew.bat :tests:platform:desktop_native:test_desktop_native_vulkan_debug_generate
+.\gradlew.bat :tests:platform:desktop_native:test_desktop_native_vulkan_release_generate
 ```
 
 Desktop native sample and test app-facing task names include the native build

@@ -3,6 +3,7 @@ package io.github.libfdx.gradle
 import io.github.libfdx.backend.web.TeaVMAssetProperties
 import io.github.libfdx.backend.web.WebAsset
 import io.github.libfdx.backend.web.WebAssets
+import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -12,6 +13,10 @@ import org.gradle.api.provider.MapProperty
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.api.tasks.diagnostics.TaskReportTask
+import org.gradle.api.tasks.JavaExec
+import org.gradle.jvm.tasks.Jar
+import org.gradle.jvm.toolchain.JavaLanguageVersion
+import org.gradle.jvm.toolchain.JavaToolchainService
 import org.gradle.kotlin.dsl.create
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.register
@@ -104,6 +109,9 @@ class LibfdxGradlePlugin : Plugin<Project> {
         }
         if(extension.isDeclared(LibfdxTarget.WASM)) {
             registerWasmTasks(project, extension)
+        }
+        if(extension.isDeclared(LibfdxTarget.DESKTOP_JVM)) {
+            registerDesktopJvmTasks(project, extension)
         }
         if(extension.isDeclared(LibfdxTarget.DESKTOP_NATIVE)) {
             registerDesktopNativeTasks(project, extension)
@@ -232,10 +240,148 @@ class LibfdxGradlePlugin : Plugin<Project> {
     }
 
     private fun usesLocalLibfdxRuntime(project: Project): Boolean {
+        return hasLocalLibfdxRuntimeDependency(project, mutableSetOf())
+    }
+
+    private fun hasLocalLibfdxRuntimeDependency(project: Project, visited: MutableSet<String>): Boolean {
+        if(!visited.add(project.path)) {
+            return false
+        }
         val runtimeClasspath = project.configurations.findByName("runtimeClasspath") ?: return false
         return runtimeClasspath.allDependencies
             .withType(ProjectDependency::class.java)
-            .any { it.path.startsWith(":libfdx:") }
+            .any {
+                val dependencyProject = project.rootProject.findProject(it.path)
+                it.path.startsWith(":libfdx:") ||
+                    (dependencyProject != null && hasLocalLibfdxRuntimeDependency(dependencyProject, visited))
+            }
+    }
+
+    private fun registerDesktopJvmTasks(project: Project, extension: LibfdxExtension) {
+        val desktopJvm = extension.desktopJvm
+        val sourceSets = project.extensions.getByType<SourceSetContainer>()
+        val mainRuntimeClasspath = sourceSets.getByName("main").runtimeClasspath
+        val applicationRuntimeClasspath = if(desktopJvm.runtimeClasspath.isEmpty) {
+            mainRuntimeClasspath
+        }
+        else {
+            desktopJvm.runtimeClasspath
+        }
+        val toolchains = project.extensions.getByType<JavaToolchainService>()
+        if(desktopJvm.providers.isEmpty()) {
+            throw GradleException("Declare at least one libfdx.desktopJvm provider.")
+        }
+        desktopJvm.providers.forEach { provider ->
+            val taskBaseName = "${desktopJvm.taskNamePrefix.get()}_${provider.name}"
+            val releaseClasspath = applicationRuntimeClasspath + provider.runtimeClasspath
+            val launchProperties = desktopJvm.launchProperties.get() + provider.launchProperties.get()
+            val launchDefaults = project.layout.buildDirectory.file(
+                "generated/desktop-jvm/$taskBaseName/${desktopJvm.launchPropertiesResourceName.get()}"
+            )
+            val writeLaunchDefaults = if(launchProperties.isNotEmpty()) {
+                project.tasks.register("${taskBaseName}_write_launch_defaults") {
+                    outputs.file(launchDefaults)
+                    doLast {
+                        val output = launchDefaults.get().asFile
+                        output.parentFile.mkdirs()
+                        output.writeText(
+                            launchProperties.entries.joinToString(System.lineSeparator()) { (name, value) ->
+                                "$name=$value"
+                            } + System.lineSeparator(),
+                            Charsets.UTF_8
+                        )
+                    }
+                }
+            }
+            else {
+                null
+            }
+            val buildTask = project.tasks.register<Jar>("${taskBaseName}_build") {
+                group = desktopJvm.taskGroup.get()
+                description = provider.buildDescription.orElse(
+                    "Builds the ${provider.displayName.get()} desktop JVM release jar."
+                ).get()
+                dependsOn("classes", releaseClasspath)
+                writeLaunchDefaults?.let { dependsOn(it) }
+                archiveFileName.set("$taskBaseName.jar")
+                destinationDirectory.set(desktopJvm.outputDir)
+                duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+                isZip64 = true
+                manifest {
+                    val manifestAttributes = linkedMapOf<String, String>(
+                        "Main-Class" to desktopJvm.mainClass.get(),
+                        "Multi-Release" to "true"
+                    )
+                    if(desktopJvm.enableNativeAccess.get()) {
+                        manifestAttributes["Enable-Native-Access"] = "ALL-UNNAMED"
+                    }
+                    attributes(manifestAttributes)
+                }
+                exclude("META-INF/*.DSA", "META-INF/*.RSA", "META-INF/*.SF")
+                from({
+                    releaseClasspath.files
+                        .filter { it.exists() }
+                        .map { if(it.isDirectory) it else project.zipTree(it) }
+                })
+                writeLaunchDefaults?.let {
+                    from(launchDefaults.map { file -> file.asFile }) {
+                        rename { desktopJvm.launchPropertiesResourceName.get() }
+                    }
+                }
+            }
+            project.tasks.register<JavaExec>("${taskBaseName}_run") {
+                group = desktopJvm.taskGroup.get()
+                description = provider.runDescription.orElse(
+                    "Runs the ${provider.displayName.get()} desktop JVM application."
+                ).get()
+                dependsOn(buildTask)
+                classpath = releaseClasspath
+                mainClass.set(desktopJvm.mainClass)
+                workingDir = desktopJvm.workingDir.get().asFile
+                javaLauncher.set(toolchains.launcherFor {
+                    languageVersion.set(JavaLanguageVersion.of(desktopJvm.javaLanguageVersion.get()))
+                })
+                jvmArgs(desktopJvm.jvmArgs.get())
+                if(desktopJvm.enableNativeAccess.get()
+                    && desktopJvm.jvmArgs.get().none { it.startsWith("--enable-native-access") }) {
+                    jvmArgs("--enable-native-access=ALL-UNNAMED")
+                }
+                configureDesktopJvmSystemProperties(project, this, desktopJvm, provider)
+            }
+        }
+    }
+
+    private fun configureDesktopJvmSystemProperties(
+        project: Project,
+        task: JavaExec,
+        desktopJvm: LibfdxDesktopJvmExtension,
+        provider: LibfdxDesktopJvmProviderExtension
+    ) {
+        val defaults = desktopJvm.defaultSystemProperties.get() + provider.defaultSystemProperties.get()
+        defaults.forEach { (name, fallback) ->
+            task.systemProperty(name, configuredSystemProperty(project, name) ?: fallback)
+        }
+        val forwardedNames = desktopJvm.forwardedSystemProperties.get() + provider.forwardedSystemProperties.get()
+        forwardedNames.forEach { name ->
+            configuredSystemProperty(project, name)?.takeIf { it.isNotBlank() }?.let { value ->
+                task.systemProperty(name, value)
+            }
+        }
+        val prefixes = desktopJvm.forwardedSystemPropertyPrefixes.get() + provider.forwardedSystemPropertyPrefixes.get()
+        if(prefixes.isNotEmpty()) {
+            project.gradle.startParameter.systemPropertiesArgs
+                .filterKeys { name -> prefixes.any { prefix -> name.startsWith(prefix) } }
+                .filterValues { value -> value.isNotBlank() }
+                .forEach { (name, value) -> task.systemProperty(name, value) }
+        }
+        val fixedProperties = desktopJvm.systemProperties.get() + provider.systemProperties.get()
+        fixedProperties.forEach { (name, value) ->
+            task.systemProperty(name, value)
+        }
+    }
+
+    private fun configuredSystemProperty(project: Project, name: String): String? {
+        return project.gradle.startParameter.systemPropertiesArgs[name] ?: System.getProperty(name)
     }
 
     private fun registerDesktopNativeTasks(project: Project, extension: LibfdxExtension) {

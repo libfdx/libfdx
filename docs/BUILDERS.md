@@ -5,9 +5,10 @@ outputs. These tools are separate from the runtime API: game code still uses the
 common API modules, while builders prepare assets, generated files, and platform
 project shells.
 
-Use the Gradle plugin when the project is built by Gradle. Use the standalone
-Java builders when a tool, editor, or custom pipeline needs to generate a web,
-desktop-native, or PSP project without applying the Gradle plugin.
+Use the Gradle plugin when an external Gradle project wants libFDX-managed
+platform tasks. Use the standalone Java builders when a runtime launcher,
+tool, editor, or custom pipeline needs to generate a web, desktop-native, or
+PSP project without applying the Gradle plugin.
 
 ## Index
 
@@ -25,7 +26,8 @@ The builders all serve the same general purpose: take a Java entry point,
 classpath, assets, and platform options, then produce the generated output that
 the target platform needs.
 
-- Gradle plugin: best for normal game projects, samples, tests, and CI tasks.
+- Gradle plugin: best for external Gradle game projects and the dedicated
+  plugin-use sample/test modules.
 - `WebBuilder`: best for editor/export flows that need a browser webapp output.
 - `NativeBuilder`: best for custom desktop-native TeaVM C output generation.
 - `PspBuilder`: best for custom PSP EBOOT project generation.
@@ -34,11 +36,18 @@ The builder should not hide platform requirements. If a target needs a native
 toolchain, Android SDK, PSPDEV, CMake, or browser-specific setup, the generated
 project still depends on those tools being present.
 
+Inside this repository, runtime launcher modules use explicit Gradle tasks plus
+the standalone builders instead of applying the libFDX Gradle plugin. The
+runtime Gradle tasks call `WebBuilder`, `NativeBuilder`, and `PspBuilder`
+directly from their runtime classpaths. The dedicated plugin-use modules are
+`:samples:basic:platform:plugin` and `:tests:platform:plugin`.
+
 ## 2. Gradle Plugin
 
 The libFDX Gradle plugin lives in `libfdx/tools/gradle-plugin` and is consumed
-through an included build. This repository wires it in from
-`settings.gradle.kts`; external builds can do the same:
+through an included build. This repository keeps plugin DSL usage in
+`:samples:basic:platform:plugin` and `:tests:platform:plugin`; external builds
+can use the same included build shape:
 
 ```kotlin
 pluginManagement {
@@ -47,7 +56,51 @@ pluginManagement {
 ```
 
 Apply it with `id("io.github.libfdx")` and configure targets inside
-`libfdx { ... }`.
+`libfdx { ... }`. Do not apply the plugin only to reuse the standalone builder
+classes; call the builders directly instead.
+
+The plugin target blocks are:
+
+- `desktopJvm { ... }`: creates app-name-first desktop JVM `_build` and `_run`
+  tasks. Each provider entry creates a runnable release jar under
+  `build/dist/desktop-jvm` and a matching `JavaExec` run task.
+- `js { ... }`: creates TeaVM JavaScript web output tasks.
+- `wasm { ... }`: creates TeaVM Wasm web output tasks.
+- `desktopNative { ... }`: creates TeaVM C desktop-native generate, build, and
+  run tasks.
+- `psp { ... }`: creates TeaVM C PSP generate, build, and PPSSPP capture tasks.
+
+Example desktop JVM target:
+
+```kotlin
+val desktopApplicationRuntimeClasspath by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+dependencies {
+    desktopApplicationRuntimeClasspath(project(":samples:basic:platform:desktop"))
+}
+
+libfdx {
+    desktopJvm {
+        taskNamePrefix.set("basic_desktop")
+        mainClass.set("com.example.desktop.BasicDesktopLauncher")
+        runtimeClasspath(desktopApplicationRuntimeClasspath)
+        provider("gl") {
+            displayName.set("GL")
+            runtimeClasspath(configurations.named("glRuntimeClasspath"))
+            systemProperty("libfdx.sample.graphics", "gl")
+            launchProperty("graphics", "gl")
+        }
+    }
+}
+```
+
+If one Gradle project declares multiple platform targets, set
+`desktopJvm.runtimeClasspath(...)` to the desktop launcher/runtime classpath so
+desktop JVM `_build` and `_run` tasks do not package unrelated web or native
+runtime jars.
 
 ## 3. Bitmap Font Tasks
 
@@ -79,7 +132,7 @@ libfdx {
 
 ## 4. Standalone Web Builder
 
-Tools that do not use Gradle, such as editors, can call the Java builders from
+Tools, runtime launcher modules, and editors can call the Java builders from
 the owning backend modules:
 
 ```java
@@ -98,8 +151,8 @@ copies assets into `webapp/assets`, writes generated asset metadata for preload,
 and writes the same web shell used by the Gradle plugin.
 
 Use this builder when an application needs to export a playable web build from
-inside a custom tool. The caller is responsible for passing the correct
-classpath and choosing the output directory.
+inside a custom tool or from explicit Gradle wiring. The caller is responsible
+for passing the correct classpath and choosing the output directory.
 
 ## 5. Standalone Desktop Native Builder
 
@@ -155,6 +208,15 @@ Run the desktop generator UI with:
 ```powershell
 .\gradlew.bat :libfdx:tools:project-generator:platform:desktop:project_generator_desktop_gl_run
 ```
+
+Build the desktop generator UI release jar with:
+
+```powershell
+.\gradlew.bat :libfdx:tools:project-generator:platform:desktop:project_generator_desktop_gl_build
+```
+
+The jar is written under
+`libfdx/tools/project-generator/platform/desktop/build/dist/desktop-jvm`.
 
 Build or serve the web generator UI with:
 

@@ -1,8 +1,12 @@
 import io.github.libfdx.build.LibExt
 
+import org.gradle.api.file.FileCollection
+import java.lang.reflect.InvocationTargetException
+import java.net.URLClassLoader
+import java.nio.file.Path
+
 plugins {
     id("java")
-    id("io.github.libfdx")
 }
 
 java {
@@ -14,6 +18,10 @@ group = "${LibExt.fdxGroup}.tests"
 
 
 val nativeTargetFileName = "libfdx-tests-vulkan-desktop-native"
+val nativeBuildRoot = layout.buildDirectory.dir("dist/desktop-native")
+val nativeShowConsole = providers.gradleProperty("libfdx.desktopNative.showConsole")
+        .map { value -> value.toBooleanStrictOrNull() ?: value.toBoolean() }
+        .orElse(true)
 val nativeOpenConsole = providers.gradleProperty("libfdx.desktopNative.openConsole")
         .map { value -> value.toBooleanStrictOrNull() ?: value.toBoolean() }
         .orElse(true)
@@ -35,18 +43,52 @@ dependencies {
     }
 }
 
-libfdx {
-    desktopNative {
-        mainClass.set("io.github.libfdx.tests.desktopnative.DesktopNativeVulkanTestLauncher")
-        targetFileName.set(nativeTargetFileName)
-        buildType.set("Debug")
-        minHeapSize.set(64)
-        maxHeapSize.set(1024)
-    }
-}
+val builderClasspath = sourceSets["main"].runtimeClasspath
 
 fun isWindowsHost(): Boolean {
     return System.getProperty("os.name", "").lowercase().contains("win")
+}
+
+fun nativeBuildScript(scriptBaseName: String): File {
+    return nativeBuildRoot.get().asFile.resolve(scriptBaseName + if(isWindowsHost()) ".bat" else ".sh")
+}
+
+fun registerNativeGenerateTask(taskName: String, nativeBuildType: String) {
+    tasks.register(taskName) {
+        group = "application"
+        description = "Generates the desktop_native Vulkan graphics test $nativeBuildType project."
+        dependsOn(builderClasspath)
+        inputs.files(builderClasspath)
+        outputs.dir(nativeBuildRoot)
+        doLast {
+            runNativeBuilder(
+                    builderClasspath,
+                    "io.github.libfdx.tests.desktopnative.DesktopNativeVulkanTestLauncher",
+                    nativeBuildRoot.get().asFile,
+                    nativeTargetFileName,
+                    nativeBuildType,
+                    nativeShowConsole.get(),
+                    64,
+                    1024)
+        }
+    }
+}
+
+fun registerNativeBuildTask(taskName: String, descriptionText: String, generateTask: String, scriptBaseName: String) {
+    tasks.register<Exec>(taskName) {
+        group = "application"
+        description = descriptionText
+        dependsOn(generateTask)
+        doFirst {
+            val script = nativeBuildScript(scriptBaseName)
+            if(!script.isFile) {
+                throw GradleException("Native build script was not generated: ${script.absolutePath}")
+            }
+            workingDir = nativeBuildRoot.get().asFile
+            commandLine(if(isWindowsHost()) listOf("cmd", "/c", script.absolutePath)
+                    else listOf("bash", script.absolutePath))
+        }
+    }
 }
 
 fun windowsPowerShellStartCommand(executable: File, args: List<String>, workingDirectory: File): List<String> {
@@ -128,17 +170,68 @@ fun addSystemPropertyArg(args: MutableList<String>, option: String, property: St
     }
 }
 
-tasks.register("test_desktop_native_vulkan_debug_build") {
-    group = "application"
-    description = "Builds the desktop_native Vulkan graphics test Debug executable."
-    dependsOn("libfdx_desktop_native_build_debug")
+fun runNativeBuilder(classpath: FileCollection, mainClassName: String, buildRoot: File, targetFileName: String,
+        nativeBuildType: String, showConsole: Boolean, minHeapSize: Int, maxHeapSize: Int) {
+    withBuilderClassLoader(classpath) { classLoader ->
+        val builderClass = classLoader.loadClass("io.github.libfdx.backend.desktopnative.NativeBuilder")
+        var builder = builderClass.getMethod("desktop").invoke(null)
+        val paths = classpath.files.map { it.toPath() }
+        builder = invokeBuilder(builder, "classpath", listOf(Collection::class.java), listOf(paths))
+        builder = invokeBuilder(builder, "nativeResourceClasspath", listOf(Collection::class.java), listOf(paths))
+        builder = invokeBuilder(builder, "buildRoot", listOf(Path::class.java), listOf(buildRoot.toPath()))
+        builder = invokeBuilder(builder, "mainClass", listOf(String::class.java), listOf(mainClassName))
+        builder = invokeBuilder(builder, "targetFileName", listOf(String::class.java), listOf(targetFileName))
+        builder = invokeBuilder(builder, "buildType", listOf(String::class.java), listOf(nativeBuildType))
+        builder = invokeBuilder(builder, "showConsole", listOf(Boolean::class.javaPrimitiveType!!), listOf(showConsole))
+        builder = invokeBuilder(builder, "minHeapSize", listOf(Integer.TYPE), listOf(minHeapSize))
+        builder = invokeBuilder(builder, "maxHeapSize", listOf(Integer.TYPE), listOf(maxHeapSize))
+        invokeBuilder(builder, "build", emptyList(), emptyList())
+    }
 }
 
-tasks.register("test_desktop_native_vulkan_release_build") {
-    group = "application"
-    description = "Builds the desktop_native Vulkan graphics test Release executable."
-    dependsOn("libfdx_desktop_native_build_release")
+fun withBuilderClassLoader(classpath: FileCollection, action: (ClassLoader) -> Unit) {
+    val urls = classpath.files.map { it.toURI().toURL() }.toTypedArray()
+    URLClassLoader(urls, ClassLoader.getPlatformClassLoader()).use { classLoader ->
+        val previous = Thread.currentThread().contextClassLoader
+        Thread.currentThread().contextClassLoader = classLoader
+        try {
+            action(classLoader)
+        }
+        finally {
+            Thread.currentThread().contextClassLoader = previous
+        }
+    }
 }
+
+fun invokeBuilder(target: Any, methodName: String, parameterTypes: List<Class<*>>, args: List<Any>): Any {
+    try {
+        return target.javaClass.getMethod(methodName, *parameterTypes.toTypedArray())
+                .invoke(target, *args.toTypedArray()) ?: target
+    }
+    catch (error: InvocationTargetException) {
+        val cause = error.targetException
+        if (cause is RuntimeException) {
+            throw cause
+        }
+        if (cause is Error) {
+            throw cause
+        }
+        throw GradleException("Builder method '$methodName' failed.", cause)
+    }
+}
+
+registerNativeGenerateTask("test_desktop_native_vulkan_debug_generate", "Debug")
+registerNativeGenerateTask("test_desktop_native_vulkan_release_generate", "Release")
+
+registerNativeBuildTask("test_desktop_native_vulkan_debug_build",
+        "Builds the desktop_native Vulkan graphics test Debug executable.",
+        "test_desktop_native_vulkan_debug_generate",
+        "app_debug")
+
+registerNativeBuildTask("test_desktop_native_vulkan_release_build",
+        "Builds the desktop_native Vulkan graphics test Release executable.",
+        "test_desktop_native_vulkan_release_generate",
+        "app_release")
 
 registerDesktopNativeVulkanTestTask(
         "test_desktop_native_vulkan_debug_run",

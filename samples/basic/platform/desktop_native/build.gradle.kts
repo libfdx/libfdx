@@ -1,8 +1,12 @@
 import io.github.libfdx.build.LibExt
 
+import org.gradle.api.file.FileCollection
+import java.lang.reflect.InvocationTargetException
+import java.net.URLClassLoader
+import java.nio.file.Path
+
 plugins {
     id("java")
-    id("io.github.libfdx")
 }
 
 java {
@@ -14,6 +18,10 @@ group = "${LibExt.fdxGroup}.samples.basic"
 
 
 val nativeTargetFileName = "libfdx-basic-gl-desktop-native"
+val nativeBuildRoot = layout.buildDirectory.dir("dist/desktop-native")
+val nativeShowConsole = providers.gradleProperty("libfdx.desktopNative.showConsole")
+        .map { value -> value.toBooleanStrictOrNull() ?: value.toBoolean() }
+        .orElse(true)
 val nativeOpenConsole = providers.gradleProperty("libfdx.desktopNative.openConsole")
         .map { value -> value.toBooleanStrictOrNull() ?: value.toBoolean() }
         .orElse(true)
@@ -35,16 +43,50 @@ dependencies {
     }
 }
 
-libfdx {
-    desktopNative {
-        mainClass.set("io.github.libfdx.samples.basic.desktopnative.BasicDesktopNativeLauncher")
-        targetFileName.set(nativeTargetFileName)
-        buildType.set("Debug")
-    }
-}
+val builderClasspath = sourceSets["main"].runtimeClasspath
 
 fun isWindowsHost(): Boolean {
     return System.getProperty("os.name", "").lowercase().contains("win")
+}
+
+fun nativeBuildScript(scriptBaseName: String): File {
+    return nativeBuildRoot.get().asFile.resolve(scriptBaseName + if(isWindowsHost()) ".bat" else ".sh")
+}
+
+fun registerNativeGenerateTask(taskName: String, nativeBuildType: String) {
+    tasks.register(taskName) {
+        group = "application"
+        description = "Generates the basic desktop_native GL sample $nativeBuildType project."
+        dependsOn(builderClasspath)
+        inputs.files(builderClasspath)
+        outputs.dir(nativeBuildRoot)
+        doLast {
+            runNativeBuilder(
+                    builderClasspath,
+                    "io.github.libfdx.samples.basic.desktopnative.BasicDesktopNativeLauncher",
+                    nativeBuildRoot.get().asFile,
+                    nativeTargetFileName,
+                    nativeBuildType,
+                    nativeShowConsole.get())
+        }
+    }
+}
+
+fun registerNativeBuildTask(taskName: String, descriptionText: String, generateTask: String, scriptBaseName: String) {
+    tasks.register<Exec>(taskName) {
+        group = "application"
+        description = descriptionText
+        dependsOn(generateTask)
+        doFirst {
+            val script = nativeBuildScript(scriptBaseName)
+            if(!script.isFile) {
+                throw GradleException("Native build script was not generated: ${script.absolutePath}")
+            }
+            workingDir = nativeBuildRoot.get().asFile
+            commandLine(if(isWindowsHost()) listOf("cmd", "/c", script.absolutePath)
+                    else listOf("bash", script.absolutePath))
+        }
+    }
 }
 
 fun windowsPowerShellStartCommand(executable: File, args: List<String>, workingDirectory: File): List<String> {
@@ -90,17 +132,66 @@ fun registerDesktopNativeSampleTask(taskName: String, descriptionText: String, n
     }
 }
 
-tasks.register("basic_desktop_native_gl_debug_build") {
-    group = "application"
-    description = "Builds the basic desktop_native GL sample Debug executable."
-    dependsOn("libfdx_desktop_native_build_debug")
+fun runNativeBuilder(classpath: FileCollection, mainClassName: String, buildRoot: File, targetFileName: String,
+        nativeBuildType: String, showConsole: Boolean) {
+    withBuilderClassLoader(classpath) { classLoader ->
+        val builderClass = classLoader.loadClass("io.github.libfdx.backend.desktopnative.NativeBuilder")
+        var builder = builderClass.getMethod("desktop").invoke(null)
+        val paths = classpath.files.map { it.toPath() }
+        builder = invokeBuilder(builder, "classpath", listOf(Collection::class.java), listOf(paths))
+        builder = invokeBuilder(builder, "nativeResourceClasspath", listOf(Collection::class.java), listOf(paths))
+        builder = invokeBuilder(builder, "buildRoot", listOf(Path::class.java), listOf(buildRoot.toPath()))
+        builder = invokeBuilder(builder, "mainClass", listOf(String::class.java), listOf(mainClassName))
+        builder = invokeBuilder(builder, "targetFileName", listOf(String::class.java), listOf(targetFileName))
+        builder = invokeBuilder(builder, "buildType", listOf(String::class.java), listOf(nativeBuildType))
+        builder = invokeBuilder(builder, "showConsole", listOf(Boolean::class.javaPrimitiveType!!), listOf(showConsole))
+        invokeBuilder(builder, "build", emptyList(), emptyList())
+    }
 }
 
-tasks.register("basic_desktop_native_gl_release_build") {
-    group = "application"
-    description = "Builds the basic desktop_native GL sample Release executable."
-    dependsOn("libfdx_desktop_native_build_release")
+fun withBuilderClassLoader(classpath: FileCollection, action: (ClassLoader) -> Unit) {
+    val urls = classpath.files.map { it.toURI().toURL() }.toTypedArray()
+    URLClassLoader(urls, ClassLoader.getPlatformClassLoader()).use { classLoader ->
+        val previous = Thread.currentThread().contextClassLoader
+        Thread.currentThread().contextClassLoader = classLoader
+        try {
+            action(classLoader)
+        }
+        finally {
+            Thread.currentThread().contextClassLoader = previous
+        }
+    }
 }
+
+fun invokeBuilder(target: Any, methodName: String, parameterTypes: List<Class<*>>, args: List<Any>): Any {
+    try {
+        return target.javaClass.getMethod(methodName, *parameterTypes.toTypedArray())
+                .invoke(target, *args.toTypedArray()) ?: target
+    }
+    catch (error: InvocationTargetException) {
+        val cause = error.targetException
+        if (cause is RuntimeException) {
+            throw cause
+        }
+        if (cause is Error) {
+            throw cause
+        }
+        throw GradleException("Builder method '$methodName' failed.", cause)
+    }
+}
+
+registerNativeGenerateTask("basic_desktop_native_gl_debug_generate", "Debug")
+registerNativeGenerateTask("basic_desktop_native_gl_release_generate", "Release")
+
+registerNativeBuildTask("basic_desktop_native_gl_debug_build",
+        "Builds the basic desktop_native GL sample Debug executable.",
+        "basic_desktop_native_gl_debug_generate",
+        "app_debug")
+
+registerNativeBuildTask("basic_desktop_native_gl_release_build",
+        "Builds the basic desktop_native GL sample Release executable.",
+        "basic_desktop_native_gl_release_generate",
+        "app_release")
 
 registerDesktopNativeSampleTask(
         "basic_desktop_native_gl_debug_run",

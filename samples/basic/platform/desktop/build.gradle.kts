@@ -1,6 +1,8 @@
 import io.github.libfdx.build.LibExt
 
+import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.attributes.java.TargetJvmVersion
+import org.gradle.jvm.tasks.Jar
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 
 plugins {
@@ -61,78 +63,66 @@ dependencies {
 }
 
 val sampleMainClass = "io.github.libfdx.samples.basic.desktop.BasicDesktopLauncher"
+val desktopJvmDistDir = layout.buildDirectory.dir("dist/desktop-jvm")
 
-fun JavaExec.configureSampleRun(
-    descriptionText: String,
-    graphics: String,
-    graphicsLabel: String,
-    providerClasspath: FileCollection
-) {
-    group = "application"
-    description = descriptionText
-    classpath = sourceSets["main"].runtimeClasspath + providerClasspath
-    mainClass.set(sampleMainClass)
-    workingDir = rootProject.projectDir
-    val exitAfterFrames = System.getProperty("libfdx.sample.exitAfterFrames")
-    if (!exitAfterFrames.isNullOrBlank()) {
-        systemProperty("libfdx.sample.exitAfterFrames", exitAfterFrames)
+fun registerDesktopSample(providerName: String, displayName: String, providerClasspath: FileCollection) {
+    val taskBaseName = "basic_desktop_$providerName"
+    val releaseClasspath = sourceSets["main"].runtimeClasspath + providerClasspath
+    val launchDefaults = layout.buildDirectory.file(
+            "generated/desktop-jvm/$taskBaseName/libfdx-desktop-launch.properties")
+    val writeLaunchDefaults = tasks.register("${taskBaseName}_write_launch_defaults") {
+        outputs.file(launchDefaults)
+        doLast {
+            val output = launchDefaults.get().asFile
+            output.parentFile.mkdirs()
+            output.writeText(
+                    "graphics=$providerName${System.lineSeparator()}graphicsLabel=$displayName${System.lineSeparator()}",
+                    Charsets.UTF_8)
+        }
     }
-    systemProperty("libfdx.sample.graphics", graphics)
-    systemProperty("libfdx.sample.graphicsLabel", graphicsLabel)
-    jvmArgs("-Dorg.lwjgl.system.stackSize=1048576")
-    if (JavaVersion.current().majorVersion.toInt() >= 22) {
-        jvmArgs("--enable-native-access=ALL-UNNAMED")
-    }
-}
-
-fun JavaExec.useJava25Launcher() {
-    javaLauncher.set(javaToolchains.launcherFor {
-        languageVersion.set(JavaLanguageVersion.of(25))
-    })
-    jvmArgs("--enable-native-access=ALL-UNNAMED")
-}
-
-fun registerDesktopSampleBuild(taskName: String, descriptionText: String, providerClasspath: FileCollection) {
-    tasks.register(taskName) {
+    val buildTask = tasks.register<Jar>("${taskBaseName}_build") {
         group = "application"
-        description = descriptionText
-        dependsOn("classes")
-        inputs.files(providerClasspath)
+        description = "Builds the basic desktop sample $displayName release jar."
+        dependsOn("classes", releaseClasspath, writeLaunchDefaults)
+        archiveFileName.set("$taskBaseName.jar")
+        destinationDirectory.set(desktopJvmDistDir)
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        isZip64 = true
+        manifest {
+            attributes(
+                    "Main-Class" to sampleMainClass,
+                    "Multi-Release" to "true",
+                    "Enable-Native-Access" to "ALL-UNNAMED")
+        }
+        exclude("META-INF/*.DSA", "META-INF/*.RSA", "META-INF/*.SF")
+        from({
+            releaseClasspath.files
+                    .filter { it.exists() }
+                    .map { if (it.isDirectory) it else zipTree(it) }
+        })
+        from(launchDefaults.map { it.asFile }) {
+            rename { "libfdx-desktop-launch.properties" }
+        }
+    }
+    tasks.register<JavaExec>("${taskBaseName}_run") {
+        group = "application"
+        description = "Runs the basic desktop sample with $displayName."
+        dependsOn(buildTask)
+        classpath = releaseClasspath
+        mainClass.set(sampleMainClass)
+        workingDir = rootProject.projectDir
+        javaLauncher.set(javaToolchains.launcherFor {
+            languageVersion.set(JavaLanguageVersion.of(25))
+        })
+        jvmArgs("-Dorg.lwjgl.system.stackSize=1048576", "--enable-native-access=ALL-UNNAMED")
+        systemProperty("libfdx.sample.graphics", providerName)
+        systemProperty("libfdx.sample.graphicsLabel", displayName)
+        System.getProperty("libfdx.sample.exitAfterFrames")?.takeIf { it.isNotBlank() }?.let { frames ->
+            systemProperty("libfdx.sample.exitAfterFrames", frames)
+        }
     }
 }
 
-registerDesktopSampleBuild(
-    "basic_desktop_gl_build",
-    "Builds the basic desktop sample runtime inputs for GL.",
-    glRuntimeClasspath
-)
-
-registerDesktopSampleBuild(
-    "basic_desktop_wgpu_build",
-    "Builds the basic desktop sample runtime inputs for WGPU.",
-    wgpuRuntimeClasspath
-)
-
-registerDesktopSampleBuild(
-    "basic_desktop_vulkan_build",
-    "Builds the basic desktop sample runtime inputs for Vulkan.",
-    vulkanRuntimeClasspath
-)
-
-tasks.register<JavaExec>("basic_desktop_wgpu_run") {
-    configureSampleRun("Runs the basic desktop sample with WGPU.", "wgpu", "WGPU", wgpuRuntimeClasspath)
-    dependsOn("basic_desktop_wgpu_build")
-    useJava25Launcher()
-}
-
-tasks.register<JavaExec>("basic_desktop_gl_run") {
-    configureSampleRun("Runs the basic desktop sample with GL.", "gl", "GL", glRuntimeClasspath)
-    dependsOn("basic_desktop_gl_build")
-    useJava25Launcher()
-}
-
-tasks.register<JavaExec>("basic_desktop_vulkan_run") {
-    configureSampleRun("Runs the basic desktop sample with Vulkan.", "vulkan", "Vulkan", vulkanRuntimeClasspath)
-    dependsOn("basic_desktop_vulkan_build")
-    useJava25Launcher()
-}
+registerDesktopSample("gl", "GL", glRuntimeClasspath)
+registerDesktopSample("wgpu", "WGPU", wgpuRuntimeClasspath)
+registerDesktopSample("vulkan", "Vulkan", vulkanRuntimeClasspath)
