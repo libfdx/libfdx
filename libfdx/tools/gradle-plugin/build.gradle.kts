@@ -8,32 +8,9 @@ plugins {
 
 LibExt.configure(rootProject.projectDir)
 
-repositories {
-    google()
-    mavenCentral()
-    gradlePluginPortal()
-    maven {
-        url = uri("http://teavm.org/maven/repository/")
-        isAllowInsecureProtocol = true
-    }
-}
-
 allprojects {
     group = LibExt.fdxGroup
     version = LibExt.fdxVersion
-
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-        maven {
-            url = uri("https://central.sonatype.com/repository/maven-snapshots/")
-        }
-        maven {
-            url = uri("http://teavm.org/maven/repository/")
-            isAllowInsecureProtocol = true
-        }
-    }
 }
 
 extra["libfdxPublishTarget"] = "GRADLE_PLUGIN"

@@ -4,15 +4,6 @@ plugins {
     id("java-library")
 }
 
-repositories {
-    google()
-    mavenCentral()
-    maven {
-        url = uri("http://teavm.org/maven/repository/")
-        isAllowInsecureProtocol = true
-    }
-}
-
 java {
     sourceCompatibility = JavaVersion.toVersion(25)
     targetCompatibility = JavaVersion.toVersion(25)
