@@ -40,13 +40,6 @@ jobs:
         with:
           arch: x64
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          add-job-summary: never
-          gradle-home-cache-excludes: |
-            caches/modules-*
-
       - name: Build runtime fdx Windows native
         run: .\gradlew.bat --refresh-dependencies :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_windows_native
 
@@ -69,13 +62,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 25
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          add-job-summary: never
-          gradle-home-cache-excludes: |
-            caches/modules-*
 
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
@@ -103,13 +89,6 @@ jobs:
           distribution: temurin
           java-version: 25
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          add-job-summary: never
-          gradle-home-cache-excludes: |
-            caches/modules-*
-
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
 
@@ -136,13 +115,6 @@ jobs:
           distribution: temurin
           java-version: 25
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          add-job-summary: never
-          gradle-home-cache-excludes: |
-            caches/modules-*
-
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
 
@@ -168,13 +140,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 25
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          add-job-summary: never
-          gradle-home-cache-excludes: |
-            caches/modules-*
 
       - name: Set up Emscripten
         uses: mymindstorm/setup-emsdk@v16
@@ -208,13 +173,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 25
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          add-job-summary: never
-          gradle-home-cache-excludes: |
-            caches/modules-*
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
@@ -268,13 +226,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 25
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          add-job-summary: never
-          gradle-home-cache-excludes: |
-            caches/modules-*
 
       - name: Read fdxVersion
         id: version
