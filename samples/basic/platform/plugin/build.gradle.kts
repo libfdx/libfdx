@@ -19,6 +19,7 @@ base {
 dependencies {
     implementation(project(":samples:basic:platform:desktop"))
     implementation(project(":samples:basic:platform:desktop_c"))
+    implementation(project(":samples:basic:platform:ios_c"))
     implementation(project(":samples:basic:platform:web"))
 
     if (LibExt.usePublishedLibfdx) {
@@ -109,6 +110,22 @@ libfdx {
             displayName.set("plugin-use basic desktop_c GL sample")
             mainClass.set("io.github.libfdx.samples.basic.desktopc.BasicDesktopCLauncher")
             targetFileName.set("libfdx-basic-gl-plugin-desktop-c")
+        }
+    }
+    iosC {
+        bundleIdentifier.set("io.github.libfdx.samples.basic.iosc")
+
+        target("gles") {
+            displayName.set("plugin-use basic iOS C GLES sample")
+            mainClass.set("io.github.libfdx.samples.basic.iosc.BasicIosCLauncher")
+            targetFileName.set("libfdx-basic-gles-ios-c")
+            graphicsApi.set("gles")
+        }
+        target("metal") {
+            displayName.set("plugin-use basic iOS C Metal sample")
+            mainClass.set("io.github.libfdx.samples.basic.iosc.BasicIosCMetalLauncher")
+            targetFileName.set("libfdx-basic-metal-ios-c")
+            graphicsApi.set("metal")
         }
     }
 }

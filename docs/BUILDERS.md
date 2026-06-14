@@ -83,10 +83,25 @@ The plugin target blocks are:
 - `psp { ... }`: creates TeaVM C PSP generate, build, and PPSSPP capture tasks.
   Add `target("name")` entries for public `libfdx_psp_<name>_generate`,
   `libfdx_psp_<name>_build`, and `libfdx_psp_<name>_ppsspp_capture` tasks.
+- `iosC { ... }`: creates TeaVM C iOS output and a generated Xcode project.
+  Add `target("name")` entries for public `libfdx_ios_c_<name>_generate`
+  tasks. The task writes C output, copied assets, native resources, Swift
+  sources, and an `.xcodeproj` under `build/dist/ios-c` by default. Open the
+  generated Xcode project on macOS with Xcode for simulator/device builds.
+  Each target may set `graphicsApi` to `gles` or `metal`. The `gles` value
+  writes a GLKit/OpenGLES project. The `metal` value writes a native
+  Metal/MetalKit project backed by libFDX's Metal provider and generated native
+  bridge.
 
-When one plugin-use module declares both `desktopC` and `psp`, the plugin
-selects the TeaVM C target from the requested target task. Do not request PSP
-and desktop-c target tasks from the same project in one Gradle invocation.
+The plugin does not add libFDX backend dependencies to a user project. A
+launcher module that configures `iosC` must still declare its own
+`implementation("io.github.libfdx:backend_ios_c:<version>")` dependency, just
+as desktop-c and PSP launchers declare their backend artifacts explicitly.
+
+When one plugin-use module declares multiple TeaVM C targets such as
+`desktopC`, `psp`, and `iosC`, the plugin selects the TeaVM C target from the
+requested target task. Do not request tasks from different TeaVM C target
+families in the same Gradle invocation.
 
 Example desktop JVM target:
 
@@ -106,6 +121,37 @@ libfdx {
 If one Gradle project declares multiple platform targets, keep desktop provider
 dependencies on the normal runtime classpath. The plugin packages
 `runtimeClasspath` into the desktop JVM release jars.
+
+Example iOS C target:
+
+```kotlin
+dependencies {
+    implementation("io.github.libfdx:backend_ios_c:$libfdxVersion")
+}
+
+libfdx {
+    iosC {
+        bundleIdentifier.set("com.example.game")
+        target("gles") {
+            mainClass.set("com.example.ios.GameIosCLauncher")
+            targetFileName.set("game-ios")
+            graphicsApi.set("gles")
+        }
+        target("metal") {
+            mainClass.set("com.example.ios.GameIosCMetalLauncher")
+            targetFileName.set("game-metal-ios")
+            graphicsApi.set("metal")
+        }
+    }
+}
+```
+
+Generate the Xcode handoff project with:
+
+```powershell
+.\gradlew.bat libfdx_ios_c_gles_generate
+.\gradlew.bat libfdx_ios_c_metal_generate
+```
 
 ## 3. Bitmap Font Tasks
 

@@ -78,6 +78,26 @@ public final class ShapeRenderer2D implements Disposable {
             "void main() {\n" +
             "    fragColor = v_color;\n" +
             "}\n";
+    private static final String SHAPE_MSL =
+            "#include <metal_stdlib>\n" +
+            "using namespace metal;\n" +
+            "struct VertexInput {\n" +
+            "    float2 position [[attribute(0)]];\n" +
+            "    float4 color [[attribute(1)]];\n" +
+            "};\n" +
+            "struct VertexOutput {\n" +
+            "    float4 position [[position]];\n" +
+            "    float4 color;\n" +
+            "};\n" +
+            "vertex VertexOutput vertexMain(VertexInput input [[stage_in]]) {\n" +
+            "    VertexOutput output;\n" +
+            "    output.position = float4(input.position, 0.0, 1.0);\n" +
+            "    output.color = input.color;\n" +
+            "    return output;\n" +
+            "}\n" +
+            "fragment float4 fragmentMain(VertexOutput input [[stage_in]]) {\n" +
+            "    return input.color;\n" +
+            "}\n";
     private static final int[] SHAPE_VERTEX_SPIRV = {
             0x07230203, 0x00010600, 0x00070000, 0x0000001f, 0x00000000, 0x00020011, 0x00000001, 0x0006000b,
             0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e, 0x00000000, 0x0003000e, 0x00000000, 0x00000001,
@@ -184,6 +204,7 @@ public final class ShapeRenderer2D implements Disposable {
         shader = graphicsSystem.device().createShaderModule(ShaderModuleDescriptor
                 .wgsl("shape renderer 2d", SHAPE_WGSL)
                 .glsl(SHAPE_VERTEX_GLSL, SHAPE_FRAGMENT_GLSL)
+                .msl(SHAPE_MSL)
                 .spirv(SHAPE_VERTEX_SPIRV, SHAPE_FRAGMENT_SPIRV));
         trianglePipeline = createPipeline(PrimitiveTopology.TRIANGLE_LIST, "shape renderer 2d triangles");
         linePipeline = createPipeline(PrimitiveTopology.LINE_LIST, "shape renderer 2d lines");

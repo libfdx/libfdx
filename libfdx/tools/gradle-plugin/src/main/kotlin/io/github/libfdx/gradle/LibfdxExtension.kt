@@ -60,6 +60,10 @@ open class LibfdxExtension @Inject constructor(
         objects.newInstance(LibfdxPspExtension::class.java, project, objects)
     }
 
+    val iosC: LibfdxIosCExtension by lazy {
+        objects.newInstance(LibfdxIosCExtension::class.java, project, objects)
+    }
+
     fun assets(vararg paths: Any) {
         assets.from(*paths)
     }
@@ -99,6 +103,11 @@ open class LibfdxExtension @Inject constructor(
     fun psp(action: Action<in LibfdxPspExtension>) {
         declaredTargets.add(LibfdxTarget.PSP)
         action.execute(psp)
+    }
+
+    fun iosC(action: Action<in LibfdxIosCExtension>) {
+        declaredTargets.add(LibfdxTarget.IOS_C)
+        action.execute(iosC)
     }
 
     internal fun isDeclared(target: LibfdxTarget): Boolean {
@@ -551,10 +560,72 @@ open class LibfdxPspTargetExtension @Inject constructor(
     }
 }
 
+open class LibfdxIosCExtension @Inject constructor(
+    project: Project,
+    objects: ObjectFactory
+) {
+    val outputDir: DirectoryProperty = objects.directoryProperty()
+        .convention(project.layout.buildDirectory.dir("dist/ios-c"))
+    val mainClass: Property<String> = objects.property(String::class.java)
+    val relativePathInOutputDir: Property<String> = objects.property(String::class.java).convention("c/src")
+    val optimization: Property<OptimizationLevel> = objects.property(OptimizationLevel::class.java)
+        .convention(OptimizationLevel.BALANCED)
+    val debugInformation: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val fastGlobalAnalysis: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val outOfProcess: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val processMemory: Property<Int> = objects.property(Int::class.javaObjectType).convention(512)
+    val targetFileName: Property<String> = objects.property(String::class.java).convention("app")
+    val releasePath: DirectoryProperty = objects.directoryProperty()
+        .convention(outputDir.map { it.dir("c/release") })
+    val xcodeProjectDir: DirectoryProperty = objects.directoryProperty()
+        .convention(outputDir.map { it.dir("xcode") })
+    val bundleIdentifier: Property<String> = objects.property(String::class.java)
+        .convention(project.providers.gradleProperty("libfdx.iosC.bundleIdentifier")
+            .orElse("io.github.libfdx.iosc.app"))
+    val graphicsApi: Property<String> = objects.property(String::class.java)
+        .convention(project.providers.gradleProperty("libfdx.iosC.graphicsApi")
+            .orElse("gles"))
+    val minHeapSize: Property<Int> = objects.property(Int::class.javaObjectType).convention(4)
+    val maxHeapSize: Property<Int> = objects.property(Int::class.javaObjectType).convention(128)
+    val heapDump: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val shortFileNames: Property<Boolean> = objects.property(Boolean::class.java).convention(true)
+    val obfuscated: Property<Boolean> = objects.property(Boolean::class.java).convention(true)
+    val targets: NamedDomainObjectContainer<LibfdxIosCTargetExtension> =
+        objects.domainObjectContainer(LibfdxIosCTargetExtension::class.java) { name ->
+            objects.newInstance(LibfdxIosCTargetExtension::class.java, name, objects)
+        }
+
+    fun target(name: String, action: Action<in LibfdxIosCTargetExtension>) {
+        targets.create(name, action)
+    }
+
+    internal fun generatedSourcesDir(): Provider<Directory> {
+        return outputDir.flatMap { output ->
+            relativePathInOutputDir.map { relativePath -> output.dir(relativePath) }
+        }
+    }
+}
+
+open class LibfdxIosCTargetExtension @Inject constructor(
+    private val targetName: String,
+    objects: ObjectFactory
+) : Named {
+    val mainClass: Property<String> = objects.property(String::class.java)
+    val targetFileName: Property<String> = objects.property(String::class.java).convention(targetName)
+    val displayName: Property<String> = objects.property(String::class.java).convention(targetName)
+    val bundleIdentifier: Property<String> = objects.property(String::class.java)
+    val graphicsApi: Property<String> = objects.property(String::class.java)
+
+    override fun getName(): String {
+        return targetName
+    }
+}
+
 internal enum class LibfdxTarget {
     JS,
     WASM,
     DESKTOP_JVM,
     DESKTOP_C,
+    IOS_C,
     PSP
 }

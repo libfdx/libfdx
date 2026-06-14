@@ -155,7 +155,23 @@ Use the task for the Android graphics stack you want:
 .\gradlew.bat :samples:basic:platform:android:basic_android_vulkan_fallback_run
 ```
 
-## 7. Basic Web Sample
+## 7. Basic iOS C Sample
+
+The iOS C sample generates TeaVM C output plus an Xcode project. The Gradle task
+can run on Windows, but building or running the generated iOS app requires
+macOS with Xcode.
+
+```powershell
+.\gradlew.bat :samples:basic:platform:ios_c:basic_ios_c_gles_generate
+.\gradlew.bat :samples:basic:platform:ios_c:basic_ios_c_metal_generate
+```
+
+The generated Xcode project is written under
+`samples/basic/platform/plugin/build/dist/ios-c/xcode`. The GLES task writes a
+GLKit/OpenGLES project. The Metal task writes a native Metal/MetalKit project
+that links system Apple frameworks and the generated libFDX native bridge.
+
+## 8. Basic Web Sample
 
 The basic web launchers live in `:samples:basic:platform:web`. The runtime web
 module exposes WebGL and WebGPU JavaScript/Wasm aliases:

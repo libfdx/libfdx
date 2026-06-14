@@ -15,6 +15,7 @@ public final class ShaderModuleDescriptor {
     private String glslFragmentSource;
     private int[] spirvVertexWords;
     private int[] spirvFragmentWords;
+    private String mslSource;
 
     /**
      * Creates a shader module descriptor.
@@ -58,6 +59,20 @@ public final class ShaderModuleDescriptor {
                 .label(label)
                 .language(ShaderLanguage.SPIRV)
                 .spirv(vertexWords, fragmentWords);
+    }
+
+    /**
+     * Creates a shader module descriptor.
+     *
+     * @param label the debug label
+     * @param source the source value
+     * @return a new shader module descriptor
+     */
+    public static ShaderModuleDescriptor msl(String label, String source) {
+        return new ShaderModuleDescriptor()
+                .label(label)
+                .language(ShaderLanguage.MSL)
+                .msl(source);
     }
 
     /**
@@ -217,6 +232,29 @@ public final class ShaderModuleDescriptor {
     }
 
     /**
+     * Sets the MSL and returns this shader module descriptor.
+     *
+     * @param source the source value
+     * @return this shader module descriptor for chaining
+     */
+    public ShaderModuleDescriptor msl(String source) {
+        if (source == null || source.length() == 0) {
+            throw new FdxException("MSL shader source cannot be empty");
+        }
+        this.mslSource = source;
+        return this;
+    }
+
+    /**
+     * Returns the MSL source.
+     *
+     * @return the MSL source
+     */
+    public String mslSource() {
+        return mslSource;
+    }
+
+    /**
      * Returns whether this instance has source.
      *
      * @param language the language
@@ -233,6 +271,9 @@ public final class ShaderModuleDescriptor {
         if (language == ShaderLanguage.SPIRV) {
             return spirvVertexWords != null && spirvVertexWords.length > 0
                     && spirvFragmentWords != null && spirvFragmentWords.length > 0;
+        }
+        if (language == ShaderLanguage.MSL) {
+            return mslSource != null && mslSource.length() > 0;
         }
         return false;
     }

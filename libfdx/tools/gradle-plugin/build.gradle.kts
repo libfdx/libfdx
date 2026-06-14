@@ -23,6 +23,7 @@ dependencies {
         implementation("${LibExt.fdxGroup}:tools_shader:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:backend_web:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:backend_desktop_c:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_ios_c:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:backend_psp:${LibExt.publishedLibfdxVersion}")
     } else {
         implementation(libs.teavm.tooling)
@@ -53,6 +54,7 @@ if (!LibExt.usePublishedLibfdx) {
                 "../../../libfdx/backends/c_shared/src/main/java",
                 "../../../libfdx/backends/web/src/main/java",
                 "../../../libfdx/backends/desktop_c/src/main/java",
+                "../../../libfdx/backends/ios_c/src/main/java",
                 "../../../libfdx/backends/psp/src/main/java"
             )
         }

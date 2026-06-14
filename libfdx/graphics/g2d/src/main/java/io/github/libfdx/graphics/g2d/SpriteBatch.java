@@ -119,6 +119,30 @@ public final class SpriteBatch implements Batch2D {
             "void main() {\n" +
             "    fragColor = texture(u_texture, v_texCoord) * v_color;\n" +
             "}\n";
+    private static final String SPRITE_MSL =
+            "#include <metal_stdlib>\n" +
+            "using namespace metal;\n" +
+            "struct VertexInput {\n" +
+            "    float2 position [[attribute(0)]];\n" +
+            "    float2 texCoord [[attribute(1)]];\n" +
+            "    float4 color [[attribute(2)]];\n" +
+            "};\n" +
+            "struct VertexOutput {\n" +
+            "    float4 position [[position]];\n" +
+            "    float2 texCoord;\n" +
+            "    float4 color;\n" +
+            "};\n" +
+            "vertex VertexOutput vertexMain(VertexInput input [[stage_in]]) {\n" +
+            "    VertexOutput output;\n" +
+            "    output.position = float4(input.position, 0.0, 1.0);\n" +
+            "    output.texCoord = input.texCoord;\n" +
+            "    output.color = input.color;\n" +
+            "    return output;\n" +
+            "}\n" +
+            "fragment float4 fragmentMain(VertexOutput input [[stage_in]],\n" +
+            "        texture2d<float> u_texture [[texture(0)]], sampler u_sampler [[sampler(0)]]) {\n" +
+            "    return u_texture.sample(u_sampler, input.texCoord) * input.color;\n" +
+            "}\n";
     private static final String WHITE_SPRITE_WGSL =
             "struct VertexInput {\n" +
             "    @location(0) position : vec2f,\n" +
@@ -157,6 +181,27 @@ public final class SpriteBatch implements Batch2D {
             "out vec4 fragColor;\n" +
             "void main() {\n" +
             "    fragColor = texture(u_texture, v_texCoord);\n" +
+            "}\n";
+    private static final String WHITE_SPRITE_MSL =
+            "#include <metal_stdlib>\n" +
+            "using namespace metal;\n" +
+            "struct VertexInput {\n" +
+            "    float2 position [[attribute(0)]];\n" +
+            "    float2 texCoord [[attribute(1)]];\n" +
+            "};\n" +
+            "struct VertexOutput {\n" +
+            "    float4 position [[position]];\n" +
+            "    float2 texCoord;\n" +
+            "};\n" +
+            "vertex VertexOutput vertexMain(VertexInput input [[stage_in]]) {\n" +
+            "    VertexOutput output;\n" +
+            "    output.position = float4(input.position, 0.0, 1.0);\n" +
+            "    output.texCoord = input.texCoord;\n" +
+            "    return output;\n" +
+            "}\n" +
+            "fragment float4 fragmentMain(VertexOutput input [[stage_in]],\n" +
+            "        texture2d<float> u_texture [[texture(0)]], sampler u_sampler [[sampler(0)]]) {\n" +
+            "    return u_texture.sample(u_sampler, input.texCoord);\n" +
             "}\n";
     private static final String INSTANCED_SPRITE_WGSL =
             "struct VertexInput {\n" +
@@ -602,6 +647,7 @@ public final class SpriteBatch implements Batch2D {
         shader = graphics.device().createShaderModule(ShaderModuleDescriptor
                 .wgsl("sprite batch", SPRITE_WGSL)
                 .glsl(SPRITE_VERTEX_GLSL, SPRITE_FRAGMENT_GLSL)
+                .msl(SPRITE_MSL)
                 .spirv(SPRITE_VERTEX_SPIRV, SPRITE_FRAGMENT_SPIRV));
         pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
                 .shader(shader, graphics.surfaceFormat())
@@ -614,7 +660,8 @@ public final class SpriteBatch implements Batch2D {
         if (supportsWhitePipeline(graphics)) {
             whiteShader = graphics.device().createShaderModule(ShaderModuleDescriptor
                     .wgsl("white sprite batch", WHITE_SPRITE_WGSL)
-                    .glsl(WHITE_SPRITE_VERTEX_GLSL, WHITE_SPRITE_FRAGMENT_GLSL));
+                    .glsl(WHITE_SPRITE_VERTEX_GLSL, WHITE_SPRITE_FRAGMENT_GLSL)
+                    .msl(WHITE_SPRITE_MSL));
             whitePipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
                     .shader(whiteShader, graphics.surfaceFormat())
                     .label("white sprite batch")
@@ -1424,7 +1471,7 @@ public final class SpriteBatch implements Batch2D {
     private boolean supportsIndexedSprites(GraphicsContext graphics) {
         String provider = graphics.providerId().value();
         return "gl".equals(provider) || "vulkan".equals(provider) || "wgpu".equals(provider)
-                || "webgl".equals(provider);
+                || "webgl".equals(provider) || "metal".equals(provider);
     }
 
     private boolean supportsInstancedSprites(GraphicsContext graphics) {
@@ -1584,4 +1631,3 @@ public final class SpriteBatch implements Batch2D {
         return disposed;
     }
 }
-

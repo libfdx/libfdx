@@ -164,6 +164,7 @@ repo-root/
       c_shared/
       desktop_c/
       psp/
+      ios_c/
       web/
       android/
       android_native/
@@ -203,6 +204,7 @@ repo-root/
         desktop_c/
         web/
         android/
+        ios_c/
 ```
 
 ## 4. Dependency Direction
@@ -1130,6 +1132,7 @@ Artifact IDs should include the implementation name unless the implementation is
 | `:libfdx:backends:c_shared` | `io.github.libfdx:backend_c_shared` | Flat shared C build and native resource support, including TeaVM build execution, shared builder errors, optimization settings, and classpath resources copied into generated native projects. It is not a parent folder for web or native backend modules. |
 | `:libfdx:backends:desktop_c` | `io.github.libfdx:backend_desktop_c` | Desktop backend for native runtime desktop targets. It owns GLFW window/lifecycle wiring, `NativeBuilder`, desktop-c project generation, and currently exposes `DesktopCOpenGLProvider` and `DesktopCVulkanProvider` while keeping graphics attached through the common `graphics/api` SPI. |
 | `:libfdx:backends:psp` | `io.github.libfdx:backend_psp` | PSP TeaVM C backend module. It owns `PspBuilder`, PSP project generation, PSP native import declarations, PSP native resource payloads, `PspApplicationBackend`, `PspApplicationConfig`, and the first constrained PSP common graphics API slice for clear, non-indexed SpriteBatch-style rendering, and RGBA8 power-of-two sampled textures. The current application backend exposes fixed 480x272 display metadata, `PspGraphicsContext`, read-only internal/classpath assets staged through `libfdx.assets` or `PspBuilder.asset(...)`, and PSP controls as one standard-mapped gamepad plus controller-backed portable key events for focus/navigation. Physical keyboard, pointer, touch, text input, cursor, writable files, audio, and broader graphics runtime behavior belong here only when implemented as PSP backend classes. |
+| `:libfdx:backends:ios_c` | `io.github.libfdx:backend_ios_c` | Experimental iOS TeaVM C backend module. It owns the iOS C application lifecycle bridge, generated Xcode project shell, Swift/GLKit and MetalKit view controller templates, iOS GLES and native Metal provider/API adapters, graphics API project selection, and generated asset/native-resource layout. The `metal` graphics option uses a native Metal command-encoder path with backend-provided MSL shaders for the supported common 2D graphics slice. Launcher modules must declare this backend as an explicit `implementation` dependency; the Gradle plugin configures TeaVM C and Xcode generation tasks but does not add runtime dependencies to user projects. The generated Xcode project is the handoff point for simulator/device builds on macOS with Xcode. |
 | `:libfdx:backends:web` | `io.github.libfdx:backend_web` | Default browser backend using TeaVM internally for canvas/display integration, browser input and text-editor bridging, browser lifecycle, `WebBuilder`, and webapp asset metadata generation. It supports JS and Wasm build targets through the libfdx Gradle plugin and should not hard-code one graphics, audio, or gamepad provider. |
 | `:libfdx:backends:android` | `io.github.libfdx:backend_android` | Default Android backend: activity/view integration, Android input/files, and mobile lifecycle. Graphics, audio, and gamepad providers should remain replaceable. |
 | `:libfdx:backends:android_native` | `io.github.libfdx:backend_android_native` | Android backend for native runtime Android targets if that runtime is supported. |
@@ -1142,7 +1145,7 @@ Additional backend implementations should be added as new flat variant folders o
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `libfdx/tools/gradle-plugin` included build | `io.github.libfdx:libfdx-gradle-plugin` | Gradle plugin for libfdx platform targets. It is intentionally an included build under `libfdx/tools`, not `buildSrc`, so this repository and external projects can consume the same plugin with `pluginManagement { includeBuild("<libfdx>/libfdx/tools/gradle-plugin") }`. The public plugin ID is `io.github.libfdx`, and external builds should configure it with one `libfdx { ... }` block. The target blocks are `desktopJvm`, `js`, `wasm`, `desktopC`, and `psp`. Inside this repository, plugin DSL usage is isolated to the dedicated `:samples:basic:platform:plugin` and `:tests:platform:plugin` modules. Runtime launcher modules stay focused on source sets, dependencies, and direct JVM/Android run tasks where no generated plugin target is required. |
+| `libfdx/tools/gradle-plugin` included build | `io.github.libfdx:libfdx-gradle-plugin` | Gradle plugin for libfdx platform targets. It is intentionally an included build under `libfdx/tools`, not `buildSrc`, so this repository and external projects can consume the same plugin with `pluginManagement { includeBuild("<libfdx>/libfdx/tools/gradle-plugin") }`. The public plugin ID is `io.github.libfdx`, and external builds should configure it with one `libfdx { ... }` block. The target blocks are `desktopJvm`, `js`, `wasm`, `desktopC`, `psp`, and `iosC`. Inside this repository, plugin DSL usage is isolated to the dedicated `:samples:basic:platform:plugin` and `:tests:platform:plugin` modules. Runtime launcher modules stay focused on source sets, dependencies, and direct JVM/Android run tasks where no generated plugin target is required. The plugin must not add backend `implementation` or `api` dependencies to user projects; platform launcher modules declare their own backend artifacts. |
 | `:libfdx:tools:font` | `io.github.libfdx:font_tools` | Build-time font tools. The current tool generates AngelCode BMFont-style `.fnt` metadata and PNG atlases from TTF files for platforms that should ship prebuilt bitmap fonts, such as PSP. It is a general libfdx tooling module, not a TeaVM backend module. |
 | `:libfdx:tools:shader` | `io.github.libfdx:tools_shader` | Build-time shader tools for WGSL profile validation and generated shader bundle reports. It depends on `graphics/api` for the public shader profile contract and does not pull a native shader compiler into runtime code. |
 | `:libfdx:tools:project-generator:core` | `io.github.libfdx:project_generator_core` | Project generator model, validation, template rendering, and in-memory generated project tree. It must not depend on desktop, web, UIKit, or filesystem APIs. |
@@ -1168,7 +1171,7 @@ Project-generator submodules are internal launch tooling in the first implementa
 | `:tests:platform:plugin` | internal | Dedicated test-side Gradle plugin DSL coverage module. It mirrors desktop JVM, web, desktop-c, and PSP test launch tasks through the libFDX Gradle plugin and must stay one module instead of splitting into platform-suffixed plugin folders. |
 | `:tests:platform:android_native` | internal | Android C runtime test runner when a C-backed Android backend exists. |
 | `:tests:platform:ios` | internal | iOS test runner. Dedicated Gradle tasks or platform build variants select iOS backend/provider variants when iOS support is available. |
-| `:tests:platform:ios_native` | internal | iOS C runtime test runner when a C-backed iOS backend exists. |
+| `:tests:platform:ios_native` | internal | Native iOS runtime test runner when that backend family exists. |
 
 ### 9.17. External Benchmark Repository
 
@@ -1186,10 +1189,11 @@ samples/<sample-name>/
     desktop_c/
     web/
     android/
+    ios_c/
     ios/
 ```
 
-The sample `core` module contains the shared sample application code. Platform modules are launchers/wiring modules only: they select the backend, platform packaging, and platform-specific configuration. Provider stacks such as JNI or FFM should be selected by dedicated Gradle tasks or platform build variants inside the platform sample module, not by adding more sample folders. A different backend/runtime family such as desktop C uses its own platform module because it has different compiler output and native build tasks. These modules should be created when the sample is created so every sample starts cross-platform by default.
+The sample `core` module contains the shared sample application code. Platform modules are launchers/wiring modules only: they select the backend, platform packaging, and platform-specific configuration. Provider stacks such as JNI or FFM should be selected by dedicated Gradle tasks or platform build variants inside the platform sample module, not by adding more sample folders. A different backend/runtime family such as desktop C or iOS C uses its own platform module because it has different compiler output and native build tasks. These modules should be created when the sample is created so every sample starts cross-platform by default.
 
 Required module shape for every sample:
 
@@ -1200,6 +1204,7 @@ Required module shape for every sample:
 | `:samples:<name>:platform:desktop_c` | desktop_c launcher for the sample. Depends on `<name>:core`, `backends/desktop_c`, and desktop_c provider/native-resource modules selected by Gradle. |
 | `:samples:<name>:platform:web` | Web launcher for the sample. Depends on `<name>:core`, one web backend implementation, and browser providers selected by Gradle. |
 | `:samples:<name>:platform:android` | Android launcher for the sample. Depends on `<name>:core`, one Android backend implementation, and Android provider stacks selected by Gradle. |
+| `:samples:<name>:platform:ios_c` | iOS TeaVM C launcher for the sample. Depends on `<name>:core` and `backends/ios_c`; Gradle plugin generation is owned by the plugin-use module and writes GLES/GLKit or native Metal/MetalKit Xcode handoff projects. |
 | `:samples:<name>:platform:ios` | iOS launcher for the sample. Depends on `<name>:core`, one iOS backend implementation, and iOS provider stacks selected by Gradle when iOS support is available. |
 
 Do not create stack-specific sample modules such as `samples/g2d/platform/desktop_jni` or nested sample folders for JNI/FFM. The sample platform module should stay stable while Gradle changes the selected provider stack.
@@ -1211,13 +1216,13 @@ plugin-use sample is explicitly needed.
 
 The internal `:tests:platform:plugin` module is the analogous test-side plugin
 DSL coverage module. It owns plugin-use test target tasks and should stay one module;
-do not split it into `plugin_web`, `plugin_desktop_c`, or `plugin_psp`
+do not split it into `plugin_web`, `plugin_desktop_c`, `plugin_psp`, or `plugin_ios_c`
 folders.
 
 Combined plugin-use modules may set `desktopJvm.runtimeClasspath(...)` to the
 desktop launcher dependency path. That keeps desktop JVM plugin tasks from
 loading web or TeaVM C runtime jars that are present only for the same module's
-web, desktop-c, or PSP plugin target tasks.
+web, desktop-c, PSP, or iOS C plugin target tasks.
 
 Planned sample families:
 
@@ -1321,6 +1326,7 @@ dependencies {
     implementation("io.github.libfdx:backend_desktop:$libfdxVersion")
     implementation("io.github.libfdx:backend_desktop_c:$libfdxVersion")
     implementation("io.github.libfdx:backend_psp:$libfdxVersion")
+    implementation("io.github.libfdx:backend_ios_c:$libfdxVersion")
     implementation("io.github.libfdx:backend_web:$libfdxVersion")
     implementation("io.github.libfdx:backend_android:$libfdxVersion")
     implementation("io.github.libfdx:backend_android_native:$libfdxVersion")
@@ -1346,6 +1352,7 @@ Sample modules are source examples, not artifacts that normal users should depen
 :samples:basic:platform:desktop_c
 :samples:basic:platform:web
 :samples:basic:platform:android
+:samples:basic:platform:ios_c
 :samples:basic:platform:plugin
 ```
 
@@ -1617,6 +1624,19 @@ dependencies {
 ```
 
 ```kotlin
+// :samples:basic:platform:ios_c
+dependencies {
+    implementation(project(":samples:basic:core"))
+
+    if (LibExt.usePublishedLibfdx) {
+        implementation("${LibExt.fdxGroup}:backend_ios_c:${LibExt.publishedLibfdxVersion}")
+    } else {
+        implementation(project(":libfdx:backends:ios_c"))
+    }
+}
+```
+
+```kotlin
 // :samples:basic:platform:web
 dependencies {
     implementation(project(":samples:basic:core"))
@@ -1858,6 +1878,8 @@ Desktop JVM basic sample runtime tasks start with the sample name and end with `
 
 Desktop C runtime sample and test modules keep Gradle minimal and do not apply the libFDX Gradle plugin or define local native build helper classes. Runtime modules may expose thin app-facing tasks such as `basic_desktop_c_opengl_generate_debug`, `basic_desktop_c_opengl_build_debug`, `test_desktop_c_opengl_generate_debug`, `test_desktop_c_opengl_build_debug`, `test_desktop_c_vulkan_generate_debug`, and `test_desktop_c_vulkan_build_debug` so contributors can run the C-backed desktop samples and tests from the platform modules. The single plugin-use modules own the actual plugin DSL generate/build/run implementation and expose plugin coverage tasks such as `libfdx_desktop_c_opengl_generate_debug`, `libfdx_desktop_c_opengl_build_debug`, `libfdx_desktop_c_vulkan_generate_debug`, and `libfdx_desktop_c_vulkan_build_debug`.
 
+iOS C runtime sample modules keep Gradle minimal and do not apply the libFDX Gradle plugin. Runtime modules may expose thin generation aliases such as `basic_ios_c_gles_generate` and `basic_ios_c_metal_generate`; the plugin-use module owns the actual `iosC { ... }` targets and emits the TeaVM C output plus generated Xcode project through tasks such as `libfdx_ios_c_gles_generate` and `libfdx_ios_c_metal_generate`. The `gles` target emits a GLKit/OpenGLES project. The `metal` target emits a native Metal/MetalKit project and links only system Apple frameworks plus the generated libFDX native bridge. The generated project is opened and built on macOS with Xcode for simulator/device validation; repository generation tasks do not invoke Xcode.
+
 Web runtime sample and test modules keep Gradle minimal and do not apply the libFDX Gradle plugin. They may expose thin app-facing aliases such as `basic_webgl_js_run`, `basic_webgpu_wasm_run`, `test_webgl_js_run`, and `test_webgpu_wasm_run`; the single plugin-use modules own the generated web build/server implementation.
 
 PSP platform test tasks live in `:tests:platform:psp` as the shared selector entrypoints `test_psp_generate`, `test_psp_build`, and `test_psp_ppsspp_capture`. The PSP module does not apply the libFDX Gradle plugin; those tasks are thin runtime entrypoints for the single plugin-use module's `test` PSP target. Build tasks execute the generated PSP build script and require a PSPDEV/psp-cmake toolchain on `PATH` or through `PSPDEV`. Because the Gradle plugin has one TeaVM C task, the plugin-use module selects the PSP plugin target only for requested PSP target tasks and otherwise defaults to desktop-c plugin tasks. On Windows, `PSPDEV` may be set to a Windows path; the generated `build.bat` converts it to a WSL path before invoking `build.sh`. PPSSPP capture tasks build the EBOOT, launch PPSSPP in windowed mode, wait `libfdx.psp.ppssppCaptureDelaySeconds`, and write a capture under `build/reports/ppsspp`. The emulator executable is resolved from `libfdx.psp.ppssppExecutable`, `PPSSPP_EXECUTABLE`, `PPSSPP_HOME`, `PATH`, standard Windows install locations, or the generated local `build/tools/ppsspp` directory. If no executable is found and `libfdx.psp.ppssppAutoDownload` is true, the task downloads the portable ZIP from `libfdx.psp.ppssppDownloadUrl` and extracts it into `build/tools/ppsspp`.
@@ -1992,6 +2014,9 @@ Class placement examples:
 | `PspProject` / `PspProjectWriter` | `:libfdx:backends:psp` | `io.github.libfdx.backend.psp` |
 | `PspApplicationBackend` / `PspApplicationConfig` | `:libfdx:backends:psp` | `io.github.libfdx.backend.psp` |
 | `PspGraphicsContext` | `:libfdx:backends:psp` | `io.github.libfdx.backend.psp` |
+| `IosCProject` / `IosCProjectWriter` | `:libfdx:backends:ios_c` | `io.github.libfdx.backend.iosc` |
+| `IosCApplicationBackend` / `IosCApplicationConfig` | `:libfdx:backends:ios_c` | `io.github.libfdx.backend.iosc` |
+| `IosCOpenGLESProvider` / `IosCMetalProvider` / `IosCGraphicsApi` | `:libfdx:backends:ios_c` | `io.github.libfdx.backend.iosc` |
 | `AndroidApplicationConfig` | `:libfdx:backends:android` | `io.github.libfdx.backend.android` |
 | `AndroidTextEditorStyle` | `:libfdx:backends:android` | `io.github.libfdx.backend.android` |
 

@@ -4,6 +4,9 @@ import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import io.github.libfdx.backend.desktopc.NativeProject
 import io.github.libfdx.backend.desktopc.NativeProjectWriter
+import io.github.libfdx.backend.iosc.IosCGraphicsApi
+import io.github.libfdx.backend.iosc.IosCProject
+import io.github.libfdx.backend.iosc.IosCProjectWriter
 import io.github.libfdx.backend.psp.PspProject
 import io.github.libfdx.backend.psp.PspProjectWriter
 import io.github.libfdx.backend.web.WebApp
@@ -316,6 +319,54 @@ abstract class LibfdxPspProjectTask : DefaultTask() {
                 .releaseDirectory(releaseDir.get().asFile.toPath())
                 .projectName(projectName.get())
                 .debugMemory(debugMemory.get())
+                .nativeResourceClasspath(nativeResourceClasspath.files.map { it.toPath() })
+                .assets(assets.files.map { it.toPath() })
+                .build()
+        )
+    }
+}
+
+abstract class LibfdxIosCProjectTask : DefaultTask() {
+    @get:OutputDirectory
+    abstract val buildRoot: DirectoryProperty
+
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val generatedSourcesDir: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val releaseDir: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val xcodeProjectDir: DirectoryProperty
+
+    @get:Input
+    abstract val projectName: Property<String>
+
+    @get:Input
+    abstract val bundleIdentifier: Property<String>
+
+    @get:Input
+    abstract val graphicsApi: Property<String>
+
+    @get:Classpath
+    abstract val nativeResourceClasspath: ConfigurableFileCollection
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val assets: ConfigurableFileCollection
+
+    @TaskAction
+    fun writeProject() {
+        IosCProjectWriter.write(
+            IosCProject.builder()
+                .buildRoot(buildRoot.get().asFile.toPath())
+                .generatedSourcesDirectory(generatedSourcesDir.get().asFile.toPath())
+                .releaseDirectory(releaseDir.get().asFile.toPath())
+                .xcodeProjectDirectory(xcodeProjectDir.get().asFile.toPath())
+                .projectName(projectName.get())
+                .bundleIdentifier(bundleIdentifier.get())
+                .graphicsApi(IosCGraphicsApi.fromId(graphicsApi.get()))
                 .nativeResourceClasspath(nativeResourceClasspath.files.map { it.toPath() })
                 .assets(assets.files.map { it.toPath() })
                 .build()

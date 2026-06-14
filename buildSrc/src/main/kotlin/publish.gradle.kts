@@ -70,6 +70,7 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:extensions:graphics:wgpu:platform:web",
     ":libfdx:backends:desktop",
     ":libfdx:backends:desktop_c",
+    ":libfdx:backends:ios_c",
     ":libfdx:backends:psp",
     ":libfdx:backends:android",
     ":libfdx:backends:web",

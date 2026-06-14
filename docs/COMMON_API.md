@@ -750,6 +750,7 @@ Rules:
 - Web backends may not support blocking file APIs for every storage location.
 - Browser internal/classpath assets declared through Gradle `libfdx.assets` or standalone `backend_web` `WebBuilder` assets are copied into generated webapp assets, preloaded by the generated page, and exposed through `fdx.files().internal(...)`.
 - PSP internal/classpath assets declared through Gradle `libfdx.assets` or standalone `backend_psp` `PspBuilder.asset(...)` are copied into the generated PSP release layout and exposed through read-only `fdx.files().internal(...)` handles.
+- iOS C internal/classpath assets declared through Gradle `libfdx.assets` are copied into the generated Xcode project asset bundle and exposed through read-only `fdx.files().internal(...)` handles.
 - Asset loading should be designed so web implementations can be async.
 - In `WebApplicationConfig`, a display width or height of `0` or a negative value means the canvas fills the browser window.
 - Platform-specific native file handles should be reachable only through provider/backend-specific APIs.

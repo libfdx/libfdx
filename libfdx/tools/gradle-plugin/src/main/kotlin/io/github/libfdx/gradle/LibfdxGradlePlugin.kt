@@ -65,6 +65,9 @@ class LibfdxGradlePlugin : Plugin<Project> {
                     if(graphNativeTarget == LibfdxTarget.PSP) {
                         configurePsp(project, extension, taskGraphTasks)
                     }
+                    if(graphNativeTarget == LibfdxTarget.IOS_C) {
+                        configureIosC(project, extension, taskGraphTasks)
+                    }
                 }
             })
         }
@@ -86,6 +89,9 @@ class LibfdxGradlePlugin : Plugin<Project> {
         if(nativeTarget == LibfdxTarget.PSP) {
             configurePsp(project, extension, requestedTasks)
         }
+        if(nativeTarget == LibfdxTarget.IOS_C) {
+            configureIosC(project, extension, requestedTasks)
+        }
     }
 
     private fun validateNativeCTargets(
@@ -93,10 +99,12 @@ class LibfdxGradlePlugin : Plugin<Project> {
         nativeTarget: LibfdxTarget?,
         requestedTasks: Set<String>
     ) {
-        val nativeTargets = listOf(LibfdxTarget.DESKTOP_C, LibfdxTarget.PSP)
+        val nativeTargets = listOf(LibfdxTarget.DESKTOP_C, LibfdxTarget.PSP, LibfdxTarget.IOS_C)
             .filter { extension.isDeclared(it) }
         if(nativeTargets.size > 1 && nativeTarget == null) {
-            throw GradleException("Declare only one libfdx TeaVM C target in a project for now: desktopC or psp.")
+            throw GradleException(
+                "Declare only one libfdx TeaVM C target in a project for now: desktopC, psp, or iosC."
+            )
         }
         val requestedPspTargets = selectedPspTargets(extension, requestedTasks)
         if(requestedPspTargets.size > 1) {
@@ -109,39 +117,65 @@ class LibfdxGradlePlugin : Plugin<Project> {
                         + requestedDesktopCTargets.map { it.name }
             )
         }
-        if(wantsPspTarget(extension, requestedTasks) && wantsDesktopCTarget(extension, requestedTasks)) {
-            throw GradleException("Run desktop_c and PSP plugin tasks in separate Gradle invocations.")
+        val requestedIosCTargets = selectedIosCTargets(extension, requestedTasks)
+        if(requestedIosCTargets.size > 1) {
+            throw GradleException("Run ios_c plugin targets in separate Gradle invocations: "
+                    + requestedIosCTargets.map { it.name })
+        }
+        val requestedNativeKinds = listOf(
+            wantsDesktopCTarget(extension, requestedTasks),
+            wantsPspTarget(extension, requestedTasks),
+            wantsIosCTarget(extension, requestedTasks)
+        ).count { it }
+        if(requestedNativeKinds > 1) {
+            throw GradleException("Run desktop_c, PSP, and ios_c plugin tasks in separate Gradle invocations.")
         }
     }
 
     private fun selectedNativeTarget(extension: LibfdxExtension, requestedTasks: Set<String>): LibfdxTarget? {
         val desktopCDeclared = extension.isDeclared(LibfdxTarget.DESKTOP_C)
         val pspDeclared = extension.isDeclared(LibfdxTarget.PSP)
+        val iosCDeclared = extension.isDeclared(LibfdxTarget.IOS_C)
         val wantsDesktopC = wantsDesktopCTarget(extension, requestedTasks)
         val wantsPsp = wantsPspTarget(extension, requestedTasks)
+        val wantsIosC = wantsIosCTarget(extension, requestedTasks)
         if(wantsDesktopC && desktopCDeclared) {
             return LibfdxTarget.DESKTOP_C
         }
         if(wantsPsp && pspDeclared) {
             return LibfdxTarget.PSP
         }
+        if(wantsIosC && iosCDeclared) {
+            return LibfdxTarget.IOS_C
+        }
         return when {
             desktopCDeclared -> LibfdxTarget.DESKTOP_C
             pspDeclared -> LibfdxTarget.PSP
+            iosCDeclared -> LibfdxTarget.IOS_C
             else -> null
         }
     }
 
     private fun wantsDesktopCTarget(extension: LibfdxExtension, requestedTasks: Set<String>): Boolean {
-        return requestedTasks.any { it.startsWith("libfdx_desktop_c_") }
+        return requestedTasks.any { taskName(it).startsWith("libfdx_desktop_c_") }
             || extension.desktopC.targets.any { target ->
-                desktopCTargetTaskNames(target.name).any(requestedTasks::contains)
+                desktopCTargetTaskNames(target.name).any { task -> taskRequested(requestedTasks, task) }
             }
     }
 
     private fun wantsPspTarget(extension: LibfdxExtension, requestedTasks: Set<String>): Boolean {
-        return requestedTasks.any { it.startsWith("libfdx_psp_") }
-            || extension.psp.targets.any { target -> pspTargetTaskNames(target.name).any(requestedTasks::contains) }
+        return requestedTasks.any { taskName(it).startsWith("libfdx_psp_") }
+            || extension.psp.targets.any { target ->
+                pspTargetTaskNames(target.name).any { task -> taskRequested(requestedTasks, task) }
+            }
+    }
+
+    private fun wantsIosCTarget(extension: LibfdxExtension, requestedTasks: Set<String>): Boolean {
+        return requestedTasks.any { taskName(it).startsWith("libfdx_ios_c_") }
+            || extension.iosC.targets.any { target ->
+                iosCTargetTaskNames(target.name).any { task -> taskRequested(requestedTasks, task) }
+                    || iosCAliasTaskRequested(requestedTasks, target.name)
+            }
     }
 
     private fun selectedPspTargets(
@@ -149,7 +183,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
         requestedTasks: Set<String>
     ): List<LibfdxPspTargetExtension> {
         return extension.psp.targets.filter { target ->
-            pspTargetTaskNames(target.name).any(requestedTasks::contains)
+            pspTargetTaskNames(target.name).any { task -> taskRequested(requestedTasks, task) }
         }
     }
 
@@ -158,8 +192,34 @@ class LibfdxGradlePlugin : Plugin<Project> {
         requestedTasks: Set<String>
     ): List<LibfdxDesktopCTargetExtension> {
         return extension.desktopC.targets.filter { target ->
-            desktopCTargetTaskNames(target.name).any(requestedTasks::contains)
+            desktopCTargetTaskNames(target.name).any { task -> taskRequested(requestedTasks, task) }
         }
+    }
+
+    private fun selectedIosCTargets(
+        extension: LibfdxExtension,
+        requestedTasks: Set<String>
+    ): List<LibfdxIosCTargetExtension> {
+        return extension.iosC.targets.filter { target ->
+            iosCTargetTaskNames(target.name).any { task -> taskRequested(requestedTasks, task) }
+                || iosCAliasTaskRequested(requestedTasks, target.name)
+        }
+    }
+
+    private fun taskRequested(requestedTasks: Set<String>, expectedTaskName: String): Boolean {
+        return requestedTasks.any { requested ->
+            val name = taskName(requested)
+            name == expectedTaskName
+        }
+    }
+
+    private fun iosCAliasTaskRequested(requestedTasks: Set<String>, targetName: String): Boolean {
+        val suffix = "ios_c_${safeTaskName(targetName)}_generate"
+        return requestedTasks.any { requested -> taskName(requested).endsWith(suffix) }
+    }
+
+    private fun taskName(taskPath: String): String {
+        return taskPath.substringAfterLast(':')
     }
 
     private fun selectedDesktopCTarget(
@@ -182,6 +242,17 @@ class LibfdxGradlePlugin : Plugin<Project> {
             return selected.first()
         }
         return extension.psp.targets.firstOrNull()
+    }
+
+    private fun selectedIosCTarget(
+        extension: LibfdxExtension,
+        requestedTasks: Set<String>
+    ): LibfdxIosCTargetExtension? {
+        val selected = selectedIosCTargets(extension, requestedTasks)
+        if(selected.isNotEmpty()) {
+            return selected.first()
+        }
+        return extension.iosC.targets.firstOrNull()
     }
 
     private fun requestedTaskNames(project: Project): Set<String> {
@@ -217,6 +288,11 @@ class LibfdxGradlePlugin : Plugin<Project> {
             "${prefix}_build",
             "${prefix}_ppsspp_capture"
         )
+    }
+
+    private fun iosCTargetTaskNames(targetName: String): List<String> {
+        val prefix = targetTaskBase("libfdx_ios_c", targetName)
+        return listOf("${prefix}_generate")
     }
 
     private fun configureWebAssets(extension: LibfdxExtension) {
@@ -271,6 +347,30 @@ class LibfdxGradlePlugin : Plugin<Project> {
         }
     }
 
+    private fun configureIosC(project: Project, extension: LibfdxExtension, requestedTasks: Set<String>) {
+        val iosC = extension.iosC
+        selectedIosCTarget(extension, requestedTasks)?.let { target ->
+            if(!target.mainClass.isPresent && !iosC.mainClass.isPresent) {
+                throw GradleException("iosC target '${target.name}' must declare mainClass.")
+            }
+            if(target.mainClass.isPresent) {
+                iosC.mainClass.set(target.mainClass)
+            }
+            if(target.bundleIdentifier.isPresent) {
+                iosC.bundleIdentifier.set(target.bundleIdentifier)
+            }
+            if(target.graphicsApi.isPresent) {
+                iosC.graphicsApi.set(target.graphicsApi)
+            }
+            iosC.targetFileName.set(target.targetFileName)
+        }
+        applyIosCConfig(extension.cConfig, iosC)
+        project.tasks.named(TeaVMPlugin.C_TASK_NAME, GenerateCTask::class.java).configure {
+            targetFileName.set(iosC.targetFileName)
+            properties.put("libfdx.native.backend", "ios_c")
+        }
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun applyDesktopCConfig(cConfig: TeaVMCConfiguration, desktopC: LibfdxDesktopCExtension) {
         cConfig.outputDir.set(desktopC.outputDir)
@@ -306,6 +406,23 @@ class LibfdxGradlePlugin : Plugin<Project> {
         (cConfig.obfuscated as org.gradle.api.provider.Property<Boolean>).set(psp.obfuscated)
     }
 
+    @Suppress("UNCHECKED_CAST")
+    private fun applyIosCConfig(cConfig: TeaVMCConfiguration, iosC: LibfdxIosCExtension) {
+        cConfig.outputDir.set(iosC.outputDir)
+        (cConfig.mainClass as org.gradle.api.provider.Property<String>).set(iosC.mainClass)
+        (cConfig.relativePathInOutputDir as org.gradle.api.provider.Property<String>).set(iosC.relativePathInOutputDir)
+        (cConfig.optimization as org.gradle.api.provider.Property<OptimizationLevel>).set(iosC.optimization)
+        (cConfig.debugInformation as org.gradle.api.provider.Property<Boolean>).set(iosC.debugInformation)
+        (cConfig.fastGlobalAnalysis as org.gradle.api.provider.Property<Boolean>).set(iosC.fastGlobalAnalysis)
+        (cConfig.outOfProcess as org.gradle.api.provider.Property<Boolean>).set(iosC.outOfProcess)
+        (cConfig.processMemory as org.gradle.api.provider.Property<Int>).set(iosC.processMemory)
+        (cConfig.minHeapSize as org.gradle.api.provider.Property<Int>).set(iosC.minHeapSize)
+        (cConfig.maxHeapSize as org.gradle.api.provider.Property<Int>).set(iosC.maxHeapSize)
+        (cConfig.heapDump as org.gradle.api.provider.Property<Boolean>).set(iosC.heapDump)
+        (cConfig.shortFileNames as org.gradle.api.provider.Property<Boolean>).set(iosC.shortFileNames)
+        (cConfig.obfuscated as org.gradle.api.provider.Property<Boolean>).set(iosC.obfuscated)
+    }
+
     private fun registerTasks(project: Project, extension: LibfdxExtension) {
         if(extension.isDeclared(LibfdxTarget.JS)) {
             registerJsTasks(project, extension)
@@ -323,6 +440,10 @@ class LibfdxGradlePlugin : Plugin<Project> {
         if(extension.isDeclared(LibfdxTarget.PSP)) {
             registerPspTargetTasks(project, extension)
             registerPspTasks(project, extension)
+        }
+        if(extension.isDeclared(LibfdxTarget.IOS_C)) {
+            registerIosCTargetTasks(project, extension)
+            registerIosCTasks(project, extension)
         }
     }
 
@@ -785,6 +906,41 @@ class LibfdxGradlePlugin : Plugin<Project> {
             captureFile.set(project.layout.buildDirectory.file(extension.psp.targetFileName.map { name ->
                 "reports/ppsspp/$name.png"
             }))
+        }
+    }
+
+    private fun registerIosCTasks(project: Project, extension: LibfdxExtension) {
+        val sourceSets = project.extensions.getByType<SourceSetContainer>()
+        val runtimeClasspath = sourceSets.getByName("main").runtimeClasspath
+        val hasTargets = extension.iosC.targets.isNotEmpty()
+        project.tasks.register<LibfdxIosCProjectTask>(
+            internalTaskName("libfdx_ios_c_generate", hasTargets)
+        ) {
+            group = if(hasTargets) null else TASK_GROUP
+            description = "Generate the libfdx iOS C TeaVM and Xcode project."
+            dependsOn(project.tasks.named(TeaVMPlugin.C_TASK_NAME))
+            buildRoot.set(extension.iosC.outputDir)
+            generatedSourcesDir.set(extension.iosC.generatedSourcesDir())
+            releaseDir.set(extension.iosC.releasePath)
+            xcodeProjectDir.set(extension.iosC.xcodeProjectDir)
+            projectName.set(extension.iosC.targetFileName)
+            bundleIdentifier.set(extension.iosC.bundleIdentifier)
+            graphicsApi.set(extension.iosC.graphicsApi)
+            nativeResourceClasspath.from(runtimeClasspath)
+            assets.from(extension.assets)
+        }
+    }
+
+    private fun registerIosCTargetTasks(project: Project, extension: LibfdxExtension) {
+        extension.iosC.targets.forEach { target ->
+            val label = target.displayName.get()
+            val taskBaseName = targetTaskBase("libfdx_ios_c", target.name)
+            val generate = internalTaskName("libfdx_ios_c_generate", true)
+            project.tasks.register("${taskBaseName}_generate") {
+                group = TASK_GROUP
+                description = "Generates the $label iOS C TeaVM and Xcode project."
+                dependsOn(generate)
+            }
         }
     }
 
