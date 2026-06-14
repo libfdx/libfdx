@@ -21,6 +21,7 @@ dependencies {
     implementation(libs.jwebgpu.web)
     implementation(libs.jwebgpu.web.wasm)
     implementation(libs.jmultiplatform)
+    implementation(libs.teavm.extension.spi)
     implementation(libs.teavm.jso)
     implementation(libs.teavm.jso.apis)
     implementation(libs.teavm.jso.impl)
