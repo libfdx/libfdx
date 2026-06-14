@@ -54,12 +54,27 @@ published libFDX artifacts. This is controlled by the development block in
 
 ```toml
 [development]
-usePublishedLibfdx = true
+usePublishedLibfdx = false
 publishedLibfdxVersion = "-SNAPSHOT"
 ```
 
-This TOML default lets users run tests and samples against artifacts that already
-exist in Maven repositories. In this mode, the dedicated plugin-use modules can
+This TOML default makes a clean checkout compile and exercise the local
+`:libfdx:*` project dependencies and the local `libfdx/tools/gradle-plugin`
+build. That is the expected mode for repository development and CI because
+task wiring, samples, and tests must match the source that was checked out.
+Runtime launcher modules use explicit Gradle tasks and standalone builders
+instead of applying the plugin. The included plugin build must stay isolated to
+the plugin project; it must not include or remap root `:libfdx:*` source modules
+under the plugin build id.
+
+Use ignored `local.properties` overrides when checking published artifacts:
+
+```properties
+development.usePublishedLibfdx=true
+development.publishedLibfdxVersion=-SNAPSHOT
+```
+
+With `development.usePublishedLibfdx=true`, the dedicated plugin-use modules
 resolve the libFDX Gradle plugin from Maven, and consumers resolve libFDX
 dependencies as published coordinates such as
 `<fdxGroup>:<artifact>:<publishedLibfdxVersion>`. This avoids rebuilding local
@@ -67,23 +82,8 @@ libFDX modules when the goal is to check consumers against a released or
 snapshot build. Settings still includes the local `:libfdx:*` source modules;
 the Maven-vs-local choice is made in each consumer dependency block.
 Builder-backed web tasks use local generated runtime fdx web resources only
-when that consumer uses local `:libfdx:*` project dependencies.
-
-Use ignored `local.properties` overrides when developing libFDX itself:
-
-```properties
-development.usePublishedLibfdx=false
-development.publishedLibfdxVersion=-SNAPSHOT
-```
-
-With `development.usePublishedLibfdx=false`, settings includes the local
-`libfdx/tools/gradle-plugin` build for the plugin-use modules, and tests and
-samples compile and exercise local `:libfdx:*` project dependencies from the
-current checkout. Runtime launcher modules use explicit Gradle tasks and
-standalone builders instead of applying the plugin. The included plugin build
-must stay isolated to the plugin project; it must not include or remap root
-`:libfdx:*` source modules under the plugin build id. Delete the local override
-keys to use the `libfdx.toml` defaults again.
+when that consumer uses local `:libfdx:*` project dependencies. Delete the local
+override keys to use the `libfdx.toml` defaults again.
 
 To switch modes for one checkout, edit `local.properties` before running the
 launcher or validation task. Gradle `-P` overrides are not supported for libFDX
