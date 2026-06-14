@@ -44,6 +44,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           add-job-summary: never
+          gradle-home-cache-excludes: |
+            caches/modules-*
 
       - name: Build runtime fdx Windows native
         run: .\gradlew.bat --refresh-dependencies :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_windows_native
@@ -72,6 +74,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           add-job-summary: never
+          gradle-home-cache-excludes: |
+            caches/modules-*
 
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
@@ -103,6 +107,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           add-job-summary: never
+          gradle-home-cache-excludes: |
+            caches/modules-*
 
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
@@ -134,6 +140,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           add-job-summary: never
+          gradle-home-cache-excludes: |
+            caches/modules-*
 
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
@@ -165,6 +173,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           add-job-summary: never
+          gradle-home-cache-excludes: |
+            caches/modules-*
 
       - name: Set up Emscripten
         uses: mymindstorm/setup-emsdk@v16
@@ -203,6 +213,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           add-job-summary: never
+          gradle-home-cache-excludes: |
+            caches/modules-*
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
@@ -261,6 +273,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           add-job-summary: never
+          gradle-home-cache-excludes: |
+            caches/modules-*
 
       - name: Read fdxVersion
         id: version
