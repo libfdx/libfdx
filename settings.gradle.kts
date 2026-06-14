@@ -59,9 +59,6 @@ pluginManagement {
             url = uri("https://central.sonatype.com/repository/maven-snapshots/")
         }
         gradlePluginPortal()
-        maven {
-            url = uri("https://teavm.org/maven/repository/")
-        }
     }
 }
 

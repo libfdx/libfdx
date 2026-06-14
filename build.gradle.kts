@@ -16,9 +16,6 @@ allprojects {
         maven {
             url = uri("https://central.sonatype.com/repository/maven-snapshots/")
         }
-        maven {
-            url = uri("https://teavm.org/maven/repository/")
-        }
     }
 
     configurations.configureEach {
