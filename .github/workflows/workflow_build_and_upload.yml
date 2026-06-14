@@ -46,7 +46,7 @@ jobs:
           add-job-summary: never
 
       - name: Build runtime fdx Windows native
-        run: .\gradlew.bat :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_windows_native
+        run: .\gradlew.bat --refresh-dependencies :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_windows_native
 
       - name: Upload runtime fdx Windows native
         uses: actions/upload-artifact@v7
@@ -77,7 +77,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build runtime fdx Linux native
-        run: ./gradlew :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_linux_native
+        run: ./gradlew --refresh-dependencies :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_linux_native
 
       - name: Upload runtime fdx Linux native
         uses: actions/upload-artifact@v7
@@ -108,7 +108,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build runtime fdx macOS x64 native
-        run: ./gradlew :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native
+        run: ./gradlew --refresh-dependencies :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native
 
       - name: Upload runtime fdx macOS x64 native
         uses: actions/upload-artifact@v7
@@ -139,7 +139,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build runtime fdx macOS arm64 native
-        run: ./gradlew :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native
+        run: ./gradlew --refresh-dependencies :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native
 
       - name: Upload runtime fdx macOS arm64 native
         uses: actions/upload-artifact@v7
@@ -175,7 +175,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build runtime fdx web natives
-        run: ./gradlew :libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native
+        run: ./gradlew --refresh-dependencies :libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native
 
       - name: Upload runtime fdx web natives
         uses: actions/upload-artifact@v7
@@ -220,7 +220,7 @@ jobs:
 
       - name: Build Android native artifacts
         run: |
-          ./gradlew \
+          ./gradlew --refresh-dependencies \
             :libfdx:runtime:fdx:platform:android:assembleRelease \
             :libfdx:backends:android:assembleRelease \
             :libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease \
@@ -267,7 +267,7 @@ jobs:
         shell: bash
         run: |
           chmod +x ./gradlew
-          value="$(./gradlew -q printFdxVersion | grep -E '^[0-9]+(\.[0-9]+)*([.-][A-Za-z0-9]+)*$' | tail -n 1)"
+          value="$(./gradlew --refresh-dependencies -q printFdxVersion | grep -E '^[0-9]+(\.[0-9]+)*([.-][A-Za-z0-9]+)*$' | tail -n 1)"
           if [ -z "$value" ]; then
             echo "Could not read fdxVersion from Gradle output"
             exit 1
@@ -362,7 +362,7 @@ jobs:
         env:
           SIGNING_KEY: ${{ secrets.PGP_SECRET }}
           SIGNING_PASSWORD: ${{ secrets.PGP_PASSPHRASE }}
-        run: ./gradlew prepareReleaseDeploy
+        run: ./gradlew --refresh-dependencies prepareReleaseDeploy
 
       - name: Upload release deploy files artifact
         uses: actions/upload-artifact@v7
@@ -384,11 +384,11 @@ jobs:
           max_attempts: 6
           timeout_minutes: 20
           retry_on: error
-          command: ./gradlew publishRelease
+          command: ./gradlew --refresh-dependencies publishRelease
 
       - name: Prepare snapshot deploy files
         if: ${{ !inputs.isRelease }}
-        run: ./gradlew prepareSnapshotDeploy
+        run: ./gradlew --refresh-dependencies prepareSnapshotDeploy
 
       - name: Upload snapshot deploy files artifact
         uses: actions/upload-artifact@v7
@@ -404,7 +404,7 @@ jobs:
           max_attempts: 6
           timeout_minutes: 20
           retry_on: error
-          command: ./gradlew publishSnapshot
+          command: ./gradlew --refresh-dependencies publishSnapshot
 
       - name: Create Git tag
         uses: actions/github-script@v9
