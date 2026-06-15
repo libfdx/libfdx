@@ -2,7 +2,7 @@
 
 This document defines the provider-neutral public API contracts for libfdx-owned modules.
 
-Use this document to decide what a common API type means, what module owns it, and what behavior provider implementations must support. Use [ARCHITECTURE.md](ARCHITECTURE.md) to decide folder layout, Gradle module names, Maven artifact names, dependency direction, and package roots.
+Use this document to decide what a common API type means, what module owns it, and what behavior provider implementations must support. Use [ARCHITECTURE.md](ARCHITECTURE.md) to decide folder layout, Gradle module names, Maven artifact names, dependency direction, and package roots. Use [SHADERS.md](SHADERS.md) for the WGSL-first shader architecture, generated bundle flow, and optional editor/runtime compiler model.
 
 ## Index
 
@@ -244,7 +244,7 @@ Defined types:
 | `Disposable` | Common cleanup contract for resources with explicit lifetime. |
 | `FdxService` | Internal marker available for backend/provider wiring code when a backend keeps an implementation registry. It is not part of the user-facing runtime access model. |
 | `FdxException` | Base framework exception. |
-| `Logger` | Logging facade independent from a concrete logging implementation. |
+| `Logger` | Logging API independent from a concrete logging implementation. |
 | `ProviderId` | Stable logical provider identity, such as `wgpu`, `vulkan`, or `miniaudio`. |
 | `ProviderHandle` | Escape hatch contract for provider-backed common handles. |
 | `FdxFuture<T>` | Framework async result type for portable async operations across desktop, web, Android, iOS, and C-backed targets. |
@@ -329,7 +329,7 @@ Rules:
 - The initial `FdxFuture<T>` contract has no cancellation API. Cancellation can be added later through a separate type or explicit operation-specific method.
 - `FdxService` is reserved for private backend/provider wiring when an implementation keeps an internal registry. It is not a signal that user code should resolve a type generically.
 - Provider and backend factory contracts should not implement `FdxService`.
-- `Logger` is returned by `Fdx.logger()` so applications and framework modules can share the same logging facade.
+- `Logger` is returned by `Fdx.logger()` so applications and framework modules can share the same logging API.
 - `ProviderId` equality is value-based. Two `ProviderId` instances with the same `value()` must compare equal and have the same hash code.
 - Provider ID values should be stable lowercase identifiers such as `wgpu`, `vulkan`, `miniaudio`, or `desktop_gamepads`.
 
@@ -386,7 +386,7 @@ Defined types:
 
 | Type | Role |
 | --- | --- |
-| `Json` | Convenience facade for reading/writing JSON and using registered manual codecs. |
+| `Json` | Convenience API for reading/writing JSON and using registered manual codecs. |
 | `JsonReader` | Strict JSON parser from `String` or UTF-8 bytes into `JsonValue`. |
 | `JsonValue` | Typed JSON tree for object, array, string, number, boolean, and null values. |
 | `JsonWriter` | Compact or pretty JSON writer, including object/array streaming helpers. |
@@ -787,7 +787,7 @@ Defined types:
 | `TextInputController` | Backend delegate used by `Input` implementations to show, update, and hide platform text input. |
 | `Cursor` | Cursor shape, visibility, and lock/capture requests when supported. |
 | `CursorShape` | Portable cursor shape identifier. |
-| `Gamepads` | Gamepad access facade backed by a gamepad provider. |
+| `Gamepads` | Gamepad access API backed by a gamepad provider. |
 | `Gamepad` | Portable gamepad/controller handle. |
 | `GamepadButton` | Portable gamepad button identifiers. |
 | `GamepadAxis` | Portable gamepad axis identifiers. |
@@ -1491,7 +1491,7 @@ Defined root, context, and setup types:
 | Type | Role |
 | --- | --- |
 | `Graphics` | Graphics manager/factory returned by `Fdx.graphics()`. It owns the main graphics context and optional creation of additional contexts. |
-| `GraphicsContext` | Provider-backed rendering context/device facade used by game and rendering code. |
+| `GraphicsContext` | Provider-backed rendering context and device entry point used by game and rendering code. |
 | `GraphicsConfig` | Configuration for creating an additional graphics context when supported. |
 | `GraphicsAttachment` | Backend-driven graphics context that owns frame begin/end, resize, and presentation lifecycle for a display-backed context. |
 | `GraphicsAttachmentReadiness` | Optional backend/provider marker for attachments that finish initialization asynchronously before game code can create graphics resources. |
@@ -1500,7 +1500,7 @@ Defined root, context, and setup types:
 | `GraphicsEnvironment` | Provider-neutral setup view passed from a backend to a `GraphicsAttachmentProvider`. |
 | `NativeWindow` | Backend-created native presentation handle/object bundle used only by provider setup code. |
 | `NativeWindowPlatform` | Platform identifier for `NativeWindow` handle interpretation. |
-| `GraphicsDevice` | Provider-backed device facade used by common code to create first rendering resources. |
+| `GraphicsDevice` | Provider-backed device interface used by common code to create first rendering resources. |
 | `GraphicsFrame` | Current backend-owned frame view exposed during `ApplicationListener.render()`. |
 | `FrameBuffer` | Current frame drawable and readback view. |
 | `Camera`, `CameraProjection` | Shared mutable camera state for orthographic and perspective projection. |
@@ -1649,7 +1649,7 @@ Rules:
 - `Graphics.create(GraphicsConfig)` is an advanced capability. Desktop backends may support additional contexts/providers; mobile and web backends may reject it clearly.
 - `GraphicsConfig.display(...)` binds an additional on-window context to the display it should render into. There is no hidden current display.
 - `GraphicsContext.as()` is the advanced provider-specific escape hatch.
-- `GraphicsContext.device()` returns a common device facade backed by the selected provider.
+- `GraphicsContext.device()` returns a common device interface backed by the selected provider.
 - `GraphicsContext.surfaceFormat()` returns the current presentation color format used for render pipeline creation.
 - `GraphicsContext.currentFrame()` is valid only during a backend-owned frame, normally inside `ApplicationListener.render()`.
 - Resources are owned by one `GraphicsContext`. A texture created by a GL context is not automatically usable by a Vulkan context.
@@ -1697,7 +1697,7 @@ Defined value/state types:
 | Type | Role |
 | --- | --- |
 | `TextureFormat` | Portable texture/surface format. |
-| `ShaderLanguage` | Shader source family. WGSL, GLSL, and SPIR-V are available in the first rendering slice. |
+| `ShaderLanguage` | Shader source family. WGSL, GLSL, SPIR-V, and MSL are represented in the current graphics API. |
 | `ShaderProfile` | WGSL portability profile: WebGL2-compatible, WebGPU-compatible, or provider-native. |
 | `ShaderTarget` | Provider target language/output selection, such as WebGPU WGSL, OpenGL GLSL, WebGL/GLES GLSL ES, Vulkan SPIR-V, Metal MSL, or DirectX HLSL. |
 | `ShaderStage`, `ShaderBindingType` | Shader metadata values for generated reflection and setup-time validation. |
@@ -1718,9 +1718,11 @@ public final class ShaderModuleDescriptor {
     public static ShaderModuleDescriptor wgsl(String label, String source);
     public static ShaderModuleDescriptor glsl(String label, String vertexSource, String fragmentSource);
     public static ShaderModuleDescriptor spirv(String label, int[] vertexWords, int[] fragmentWords);
+    public static ShaderModuleDescriptor msl(String label, String source);
     public ShaderModuleDescriptor wgsl(String source);
     public ShaderModuleDescriptor glsl(String vertexSource, String fragmentSource);
     public ShaderModuleDescriptor spirv(int[] vertexWords, int[] fragmentWords);
+    public ShaderModuleDescriptor msl(String source);
     public boolean hasSource(ShaderLanguage language);
 }
 
@@ -1832,7 +1834,7 @@ Defined interface roles:
 | `GraphicsAttachment` | Backend-driven graphics lifecycle object. | Backends own frame timing, resize, and presentation; providers own GPU work. |
 | `Graphics` | Graphics manager returned by `Fdx.graphics()`. | Game code has one typed graphics entry point that can own one or more provider contexts. |
 | `GraphicsContext` | Provider-backed rendering context. | Simple code uses `fdx.graphics().main()`; advanced code may create additional contexts when supported. |
-| `GraphicsDevice` | Common facade for creating first low-level rendering resources. | Providers may map this to a native device, context, or device wrapper. |
+| `GraphicsDevice` | Common interface for creating first low-level rendering resources. | Providers may map this to a native device, context, or device wrapper. |
 | `GraphicsFrame` | Current frame command and color target access. | Backends/providers keep native frame acquisition and presentation hidden from game code. |
 
 Defined provider setup shape:
@@ -1968,9 +1970,9 @@ Rules:
 - Resource metadata methods should return the values the resource was created with.
 - `ShaderModuleDescriptor` may contain multiple source-language variants for the same shader intent. Providers select a supported source variant; they should not pretend to support a language by silently translating through provider-specific hacks unless that translation is an explicit provider feature. Vulkan providers should prefer SPIR-V bytecode for predictable startup and portability to Android later.
 - `ShaderBundle` is the common setup-time wrapper for WGSL-first shaders. It validates the WGSL profile when built, stores generated target artifacts, and returns the correct `ShaderModuleDescriptor` for the active provider through `descriptorForProvider(...)`.
-- Runtime shader creation must not perform hidden WGSL-to-GLSL/SPIR-V/MSL/HLSL translation. Translation belongs to build tooling, checked-in generated bootstrap code, or an explicitly documented provider feature. Missing generated output for the active provider is a setup error.
+- Normal runtime shader creation must not perform hidden WGSL-to-GLSL/SPIR-V/MSL/HLSL translation. Translation belongs to build tooling, checked-in generated bootstrap code, an explicit editor/tool compiler API, or an explicitly documented provider feature. Missing generated output for the active provider is a setup error.
 - A shader that passes WebGPU/WGSL validation is not automatically portable to WebGL/OpenGL ES. Use `ShaderProfile.PORTABLE_WEBGL2` for shaders that must run on WebGL2/GLES-style targets and `ShaderProfile.PORTABLE_WEBGPU` for shaders that only need modern WebGPU/wgpu-class targets.
-- Metal and DirectX should be added as generated `ShaderTarget` outputs from the same WGSL source contract. They should not require a second authoring language unless the shader declares `ShaderProfile.NATIVE` and the owning module documents the native-only behavior.
+- Metal uses generated or authored MSL through the same WGSL-first bundle contract. DirectX/HLSL remains a future target until the language enum, descriptor shape, and provider path are implemented. Neither target should require a second authoring language unless the shader declares `ShaderProfile.NATIVE` and the owning module documents the native-only behavior.
 - `BufferDescriptor.vertex(label, size)` creates provider-backed vertex storage. `BufferDescriptor.index(label, size)` creates provider-backed index storage. Buffers are dynamic by default for frequent writes; `staticVertex(...)`, `staticIndex(...)`, or `dynamic(false)` mark storage that is optimized for infrequent uploads and repeated draws.
 - The first common indexed draw shape uses unsigned 16-bit indices. `GraphicsDevice.writeBuffer(buffer, data)` uploads the bytes in the provided `ByteBuffer` range.
 - `Mesh` is the single concrete graphics API mesh class, not a g3d type. It can be used by 2D, UI, custom renderers, and 3D. It owns static vertex and optional unsigned 16-bit index buffers, exposes its `VertexLayout`, counts, optional bounds metadata, and disposes the underlying buffers.
@@ -2082,7 +2084,7 @@ These mappings explain why the common interfaces are generic. They are not a com
 | `Graphics` / `GraphicsContext` | Manager owns context creation; context owns wgpu instance/runtime and surface state. | Manager owns context creation; context owns instance, extension loading, and surface state. | Manager owns context creation; context owns Metal runtime/device discovery and layer/view integration. | Manager owns context creation; context owns display/profile state. |
 | `GraphicsAdapter` | Wraps the selected wgpu adapter. | Wraps the selected physical device and queue family choices. | Wraps the selected Metal device. | Represents selected driver/profile/display configuration. |
 | `GraphicsDevice` | Wraps wgpu device. | Wraps logical device. | Wraps Metal device plus common API state. | Wraps current graphics context plus common API state. |
-| `GraphicsQueue` | Wraps wgpu queue. | Wraps graphics/compute/present queue facade. | Wraps command queue. | Serializes and flushes recorded command work against the current context. |
+| `GraphicsQueue` | Wraps wgpu queue. | Wraps graphics/compute/present queue handle. | Wraps command queue. | Serializes and flushes recorded command work against the current context. |
 | `Surface` | Wraps wgpu surface. | Wraps platform surface plus swapchain ownership. | Wraps layer/drawable source. | Wraps window/canvas drawable or default framebuffer target. |
 | `SurfaceTexture` | Wraps acquired surface texture. | Wraps acquired swapchain image plus view. | Wraps current drawable texture. | Wraps current backbuffer or default framebuffer as a frame object. |
 | `Texture` | Wraps wgpu texture. | Wraps image plus allocation ownership. | Wraps texture. | Wraps texture object/storage. |
@@ -2770,7 +2772,7 @@ Defined types:
 
 | Type | Role |
 | --- | --- |
-| `ScenarioValidator` | Main validation runner/facade for executing selected scenarios against a host. |
+| `ScenarioValidator` | Main validation runner for executing selected scenarios against a host. |
 | `ScenarioCatalog` | Named collection of reusable validation scenarios. |
 | `Scenario` | Ordered validation flow linked to a setup, screen, or runtime state. |
 | `ScenarioSetup` | Creates or selects runtime state, screens, UI roots, worlds, probes, and capture hooks for a scenario. |
@@ -2822,7 +2824,7 @@ These decisions are part of the common API contract:
 - Use `HttpClient` as the HTTP entry point type.
 - Keep `AudioSource` as the advanced persistent playback source/channel type. Basic playback should still use `Sound`, `Music`, and `PlaybackHandle`.
 - Use descriptor names ending in `Descriptor` for graphics creation inputs, such as `TextureDescriptor`, `BufferDescriptor`, and `RenderPipelineDescriptor`.
-- Include `ShaderLanguage`, `ShaderProfile`, `ShaderTarget`, and `ShaderBundle` from the start. WGSL is the authoring source for portable shaders, GLSL/GLSL ES is used by the GL/WebGL/GLES provider family, SPIR-V is used by Vulkan, and MSL/HLSL are future generated targets for Metal/DirectX.
+- Include `ShaderLanguage`, `ShaderProfile`, `ShaderTarget`, and `ShaderBundle` from the start. WGSL is the authoring source for portable shaders, GLSL/GLSL ES is used by the GL/WebGL/GLES provider family, SPIR-V is used by Vulkan, MSL is used by Metal, and HLSL is a future generated target for DirectX.
 - Keep `TextureView` as a required common graphics type. Advanced view behavior is capability-gated.
 
 ## 19. Runtime Core

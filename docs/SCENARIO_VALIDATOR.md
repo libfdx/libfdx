@@ -138,7 +138,7 @@ Adapter implementation helpers live under
 
 | Type | Role |
 | --- | --- |
-| `ScenarioValidator` | Main validation runner/facade for executing selected scenarios against a host. |
+| `ScenarioValidator` | Main validation runner for executing selected scenarios against a host. |
 | `ScenarioCatalog` | Named collection of reusable validation scenarios. |
 | `Scenario` | Ordered validation flow linked to a setup, screen, or runtime state. |
 | `ScenarioSetup` | Creates or selects runtime state, screens, UI roots, worlds, probes, and capture hooks for a scenario. |
