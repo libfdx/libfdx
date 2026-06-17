@@ -268,6 +268,47 @@ final class AndroidGlesApi implements GLApi {
     }
 
     /**
+     * Runs the bind uniform buffer step.
+     *
+     * @param buffer the buffer
+     */
+    @Override
+    public void bindUniformBuffer(int buffer) {
+        GLES30.glBindBuffer(GLES30.GL_UNIFORM_BUFFER, buffer);
+    }
+
+    /**
+     * Runs the uniform buffer data step.
+     *
+     * @param size the size
+     */
+    @Override
+    public void uniformBufferData(int size) {
+        GLES30.glBufferData(GLES30.GL_UNIFORM_BUFFER, size, null, GLES30.GL_DYNAMIC_DRAW);
+    }
+
+    /**
+     * Runs the uniform buffer sub data step.
+     *
+     * @param data the data
+     */
+    @Override
+    public void uniformBufferSubData(ByteBuffer data) {
+        GLES30.glBufferSubData(GLES30.GL_UNIFORM_BUFFER, 0, data.remaining(), data);
+    }
+
+    /**
+     * Runs the bind uniform buffer base step.
+     *
+     * @param binding the binding
+     * @param buffer the buffer
+     */
+    @Override
+    public void bindUniformBufferBase(int binding, int buffer) {
+        GLES30.glBindBufferBase(GLES30.GL_UNIFORM_BUFFER, binding, buffer);
+    }
+
+    /**
      * Runs the element buffer sub data step.
      *
      * @param data the data
@@ -394,6 +435,31 @@ final class AndroidGlesApi implements GLApi {
     @Override
     public void uniform1i(int location, int value) {
         GLES30.glUniform1i(location, value);
+    }
+
+    /**
+     * Runs the uniform block index step.
+     *
+     * @param program the program
+     * @param name the name
+     * @return the uniform block index, or -1 when absent
+     */
+    @Override
+    public int uniformBlockIndex(int program, String name) {
+        int index = GLES30.glGetUniformBlockIndex(program, name);
+        return index == GLES30.GL_INVALID_INDEX ? -1 : index;
+    }
+
+    /**
+     * Runs the uniform block binding step.
+     *
+     * @param program the program
+     * @param blockIndex the block index
+     * @param binding the binding
+     */
+    @Override
+    public void uniformBlockBinding(int program, int blockIndex, int binding) {
+        GLES30.glUniformBlockBinding(program, blockIndex, binding);
     }
 
     /**

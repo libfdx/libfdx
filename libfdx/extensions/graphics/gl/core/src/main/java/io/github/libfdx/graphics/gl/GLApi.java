@@ -178,6 +178,43 @@ public interface GLApi {
     void bufferSubData(ByteBuffer data);
 
     /**
+     * Runs the bind uniform buffer step.
+     *
+     * @param buffer the buffer
+     */
+    default void bindUniformBuffer(int buffer) {
+        throw new UnsupportedOperationException("Uniform buffers are not supported");
+    }
+
+    /**
+     * Runs the uniform buffer data step.
+     *
+     * @param size the size
+     */
+    default void uniformBufferData(int size) {
+        throw new UnsupportedOperationException("Uniform buffers are not supported");
+    }
+
+    /**
+     * Runs the uniform buffer sub data step.
+     *
+     * @param data the data
+     */
+    default void uniformBufferSubData(ByteBuffer data) {
+        throw new UnsupportedOperationException("Uniform buffers are not supported");
+    }
+
+    /**
+     * Runs the bind uniform buffer base step.
+     *
+     * @param binding the binding
+     * @param buffer the buffer
+     */
+    default void bindUniformBufferBase(int binding, int buffer) {
+        throw new UnsupportedOperationException("Uniform buffers are not supported");
+    }
+
+    /**
      * Runs the element buffer sub data step.
      *
      * @param data the data
@@ -264,6 +301,27 @@ public interface GLApi {
      * @param value the value
      */
     void uniform1i(int location, int value);
+
+    /**
+     * Runs the uniform block index step.
+     *
+     * @param program the program
+     * @param name the name
+     * @return the uniform block index, or -1 when absent
+     */
+    default int uniformBlockIndex(int program, String name) {
+        return -1;
+    }
+
+    /**
+     * Runs the uniform block binding step.
+     *
+     * @param program the program
+     * @param blockIndex the block index
+     * @param binding the binding
+     */
+    default void uniformBlockBinding(int program, int blockIndex, int binding) {
+    }
 
     /**
      * Runs the uniform1f step.

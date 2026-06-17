@@ -71,6 +71,8 @@ import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
+import io.github.libfdx.graphics.ShaderBinding;
+import io.github.libfdx.graphics.ShaderBindingType;
 import io.github.libfdx.graphics.ShaderLanguage;
 import io.github.libfdx.graphics.ShaderModule;
 import io.github.libfdx.graphics.ShaderModuleDescriptor;
@@ -461,7 +463,7 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
 
         WGPUBindGroupLayout textureBindGroupLayout = createTextureBindGroupLayout(descriptor.sampledTextureCount(),
                 descriptor.label());
-        WGPUBindGroupLayout uniformBindGroupLayout = descriptor.sampledTextureCount() >= 5
+        WGPUBindGroupLayout uniformBindGroupLayout = usesPbrUniformBlock(descriptor)
                 ? createUniformBindGroupLayout(descriptor.label())
                 : null;
         WGPUVectorBindGroupLayout bindGroupLayouts = WGPUVectorBindGroupLayout.obtain();
@@ -587,6 +589,20 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         return depthStencilState;
     }
 
+    private static boolean usesPbrUniformBlock(RenderPipelineDescriptor descriptor) {
+        ShaderBinding[] bindings = descriptor.shaderReflection().bindings();
+        for (int i = 0; i < bindings.length; i++) {
+            ShaderBinding binding = bindings[i];
+            if (binding.group() == 1
+                    && binding.binding() == 0
+                    && binding.type() == ShaderBindingType.UNIFORM_BUFFER
+                    && "uniforms".equals(binding.name())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private WGPUBlendState createAlphaBlendState() {
         WGPUBlendState blend = WGPUBlendState.obtain();
         blend.getColor().setOperation(WGPUBlendOperation.Add);
@@ -610,7 +626,7 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
     }
 
     private WGPUVectorVertexBufferLayout createVertexBuffers(VertexLayout[] layouts) {
-        WGPUVectorVertexBufferLayout vertexBuffers = WGPUVectorVertexBufferLayout.obtain();
+        WGPUVectorVertexBufferLayout vertexBuffers = new WGPUVectorVertexBufferLayout();
         vertexBuffers.clear();
         if (layouts == null || layouts.length == 0) {
             return vertexBuffers;
@@ -618,19 +634,19 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
 
         for (int layoutIndex = 0; layoutIndex < layouts.length; layoutIndex++) {
             VertexLayout layout = layouts[layoutIndex];
-            WGPUVectorVertexAttribute nativeAttributes = WGPUVectorVertexAttribute.obtain();
+            WGPUVectorVertexAttribute nativeAttributes = new WGPUVectorVertexAttribute();
             nativeAttributes.clear();
             VertexAttribute[] attributes = layout.attributes();
             for (int i = 0; i < attributes.length; i++) {
                 VertexAttribute attribute = attributes[i];
-                WGPUVertexAttribute nativeAttribute = WGPUVertexAttribute.obtain();
+                WGPUVertexAttribute nativeAttribute = new WGPUVertexAttribute();
                 nativeAttribute.setShaderLocation(attribute.location());
                 nativeAttribute.setOffset(attribute.offset());
                 nativeAttribute.setFormat(toNative(attribute.format()));
                 nativeAttributes.push_back(nativeAttribute);
             }
 
-            WGPUVertexBufferLayout nativeLayout = WGPUVertexBufferLayout.obtain();
+            WGPUVertexBufferLayout nativeLayout = new WGPUVertexBufferLayout();
             nativeLayout.setArrayStride(layout.arrayStride());
             nativeLayout.setStepMode(layout.stepMode() == VertexStepMode.INSTANCE
                     ? WGPUVertexStepMode.Instance

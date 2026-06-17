@@ -15,8 +15,13 @@ import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
+import io.github.libfdx.graphics.ShaderBinding;
+import io.github.libfdx.graphics.ShaderBindingType;
+import io.github.libfdx.graphics.ShaderBundle;
 import io.github.libfdx.graphics.ShaderModule;
 import io.github.libfdx.graphics.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.ShaderReflection;
+import io.github.libfdx.graphics.g3d.generated.GeneratedModelBatchShaders;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.VertexAttribute;
@@ -72,6 +77,14 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 || "wgpu".equals(providerId) || "vulkan".equals(providerId);
     }
 
+    private static ShaderModuleDescriptor descriptorForProvider(GraphicsContext graphics, ShaderBundle bundle) {
+        String provider = graphics.providerId().value();
+        if ("psp".equals(provider)) {
+            return ShaderModuleDescriptor.wgsl(bundle.label(), bundle.wgslSource());
+        }
+        return bundle.descriptorForProvider(provider);
+    }
+
     /**
      * Runs the shader step.
      *
@@ -124,104 +137,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
      * @author xpenatan
      */
     private static final class PositionColorShader implements Shader3D {
-        private static final String WGSL =
-                "struct VertexInput {\n" +
-                "    @location(0) position : vec3f,\n" +
-                "    @location(1) color : vec4f,\n" +
-                "};\n" +
-                "struct VertexOutput {\n" +
-                "    @builtin(position) position : vec4f,\n" +
-                "    @location(0) color : vec4f,\n" +
-                "};\n" +
-                "@vertex\n" +
-                "fn vertexMain(input : VertexInput) -> VertexOutput {\n" +
-                "    var output : VertexOutput;\n" +
-                "    output.position = vec4f(input.position, 1.0);\n" +
-                "    output.color = input.color;\n" +
-                "    return output;\n" +
-                "}\n" +
-                "@fragment\n" +
-                "fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {\n" +
-                "    return input.color;\n" +
-                "}\n";
-        private static final String VERTEX_GLSL =
-                "#version 330 core\n" +
-                "layout(location = 0) in vec3 a_position;\n" +
-                "layout(location = 1) in vec4 a_color;\n" +
-                "out vec4 v_color;\n" +
-                "void main() {\n" +
-                "    v_color = a_color;\n" +
-                "    gl_Position = vec4(a_position, 1.0);\n" +
-                "}\n";
-        private static final String FRAGMENT_GLSL =
-                "#version 330 core\n" +
-                "in vec4 v_color;\n" +
-                "out vec4 fragColor;\n" +
-                "void main() {\n" +
-                "    fragColor = v_color;\n" +
-                "}\n";
         private static final float PI = 3.14159265359f;
-        private static final int[] VERTEX_SPIRV = {
-                0x07230203, 0x00010600, 0x00070000, 0x00000020, 0x00000000, 0x00020011, 0x00000001,
-                0x0006000b, 0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e, 0x00000000, 0x0003000e,
-                0x00000000, 0x00000001, 0x000a000f, 0x00000000, 0x00000002, 0x74726576, 0x614d7865,
-                0x00006e69, 0x00000003, 0x00000004, 0x00000005, 0x00000006, 0x00030003, 0x00000002,
-                0x000001c2, 0x000a0004, 0x475f4c47, 0x4c474f4f, 0x70635f45, 0x74735f70, 0x5f656c79,
-                0x656e696c, 0x7269645f, 0x69746365, 0x00006576, 0x00080004, 0x475f4c47, 0x4c474f4f,
-                0x6e695f45, 0x64756c63, 0x69645f65, 0x74636572, 0x00657669, 0x00050005, 0x00000002,
-                0x74726576, 0x614d7865, 0x00006e69, 0x00040005, 0x00000003, 0x6f635f76, 0x00726f6c,
-                0x00040005, 0x00000004, 0x6f635f61, 0x00726f6c, 0x00060005, 0x00000007, 0x505f6c67,
-                0x65567265, 0x78657472, 0x00000000, 0x00060006, 0x00000007, 0x00000000, 0x505f6c67,
-                0x7469736f, 0x006e6f69, 0x00070006, 0x00000007, 0x00000001, 0x505f6c67, 0x746e696f,
-                0x657a6953, 0x00000000, 0x00070006, 0x00000007, 0x00000002, 0x435f6c67, 0x4470696c,
-                0x61747369, 0x0065636e, 0x00070006, 0x00000007, 0x00000003, 0x435f6c67, 0x446c6c75,
-                0x61747369, 0x0065636e, 0x00030005, 0x00000005, 0x00000000, 0x00050005, 0x00000006,
-                0x6f705f61, 0x69746973, 0x00006e6f, 0x00040047, 0x00000003, 0x0000001e, 0x00000000,
-                0x00040047, 0x00000004, 0x0000001e, 0x00000001, 0x00050048, 0x00000007, 0x00000000,
-                0x0000000b, 0x00000000, 0x00050048, 0x00000007, 0x00000001, 0x0000000b, 0x00000001,
-                0x00050048, 0x00000007, 0x00000002, 0x0000000b, 0x00000003, 0x00050048, 0x00000007,
-                0x00000003, 0x0000000b, 0x00000004, 0x00030047, 0x00000007, 0x00000002, 0x00040047,
-                0x00000006, 0x0000001e, 0x00000000, 0x00020013, 0x00000008, 0x00030021, 0x00000009,
-                0x00000008, 0x00030016, 0x0000000a, 0x00000020, 0x00040017, 0x0000000b, 0x0000000a,
-                0x00000004, 0x00040020, 0x0000000c, 0x00000003, 0x0000000b, 0x0004003b, 0x0000000c,
-                0x00000003, 0x00000003, 0x00040020, 0x0000000d, 0x00000001, 0x0000000b, 0x0004003b,
-                0x0000000d, 0x00000004, 0x00000001, 0x00040015, 0x0000000e, 0x00000020, 0x00000000,
-                0x0004002b, 0x0000000e, 0x0000000f, 0x00000001, 0x0004001c, 0x00000010, 0x0000000a,
-                0x0000000f, 0x0006001e, 0x00000007, 0x0000000b, 0x0000000a, 0x00000010, 0x00000010,
-                0x00040020, 0x00000011, 0x00000003, 0x00000007, 0x0004003b, 0x00000011, 0x00000005,
-                0x00000003, 0x00040015, 0x00000012, 0x00000020, 0x00000001, 0x0004002b, 0x00000012,
-                0x00000013, 0x00000000, 0x00040017, 0x00000014, 0x0000000a, 0x00000002, 0x00040020,
-                0x00000015, 0x00000001, 0x00000014, 0x0004003b, 0x0000000d, 0x00000006, 0x00000001,
-                0x0004002b, 0x0000000a, 0x00000016, 0x00000000, 0x0004002b, 0x0000000a, 0x00000017,
-                0x3f800000, 0x00050036, 0x00000008, 0x00000002, 0x00000000, 0x00000009, 0x000200f8,
-                0x00000018, 0x0004003d, 0x0000000b, 0x00000019, 0x00000004, 0x0003003e, 0x00000003,
-                0x00000019, 0x0004003d, 0x0000000b, 0x0000001a, 0x00000006, 0x00050051, 0x0000000a,
-                0x0000001b, 0x0000001a, 0x00000000, 0x00050051, 0x0000000a, 0x0000001c, 0x0000001a,
-                0x00000001, 0x00050051, 0x0000000a, 0x0000001f, 0x0000001a, 0x00000002, 0x00070050,
-                0x0000000b, 0x0000001d, 0x0000001b, 0x0000001c, 0x0000001f,
-                0x00000017, 0x00050041, 0x0000000c, 0x0000001e, 0x00000005, 0x00000013, 0x0003003e,
-                0x0000001e, 0x0000001d, 0x000100fd, 0x00010038
-        };
-        private static final int[] FRAGMENT_SPIRV = {
-                0x07230203, 0x00010600, 0x00070000, 0x0000000d, 0x00000000, 0x00020011, 0x00000001,
-                0x0006000b, 0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e, 0x00000000, 0x0003000e,
-                0x00000000, 0x00000001, 0x0009000f, 0x00000004, 0x00000002, 0x67617266, 0x746e656d,
-                0x6e69614d, 0x00000000, 0x00000003, 0x00000004, 0x00030010, 0x00000002, 0x00000007,
-                0x00030003, 0x00000002, 0x000001c2, 0x000a0004, 0x475f4c47, 0x4c474f4f, 0x70635f45,
-                0x74735f70, 0x5f656c79, 0x656e696c, 0x7269645f, 0x69746365, 0x00006576, 0x00080004,
-                0x475f4c47, 0x4c474f4f, 0x6e695f45, 0x64756c63, 0x69645f65, 0x74636572, 0x00657669,
-                0x00060005, 0x00000002, 0x67617266, 0x746e656d, 0x6e69614d, 0x00000000, 0x00050005,
-                0x00000003, 0x67617266, 0x6f6c6f43, 0x00000072, 0x00040005, 0x00000004, 0x6f635f76,
-                0x00726f6c, 0x00040047, 0x00000003, 0x0000001e, 0x00000000, 0x00040047, 0x00000004,
-                0x0000001e, 0x00000000, 0x00020013, 0x00000005, 0x00030021, 0x00000006, 0x00000005,
-                0x00030016, 0x00000007, 0x00000020, 0x00040017, 0x00000008, 0x00000007, 0x00000004,
-                0x00040020, 0x00000009, 0x00000003, 0x00000008, 0x0004003b, 0x00000009, 0x00000003,
-                0x00000003, 0x00040020, 0x0000000a, 0x00000001, 0x00000008, 0x0004003b, 0x0000000a,
-                0x00000004, 0x00000001, 0x00050036, 0x00000005, 0x00000002, 0x00000000, 0x00000006,
-                0x000200f8, 0x0000000b, 0x0004003d, 0x00000008, 0x0000000c, 0x00000004, 0x0003003e,
-                0x00000003, 0x0000000c, 0x000100fd, 0x00010038
-        };
-
+        private static final ShaderBundle SHADER = GeneratedModelBatchShaders.positionColor();
         private final GraphicsContext graphics;
         private final ShaderModule shaderModule;
         private final Map<PipelineKey, RenderPipeline> pipelines = new HashMap<PipelineKey, RenderPipeline>();
@@ -232,10 +149,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
 
         PositionColorShader(GraphicsContext graphics) {
             this.graphics = graphics;
-            shaderModule = graphics.device().createShaderModule(ShaderModuleDescriptor
-                    .wgsl("model batch position color", WGSL)
-                    .glsl(VERTEX_GLSL, FRAGMENT_GLSL)
-                    .spirv(VERTEX_SPIRV, FRAGMENT_SPIRV));
+            shaderModule = graphics.device().createShaderModule(descriptorForProvider(graphics, SHADER));
         }
 
         /**
@@ -789,286 +703,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
      * @author xpenatan
      */
     private static final class GpuPbrShader implements Shader3D {
-        private static final String VERTEX_GLSL =
-                "#version 330 core\n" +
-                "layout(location = 0) in vec3 a_position;\n" +
-                "layout(location = 1) in vec3 a_normal;\n" +
-                "layout(location = 2) in vec2 a_uv;\n" +
-                "layout(location = 3) in vec4 a_color;\n" +
-                "layout(location = 4) in vec3 a_pbr;\n" +
-                "layout(location = 5) in vec3 a_emissive;\n" +
-                "uniform mat4 u_model;\n" +
-                "uniform mat4 u_viewProjection;\n" +
-                "out vec3 v_worldPosition;\n" +
-                "out vec3 v_normal;\n" +
-                "out vec2 v_uv;\n" +
-                "out vec4 v_color;\n" +
-                "out vec3 v_pbr;\n" +
-                "out vec3 v_emissive;\n" +
-                "void main() {\n" +
-                "    vec4 worldPosition = u_model * vec4(a_position, 1.0);\n" +
-                "    v_worldPosition = worldPosition.xyz;\n" +
-                "    v_normal = mat3(u_model) * a_normal;\n" +
-                "    v_uv = a_uv;\n" +
-                "    v_color = a_color;\n" +
-                "    v_pbr = a_pbr;\n" +
-                "    v_emissive = a_emissive;\n" +
-                "    gl_Position = u_viewProjection * worldPosition;\n" +
-                "}\n";
-        private static final String FRAGMENT_GLSL =
-                "#version 330 core\n" +
-                "in vec3 v_worldPosition;\n" +
-                "in vec3 v_normal;\n" +
-                "in vec2 v_uv;\n" +
-                "in vec4 v_color;\n" +
-                "in vec3 v_pbr;\n" +
-                "in vec3 v_emissive;\n" +
-                "uniform vec3 u_cameraPosition;\n" +
-                "uniform vec3 u_ambientColor;\n" +
-                "uniform vec3 u_lightDirection;\n" +
-                "uniform vec3 u_lightColor;\n" +
-                "uniform float u_lightIntensity;\n" +
-                "uniform sampler2D u_baseColorTexture;\n" +
-                "uniform sampler2D u_metallicRoughnessTexture;\n" +
-                "uniform sampler2D u_normalTexture;\n" +
-                "uniform sampler2D u_occlusionTexture;\n" +
-                "uniform sampler2D u_emissiveTexture;\n" +
-                "uniform int u_hasBaseColorTexture;\n" +
-                "uniform int u_hasMetallicRoughnessTexture;\n" +
-                "uniform int u_hasNormalTexture;\n" +
-                "uniform int u_hasOcclusionTexture;\n" +
-                "uniform int u_hasEmissiveTexture;\n" +
-                "out vec4 fragColor;\n" +
-                "const float PI = 3.14159265359;\n" +
-                "vec3 srgbToLinear(vec3 value) {\n" +
-                "    return pow(max(value, vec3(0.0)), vec3(2.2));\n" +
-                "}\n" +
-                "vec3 linearToSrgb(vec3 value) {\n" +
-                "    return pow(max(value, vec3(0.0)), vec3(1.0 / 2.2));\n" +
-                "}\n" +
-                "float distributionGGX(vec3 n, vec3 h, float roughness) {\n" +
-                "    float a = roughness * roughness;\n" +
-                "    float a2 = a * a;\n" +
-                "    float ndh = max(dot(n, h), 0.0);\n" +
-                "    float denom = ndh * ndh * (a2 - 1.0) + 1.0;\n" +
-                "    return a2 / max(PI * denom * denom, 0.000001);\n" +
-                "}\n" +
-                "float geometrySchlickGGX(float ndv, float roughness) {\n" +
-                "    float r = roughness + 1.0;\n" +
-                "    float k = (r * r) / 8.0;\n" +
-                "    return ndv / max(ndv * (1.0 - k) + k, 0.000001);\n" +
-                "}\n" +
-                "float geometrySmith(vec3 n, vec3 v, vec3 l, float roughness) {\n" +
-                "    return geometrySchlickGGX(max(dot(n, v), 0.0), roughness)\n" +
-                "            * geometrySchlickGGX(max(dot(n, l), 0.0), roughness);\n" +
-                "}\n" +
-                "vec3 fresnelSchlick(float cosTheta, vec3 f0) {\n" +
-                "    return f0 + (1.0 - f0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);\n" +
-                "}\n" +
-                "vec3 mappedNormal(vec3 n) {\n" +
-                "    if (u_hasNormalTexture == 0) {\n" +
-                "        return normalize(n);\n" +
-                "    }\n" +
-                "    vec3 q1 = dFdx(v_worldPosition);\n" +
-                "    vec3 q2 = dFdy(v_worldPosition);\n" +
-                "    vec2 st1 = dFdx(v_uv);\n" +
-                "    vec2 st2 = dFdy(v_uv);\n" +
-                "    vec3 tangent = q1 * st2.t - q2 * st1.t;\n" +
-                "    if (dot(tangent, tangent) < 0.000001) {\n" +
-                "        return normalize(n);\n" +
-                "    }\n" +
-                "    vec3 t = normalize(tangent);\n" +
-                "    vec3 b = normalize(cross(n, t));\n" +
-                "    vec3 sampleNormal = texture(u_normalTexture, v_uv).xyz * 2.0 - 1.0;\n" +
-                "    return normalize(mat3(t, b, n) * sampleNormal);\n" +
-                "}\n" +
-                "void main() {\n" +
-                "    vec2 uv = v_uv;\n" +
-                "    vec4 base = v_color;\n" +
-                "    if (u_hasBaseColorTexture != 0) {\n" +
-                "        vec4 texel = texture(u_baseColorTexture, uv);\n" +
-                "        base.rgb *= srgbToLinear(texel.rgb);\n" +
-                "        base.a *= texel.a;\n" +
-                "    }\n" +
-                "    if (base.a <= 0.001) {\n" +
-                "        discard;\n" +
-                "    }\n" +
-                "    float ao = clamp(v_pbr.x, 0.0, 1.0);\n" +
-                "    float metallic = clamp(v_pbr.y, 0.0, 1.0);\n" +
-                "    float roughness = clamp(v_pbr.z, 0.04, 1.0);\n" +
-                "    if (u_hasMetallicRoughnessTexture != 0) {\n" +
-                "        vec4 mr = texture(u_metallicRoughnessTexture, uv);\n" +
-                "        roughness = clamp(roughness * mr.g, 0.04, 1.0);\n" +
-                "        metallic = clamp(metallic * mr.b, 0.0, 1.0);\n" +
-                "    }\n" +
-                "    if (u_hasOcclusionTexture != 0) {\n" +
-                "        ao *= texture(u_occlusionTexture, uv).r;\n" +
-                "    }\n" +
-                "    vec3 emissive = v_emissive;\n" +
-                "    if (u_hasEmissiveTexture != 0) {\n" +
-                "        emissive *= srgbToLinear(texture(u_emissiveTexture, uv).rgb);\n" +
-                "    }\n" +
-                "    vec3 n = mappedNormal(normalize(v_normal));\n" +
-                "    vec3 v = normalize(u_cameraPosition - v_worldPosition);\n" +
-                "    vec3 l = normalize(-u_lightDirection);\n" +
-                "    vec3 h = normalize(v + l);\n" +
-                "    vec3 albedo = max(base.rgb, vec3(0.0));\n" +
-                "    vec3 f0 = mix(vec3(0.04), albedo, metallic);\n" +
-                "    float ndl = max(dot(n, l), 0.0);\n" +
-                "    float ndv = max(dot(n, v), 0.0);\n" +
-                "    vec3 f = fresnelSchlick(max(dot(h, v), 0.0), f0);\n" +
-                "    float d = distributionGGX(n, h, roughness);\n" +
-                "    float g = geometrySmith(n, v, l, roughness);\n" +
-                "    vec3 specular = (d * g * f) / max(4.0 * ndv * ndl, 0.000001);\n" +
-                "    vec3 kd = (vec3(1.0) - f) * (1.0 - metallic);\n" +
-                "    vec3 radiance = u_lightColor * u_lightIntensity;\n" +
-                "    vec3 color = (kd * albedo / PI + specular) * radiance * ndl;\n" +
-                "    color += u_ambientColor * albedo * ao;\n" +
-                "    color += emissive;\n" +
-                "    fragColor = vec4(linearToSrgb(color), base.a);\n" +
-                "}\n";
-        private static final String WGSL =
-                "struct VertexInput {\n" +
-                "    @location(0) position : vec3f,\n" +
-                "    @location(1) normal : vec3f,\n" +
-                "    @location(2) uv : vec2f,\n" +
-                "    @location(3) color : vec4f,\n" +
-                "    @location(4) pbr : vec3f,\n" +
-                "    @location(5) emissive : vec3f,\n" +
-                "};\n" +
-                "struct VertexOutput {\n" +
-                "    @builtin(position) position : vec4f,\n" +
-                "    @location(0) worldPosition : vec3f,\n" +
-                "    @location(1) normal : vec3f,\n" +
-                "    @location(2) uv : vec2f,\n" +
-                "    @location(3) color : vec4f,\n" +
-                "    @location(4) pbr : vec3f,\n" +
-                "    @location(5) emissive : vec3f,\n" +
-                "};\n" +
-                "struct PbrUniforms {\n" +
-                "    model : mat4x4<f32>,\n" +
-                "    viewProjection : mat4x4<f32>,\n" +
-                "    cameraPosition : vec4f,\n" +
-                "    ambientColor : vec4f,\n" +
-                "    lightDirection : vec4f,\n" +
-                "    lightColorIntensity : vec4f,\n" +
-                "    textureFlags : vec4f,\n" +
-                "    emissiveFlags : vec4f,\n" +
-                "};\n" +
-                "@group(0) @binding(0) var baseColorTexture : texture_2d<f32>;\n" +
-                "@group(0) @binding(1) var baseColorSampler : sampler;\n" +
-                "@group(0) @binding(2) var metallicRoughnessTexture : texture_2d<f32>;\n" +
-                "@group(0) @binding(3) var metallicRoughnessSampler : sampler;\n" +
-                "@group(0) @binding(4) var normalTexture : texture_2d<f32>;\n" +
-                "@group(0) @binding(5) var normalSampler : sampler;\n" +
-                "@group(0) @binding(6) var occlusionTexture : texture_2d<f32>;\n" +
-                "@group(0) @binding(7) var occlusionSampler : sampler;\n" +
-                "@group(0) @binding(8) var emissiveTexture : texture_2d<f32>;\n" +
-                "@group(0) @binding(9) var emissiveSampler : sampler;\n" +
-                "@group(1) @binding(0) var<uniform> uniforms : PbrUniforms;\n" +
-                "const PI : f32 = 3.14159265359;\n" +
-                "@vertex\n" +
-                "fn vertexMain(input : VertexInput) -> VertexOutput {\n" +
-                "    var output : VertexOutput;\n" +
-                "    let worldPosition = uniforms.model * vec4f(input.position, 1.0);\n" +
-                "    output.worldPosition = worldPosition.xyz;\n" +
-                "    output.normal = (uniforms.model * vec4f(input.normal, 0.0)).xyz;\n" +
-                "    output.uv = input.uv;\n" +
-                "    output.color = input.color;\n" +
-                "    output.pbr = input.pbr;\n" +
-                "    output.emissive = input.emissive;\n" +
-                "    output.position = uniforms.viewProjection * worldPosition;\n" +
-                "    return output;\n" +
-                "}\n" +
-                "fn srgbToLinear(value : vec3f) -> vec3f {\n" +
-                "    return pow(max(value, vec3f(0.0)), vec3f(2.2));\n" +
-                "}\n" +
-                "fn linearToSrgb(value : vec3f) -> vec3f {\n" +
-                "    return pow(max(value, vec3f(0.0)), vec3f(1.0 / 2.2));\n" +
-                "}\n" +
-                "fn distributionGGX(n : vec3f, h : vec3f, roughness : f32) -> f32 {\n" +
-                "    let a = roughness * roughness;\n" +
-                "    let a2 = a * a;\n" +
-                "    let ndh = max(dot(n, h), 0.0);\n" +
-                "    let denom = ndh * ndh * (a2 - 1.0) + 1.0;\n" +
-                "    return a2 / max(PI * denom * denom, 0.000001);\n" +
-                "}\n" +
-                "fn geometrySchlickGGX(ndv : f32, roughness : f32) -> f32 {\n" +
-                "    let r = roughness + 1.0;\n" +
-                "    let k = (r * r) / 8.0;\n" +
-                "    return ndv / max(ndv * (1.0 - k) + k, 0.000001);\n" +
-                "}\n" +
-                "fn geometrySmith(n : vec3f, v : vec3f, l : vec3f, roughness : f32) -> f32 {\n" +
-                "    return geometrySchlickGGX(max(dot(n, v), 0.0), roughness)\n" +
-                "            * geometrySchlickGGX(max(dot(n, l), 0.0), roughness);\n" +
-                "}\n" +
-                "fn fresnelSchlick(cosTheta : f32, f0 : vec3f) -> vec3f {\n" +
-                "    return f0 + (vec3f(1.0) - f0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);\n" +
-                "}\n" +
-                "fn mappedNormal(nIn : vec3f, worldPosition : vec3f, uv : vec2f) -> vec3f {\n" +
-                "    let n = normalize(nIn);\n" +
-                "    if (uniforms.textureFlags.z < 0.5) {\n" +
-                "        return n;\n" +
-                "    }\n" +
-                "    let sampleNormal = textureSample(normalTexture, normalSampler, uv).xyz * 2.0 - vec3f(1.0);\n" +
-                "    let q1 = dpdx(worldPosition);\n" +
-                "    let q2 = dpdy(worldPosition);\n" +
-                "    let st1 = dpdx(uv);\n" +
-                "    let st2 = dpdy(uv);\n" +
-                "    let tangent = q1 * st2.y - q2 * st1.y;\n" +
-                "    if (dot(tangent, tangent) < 0.000001) {\n" +
-                "        return n;\n" +
-                "    }\n" +
-                "    let t = normalize(tangent);\n" +
-                "    let b = normalize(cross(n, t));\n" +
-                "    return normalize(mat3x3<f32>(t, b, n) * sampleNormal);\n" +
-                "}\n" +
-                "@fragment\n" +
-                "fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {\n" +
-                "    let uv = input.uv;\n" +
-                "    var base = input.color;\n" +
-                "    if (uniforms.textureFlags.x > 0.5) {\n" +
-                "        let texel = textureSample(baseColorTexture, baseColorSampler, uv);\n" +
-                "        base = vec4f(base.rgb * srgbToLinear(texel.rgb), base.a * texel.a);\n" +
-                "    }\n" +
-                "    if (base.a <= 0.001) {\n" +
-                "        discard;\n" +
-                "    }\n" +
-                "    var ao = clamp(input.pbr.x, 0.0, 1.0);\n" +
-                "    var metallic = clamp(input.pbr.y, 0.0, 1.0);\n" +
-                "    var roughness = clamp(input.pbr.z, 0.04, 1.0);\n" +
-                "    if (uniforms.textureFlags.y > 0.5) {\n" +
-                "        let mr = textureSample(metallicRoughnessTexture, metallicRoughnessSampler, uv);\n" +
-                "        roughness = clamp(roughness * mr.g, 0.04, 1.0);\n" +
-                "        metallic = clamp(metallic * mr.b, 0.0, 1.0);\n" +
-                "    }\n" +
-                "    if (uniforms.textureFlags.w > 0.5) {\n" +
-                "        ao *= textureSample(occlusionTexture, occlusionSampler, uv).r;\n" +
-                "    }\n" +
-                "    var emissive = input.emissive;\n" +
-                "    if (uniforms.emissiveFlags.x > 0.5) {\n" +
-                "        emissive *= srgbToLinear(textureSample(emissiveTexture, emissiveSampler, uv).rgb);\n" +
-                "    }\n" +
-                "    let n = mappedNormal(input.normal, input.worldPosition, uv);\n" +
-                "    let v = normalize(uniforms.cameraPosition.xyz - input.worldPosition);\n" +
-                "    let l = normalize(-uniforms.lightDirection.xyz);\n" +
-                "    let h = normalize(v + l);\n" +
-                "    let albedo = max(base.rgb, vec3f(0.0));\n" +
-                "    let f0 = mix(vec3f(0.04), albedo, vec3f(metallic));\n" +
-                "    let ndl = max(dot(n, l), 0.0);\n" +
-                "    let ndv = max(dot(n, v), 0.0);\n" +
-                "    let f = fresnelSchlick(max(dot(h, v), 0.0), f0);\n" +
-                "    let d = distributionGGX(n, h, roughness);\n" +
-                "    let g = geometrySmith(n, v, l, roughness);\n" +
-                "    let specular = (d * g * f) / max(4.0 * ndv * ndl, 0.000001);\n" +
-                "    let kd = (vec3f(1.0) - f) * (1.0 - metallic);\n" +
-                "    let radiance = uniforms.lightColorIntensity.rgb * uniforms.lightColorIntensity.a;\n" +
-                "    var color = (kd * albedo / PI + specular) * radiance * ndl;\n" +
-                "    color += uniforms.ambientColor.rgb * albedo * ao;\n" +
-                "    color += emissive;\n" +
-                "    return vec4f(linearToSrgb(color), base.a);\n" +
-                "}\n";
-
+        private static final ShaderBundle SHADER = GeneratedModelBatchShaders.pbr();
+        private static final ShaderReflection REFLECTION = SHADER.reflection();
+        private static final int SAMPLED_TEXTURE_COUNT = sampledTextureCount(REFLECTION);
         private final GraphicsContext graphics;
         private final ShaderModule shaderModule;
         private final Map<PipelineKey, RenderPipeline> pipelines = new HashMap<PipelineKey, RenderPipeline>();
@@ -1160,8 +797,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
                         .shader(shaderModule, graphics.surfaceFormat())
                         .label(pipelineLabel())
+                        .shaderReflection(REFLECTION)
                         .primitiveTopology(topology)
-                        .sampledTextureCount(5)
+                        .sampledTextureCount(SAMPLED_TEXTURE_COUNT)
                         .depthTestEnabled(true)
                         .depthWriteEnabled(true)
                         .vertexLayout(vertexLayout));
@@ -1171,14 +809,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         }
 
         private ShaderModuleDescriptor shaderModuleDescriptor() {
-            if ("wgpu".equals(providerId)) {
-                return ShaderModuleDescriptor.wgsl("model batch wgpu pbr", WGSL);
-            }
-            if ("vulkan".equals(providerId)) {
-                return ShaderModuleDescriptor.spirv("model batch vulkan pbr",
-                        VulkanPbrShaderSpirv.VERTEX, VulkanPbrShaderSpirv.FRAGMENT);
-            }
-            return ShaderModuleDescriptor.glsl("model batch gl pbr", VERTEX_GLSL, FRAGMENT_GLSL);
+            return SHADER.descriptorForProvider(providerId);
         }
 
         private String pipelineLabel() {
@@ -1189,6 +820,17 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 return "model batch vulkan pbr";
             }
             return "model batch gl pbr";
+        }
+
+        private static int sampledTextureCount(ShaderReflection reflection) {
+            int count = 0;
+            ShaderBinding[] bindings = reflection.bindings();
+            for (int i = 0; i < bindings.length; i++) {
+                if (bindings[i].type() == ShaderBindingType.TEXTURE) {
+                    count++;
+                }
+            }
+            return count;
         }
 
         private void applyEnvironment(RenderPass pass) {
@@ -1234,6 +876,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             pass.setUniform1i("u_normalTexture", 2);
             pass.setUniform1i("u_occlusionTexture", 3);
             pass.setUniform1i("u_emissiveTexture", 4);
+            pass.setUniform1i("f_baseColorTexture_baseColorSampler", 0);
+            pass.setUniform1i("f_metallicRoughnessTexture_metallicRoughnessSampler", 1);
+            pass.setUniform1i("f_normalTexture_normalSampler", 2);
+            pass.setUniform1i("f_occlusionTexture_occlusionSampler", 3);
+            pass.setUniform1i("f_emissiveTexture_emissiveSampler", 4);
             pass.setUniform1i("u_hasBaseColorTexture", pbr != null && pbr.baseColorTexture() != null ? 1 : 0);
             pass.setUniform1i("u_hasMetallicRoughnessTexture", pbr != null && pbr.metallicRoughnessTexture() != null
                     ? 1 : 0);

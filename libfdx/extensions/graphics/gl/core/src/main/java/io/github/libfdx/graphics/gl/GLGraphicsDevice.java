@@ -8,6 +8,8 @@ import io.github.libfdx.graphics.BufferUsage;
 import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
+import io.github.libfdx.graphics.ShaderBinding;
+import io.github.libfdx.graphics.ShaderBindingType;
 import io.github.libfdx.graphics.ShaderLanguage;
 import io.github.libfdx.graphics.ShaderModule;
 import io.github.libfdx.graphics.ShaderModuleDescriptor;
@@ -167,6 +169,8 @@ final class GLGraphicsDevice implements GraphicsDevice {
             gl.deleteProgram(program);
             throw new FdxException("Could not link GL shader module " + descriptor.label() + ": " + log);
         }
+        bindUniformBlock(program, "v_uniforms_block_ubo", 0);
+        bindUniformBlock(program, "f_uniforms_block_ubo", 0);
         return new GLShaderModuleHandle(providerId, gl, program);
     }
 
@@ -182,14 +186,15 @@ final class GLGraphicsDevice implements GraphicsDevice {
             throw new FdxException("RenderPipelineDescriptor cannot be null");
         }
         GLShaderModuleHandle shaderModule = descriptor.shaderModule().as();
-        return new GLRenderPipelineHandle(providerId, shaderModule.program(), descriptor.primitiveTopology(),
+        int pbrUniformBuffer = createPbrUniformBuffer(descriptor);
+        return new GLRenderPipelineHandle(providerId, gl, shaderModule.program(), descriptor.primitiveTopology(),
                 descriptor.vertexLayouts(), descriptor.sampledTextureCount(), descriptor.depthTestEnabled(),
-                descriptor.depthWriteEnabled());
+                descriptor.depthWriteEnabled(), pbrUniformBuffer);
     }
 
     private int compileShader(GLShaderType type, String source, String label) {
         int shader = gl.createShader(type);
-        gl.shaderSource(shader, source);
+        gl.shaderSource(shader, normalizeGlslSource(source));
         gl.compileShader(shader);
         if (!gl.shaderCompileStatus(shader)) {
             String log = gl.shaderInfoLog(shader);
@@ -197,6 +202,46 @@ final class GLGraphicsDevice implements GraphicsDevice {
             throw new FdxException("Could not compile GL shader " + label + ": " + log);
         }
         return shader;
+    }
+
+    private int createPbrUniformBuffer(RenderPipelineDescriptor descriptor) {
+        if (!usesPbrUniformBlock(descriptor)) {
+            return 0;
+        }
+        int buffer = gl.genBuffer();
+        gl.bindUniformBuffer(buffer);
+        gl.uniformBufferData(GLRenderPipelineHandle.PBR_UNIFORM_BYTE_COUNT);
+        gl.bindUniformBuffer(0);
+        return buffer;
+    }
+
+    private void bindUniformBlock(int program, String name, int binding) {
+        int blockIndex = gl.uniformBlockIndex(program, name);
+        if (blockIndex >= 0) {
+            gl.uniformBlockBinding(program, blockIndex, binding);
+        }
+    }
+
+    private boolean usesPbrUniformBlock(RenderPipelineDescriptor descriptor) {
+        ShaderBinding[] bindings = descriptor.shaderReflection().bindings();
+        for (int i = 0; i < bindings.length; i++) {
+            ShaderBinding binding = bindings[i];
+            if (binding.group() == 1
+                    && binding.binding() == 0
+                    && binding.type() == ShaderBindingType.UNIFORM_BUFFER
+                    && "uniforms".equals(binding.name())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String normalizeGlslSource(String source) {
+        String actualSource = source != null ? source : "";
+        actualSource = actualSource.replaceAll("layout\\(binding\\s*=\\s*[0-9]+\\s*,\\s*std140\\)", "layout(std140)");
+        return actualSource.replaceAll(
+                "gl_Position\\s*=\\s*vec4\\(\\s*([A-Za-z0-9_]+\\.position)\\.x\\s*,\\s*-\\(\\s*\\1\\.y\\s*\\)\\s*,\\s*\\(\\(2\\.0f?\\s*\\*\\s*\\1\\.z\\s*\\)\\s*-\\s*\\1\\.w\\s*\\)\\s*,\\s*\\1\\.w\\s*\\)\\s*;",
+                "gl_Position = $1;");
     }
 
     /**

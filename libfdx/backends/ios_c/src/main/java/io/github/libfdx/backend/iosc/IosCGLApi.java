@@ -268,6 +268,48 @@ final class IosCGLApi implements GLApi {
     }
 
     /**
+     * Runs the bind uniform buffer step.
+     *
+     * @param buffer the buffer
+     */
+    @Override
+    public void bindUniformBuffer(int buffer) {
+        IosCOpenGLES.glBindBuffer(IosCOpenGLES.UNIFORM_BUFFER, buffer);
+    }
+
+    /**
+     * Runs the uniform buffer data step.
+     *
+     * @param size the size
+     */
+    @Override
+    public void uniformBufferData(int size) {
+        IosCOpenGLES.glBufferData(IosCOpenGLES.UNIFORM_BUFFER, size, Address.fromLong(0L),
+                IosCOpenGLES.DYNAMIC_DRAW);
+    }
+
+    /**
+     * Runs the uniform buffer sub data step.
+     *
+     * @param data the data
+     */
+    @Override
+    public void uniformBufferSubData(ByteBuffer data) {
+        IosCOpenGLES.glBufferSubData(IosCOpenGLES.UNIFORM_BUFFER, 0, data.remaining(), data);
+    }
+
+    /**
+     * Runs the bind uniform buffer base step.
+     *
+     * @param binding the binding
+     * @param buffer the buffer
+     */
+    @Override
+    public void bindUniformBufferBase(int binding, int buffer) {
+        IosCOpenGLES.glBindBufferBase(IosCOpenGLES.UNIFORM_BUFFER, binding, buffer);
+    }
+
+    /**
      * Runs the element buffer sub data step.
      *
      * @param data the data
@@ -399,6 +441,30 @@ final class IosCGLApi implements GLApi {
     @Override
     public void uniform1i(int location, int value) {
         IosCOpenGLES.glUniform1i(location, value);
+    }
+
+    /**
+     * Runs the uniform block index step.
+     *
+     * @param program the program
+     * @param name the name
+     * @return the uniform block index, or -1 when absent
+     */
+    @Override
+    public int uniformBlockIndex(int program, String name) {
+        return IosCOpenGLES.glGetUniformBlockIndex(program, name);
+    }
+
+    /**
+     * Runs the uniform block binding step.
+     *
+     * @param program the program
+     * @param blockIndex the block index
+     * @param binding the binding
+     */
+    @Override
+    public void uniformBlockBinding(int program, int blockIndex, int binding) {
+        IosCOpenGLES.glUniformBlockBinding(program, blockIndex, binding);
     }
 
     /**

@@ -215,8 +215,12 @@ public final class ShaderBundle {
                 }
                 return ShaderModuleDescriptor.spirv(label, spirvVertexWords, spirvFragmentWords);
             case METAL_MSL:
+                if (mslSource == null || mslSource.length() == 0) {
+                    throw missing(target, "MSL");
+                }
+                return ShaderModuleDescriptor.msl(label, mslSource);
             case DIRECTX_HLSL:
-                throw new FdxException("Shader target " + target + " is generated metadata only until a provider "
+                throw new FdxException("Shader target " + target + " is generated metadata only until a descriptor "
                         + "accepts that language");
             default:
                 throw new FdxException("Unsupported shader target: " + target);

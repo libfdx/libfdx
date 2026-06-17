@@ -1690,7 +1690,7 @@ Defined descriptor types:
 | `ShaderBundle` | WGSL source-of-truth plus generated target artifacts, reflection metadata, profile validation, and provider-target descriptor selection. |
 | `ShaderReflection`, `ShaderBinding`, `ShaderAttribute` | Setup-time metadata for shader bindings and vertex inputs generated or declared with a shader bundle. |
 | `RenderPassDescriptor` | Color/depth attachments, load/store operations, clear values. |
-| `RenderPipelineDescriptor` | Shader module, entry points, target format, primitive topology, vertex layouts, sampled texture count, and debug label. |
+| `RenderPipelineDescriptor` | Shader module, entry points, target format, shader reflection metadata, primitive topology, vertex layouts, sampled texture count, depth state, and debug label. |
 
 Defined value/state types:
 
@@ -1811,10 +1811,13 @@ public final class RenderPipelineDescriptor {
     public RenderPipelineDescriptor label(String label);
     public RenderPipelineDescriptor vertexEntryPoint(String vertexEntryPoint);
     public RenderPipelineDescriptor fragmentEntryPoint(String fragmentEntryPoint);
+    public RenderPipelineDescriptor shaderReflection(ShaderReflection shaderReflection);
     public RenderPipelineDescriptor primitiveTopology(PrimitiveTopology primitiveTopology);
     public RenderPipelineDescriptor vertexLayout(VertexLayout vertexLayout);
     public RenderPipelineDescriptor vertexLayouts(VertexLayout... vertexLayouts);
     public RenderPipelineDescriptor sampledTextureCount(int sampledTextureCount);
+    public RenderPipelineDescriptor depthTestEnabled(boolean depthTestEnabled);
+    public RenderPipelineDescriptor depthWriteEnabled(boolean depthWriteEnabled);
 }
 ```
 
@@ -2640,14 +2643,14 @@ Rules:
 
 - `g3d` should use `graphics/api`, not provider-specific graphics types.
 - `Batch3D` is the common model/renderable submission contract. `ModelBatch` is the first implementation.
-- The first `ModelBatch` source slice renders static position/color meshes through reusable `Buffer`, `ShaderModule`, and `RenderPipeline` objects. It is a correctness and API integration base for the later PBR, uniform/storage buffer, instancing, skinning, and render-target work.
+- The first `ModelBatch` source slice renders static position/color meshes through reusable `Buffer`, `ShaderModule`, and `RenderPipeline` objects. The default `PbrShaderProvider` also owns the current static metallic-roughness PBR path for retained glTF mesh data and selects its built-in shader modules through `ShaderBundle`.
 - `ModelBuilder` creates simple primitive models and custom triangle meshes using the current position/color renderer path.
-- `G3DAssetLoaders.register(...)` installs the initial glTF loader. The first glTF slice supports static glTF 2.0 `.gltf`/`.glb` triangle meshes with `POSITION`, optional `COLOR_0`, optional indices, and `pbrMetallicRoughness.baseColorFactor`. Textures, node transforms, skins, morph targets, and animations are later slices.
+- `G3DAssetLoaders.register(...)` installs the initial glTF loader. The current glTF slice supports static glTF 2.0 `.gltf`/`.glb` triangle meshes with `POSITION`, optional `NORMAL`, optional `TEXCOORD_0`, optional `COLOR_0`, optional indices, metallic-roughness factors, and base-color, metallic-roughness, normal, occlusion, and emissive textures. Node transforms, skins, morph targets, animations, and broader material policies are later slices.
 - `g3d` should keep model loading, materials, PBR data, custom shaders, animation, lighting, frame targets, render paths, and rendering helpers in one user-facing artifact.
 - Provider-specific rendering paths can exist internally, but normal user code should not need provider-specific graphics classes.
 - `ModelBatch` should batch by shader key, material state, mesh, primitive topology, vertex layout, and render target. It should sort opaque renderables for state locality and depth efficiency, sort transparent renderables back-to-front, and keep stable ordering where required.
 - `ModelBatch` should use API-neutral performance features through `graphics/api`: immutable/static mesh buffers, dynamic uniform or storage buffers, per-context pipeline caches, material/shader variant caches, texture and sampler binding reuse, instancing for repeated meshes, GPU skinning where supported, and clear fallbacks where a provider lacks an optimization.
-- The full default PBR path is not implemented in the first source slice. When implemented, it should be metallic-roughness and support base color, normal, metallic-roughness, occlusion, emissive, alpha mode, double-sided state, image-based lighting, and shadow inputs.
+- Later PBR slices should broaden material policy and lighting support, including alpha mode, double-sided state, image-based lighting, shadows, instancing, GPU skinning, morph targets, and render-target integration.
 - Custom shaders should plug in through `ShaderProvider3D` and still receive standard camera, model, material, light, animation, and render-target inputs through `RenderContext3D`.
 - Framebuffer and future multi-render-target support belongs in `graphics/api`; `g3d` render paths should consume those targets for capture, shadow maps, G-buffers, reflection/environment captures, post-processing, and user-created offscreen passes.
 - Animation should support node transforms first, then skeletal skinning and morph targets. CPU skinning may exist as a compatibility fallback, but GPU skinning should be the optimized default when the selected provider can support it.

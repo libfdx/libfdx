@@ -37,6 +37,7 @@ final class DesktopCOpenGL {
     static final int TEXTURE0 = 0x84C0;
     static final int ARRAY_BUFFER = 0x8892;
     static final int ELEMENT_ARRAY_BUFFER = 0x8893;
+    static final int UNIFORM_BUFFER = 0x8A11;
     static final int DYNAMIC_DRAW = 0x88E8;
     static final int STATIC_DRAW = 0x88E4;
     static final int FRAGMENT_SHADER = 0x8B30;
@@ -188,6 +189,9 @@ final class DesktopCOpenGL {
     @Import(name = "glBufferSubData")
     static native void glBufferSubData(int target, int offset, int size, ByteBuffer data);
 
+    @Import(name = "glBindBufferBase")
+    static native void glBindBufferBase(int target, int index, int buffer);
+
     @Import(name = "glDeleteBuffers")
     private static native void glDeleteBuffers(int count, Address values);
 
@@ -219,6 +223,12 @@ final class DesktopCOpenGL {
 
     @Import(name = "glUniform1i")
     static native void glUniform1i(int location, int value);
+
+    @Import(name = "glGetUniformBlockIndex")
+    static native int glGetUniformBlockIndex(int program, String uniformBlockName);
+
+    @Import(name = "glUniformBlockBinding")
+    static native void glUniformBlockBinding(int program, int uniformBlockIndex, int uniformBlockBinding);
 
     @Import(name = "glUniform1f")
     static native void glUniform1f(int location, float value);

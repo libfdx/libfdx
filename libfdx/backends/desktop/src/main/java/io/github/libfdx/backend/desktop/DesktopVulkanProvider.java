@@ -20,6 +20,8 @@ import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
+import io.github.libfdx.graphics.ShaderBinding;
+import io.github.libfdx.graphics.ShaderBindingType;
 import io.github.libfdx.graphics.ShaderLanguage;
 import io.github.libfdx.graphics.ShaderModule;
 import io.github.libfdx.graphics.ShaderModuleDescriptor;
@@ -374,7 +376,6 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
     private static final int MAX_TEXTURE_DESCRIPTOR_SLOTS = 16;
     private static final int MAX_UNIFORM_DESCRIPTOR_SETS = 4096;
     private static final int PBR_UNIFORM_BYTE_COUNT = 224;
-    private static final int PBR_TEXTURE_DESCRIPTOR_COUNT = 5;
     private static final int DEPTH_FORMAT = VK_FORMAT_D32_SFLOAT;
     private static final long FRAME_FENCE_TIMEOUT_NS = 33_000_000L;
     private static final long SWAPCHAIN_ACQUIRE_TIMEOUT_NS = 33_000_000L;
@@ -480,8 +481,17 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
     }
 
     private static boolean usesPbrUniformBlock(RenderPipelineDescriptor descriptor) {
-        // The built-in Vulkan ModelBatch PBR shader declares five sampled texture slots and one PBR uniform block.
-        return descriptor.sampledTextureCount() == PBR_TEXTURE_DESCRIPTOR_COUNT;
+        ShaderBinding[] bindings = descriptor.shaderReflection().bindings();
+        for (int i = 0; i < bindings.length; i++) {
+            ShaderBinding binding = bindings[i];
+            if (binding.group() == 1
+                    && binding.binding() == 0
+                    && binding.type() == ShaderBindingType.UNIFORM_BUFFER
+                    && "uniforms".equals(binding.name())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void waitDeviceIdleBeforeDestroy(VkDevice device, String resourceName) {

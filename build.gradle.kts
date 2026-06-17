@@ -43,7 +43,10 @@ tasks.register("build_native_artifacts") {
         ":libfdx:runtime:fdx:platform:android:assembleRelease",
         ":libfdx:backends:android:assembleRelease",
         ":libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease",
-        ":libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease"
+        ":libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease",
+        ":libfdx:tools:shader:platform:desktop_ffm:generate_shaderc_desktop_native",
+        ":libfdx:tools:shader:platform:web:generate_shaderc_web_native",
+        ":libfdx:tools:shader:platform:android_jni:assembleRelease"
     )
 }
 

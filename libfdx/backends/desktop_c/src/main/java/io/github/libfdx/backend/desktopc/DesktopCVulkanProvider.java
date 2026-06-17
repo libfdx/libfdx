@@ -22,6 +22,8 @@ import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
+import io.github.libfdx.graphics.ShaderBinding;
+import io.github.libfdx.graphics.ShaderBindingType;
 import io.github.libfdx.graphics.ShaderLanguage;
 import io.github.libfdx.graphics.ShaderModule;
 import io.github.libfdx.graphics.ShaderModuleDescriptor;
@@ -50,7 +52,6 @@ import java.nio.FloatBuffer;
  */
 public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider, GraphicsProviderSupport {
     public static final ProviderId ID = VulkanProvider.ID;
-    private static final int PBR_TEXTURE_DESCRIPTOR_COUNT = 5;
 
     private VulkanConfiguration configuration = new VulkanConfiguration();
 
@@ -551,8 +552,17 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
     }
 
     private static boolean usesPbrUniformBlock(RenderPipelineDescriptor descriptor) {
-        // The built-in Vulkan ModelBatch PBR shader declares five sampled texture slots and one PBR uniform block.
-        return descriptor.sampledTextureCount() == PBR_TEXTURE_DESCRIPTOR_COUNT;
+        ShaderBinding[] bindings = descriptor.shaderReflection().bindings();
+        for (int i = 0; i < bindings.length; i++) {
+            ShaderBinding binding = bindings[i];
+            if (binding.group() == 1
+                    && binding.binding() == 0
+                    && binding.type() == ShaderBindingType.UNIFORM_BUFFER
+                    && "uniforms".equals(binding.name())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

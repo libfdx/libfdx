@@ -30,6 +30,7 @@ import java.util.Map;
 final class WebGLApi implements GLApi {
     private static final int ARRAY_BUFFER = 0x8892;
     private static final int ELEMENT_ARRAY_BUFFER = 0x8893;
+    private static final int UNIFORM_BUFFER = 0x8A11;
     private static final int DYNAMIC_DRAW = 0x88E8;
     private static final int STATIC_DRAW = 0x88E4;
     private static final int VERTEX_SHADER = 0x8B31;
@@ -344,6 +345,47 @@ final class WebGLApi implements GLApi {
     }
 
     /**
+     * Runs the bind uniform buffer step.
+     *
+     * @param buffer the buffer
+     */
+    @Override
+    public void bindUniformBuffer(int buffer) {
+        gl.bindBuffer(UNIFORM_BUFFER, buffers.get(buffer));
+    }
+
+    /**
+     * Runs the uniform buffer data step.
+     *
+     * @param size the size
+     */
+    @Override
+    public void uniformBufferData(int size) {
+        gl.bufferData(UNIFORM_BUFFER, size, DYNAMIC_DRAW);
+    }
+
+    /**
+     * Runs the uniform buffer sub data step.
+     *
+     * @param data the data
+     */
+    @Override
+    public void uniformBufferSubData(ByteBuffer data) {
+        gl.bufferSubData(UNIFORM_BUFFER, 0, activeBytes(data));
+    }
+
+    /**
+     * Runs the bind uniform buffer base step.
+     *
+     * @param binding the binding
+     * @param buffer the buffer
+     */
+    @Override
+    public void bindUniformBufferBase(int binding, int buffer) {
+        bindBufferBase(gl, UNIFORM_BUFFER, binding, buffers.get(buffer));
+    }
+
+    /**
      * Runs the element buffer sub data step.
      *
      * @param data the data
@@ -481,6 +523,30 @@ final class WebGLApi implements GLApi {
         if (programUniforms != null) {
             gl.uniform1i(programUniforms.get(location), value);
         }
+    }
+
+    /**
+     * Runs the uniform block index step.
+     *
+     * @param program the program
+     * @param name the name
+     * @return the uniform block index, or -1 when absent
+     */
+    @Override
+    public int uniformBlockIndex(int program, String name) {
+        return uniformBlockIndex(gl, programs.get(program), name);
+    }
+
+    /**
+     * Runs the uniform block binding step.
+     *
+     * @param program the program
+     * @param blockIndex the block index
+     * @param binding the binding
+     */
+    @Override
+    public void uniformBlockBinding(int program, int blockIndex, int binding) {
+        uniformBlockBinding(gl, programs.get(program), blockIndex, binding);
     }
 
     /**
@@ -865,4 +931,21 @@ final class WebGLApi implements GLApi {
             "gl.uniformMatrix4fv(location, transpose, values);")
     private static native void uniformMatrix4fv(WebGLRenderingContext gl, WebGLUniformLocation location,
             boolean transpose, float[] values);
+
+    @JSBody(params = { "gl", "target", "binding", "buffer" }, script =
+            "if (!gl.bindBufferBase) throw 'Uniform buffers are not supported';\n" +
+            "gl.bindBufferBase(target, binding, buffer);")
+    private static native void bindBufferBase(WebGLRenderingContext gl, int target, int binding, WebGLBuffer buffer);
+
+    @JSBody(params = { "gl", "program", "name" }, script =
+            "if (!gl.getUniformBlockIndex) return -1;\n" +
+            "var index = gl.getUniformBlockIndex(program, name);\n" +
+            "return index === 0xFFFFFFFF ? -1 : index;")
+    private static native int uniformBlockIndex(WebGLRenderingContext gl, WebGLProgram program, String name);
+
+    @JSBody(params = { "gl", "program", "blockIndex", "binding" }, script =
+            "if (!gl.uniformBlockBinding) throw 'Uniform buffers are not supported';\n" +
+            "gl.uniformBlockBinding(program, blockIndex, binding);")
+    private static native void uniformBlockBinding(WebGLRenderingContext gl, WebGLProgram program, int blockIndex,
+            int binding);
 }

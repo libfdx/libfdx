@@ -259,6 +259,47 @@ final class DesktopGLApi implements GLApi {
     }
 
     /**
+     * Runs the bind uniform buffer step.
+     *
+     * @param buffer the buffer
+     */
+    @Override
+    public void bindUniformBuffer(int buffer) {
+        GL15.glBindBuffer(GL31.GL_UNIFORM_BUFFER, buffer);
+    }
+
+    /**
+     * Runs the uniform buffer data step.
+     *
+     * @param size the size
+     */
+    @Override
+    public void uniformBufferData(int size) {
+        GL15.glBufferData(GL31.GL_UNIFORM_BUFFER, size, GL15.GL_DYNAMIC_DRAW);
+    }
+
+    /**
+     * Runs the uniform buffer sub data step.
+     *
+     * @param data the data
+     */
+    @Override
+    public void uniformBufferSubData(ByteBuffer data) {
+        GL15.glBufferSubData(GL31.GL_UNIFORM_BUFFER, 0, data);
+    }
+
+    /**
+     * Runs the bind uniform buffer base step.
+     *
+     * @param binding the binding
+     * @param buffer the buffer
+     */
+    @Override
+    public void bindUniformBufferBase(int binding, int buffer) {
+        GL30.glBindBufferBase(GL31.GL_UNIFORM_BUFFER, binding, buffer);
+    }
+
+    /**
      * Runs the element buffer sub data step.
      *
      * @param data the data
@@ -381,6 +422,30 @@ final class DesktopGLApi implements GLApi {
     @Override
     public void uniform1i(int location, int value) {
         GL20.glUniform1i(location, value);
+    }
+
+    /**
+     * Runs the uniform block index step.
+     *
+     * @param program the program
+     * @param name the name
+     * @return the uniform block index, or -1 when absent
+     */
+    @Override
+    public int uniformBlockIndex(int program, String name) {
+        return GL31.glGetUniformBlockIndex(program, name);
+    }
+
+    /**
+     * Runs the uniform block binding step.
+     *
+     * @param program the program
+     * @param blockIndex the block index
+     * @param binding the binding
+     */
+    @Override
+    public void uniformBlockBinding(int program, int blockIndex, int binding) {
+        GL31.glUniformBlockBinding(program, blockIndex, binding);
     }
 
     /**

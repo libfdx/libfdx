@@ -17,7 +17,7 @@ The target flow is:
 ```text
 WGSL source
   -> libFDX shader tool
-     -> compiler adapter, initially Naga
+     -> Tint compiler backend
         -> WGSL for WebGPU/wgpu
         -> GLSL ES for WebGL/GLES
         -> GLSL for desktop OpenGL
@@ -28,8 +28,8 @@ WGSL source
   -> active provider selects its generated ShaderModuleDescriptor
 ```
 
-The public promise is the libFDX shader pipeline. Naga is the first compiler
-adapter, not the public API contract.
+The public promise is the libFDX shader pipeline. Tint is the first compiler
+backend, not the public API contract.
 
 ## 2. Non-Goals
 
@@ -38,20 +38,30 @@ adapter, not the public API contract.
   side effect of `GraphicsDevice.createShaderModule(...)`.
 - Do not require Metal, Vulkan, GL, WebGPU, and future DirectX users to maintain
   separate hand-written shader source files for the same portable shader.
-- Do not expose Naga, Tint, SPIRV-Cross, shaderc, DXC, or platform SDK compiler
-  types through the common graphics API.
+- Do not expose Tint, SPIRV-Cross, shaderc, DXC, or platform SDK compiler types
+  through the common graphics API.
 - Do not claim target support until the compiler path and provider path are both
   implemented and validated.
 
 ## 3. Source Layout
 
-Portable shader source belongs under:
+User-project portable shader source belongs under:
 
 ```text
 src/main/fdx-shaders/**/*.wgsl
 ```
 
-This path applies to user projects and libFDX modules that own built-in shaders.
+libFDX modules that own built-in renderer shaders keep their source inputs under
+the owning module:
+
+```text
+libfdx/graphics/g2d/src/main/shaders/**/*.wgsl
+libfdx/graphics/g3d/src/main/shaders/**/*.wgsl
+```
+
+Those built-in inputs are translated by module-local Gradle tasks into generated
+Java bundle classes under `build/generated/sources/libfdxShaders`. The generated
+classes are build output, not source-of-truth files.
 
 A shader may declare its intended profile with a leading comment:
 
@@ -121,11 +131,31 @@ release builds.
 The libFDX Gradle plugin owns the project-facing tasks:
 
 - `libfdx_validate_shaders` validates `src/main/fdx-shaders`.
-- A future generation task should translate WGSL into requested target outputs.
+- Project-facing generation should translate WGSL into requested target outputs
+  through the same shader tool API used by libFDX built-ins.
 - Generated reports belong under `build/reports/libfdx/shaders`.
 - Generated Java/source artifacts belong under Gradle build output folders.
 - Checked-in generated shader code is allowed only for libFDX bootstrap shaders
   when a module intentionally documents that choice.
+
+Current built-in generation tasks are module-owned:
+
+| Task | Owner | Output |
+| --- | --- | --- |
+| `:libfdx:graphics:g2d:generate_g2d_shader_bundles` | `graphics/g2d` | `GeneratedSpriteBatchShaders` |
+| `:libfdx:graphics:g3d:generate_g3d_shader_bundles` | `graphics/g3d` | `GeneratedModelBatchShaders` |
+
+The tasks use `:libfdx:tools:shader:core` and the host
+`libfdx_shaderc_cli` executable built from Tint/Dawn source resolved under that
+module's `build/third-party` directory.
+
+Current built-in shader status:
+
+| Renderer path | Source-of-truth | Generated/selected targets |
+| --- | --- | --- |
+| `SpriteBatch` | WGSL files in `graphics/g2d/src/main/shaders` | WebGPU/wgpu WGSL, WebGL/GLES GLSL ES, desktop GL GLSL, Vulkan SPIR-V, Metal MSL |
+| `ModelBatch` position/color | WGSL file in `graphics/g3d/src/main/shaders` | WebGPU/wgpu WGSL, WebGL/GLES GLSL ES, desktop GL GLSL, Vulkan SPIR-V, Metal MSL |
+| `ModelBatch` PBR | WGSL file in `graphics/g3d/src/main/shaders` | WebGPU/wgpu WGSL, WebGL/GLES GLSL ES, desktop GL GLSL, Vulkan SPIR-V, Metal MSL |
 
 The build tool must be deterministic. Generated bundles should include enough
 metadata to reproduce or diagnose the output:
@@ -134,7 +164,7 @@ metadata to reproduce or diagnose the output:
 - source hash;
 - profile ID;
 - target list;
-- compiler adapter ID;
+- compiler backend ID;
 - compiler version;
 - compiler options;
 - generated reflection metadata;
@@ -164,21 +194,22 @@ The first runtime/editor implementation should prefer a compiler process:
 Java editor
   -> libfdx shader runtime compiler API
   -> bundled libfdx-shaderc executable
-  -> Naga adapter
+  -> Tint compiler backend
   -> translated outputs and diagnostics
 ```
 
-This keeps Rust/Naga out of normal game classpaths and works well for desktop
-editors. A later implementation may replace the process boundary with JNI, FFM,
-or a local compiler daemon without changing the editor-facing API.
+This keeps compiler tooling out of normal game classpaths and works well for
+desktop editors. Platform-specific runtime/editor modules may replace the
+process boundary with JNI, FFM, Emscripten, or a local compiler daemon without
+changing the editor-facing API.
 
 Editor runtime compilation must cache outputs by source hash, profile, target,
-compiler adapter, compiler version, and options. Recompilation should happen on
+compiler backend, compiler version, and options. Recompilation should happen on
 file changes or explicit editor actions, never every frame.
 
-## 8. Compiler Adapter Model
+## 8. Compiler Backend Model
 
-The shader tool should own a small compiler adapter contract internally.
+The shader tool should own a small compiler backend contract internally.
 The common graphics API should not expose this contract.
 
 Target shape:
@@ -198,19 +229,15 @@ ShaderCompilerResult
   compiler metadata
 ```
 
-The first adapter is Naga. Current Naga documentation states that Naga can
-translate source code written in one shading language to another, has frontends
-for WGSL, GLSL, and SPIR-V, and has backends for GLSL, HLSL, MSL, SPIR-V, and
-WGSL:
+The first backend is Tint through Dawn/Tint source resolved into the Gradle
+build directory. The source checkout is build output and must not be committed.
+The shared native bridge exposes a small C ABI and command-line executable; Java
+runtime/editor integration uses platform modules for the ABI that each runtime
+can support.
 
-- [Naga crate docs](https://docs.rs/naga/latest/naga/)
-- [Naga frontends](https://docs.rs/naga/latest/naga/front/index.html)
-- [Naga backends](https://docs.rs/naga/latest/naga/back/index.html)
-- [Naga feature flags](https://docs.rs/crate/naga/latest/features)
+Required first Tint target set:
 
-Required first Naga feature set:
-
-| Target | Naga direction |
+| Target | Tint direction |
 | --- | --- |
 | WebGPU/wgpu | WGSL input, WGSL output or preserved source |
 | WebGL/GLES | WGSL input, GLSL output configured for GLSL ES |
@@ -219,7 +246,7 @@ Required first Naga feature set:
 | Metal | WGSL input, MSL output |
 | DirectX later | WGSL input, HLSL output |
 
-If Naga cannot translate a valid libFDX shader for a target, the shader tool must
+If Tint cannot translate a valid libFDX shader for a target, the shader tool must
 report a compiler diagnostic and fail that target. It must not silently emit a
 partial or mismatched shader.
 
@@ -262,7 +289,10 @@ Reflection should include:
 - target-specific generated names if the compiler rewrites them.
 
 Reflection must be stable enough for high-level renderers to create bind groups,
-pipelines, and validation errors without provider-specific parsing.
+pipelines, and validation errors without provider-specific parsing. Generated
+built-in bundles currently emit binding and vertex input metadata from the WGSL
+source. `RenderPipelineDescriptor.shaderReflection(...)` carries the metadata to
+providers that need setup-time resource layout decisions.
 
 ## 11. Hot Reload Rules
 
@@ -291,21 +321,25 @@ Stable ownership:
 | `ShaderLanguage`, `ShaderProfile`, `ShaderTarget`, `ShaderBundle`, descriptors, reflection values | `:libfdx:graphics:api` |
 | Built-in 2D shader sources and generated bundles | `:libfdx:graphics:g2d` |
 | Built-in 3D shader sources and generated bundles | `:libfdx:graphics:g3d` |
-| WGSL profile validation and shader generation API | `:libfdx:tools:shader` |
+| WGSL profile validation, shader generation API, shared compiler bridge, and native Tint bridge source | `:libfdx:tools:shader:core` |
+| Android runtime/editor shader compilation | `:libfdx:tools:shader:platform:android_jni` |
+| Web runtime/editor shader compilation | `:libfdx:tools:shader:platform:web` |
+| Desktop runtime/editor shader compilation | `:libfdx:tools:shader:platform:desktop_ffm` |
 | Gradle task wiring and user project DSL | `:libfdx:tools:gradle-plugin` |
 | Provider-specific shader module creation | selected graphics provider or backend-owned provider |
 | Optional editor/runtime compiler API | tooling module, not `graphics/api` |
 
-The first implementation may keep the Naga adapter inside `:libfdx:tools:shader`
-if that is simplest. Split the adapter only when native packaging, CLI
-distribution, or dependency boundaries require it.
+The parent `libfdx/tools/shader` and `libfdx/tools/shader/platform` folders are
+grouping folders only. They must not contain parent Gradle build files or source
+sets. Gradle should include the nested modules directly and must not remap them
+with custom directory remaps.
 
 ## 13. Validation Requirements
 
 For shader tooling changes:
 
 - validate Java compile for `graphics/api` and `tools/shader`;
-- run `tools/shader` tests;
+- run `:libfdx:tools:shader:core` tests;
 - run Gradle plugin tests or a plugin sample task when task wiring changes;
 - compile every requested generated target with the target compiler path when
   available;
@@ -320,21 +354,32 @@ For visual renderer changes:
 - report `PASS`, `BLOCKED`, or `NOT RUN` for every matrix cell in scope;
 - never claim visual parity from shader generation alone.
 
-## 14. Implementation Phases
+## 14. Implementation Status
 
-1. Freeze this architecture document and align canonical docs.
+1. Freeze this architecture document and align canonical docs. This is active
+   source-of-truth documentation and should be updated with shader architecture
+   changes.
 2. Tighten `ShaderBundle` and `ShaderModuleDescriptor` so documented targets and
    implemented descriptor selection match.
-3. Extend `tools/shader` from profile validation to deterministic bundle
-   generation.
-4. Add the Naga-backed compiler adapter for WGSL to GLSL ES, GLSL, SPIR-V, MSL,
-   and preserved WGSL.
-5. Wire Gradle generation tasks and reports.
-6. Migrate built-in `g2d` shaders to WGSL source plus generated target outputs.
-7. Add native Metal generated MSL validation through the iOS C Metal provider.
-8. Add optional editor/runtime compilation through a compiler process API.
-9. Add faster runtime integration later through JNI, FFM, or a daemon if editor
-   latency demands it.
+3. `:libfdx:tools:shader:core` owns profile validation,
+   deterministic bundle generation, Tint process compilation, and the shared C
+   ABI/native source.
+4. Tint-backed generation currently covers preserved WGSL, GLSL ES, desktop
+   GLSL, SPIR-V, and MSL. HLSL remains a future target.
+5. Built-in Gradle generation is wired for `graphics/g2d` and `graphics/g3d`.
+   Project-facing generation remains a plugin-facing follow-up.
+6. Built-in `SpriteBatch` and `ModelBatch` now consume generated bundle classes
+   with generated reflection metadata. `ModelBatch` PBR no longer uses separate
+   handwritten GL GLSL or Vulkan SPIR-V fallback sources.
+7. Desktop GL, desktop WGPU, desktop Vulkan, Android GLES, Android WGPU, WebGL
+   JS, and WebGPU JS have rendered the generated PBR model path in local
+   validation. Native Metal generated MSL validation through the iOS C Metal provider
+   remains pending.
+8. Optional editor/runtime compilation exists through the compiler request/result
+   API and process/native bridge model.
+9. Platform runtime integration modules exist for Android JNI, desktop FFM, and
+   web Emscripten; each platform still needs full packaging/runtime validation
+   before release claims.
 10. Add future frontends only through the shader tool API, not through
     provider APIs.
 

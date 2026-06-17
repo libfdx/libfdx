@@ -11,25 +11,31 @@ import io.github.libfdx.graphics.VertexLayout;
  * @author xpenatan
  */
 final class GLRenderPipelineHandle implements RenderPipeline {
+    static final int PBR_UNIFORM_BYTE_COUNT = 224;
+
     private final ProviderId providerId;
+    private final GLApi gl;
     private final int program;
     private final PrimitiveTopology primitiveTopology;
     private final VertexLayout[] vertexLayouts;
     private final int sampledTextureCount;
     private final boolean depthTestEnabled;
     private final boolean depthWriteEnabled;
+    private final int pbrUniformBuffer;
     private boolean disposed;
 
-    GLRenderPipelineHandle(ProviderId providerId, int program, PrimitiveTopology primitiveTopology,
+    GLRenderPipelineHandle(ProviderId providerId, GLApi gl, int program, PrimitiveTopology primitiveTopology,
             VertexLayout[] vertexLayouts, int sampledTextureCount, boolean depthTestEnabled,
-            boolean depthWriteEnabled) {
+            boolean depthWriteEnabled, int pbrUniformBuffer) {
         this.providerId = providerId;
+        this.gl = gl;
         this.program = program;
         this.primitiveTopology = primitiveTopology != null ? primitiveTopology : PrimitiveTopology.TRIANGLE_LIST;
         this.vertexLayouts = vertexLayouts != null ? vertexLayouts.clone() : new VertexLayout[0];
         this.sampledTextureCount = sampledTextureCount;
         this.depthTestEnabled = depthTestEnabled;
         this.depthWriteEnabled = depthWriteEnabled;
+        this.pbrUniformBuffer = pbrUniformBuffer;
     }
 
     int program() {
@@ -60,6 +66,14 @@ final class GLRenderPipelineHandle implements RenderPipeline {
         return depthWriteEnabled;
     }
 
+    int pbrUniformBuffer() {
+        return pbrUniformBuffer;
+    }
+
+    boolean pbrUniformBufferEnabled() {
+        return pbrUniformBuffer != 0;
+    }
+
     /**
      * Returns the identifier of the provider backing this object.
      *
@@ -87,6 +101,12 @@ final class GLRenderPipelineHandle implements RenderPipeline {
      */
     @Override
     public void dispose() {
+        if (disposed) {
+            return;
+        }
+        if (pbrUniformBuffer != 0) {
+            gl.deleteBuffer(pbrUniformBuffer);
+        }
         disposed = true;
     }
 

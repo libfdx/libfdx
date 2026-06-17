@@ -11,6 +11,9 @@ import io.github.libfdx.graphics.VertexAttribute;
 import io.github.libfdx.graphics.VertexLayout;
 import io.github.libfdx.graphics.VertexStepMode;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
 import java.util.Arrays;
 
 /**
@@ -19,11 +22,25 @@ import java.util.Arrays;
  * @author xpenatan
  */
 final class GLRenderPass implements RenderPass {
+    private static final int MATRIX_FLOAT_COUNT = 16;
+    private static final int MODEL_OFFSET = 0;
+    private static final int VIEW_PROJECTION_OFFSET = 16;
+    private static final int CAMERA_POSITION_OFFSET = 32;
+    private static final int AMBIENT_COLOR_OFFSET = 36;
+    private static final int LIGHT_DIRECTION_OFFSET = 40;
+    private static final int LIGHT_COLOR_INTENSITY_OFFSET = 44;
+    private static final int TEXTURE_FLAGS_OFFSET = 48;
+    private static final int EMISSIVE_FLAGS_OFFSET = 52;
+    private static final int PBR_UNIFORM_BINDING = 0;
+
     private final ProviderId providerId;
     private final GLApi gl;
     private GLRenderPipelineHandle pipeline;
     private GLBufferHandle[] vertexBuffers = new GLBufferHandle[2];
     private GLBufferHandle indexBuffer;
+    private ByteBuffer pbrUniformBytes;
+    private FloatBuffer pbrUniformFloats;
+    private boolean pbrUniformDataDirty;
     private boolean ended;
 
     GLRenderPass(ProviderId providerId, GLApi gl) {
@@ -48,10 +65,11 @@ final class GLRenderPass implements RenderPass {
         }
         gl.enableAlphaBlending();
         if (this.pipeline.sampledTextureCount() > 0) {
-            int textureLocation = gl.uniformLocation(this.pipeline.program(), "u_texture");
-            if (textureLocation >= 0) {
-                gl.uniform1i(textureLocation, 0);
-            }
+            setTextureUniform(0);
+        }
+        if (this.pipeline.pbrUniformBufferEnabled()) {
+            resetPbrUniformData();
+            gl.bindUniformBufferBase(PBR_UNIFORM_BINDING, this.pipeline.pbrUniformBuffer());
         }
         applyVertexLayouts();
     }
@@ -125,10 +143,7 @@ final class GLRenderPass implements RenderPass {
         gl.activeTexture(slot);
         gl.bindTexture2D(glTexture.texture());
         if (pipeline != null) {
-            int textureLocation = gl.uniformLocation(pipeline.program(), "u_texture");
-            if (textureLocation >= 0) {
-                gl.uniform1i(textureLocation, slot);
-            }
+            setTextureUniform(slot);
         }
     }
 
@@ -158,6 +173,7 @@ final class GLRenderPass implements RenderPass {
      */
     @Override
     public void setUniform1i(String name, int value) {
+        setPbrUniform1i(name, value);
         int location = uniformLocation(name);
         if (location >= 0) {
             gl.uniform1i(location, value);
@@ -172,6 +188,7 @@ final class GLRenderPass implements RenderPass {
      */
     @Override
     public void setUniform1f(String name, float value) {
+        setPbrUniform1f(name, value);
         int location = uniformLocation(name);
         if (location >= 0) {
             gl.uniform1f(location, value);
@@ -188,6 +205,7 @@ final class GLRenderPass implements RenderPass {
      */
     @Override
     public void setUniform3f(String name, float x, float y, float z) {
+        setPbrUniform3f(name, x, y, z);
         int location = uniformLocation(name);
         if (location >= 0) {
             gl.uniform3f(location, x, y, z);
@@ -205,6 +223,7 @@ final class GLRenderPass implements RenderPass {
      */
     @Override
     public void setUniform4f(String name, float x, float y, float z, float w) {
+        setPbrUniform4f(name, x, y, z, w);
         int location = uniformLocation(name);
         if (location >= 0) {
             gl.uniform4f(location, x, y, z, w);
@@ -219,9 +238,10 @@ final class GLRenderPass implements RenderPass {
      */
     @Override
     public void setUniformMatrix4(String name, float[] values) {
-        if (values == null || values.length < 16) {
+        if (values == null || values.length < MATRIX_FLOAT_COUNT) {
             throw new FdxException("Matrix uniform requires 16 float values");
         }
+        setPbrUniformMatrix4(name, values);
         int location = uniformLocation(name);
         if (location >= 0) {
             gl.uniformMatrix4fv(location, false, values);
@@ -245,6 +265,7 @@ final class GLRenderPass implements RenderPass {
         if (firstInstance != 0) {
             throw new FdxException("GL draw currently supports firstInstance=0 only");
         }
+        applyPbrUniformBuffer();
         if (instanceCount <= 1) {
             gl.drawArrays(pipeline.primitiveTopology(), firstVertex, vertexCount);
             return;
@@ -273,6 +294,7 @@ final class GLRenderPass implements RenderPass {
         if (firstInstance != 0) {
             throw new FdxException("GL drawIndexed currently supports firstInstance=0 only");
         }
+        applyPbrUniformBuffer();
         int offsetBytes = firstIndex * 2;
         if (instanceCount <= 1) {
             gl.drawElementsBaseVertex(pipeline.primitiveTopology(), indexCount, offsetBytes, baseVertex);
@@ -295,6 +317,143 @@ final class GLRenderPass implements RenderPass {
         gl.useProgram(0);
         gl.bindArrayBuffer(0);
         gl.bindElementArrayBuffer(0);
+        gl.bindUniformBuffer(0);
+    }
+
+    private void applyPbrUniformBuffer() {
+        if (pipeline == null || !pipeline.pbrUniformBufferEnabled()) {
+            return;
+        }
+        gl.bindUniformBufferBase(PBR_UNIFORM_BINDING, pipeline.pbrUniformBuffer());
+        if (!pbrUniformDataDirty || pbrUniformBytes == null) {
+            return;
+        }
+        pbrUniformBytes.position(0);
+        pbrUniformBytes.limit(GLRenderPipelineHandle.PBR_UNIFORM_BYTE_COUNT);
+        gl.bindUniformBuffer(pipeline.pbrUniformBuffer());
+        gl.uniformBufferSubData(pbrUniformBytes);
+        gl.bindUniformBuffer(0);
+        pbrUniformDataDirty = false;
+    }
+
+    private void setPbrUniform1i(String name, int value) {
+        if (!usesPbrUniformBuffer()) {
+            return;
+        }
+        if ("u_hasBaseColorTexture".equals(name)) {
+            setPbrUniformFloat(TEXTURE_FLAGS_OFFSET, value);
+        } else if ("u_hasMetallicRoughnessTexture".equals(name)) {
+            setPbrUniformFloat(TEXTURE_FLAGS_OFFSET + 1, value);
+        } else if ("u_hasNormalTexture".equals(name)) {
+            setPbrUniformFloat(TEXTURE_FLAGS_OFFSET + 2, value);
+        } else if ("u_hasOcclusionTexture".equals(name)) {
+            setPbrUniformFloat(TEXTURE_FLAGS_OFFSET + 3, value);
+        } else if ("u_hasEmissiveTexture".equals(name)) {
+            setPbrUniformFloat(EMISSIVE_FLAGS_OFFSET, value);
+        }
+    }
+
+    private void setPbrUniform1f(String name, float value) {
+        if (!usesPbrUniformBuffer()) {
+            return;
+        }
+        if ("u_lightIntensity".equals(name)) {
+            setPbrUniformFloat(LIGHT_COLOR_INTENSITY_OFFSET + 3, value);
+        }
+    }
+
+    private void setPbrUniform3f(String name, float x, float y, float z) {
+        if (!usesPbrUniformBuffer()) {
+            return;
+        }
+        if ("u_cameraPosition".equals(name)) {
+            setPbrUniform4f(CAMERA_POSITION_OFFSET, x, y, z, 1.0f);
+        } else if ("u_ambientColor".equals(name)) {
+            setPbrUniform4f(AMBIENT_COLOR_OFFSET, x, y, z, 1.0f);
+        } else if ("u_lightDirection".equals(name)) {
+            setPbrUniform4f(LIGHT_DIRECTION_OFFSET, x, y, z, 0.0f);
+        } else if ("u_lightColor".equals(name)) {
+            setPbrUniform4f(LIGHT_COLOR_INTENSITY_OFFSET, x, y, z,
+                    pbrUniformFloats.get(LIGHT_COLOR_INTENSITY_OFFSET + 3));
+        }
+    }
+
+    private void setPbrUniform4f(String name, float x, float y, float z, float w) {
+        if (!usesPbrUniformBuffer()) {
+            return;
+        }
+        if ("u_cameraPosition".equals(name)) {
+            setPbrUniform4f(CAMERA_POSITION_OFFSET, x, y, z, w);
+        } else if ("u_ambientColor".equals(name)) {
+            setPbrUniform4f(AMBIENT_COLOR_OFFSET, x, y, z, w);
+        } else if ("u_lightDirection".equals(name)) {
+            setPbrUniform4f(LIGHT_DIRECTION_OFFSET, x, y, z, w);
+        } else if ("u_lightColor".equals(name)) {
+            setPbrUniform4f(LIGHT_COLOR_INTENSITY_OFFSET, x, y, z, w);
+        }
+    }
+
+    private void setPbrUniformMatrix4(String name, float[] values) {
+        if (!usesPbrUniformBuffer()) {
+            return;
+        }
+        if ("u_model".equals(name)) {
+            setPbrUniformMatrix(MODEL_OFFSET, values);
+        } else if ("u_viewProjection".equals(name)) {
+            setPbrUniformMatrix(VIEW_PROJECTION_OFFSET, values);
+        }
+    }
+
+    private void setPbrUniformMatrix(int offset, float[] values) {
+        ensurePbrUniformData();
+        for (int i = 0; i < MATRIX_FLOAT_COUNT; i++) {
+            pbrUniformFloats.put(offset + i, values[i]);
+        }
+        pbrUniformDataDirty = true;
+    }
+
+    private void setPbrUniform4f(int offset, float x, float y, float z, float w) {
+        ensurePbrUniformData();
+        pbrUniformFloats.put(offset, x);
+        pbrUniformFloats.put(offset + 1, y);
+        pbrUniformFloats.put(offset + 2, z);
+        pbrUniformFloats.put(offset + 3, w);
+        pbrUniformDataDirty = true;
+    }
+
+    private void setPbrUniformFloat(int offset, float value) {
+        ensurePbrUniformData();
+        pbrUniformFloats.put(offset, value);
+        pbrUniformDataDirty = true;
+    }
+
+    private boolean usesPbrUniformBuffer() {
+        return pipeline != null && pipeline.pbrUniformBufferEnabled();
+    }
+
+    private void resetPbrUniformData() {
+        ensurePbrUniformData();
+        for (int i = 0; i < GLRenderPipelineHandle.PBR_UNIFORM_BYTE_COUNT / 4; i++) {
+            pbrUniformFloats.put(i, 0.0f);
+        }
+        pbrUniformFloats.put(MODEL_OFFSET, 1.0f);
+        pbrUniformFloats.put(MODEL_OFFSET + 5, 1.0f);
+        pbrUniformFloats.put(MODEL_OFFSET + 10, 1.0f);
+        pbrUniformFloats.put(MODEL_OFFSET + 15, 1.0f);
+        pbrUniformFloats.put(VIEW_PROJECTION_OFFSET, 1.0f);
+        pbrUniformFloats.put(VIEW_PROJECTION_OFFSET + 5, 1.0f);
+        pbrUniformFloats.put(VIEW_PROJECTION_OFFSET + 10, 1.0f);
+        pbrUniformFloats.put(VIEW_PROJECTION_OFFSET + 15, 1.0f);
+        pbrUniformDataDirty = true;
+    }
+
+    private void ensurePbrUniformData() {
+        if (pbrUniformBytes != null) {
+            return;
+        }
+        pbrUniformBytes = ByteBuffer.allocateDirect(GLRenderPipelineHandle.PBR_UNIFORM_BYTE_COUNT)
+                .order(ByteOrder.nativeOrder());
+        pbrUniformFloats = pbrUniformBytes.asFloatBuffer();
     }
 
     private void applyVertexLayouts() {
@@ -353,6 +512,17 @@ final class GLRenderPass implements RenderPass {
             throw new FdxException("Uniform name cannot be empty");
         }
         return gl.uniformLocation(pipeline.program(), name);
+    }
+
+    private void setTextureUniform(int slot) {
+        int textureLocation = gl.uniformLocation(pipeline.program(), "u_texture");
+        if (textureLocation >= 0) {
+            gl.uniform1i(textureLocation, slot);
+        }
+        int tintTextureLocation = gl.uniformLocation(pipeline.program(), "f_u_texture_u_sampler");
+        if (tintTextureLocation >= 0) {
+            gl.uniform1i(tintTextureLocation, slot);
+        }
     }
 
     /**

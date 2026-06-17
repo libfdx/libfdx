@@ -8,6 +8,7 @@ import io.github.libfdx.assets.AssetManager;
 import io.github.libfdx.assets.DefaultAssetManager;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.Logger;
+import io.github.libfdx.display.Display;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.Texture;
@@ -16,6 +17,8 @@ import io.github.libfdx.graphics.g2d.G2DAssetLoaders;
 import io.github.libfdx.graphics.g2d.SpriteBatch;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 import io.github.libfdx.tests.TestFpsLogger;
+
+import java.nio.ByteBuffer;
 
 /**
  * Runs the sprite batch test scenario.
@@ -29,12 +32,17 @@ public final class SpriteBatchTest extends ApplicationAdapter {
 
     private final long exitAfterFrames;
     private Application application;
+    private Display display;
+    private GraphicsContext graphics;
     private AssetManager assets;
     private Logger logger;
     private TestFpsLogger fpsLogger;
     private Batch2D batch;
     private TextureRegion[][] playerFrames;
+    private String capturePath;
+    private long captureFrame;
     private boolean created;
+    private boolean captured;
     private long renderedFrames;
 
     /**
@@ -54,7 +62,8 @@ public final class SpriteBatchTest extends ApplicationAdapter {
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
-        GraphicsContext graphics = fdx.graphics().main();
+        display = fdx.displays().main();
+        graphics = fdx.graphics().main();
         assets = new DefaultAssetManager(fdx.files());
         logger = fdx.logger();
         fpsLogger = TestFpsLogger.create(logger, "SpriteBatchTest");
@@ -65,6 +74,8 @@ public final class SpriteBatchTest extends ApplicationAdapter {
         assets.finishLoading();
         Texture player = assets.get(PLAYER_ASSET, Texture.class);
         playerFrames = TextureRegion.split(player, PLAYER_FRAME_WIDTH, PLAYER_FRAME_HEIGHT);
+        capturePath = System.getProperty("libfdx.test.capture", "");
+        captureFrame = Long.parseLong(System.getProperty("libfdx.test.captureFrame", "2"));
 
         created = true;
         logger.info("SpriteBatchTest created with " + player.width() + "x" + player.height()
@@ -85,6 +96,10 @@ public final class SpriteBatchTest extends ApplicationAdapter {
         batch.draw(frame(3, 2), 0.54f, -0.25f, 0.35f, 0.35f);
         batch.end();
 
+        if (capturePath != null && capturePath.length() > 0 && !captured && renderedFrames >= captureFrame) {
+            captureFrame(capturePath);
+            captured = true;
+        }
         renderedFrames++;
         fpsLogger.frame(deltaSeconds, renderedFrames);
         if (exitAfterFrames > 0L && renderedFrames >= exitAfterFrames) {
@@ -112,7 +127,30 @@ public final class SpriteBatchTest extends ApplicationAdapter {
             throw new FdxException("SpriteBatchTest rendered " + renderedFrames + " of "
                     + exitAfterFrames + " required frames");
         }
+        if (capturePath != null && capturePath.length() > 0 && !captured) {
+            throw new FdxException("SpriteBatchTest did not capture framebuffer to " + capturePath);
+        }
         logger.info("SpriteBatchTest rendered " + renderedFrames + " frames");
+    }
+
+    private int framebufferWidth() {
+        int width = display.framebufferWidth() > 0 ? display.framebufferWidth() : display.width();
+        return width > 0 ? width : 640;
+    }
+
+    private int framebufferHeight() {
+        int height = display.framebufferHeight() > 0 ? display.framebufferHeight() : display.height();
+        return height > 0 ? height : 480;
+    }
+
+    private void captureFrame(String path) {
+        try {
+            ByteBuffer pixels = FramebufferCapture.readPixelsRgba8(graphics);
+            FramebufferCapture.writePpm(path, framebufferWidth(), framebufferHeight(), pixels);
+            logger.info("SpriteBatchTest captured framebuffer to " + path);
+        } catch (Exception e) {
+            throw new FdxException("Could not capture SpriteBatchTest framebuffer", e);
+        }
     }
 
     private TextureRegion frame(int row, int column) {

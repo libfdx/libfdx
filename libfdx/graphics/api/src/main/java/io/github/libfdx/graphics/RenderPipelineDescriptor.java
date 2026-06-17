@@ -13,6 +13,7 @@ public final class RenderPipelineDescriptor {
     private String vertexEntryPoint = "vertexMain";
     private String fragmentEntryPoint = "fragmentMain";
     private TextureFormat colorFormat = TextureFormat.UNKNOWN;
+    private ShaderReflection shaderReflection = ShaderReflection.empty();
     private PrimitiveTopology primitiveTopology = PrimitiveTopology.TRIANGLE_LIST;
     private VertexLayout[] vertexLayouts = new VertexLayout[0];
     private int sampledTextureCount;
@@ -132,6 +133,26 @@ public final class RenderPipelineDescriptor {
      */
     public RenderPipelineDescriptor colorFormat(TextureFormat colorFormat) {
         this.colorFormat = colorFormat != null ? colorFormat : TextureFormat.UNKNOWN;
+        return this;
+    }
+
+    /**
+     * Returns the shader reflection.
+     *
+     * @return the shader reflection
+     */
+    public ShaderReflection shaderReflection() {
+        return shaderReflection;
+    }
+
+    /**
+     * Sets the shader reflection and returns this render pipeline descriptor.
+     *
+     * @param shaderReflection the shader reflection
+     * @return this render pipeline descriptor for chaining
+     */
+    public RenderPipelineDescriptor shaderReflection(ShaderReflection shaderReflection) {
+        this.shaderReflection = shaderReflection != null ? shaderReflection : ShaderReflection.empty();
         return this;
     }
 

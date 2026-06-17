@@ -258,6 +258,48 @@ final class DesktopCGLApi implements GLApi {
     }
 
     /**
+     * Runs the bind uniform buffer step.
+     *
+     * @param buffer the buffer
+     */
+    @Override
+    public void bindUniformBuffer(int buffer) {
+        DesktopCOpenGL.glBindBuffer(DesktopCOpenGL.UNIFORM_BUFFER, buffer);
+    }
+
+    /**
+     * Runs the uniform buffer data step.
+     *
+     * @param size the size
+     */
+    @Override
+    public void uniformBufferData(int size) {
+        DesktopCOpenGL.glBufferData(DesktopCOpenGL.UNIFORM_BUFFER, size, Address.fromLong(0L),
+                DesktopCOpenGL.DYNAMIC_DRAW);
+    }
+
+    /**
+     * Runs the uniform buffer sub data step.
+     *
+     * @param data the data
+     */
+    @Override
+    public void uniformBufferSubData(ByteBuffer data) {
+        DesktopCOpenGL.glBufferSubData(DesktopCOpenGL.UNIFORM_BUFFER, 0, data.remaining(), data);
+    }
+
+    /**
+     * Runs the bind uniform buffer base step.
+     *
+     * @param binding the binding
+     * @param buffer the buffer
+     */
+    @Override
+    public void bindUniformBufferBase(int binding, int buffer) {
+        DesktopCOpenGL.glBindBufferBase(DesktopCOpenGL.UNIFORM_BUFFER, binding, buffer);
+    }
+
+    /**
      * Runs the element buffer sub data step.
      *
      * @param data the data
@@ -389,6 +431,30 @@ final class DesktopCGLApi implements GLApi {
     @Override
     public void uniform1i(int location, int value) {
         DesktopCOpenGL.glUniform1i(location, value);
+    }
+
+    /**
+     * Runs the uniform block index step.
+     *
+     * @param program the program
+     * @param name the name
+     * @return the uniform block index, or -1 when absent
+     */
+    @Override
+    public int uniformBlockIndex(int program, String name) {
+        return DesktopCOpenGL.glGetUniformBlockIndex(program, name);
+    }
+
+    /**
+     * Runs the uniform block binding step.
+     *
+     * @param program the program
+     * @param blockIndex the block index
+     * @param binding the binding
+     */
+    @Override
+    public void uniformBlockBinding(int program, int blockIndex, int binding) {
+        DesktopCOpenGL.glUniformBlockBinding(program, blockIndex, binding);
     }
 
     /**
