@@ -18,6 +18,12 @@ dependencies {
 }
 
 val generatedShadercResources = layout.buildDirectory.dir("generated/resources/shaderc")
+val requiredDesktopShadercResources = listOf(
+    "libfdx/shader/native/desktop/windows-x86_64/fdx_shaderc.dll",
+    "libfdx/shader/native/desktop/linux-x86_64/libfdx_shaderc.so",
+    "libfdx/shader/native/desktop/macos-x86_64/libfdx_shaderc.dylib",
+    "libfdx/shader/native/desktop/macos-arm64/libfdx_shaderc.dylib"
+)
 
 fun hostClassifier(): String {
     val os = System.getProperty("os.name").lowercase()
@@ -56,6 +62,27 @@ tasks.register<Sync>("generate_shaderc_desktop_native") {
     into(generatedShadercResources)
 }
 
+val validateShadercDesktopNativeResources = tasks.register("validate_shaderc_desktop_native_resources") {
+    group = "libfdx native"
+    description = "Validates staged desktop shader compiler native resources before packaging."
+    mustRunAfter("generate_shaderc_desktop_native")
+    inputs.files(requiredDesktopShadercResources.map { path ->
+        generatedShadercResources.map { dir -> dir.file(path) }
+    })
+    doLast {
+        val root = generatedShadercResources.get().asFile
+        val missing = requiredDesktopShadercResources
+            .map { root.resolve(it) }
+            .filterNot { it.isFile }
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "Missing generated desktop shader compiler resources:\n" +
+                        missing.joinToString(separator = "\n") { " - ${it.absolutePath}" }
+            )
+        }
+    }
+}
+
 sourceSets {
     main {
         resources.srcDir(generatedShadercResources)
@@ -63,7 +90,11 @@ sourceSets {
 }
 
 tasks.named<ProcessResources>("processResources") {
-    dependsOn("generate_shaderc_desktop_native")
+    mustRunAfter("generate_shaderc_desktop_native")
+}
+
+tasks.named("jar") {
+    dependsOn(validateShadercDesktopNativeResources)
 }
 
 tasks.named<Test>("test") {

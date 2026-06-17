@@ -36,7 +36,7 @@ val emcmakeCommand = providers.gradleProperty("libfdx.shaderc.emcmake")
 val dawnRepository = providers.gradleProperty("libfdx.shaderc.dawnRepository")
     .orElse("https://dawn.googlesource.com/dawn")
 val dawnRevision = providers.gradleProperty("libfdx.shaderc.dawnRevision")
-    .orElse("refs/heads/main")
+    .orElse("2f2ebd3da8c8fdbce8fcd8c7ebde76e0ed4f5de5")
 val androidAbis = providers.gradleProperty("libfdx.shaderc.androidAbis")
     .map { value -> value.split(',', ';', ' ').map { it.trim() }.filter { it.isNotEmpty() } }
     .orElse(listOf("arm64-v8a"))
