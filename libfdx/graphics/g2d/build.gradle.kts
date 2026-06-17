@@ -52,6 +52,10 @@ tasks.named("compileJava") {
     dependsOn(generateG2dShaderBundles)
 }
 
+tasks.matching { it.name == "sourcesJar" }.configureEach {
+    dependsOn(generateG2dShaderBundles)
+}
+
 dependencies {
     api(project(":libfdx:graphics:api"))
     api(project(":libfdx:assets:manager"))

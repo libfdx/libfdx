@@ -50,6 +50,10 @@ tasks.named("compileJava") {
     dependsOn(generateG3dShaderBundles)
 }
 
+tasks.matching { it.name == "sourcesJar" }.configureEach {
+    dependsOn(generateG3dShaderBundles)
+}
+
 dependencies {
     api(project(":libfdx:graphics:api"))
     api(project(":libfdx:foundation:math"))
