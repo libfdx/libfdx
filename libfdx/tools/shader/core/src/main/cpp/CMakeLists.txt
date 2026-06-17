@@ -14,6 +14,19 @@ if(NOT FDX_SHADERC_OUTPUT_DIR)
   set(FDX_SHADERC_OUTPUT_DIR "${CMAKE_BINARY_DIR}/libfdx_shaderc")
 endif()
 
+function(fdx_shaderc_set_output_dirs target)
+  set_target_properties(${target} PROPERTIES
+      RUNTIME_OUTPUT_DIRECTORY "${FDX_SHADERC_OUTPUT_DIR}"
+      LIBRARY_OUTPUT_DIRECTORY "${FDX_SHADERC_OUTPUT_DIR}"
+      ARCHIVE_OUTPUT_DIRECTORY "${FDX_SHADERC_OUTPUT_DIR}")
+  foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(${target} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_${config} "${FDX_SHADERC_OUTPUT_DIR}"
+        LIBRARY_OUTPUT_DIRECTORY_${config} "${FDX_SHADERC_OUTPUT_DIR}"
+        ARCHIVE_OUTPUT_DIRECTORY_${config} "${FDX_SHADERC_OUTPUT_DIR}")
+  endforeach()
+endfunction()
+
 option(FDX_SHADERC_WEB_DIAGNOSTICS "Enable Emscripten diagnostics for libfdx shaderc web builds" OFF)
 
 set(DAWN_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
@@ -58,14 +71,15 @@ set(TINT_BUILD_WGSL_WRITER ON CACHE BOOL "" FORCE)
 set(TINT_ENABLE_IR_DUMPING OFF CACHE BOOL "" FORCE)
 set(TINT_ENABLE_IR_VALIDATION_ASSERTS OFF CACHE BOOL "" FORCE)
 
+add_subdirectory("${FDX_DAWN_SOURCE_DIR}" dawn EXCLUDE_FROM_ALL)
+
+# Dawn skips this target for Emscripten, but Tint's SPIR-V writer still links it.
 if(EMSCRIPTEN AND NOT TARGET SPIRV-Headers)
   set(SPIRV_HEADERS_SKIP_EXAMPLES ON CACHE BOOL "" FORCE)
   set(SPIRV_HEADERS_SKIP_INSTALL ON CACHE BOOL "" FORCE)
   add_subdirectory("${FDX_DAWN_SOURCE_DIR}/third_party/spirv-headers/src"
       "${CMAKE_CURRENT_BINARY_DIR}/libfdx_spirv_headers" EXCLUDE_FROM_ALL)
 endif()
-
-add_subdirectory("${FDX_DAWN_SOURCE_DIR}" dawn EXCLUDE_FROM_ALL)
 
 set(LIBFDX_SHADERC_CORE_SOURCES libfdx_shaderc.cpp)
 set(LIBFDX_SHADERC_TINT_LIBS
@@ -78,8 +92,8 @@ if(EMSCRIPTEN)
   add_executable(fdx_shaderc ${LIBFDX_SHADERC_CORE_SOURCES})
   set_target_properties(fdx_shaderc PROPERTIES
       OUTPUT_NAME "libfdx_shaderc"
-      SUFFIX ".js"
-      RUNTIME_OUTPUT_DIRECTORY "${FDX_SHADERC_OUTPUT_DIR}")
+      SUFFIX ".js")
+  fdx_shaderc_set_output_dirs(fdx_shaderc)
   target_link_options(fdx_shaderc PRIVATE
       "SHELL:-s MODULARIZE=1"
       "SHELL:-s EXPORT_NAME=LibFdxShadercModule"
@@ -99,16 +113,12 @@ else()
     list(APPEND LIBFDX_SHADERC_CORE_SOURCES libfdx_shaderc_jni.cpp)
   endif()
   add_library(fdx_shaderc SHARED ${LIBFDX_SHADERC_CORE_SOURCES})
-  set_target_properties(fdx_shaderc PROPERTIES
-      RUNTIME_OUTPUT_DIRECTORY "${FDX_SHADERC_OUTPUT_DIR}"
-      LIBRARY_OUTPUT_DIRECTORY "${FDX_SHADERC_OUTPUT_DIR}"
-      ARCHIVE_OUTPUT_DIRECTORY "${FDX_SHADERC_OUTPUT_DIR}")
+  fdx_shaderc_set_output_dirs(fdx_shaderc)
   target_link_libraries(fdx_shaderc PRIVATE ${LIBFDX_SHADERC_TINT_LIBS})
 
   if(NOT ANDROID)
     add_executable(libfdx_shaderc_cli libfdx_shaderc_cli.cpp)
-    set_target_properties(libfdx_shaderc_cli PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${FDX_SHADERC_OUTPUT_DIR}")
+    fdx_shaderc_set_output_dirs(libfdx_shaderc_cli)
     target_link_libraries(libfdx_shaderc_cli PRIVATE fdx_shaderc)
   endif()
 endif()

@@ -230,10 +230,12 @@ ShaderCompilerResult
 ```
 
 The first backend is Tint through Dawn/Tint source resolved into the Gradle
-build directory. The source checkout is build output and must not be committed.
-The shared native bridge exposes a small C ABI and command-line executable; Java
-runtime/editor integration uses platform modules for the ABI that each runtime
-can support.
+build directory at the pinned default revision from the shader compiler Gradle
+module. The source checkout is build output and must not be committed. Compiler
+updates can override `libfdx.shaderc.dawnRevision` for validation before the
+default pin changes. The shared native bridge exposes a small C ABI and
+command-line executable; Java runtime/editor integration uses platform modules
+for the ABI that each runtime can support.
 
 Required first Tint target set:
 
