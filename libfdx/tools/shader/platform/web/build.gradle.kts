@@ -17,6 +17,10 @@ dependencies {
 }
 
 val generatedShadercResources = layout.buildDirectory.dir("generated/resources/shaderc")
+val requiredWebShadercResources = listOf(
+    "libfdx/shader/native/web/libfdx_shaderc.js",
+    "libfdx/shader/native/web/libfdx_shaderc.wasm"
+)
 
 tasks.register<Sync>("generate_shaderc_web_native") {
     group = "libfdx native"
@@ -29,6 +33,27 @@ tasks.register<Sync>("generate_shaderc_web_native") {
     into(generatedShadercResources)
 }
 
+val validateShadercWebNativeResources = tasks.register("validate_shaderc_web_native_resources") {
+    group = "libfdx native"
+    description = "Validates staged web shader compiler JS/Wasm resources before packaging."
+    mustRunAfter("generate_shaderc_web_native")
+    inputs.files(requiredWebShadercResources.map { path ->
+        generatedShadercResources.map { dir -> dir.file(path) }
+    })
+    doLast {
+        val root = generatedShadercResources.get().asFile
+        val missing = requiredWebShadercResources
+            .map { root.resolve(it) }
+            .filterNot { it.isFile }
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "Missing generated web shader compiler resources:\n" +
+                        missing.joinToString(separator = "\n") { " - ${it.absolutePath}" }
+            )
+        }
+    }
+}
+
 sourceSets {
     main {
         resources.srcDir(generatedShadercResources)
@@ -36,5 +61,9 @@ sourceSets {
 }
 
 tasks.named<ProcessResources>("processResources") {
-    dependsOn("generate_shaderc_web_native")
+    mustRunAfter("generate_shaderc_web_native")
+}
+
+tasks.named("jar") {
+    dependsOn(validateShadercWebNativeResources)
 }
