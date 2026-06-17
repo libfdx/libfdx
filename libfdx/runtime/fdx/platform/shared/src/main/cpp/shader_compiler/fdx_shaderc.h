@@ -1,5 +1,5 @@
-#ifndef LIBFDX_TOOLS_SHADER_FDX_SHADERC_H_
-#define LIBFDX_TOOLS_SHADER_FDX_SHADERC_H_
+#ifndef LIBFDX_RUNTIME_SHADER_COMPILER_FDX_SHADERC_H_
+#define LIBFDX_RUNTIME_SHADER_COMPILER_FDX_SHADERC_H_
 
 #include <stdint.h>
 
@@ -75,4 +75,4 @@ FDX_SHADERC_API const char* fdx_shaderc_result_diagnostics(void* handle);
 
 FDX_SHADERC_API void fdx_shaderc_result_free(void* handle);
 
-#endif  // LIBFDX_TOOLS_SHADER_FDX_SHADERC_H_
+#endif  // LIBFDX_RUNTIME_SHADER_COMPILER_FDX_SHADERC_H_

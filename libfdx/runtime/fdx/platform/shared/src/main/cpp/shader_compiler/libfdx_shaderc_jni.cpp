@@ -110,3 +110,22 @@ Java_io_github_libfdx_tools_shader_FdxTintAndroidJniCompilerBridge_compileNative
     fdx_shaderc_free_result(&result);
     return env->NewStringUTF(encoded.c_str());
 }
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_io_github_libfdx_backend_android_AndroidRuntimeShaderCompiler_compileNative(
+    JNIEnv* env,
+    jclass,
+    jstring source,
+    jint target,
+    jint stage,
+    jstring entry_point,
+    jstring glsl_profile,
+    jstring glsl_es_profile) {
+    return Java_io_github_libfdx_tools_shader_FdxTintAndroidJniCompilerBridge_compileNative(env, nullptr, source,
+            target, stage, entry_point, glsl_profile, glsl_es_profile);
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_io_github_libfdx_backend_android_AndroidRuntimeShaderCompiler_isAvailableNative(JNIEnv*, jclass) {
+    return JNI_TRUE;
+}

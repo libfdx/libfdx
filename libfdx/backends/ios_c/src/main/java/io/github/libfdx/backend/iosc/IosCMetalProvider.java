@@ -23,6 +23,8 @@ import io.github.libfdx.graphics.RenderPipelineDescriptor;
 import io.github.libfdx.graphics.ShaderLanguage;
 import io.github.libfdx.graphics.ShaderModule;
 import io.github.libfdx.graphics.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.ShaderModuleDescriptors;
+import io.github.libfdx.graphics.ShaderTarget;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
@@ -547,6 +549,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
             if (descriptor == null) {
                 throw new FdxException("ShaderModuleDescriptor cannot be null");
             }
+            descriptor = ShaderModuleDescriptors.requireTarget(descriptor, ShaderTarget.METAL_MSL, "iOS C Metal");
             if (!descriptor.hasSource(ShaderLanguage.MSL)) {
                 throw new FdxException("iOS C Metal requires MSL shader modules");
             }

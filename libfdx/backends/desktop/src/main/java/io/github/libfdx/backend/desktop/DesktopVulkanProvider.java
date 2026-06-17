@@ -25,6 +25,8 @@ import io.github.libfdx.graphics.ShaderBindingType;
 import io.github.libfdx.graphics.ShaderLanguage;
 import io.github.libfdx.graphics.ShaderModule;
 import io.github.libfdx.graphics.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.ShaderModuleDescriptors;
+import io.github.libfdx.graphics.ShaderTarget;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
@@ -2669,6 +2671,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             if (descriptor == null) {
                 throw new FdxException("ShaderModuleDescriptor cannot be null");
             }
+            descriptor = ShaderModuleDescriptors.requireTarget(descriptor, ShaderTarget.VULKAN_SPIRV, "Vulkan");
             if (!descriptor.hasSource(ShaderLanguage.SPIRV)) {
                 throw new FdxException("Vulkan requires SPIR-V shader modules");
             }

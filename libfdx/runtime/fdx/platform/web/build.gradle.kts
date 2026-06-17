@@ -1,3 +1,4 @@
+import io.github.libfdx.build.LibExt
 import org.gradle.api.GradleException
 import org.gradle.api.tasks.Exec
 import org.gradle.language.jvm.tasks.ProcessResources
@@ -5,6 +6,8 @@ import org.gradle.language.jvm.tasks.ProcessResources
 plugins {
     id("java-library")
 }
+
+group = "${LibExt.fdxGroup}.runtime.fdx"
 
 java {
     sourceCompatibility = JavaVersion.toVersion(25)
@@ -19,9 +22,15 @@ val freetypeVersion = "2.14.3"
 val freetypeSourceDir =
     rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/build/third-party/freetype/freetype-$freetypeVersion")
 val runtimeFdxNativeDir = rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/runtime_fdx")
+val shaderCompilerSourceDir =
+    rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/shader_compiler")
+val shaderCompilerDawnSourceDir = project(":libfdx:tools:shader:core").layout.buildDirectory.dir("third-party/dawn/source")
 val runtimeFdxWebCmakeDir = layout.projectDirectory.dir("src/main/cpp")
 val runtimeFdxWebBuildDir = layout.buildDirectory.dir("emscripten/freetype")
 val runtimeFdxWebGeneratedResources = layout.buildDirectory.dir("generated/resources/runtimeFdxWeb")
+val runtimeFdxShaderCompilerEnabled = providers.gradleProperty("libfdx.runtimeFdx.shaderCompiler")
+    .map(String::toBoolean)
+    .orElse(false)
 
 fun executableCommand(name: String): List<String> {
     val windows = System.getProperty("os.name").lowercase().contains("win")
@@ -79,6 +88,30 @@ fun hasValidEmscriptenCmakeCache(directory: File): Boolean {
     return hasEmscriptenToolchain && hasEmscriptenCCompiler && hasEmscriptenCxxCompiler
 }
 
+fun runtimeFdxShaderCompilerCmakeArgs(): List<String> {
+    if (!runtimeFdxShaderCompilerEnabled.get()) {
+        return listOf("-DLIBFDX_ENABLE_SHADER_COMPILER=OFF")
+    }
+    return listOf(
+        "-DLIBFDX_ENABLE_SHADER_COMPILER=ON",
+        "-DLIBFDX_SHADERC_SOURCE_DIR=${shaderCompilerSourceDir.asFile.absolutePath}",
+        "-DFDX_DAWN_SOURCE_DIR=${shaderCompilerDawnSourceDir.get().asFile.absolutePath}"
+    )
+}
+
+fun Task.runtimeFdxShaderCompilerDependency() {
+    if (runtimeFdxShaderCompilerEnabled.get()) {
+        dependsOn(":libfdx:tools:shader:core:resolve_shaderc_dawn_source")
+    }
+}
+
+fun Task.runtimeFdxNativeSourceInputs() {
+    inputs.dir(runtimeFdxNativeDir)
+    if (runtimeFdxShaderCompilerEnabled.get()) {
+        inputs.dir(shaderCompilerSourceDir)
+    }
+}
+
 sourceSets {
     named("main") {
         resources.srcDir(runtimeFdxWebGeneratedResources)
@@ -87,9 +120,11 @@ sourceSets {
 
 val configureRuntimeFdxWebNative = tasks.register<Exec>("configure_runtime_fdx_web_native") {
     group = "libfdx native"
-    description = "Configures the Emscripten FreeType build used by runtime fdx web font support."
+    description = "Configures the Emscripten runtime fdx web native build."
     dependsOn(":libfdx:runtime:fdx:platform:shared:extract_freetype_source")
+    runtimeFdxShaderCompilerDependency()
     inputs.file(runtimeFdxWebCmakeDir.file("CMakeLists.txt"))
+    inputs.property("runtimeFdxShaderCompilerEnabled", runtimeFdxShaderCompilerEnabled)
     outputs.dir(runtimeFdxWebBuildDir)
     outputs.upToDateWhen {
         hasValidEmscriptenCmakeCache(runtimeFdxWebBuildDir.get().asFile)
@@ -110,13 +145,16 @@ val configureRuntimeFdxWebNative = tasks.register<Exec>("configure_runtime_fdx_w
         "-DLIBFDX_FREETYPE_SOURCE_DIR=${freetypeSourceDir.asFile.absolutePath}",
         "-DLIBFDX_RUNTIME_FDX_NATIVE_DIR=${runtimeFdxNativeDir.asFile.absolutePath}",
         "-DLIBFDX_WEB_OUTPUT_DIR=${runtimeFdxWebGeneratedResources.get().asFile.absolutePath}"
-    ))
+    ) + runtimeFdxShaderCompilerCmakeArgs())
 }
 
 val buildRuntimeFdxWebNative = tasks.register<Exec>("build_runtime_fdx_web_native") {
     group = "libfdx native"
-    description = "Builds fdx.js and fdx.wasm for runtime fdx web font support."
+    description = "Builds fdx.js and fdx.wasm for runtime fdx web support."
     dependsOn(configureRuntimeFdxWebNative)
+    runtimeFdxNativeSourceInputs()
+    inputs.file(runtimeFdxWebCmakeDir.file("CMakeLists.txt"))
+    inputs.property("runtimeFdxShaderCompilerEnabled", runtimeFdxShaderCompilerEnabled)
     outputs.file(runtimeFdxWebGeneratedResources.map { it.file("fdx.js") })
     outputs.file(runtimeFdxWebGeneratedResources.map { it.file("fdx.wasm") })
     doFirst {

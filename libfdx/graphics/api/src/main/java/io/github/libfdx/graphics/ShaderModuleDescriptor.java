@@ -8,8 +8,13 @@ import io.github.libfdx.core.FdxException;
  * @author xpenatan
  */
 public final class ShaderModuleDescriptor {
+    public static final String DEFAULT_VERTEX_ENTRY_POINT = "vertexMain";
+    public static final String DEFAULT_FRAGMENT_ENTRY_POINT = "fragmentMain";
+
     private String label = "";
     private ShaderLanguage language = ShaderLanguage.WGSL;
+    private String vertexEntryPoint = DEFAULT_VERTEX_ENTRY_POINT;
+    private String fragmentEntryPoint = DEFAULT_FRAGMENT_ENTRY_POINT;
     private String wgslSource;
     private String glslVertexSource;
     private String glslFragmentSource;
@@ -112,6 +117,37 @@ public final class ShaderModuleDescriptor {
      */
     public ShaderModuleDescriptor language(ShaderLanguage language) {
         this.language = language != null ? language : ShaderLanguage.WGSL;
+        return this;
+    }
+
+    /**
+     * Returns the vertex entry point.
+     *
+     * @return the vertex entry point
+     */
+    public String vertexEntryPoint() {
+        return vertexEntryPoint;
+    }
+
+    /**
+     * Returns the fragment entry point.
+     *
+     * @return the fragment entry point
+     */
+    public String fragmentEntryPoint() {
+        return fragmentEntryPoint;
+    }
+
+    /**
+     * Sets the entry points and returns this shader module descriptor.
+     *
+     * @param vertexEntryPoint the vertex entry point
+     * @param fragmentEntryPoint the fragment entry point
+     * @return this shader module descriptor for chaining
+     */
+    public ShaderModuleDescriptor entryPoints(String vertexEntryPoint, String fragmentEntryPoint) {
+        this.vertexEntryPoint = requireEntryPoint(vertexEntryPoint, "vertex");
+        this.fragmentEntryPoint = requireEntryPoint(fragmentEntryPoint, "fragment");
         return this;
     }
 
@@ -276,5 +312,12 @@ public final class ShaderModuleDescriptor {
             return mslSource != null && mslSource.length() > 0;
         }
         return false;
+    }
+
+    private static String requireEntryPoint(String value, String stage) {
+        if (value == null || value.length() == 0) {
+            throw new FdxException("Shader " + stage + " entry point cannot be empty");
+        }
+        return value;
     }
 }

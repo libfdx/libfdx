@@ -3,8 +3,8 @@
 This document defines the current architecture direction for libfdx. It should evolve as the framework is implemented, but it is now the source of truth for module layout, dependency direction, naming, and provider boundaries.
 
 For provider-neutral public API contract details, see [COMMON_API.md](COMMON_API.md).
-For shader authoring, translation, generated bundles, and optional editor/runtime
-compilation, see [SHADERS.md](SHADERS.md).
+For shader authoring, translation, runtime compilation, and optional
+editor/runtime compiler behavior, see [SHADERS.md](SHADERS.md).
 
 ## Index
 
@@ -261,13 +261,13 @@ General rules:
 - `runtime/fdx/core` is the single public `core` module and should stay small.
 - Non-required systems must not be placed in `runtime/fdx/core`.
 - Runtime APIs should be backend-neutral.
-- `runtime/fdx/core` owns base framework contracts and default runtime services shared by all systems, such as framework exceptions, provider identity, logging, async primitives, FreeType font rasterization now, and native math/image helpers later. User code normally reaches runtime services through higher-level APIs such as `UiFont`, `BitmapFontFiles`, or math classes, not by calling native runtime bindings directly.
+- `runtime/fdx/core` owns base framework contracts and default runtime services shared by all systems, such as framework exceptions, provider identity, logging, async primitives, FreeType font rasterization, optional WGSL shader compilation, and native math/image helpers later. User code normally reaches runtime services through higher-level APIs such as `UiFont`, `BitmapFontFiles`, graphics shader creation, or math classes, not by calling native runtime bindings directly.
 - Backends and platform launchers register the platform implementation for `runtime/fdx/core`. Common modules consume the shared Java contracts and must not know the concrete native file layout.
 - `runtime/fdx/core` owns the Java contracts and does not compile or package platform native code directly.
-- `runtime/fdx/platform/*` owns native runtime fdx compilation. Windows, Linux, macOS, Android, and web platform modules build the matching native artifacts and write generated outputs into the core module's generated resource directories or Android AAR outputs.
+- `runtime/fdx/platform/*` owns native runtime fdx compilation. Windows, Linux, macOS, Android, and web platform modules build the matching native artifacts and write generated outputs into the core module's generated resource directories or Android AAR outputs. Optional services such as the Tint-backed shader compiler are linked only into platforms that opt into that capability.
 - Third-party FreeType source is not committed into the repository. The pinned source archive is prepared under `runtime/fdx/platform/build/third-party/...` for native artifact generation. Android and web runtime fdx platform builds use that source when compiling the native bridge.
 - Runtime fdx C/C++ implementation files should be shared by default under `runtime/fdx/platform/shared`. Platform modules should add only thin adapters required by the platform ABI or toolchain, such as JNI for Android or JS/WASM loading for web. Do not fork the FreeType rasterizer implementation per platform.
-- Runtime fdx native artifacts use the framework core name, not feature-specific names. Web emits `fdx.js` and `fdx.wasm`; native shared-library platforms should emit the platform convention for `fdx`, such as `fdx.dll` on Windows and `libfdx.so` on Android/Linux.
+- Runtime fdx native artifacts use the framework core name, not feature-specific names. Web emits `fdx.js` and `fdx.wasm`; native shared-library platforms should emit the platform convention for `fdx`, such as `fdx.dll` on Windows and `libfdx.so` on Android/Linux. Platforms that do not need shader translation, such as PSP, must not package the Tint compiler capability.
 - `runtime/application` owns application lifecycle and the base `ApplicationConfig`. Backend-specific startup classes such as `DesktopApplicationConfig` should expose direct typed setters instead of requiring generic config keys in launcher code.
 - Backends should implement APIs instead of being depended on by foundation/runtime APIs.
 - Opt-in feature objects such as `AssetManager`, UI roots, and physics worlds should be created by user/framework feature code from explicit dependencies. Backends should not be forced to depend on those feature modules just because examples need them.
@@ -703,7 +703,7 @@ ComputePass
 
 Common type summary for `runtime/fdx/core`:
 
-`runtime/fdx/core` is the only public `core` module. It owns the tiny shared base contracts in package `io.github.libfdx.core` and shared runtime-service contracts in package `io.github.libfdx.runtime.core`. It is not only interfaces. It can contain interfaces, abstract contracts, small final value classes, exceptions, and lightweight helpers that every module can safely depend on.
+`runtime/fdx/core` is the only public `core` module. It owns the tiny shared base contracts in package `io.github.libfdx.core`, shared runtime-service contracts in package `io.github.libfdx.runtime.core`, and shader compiler contracts in package `io.github.libfdx.runtime.core.shader`. It is not only interfaces. It can contain interfaces, abstract contracts, small final value classes, exceptions, and lightweight helpers that every module can safely depend on.
 
 It should not contain solution APIs such as graphics, audio, files, assets, application lifecycle, UI, or physics.
 
@@ -947,7 +947,7 @@ Maven publication wiring lives in the shared `buildSrc/src/main/kotlin/publish.g
 
 The configured dependency mode controls repository consumer wiring for tests and samples. `LibExt` reads `libfdx.toml` `[development]` values, then lets ignored root `local.properties` keys `development.usePublishedLibfdx` and `development.publishedLibfdxVersion` override them for one checkout. Settings always includes the local `:libfdx:*` source modules. The checked-in default is false so clean source checkouts and CI use the local Gradle plugin build for the dedicated plugin-use modules and local project dependencies for consumers. That included plugin build must stay isolated to the plugin project; it must not include or remap root `:libfdx:*` source modules under the plugin build id. When true, plugin-use modules resolve the Gradle plugin from Maven and consumers resolve libFDX dependencies as published `<fdxGroup>:<artifact>:<publishedLibfdxVersion>` coordinates. Builder-backed web tasks attach local generated runtime fdx web resources only when the consumer runtime classpath has direct or transitive local `:libfdx:*` project dependencies; Maven-backed consumers must get those resources from the published artifacts.
 
-GitHub publish workflows build publishable platform artifacts before Maven publication, not sample/test validation outputs. Windows, Linux, macOS x64, and macOS arm64 jobs build the desktop runtime native resources and desktop shader compiler native resources for their runner target. The web job builds runtime fdx web resources and shader compiler web JS/Wasm resources. The Android job builds release AARs for runtime fdx Android, backend Android, Android Vulkan/WGPU JNI providers, and Android shader compiler JNI. The final publish job downloads desktop runtime artifacts into the generated resource directory of `fdx_desktop`, web runtime artifacts into `fdx_web`, shader compiler native resources into their generated resource directories, plus Android AAR output directories, and verifies the downloaded files before deploy preparation. Deploy preparation does not compile C native artifacts; local deploy preparation requires current-host runtime fdx desktop resources, runtime fdx web resources, shader compiler native resources for any published shader compiler platform artifacts, and Android release AARs to already exist, while CI verifies every desktop runtime fdx and shader compiler native classifier before packaging.
+GitHub publish workflows build publishable platform artifacts before Maven publication, not sample/test validation outputs. Windows, Linux, macOS x64, and macOS arm64 jobs build the desktop runtime fdx native resources for their runner target. The web job builds runtime fdx web resources. The Android job builds release AARs for runtime fdx Android, backend Android, and Android Vulkan/WGPU JNI providers. Optional Tint-backed shader compiler support is embedded into the same runtime fdx platform artifact only when the native build is explicitly invoked with `libfdx.runtimeFdx.shaderCompiler=true`; the normal build-and-upload job only packages and uploads already-built platform artifacts. The final publish job downloads desktop runtime artifacts into the generated resource directory of `fdx_desktop`, web runtime artifacts into `fdx_web`, plus Android AAR output directories, and verifies the downloaded files before deploy preparation. Deploy preparation does not compile C native artifacts; local deploy preparation requires current-host runtime fdx desktop resources, runtime fdx web resources, and Android release AARs to already exist, while CI verifies every required desktop runtime fdx classifier before packaging.
 
 ### 9.1. Foundation Modules
 
@@ -1016,14 +1016,14 @@ Gamepad common contracts live in `runtime/input`. These modules provide platform
 | `:libfdx:graphics:api` | `io.github.libfdx:graphics` | Low-level WebGPU-style graphics abstraction: adapters, devices, queues, buffers, textures, texture views, framebuffers, render targets, multi-render targets, samplers, shader modules, shader profiles/bundles, bind groups, pipelines, command encoders, command buffers, render passes, and surfaces. |
 
 Shader authoring is WGSL-first. The detailed shader architecture, including
-portable profiles, generated target artifacts, `ShaderBundle`, Tint as the first
-compiler backend, build-time generation, and optional editor/runtime compilation,
+portable profiles, native descriptor escape hatches, Tint as the first compiler
+backend, runtime/setup-time compilation, and optional editor hot reload,
 lives in [SHADERS.md](SHADERS.md).
 
-The short architecture rule is that normal game runtimes consume generated
-shader bundles, while optional tools and editors may compile shaders at runtime
-through an explicit shader compiler API. Runtime graphics providers must not
-perform hidden shader translation when creating a `ShaderModule`.
+The short architecture rule is that normal game runtimes may pass WGSL directly.
+Providers that cannot consume WGSL translate it through the optional
+`runtime/fdx/core` shader compiler capability during shader-module creation.
+Direct GLSL, SPIR-V, and MSL descriptors remain explicit escape hatches.
 
 ### 9.7. wgpu/WebGPU Provider Modules
 
@@ -1135,10 +1135,10 @@ Additional backend implementations should be added as new flat variant folders o
 | --- | --- | --- |
 | `libfdx/tools/gradle-plugin` included build | `io.github.libfdx:libfdx-gradle-plugin` | Gradle plugin for libfdx platform targets. It is intentionally an included build under `libfdx/tools`, not `buildSrc`, so this repository and external projects can consume the same plugin with `pluginManagement { includeBuild("<libfdx>/libfdx/tools/gradle-plugin") }`. The public plugin ID is `io.github.libfdx`, and external builds should configure it with one `libfdx { ... }` block. The target blocks are `desktopJvm`, `js`, `wasm`, `desktopC`, `psp`, and `iosC`. Inside this repository, plugin DSL usage is isolated to the dedicated `:samples:basic:platform:plugin` and `:tests:platform:plugin` modules. Runtime launcher modules stay focused on source sets, dependencies, and direct JVM/Android run tasks where no generated plugin target is required. The plugin must not add backend `implementation` or `api` dependencies to user projects; platform launcher modules declare their own backend artifacts. |
 | `:libfdx:tools:font` | `io.github.libfdx:font_tools` | Build-time font tools. The current tool generates AngelCode BMFont-style `.fnt` metadata and PNG atlases from TTF files for platforms that should ship prebuilt bitmap fonts, such as PSP. It is a general libfdx tooling module, not a TeaVM backend module. |
-| `:libfdx:tools:shader:core` | `io.github.libfdx:shader_compiler` | Shared Java shader tooling plus the native Tint bridge sources. It owns WGSL profile validation, compiler request/result types, deterministic bundle/report generation, process-based compilation, and the C ABI used by platform bridges. It depends on `graphics/api` for the public shader profile contract. Dawn/Tint source is resolved at a pinned default revision under this module's `build/third-party` directory and is not committed; compiler updates can override `libfdx.shaderc.dawnRevision`. |
-| `:libfdx:tools:shader:platform:android_jni` | `io.github.libfdx:shader_compiler_android_jni` | Android runtime/editor shader compiler bridge. It packages the native Tint bridge through Android JNI/ABI artifacts and depends on `:libfdx:tools:shader:core`. |
-| `:libfdx:tools:shader:platform:web` | `io.github.libfdx:shader_compiler_web` | Web runtime/editor shader compiler bridge. It packages the Emscripten JS/WASM Tint bridge and Java web bridge code, and depends on `:libfdx:tools:shader:core`. |
-| `:libfdx:tools:shader:platform:desktop_ffm` | `io.github.libfdx:shader_compiler_desktop_ffm` | Desktop runtime/editor shader compiler bridge using Java FFM to call the native Tint bridge, and depends on `:libfdx:tools:shader:core`. |
+| `:libfdx:tools:shader:core` | `io.github.libfdx:shader_tools` | Optional shader tooling for validation, diagnostics, and command-line/editor workflows. Runtime shader compilation contracts live in `:libfdx:runtime:fdx:core`, and runtime native compiler packaging lives in `:libfdx:runtime:fdx:platform:*`. Dawn/Tint source is resolved under build output and is not committed. |
+| `:libfdx:tools:shader:platform:android_jni` | internal/optional | Transitional Android tooling bridge only. Normal Android runtime shader compilation should be supplied by the `fdx_android` runtime artifact when that platform opts into Tint. |
+| `:libfdx:tools:shader:platform:web` | internal/optional | Transitional Web tooling bridge only. Normal Web runtime shader compilation should be supplied by the `fdx_web` runtime artifact when that platform opts into Tint. |
+| `:libfdx:tools:shader:platform:desktop_ffm` | internal/optional | Transitional Desktop tooling bridge only. Normal Desktop runtime shader compilation should be supplied by the `fdx_desktop` runtime artifact when that platform opts into Tint. |
 | `:libfdx:tools:project-generator:core` | `io.github.libfdx:project_generator_core` | Project generator model, validation, template rendering, and in-memory generated project tree. It must not depend on desktop, web, UIKit, or filesystem APIs. |
 | `:libfdx:tools:project-generator:ui` | `io.github.libfdx:project_generator_ui` | Shared UIKit project generator UI. It depends on project-generator core and delegates persistence/download behavior to a platform export target. |
 | `:libfdx:tools:project-generator:platform:desktop` | internal | Desktop LWJGL3 runtime for the shared project generator UI. It writes generated project files to a selected directory. |
@@ -1918,7 +1918,7 @@ Core and runtime packages:
 
 | Gradle module | Java package root | What belongs there |
 | --- | --- | --- |
-| `:libfdx:runtime:fdx:core` | `io.github.libfdx.core`, `io.github.libfdx.runtime.core` | Minimal framework core types plus shared runtime services and native-service contracts. |
+| `:libfdx:runtime:fdx:core` | `io.github.libfdx.core`, `io.github.libfdx.runtime.core`, `io.github.libfdx.runtime.core.shader` | Minimal framework core types plus shared runtime services and native-service contracts. |
 | `:libfdx:foundation:math` | `io.github.libfdx.math` | Vectors, matrices, quaternions, bounds, and backend-independent color math. |
 | `:libfdx:foundation:json` | `io.github.libfdx.json` | Strict JSON value tree, reader, writer, and callback-based class codecs. |
 | `:libfdx:foundation:collections` | `io.github.libfdx.collections` | Specialized collections and allocation-conscious data structures. |

@@ -31,6 +31,112 @@
         return target;
     }
 
+    function base64(bytes) {
+        var binary = "";
+        for (var i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+
+    function writeInt(bytes, value) {
+        bytes.push(value & 255);
+        bytes.push((value >> 8) & 255);
+        bytes.push((value >> 16) & 255);
+        bytes.push((value >> 24) & 255);
+    }
+
+    function utf8Bytes(text) {
+        return new TextEncoder().encode(text || "");
+    }
+
+    function wire(status, kind, output, diagnostics) {
+        var out = output || new Uint8Array(0);
+        var diag = utf8Bytes(diagnostics || "");
+        var bytes = [];
+        writeInt(bytes, status);
+        writeInt(bytes, kind);
+        writeInt(bytes, out.length);
+        writeInt(bytes, diag.length);
+        for (var i = 0; i < out.length; i++) {
+            bytes.push(out[i]);
+        }
+        for (var j = 0; j < diag.length; j++) {
+            bytes.push(diag[j]);
+        }
+        return base64(bytes);
+    }
+
+    function installShaderCompiler(module) {
+        if (root.libfdxShaderCompileBase64) {
+            return;
+        }
+        if (typeof module.cwrap !== "function"
+                || typeof module.lengthBytesUTF8 !== "function"
+                || typeof module.stringToUTF8 !== "function"
+                || typeof module.UTF8ToString !== "function") {
+            return;
+        }
+
+        var compile;
+        var status;
+        var kind;
+        var output;
+        var size;
+        var diagnostics;
+        var freeResult;
+        try {
+            compile = module.cwrap("fdx_shaderc_compile_wgsl_handle", "number",
+                    ["number", "number", "number", "number", "number", "number", "number"]);
+            status = module.cwrap("fdx_shaderc_result_status", "number", ["number"]);
+            kind = module.cwrap("fdx_shaderc_result_output_kind", "number", ["number"]);
+            output = module.cwrap("fdx_shaderc_result_output", "number", ["number"]);
+            size = module.cwrap("fdx_shaderc_result_output_size", "number", ["number"]);
+            diagnostics = module.cwrap("fdx_shaderc_result_diagnostics", "number", ["number"]);
+            freeResult = module.cwrap("fdx_shaderc_result_free", null, ["number"]);
+        } catch (ignored) {
+            return;
+        }
+
+        root.libfdxShaderCompileBase64 = function(source, target, stage, entryPoint, glslProfile, glslEsProfile) {
+            var sourceSize = module.lengthBytesUTF8(source);
+            var entrySize = module.lengthBytesUTF8(entryPoint);
+            var glslSize = module.lengthBytesUTF8(glslProfile);
+            var glslEsSize = module.lengthBytesUTF8(glslEsProfile);
+            var sourcePtr = module._malloc(sourceSize + 1);
+            var entryPtr = module._malloc(entrySize + 1);
+            var glslPtr = module._malloc(glslSize + 1);
+            var glslEsPtr = module._malloc(glslEsSize + 1);
+            var handle = 0;
+            try {
+                module.stringToUTF8(source, sourcePtr, sourceSize + 1);
+                module.stringToUTF8(entryPoint, entryPtr, entrySize + 1);
+                module.stringToUTF8(glslProfile, glslPtr, glslSize + 1);
+                module.stringToUTF8(glslEsProfile, glslEsPtr, glslEsSize + 1);
+                handle = compile(sourcePtr, sourceSize, target, stage, entryPtr, glslPtr, glslEsPtr);
+                var resultStatus = status(handle);
+                var resultKind = kind(handle);
+                var resultSize = size(handle);
+                var resultOutput = new Uint8Array(0);
+                if (resultSize > 0) {
+                    var outputPtr = output(handle);
+                    resultOutput = module.HEAPU8.slice(outputPtr, outputPtr + resultSize);
+                }
+                var diagnosticPtr = diagnostics(handle);
+                var diagnosticText = diagnosticPtr ? module.UTF8ToString(diagnosticPtr) : "";
+                return wire(resultStatus, resultKind, resultOutput, diagnosticText);
+            } finally {
+                if (handle) {
+                    freeResult(handle);
+                }
+                module._free(sourcePtr);
+                module._free(entryPtr);
+                module._free(glslPtr);
+                module._free(glslEsPtr);
+            }
+        };
+    }
+
     function ensureModule() {
         if (root.libfdxCoreModule) {
             return Promise.resolve(root.libfdxCoreModule);
@@ -46,6 +152,7 @@
                 return path === "fdx.wasm" ? moduleBaseUrl(path) : path;
             }
         }).then(function(module) {
+            installShaderCompiler(module);
             root.libfdxCoreModule = module;
             return module;
         });

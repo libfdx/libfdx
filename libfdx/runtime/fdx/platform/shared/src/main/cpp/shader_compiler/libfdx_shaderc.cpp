@@ -1,11 +1,13 @@
 #include "fdx_shaderc.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -150,6 +152,56 @@ tint::msl::writer::ArrayLengthOptions GenerateMslArrayLengthFromConstants(
     return options;
 }
 
+bool ConfigureVulkanCombinedSamplerBindings(tint::spirv::writer::Options& gen_options,
+                                            tint::inspector::Inspector& inspector,
+                                            const std::string& entry_point,
+                                            ResultHandle* result) {
+    std::unordered_map<tint::BindingPoint, tint::BindingPoint> texture_slots;
+    std::unordered_map<tint::BindingPoint, tint::BindingPoint> sampler_slots;
+    std::unordered_map<uint32_t, uint32_t> next_texture_binding_by_group;
+    std::vector<tint::BindingPoint> texture_bindings;
+    texture_bindings.reserve(gen_options.bindings.texture.size());
+    for (const auto& binding : gen_options.bindings.texture) {
+        texture_bindings.push_back(binding.first);
+    }
+    std::sort(texture_bindings.begin(), texture_bindings.end());
+    for (const auto& source : texture_bindings) {
+        uint32_t& next_binding = next_texture_binding_by_group[source.group];
+        texture_slots.emplace(source, tint::BindingPoint{.group = source.group, .binding = next_binding++});
+    }
+
+    auto pairs = inspector.GetSamplerTextureUses(entry_point);
+    for (const auto& pair : pairs) {
+        auto texture = gen_options.bindings.texture.find(pair.texture_binding_point);
+        auto sampler = gen_options.bindings.sampler.find(pair.sampler_binding_point);
+        if (texture == gen_options.bindings.texture.end() ||
+            sampler == gen_options.bindings.sampler.end()) {
+            continue;
+        }
+
+        tint::BindingPoint slot = texture_slots[pair.texture_binding_point];
+        auto existing_sampler_slot = sampler_slots.find(pair.sampler_binding_point);
+        if (existing_sampler_slot != sampler_slots.end() && existing_sampler_slot->second != slot) {
+            result->diagnostics =
+                "Vulkan combined sampler binding generation cannot map one WGSL sampler to "
+                "multiple texture slots. Use one sampler binding per sampled texture for this "
+                "backend.";
+            return false;
+        }
+
+        sampler_slots.emplace(pair.sampler_binding_point, slot);
+        texture->second = slot;
+        sampler->second = slot;
+        gen_options.statically_paired_texture_binding_points.insert(pair.texture_binding_point);
+    }
+
+    for (auto& binding : gen_options.bindings.texture) {
+        binding.second = texture_slots[binding.first];
+    }
+
+    return true;
+}
+
 bool CompileParsedProgram(const tint::Program& program,
                           tint::inspector::Inspector& inspector,
                           const fdx_shaderc_options& options,
@@ -194,6 +246,9 @@ bool CompileParsedProgram(const tint::Program& program,
         tint::spirv::writer::Options gen_options;
         gen_options.entry_point_name = entry_point;
         gen_options.bindings = tint::GenerateBindings(ir.Get(), entry_point, false, false);
+        if (!ConfigureVulkanCombinedSamplerBindings(gen_options, inspector, entry_point, result)) {
+            return false;
+        }
         gen_options.resource_table =
             tint::core::ir::transform::GenerateResourceTableConfig(ir.Get(), false);
         auto output = tint::spirv::writer::Generate(ir.Get(), gen_options);

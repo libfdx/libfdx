@@ -1,5 +1,7 @@
 package io.github.libfdx.runtime.core;
 
+import io.github.libfdx.runtime.core.shader.RuntimeShaderCompiler;
+
 /**
  * Represents a runtime core.
  *
@@ -44,6 +46,20 @@ public final class RuntimeCore {
     }
 
     /**
+     * Returns the runtime shader compiler.
+     *
+     * @return the runtime shader compiler
+     */
+    public static RuntimeShaderCompiler shaderCompiler() {
+        RuntimeCoreProvider current = provider();
+        RuntimeShaderCompiler compiler = current != null ? current.shaderCompiler() : null;
+        if (compiler == null) {
+            throw new RuntimeCoreException("Runtime core shader compiler is not available");
+        }
+        return compiler;
+    }
+
+    /**
      * Returns the native font rasterizer available.
      *
      * @return true if native font rasterizer available succeeds or is active; false otherwise
@@ -51,5 +67,15 @@ public final class RuntimeCore {
     public static boolean nativeFontRasterizerAvailable() {
         RuntimeCoreProvider current = provider();
         return current != null && current.nativeFontRasterizerAvailable();
+    }
+
+    /**
+     * Returns whether the native shader compiler is available.
+     *
+     * @return true if native shader compiler is available; false otherwise
+     */
+    public static boolean nativeShaderCompilerAvailable() {
+        RuntimeCoreProvider current = provider();
+        return current != null && current.nativeShaderCompilerAvailable();
     }
 }

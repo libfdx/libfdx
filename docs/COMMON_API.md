@@ -2,7 +2,7 @@
 
 This document defines the provider-neutral public API contracts for libfdx-owned modules.
 
-Use this document to decide what a common API type means, what module owns it, and what behavior provider implementations must support. Use [ARCHITECTURE.md](ARCHITECTURE.md) to decide folder layout, Gradle module names, Maven artifact names, dependency direction, and package roots. Use [SHADERS.md](SHADERS.md) for the WGSL-first shader architecture, generated bundle flow, and optional editor/runtime compiler model.
+Use this document to decide what a common API type means, what module owns it, and what behavior provider implementations must support. Use [ARCHITECTURE.md](ARCHITECTURE.md) to decide folder layout, Gradle module names, Maven artifact names, dependency direction, and package roots. Use [SHADERS.md](SHADERS.md) for the WGSL-first shader architecture, runtime compilation flow, and optional editor/runtime compiler model.
 
 ## Index
 
@@ -1687,8 +1687,8 @@ Defined descriptor types:
 | `BufferDescriptor` | Buffer creation label, size, usage, and dynamic/static update intent. |
 | `TextureDescriptor` | Texture creation label, size, format, usage, and sampler wrap state. |
 | `ShaderModuleDescriptor` | Provider-facing shader source or bytecode plus shader language metadata. |
-| `ShaderBundle` | WGSL source-of-truth plus generated target artifacts, reflection metadata, profile validation, and provider-target descriptor selection. |
-| `ShaderReflection`, `ShaderBinding`, `ShaderAttribute` | Setup-time metadata for shader bindings and vertex inputs generated or declared with a shader bundle. |
+| `ShaderBundle` | Optional WGSL source-of-truth container plus native target artifacts when a tool or user intentionally supplies them. |
+| `ShaderReflection`, `ShaderBinding`, `ShaderAttribute` | Setup-time metadata for shader bindings and vertex inputs declared by a shader owner or produced by shader tooling. |
 | `RenderPassDescriptor` | Color/depth attachments, load/store operations, clear values. |
 | `RenderPipelineDescriptor` | Shader module, entry points, target format, shader reflection metadata, primitive topology, vertex layouts, sampled texture count, depth state, and debug label. |
 
@@ -1700,7 +1700,7 @@ Defined value/state types:
 | `ShaderLanguage` | Shader source family. WGSL, GLSL, SPIR-V, and MSL are represented in the current graphics API. |
 | `ShaderProfile` | WGSL portability profile: WebGL2-compatible, WebGPU-compatible, or provider-native. |
 | `ShaderTarget` | Provider target language/output selection, such as WebGPU WGSL, OpenGL GLSL, WebGL/GLES GLSL ES, Vulkan SPIR-V, Metal MSL, or DirectX HLSL. |
-| `ShaderStage`, `ShaderBindingType` | Shader metadata values for generated reflection and setup-time validation. |
+| `ShaderStage`, `ShaderBindingType` | Shader metadata values for setup-time reflection and validation. |
 | `ShaderValidationResult`, `ShaderValidationDiagnostic`, `ShaderValidationSeverity` | Build/setup-time shader profile validation result types. |
 | `PrimitiveTopology` | Primitive assembly mode for first render pipelines. |
 | `BufferUsage` | Portable buffer usage. The first implementation defines vertex and index buffers. |
@@ -1723,6 +1723,7 @@ public final class ShaderModuleDescriptor {
     public ShaderModuleDescriptor glsl(String vertexSource, String fragmentSource);
     public ShaderModuleDescriptor spirv(int[] vertexWords, int[] fragmentWords);
     public ShaderModuleDescriptor msl(String source);
+    public ShaderModuleDescriptor entryPoints(String vertexEntryPoint, String fragmentEntryPoint);
     public boolean hasSource(ShaderLanguage language);
 }
 
@@ -1971,11 +1972,11 @@ Rules:
 
 - Descriptor objects carry creation parameters; resource interfaces expose stable identity, metadata, lifecycle, and provider access.
 - Resource metadata methods should return the values the resource was created with.
-- `ShaderModuleDescriptor` may contain multiple source-language variants for the same shader intent. Providers select a supported source variant; they should not pretend to support a language by silently translating through provider-specific hacks unless that translation is an explicit provider feature. Vulkan providers should prefer SPIR-V bytecode for predictable startup and portability to Android later.
-- `ShaderBundle` is the common setup-time wrapper for WGSL-first shaders. It validates the WGSL profile when built, stores generated target artifacts, and returns the correct `ShaderModuleDescriptor` for the active provider through `descriptorForProvider(...)`.
-- Normal runtime shader creation must not perform hidden WGSL-to-GLSL/SPIR-V/MSL/HLSL translation. Translation belongs to build tooling, checked-in generated bootstrap code, an explicit editor/tool compiler API, or an explicitly documented provider feature. Missing generated output for the active provider is a setup error.
+- `ShaderModuleDescriptor` may contain WGSL and/or native source-language variants for the same shader intent. Providers use native GLSL, SPIR-V, or MSL descriptors directly when present. If only WGSL is present and the provider needs another language, the provider may translate through the optional `runtime/fdx/core` shader compiler capability during shader-module creation.
+- `ShaderBundle` remains an optional setup-time wrapper for tools and users that want to group WGSL, profile metadata, reflection metadata, and manually supplied native artifacts. Normal built-in renderers pass WGSL `ShaderModuleDescriptor` values directly and let the selected provider compile when translation is required.
+- Runtime WGSL-to-GLSL/SPIR-V/MSL translation is an explicit provider feature backed by `runtime/fdx/core`. It happens at shader-module creation/setup time, not in a render loop. If the active runtime does not provide the compiler capability for a provider that needs translation, shader creation must fail clearly.
 - A shader that passes WebGPU/WGSL validation is not automatically portable to WebGL/OpenGL ES. Use `ShaderProfile.PORTABLE_WEBGL2` for shaders that must run on WebGL2/GLES-style targets and `ShaderProfile.PORTABLE_WEBGPU` for shaders that only need modern WebGPU/wgpu-class targets.
-- Metal uses generated or authored MSL through the same WGSL-first bundle contract. DirectX/HLSL remains a future target until the language enum, descriptor shape, and provider path are implemented. Neither target should require a second authoring language unless the shader declares `ShaderProfile.NATIVE` and the owning module documents the native-only behavior.
+- Metal uses translated or authored MSL through the same WGSL-first descriptor contract. DirectX/HLSL remains a future target until the language enum, descriptor shape, and provider path are implemented. Neither target should require a second authoring language unless the shader declares `ShaderProfile.NATIVE` and the owning module documents the native-only behavior.
 - `BufferDescriptor.vertex(label, size)` creates provider-backed vertex storage. `BufferDescriptor.index(label, size)` creates provider-backed index storage. Buffers are dynamic by default for frequent writes; `staticVertex(...)`, `staticIndex(...)`, or `dynamic(false)` mark storage that is optimized for infrequent uploads and repeated draws.
 - The first common indexed draw shape uses unsigned 16-bit indices. `GraphicsDevice.writeBuffer(buffer, data)` uploads the bytes in the provided `ByteBuffer` range.
 - `Mesh` is the single concrete graphics API mesh class, not a g3d type. It can be used by 2D, UI, custom renderers, and 3D. It owns static vertex and optional unsigned 16-bit index buffers, exposes its `VertexLayout`, counts, optional bounds metadata, and disposes the underlying buffers.
@@ -2643,7 +2644,7 @@ Rules:
 
 - `g3d` should use `graphics/api`, not provider-specific graphics types.
 - `Batch3D` is the common model/renderable submission contract. `ModelBatch` is the first implementation.
-- The first `ModelBatch` source slice renders static position/color meshes through reusable `Buffer`, `ShaderModule`, and `RenderPipeline` objects. The default `PbrShaderProvider` also owns the current static metallic-roughness PBR path for retained glTF mesh data and selects its built-in shader modules through `ShaderBundle`.
+- The first `ModelBatch` source slice renders static position/color meshes through reusable `Buffer`, `ShaderModule`, and `RenderPipeline` objects. The default `PbrShaderProvider` also owns the current static metallic-roughness PBR path for retained glTF mesh data and creates its built-in shader modules from WGSL `ShaderModuleDescriptor` values plus explicit setup-time reflection metadata.
 - `ModelBuilder` creates simple primitive models and custom triangle meshes using the current position/color renderer path.
 - `G3DAssetLoaders.register(...)` installs the initial glTF loader. The current glTF slice supports static glTF 2.0 `.gltf`/`.glb` triangle meshes with `POSITION`, optional `NORMAL`, optional `TEXCOORD_0`, optional `COLOR_0`, optional indices, metallic-roughness factors, and base-color, metallic-roughness, normal, occlusion, and emissive textures. Node transforms, skins, morph targets, animations, and broader material policies are later slices.
 - `g3d` should keep model loading, materials, PBR data, custom shaders, animation, lighting, frame targets, render paths, and rendering helpers in one user-facing artifact.
@@ -2827,7 +2828,7 @@ These decisions are part of the common API contract:
 - Use `HttpClient` as the HTTP entry point type.
 - Keep `AudioSource` as the advanced persistent playback source/channel type. Basic playback should still use `Sound`, `Music`, and `PlaybackHandle`.
 - Use descriptor names ending in `Descriptor` for graphics creation inputs, such as `TextureDescriptor`, `BufferDescriptor`, and `RenderPipelineDescriptor`.
-- Include `ShaderLanguage`, `ShaderProfile`, `ShaderTarget`, and `ShaderBundle` from the start. WGSL is the authoring source for portable shaders, GLSL/GLSL ES is used by the GL/WebGL/GLES provider family, SPIR-V is used by Vulkan, MSL is used by Metal, and HLSL is a future generated target for DirectX.
+- Include `ShaderLanguage`, `ShaderProfile`, `ShaderTarget`, and `ShaderBundle` from the start. WGSL is the default authoring source for portable shaders. GL/WebGL/GLES may translate WGSL to GLSL or accept direct GLSL, Vulkan may translate WGSL to SPIR-V or accept direct SPIR-V, Metal may translate WGSL to MSL or accept direct MSL, and HLSL is a future DirectX target.
 - Keep `TextureView` as a required common graphics type. Advanced view behavior is capability-gated.
 
 ## 19. Runtime Core
@@ -2842,6 +2843,7 @@ Package:
 
 ```text
 io.github.libfdx.runtime.core
+io.github.libfdx.runtime.core.shader
 ```
 
 `runtime/fdx/core` is the shared framework runtime service layer. It is not a user-created feature object and it is not a generic service locator. It provides small framework-wide services that common modules can use by default when the selected backend/platform has supplied the implementation.
@@ -2849,6 +2851,7 @@ io.github.libfdx.runtime.core
 Initial scope:
 
 - FreeType font rasterization for `.ttf` and `.otf` assets.
+- Optional WGSL shader compilation for platforms/backends that package the runtime `fdx` compiler capability.
 
 Future possible scope:
 
@@ -2858,6 +2861,8 @@ Future possible scope:
 
 Defined types:
 
+The shader compiler contract types live in `io.github.libfdx.runtime.core.shader`.
+
 | Type | Role |
 | --- | --- |
 | `RuntimeCore` | Static framework runtime fdx access point and provider registration hook used by backend/platform wiring. |
@@ -2866,6 +2871,10 @@ Defined types:
 | `FontRasterizerOptions` | Size, character set, padding, and atlas width for font rasterization. |
 | `RasterizedFont` | Rasterized font result: atlas pixels, glyph metrics, line height, baseline, and kerning. |
 | `RasterizedGlyph` | One glyph's atlas region and layout metrics. |
+| `RuntimeShaderCompiler` | Optional WGSL compiler service used by providers, tools, and editors when a runtime can translate shaders. |
+| `RuntimeShaderCompileRequest` | WGSL source, target, stage, entry point, and profile options for one compilation. |
+| `RuntimeShaderCompileResult` | Compilation success flag, output kind, output bytes, and diagnostics. |
+| `RuntimeShaderCompileTarget`, `RuntimeShaderCompileStage`, `RuntimeShaderCompileOutputKind` | Provider-neutral shader compiler values. |
 | `RuntimeCoreException` | Clear framework exception for runtime fdx failures. |
 
 Rules:
@@ -2875,8 +2884,11 @@ Rules:
 - Font rasterization happens when a font is loaded or cached, not during every UI render frame.
 - UI and g2d rendering consume cached `BitmapFont` atlas data after rasterization.
 - Backends must register a platform-specific `RuntimeCoreProvider` before code loads `.ttf`/`.otf` fonts through `UiFont.freeType(...)` or `BitmapFontFiles.loadFreeType(...)`.
+- Shader compilation happens when a shader module is created, an editor explicitly recompiles, or tooling validates a shader. It must not happen inside a frame loop.
+- Providers that consume WGSL directly do not require the shader compiler capability. Providers that need GLSL, SPIR-V, or MSL may request the capability only when the descriptor does not already provide the native language.
+- Platforms that do not need shader translation, such as PSP, must not be forced to package the compiler capability.
 - If no platform provider is registered, `runtime/fdx/core` must fail clearly. Do not silently fall back to a Java rasterizer or any non-FreeType implementation.
-- Desktop JVM registers a provider backed by LWJGL FreeType. Desktop_native and Android register providers backed by the runtime fdx C/C++ bridge linked with downloaded FreeType source. Web registers a provider backed by the runtime fdx Emscripten JS/WASM bridge.
+- Desktop JVM registers a provider backed by LWJGL FreeType and may also expose the native runtime shader compiler when the selected desktop `fdx` native library includes it. Desktop C and Android register providers backed by the runtime fdx C/C++ bridge linked with downloaded FreeType source and optional shader compiler source. Web registers a provider backed by the runtime fdx Emscripten JS/WASM bridge.
 - Native bridge source is owned by `runtime/fdx/platform/*`, not by the Java core module. The core module owns Java contracts. `fdx_shared` packages the shared native source payload needed by TeaVM/native project generation, and `fdx_desktop`, `fdx_android`, and `fdx_web` package platform native outputs.
 - Third-party FreeType source is not committed into the repository. The `runtime/fdx/platform` build prepares the pinned FreeType source archive under `build/third-party/...`; Android and web runtime fdx platform builds use that source when compiling the native bridge.
 - Platform-specific native resources generated for the core JAR are scoped under `libfdx-native/<platform>/...` in generated resource output.

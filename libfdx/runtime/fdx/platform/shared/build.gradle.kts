@@ -1,3 +1,4 @@
+import io.github.libfdx.build.LibExt
 import java.io.File
 import java.net.URI
 import java.security.MessageDigest
@@ -8,6 +9,8 @@ import org.gradle.api.tasks.Exec
 plugins {
     id("java-library")
 }
+
+group = "${LibExt.fdxGroup}.runtime.fdx"
 
 java {
     sourceCompatibility = JavaVersion.toVersion(25)
@@ -65,6 +68,9 @@ val copyRuntimeFdxSharedNativeSources = tasks.register<Copy>("copy_runtime_fdx_s
     description = "Copies shared runtime fdx native source payloads into fdx_shared generated resources."
     from(runtimeFdxSharedNativeSourceDir.dir("common")) {
         into("libfdx-native/common")
+    }
+    from(runtimeFdxSharedNativeSourceDir.dir("shader_compiler")) {
+        into("libfdx-native/shared/shader_compiler")
     }
     from(runtimeFdxSharedNativeSourceDir.dir("runtime_fdx")) {
         into("libfdx-native/desktop/runtime_fdx")

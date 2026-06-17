@@ -28,6 +28,8 @@ tasks.named<Test>("test") {
 
 val dawnSourceDirectory = layout.buildDirectory.dir("third-party/dawn/source")
 val shadercOutputDirectory = layout.buildDirectory.dir("native/shaderc")
+val shadercSourceDirectory =
+    rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/shader_compiler")
 
 val cmakeCommand = providers.gradleProperty("libfdx.shaderc.cmake").orElse("cmake")
 val emcmakeCommand = providers.gradleProperty("libfdx.shaderc.emcmake")
@@ -212,6 +214,7 @@ fun configureCmakeTask(name: String, buildDirectory: Provider<Directory>, output
             "-S", layout.projectDirectory.dir("src/main/cpp").asFile.absolutePath,
             "-B", buildDirectory.get().asFile.absolutePath,
             "-DFDX_DAWN_SOURCE_DIR=${dawnSourceDirectory.get().asFile.absolutePath}",
+            "-DLIBFDX_SHADERC_SOURCE_DIR=${shadercSourceDirectory.asFile.absolutePath}",
             "-DFDX_SHADERC_OUTPUT_DIR=${outputDirectory.get().asFile.absolutePath}",
             "-DCMAKE_BUILD_TYPE=Release"
         ) + extraArgs

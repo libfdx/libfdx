@@ -1,3 +1,4 @@
+import io.github.libfdx.build.LibExt
 import org.gradle.api.GradleException
 import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.Exec
@@ -6,6 +7,8 @@ import org.gradle.language.jvm.tasks.ProcessResources
 plugins {
     id("java-library")
 }
+
+group = "${LibExt.fdxGroup}.runtime.fdx"
 
 java {
     sourceCompatibility = JavaVersion.toVersion(25)
@@ -18,6 +21,9 @@ base {
 
 val runtimeFdxDesktopGeneratedResources = layout.buildDirectory.dir("generated/resources/runtimeFdxDesktop")
 val runtimeFdxNativeDir = rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/runtime_fdx")
+val shaderCompilerSourceDir =
+    rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/shader_compiler")
+val shaderCompilerDawnSourceDir = project(":libfdx:tools:shader:core").layout.buildDirectory.dir("third-party/dawn/source")
 val generatedDesktopRuntimeFdxNatives = mapOf(
     "windows-x64" to "fdx.dll",
     "linux-x64" to "libfdx.so",
@@ -25,6 +31,9 @@ val generatedDesktopRuntimeFdxNatives = mapOf(
     "macos-arm64" to "libfdx.dylib"
 )
 val requireAllRuntimeFdxNatives = providers.gradleProperty("libfdx.runtimeFdx.requireAllNativeResources")
+    .map(String::toBoolean)
+    .orElse(false)
+val runtimeFdxShaderCompilerEnabled = providers.gradleProperty("libfdx.runtimeFdx.shaderCompiler")
     .map(String::toBoolean)
     .orElse(false)
 
@@ -98,6 +107,30 @@ fun requireMacosHost() {
     }
 }
 
+fun runtimeFdxShaderCompilerCmakeArgs(): List<String> {
+    if (!runtimeFdxShaderCompilerEnabled.get()) {
+        return listOf("-DLIBFDX_ENABLE_SHADER_COMPILER=OFF")
+    }
+    return listOf(
+        "-DLIBFDX_ENABLE_SHADER_COMPILER=ON",
+        "-DLIBFDX_SHADERC_SOURCE_DIR=${shaderCompilerSourceDir.asFile.absolutePath}",
+        "-DFDX_DAWN_SOURCE_DIR=${shaderCompilerDawnSourceDir.get().asFile.absolutePath}"
+    )
+}
+
+fun Task.runtimeFdxShaderCompilerDependency() {
+    if (runtimeFdxShaderCompilerEnabled.get()) {
+        dependsOn(":libfdx:tools:shader:core:resolve_shaderc_dawn_source")
+    }
+}
+
+fun Task.runtimeFdxNativeSourceInputs() {
+    inputs.dir(runtimeFdxNativeDir)
+    if (runtimeFdxShaderCompilerEnabled.get()) {
+        inputs.dir(shaderCompilerSourceDir)
+    }
+}
+
 val runtimeFdxWindowsBuildDir = layout.buildDirectory.dir("cmake/runtimeFdx/windows")
 val runtimeFdxWindowsOutputDir = layout.buildDirectory.dir("native/runtimeFdx/windows")
 val runtimeFdxWindowsNativeLibrary = runtimeFdxWindowsOutputDir.map { it.file("fdx.dll") }
@@ -105,6 +138,8 @@ val runtimeFdxWindowsNativeLibrary = runtimeFdxWindowsOutputDir.map { it.file("f
 val configureRuntimeFdxWindowsNative = tasks.register<Exec>("configure_runtime_fdx_windows_native") {
     group = "libfdx native"
     description = "Configures the Windows runtime fdx native library."
+    runtimeFdxShaderCompilerDependency()
+    inputs.property("runtimeFdxShaderCompilerEnabled", runtimeFdxShaderCompilerEnabled)
     outputs.dir(runtimeFdxWindowsBuildDir)
     doFirst {
         requireWindowsHost()
@@ -117,13 +152,15 @@ val configureRuntimeFdxWindowsNative = tasks.register<Exec>("configure_runtime_f
         "-DCMAKE_BUILD_TYPE=Release",
         "-DLIBFDX_JAVA_HOME=${System.getProperty("java.home")}",
         "-DLIBFDX_DESKTOP_OUTPUT_DIR=${runtimeFdxWindowsOutputDir.get().asFile.absolutePath}"
-    ))
+    ) + runtimeFdxShaderCompilerCmakeArgs())
 }
 
 val buildRuntimeFdxWindowsNative = tasks.register<Exec>("build_runtime_fdx_windows_native") {
     group = "libfdx native"
     description = "Builds fdx.dll for Windows runtime fdx."
     dependsOn(configureRuntimeFdxWindowsNative)
+    runtimeFdxNativeSourceInputs()
+    inputs.property("runtimeFdxShaderCompilerEnabled", runtimeFdxShaderCompilerEnabled)
     outputs.file(runtimeFdxWindowsNativeLibrary)
     doFirst {
         requireWindowsHost()
@@ -149,6 +186,8 @@ val runtimeFdxLinuxNativeLibrary = runtimeFdxLinuxOutputDir.map { it.file("libfd
 val configureRuntimeFdxLinuxNative = tasks.register<Exec>("configure_runtime_fdx_linux_native") {
     group = "libfdx native"
     description = "Configures the Linux runtime fdx native library."
+    runtimeFdxShaderCompilerDependency()
+    inputs.property("runtimeFdxShaderCompilerEnabled", runtimeFdxShaderCompilerEnabled)
     outputs.dir(runtimeFdxLinuxBuildDir)
     doFirst {
         requireLinuxHost()
@@ -161,13 +200,15 @@ val configureRuntimeFdxLinuxNative = tasks.register<Exec>("configure_runtime_fdx
         "-DCMAKE_BUILD_TYPE=Release",
         "-DLIBFDX_JAVA_HOME=${System.getProperty("java.home")}",
         "-DLIBFDX_DESKTOP_OUTPUT_DIR=${runtimeFdxLinuxOutputDir.get().asFile.absolutePath}"
-    ))
+    ) + runtimeFdxShaderCompilerCmakeArgs())
 }
 
 val buildRuntimeFdxLinuxNative = tasks.register<Exec>("build_runtime_fdx_linux_native") {
     group = "libfdx native"
     description = "Builds libfdx.so for Linux runtime fdx."
     dependsOn(configureRuntimeFdxLinuxNative)
+    runtimeFdxNativeSourceInputs()
+    inputs.property("runtimeFdxShaderCompilerEnabled", runtimeFdxShaderCompilerEnabled)
     outputs.file(runtimeFdxLinuxNativeLibrary)
     doFirst {
         requireLinuxHost()
@@ -193,6 +234,8 @@ val runtimeFdxMacosNativeLibrary = runtimeFdxMacosOutputDir.map { it.file("libfd
 val configureRuntimeFdxMacosNative = tasks.register<Exec>("configure_runtime_fdx_macos_native") {
     group = "libfdx native"
     description = "Configures the macOS runtime fdx native library."
+    runtimeFdxShaderCompilerDependency()
+    inputs.property("runtimeFdxShaderCompilerEnabled", runtimeFdxShaderCompilerEnabled)
     outputs.dir(runtimeFdxMacosBuildDir)
     doFirst {
         requireMacosHost()
@@ -205,13 +248,15 @@ val configureRuntimeFdxMacosNative = tasks.register<Exec>("configure_runtime_fdx
         "-DCMAKE_BUILD_TYPE=Release",
         "-DLIBFDX_JAVA_HOME=${System.getProperty("java.home")}",
         "-DLIBFDX_DESKTOP_OUTPUT_DIR=${runtimeFdxMacosOutputDir.get().asFile.absolutePath}"
-    ))
+    ) + runtimeFdxShaderCompilerCmakeArgs())
 }
 
 val buildRuntimeFdxMacosNative = tasks.register<Exec>("build_runtime_fdx_macos_native") {
     group = "libfdx native"
     description = "Builds libfdx.dylib for macOS runtime fdx."
     dependsOn(configureRuntimeFdxMacosNative)
+    runtimeFdxNativeSourceInputs()
+    inputs.property("runtimeFdxShaderCompilerEnabled", runtimeFdxShaderCompilerEnabled)
     outputs.file(runtimeFdxMacosNativeLibrary)
     doFirst {
         requireMacosHost()

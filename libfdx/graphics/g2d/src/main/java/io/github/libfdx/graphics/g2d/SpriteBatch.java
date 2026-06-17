@@ -11,10 +11,8 @@ import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
-import io.github.libfdx.graphics.ShaderBundle;
 import io.github.libfdx.graphics.ShaderModule;
 import io.github.libfdx.graphics.ShaderModuleDescriptor;
-import io.github.libfdx.graphics.g2d.generated.GeneratedSpriteBatchShaders;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.VertexAttribute;
@@ -75,11 +73,121 @@ public final class SpriteBatch implements Batch2D {
             VertexAttribute.of(1, VertexFormat.FLOAT32X4, 16),
             VertexAttribute.of(2, VertexFormat.FLOAT32X4, 32),
             VertexAttribute.of(3, VertexFormat.FLOAT32X2, 48));
-    private static final ShaderBundle SPRITE_SHADER = GeneratedSpriteBatchShaders.spriteBatch();
-    private static final ShaderBundle WHITE_SPRITE_SHADER = GeneratedSpriteBatchShaders.whiteSpriteBatch();
-    private static final ShaderBundle INSTANCED_SPRITE_SHADER = GeneratedSpriteBatchShaders.instancedSpriteBatch();
-    private static final ShaderBundle COMPACT_INSTANCED_SPRITE_SHADER =
-            GeneratedSpriteBatchShaders.compactInstancedSpriteBatch();
+    private static final String SPRITE_SHADER_SOURCE = """
+            struct VertexInput {
+                @location(0) position : vec2f,
+                @location(1) texCoord : vec2f,
+                @location(2) color : vec4f,
+            };
+            struct VertexOutput {
+                @builtin(position) position : vec4f,
+                @location(0) texCoord : vec2f,
+                @location(1) color : vec4f,
+            };
+            @group(0) @binding(0) var u_texture : texture_2d<f32>;
+            @group(0) @binding(1) var u_sampler : sampler;
+            @vertex
+            fn vertexMain(input : VertexInput) -> VertexOutput {
+                var output : VertexOutput;
+                output.position = vec4f(input.position, 0.0, 1.0);
+                output.texCoord = input.texCoord;
+                output.color = input.color;
+                return output;
+            }
+            @fragment
+            fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
+                return textureSample(u_texture, u_sampler, input.texCoord) * input.color;
+            }
+            """;
+    private static final String WHITE_SPRITE_SHADER_SOURCE = """
+            struct VertexInput {
+                @location(0) position : vec2f,
+                @location(1) texCoord : vec2f,
+            };
+            struct VertexOutput {
+                @builtin(position) position : vec4f,
+                @location(0) texCoord : vec2f,
+            };
+            @group(0) @binding(0) var u_texture : texture_2d<f32>;
+            @group(0) @binding(1) var u_sampler : sampler;
+            @vertex
+            fn vertexMain(input : VertexInput) -> VertexOutput {
+                var output : VertexOutput;
+                output.position = vec4f(input.position, 0.0, 1.0);
+                output.texCoord = input.texCoord;
+                return output;
+            }
+            @fragment
+            fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
+                return textureSample(u_texture, u_sampler, input.texCoord);
+            }
+            """;
+    private static final String INSTANCED_SPRITE_SHADER_SOURCE = """
+            struct VertexInput {
+                @location(0) baseAndEdgeX : vec4f,
+                @location(1) edgeYAndUvBase : vec4f,
+                @location(2) uvSizeAndColorRG : vec4f,
+                @location(3) colorBA : vec2f,
+            };
+            struct VertexOutput {
+                @builtin(position) position : vec4f,
+                @location(0) texCoord : vec2f,
+                @location(1) color : vec4f,
+            };
+            @group(0) @binding(0) var u_texture : texture_2d<f32>;
+            @group(0) @binding(1) var u_sampler : sampler;
+            @vertex
+            fn vertexMain(@builtin(vertex_index) vertexIndex : u32, input : VertexInput) -> VertexOutput {
+                var output : VertexOutput;
+                let cornerIndex = vertexIndex;
+                let corner = vec2f(
+                    select(0.0, 1.0, cornerIndex == 2u || cornerIndex == 4u || cornerIndex == 5u),
+                    select(0.0, 1.0, cornerIndex == 1u || cornerIndex == 2u || cornerIndex == 4u));
+                let basePosition = vec2f(input.baseAndEdgeX.x, input.baseAndEdgeX.y);
+                let edgeX = vec2f(input.baseAndEdgeX.z, input.baseAndEdgeX.w);
+                let edgeY = vec2f(input.edgeYAndUvBase.x, input.edgeYAndUvBase.y);
+                let uvBase = vec2f(input.edgeYAndUvBase.z, input.edgeYAndUvBase.w);
+                let uvSize = vec2f(input.uvSizeAndColorRG.x, input.uvSizeAndColorRG.y);
+                let color = vec4f(input.uvSizeAndColorRG.z, input.uvSizeAndColorRG.w,
+                    input.colorBA.x, input.colorBA.y);
+                let position = basePosition + edgeX * corner.x + edgeY * corner.y;
+                output.position = vec4f(position, 0.0, 1.0);
+                output.texCoord = uvBase + uvSize * corner;
+                output.color = color;
+                return output;
+            }
+            @fragment
+            fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
+                return textureSample(u_texture, u_sampler, input.texCoord) * input.color;
+            }
+            """;
+    private static final String COMPACT_INSTANCED_SPRITE_SHADER_SOURCE = """
+            struct VertexInput {
+                @location(0) localPosition : vec2f,
+                @location(1) texCoord : vec2f,
+                @location(2) color : vec4f,
+                @location(3) center : vec2f,
+            };
+            struct VertexOutput {
+                @builtin(position) position : vec4f,
+                @location(0) texCoord : vec2f,
+                @location(1) color : vec4f,
+            };
+            @group(0) @binding(0) var u_texture : texture_2d<f32>;
+            @group(0) @binding(1) var u_sampler : sampler;
+            @vertex
+            fn vertexMain(input : VertexInput) -> VertexOutput {
+                var output : VertexOutput;
+                output.position = vec4f(input.center + input.localPosition, 0.0, 1.0);
+                output.texCoord = input.texCoord;
+                output.color = input.color;
+                return output;
+            }
+            @fragment
+            fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
+                return textureSample(u_texture, u_sampler, input.texCoord) * input.color;
+            }
+            """;
 
     private final GraphicsContext graphics;
     private final ShaderModule shader;
@@ -209,7 +317,7 @@ public final class SpriteBatch implements Batch2D {
         vertices = new float[initialMaxSprites * VERTICES_PER_SPRITE * FLOATS_PER_VERTEX];
         instances = new float[initialMaxSprites * INSTANCE_FLOATS_PER_SPRITE];
         compactInstances = new float[initialMaxSprites * INSTANCED_CENTER_FLOATS_PER_SPRITE];
-        shader = graphics.device().createShaderModule(descriptorForProvider(graphics, SPRITE_SHADER));
+        shader = graphics.device().createShaderModule(shaderDescriptor("sprite batch", SPRITE_SHADER_SOURCE));
         pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
                 .shader(shader, graphics.surfaceFormat())
                 .label("sprite batch")
@@ -219,7 +327,8 @@ public final class SpriteBatch implements Batch2D {
                 .vertexLayout(SPRITE_VERTEX_LAYOUT)
                 .sampledTextureCount(1));
         if (supportsWhitePipeline(graphics)) {
-            whiteShader = graphics.device().createShaderModule(descriptorForProvider(graphics, WHITE_SPRITE_SHADER));
+            whiteShader = graphics.device().createShaderModule(shaderDescriptor("white sprite batch",
+                    WHITE_SPRITE_SHADER_SOURCE));
             whitePipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
                     .shader(whiteShader, graphics.surfaceFormat())
                     .label("white sprite batch")
@@ -233,8 +342,8 @@ public final class SpriteBatch implements Batch2D {
             whitePipeline = null;
         }
         if (instanced) {
-            instancedShader = graphics.device().createShaderModule(descriptorForProvider(graphics,
-                    INSTANCED_SPRITE_SHADER));
+            instancedShader = graphics.device().createShaderModule(shaderDescriptor("instanced sprite batch",
+                    INSTANCED_SPRITE_SHADER_SOURCE));
             instancedPipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
                     .shader(instancedShader, graphics.surfaceFormat())
                     .label("instanced sprite batch")
@@ -246,8 +355,8 @@ public final class SpriteBatch implements Batch2D {
             instanceBuffers = ensureBufferSlots(instanceBuffers, 0);
             instanceBuffers[0] = ensureBuffer(instanceBuffers[0],
                     initialMaxSprites * INSTANCE_BYTES_PER_SPRITE, "sprite batch instances");
-            compactInstancedShader = graphics.device().createShaderModule(descriptorForProvider(graphics,
-                    COMPACT_INSTANCED_SPRITE_SHADER));
+            compactInstancedShader = graphics.device().createShaderModule(shaderDescriptor("compact instanced sprite "
+                    + "batch", COMPACT_INSTANCED_SPRITE_SHADER_SOURCE));
             compactInstancedPipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
                     .shader(compactInstancedShader, graphics.surfaceFormat())
                     .label("compact instanced sprite batch")
@@ -1022,12 +1131,8 @@ public final class SpriteBatch implements Batch2D {
         graphics.device().writeBuffer(instancedIndexBuffer, instancedIndexUploadBuffer);
     }
 
-    private static ShaderModuleDescriptor descriptorForProvider(GraphicsContext graphics, ShaderBundle bundle) {
-        String provider = graphics.providerId().value();
-        if ("psp".equals(provider)) {
-            return ShaderModuleDescriptor.wgsl(bundle.label(), bundle.wgslSource());
-        }
-        return bundle.descriptorForProvider(provider);
+    private static ShaderModuleDescriptor shaderDescriptor(String label, String source) {
+        return ShaderModuleDescriptor.wgsl(label, source);
     }
 
     private boolean supportsIndexedSprites(GraphicsContext graphics) {

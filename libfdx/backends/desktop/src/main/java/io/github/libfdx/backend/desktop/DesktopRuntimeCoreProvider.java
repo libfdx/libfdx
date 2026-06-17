@@ -3,6 +3,7 @@ package io.github.libfdx.backend.desktop;
 import io.github.libfdx.math.internal.MathAcceleration;
 import io.github.libfdx.runtime.core.FontRasterizer;
 import io.github.libfdx.runtime.core.RuntimeCoreProvider;
+import io.github.libfdx.runtime.core.shader.RuntimeShaderCompiler;
 
 /**
  * Provides desktop runtime core services.
@@ -11,6 +12,7 @@ import io.github.libfdx.runtime.core.RuntimeCoreProvider;
  */
 final class DesktopRuntimeCoreProvider implements RuntimeCoreProvider {
     private final FontRasterizer fontRasterizer = new DesktopFreeTypeFontRasterizer();
+    private final DesktopRuntimeShaderCompiler shaderCompiler = new DesktopRuntimeShaderCompiler();
 
     DesktopRuntimeCoreProvider() {
         MathAcceleration.register(new DesktopMathAccelerator());
@@ -27,6 +29,16 @@ final class DesktopRuntimeCoreProvider implements RuntimeCoreProvider {
     }
 
     /**
+     * Returns the runtime shader compiler.
+     *
+     * @return the runtime shader compiler
+     */
+    @Override
+    public RuntimeShaderCompiler shaderCompiler() {
+        return shaderCompiler.available() ? shaderCompiler : null;
+    }
+
+    /**
      * Returns the native font rasterizer available.
      *
      * @return true if native font rasterizer available succeeds or is active; false otherwise
@@ -34,5 +46,15 @@ final class DesktopRuntimeCoreProvider implements RuntimeCoreProvider {
     @Override
     public boolean nativeFontRasterizerAvailable() {
         return true;
+    }
+
+    /**
+     * Returns whether the native shader compiler is available.
+     *
+     * @return true if native shader compiler is available; false otherwise
+     */
+    @Override
+    public boolean nativeShaderCompilerAvailable() {
+        return shaderCompiler.available();
     }
 }

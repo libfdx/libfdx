@@ -13,6 +13,8 @@ import io.github.libfdx.graphics.ShaderBindingType;
 import io.github.libfdx.graphics.ShaderLanguage;
 import io.github.libfdx.graphics.ShaderModule;
 import io.github.libfdx.graphics.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.ShaderModuleDescriptors;
+import io.github.libfdx.graphics.ShaderTarget;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.TextureFormat;
@@ -151,6 +153,7 @@ final class GLGraphicsDevice implements GraphicsDevice {
         if (descriptor == null) {
             throw new FdxException("ShaderModuleDescriptor cannot be null");
         }
+        descriptor = ShaderModuleDescriptors.requireTarget(descriptor, ShaderTarget.forProvider(providerId), "GL");
         if (!descriptor.hasSource(ShaderLanguage.GLSL)) {
             throw new FdxException("GL currently supports GLSL shader modules only");
         }

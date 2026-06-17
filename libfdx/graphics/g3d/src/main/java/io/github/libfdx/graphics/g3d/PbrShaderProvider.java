@@ -15,13 +15,12 @@ import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
+import io.github.libfdx.graphics.ShaderAttribute;
 import io.github.libfdx.graphics.ShaderBinding;
 import io.github.libfdx.graphics.ShaderBindingType;
-import io.github.libfdx.graphics.ShaderBundle;
 import io.github.libfdx.graphics.ShaderModule;
 import io.github.libfdx.graphics.ShaderModuleDescriptor;
 import io.github.libfdx.graphics.ShaderReflection;
-import io.github.libfdx.graphics.g3d.generated.GeneratedModelBatchShaders;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.VertexAttribute;
@@ -42,6 +41,190 @@ import java.util.Map;
  * @author xpenatan
  */
 public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
+    private static final String POSITION_COLOR_SHADER_SOURCE = """
+            struct VertexInput {
+                @location(0) position : vec3f,
+                @location(1) color : vec4f,
+            };
+            struct VertexOutput {
+                @builtin(position) position : vec4f,
+                @location(0) color : vec4f,
+            };
+            @vertex
+            fn vertexMain(input : VertexInput) -> VertexOutput {
+                var output : VertexOutput;
+                output.position = vec4f(input.position, 1.0);
+                output.color = input.color;
+                return output;
+            }
+            @fragment
+            fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
+                return input.color;
+            }
+            """;
+    private static final String PBR_SHADER_SOURCE = """
+            struct VertexInput {
+                @location(0) position : vec3f,
+                @location(1) normal : vec3f,
+                @location(2) uv : vec2f,
+                @location(3) color : vec4f,
+                @location(4) pbr : vec3f,
+                @location(5) emissive : vec3f,
+            };
+            struct VertexOutput {
+                @builtin(position) position : vec4f,
+                @location(0) worldPosition : vec3f,
+                @location(1) normal : vec3f,
+                @location(2) uv : vec2f,
+                @location(3) color : vec4f,
+                @location(4) pbr : vec3f,
+                @location(5) emissive : vec3f,
+            };
+            struct PbrUniforms {
+                model : mat4x4<f32>,
+                viewProjection : mat4x4<f32>,
+                cameraPosition : vec4f,
+                ambientColor : vec4f,
+                lightDirection : vec4f,
+                lightColorIntensity : vec4f,
+                textureFlags : vec4f,
+                emissiveFlags : vec4f,
+            };
+            @group(0) @binding(0) var baseColorTexture : texture_2d<f32>;
+            @group(0) @binding(1) var baseColorSampler : sampler;
+            @group(0) @binding(2) var metallicRoughnessTexture : texture_2d<f32>;
+            @group(0) @binding(3) var metallicRoughnessSampler : sampler;
+            @group(0) @binding(4) var normalTexture : texture_2d<f32>;
+            @group(0) @binding(5) var normalSampler : sampler;
+            @group(0) @binding(6) var occlusionTexture : texture_2d<f32>;
+            @group(0) @binding(7) var occlusionSampler : sampler;
+            @group(0) @binding(8) var emissiveTexture : texture_2d<f32>;
+            @group(0) @binding(9) var emissiveSampler : sampler;
+            @group(1) @binding(0) var<uniform> uniforms : PbrUniforms;
+            const PI : f32 = 3.14159265359;
+            @vertex
+            fn vertexMain(input : VertexInput) -> VertexOutput {
+                var output : VertexOutput;
+                let worldPosition = uniforms.model * vec4f(input.position, 1.0);
+                output.worldPosition = worldPosition.xyz;
+                output.normal = (uniforms.model * vec4f(input.normal, 0.0)).xyz;
+                output.uv = input.uv;
+                output.color = input.color;
+                output.pbr = input.pbr;
+                output.emissive = input.emissive;
+                output.position = uniforms.viewProjection * worldPosition;
+                return output;
+            }
+            fn srgbToLinear(value : vec3f) -> vec3f {
+                return pow(max(value, vec3f(0.0)), vec3f(2.2));
+            }
+            fn linearToSrgb(value : vec3f) -> vec3f {
+                return pow(max(value, vec3f(0.0)), vec3f(1.0 / 2.2));
+            }
+            fn distributionGGX(n : vec3f, h : vec3f, roughness : f32) -> f32 {
+                let a = roughness * roughness;
+                let a2 = a * a;
+                let ndh = max(dot(n, h), 0.0);
+                let denom = ndh * ndh * (a2 - 1.0) + 1.0;
+                return a2 / max(PI * denom * denom, 0.000001);
+            }
+            fn geometrySchlickGGX(ndv : f32, roughness : f32) -> f32 {
+                let r = roughness + 1.0;
+                let k = (r * r) / 8.0;
+                return ndv / max(ndv * (1.0 - k) + k, 0.000001);
+            }
+            fn geometrySmith(n : vec3f, v : vec3f, l : vec3f, roughness : f32) -> f32 {
+                return geometrySchlickGGX(max(dot(n, v), 0.0), roughness)
+                        * geometrySchlickGGX(max(dot(n, l), 0.0), roughness);
+            }
+            fn fresnelSchlick(cosTheta : f32, f0 : vec3f) -> vec3f {
+                return f0 + (vec3f(1.0) - f0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+            }
+            fn mappedNormal(nIn : vec3f, worldPosition : vec3f, uv : vec2f) -> vec3f {
+                let n = normalize(nIn);
+                if (uniforms.textureFlags.z < 0.5) {
+                    return n;
+                }
+                let sampleNormal = textureSample(normalTexture, normalSampler, uv).xyz * 2.0 - vec3f(1.0);
+                let q1 = dpdx(worldPosition);
+                let q2 = dpdy(worldPosition);
+                let st1 = dpdx(uv);
+                let st2 = dpdy(uv);
+                let tangent = q1 * st2.y - q2 * st1.y;
+                if (dot(tangent, tangent) < 0.000001) {
+                    return n;
+                }
+                let t = normalize(tangent);
+                let b = normalize(cross(n, t));
+                return normalize(mat3x3<f32>(t, b, n) * sampleNormal);
+            }
+            @fragment
+            fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
+                let uv = input.uv;
+                var base = input.color;
+                if (uniforms.textureFlags.x > 0.5) {
+                    let texel = textureSample(baseColorTexture, baseColorSampler, uv);
+                    base = vec4f(base.rgb * srgbToLinear(texel.rgb), base.a * texel.a);
+                }
+                if (base.a <= 0.001) {
+                    discard;
+                }
+                var ao = clamp(input.pbr.x, 0.0, 1.0);
+                var metallic = clamp(input.pbr.y, 0.0, 1.0);
+                var roughness = clamp(input.pbr.z, 0.04, 1.0);
+                if (uniforms.textureFlags.y > 0.5) {
+                    let mr = textureSample(metallicRoughnessTexture, metallicRoughnessSampler, uv);
+                    roughness = clamp(roughness * mr.g, 0.04, 1.0);
+                    metallic = clamp(metallic * mr.b, 0.0, 1.0);
+                }
+                if (uniforms.textureFlags.w > 0.5) {
+                    ao *= textureSample(occlusionTexture, occlusionSampler, uv).r;
+                }
+                var emissive = input.emissive;
+                if (uniforms.emissiveFlags.x > 0.5) {
+                    emissive *= srgbToLinear(textureSample(emissiveTexture, emissiveSampler, uv).rgb);
+                }
+                let n = mappedNormal(input.normal, input.worldPosition, uv);
+                let v = normalize(uniforms.cameraPosition.xyz - input.worldPosition);
+                let l = normalize(-uniforms.lightDirection.xyz);
+                let h = normalize(v + l);
+                let albedo = max(base.rgb, vec3f(0.0));
+                let f0 = mix(vec3f(0.04), albedo, vec3f(metallic));
+                let ndl = max(dot(n, l), 0.0);
+                let ndv = max(dot(n, v), 0.0);
+                let f = fresnelSchlick(max(dot(h, v), 0.0), f0);
+                let d = distributionGGX(n, h, roughness);
+                let g = geometrySmith(n, v, l, roughness);
+                let specular = (d * g * f) / max(4.0 * ndv * ndl, 0.000001);
+                let kd = (vec3f(1.0) - f) * (1.0 - metallic);
+                let radiance = uniforms.lightColorIntensity.rgb * uniforms.lightColorIntensity.a;
+                var color = (kd * albedo / PI + specular) * radiance * ndl;
+                color += uniforms.ambientColor.rgb * albedo * ao;
+                color += emissive;
+                return vec4f(linearToSrgb(color), base.a);
+            }
+            """;
+    private static final ShaderReflection PBR_REFLECTION = ShaderReflection.of(new ShaderBinding[] {
+            ShaderBinding.of(0, 0, "baseColorTexture", ShaderBindingType.TEXTURE),
+            ShaderBinding.of(0, 1, "baseColorSampler", ShaderBindingType.SAMPLER),
+            ShaderBinding.of(0, 2, "metallicRoughnessTexture", ShaderBindingType.TEXTURE),
+            ShaderBinding.of(0, 3, "metallicRoughnessSampler", ShaderBindingType.SAMPLER),
+            ShaderBinding.of(0, 4, "normalTexture", ShaderBindingType.TEXTURE),
+            ShaderBinding.of(0, 5, "normalSampler", ShaderBindingType.SAMPLER),
+            ShaderBinding.of(0, 6, "occlusionTexture", ShaderBindingType.TEXTURE),
+            ShaderBinding.of(0, 7, "occlusionSampler", ShaderBindingType.SAMPLER),
+            ShaderBinding.of(0, 8, "emissiveTexture", ShaderBindingType.TEXTURE),
+            ShaderBinding.of(0, 9, "emissiveSampler", ShaderBindingType.SAMPLER),
+            ShaderBinding.of(1, 0, "uniforms", ShaderBindingType.UNIFORM_BUFFER)
+    }, new ShaderAttribute[] {
+            ShaderAttribute.of(0, "position", VertexFormat.FLOAT32X3),
+            ShaderAttribute.of(1, "normal", VertexFormat.FLOAT32X3),
+            ShaderAttribute.of(2, "uv", VertexFormat.FLOAT32X2),
+            ShaderAttribute.of(3, "color", VertexFormat.FLOAT32X4),
+            ShaderAttribute.of(4, "pbr", VertexFormat.FLOAT32X3),
+            ShaderAttribute.of(5, "emissive", VertexFormat.FLOAT32X3)
+    });
+
     private final PositionColorShader shader;
     private final GpuPbrShader gpuShader;
     private boolean disposed;
@@ -74,15 +257,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
 
     private static boolean usesGpuPbrShader(String providerId) {
         return "gl".equals(providerId) || "gles".equals(providerId) || "webgl".equals(providerId)
-                || "wgpu".equals(providerId) || "vulkan".equals(providerId);
-    }
-
-    private static ShaderModuleDescriptor descriptorForProvider(GraphicsContext graphics, ShaderBundle bundle) {
-        String provider = graphics.providerId().value();
-        if ("psp".equals(provider)) {
-            return ShaderModuleDescriptor.wgsl(bundle.label(), bundle.wgslSource());
-        }
-        return bundle.descriptorForProvider(provider);
+                || "wgpu".equals(providerId) || "vulkan".equals(providerId) || "metal".equals(providerId);
     }
 
     /**
@@ -138,7 +313,6 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
      */
     private static final class PositionColorShader implements Shader3D {
         private static final float PI = 3.14159265359f;
-        private static final ShaderBundle SHADER = GeneratedModelBatchShaders.positionColor();
         private final GraphicsContext graphics;
         private final ShaderModule shaderModule;
         private final Map<PipelineKey, RenderPipeline> pipelines = new HashMap<PipelineKey, RenderPipeline>();
@@ -149,7 +323,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
 
         PositionColorShader(GraphicsContext graphics) {
             this.graphics = graphics;
-            shaderModule = graphics.device().createShaderModule(descriptorForProvider(graphics, SHADER));
+            shaderModule = graphics.device().createShaderModule(ShaderModuleDescriptor.wgsl(
+                    "model batch position color", POSITION_COLOR_SHADER_SOURCE));
         }
 
         /**
@@ -703,8 +878,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
      * @author xpenatan
      */
     private static final class GpuPbrShader implements Shader3D {
-        private static final ShaderBundle SHADER = GeneratedModelBatchShaders.pbr();
-        private static final ShaderReflection REFLECTION = SHADER.reflection();
+        private static final ShaderReflection REFLECTION = PBR_REFLECTION;
         private static final int SAMPLED_TEXTURE_COUNT = sampledTextureCount(REFLECTION);
         private final GraphicsContext graphics;
         private final ShaderModule shaderModule;
@@ -809,7 +983,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         }
 
         private ShaderModuleDescriptor shaderModuleDescriptor() {
-            return SHADER.descriptorForProvider(providerId);
+            return ShaderModuleDescriptor.wgsl("model batch pbr", PBR_SHADER_SOURCE);
         }
 
         private String pipelineLabel() {
@@ -818,6 +992,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
             if ("vulkan".equals(providerId)) {
                 return "model batch vulkan pbr";
+            }
+            if ("metal".equals(providerId)) {
+                return "model batch metal pbr";
             }
             return "model batch gl pbr";
         }
@@ -973,4 +1150,5 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             return System.identityHashCode(vertexLayout) * 31 + topology.hashCode();
         }
     }
+
 }

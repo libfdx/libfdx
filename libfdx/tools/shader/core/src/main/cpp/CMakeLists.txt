@@ -10,9 +10,16 @@ if(NOT FDX_DAWN_SOURCE_DIR)
   message(FATAL_ERROR "FDX_DAWN_SOURCE_DIR is required")
 endif()
 
+if(NOT LIBFDX_SHADERC_SOURCE_DIR)
+  message(FATAL_ERROR "LIBFDX_SHADERC_SOURCE_DIR is required")
+endif()
+file(TO_CMAKE_PATH "${FDX_DAWN_SOURCE_DIR}" FDX_DAWN_SOURCE_DIR)
+file(TO_CMAKE_PATH "${LIBFDX_SHADERC_SOURCE_DIR}" LIBFDX_SHADERC_SOURCE_DIR)
+
 if(NOT FDX_SHADERC_OUTPUT_DIR)
   set(FDX_SHADERC_OUTPUT_DIR "${CMAKE_BINARY_DIR}/libfdx_shaderc")
 endif()
+file(TO_CMAKE_PATH "${FDX_SHADERC_OUTPUT_DIR}" FDX_SHADERC_OUTPUT_DIR)
 
 function(fdx_shaderc_set_output_dirs target)
   set_target_properties(${target} PROPERTIES
@@ -81,7 +88,7 @@ if(EMSCRIPTEN AND NOT TARGET SPIRV-Headers)
       "${CMAKE_CURRENT_BINARY_DIR}/libfdx_spirv_headers" EXCLUDE_FROM_ALL)
 endif()
 
-set(LIBFDX_SHADERC_CORE_SOURCES libfdx_shaderc.cpp)
+set(LIBFDX_SHADERC_CORE_SOURCES "${LIBFDX_SHADERC_SOURCE_DIR}/libfdx_shaderc.cpp")
 set(LIBFDX_SHADERC_TINT_LIBS
     libtint
     tint_api_helpers
@@ -108,17 +115,20 @@ if(EMSCRIPTEN)
         "SHELL:--profiling-funcs")
   endif()
   target_link_libraries(fdx_shaderc PRIVATE ${LIBFDX_SHADERC_TINT_LIBS})
+  target_include_directories(fdx_shaderc PRIVATE "${LIBFDX_SHADERC_SOURCE_DIR}")
 else()
   if(ANDROID)
-    list(APPEND LIBFDX_SHADERC_CORE_SOURCES libfdx_shaderc_jni.cpp)
+    list(APPEND LIBFDX_SHADERC_CORE_SOURCES "${LIBFDX_SHADERC_SOURCE_DIR}/libfdx_shaderc_jni.cpp")
   endif()
   add_library(fdx_shaderc SHARED ${LIBFDX_SHADERC_CORE_SOURCES})
   fdx_shaderc_set_output_dirs(fdx_shaderc)
   target_link_libraries(fdx_shaderc PRIVATE ${LIBFDX_SHADERC_TINT_LIBS})
+  target_include_directories(fdx_shaderc PRIVATE "${LIBFDX_SHADERC_SOURCE_DIR}")
 
   if(NOT ANDROID)
     add_executable(libfdx_shaderc_cli libfdx_shaderc_cli.cpp)
     fdx_shaderc_set_output_dirs(libfdx_shaderc_cli)
     target_link_libraries(libfdx_shaderc_cli PRIVATE fdx_shaderc)
+    target_include_directories(libfdx_shaderc_cli PRIVATE "${LIBFDX_SHADERC_SOURCE_DIR}")
   endif()
 endif()

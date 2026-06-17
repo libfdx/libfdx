@@ -10,6 +10,7 @@
 ##
 
 .gradle/
+**/.cxx/
 bin/
 obj/
 out/
