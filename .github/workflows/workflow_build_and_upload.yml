@@ -41,23 +41,13 @@ jobs:
           arch: x64
 
       - name: Build runtime fdx Windows native
-        run: .\gradlew.bat --refresh-dependencies :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_windows_native
-
-      - name: Build shader compiler Windows native
-        run: .\gradlew.bat --refresh-dependencies :libfdx:tools:shader:platform:desktop_ffm:generate_shaderc_desktop_native
+        run: .\gradlew.bat --refresh-dependencies -Plibfdx.runtimeFdx.shaderCompiler=true :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_windows_native
 
       - name: Upload runtime fdx Windows native
         uses: actions/upload-artifact@v7
         with:
           name: runtime-fdx-desktop-windows-x64
           path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/windows-x64/fdx.dll
-          if-no-files-found: error
-
-      - name: Upload shader compiler Windows native
-        uses: actions/upload-artifact@v7
-        with:
-          name: shader-compiler-desktop-windows-x86_64
-          path: libfdx/tools/shader/platform/desktop_ffm/build/generated/resources/shaderc/libfdx/shader/native/desktop/windows-x86_64/fdx_shaderc.dll
           if-no-files-found: error
 
   build_linux:
@@ -82,23 +72,13 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build runtime fdx Linux native
-        run: ./gradlew --refresh-dependencies :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_linux_native
-
-      - name: Build shader compiler Linux native
-        run: ./gradlew --refresh-dependencies :libfdx:tools:shader:platform:desktop_ffm:generate_shaderc_desktop_native
+        run: ./gradlew --refresh-dependencies -Plibfdx.runtimeFdx.shaderCompiler=true :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_linux_native
 
       - name: Upload runtime fdx Linux native
         uses: actions/upload-artifact@v7
         with:
           name: runtime-fdx-desktop-linux-x64
           path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/linux-x64/libfdx.so
-          if-no-files-found: error
-
-      - name: Upload shader compiler Linux native
-        uses: actions/upload-artifact@v7
-        with:
-          name: shader-compiler-desktop-linux-x86_64
-          path: libfdx/tools/shader/platform/desktop_ffm/build/generated/resources/shaderc/libfdx/shader/native/desktop/linux-x86_64/libfdx_shaderc.so
           if-no-files-found: error
 
   build_macos_x64:
@@ -118,23 +98,13 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build runtime fdx macOS x64 native
-        run: ./gradlew --refresh-dependencies :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native
-
-      - name: Build shader compiler macOS x64 native
-        run: ./gradlew --refresh-dependencies :libfdx:tools:shader:platform:desktop_ffm:generate_shaderc_desktop_native
+        run: ./gradlew --refresh-dependencies -Plibfdx.runtimeFdx.shaderCompiler=true :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native
 
       - name: Upload runtime fdx macOS x64 native
         uses: actions/upload-artifact@v7
         with:
           name: runtime-fdx-desktop-macos-x64
           path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-x64/libfdx.dylib
-          if-no-files-found: error
-
-      - name: Upload shader compiler macOS x64 native
-        uses: actions/upload-artifact@v7
-        with:
-          name: shader-compiler-desktop-macos-x86_64
-          path: libfdx/tools/shader/platform/desktop_ffm/build/generated/resources/shaderc/libfdx/shader/native/desktop/macos-x86_64/libfdx_shaderc.dylib
           if-no-files-found: error
 
   build_macos_arm64:
@@ -154,23 +124,13 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build runtime fdx macOS arm64 native
-        run: ./gradlew --refresh-dependencies :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native
-
-      - name: Build shader compiler macOS arm64 native
-        run: ./gradlew --refresh-dependencies :libfdx:tools:shader:platform:desktop_ffm:generate_shaderc_desktop_native
+        run: ./gradlew --refresh-dependencies -Plibfdx.runtimeFdx.shaderCompiler=true :libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native
 
       - name: Upload runtime fdx macOS arm64 native
         uses: actions/upload-artifact@v7
         with:
           name: runtime-fdx-desktop-macos-arm64
           path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-arm64/libfdx.dylib
-          if-no-files-found: error
-
-      - name: Upload shader compiler macOS arm64 native
-        uses: actions/upload-artifact@v7
-        with:
-          name: shader-compiler-desktop-macos-arm64
-          path: libfdx/tools/shader/platform/desktop_ffm/build/generated/resources/shaderc/libfdx/shader/native/desktop/macos-arm64/libfdx_shaderc.dylib
           if-no-files-found: error
 
   build_web:
@@ -196,9 +156,8 @@ jobs:
 
       - name: Build web native artifacts
         run: |
-          ./gradlew --refresh-dependencies \
-            :libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native \
-            :libfdx:tools:shader:platform:web:generate_shaderc_web_native
+          ./gradlew --refresh-dependencies -Plibfdx.runtimeFdx.shaderCompiler=true \
+            :libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native
 
       - name: Upload runtime fdx web natives
         uses: actions/upload-artifact@v7
@@ -207,15 +166,6 @@ jobs:
           path: |
             libfdx/runtime/fdx/platform/web/build/generated/resources/runtimeFdxWeb/fdx.js
             libfdx/runtime/fdx/platform/web/build/generated/resources/runtimeFdxWeb/fdx.wasm
-          if-no-files-found: error
-
-      - name: Upload shader compiler web natives
-        uses: actions/upload-artifact@v7
-        with:
-          name: shader-compiler-web
-          path: |
-            libfdx/tools/shader/platform/web/build/generated/resources/shaderc/libfdx/shader/native/web/libfdx_shaderc.js
-            libfdx/tools/shader/platform/web/build/generated/resources/shaderc/libfdx/shader/native/web/libfdx_shaderc.wasm
           if-no-files-found: error
 
   build_android:
@@ -247,12 +197,11 @@ jobs:
 
       - name: Build Android library artifacts
         run: |
-          ./gradlew --refresh-dependencies \
+          ./gradlew --refresh-dependencies -Plibfdx.runtimeFdx.shaderCompiler=true \
             :libfdx:runtime:fdx:platform:android:assembleRelease \
             :libfdx:backends:android:assembleRelease \
             :libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease \
-            :libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease \
-            :libfdx:tools:shader:platform:android_jni:assembleRelease
+            :libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease
 
       - name: Upload Android library artifacts
         uses: actions/upload-artifact@v7
@@ -263,7 +212,6 @@ jobs:
             libfdx/backends/android/build/outputs/aar/*.aar
             libfdx/extensions/graphics/vulkan/platform/android_jni/build/outputs/aar/*.aar
             libfdx/extensions/graphics/wgpu/platform/android_jni/build/outputs/aar/*.aar
-            libfdx/tools/shader/platform/android_jni/build/outputs/aar/*.aar
           if-no-files-found: error
 
   publish:
@@ -347,41 +295,11 @@ jobs:
           name: runtime-fdx-desktop-macos-arm64
           path: libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-arm64
 
-      - name: Download shader compiler Windows native
-        uses: actions/download-artifact@v8
-        with:
-          name: shader-compiler-desktop-windows-x86_64
-          path: libfdx/tools/shader/platform/desktop_ffm/build/generated/resources/shaderc/libfdx/shader/native/desktop/windows-x86_64
-
-      - name: Download shader compiler Linux native
-        uses: actions/download-artifact@v8
-        with:
-          name: shader-compiler-desktop-linux-x86_64
-          path: libfdx/tools/shader/platform/desktop_ffm/build/generated/resources/shaderc/libfdx/shader/native/desktop/linux-x86_64
-
-      - name: Download shader compiler macOS x64 native
-        uses: actions/download-artifact@v8
-        with:
-          name: shader-compiler-desktop-macos-x86_64
-          path: libfdx/tools/shader/platform/desktop_ffm/build/generated/resources/shaderc/libfdx/shader/native/desktop/macos-x86_64
-
-      - name: Download shader compiler macOS arm64 native
-        uses: actions/download-artifact@v8
-        with:
-          name: shader-compiler-desktop-macos-arm64
-          path: libfdx/tools/shader/platform/desktop_ffm/build/generated/resources/shaderc/libfdx/shader/native/desktop/macos-arm64
-
       - name: Download runtime fdx web natives
         uses: actions/download-artifact@v8
         with:
           name: runtime-fdx-web
           path: libfdx/runtime/fdx/platform/web/build/generated/resources/runtimeFdxWeb
-
-      - name: Download shader compiler web natives
-        uses: actions/download-artifact@v8
-        with:
-          name: shader-compiler-web
-          path: libfdx/tools/shader/platform/web/build/generated/resources/shaderc/libfdx/shader/native/web
 
       - name: Download Android build artifacts
         uses: actions/download-artifact@v8
@@ -397,19 +315,12 @@ jobs:
             "libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/linux-x64/libfdx.so"
             "libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-x64/libfdx.dylib"
             "libfdx/runtime/fdx/platform/desktop/build/generated/resources/runtimeFdxDesktop/libfdx-native/desktop/macos-arm64/libfdx.dylib"
-            "libfdx/tools/shader/platform/desktop_ffm/build/generated/resources/shaderc/libfdx/shader/native/desktop/windows-x86_64/fdx_shaderc.dll"
-            "libfdx/tools/shader/platform/desktop_ffm/build/generated/resources/shaderc/libfdx/shader/native/desktop/linux-x86_64/libfdx_shaderc.so"
-            "libfdx/tools/shader/platform/desktop_ffm/build/generated/resources/shaderc/libfdx/shader/native/desktop/macos-x86_64/libfdx_shaderc.dylib"
-            "libfdx/tools/shader/platform/desktop_ffm/build/generated/resources/shaderc/libfdx/shader/native/desktop/macos-arm64/libfdx_shaderc.dylib"
             "libfdx/runtime/fdx/platform/web/build/generated/resources/runtimeFdxWeb/fdx.js"
             "libfdx/runtime/fdx/platform/web/build/generated/resources/runtimeFdxWeb/fdx.wasm"
-            "libfdx/tools/shader/platform/web/build/generated/resources/shaderc/libfdx/shader/native/web/libfdx_shaderc.js"
-            "libfdx/tools/shader/platform/web/build/generated/resources/shaderc/libfdx/shader/native/web/libfdx_shaderc.wasm"
             "libfdx/runtime/fdx/platform/android/build/outputs/aar/fdx_android-release.aar"
             "libfdx/backends/android/build/outputs/aar/backend_android-release.aar"
             "libfdx/extensions/graphics/vulkan/platform/android_jni/build/outputs/aar/vulkan_android_jni-release.aar"
             "libfdx/extensions/graphics/wgpu/platform/android_jni/build/outputs/aar/wgpu_android_jni-release.aar"
-            "libfdx/tools/shader/platform/android_jni/build/outputs/aar/shader_compiler_android_jni-release.aar"
           )
           for file in "${required_files[@]}"; do
             if [ ! -f "$file" ]; then

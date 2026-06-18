@@ -11,10 +11,12 @@ import io.github.libfdx.backend.psp.PspProject
 import io.github.libfdx.backend.psp.PspProjectWriter
 import io.github.libfdx.backend.web.WebApp
 import io.github.libfdx.backend.web.WebAppWriter
+import io.github.libfdx.graphics.ShaderProfile
+import io.github.libfdx.graphics.ShaderProfileValidator
+import io.github.libfdx.graphics.ShaderValidationDiagnostic
+import io.github.libfdx.graphics.ShaderValidationSeverity
 import io.github.libfdx.tools.font.BitmapFontGenerator
 import io.github.libfdx.tools.font.BitmapFontSpec
-import io.github.libfdx.tools.shader.FdxShaderValidator
-import io.github.libfdx.graphics.ShaderProfile
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.file.ConfigurableFileCollection
@@ -39,6 +41,7 @@ import java.io.File
 import java.net.InetSocketAddress
 import java.net.URI
 import java.nio.file.Files
+import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.CountDownLatch
 import java.util.zip.ZipInputStream
@@ -159,15 +162,115 @@ abstract class LibfdxValidateShadersTask : DefaultTask() {
     @TaskAction
     fun validate() {
         val root = sourceDir.get().asFile.toPath()
-        val profile = FdxShaderValidator.profileFromId(defaultProfile.get(), ShaderProfile.PORTABLE_WEBGPU)
-        val report = FdxShaderValidator.validateDirectory(root, profile)
+        val profile = profileFromId(defaultProfile.get(), ShaderProfile.PORTABLE_WEBGPU)
+        val entries = validateDirectory(root, profile)
         val output = reportFile.get().asFile
         output.parentFile.mkdirs()
-        output.writeText(report.toMarkdown(root), Charsets.UTF_8)
-        if(!report.success()) {
+        output.writeText(toMarkdown(root, entries), Charsets.UTF_8)
+        if(errorCount(entries) != 0) {
             throw GradleException("libFDX shader validation failed. See ${output.absolutePath}")
         }
-        logger.lifecycle("Validated ${report.entries().size} libfdx shader source file(s): ${output.absolutePath}")
+        logger.lifecycle("Validated ${entries.size} libfdx shader source file(s): ${output.absolutePath}")
+    }
+
+    private fun validateDirectory(sourceDirectory: Path, defaultProfile: ShaderProfile): List<ShaderValidationEntry> {
+        if(!Files.isDirectory(sourceDirectory)) {
+            return emptyList()
+        }
+        return Files.walk(sourceDirectory).use { stream ->
+            stream.filter(Files::isRegularFile)
+                .filter { it.fileName.toString().endsWith(".wgsl") }
+                .sorted()
+                .map { validateFile(it, defaultProfile) }
+                .toList()
+        }
+    }
+
+    private fun validateFile(path: Path, defaultProfile: ShaderProfile): ShaderValidationEntry {
+        val source = Files.readString(path)
+        val profile = profileFromSource(source, defaultProfile)
+        val result = ShaderProfileValidator.validateWgsl(profile, source)
+        return ShaderValidationEntry(path, profile.id(), result.diagnostics())
+    }
+
+    private fun profileFromSource(source: String?, defaultProfile: ShaderProfile): ShaderProfile {
+        if(source.isNullOrEmpty()) {
+            return defaultProfile
+        }
+        source.lineSequence().take(32).forEach { line ->
+            var trimmed = line.trim()
+            if(trimmed.startsWith("//")) {
+                trimmed = trimmed.substring(2).trim()
+            }
+            if(trimmed.startsWith(PROFILE_PREFIX)) {
+                var value = trimmed.substring(PROFILE_PREFIX.length).trim()
+                if(value.startsWith("=")) {
+                    value = value.substring(1).trim()
+                }
+                return profileFromId(value, defaultProfile)
+            }
+        }
+        return defaultProfile
+    }
+
+    private fun profileFromId(id: String?, fallback: ShaderProfile): ShaderProfile {
+        return ShaderProfile.fromId(id, fallback)
+    }
+
+    private fun toMarkdown(root: Path, entries: List<ShaderValidationEntry>): String {
+        return buildString {
+            val errors = errorCount(entries)
+            append("# libFDX Shader Validation\n\n")
+            append("status: ").append(if(errors == 0) "PASS" else "FAIL").append('\n')
+            append("shaders: ").append(entries.size).append('\n')
+            append("errors: ").append(errors).append("\n\n")
+            entries.forEach { entry ->
+                append("## ").append(relative(root, entry.path)).append('\n')
+                append("profile: ").append(entry.profileId).append('\n')
+                if(entry.diagnostics.isEmpty()) {
+                    append("result: PASS\n\n")
+                }
+                else {
+                    append("result: FAIL\n")
+                    entry.diagnostics.forEach { diagnostic ->
+                        append("- ")
+                            .append(diagnostic.severity())
+                            .append(' ')
+                            .append(diagnostic.code())
+                            .append(": ")
+                            .append(diagnostic.message())
+                            .append('\n')
+                    }
+                    append('\n')
+                }
+            }
+        }
+    }
+
+    private fun relative(root: Path, path: Path): String {
+        return try {
+            root.toAbsolutePath().normalize().relativize(path.toAbsolutePath().normalize()).toString()
+                .replace('\\', '/')
+        }
+        catch(_: IllegalArgumentException) {
+            path.toString().replace('\\', '/')
+        }
+    }
+
+    private fun errorCount(entries: List<ShaderValidationEntry>): Int {
+        return entries.sumOf { entry ->
+            entry.diagnostics.count { it.severity() == ShaderValidationSeverity.ERROR }
+        }
+    }
+
+    private data class ShaderValidationEntry(
+        val path: Path,
+        val profileId: String,
+        val diagnostics: Array<ShaderValidationDiagnostic>
+    )
+
+    private companion object {
+        const val PROFILE_PREFIX = "@fdx.profile"
     }
 }
 

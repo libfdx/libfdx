@@ -20,7 +20,7 @@ dependencies {
     implementation(libs.teavm.gradle.plugin)
     if (LibExt.usePublishedLibfdx) {
         implementation("${LibExt.fdxGroup}:tools_font:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:shader_compiler:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:graphics:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:backend_web:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:backend_desktop_c:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:backend_ios_c:${LibExt.publishedLibfdxVersion}")
@@ -50,7 +50,6 @@ if (!LibExt.usePublishedLibfdx) {
                 "../../../libfdx/extensions/graphics/gl/core/src/main/java",
                 "../../../libfdx/extensions/graphics/vulkan/core/src/main/java",
                 "../../../libfdx/tools/font/src/main/java",
-                "../../../libfdx/tools/shader/core/src/main/java",
                 "../../../libfdx/backends/c_shared/src/main/java",
                 "../../../libfdx/backends/web/src/main/java",
                 "../../../libfdx/backends/desktop_c/src/main/java",

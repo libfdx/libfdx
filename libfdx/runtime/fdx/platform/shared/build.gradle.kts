@@ -34,6 +34,13 @@ val freetypeSourceUrls = listOf(
 val freetypeArchive = layout.buildDirectory.file("third-party/downloads/$freetypeArchiveName")
 val freetypeExtractDir = layout.buildDirectory.dir("third-party/freetype")
 val freetypeSourceDir = freetypeExtractDir.map { it.dir("freetype-$freetypeVersion") }
+val tintSourceDirectory = layout.buildDirectory.dir("third-party/dawn/source")
+val tintRepository = providers.gradleProperty("libfdx.runtimeFdx.tintRepository")
+    .orElse(providers.gradleProperty("libfdx.shaderc.dawnRepository"))
+    .orElse("https://dawn.googlesource.com/dawn")
+val tintRevision = providers.gradleProperty("libfdx.runtimeFdx.tintRevision")
+    .orElse(providers.gradleProperty("libfdx.shaderc.dawnRevision"))
+    .orElse("2f2ebd3da8c8fdbce8fcd8c7ebde76e0ed4f5de5")
 
 fun sha256(file: File): String {
     val digest = MessageDigest.getInstance("SHA-256")
@@ -136,6 +143,39 @@ val extractFreetypeSource = tasks.register<Exec>("extract_freetype_source") {
     }
     executable = "tar"
     args("-xf", freetypeArchive.get().asFile.absolutePath, "-C", freetypeExtractDir.get().asFile.absolutePath)
+}
+
+tasks.register("resolve_runtime_fdx_tint_source") {
+    group = "libfdx native"
+    description = "Downloads the pinned Dawn/Tint source used by runtime fdx shader compilation."
+    outputs.dir(tintSourceDirectory)
+    doLast {
+        val source = tintSourceDirectory.get().asFile
+        if (!source.resolve(".git").isDirectory) {
+            source.parentFile.mkdirs()
+            providers.exec {
+                commandLine("git", "clone", "--depth", "1", "--filter=blob:none", "--sparse",
+                    tintRepository.get(), source.absolutePath)
+            }.result.get()
+        }
+        providers.exec {
+            workingDir = source
+            commandLine("git", "config", "core.longpaths", "true")
+        }.result.get()
+        providers.exec {
+            workingDir = source
+            commandLine("git", "sparse-checkout", "set", "--no-cone", "CMakeLists.txt", "DEPS", "cmake", "src",
+                "include", "third_party", "build", "build_overrides", "generator", "tools")
+        }.result.get()
+        providers.exec {
+            workingDir = source
+            commandLine("git", "fetch", "--depth", "1", "origin", tintRevision.get())
+        }.result.get()
+        providers.exec {
+            workingDir = source
+            commandLine("git", "reset", "--hard", "FETCH_HEAD")
+        }.result.get()
+    }
 }
 
 tasks.register("prepare_runtime_fdx_shared") {

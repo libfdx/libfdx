@@ -14,7 +14,8 @@ val freetypeSourceDir =
 val runtimeFdxNativeDir = rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/runtime_fdx")
 val shaderCompilerSourceDir =
     rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/shader_compiler")
-val shaderCompilerDawnSourceDir = project(":libfdx:tools:shader:core").layout.buildDirectory.dir("third-party/dawn/source")
+val shaderCompilerDawnSourceDir =
+    project(":libfdx:runtime:fdx:platform:shared").layout.buildDirectory.dir("third-party/dawn/source")
 val runtimeFdxShaderCompilerEnabled = providers.gradleProperty("libfdx.runtimeFdx.shaderCompiler")
     .map(String::toBoolean)
     .orElse(false)
@@ -34,7 +35,7 @@ fun Task.runtimeFdxNativeInputsDependency() {
     dependsOn(":libfdx:runtime:fdx:platform:shared:extract_freetype_source")
     inputs.dir(runtimeFdxNativeDir)
     if (runtimeFdxShaderCompilerEnabled.get()) {
-        dependsOn(":libfdx:tools:shader:core:resolve_shaderc_dawn_source")
+        dependsOn(":libfdx:runtime:fdx:platform:shared:resolve_runtime_fdx_tint_source")
         inputs.dir(shaderCompilerSourceDir)
     }
 }
@@ -82,7 +83,7 @@ tasks.register("prepare_runtime_fdx_android_native") {
     description = "Prepares native dependencies used by runtime fdx Android builds."
     dependsOn(":libfdx:runtime:fdx:platform:shared:prepare_runtime_fdx_shared")
     if (runtimeFdxShaderCompilerEnabled.get()) {
-        dependsOn(":libfdx:tools:shader:core:resolve_shaderc_dawn_source")
+        dependsOn(":libfdx:runtime:fdx:platform:shared:resolve_runtime_fdx_tint_source")
     }
 }
 

@@ -24,7 +24,8 @@ val freetypeSourceDir =
 val runtimeFdxNativeDir = rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/runtime_fdx")
 val shaderCompilerSourceDir =
     rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/shader_compiler")
-val shaderCompilerDawnSourceDir = project(":libfdx:tools:shader:core").layout.buildDirectory.dir("third-party/dawn/source")
+val shaderCompilerDawnSourceDir =
+    project(":libfdx:runtime:fdx:platform:shared").layout.buildDirectory.dir("third-party/dawn/source")
 val runtimeFdxWebCmakeDir = layout.projectDirectory.dir("src/main/cpp")
 val runtimeFdxWebBuildDir = layout.buildDirectory.dir("emscripten/freetype")
 val runtimeFdxWebGeneratedResources = layout.buildDirectory.dir("generated/resources/runtimeFdxWeb")
@@ -101,7 +102,7 @@ fun runtimeFdxShaderCompilerCmakeArgs(): List<String> {
 
 fun Task.runtimeFdxShaderCompilerDependency() {
     if (runtimeFdxShaderCompilerEnabled.get()) {
-        dependsOn(":libfdx:tools:shader:core:resolve_shaderc_dawn_source")
+        dependsOn(":libfdx:runtime:fdx:platform:shared:resolve_runtime_fdx_tint_source")
     }
 }
 

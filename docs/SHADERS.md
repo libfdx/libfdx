@@ -136,6 +136,10 @@ build output and is not committed to the repository. The shared C bridge exposes
 a small ABI that is linked into platform `fdx` runtime artifacts when the
 platform opts into shader compilation.
 
+Web Emscripten Tint builds use conservative `-O0` code generation because the
+optimized Wasm path has been unstable. Treat any higher optimization level as a
+separate validation target.
+
 Required first Tint target set:
 
 | Target | Tint direction |
@@ -228,14 +232,12 @@ Stable ownership:
 | Desktop runtime shader compiler packaging | `:libfdx:runtime:fdx:platform:desktop` |
 | Android runtime shader compiler packaging | `:libfdx:runtime:fdx:platform:android` |
 | Web runtime shader compiler packaging | `:libfdx:runtime:fdx:platform:web` |
-| WGSL profile validation and optional command-line tooling | `:libfdx:tools:shader:core` |
-| Gradle task wiring and user project DSL | `:libfdx:tools:gradle-plugin` |
+| WGSL profile validation, Gradle task wiring, and user project DSL | `libfdx/tools/gradle-plugin` |
 | Provider-specific shader module creation | selected graphics provider or backend-owned provider |
 
-The parent `libfdx/tools/shader` and `libfdx/tools/shader/platform` folders are
-grouping folders only. They must not contain parent Gradle build files or source
-sets. Gradle should include nested modules directly and must not remap them with
-custom directory remaps.
+There is no runtime `tools/shader` module. Runtime shader compilation is an
+optional runtime fdx platform capability, and Tint/Dawn source is resolved by
+`:libfdx:runtime:fdx:platform:shared` under build output.
 
 ## 11. Validation Requirements
 
@@ -245,7 +247,7 @@ For shader runtime/compiler changes:
 - validate affected high-level renderer modules such as `graphics/g2d` and
   `graphics/g3d`;
 - validate affected providers whose shader creation path changed;
-- run shader compiler tests when the compiler backend or ABI changes;
+- run runtime shader compiler tests when the compiler backend or ABI changes;
 - run Gradle plugin tests or a plugin sample task when task wiring changes;
 - run provider render validation for every provider whose built-in shaders or
   shader creation path changed.

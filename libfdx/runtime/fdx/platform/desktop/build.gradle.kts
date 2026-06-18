@@ -23,7 +23,8 @@ val runtimeFdxDesktopGeneratedResources = layout.buildDirectory.dir("generated/r
 val runtimeFdxNativeDir = rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/runtime_fdx")
 val shaderCompilerSourceDir =
     rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/shader_compiler")
-val shaderCompilerDawnSourceDir = project(":libfdx:tools:shader:core").layout.buildDirectory.dir("third-party/dawn/source")
+val shaderCompilerDawnSourceDir =
+    project(":libfdx:runtime:fdx:platform:shared").layout.buildDirectory.dir("third-party/dawn/source")
 val generatedDesktopRuntimeFdxNatives = mapOf(
     "windows-x64" to "fdx.dll",
     "linux-x64" to "libfdx.so",
@@ -120,7 +121,7 @@ fun runtimeFdxShaderCompilerCmakeArgs(): List<String> {
 
 fun Task.runtimeFdxShaderCompilerDependency() {
     if (runtimeFdxShaderCompilerEnabled.get()) {
-        dependsOn(":libfdx:tools:shader:core:resolve_shaderc_dawn_source")
+        dependsOn(":libfdx:runtime:fdx:platform:shared:resolve_runtime_fdx_tint_source")
     }
 }
 
