@@ -52,27 +52,15 @@ public final class ShaderModuleDescriptors {
                 if (descriptor.hasSource(ShaderLanguage.WGSL)) {
                     return descriptor;
                 }
-                throw missingNativeOrWgsl(descriptor, target, providerName, "WGSL");
+                throw missingWgsl(descriptor, target, providerName, "WGSL");
             case WEBGL_GLSL_ES:
             case GLES_GLSL_ES:
-                if (descriptor.hasSource(ShaderLanguage.GLSL)) {
-                    return descriptor;
-                }
                 return compileGlsl(descriptor, target, providerName, true);
             case OPENGL_GLSL:
-                if (descriptor.hasSource(ShaderLanguage.GLSL)) {
-                    return descriptor;
-                }
                 return compileGlsl(descriptor, target, providerName, false);
             case VULKAN_SPIRV:
-                if (descriptor.hasSource(ShaderLanguage.SPIRV)) {
-                    return descriptor;
-                }
                 return compileSpirv(descriptor, target, providerName);
             case METAL_MSL:
-                if (descriptor.hasSource(ShaderLanguage.MSL)) {
-                    return descriptor;
-                }
                 return compileMsl(descriptor, target, providerName);
             case DIRECTX_HLSL:
                 throw new FdxException("Shader target " + target + " is not supported by ShaderModuleDescriptor yet");
@@ -97,7 +85,7 @@ public final class ShaderModuleDescriptors {
             vertex = toDesktopGlsl(vertex);
             fragment = toDesktopGlsl(fragment);
         }
-        return ShaderModuleDescriptor.glsl(descriptor.label(), vertex, fragment)
+        return ShaderModuleDescriptor.generatedGlsl(descriptor.label(), vertex, fragment)
                 .entryPoints(descriptor.vertexEntryPoint(), descriptor.fragmentEntryPoint());
     }
 
@@ -109,7 +97,7 @@ public final class ShaderModuleDescriptors {
                 descriptor.vertexEntryPoint());
         int[] fragment = compileSpirvWords(compiler, descriptor, source, target, RuntimeShaderCompileStage.FRAGMENT,
                 descriptor.fragmentEntryPoint());
-        return ShaderModuleDescriptor.spirv(descriptor.label(), vertex, fragment)
+        return ShaderModuleDescriptor.generatedSpirv(descriptor.label(), vertex, fragment)
                 .entryPoints(descriptor.vertexEntryPoint(), descriptor.fragmentEntryPoint());
     }
 
@@ -121,14 +109,14 @@ public final class ShaderModuleDescriptors {
                 descriptor.vertexEntryPoint());
         String fragment = compileText(compiler, descriptor, source, target, RuntimeShaderCompileStage.FRAGMENT,
                 descriptor.fragmentEntryPoint());
-        return ShaderModuleDescriptor.msl(descriptor.label(), combineMsl(vertex, fragment))
+        return ShaderModuleDescriptor.generatedMsl(descriptor.label(), combineMsl(vertex, fragment))
                 .entryPoints(descriptor.vertexEntryPoint(), descriptor.fragmentEntryPoint());
     }
 
     private static String requireWgsl(ShaderModuleDescriptor descriptor, ShaderTarget target, String providerName,
             String nativeLanguage) {
         if (!descriptor.hasSource(ShaderLanguage.WGSL)) {
-            throw missingNativeOrWgsl(descriptor, target, providerName, nativeLanguage);
+            throw missingWgsl(descriptor, target, providerName, nativeLanguage);
         }
         return descriptor.wgslSource();
     }
@@ -222,11 +210,11 @@ public final class ShaderModuleDescriptors {
         return builder.toString();
     }
 
-    private static FdxException missingNativeOrWgsl(ShaderModuleDescriptor descriptor, ShaderTarget target,
+    private static FdxException missingWgsl(ShaderModuleDescriptor descriptor, ShaderTarget target,
             String providerName, String nativeLanguage) {
         return new FdxException(provider(providerName) + " requires " + nativeLanguage + " shader modules for target "
-                + target + ". Shader module " + descriptor.label() + " must provide " + nativeLanguage
-                + " directly or provide WGSL for runtime compilation.");
+                + target + ". Shader module " + descriptor.label()
+                + " must provide WGSL for Tint runtime compilation.");
     }
 
     private static String provider(String providerName) {

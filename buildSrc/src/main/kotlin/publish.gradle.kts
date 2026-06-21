@@ -36,6 +36,7 @@ val publishTarget = if(extensions.extraProperties.has(publishTargetProperty)) {
 val libfdxPublishableProjectPaths = listOf(
     ":libfdx:foundation:math",
     ":libfdx:foundation:json",
+    ":libfdx:foundation:collections",
     ":libfdx:runtime:fdx:core",
     ":libfdx:runtime:fdx:platform:shared",
     ":libfdx:runtime:fdx:platform:desktop",
@@ -45,6 +46,7 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:runtime:display",
     ":libfdx:runtime:files",
     ":libfdx:runtime:input",
+    ":libfdx:runtime:storage",
     ":libfdx:assets:manager",
     ":libfdx:assets:loaders",
     ":libfdx:graphics:api",
@@ -54,10 +56,6 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:validation:scenario-validator",
     ":libfdx:validation:scenario-validator-ui-kit",
     ":libfdx:tools:font",
-    ":libfdx:tools:shader:core",
-    ":libfdx:tools:shader:platform:android_jni",
-    ":libfdx:tools:shader:platform:web",
-    ":libfdx:tools:shader:platform:desktop_ffm",
     ":libfdx:extensions:graphics:gl:core",
     ":libfdx:extensions:graphics:gl:platform:desktop",
     ":libfdx:extensions:graphics:gl:platform:desktop_c",
@@ -95,14 +93,16 @@ val isPrepareSnapshotDeploy = isTaskRequested("prepareSnapshotDeploy")
 val isPrepareReleaseDeploy = isTaskRequested("prepareReleaseDeploy")
 val isPublishSnapshot = isTaskRequested("publishSnapshot")
 val isPublishRelease = isTaskRequested("publishRelease")
+val isUploadSnapshotDeploy = isTaskRequested("uploadSnapshotDeploy")
 val isUploadToMavenCentral = isTaskRequested("uploadToMavenCentral")
 val isZipStagingDeploy = isTaskRequested("zipStagingDeploy")
 val isPublish = isTaskRequested("publish")
-val isDeployPreparationTask = isPrepareSnapshotDeploy || isPrepareReleaseDeploy || isZipStagingDeploy
+val isSnapshotLocalDeploy = isPrepareSnapshotDeploy || isPublishSnapshot
+val isDeployPreparationTask = isSnapshotLocalDeploy || isPrepareReleaseDeploy || isZipStagingDeploy
 val isReleaseLocalDeploy = isPrepareReleaseDeploy || isZipStagingDeploy
 val isReleasePublishMode = isPrepareReleaseDeploy || isPublishRelease || isUploadToMavenCentral || isZipStagingDeploy
 val isGradlePluginTarget = publishTarget == "GRADLE_PLUGIN"
-val isSnapshotPublishMode = isPrepareSnapshotDeploy || isPublishSnapshot || (isGradlePluginTarget && isPublish)
+val isSnapshotPublishMode = isSnapshotLocalDeploy || isUploadSnapshotDeploy || (isGradlePluginTarget && isPublish)
 val libfdxVersion = if(isSnapshotPublishMode) "-SNAPSHOT" else libfdxBaseVersion
 
 if(libfdxBaseVersion.endsWith("-SNAPSHOT")) {
@@ -170,6 +170,73 @@ fun Project.releaseStagingDirectory(): File {
 
 fun Project.releaseStagingZipFile(): File {
     return File(LibExt.rootDirectory, "build/staging-deploy.zip")
+}
+
+fun encodeMavenRepositoryPath(path: String): String {
+    return path.split('/').joinToString("/") { segment ->
+        URLEncoder.encode(segment, "UTF-8").replace("+", "%20")
+    }
+}
+
+fun snapshotDeployUploadPriority(relativePath: String): Int {
+    return when {
+        relativePath.endsWith("maven-metadata.xml") -> 1
+        relativePath.contains("maven-metadata.xml.") -> 2
+        else -> 0
+    }
+}
+
+fun Project.uploadSnapshotDeployDirectory() {
+    val deployDirectory = snapshotDeployDirectory()
+    if(!deployDirectory.exists()) {
+        throw GradleException("Snapshot deploy directory ${deployDirectory.absolutePath} does not exist. Run prepareSnapshotDeploy first.")
+    }
+    if(!deployDirectory.isDirectory) {
+        throw GradleException("Snapshot deploy path ${deployDirectory.absolutePath} is not a directory.")
+    }
+    if(!Files.isReadable(Paths.get(deployDirectory.absolutePath))) {
+        throw GradleException("Snapshot deploy directory ${deployDirectory.absolutePath} is not readable.")
+    }
+
+    val deployPath = deployDirectory.toPath()
+    val files = deployDirectory.walkTopDown()
+        .filter { it.isFile }
+        .map { file ->
+            val relativePath = deployPath.relativize(file.toPath()).toString().replace('\\', '/')
+            relativePath to file
+        }
+        .sortedWith(
+            compareBy<Pair<String, File>> { (relativePath, _) -> snapshotDeployUploadPriority(relativePath) }
+                .thenBy { (relativePath, _) -> relativePath }
+        )
+        .toList()
+
+    if(files.isEmpty()) {
+        throw GradleException("Snapshot deploy directory ${deployDirectory.absolutePath} does not contain files to upload.")
+    }
+
+    val username = requiredEnvironment("CENTRAL_PORTAL_USERNAME")
+    val password = requiredEnvironment("CENTRAL_PORTAL_PASSWORD")
+    val repositoryBaseUrl = snapshotRepositoryUrl.trimEnd('/')
+    files.forEach { (relativePath, file) ->
+        val uploadUrl = "$repositoryBaseUrl/${encodeMavenRepositoryPath(relativePath)}"
+        providers.exec {
+            commandLine(
+                "curl",
+                "--fail",
+                "--silent",
+                "--show-error",
+                "-u",
+                "$username:$password",
+                "--request",
+                "PUT",
+                "--upload-file",
+                file.absolutePath,
+                uploadUrl
+            )
+        }.result.get()
+    }
+    println("Uploaded ${files.size} snapshot deploy file(s) from ${deployDirectory.absolutePath}.")
 }
 
 fun isCentralReleaseArtifact(file: File): Boolean {
@@ -409,12 +476,12 @@ fun Project.configureLibfdxMavenRepository() {
             maven {
                 name = "libfdxDeploy"
                 url = when {
-                    isPrepareSnapshotDeploy -> uri(snapshotDeployDirectory())
+                    isSnapshotLocalDeploy -> uri(snapshotDeployDirectory())
                     isReleaseLocalDeploy -> uri(releaseStagingDirectory())
                     libfdxVersion.endsWith("-SNAPSHOT") -> uri(snapshotRepositoryUrl)
                     else -> uri(releaseStagingDirectory())
                 }
-                if(!isPrepareSnapshotDeploy && !isReleaseLocalDeploy && libfdxVersion.endsWith("-SNAPSHOT")) {
+                if(!isSnapshotLocalDeploy && !isReleaseLocalDeploy && libfdxVersion.endsWith("-SNAPSHOT")) {
                     credentials {
                         username = System.getenv("CENTRAL_PORTAL_USERNAME")
                         password = System.getenv("CENTRAL_PORTAL_PASSWORD")
@@ -695,11 +762,20 @@ fun Project.configureLibraryPublishing() {
 
     tasks.register("publishSnapshot") {
         group = "publishing"
-        description = "Publish all libFDX snapshot artifacts to the Central Portal snapshot repository."
-        dependsOn(validateRuntimeFdxNativeResources)
-        dependsOn(libraryPublishTasks)
-        dependsOn("publishGradlePluginSnapshot")
+        description = "Prepare and upload build/snapshot-deploy to the Central Portal snapshot repository."
+        dependsOn("prepareSnapshotDeploy")
+        dependsOn("uploadSnapshotDeploy")
         onlyIf { libfdxVersion.endsWith("-SNAPSHOT") }
+    }
+
+    tasks.register("uploadSnapshotDeploy") {
+        group = "publishing"
+        description = "Upload build/snapshot-deploy to the Central Portal snapshot repository."
+        mustRunAfter("prepareSnapshotDeploy")
+        onlyIf { libfdxVersion.endsWith("-SNAPSHOT") }
+        doLast {
+            uploadSnapshotDeployDirectory()
+        }
     }
 
     tasks.register("uploadToMavenCentral") {

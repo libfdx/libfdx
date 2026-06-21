@@ -1,0 +1,487 @@
+package io.github.libfdx.graphics.g3d;
+
+import io.github.libfdx.core.Disposable;
+import io.github.libfdx.core.FdxException;
+import io.github.libfdx.graphics.Buffer;
+import io.github.libfdx.graphics.camera.Camera;
+import io.github.libfdx.graphics.camera.CameraProjection;
+import io.github.libfdx.graphics.GraphicsContext;
+import io.github.libfdx.graphics.GraphicsFrame;
+import io.github.libfdx.graphics.LoadOp;
+import io.github.libfdx.graphics.Mesh;
+import io.github.libfdx.graphics.PrimitiveTopology;
+import io.github.libfdx.graphics.RenderPass;
+import io.github.libfdx.graphics.RenderPassDescriptor;
+import io.github.libfdx.graphics.RenderPipeline;
+import io.github.libfdx.graphics.RenderPipelineDescriptor;
+import io.github.libfdx.graphics.ShaderAttribute;
+import io.github.libfdx.graphics.ShaderBinding;
+import io.github.libfdx.graphics.ShaderBindingType;
+import io.github.libfdx.graphics.ShaderModule;
+import io.github.libfdx.graphics.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.ShaderReflection;
+import io.github.libfdx.graphics.StoreOp;
+import io.github.libfdx.graphics.Texture;
+import io.github.libfdx.graphics.TextureDescriptor;
+import io.github.libfdx.graphics.TextureFormat;
+import io.github.libfdx.graphics.VertexAttribute;
+import io.github.libfdx.graphics.VertexFormat;
+import io.github.libfdx.graphics.VertexLayout;
+import io.github.libfdx.math.Matrix4;
+import io.github.libfdx.math.Vector3;
+
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+/**
+ * Renders a directional-light shadow map into a sampled texture.
+ *
+ * @author xpenatan
+ */
+public final class DirectionalShadowMap3D implements Disposable {
+    private final GraphicsContext graphics;
+    private final Texture texture;
+    private final DefaultRenderTarget3D target;
+    private final ShadowDepthShaderProvider shaderProvider;
+    private final ModelBatch batch;
+    private final Camera camera = new Camera();
+    private final Matrix4 lightViewProjection = new Matrix4();
+    private float centerX;
+    private float centerY;
+    private float centerZ;
+    private float halfSize = 4.5f;
+    private float near = 0.1f;
+    private float far = 18.0f;
+    private float bias = 0.022f;
+    private float strength = 0.62f;
+    private boolean disposed;
+
+    /**
+     * Creates a directional shadow map.
+     *
+     * @param graphics the graphics context
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
+    public DirectionalShadowMap3D(GraphicsContext graphics, int width, int height) {
+        if (graphics == null) {
+            throw new FdxException("GraphicsContext cannot be null");
+        }
+        if (width <= 0 || height <= 0) {
+            throw new FdxException("Shadow map dimensions must be greater than zero");
+        }
+        this.graphics = graphics;
+        texture = graphics.device().createTexture(TextureDescriptor
+                .rgba8RenderTarget("directional shadow map", width, height));
+        target = new DefaultRenderTarget3D(width, height, texture.view());
+        shaderProvider = new ShadowDepthShaderProvider(graphics);
+        batch = new ModelBatch(graphics, new ModelBatchConfig().shaderProvider(shaderProvider));
+    }
+
+    /**
+     * Sets the light-space bounds and returns this shadow map.
+     *
+     * @param centerX the center x coordinate
+     * @param centerY the center y coordinate
+     * @param centerZ the center z coordinate
+     * @param halfSize the half size of the orthographic light area
+     * @param near the near distance
+     * @param far the far distance
+     * @return this shadow map for chaining
+     */
+    public DirectionalShadowMap3D bounds(float centerX, float centerY, float centerZ,
+            float halfSize, float near, float far) {
+        if (halfSize <= 0.0f) {
+            throw new FdxException("Shadow map half size must be greater than zero");
+        }
+        if (near <= 0.0f || far <= near) {
+            throw new FdxException("Shadow map near/far range is invalid");
+        }
+        this.centerX = centerX;
+        this.centerY = centerY;
+        this.centerZ = centerZ;
+        this.halfSize = halfSize;
+        this.near = near;
+        this.far = far;
+        return this;
+    }
+
+    /**
+     * Sets the depth comparison bias and returns this shadow map.
+     *
+     * @param bias the depth comparison bias
+     * @return this shadow map for chaining
+     */
+    public DirectionalShadowMap3D bias(float bias) {
+        this.bias = Math.max(0.0f, bias);
+        return this;
+    }
+
+    /**
+     * Sets the shadow strength and returns this shadow map.
+     *
+     * @param strength the shadow strength from 0 to 1
+     * @return this shadow map for chaining
+     */
+    public DirectionalShadowMap3D strength(float strength) {
+        this.strength = Math.max(0.0f, Math.min(1.0f, strength));
+        return this;
+    }
+
+    /**
+     * Renders model instances into this shadow map.
+     *
+     * @param light the directional light
+     * @param instances the model instances
+     */
+    public void render(DirectionalLight light, ModelInstance[] instances) {
+        ensureNotDisposed();
+        if (instances == null) {
+            throw new FdxException("ModelInstance array cannot be null");
+        }
+        RenderPass pass = beginPass(light);
+        batch.begin(pass, camera);
+        for (int i = 0; i < instances.length; i++) {
+            if (instances[i] != null) {
+                batch.render(instances[i]);
+            }
+        }
+        batch.end();
+        pass.end();
+    }
+
+    /**
+     * Renders model instances into this shadow map.
+     *
+     * @param light the directional light
+     * @param instances the model instances
+     */
+    public void render(DirectionalLight light, Iterable<? extends ModelInstance> instances) {
+        ensureNotDisposed();
+        if (instances == null) {
+            throw new FdxException("ModelInstance iterable cannot be null");
+        }
+        RenderPass pass = beginPass(light);
+        batch.begin(pass, camera);
+        for (ModelInstance instance : instances) {
+            if (instance != null) {
+                batch.render(instance);
+            }
+        }
+        batch.end();
+        pass.end();
+    }
+
+    /**
+     * Returns the shadow texture.
+     *
+     * @return the shadow texture
+     */
+    public Texture texture() {
+        return texture;
+    }
+
+    /**
+     * Returns the light view projection matrix.
+     *
+     * @return the light view projection matrix
+     */
+    public Matrix4 lightViewProjection() {
+        return lightViewProjection;
+    }
+
+    /**
+     * Returns the depth comparison bias.
+     *
+     * @return the depth comparison bias
+     */
+    public float bias() {
+        return bias;
+    }
+
+    /**
+     * Returns the shadow strength.
+     *
+     * @return the shadow strength
+     */
+    public float strength() {
+        return strength;
+    }
+
+    private RenderPass beginPass(DirectionalLight light) {
+        updateLightCamera(light);
+        GraphicsFrame frame = graphics.currentFrame();
+        return frame.commandEncoder().beginRenderPass(RenderPassDescriptor
+                .color(target.colorAttachment(0), LoadOp.clear(1.0f, 1.0f, 1.0f, 1.0f), StoreOp.store())
+                .depthClear(1.0f)
+                .label("directional shadow map pass"));
+    }
+
+    private void updateLightCamera(DirectionalLight light) {
+        if (light == null) {
+            throw new FdxException("DirectionalLight cannot be null");
+        }
+        Vector3 direction = light.direction();
+        float directionX = direction.x();
+        float directionY = direction.y();
+        float directionZ = direction.z();
+        float length = (float)Math.sqrt(directionX * directionX + directionY * directionY
+                + directionZ * directionZ);
+        if (length <= 0.000001f) {
+            directionX = 0.0f;
+            directionY = -1.0f;
+            directionZ = 0.0f;
+        }
+        else {
+            float invLength = 1.0f / length;
+            directionX *= invLength;
+            directionY *= invLength;
+            directionZ *= invLength;
+        }
+
+        float distance = (near + far) * 0.5f;
+        float eyeX = centerX - directionX * distance;
+        float eyeY = centerY - directionY * distance;
+        float eyeZ = centerZ - directionZ * distance;
+        camera.projection(CameraProjection.ORTHOGRAPHIC)
+                .viewport(halfSize * 2.0f, halfSize * 2.0f)
+                .zoom(1.0f)
+                .nearFar(near, far)
+                .position(eyeX, eyeY, eyeZ)
+                .lookAt(centerX, centerY, centerZ);
+        setStableLightUp(directionX, directionY, directionZ);
+        lightViewProjection.set(camera.combined());
+    }
+
+    private void setStableLightUp(float directionX, float directionY, float directionZ) {
+        float upX = -directionX * directionY;
+        float upY = 1.0f - directionY * directionY;
+        float upZ = -directionZ * directionY;
+        float length = (float)Math.sqrt(upX * upX + upY * upY + upZ * upZ);
+        if (length <= 0.0001f) {
+            upX = -directionX * directionZ;
+            upY = -directionY * directionZ;
+            upZ = 1.0f - directionZ * directionZ;
+            length = (float)Math.sqrt(upX * upX + upY * upY + upZ * upZ);
+        }
+        if (length <= 0.0001f) {
+            camera.up(1.0f, 0.0f, 0.0f);
+            return;
+        }
+        float invLength = 1.0f / length;
+        camera.up(upX * invLength, upY * invLength, upZ * invLength);
+    }
+
+    private void ensureNotDisposed() {
+        if (disposed) {
+            throw new FdxException("DirectionalShadowMap3D has been disposed");
+        }
+    }
+
+    /**
+     * Releases resources held by this instance.
+     */
+    @Override
+    public void dispose() {
+        if (disposed) {
+            return;
+        }
+        disposed = true;
+        batch.dispose();
+        shaderProvider.dispose();
+        texture.dispose();
+    }
+
+    /**
+     * Returns whether this instance has already been disposed.
+     *
+     * @return true if disposed is enabled or true; false otherwise
+     */
+    @Override
+    public boolean isDisposed() {
+        return disposed;
+    }
+
+    private static final class ShadowDepthShaderProvider implements ShaderProvider3D, Disposable {
+        private final ShadowDepthShader shader;
+
+        ShadowDepthShaderProvider(GraphicsContext graphics) {
+            shader = new ShadowDepthShader(graphics);
+        }
+
+        @Override
+        public Shader3D shader(Renderable3D renderable, RenderContext3D context) {
+            if (!shader.canRender(renderable)) {
+                throw new FdxException("Shadow shader requires meshes with a position attribute at location 0");
+            }
+            return shader;
+        }
+
+        @Override
+        public void dispose() {
+            shader.dispose();
+        }
+
+        @Override
+        public boolean isDisposed() {
+            return shader.isDisposed();
+        }
+    }
+
+    private static final class ShadowDepthShader implements Shader3D {
+        private static final String SOURCE = """
+                struct VertexInput {
+                    @location(0) position : vec3f,
+                };
+                struct VertexOutput {
+                    @builtin(position) position : vec4f,
+                    @location(0) depth : f32,
+                };
+                struct Uniforms {
+                    model : mat4x4<f32>,
+                    viewProjection : mat4x4<f32>,
+                };
+                @group(0) @binding(0) var<uniform> uniforms : Uniforms;
+                @vertex
+                fn vertexMain(input : VertexInput) -> VertexOutput {
+                    var output : VertexOutput;
+                    let clip = uniforms.viewProjection * uniforms.model * vec4f(input.position, 1.0);
+                    output.position = clip;
+                    output.depth = clamp((clip.z / clip.w) * 0.5 + 0.5, 0.0, 1.0);
+                    return output;
+                }
+                @fragment
+                fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
+                    return vec4f(input.depth, input.depth, input.depth, 1.0);
+                }
+                """;
+        private static final ShaderReflection REFLECTION = ShaderReflection.of(new ShaderBinding[] {
+                ShaderBinding.of(0, 0, "uniforms", ShaderBindingType.UNIFORM_BUFFER)
+        }, new ShaderAttribute[] {
+                ShaderAttribute.of(0, "position", VertexFormat.FLOAT32X3)
+        });
+        private final GraphicsContext graphics;
+        private final ShaderModule shaderModule;
+        private final Map<ShadowPipelineKey, RenderPipeline> pipelines =
+                new HashMap<ShadowPipelineKey, RenderPipeline>();
+        private RenderContext3D context;
+        private boolean disposed;
+
+        ShadowDepthShader(GraphicsContext graphics) {
+            this.graphics = graphics;
+            shaderModule = graphics.device().createShaderModule(ShaderModuleDescriptor.wgsl(
+                    "directional shadow depth", SOURCE));
+        }
+
+        @Override
+        public boolean canRender(Renderable3D renderable) {
+            if (renderable == null || renderable.meshPart() == null) {
+                return false;
+            }
+            VertexAttribute[] attributes = renderable.meshPart().mesh().vertexLayout().attributes();
+            return attributes.length > 0
+                    && attributes[0].location() == 0
+                    && attributes[0].format() == VertexFormat.FLOAT32X3;
+        }
+
+        @Override
+        public void begin(RenderContext3D context) {
+            if (disposed) {
+                throw new FdxException("Shadow depth shader has been disposed");
+            }
+            this.context = context;
+        }
+
+        @Override
+        public void render(Renderable3D renderable) {
+            if (context == null) {
+                throw new FdxException("Shader3D.begin() must be called before render");
+            }
+            MeshPart meshPart = renderable.meshPart();
+            Mesh mesh = meshPart.mesh();
+            RenderPass pass = context.pass();
+            pass.setPipeline(pipeline(mesh.vertexLayout(), meshPart.primitiveTopology()));
+            pass.setVertexBuffer(mesh.vertexBuffer());
+            pass.setUniformMatrix4("u_model", renderable.worldTransform().values());
+            pass.setUniformMatrix4("u_viewProjection", context.camera().combined().values());
+            int indexCount = meshPart.indexCount() > 0 ? meshPart.indexCount() : mesh.indexCount();
+            if (indexCount > 0) {
+                pass.setIndexBuffer(mesh.indexBuffer());
+                pass.drawIndexed(indexCount, 1, meshPart.firstIndex(), 0, 0);
+                return;
+            }
+            int vertexCount = meshPart.vertexCount() > 0 ? meshPart.vertexCount() : mesh.vertexCount();
+            pass.draw(vertexCount, 1, meshPart.firstVertex(), 0);
+        }
+
+        @Override
+        public void end() {
+            context = null;
+        }
+
+        private RenderPipeline pipeline(VertexLayout vertexLayout, PrimitiveTopology topology) {
+            ShadowPipelineKey key = new ShadowPipelineKey(vertexLayout, topology);
+            RenderPipeline pipeline = pipelines.get(key);
+            if (pipeline == null) {
+                pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
+                        .shader(shaderModule, TextureFormat.RGBA8_UNORM)
+                        .label("directional shadow depth")
+                        .shaderReflection(REFLECTION)
+                        .primitiveTopology(topology)
+                        .depthTestEnabled(true)
+                        .depthWriteEnabled(true)
+                        .vertexLayout(vertexLayout));
+                pipelines.put(key, pipeline);
+            }
+            return pipeline;
+        }
+
+        @Override
+        public void dispose() {
+            if (disposed) {
+                return;
+            }
+            disposed = true;
+            for (Iterator<RenderPipeline> iterator = pipelines.values().iterator(); iterator.hasNext();) {
+                iterator.next().dispose();
+            }
+            pipelines.clear();
+            shaderModule.dispose();
+        }
+
+        @Override
+        public boolean isDisposed() {
+            return disposed;
+        }
+    }
+
+    private static final class ShadowPipelineKey {
+        private final VertexLayout vertexLayout;
+        private final PrimitiveTopology topology;
+
+        ShadowPipelineKey(VertexLayout vertexLayout, PrimitiveTopology topology) {
+            this.vertexLayout = vertexLayout;
+            this.topology = topology != null ? topology : PrimitiveTopology.TRIANGLE_LIST;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof ShadowPipelineKey)) {
+                return false;
+            }
+            ShadowPipelineKey key = (ShadowPipelineKey)other;
+            return vertexLayout == key.vertexLayout && topology == key.topology;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = vertexLayout != null ? System.identityHashCode(vertexLayout) : 0;
+            result = 31 * result + topology.hashCode();
+            return result;
+        }
+    }
+}

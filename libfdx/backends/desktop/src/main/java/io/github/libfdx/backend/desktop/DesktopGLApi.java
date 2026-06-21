@@ -392,6 +392,109 @@ final class DesktopGLApi implements GLApi {
     }
 
     /**
+     * Returns the gen framebuffer.
+     *
+     * @return the gen framebuffer
+     */
+    @Override
+    public int genFramebuffer() {
+        return GL30.glGenFramebuffers();
+    }
+
+    /**
+     * Runs the bind framebuffer step.
+     *
+     * @param framebuffer the framebuffer
+     */
+    @Override
+    public void bindFramebuffer(int framebuffer) {
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, framebuffer);
+    }
+
+    /**
+     * Runs the framebuffer texture2 d step.
+     *
+     * @param texture the texture
+     */
+    @Override
+    public void framebufferTexture2D(int texture) {
+        GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, texture, 0);
+    }
+
+    /**
+     * Returns whether the currently bound framebuffer is complete.
+     *
+     * @return true if complete
+     */
+    @Override
+    public boolean framebufferComplete() {
+        return GL30.glCheckFramebufferStatus(GL30.GL_FRAMEBUFFER) == GL30.GL_FRAMEBUFFER_COMPLETE;
+    }
+
+    /**
+     * Runs the delete framebuffer step.
+     *
+     * @param framebuffer the framebuffer
+     */
+    @Override
+    public void deleteFramebuffer(int framebuffer) {
+        GL30.glDeleteFramebuffers(framebuffer);
+    }
+
+    /**
+     * Returns the gen renderbuffer.
+     *
+     * @return the gen renderbuffer
+     */
+    @Override
+    public int genRenderbuffer() {
+        return GL30.glGenRenderbuffers();
+    }
+
+    /**
+     * Runs the bind renderbuffer step.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    @Override
+    public void bindRenderbuffer(int renderbuffer) {
+        GL30.glBindRenderbuffer(GL30.GL_RENDERBUFFER, renderbuffer);
+    }
+
+    /**
+     * Runs the renderbuffer depth storage step.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
+    @Override
+    public void renderbufferStorageDepth(int width, int height) {
+        GL30.glRenderbufferStorage(GL30.GL_RENDERBUFFER, GL14.GL_DEPTH_COMPONENT24, width, height);
+    }
+
+    /**
+     * Runs the framebuffer depth renderbuffer attachment step.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    @Override
+    public void framebufferRenderbufferDepth(int renderbuffer) {
+        GL30.glFramebufferRenderbuffer(GL30.GL_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT,
+                GL30.GL_RENDERBUFFER, renderbuffer);
+    }
+
+    /**
+     * Runs the delete renderbuffer step.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    @Override
+    public void deleteRenderbuffer(int renderbuffer) {
+        GL30.glDeleteRenderbuffers(renderbuffer);
+    }
+
+    /**
      * Runs the active texture step.
      *
      * @param slot the slot
@@ -705,6 +808,7 @@ final class DesktopGLApi implements GLApi {
     public ByteBuffer readPixelsRgba8(int width, int height) {
         ByteBuffer pixels = ByteBuffer.allocateDirect(width * height * 4);
         GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
+        GL11.glReadBuffer(GL11.GL_BACK);
         GL11.glReadPixels(0, 0, width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, pixels);
         pixels.position(0);
         pixels.limit(width * height * 4);

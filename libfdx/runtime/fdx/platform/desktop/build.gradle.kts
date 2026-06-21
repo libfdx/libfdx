@@ -34,9 +34,13 @@ val generatedDesktopRuntimeFdxNatives = mapOf(
 val requireAllRuntimeFdxNatives = providers.gradleProperty("libfdx.runtimeFdx.requireAllNativeResources")
     .map(String::toBoolean)
     .orElse(false)
+
 val runtimeFdxShaderCompilerEnabled = providers.gradleProperty("libfdx.runtimeFdx.shaderCompiler")
     .map(String::toBoolean)
-    .orElse(false)
+    .orElse(true)
+val nativeBuildParallelism = providers.gradleProperty("libfdx.nativeBuildParallelism")
+    .map(String::toInt)
+    .orElse(Runtime.getRuntime().availableProcessors().coerceAtMost(8).coerceAtLeast(1))
 
 fun executableCommand(name: String): List<String> {
     val windows = System.getProperty("os.name").lowercase().contains("win")
@@ -168,7 +172,8 @@ val buildRuntimeFdxWindowsNative = tasks.register<Exec>("build_runtime_fdx_windo
     }
     commandLine(executableCommand("cmake") + listOf(
         "--build", runtimeFdxWindowsBuildDir.get().asFile.absolutePath,
-        "--config", "Release"
+        "--config", "Release",
+        "--parallel", nativeBuildParallelism.get().toString()
     ))
 }
 
@@ -216,7 +221,8 @@ val buildRuntimeFdxLinuxNative = tasks.register<Exec>("build_runtime_fdx_linux_n
     }
     commandLine(executableCommand("cmake") + listOf(
         "--build", runtimeFdxLinuxBuildDir.get().asFile.absolutePath,
-        "--config", "Release"
+        "--config", "Release",
+        "--parallel", nativeBuildParallelism.get().toString()
     ))
 }
 
@@ -264,7 +270,8 @@ val buildRuntimeFdxMacosNative = tasks.register<Exec>("build_runtime_fdx_macos_n
     }
     commandLine(executableCommand("cmake") + listOf(
         "--build", runtimeFdxMacosBuildDir.get().asFile.absolutePath,
-        "--config", "Release"
+        "--config", "Release",
+        "--parallel", nativeBuildParallelism.get().toString()
     ))
 }
 

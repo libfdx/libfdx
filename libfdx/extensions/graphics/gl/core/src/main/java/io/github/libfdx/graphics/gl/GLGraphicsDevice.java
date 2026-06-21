@@ -103,8 +103,8 @@ final class GLGraphicsDevice implements GraphicsDevice {
         if (descriptor == null) {
             throw new FdxException("TextureDescriptor cannot be null");
         }
-        if (descriptor.usage() != TextureUsage.SAMPLED) {
-            throw new FdxException("GL currently supports sampled textures only");
+        if (!descriptor.usage().sampled() && !descriptor.usage().renderAttachment()) {
+            throw new FdxException("GL texture usage must allow sampling or render attachment binding");
         }
         if (descriptor.format() != TextureFormat.RGBA8_UNORM && descriptor.format() != TextureFormat.RGBA8_UNORM_SRGB) {
             throw new FdxException("GL currently supports RGBA8 textures only");
@@ -229,7 +229,7 @@ final class GLGraphicsDevice implements GraphicsDevice {
         ShaderBinding[] bindings = descriptor.shaderReflection().bindings();
         for (int i = 0; i < bindings.length; i++) {
             ShaderBinding binding = bindings[i];
-            if (binding.group() == 1
+            if ((binding.group() == 0 || binding.group() == 1)
                     && binding.binding() == 0
                     && binding.type() == ShaderBindingType.UNIFORM_BUFFER
                     && "uniforms".equals(binding.name())) {

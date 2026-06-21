@@ -89,7 +89,7 @@ Public surface:
 | `UiLayer`, `UiPopup`, `UiModal`, `UiTooltip` | Overlay, modal, popup, and tooltip support. |
 | `UiWindowState` | Retained position, size, and z-order for movable and resizable UI windows. |
 | `UiFocusScope`, `UiNavigation` | Keyboard and gamepad focus/navigation rules. |
-| `UiListState`, `UiScrollState` | Retained state for scrollable and virtualized content. |
+| `UiListState`, `UiScrollState` | Retained state for scrollable and virtualized content. `UiScrollState` can test vertical range visibility and scroll a range into view without moving already-visible content. |
 | `UiGesture`, `UiDrag`, `UiDrop` | Gesture, drag source, and drop target support. |
 | `UiTextInputFilter` | Text-field input filter for string, integer, and float entry. |
 | `UiTextAreaOptions` | Text-area sizing policy, including fixed-height and bounded auto-grow behavior. |

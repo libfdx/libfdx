@@ -30,8 +30,8 @@ final class WebRuntimeShaderCompiler implements RuntimeShaderCompiler {
         String encoded = compileBase64(request.source(), nativeTarget(request.target()), nativeStage(request.stage()),
                 request.entryPoint(), request.glslProfile(), request.glslEsProfile());
         if (encoded == null || encoded.length() == 0) {
-            return failure("Web runtime shader compiler is not available. Build fdx web native with "
-                    + "libfdx.runtimeFdx.shaderCompiler=true and preload the generated fdx module.");
+            return failure("Web runtime shader compiler is not available. Regenerate fdx web native with "
+                    + "libfdx.runtimeFdx.shaderCompiler=true or the default compiler-enabled web build.");
         }
         return decodeBase64(encoded);
     }

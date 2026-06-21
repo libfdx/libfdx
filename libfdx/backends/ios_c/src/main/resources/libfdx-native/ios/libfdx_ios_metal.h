@@ -34,13 +34,26 @@ int64_t libfdx_ios_metal_create_render_pipeline(
         const int32_t* attribute_formats,
         const int32_t* attribute_offsets,
         int32_t attribute_count,
-        int32_t sampled_texture_count);
+        int32_t sampled_texture_count,
+        int32_t pbr_uniforms_enabled,
+        int32_t depth_test_enabled,
+        int32_t depth_write_enabled);
 void libfdx_ios_metal_begin_render_pass(
-        int64_t context, int32_t clear, float red, float green, float blue, float alpha, int32_t store);
+        int64_t context,
+        int32_t clear,
+        float red,
+        float green,
+        float blue,
+        float alpha,
+        int32_t store,
+        int32_t depth_enabled,
+        int32_t depth_clear,
+        float depth_clear_value);
 void libfdx_ios_metal_set_pipeline(int64_t context, int64_t pipeline);
 void libfdx_ios_metal_set_vertex_buffer(int64_t context, int32_t slot, int64_t buffer);
 void libfdx_ios_metal_set_index_buffer(int64_t context, int64_t buffer);
-void libfdx_ios_metal_set_texture(int64_t context, int32_t slot, int64_t texture);
+void libfdx_ios_metal_set_texture(int64_t context, int32_t texture_slot, int32_t sampler_slot, int64_t texture);
+void libfdx_ios_metal_set_uniform_buffer(int64_t context, const void* data, int32_t byte_count);
 void libfdx_ios_metal_draw(
         int64_t context, int32_t vertex_count, int32_t instance_count, int32_t first_vertex, int32_t first_instance);
 void libfdx_ios_metal_draw_indexed(

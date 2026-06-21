@@ -30,6 +30,18 @@ public final class Mesh implements Disposable {
             VertexAttribute.of(3, VertexFormat.FLOAT32X4, 32),
             VertexAttribute.of(4, VertexFormat.FLOAT32X3, 48),
             VertexAttribute.of(5, VertexFormat.FLOAT32X3, 60));
+    public static final int PBR_SKINNED_FLOATS_PER_VERTEX = PBR_FLOATS_PER_VERTEX + 8;
+    public static final int PBR_SKINNED_BYTES_PER_VERTEX = PBR_SKINNED_FLOATS_PER_VERTEX * 4;
+    public static final VertexLayout PBR_SKINNED_LAYOUT = VertexLayout.of(
+            PBR_SKINNED_BYTES_PER_VERTEX,
+            VertexAttribute.of(0, VertexFormat.FLOAT32X3, 0),
+            VertexAttribute.of(1, VertexFormat.FLOAT32X3, 12),
+            VertexAttribute.of(2, VertexFormat.FLOAT32X2, 24),
+            VertexAttribute.of(3, VertexFormat.FLOAT32X4, 32),
+            VertexAttribute.of(4, VertexFormat.FLOAT32X3, 48),
+            VertexAttribute.of(5, VertexFormat.FLOAT32X3, 60),
+            VertexAttribute.of(6, VertexFormat.FLOAT32X4, 72),
+            VertexAttribute.of(7, VertexFormat.FLOAT32X4, 88));
 
     private final String id;
     private final VertexLayout vertexLayout;
@@ -45,6 +57,8 @@ public final class Mesh implements Disposable {
     private final float[] sourceBakedPbr;
     private final float[] sourceEmissive;
     private final float[] sourceBakedEmissive;
+    private final int[] sourceJoints;
+    private final float[] sourceWeights;
     private Buffer vertexBuffer;
     private Buffer indexBuffer;
     private boolean disposed;
@@ -92,13 +106,14 @@ public final class Mesh implements Disposable {
     public Mesh(GraphicsContext graphics, String id, VertexLayout vertexLayout, float[] vertices, int vertexCount,
             short[] indices, int indexCount, BoundingBox bounds) {
         this(graphics, id, vertexLayout, vertices, vertexCount, indices, indexCount, bounds, null, null, null,
-                null, null, null, null, null, null, false);
+                null, null, null, null, null, null, null, null, false);
     }
 
     private Mesh(GraphicsContext graphics, String id, VertexLayout vertexLayout, float[] vertices, int vertexCount,
             short[] indices, int indexCount, BoundingBox bounds, float[] sourcePositions, float[] sourceColors,
             float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords, float[] sourcePbr,
-            float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive, boolean retainSourceData) {
+            float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive, int[] sourceJoints,
+            float[] sourceWeights, boolean retainSourceData) {
         if (graphics == null) {
             throw new FdxException("GraphicsContext cannot be null");
         }
@@ -131,6 +146,8 @@ public final class Mesh implements Disposable {
         this.sourceEmissive = retainSourceData && sourceEmissive != null ? sourceEmissive.clone() : null;
         this.sourceBakedEmissive = retainSourceData && sourceBakedEmissive != null ? sourceBakedEmissive.clone()
                 : null;
+        this.sourceJoints = retainSourceData && sourceJoints != null ? sourceJoints.clone() : null;
+        this.sourceWeights = retainSourceData && sourceWeights != null ? sourceWeights.clone() : null;
         vertexBuffer = graphics.device().createBuffer(BufferDescriptor.staticVertex(this.id + " vertices",
                 vertexByteCount));
         graphics.device().writeBuffer(vertexBuffer, floats(vertices, vertexByteCount));
@@ -220,7 +237,8 @@ public final class Mesh implements Disposable {
             float[] sourcePbr, float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive,
             BoundingBox bounds) {
         return positionColor3D(graphics, id, sourcePositions, sourceColors, sourceBakedColors, sourceNormals,
-                sourceTexCoords, sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, bounds, true);
+                sourceTexCoords, sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, null, null, bounds,
+                true);
     }
 
     /**
@@ -245,6 +263,35 @@ public final class Mesh implements Disposable {
             float[] sourceColors, float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords,
             float[] sourcePbr, float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive,
             BoundingBox bounds, boolean retainSourceData) {
+        return positionColor3D(graphics, id, sourcePositions, sourceColors, sourceBakedColors, sourceNormals,
+                sourceTexCoords, sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, null, null, bounds,
+                retainSourceData);
+    }
+
+    /**
+     * Creates a mesh.
+     *
+     * @param graphics the graphics context
+     * @param id the identifier
+     * @param sourcePositions the source positions
+     * @param sourceColors the source colors
+     * @param sourceBakedColors the source baked colors
+     * @param sourceNormals the source normals
+     * @param sourceTexCoords the source tex coords
+     * @param sourcePbr the source PBR
+     * @param sourceBakedPbr the source baked PBR
+     * @param sourceEmissive the source emissive
+     * @param sourceBakedEmissive the source baked emissive
+     * @param sourceJoints four joint indices per vertex
+     * @param sourceWeights four joint weights per vertex
+     * @param bounds the bounds
+     * @param retainSourceData the retain source data
+     * @return a new mesh
+     */
+    public static Mesh positionColor3D(GraphicsContext graphics, String id, float[] sourcePositions,
+            float[] sourceColors, float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords,
+            float[] sourcePbr, float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive,
+            int[] sourceJoints, float[] sourceWeights, BoundingBox bounds, boolean retainSourceData) {
         if (sourcePositions == null || sourcePositions.length == 0 || sourcePositions.length % 3 != 0) {
             throw new FdxException("3D position/color meshes require xyz source positions");
         }
@@ -275,8 +322,21 @@ public final class Mesh implements Disposable {
         }
         boolean pbrLayout = sourceNormals != null && sourceTexCoords != null && sourcePbr != null
                 && sourceEmissive != null;
-        float[] vertices = new float[vertexCount * (pbrLayout ? PBR_FLOATS_PER_VERTEX
-                : POSITION_COLOR_FLOATS_PER_VERTEX)];
+        boolean hasSkinning = sourceJoints != null || sourceWeights != null;
+        if (hasSkinning && !pbrLayout) {
+            throw new FdxException("Skinned 3D meshes require retained PBR vertex attributes");
+        }
+        if (hasSkinning) {
+            if (sourceJoints == null || sourceJoints.length != vertexCount * 4) {
+                throw new FdxException("Skinned 3D meshes require four joint indices per vertex");
+            }
+            if (sourceWeights == null || sourceWeights.length != vertexCount * 4) {
+                throw new FdxException("Skinned 3D meshes require four joint weights per vertex");
+            }
+        }
+        int floatsPerVertex = hasSkinning ? PBR_SKINNED_FLOATS_PER_VERTEX
+                : pbrLayout ? PBR_FLOATS_PER_VERTEX : POSITION_COLOR_FLOATS_PER_VERTEX;
+        float[] vertices = new float[vertexCount * floatsPerVertex];
         int out = 0;
         for (int i = 0; i < vertexCount; i++) {
             int positionOffset = i * 3;
@@ -307,10 +367,23 @@ public final class Mesh implements Disposable {
                 vertices[out++] = sourceEmissive[emissiveOffset + 1];
                 vertices[out++] = sourceEmissive[emissiveOffset + 2];
             }
+            if (hasSkinning) {
+                int influenceOffset = i * 4;
+                vertices[out++] = sourceJoints[influenceOffset];
+                vertices[out++] = sourceJoints[influenceOffset + 1];
+                vertices[out++] = sourceJoints[influenceOffset + 2];
+                vertices[out++] = sourceJoints[influenceOffset + 3];
+                vertices[out++] = sourceWeights[influenceOffset];
+                vertices[out++] = sourceWeights[influenceOffset + 1];
+                vertices[out++] = sourceWeights[influenceOffset + 2];
+                vertices[out++] = sourceWeights[influenceOffset + 3];
+            }
         }
-        return new Mesh(graphics, id, pbrLayout ? PBR_LAYOUT : POSITION_COLOR_LAYOUT, vertices, vertexCount,
+        return new Mesh(graphics, id, hasSkinning ? PBR_SKINNED_LAYOUT : pbrLayout ? PBR_LAYOUT
+                : POSITION_COLOR_LAYOUT, vertices, vertexCount,
                 null, 0, bounds, sourcePositions, sourceColors, sourceBakedColors, sourceNormals, sourceTexCoords,
-                sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, retainSourceData);
+                sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, sourceJoints, sourceWeights,
+                retainSourceData);
     }
 
     /**
@@ -464,6 +537,24 @@ public final class Mesh implements Disposable {
      */
     public float[] sourceBakedEmissive() {
         return sourceBakedEmissive;
+    }
+
+    /**
+     * Returns the source joints.
+     *
+     * @return the source joints
+     */
+    public int[] sourceJoints() {
+        return sourceJoints;
+    }
+
+    /**
+     * Returns the source weights.
+     *
+     * @return the source weights
+     */
+    public float[] sourceWeights() {
+        return sourceWeights;
     }
 
     /**

@@ -195,14 +195,27 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         if (descriptor == null) {
             throw new FdxException("TextureDescriptor cannot be null");
         }
-        if (descriptor.usage() != TextureUsage.SAMPLED) {
-            throw new FdxException("WGPU currently supports sampled textures only");
+        if (!descriptor.usage().sampled() && !descriptor.usage().renderAttachment()) {
+            throw new FdxException("WGPU texture usage must allow sampling or render attachment binding");
         }
         int mipLevelCount = mipLevelCount(descriptor);
+        WGPUTextureUsage nativeUsage = WGPUTextureUsage.CopyDst;
+        if (descriptor.usage().sampled()) {
+            nativeUsage = nativeUsage.or(WGPUTextureUsage.TextureBinding);
+        }
+        if (descriptor.usage().renderAttachment()) {
+            nativeUsage = nativeUsage.or(WGPUTextureUsage.RenderAttachment);
+        }
+        WGPUTextureUsage viewUsage = descriptor.usage().sampled()
+                ? WGPUTextureUsage.TextureBinding
+                : WGPUTextureUsage.RenderAttachment;
+        if (descriptor.usage().sampled() && descriptor.usage().renderAttachment()) {
+            viewUsage = viewUsage.or(WGPUTextureUsage.RenderAttachment);
+        }
         WGPUTextureDescriptor textureDescriptor = WGPUTextureDescriptor.obtain();
         textureDescriptor.setNextInChain(WGPUChainedStruct.NULL);
         textureDescriptor.setLabel(descriptor.label());
-        textureDescriptor.setUsage(WGPUTextureUsage.CopyDst.or(WGPUTextureUsage.TextureBinding));
+        textureDescriptor.setUsage(nativeUsage);
         textureDescriptor.setDimension(WGPUTextureDimension._2D);
         textureDescriptor.getSize().setWidth(descriptor.width());
         textureDescriptor.getSize().setHeight(descriptor.height());
@@ -225,7 +238,7 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         viewDescriptor.setBaseArrayLayer(0);
         viewDescriptor.setArrayLayerCount(1);
         viewDescriptor.setAspect(WGPUTextureAspect.All);
-        viewDescriptor.setUsage(WGPUTextureUsage.TextureBinding);
+        viewDescriptor.setUsage(viewUsage);
         WGPUTextureView view = new WGPUTextureView();
         texture.createView(viewDescriptor, view);
 
@@ -593,7 +606,7 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         ShaderBinding[] bindings = descriptor.shaderReflection().bindings();
         for (int i = 0; i < bindings.length; i++) {
             ShaderBinding binding = bindings[i];
-            if (binding.group() == 1
+            if ((binding.group() == 0 || binding.group() == 1)
                     && binding.binding() == 0
                     && binding.type() == ShaderBindingType.UNIFORM_BUFFER
                     && "uniforms".equals(binding.name())) {

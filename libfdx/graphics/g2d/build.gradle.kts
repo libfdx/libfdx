@@ -19,5 +19,12 @@ dependencies {
     api(project(":libfdx:graphics:api"))
     api(project(":libfdx:assets:manager"))
     api(project(":libfdx:assets:loaders"))
+    implementation(project(":libfdx:foundation:collections"))
     implementation(project(":libfdx:runtime:fdx:core"))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+tasks.named<Test>("test") {
+    useJUnitPlatform()
 }

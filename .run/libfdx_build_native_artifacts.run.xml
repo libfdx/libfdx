@@ -10,7 +10,7 @@
       </option>
       <option name="taskNames">
         <list>
-          <option value="build_native_artifacts" />
+          <option value="libfdx_build_native_artifacts" />
         </list>
       </option>
       <option name="vmOptions" />

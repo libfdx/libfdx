@@ -89,6 +89,7 @@ repo-root/
       application/
       files/
       input/
+      storage/
       display/
       audio/
       net/
@@ -226,12 +227,15 @@ foundation/math, foundation/json, foundation/collections -> runtime/fdx/core
 
 runtime/fdx/core -> no lower libFDX module
 runtime/* -> runtime/fdx/core and selected foundation helpers
-runtime/application -> runtime/fdx/core only
+runtime/storage -> runtime/fdx/core, runtime/files, and foundation/json
+runtime/application -> runtime/fdx/core plus typed runtime root systems
 
 assets/* -> runtime/fdx/core, foundation/*, and runtime/files when file access is needed
 
 graphics/api -> runtime/fdx/core, foundation/*, and runtime/display for presentation handles
-graphics/g2d, graphics/g3d -> graphics/api, foundation/*, assets/* when asset integration is needed
+graphics/camera -> runtime/fdx/core, foundation/math, and runtime/input
+graphics/g2d -> graphics/api, foundation/*, assets/* when asset integration is needed
+graphics/g3d -> graphics/api, graphics/camera, foundation/*, assets/* when asset integration is needed
 
 ui/ui-kit -> runtime/display, runtime/files, runtime/input, assets/loaders, graphics/api, graphics/g2d
 validation/scenario-validator -> runtime/display, runtime/input, graphics/api when visual capture integration is needed
@@ -264,7 +268,7 @@ General rules:
 - `runtime/fdx/core` owns base framework contracts and default runtime services shared by all systems, such as framework exceptions, provider identity, logging, async primitives, FreeType font rasterization, optional WGSL shader compilation, and native math/image helpers later. User code normally reaches runtime services through higher-level APIs such as `UiFont`, `BitmapFontFiles`, graphics shader creation, or math classes, not by calling native runtime bindings directly.
 - Backends and platform launchers register the platform implementation for `runtime/fdx/core`. Common modules consume the shared Java contracts and must not know the concrete native file layout.
 - `runtime/fdx/core` owns the Java contracts and does not compile or package platform native code directly.
-- `runtime/fdx/platform/*` owns native runtime fdx compilation. Windows, Linux, macOS, Android, and web platform modules build the matching native artifacts and write generated outputs into the core module's generated resource directories or Android AAR outputs. Optional services such as the Tint-backed shader compiler are linked only into platforms that opt into that capability.
+- `runtime/fdx/platform/*` owns native runtime fdx compilation. Windows, Linux, macOS, Android, and web platform modules build the matching native artifacts and write generated outputs into the core module's generated resource directories or Android AAR outputs. Desktop, Android, and web runtime fdx native builds include the Tint-backed shader compiler by default so WGSL remains the single built-in shader source across GL/GLES/WebGL, Vulkan, and WGPU paths.
 - Third-party FreeType source is not committed into the repository. The pinned source archive is prepared under `runtime/fdx/platform/build/third-party/...` for native artifact generation. Android and web runtime fdx platform builds use that source when compiling the native bridge.
 - Runtime fdx C/C++ implementation files should be shared by default under `runtime/fdx/platform/shared`. Platform modules should add only thin adapters required by the platform ABI or toolchain, such as JNI for Android or JS/WASM loading for web. Do not fork the FreeType rasterizer implementation per platform.
 - Runtime fdx native artifacts use the framework core name, not feature-specific names. Web emits `fdx.js` and `fdx.wasm`; native shared-library platforms should emit the platform convention for `fdx`, such as `fdx.dll` on Windows and `libfdx.so` on Android/Linux. Platforms that do not need shader translation, such as PSP, must not package the Tint compiler capability.
@@ -740,6 +744,7 @@ Common type summary:
 | `ApplicationBackend` | `runtime/application` | Launcher-side backend lifecycle implementation contract; not a context service. |
 | `FileSystem` | `runtime/files` | File service. |
 | `FileHandle` | `runtime/files` | Portable file reference. |
+| `Storage`, `KeyValueStore` | `runtime/storage` | Persistent local settings/preferences and rebuildable cache stores. |
 | `Input` | `runtime/input` | Input service. |
 | `Key`, `MouseButton`, `TouchPoint` | `runtime/input` | Portable input values. |
 | `InputProcessor` | `runtime/input` | Input event callback/routing contract. |
@@ -805,7 +810,7 @@ Common type summary for `graphics/api`:
 | `GraphicsDevice` | GPU device abstraction owned by a `GraphicsContext`. |
 | `GraphicsQueue` | Command/data submission queue. |
 | `GraphicsCapabilities` | Limits, optional features, supported formats. |
-| `Camera`, `CameraProjection` | Shared mutable camera state and orthographic/perspective mode selection. |
+| `ImmediateModeRenderer` | Provider-neutral immediate-style renderer for simple 2D and 3D diagnostic lines. |
 | `Surface` | Renderable presentation surface. |
 | `SurfaceConfiguration` | Swapchain/surface configuration. |
 | `Buffer` | Portable GPU buffer handle. |
@@ -825,6 +830,16 @@ Common type summary for `graphics/api`:
 | `VertexLayout`, `VertexStepMode`, `VertexAttribute`, `VertexFormat` | Portable vertex input layout types. |
 | `TextureFormat`, `TextureUsage`, `TextureWrap`, `BufferUsage` | Portable enum/value types. |
 | `BlendState`, `DepthStencilState`, `RasterState` | Portable render state descriptors. |
+
+Common type summary for `graphics/camera`:
+
+| Type | Purpose |
+| --- | --- |
+| `Camera`, `CameraProjection` | Shared mutable camera state and orthographic/perspective mode selection. |
+| `CameraAnchor2D`, `CameraAnchor3D`, `CameraPointerRegion`, `CameraInputBindings3D` | Shared anchor, pointer-filter, and input-binding contracts for reusable camera controllers. |
+| `CinematicCameraPath3D`, `CinematicCameraPathSample3D`, `KeyframeCinematicCameraPath3D` | No-allocation sampled 3D camera paths for authored cinematic shots. |
+| `CameraController2D` | Reusable orthographic 2D pan/zoom controller. |
+| `FreeCameraController3D`, `FirstPersonCameraController3D`, `ThirdPersonCameraController3D`, `OrbitCameraController3D`, `OrthographicCameraController3D`, `CinematicCameraController` | Focused game-facing camera controllers for editor fly cameras, anchor-driven gameplay views, orbit/orthographic inspection, and smooth 2D/3D cinematic presentation. |
 
 `Texture` should describe a portable texture, not a native API object. It should expose things like size, format, usage, dimension, capabilities, provider identity, and `as()`. It should not expose native API handles, Vulkan layout transitions, or WebGPU-only view internals directly.
 
@@ -846,7 +861,11 @@ Common type summary for `graphics/g2d`:
 | --- | --- | --- |
 | `Batch2D` | `g2d` | Common textured 2D batch contract. |
 | `SpriteBatch` | `g2d` | Default batched 2D sprite renderer implementation. |
+| `SpriteOutlineRenderer2D` | `g2d` | WGSL-authored sprite outline effect renderer. |
+| `FogOfWarRenderer2D` | `g2d` | WGSL-authored 2D fog-of-war overlay renderer. |
+| `ParticleEmitter2D` | `g2d` | Fixed-capacity 2D particle emitter that renders through `Batch2D`. |
 | `TextureRegion` | `g2d` | Region of a `Texture`. |
+| `TileLayer`, `TileMap`, `TileSet`, `TileMapRenderer` | `g2d` | Provider-neutral tile-map data and `Batch2D` rendering helper. |
 | `ShapeRenderer2D` | `g2d` | Debug/simple 2D shape rendering. |
 
 2D types should use common graphics API types such as `Texture`, `Buffer`, `Mesh`, and `GraphicsDevice`. They should not depend on `WGPUTexture` or `VkTexture`.
@@ -857,24 +876,32 @@ Common type summary for `graphics/g3d`:
 
 | Type | Module | Purpose |
 | --- | --- | --- |
-| `Camera` | `graphics/api` | Shared mutable graphics camera that can switch between orthographic and perspective projection. |
+| `Camera` | `graphics/camera` | Shared mutable graphics camera that can switch between orthographic and perspective projection. |
 | `Color`, `Vector3`, `Matrix4`, `BoundingBox` | `foundation/math` | Shared math types used by 3D materials, transforms, and bounds. |
 | `Batch3D` | `g3d` | Common 3D render submission contract. |
-| `ModelBatch` | `g3d` | Default optimized model batch implementation. |
+| `ModelBatch` | `g3d` | Default optimized model batch implementation, including WGSL PBR and skinned PBR paths. |
+| `SkyboxRenderer3D` | `g3d` | WGSL-authored procedural world-space sky/background renderer for 3D scenes. |
+| `SkyEnvironment3D` | `g3d` | Procedural sky environment description sampled by the default PBR path for IBL-style diffuse and specular lighting. |
+| `BillboardRenderer3D` | `g3d` | WGSL-authored camera-facing textured quad renderer for markers, effects, impostors, and simple 3D particles. |
+| `ParticleEmitter3D` | `g3d` | Fixed-capacity 3D particle emitter that renders through `BillboardRenderer3D`. |
+| `OutlineRenderer3D` | `g3d` | WGSL-authored shell outline renderer for PBR-layout 3D meshes. |
+| `FogOfWarRenderer3D` | `g3d` | WGSL-authored world-space 3D fog-of-war overlay renderer. |
 | `ModelBuilder` | `g3d` | Programmatic primitive model construction for cubes, boxes, spheres, and custom triangle meshes. |
-| `Mesh` | `graphics/api` | Concrete low-level GPU mesh usable by 2D, UI, custom renderers, and 3D. |
+| `Mesh` | `graphics/api` | Concrete low-level GPU mesh usable by 2D, UI, custom renderers, and 3D, including PBR and skinned PBR layouts. |
 | `MeshPart` | `g3d` | 3D subset of a graphics `Mesh` rendered with one material. |
 | `Model` | `g3d` | Loaded 3D model asset. |
 | `DefaultModel` | `g3d` | Default loaded-model implementation. |
 | `ModelInstance` | `g3d` | Instance of a model in a scene. |
 | `DefaultModelInstance` | `g3d` | Default model instance implementation. |
-| `ModelNode`, `ModelNodePart`, `Renderable3D` | `g3d` | Model hierarchy and flattened render items. |
+| `ModelNode`, `ModelNodePart`, `Renderable3D` | `g3d` | Model hierarchy, skin metadata, and flattened render items. |
 | `Material`, `MaterialAlphaMode` | `g3d` | 3D material abstraction and alpha mode values. |
 | `PbrMaterial`, `ShaderMaterial` | `g3d` | Default PBR material data and custom shader material hooks. |
-| `Shader3D`, `ShaderProvider3D`, `PbrShaderProvider`, `PbrShaderConfig` | `g3d` | 3D shader selection and default PBR shader path. |
-| `AnimationClip`, `AnimationController`, `Skeleton`, `Skin`, `Bone`, `MorphTarget` | `g3d` | Node, skeletal, and morph target animation data and playback. |
+| `Shader3D`, `ShaderProvider3D`, `PbrShaderProvider`, `PbrShaderConfig` | `g3d` | 3D shader selection and default PBR/skinned PBR shader path. |
+| `AnimationClip`, `AnimationController`, `Skeleton`, `Skin`, `Bone`, `SkinningPalette`, `CpuSkinningMeshUpdater`, `CpuSkinnedModelAnimator`, `MorphTarget` | `g3d` | Node, skeletal, GPU/CPU skinning, and morph target animation data and playback. |
 | `Light`, `DirectionalLight`, `PointLight`, `SpotLight` | `g3d` | Portable light descriptions. |
-| `Environment3D` | `g3d` | Scene/environment lighting, skybox, fog, and image-based lighting data. |
+| `Environment3D` | `g3d` | Scene/environment lighting, point-light and spotlight inputs, directional and cascaded shadow-map references, distance fog, and sky environment lighting data. |
+| `DirectionalShadowMap3D` | `g3d` | Directional-light shadow-map helper backed by a sampled render-attachment texture and WGSL depth pass. |
+| `CascadedShadowMap3D` | `g3d` | Provider-neutral manager for up to four directional shadow maps split from a driver view camera and sampled by the default PBR shader. |
 | `RenderQueue3D`, `DefaultRenderQueue3D`, `RenderTarget3D`, `DefaultRenderTarget3D`, `RenderPath3D`, `RenderGraph3D` | `g3d` | Culling, sorting, pass orchestration, render target views, and render path helpers. |
 | `G3DAssetLoaders` | `g3d` | Asset loader registration for 3D formats such as glTF. |
 | `FrameBuffer`, `MultiRenderTarget` | `graphics/api` | Provider-neutral offscreen and multiple render target support used by 3D render paths. |
@@ -943,11 +970,11 @@ In module names, `_native` means the native runtime family, not a specific compi
 
 Internal Gradle paths should remain the source of truth while the project is young.
 
-Maven publication wiring lives in the shared `buildSrc/src/main/kotlin/publish.gradle.kts` publish plugin. The root build applies it with the `LIBRARIES` target, and the included `libfdx/tools/gradle-plugin` build applies the same script with the `GRADLE_PLUGIN` target. It publishes only the explicit `libfdxPublishableProjectPaths` Java and Android library allowlist with group `libfdx.toml` `release.fdxGroup`, uses each module's `archivesName` as the artifact ID, and delegates Gradle plugin marker and implementation publication to the included build. Run `listMavenDeployProjects` to print the library deploy allowlist. The configured `libfdx.toml` `release.fdxVersion` is the upcoming release version without `-SNAPSHOT`; snapshot deploy and publish tasks derive Maven version `-SNAPSHOT`, while release deploy and publish tasks use the configured base version. The public root deploy tasks are `build_native_artifacts`, `prepareSnapshotDeploy`, `prepareReleaseDeploy`, `publishSnapshot`, and `publishRelease`: `build_native_artifacts` builds current-host runtime fdx desktop C-resource JAR inputs, runtime fdx web native-resource JAR inputs, the runtime fdx Android AAR, and Android release AARs; `prepareSnapshotDeploy` publishes local snapshot files to `build/snapshot-deploy`; `prepareReleaseDeploy` publishes local release files to `build/staging-deploy` and creates `build/staging-deploy.zip`; `publishSnapshot` publishes directly to the Central Portal snapshot repository through Gradle's Maven publish tasks; and `publishRelease` prepares release deploy files, creates the staging zip, and uploads it to Central Portal. Deploy preparation uses generated native resources and must not compile C native artifacts. By default, runtime fdx native validation fails for missing current-host desktop or web resources and skips non-host desktop C-resource publications. `fdx_shared` is a published native-source/tooling artifact used by the Gradle plugin and standalone builders when a user project generates TeaVM/native builds from Maven artifacts.
+Maven publication wiring lives in the shared `buildSrc/src/main/kotlin/publish.gradle.kts` publish plugin. The root build applies it with the `LIBRARIES` target, and the included `libfdx/tools/gradle-plugin` build applies the same script with the `GRADLE_PLUGIN` target. It publishes only the explicit `libfdxPublishableProjectPaths` Java and Android library allowlist with group `libfdx.toml` `release.fdxGroup`, uses each module's `archivesName` as the artifact ID, and delegates Gradle plugin marker and implementation publication to the included build. Run `listMavenDeployProjects` to print the library deploy allowlist. The configured `libfdx.toml` `release.fdxVersion` is the upcoming release version without `-SNAPSHOT`; snapshot deploy and publish tasks derive Maven version `-SNAPSHOT`, while release deploy and publish tasks use the configured base version. The public root deploy tasks are `libfdx_build_native_artifacts`, `prepareSnapshotDeploy`, `uploadSnapshotDeploy`, `prepareReleaseDeploy`, `publishSnapshot`, and `publishRelease`: `libfdx_build_native_artifacts` builds current-host runtime fdx desktop C-resource JAR inputs, runtime fdx web native-resource JAR inputs, the runtime fdx Android AAR, and Android release AARs with the Tint-backed runtime shader compiler enabled for local libFDX development and WGSL-only built-in renderer tests; web runtime fdx native-resource builds also enable that compiler by default because WebGL needs generated GLSL ES from WGSL-only built-in shaders. `prepareSnapshotDeploy` publishes local snapshot files to `build/snapshot-deploy`; `uploadSnapshotDeploy` uploads the existing `build/snapshot-deploy` repository to the Central Portal snapshot repository without running Maven publish tasks again; `prepareReleaseDeploy` publishes local release files to `build/staging-deploy` and creates `build/staging-deploy.zip`; `publishSnapshot` runs snapshot preparation and upload; and `publishRelease` prepares release deploy files, creates the staging zip, and uploads it to Central Portal. Deploy preparation and snapshot upload use generated native resources and must not compile C native artifacts. By default, runtime fdx native validation fails for missing current-host desktop or web resources and skips non-host desktop C-resource publications. `fdx_shared` is a published native-source/tooling artifact used by the Gradle plugin and standalone builders when a user project generates TeaVM/native builds from Maven artifacts.
 
 The configured dependency mode controls repository consumer wiring for tests and samples. `LibExt` reads `libfdx.toml` `[development]` values, then lets ignored root `local.properties` keys `development.usePublishedLibfdx` and `development.publishedLibfdxVersion` override them for one checkout. Settings always includes the local `:libfdx:*` source modules. The checked-in default is false so clean source checkouts and CI use the local Gradle plugin build for the dedicated plugin-use modules and local project dependencies for consumers. That included plugin build must stay isolated to the plugin project; it must not include or remap root `:libfdx:*` source modules under the plugin build id. When true, plugin-use modules resolve the Gradle plugin from Maven and consumers resolve libFDX dependencies as published `<fdxGroup>:<artifact>:<publishedLibfdxVersion>` coordinates. Builder-backed web tasks attach local generated runtime fdx web resources only when the consumer runtime classpath has direct or transitive local `:libfdx:*` project dependencies; Maven-backed consumers must get those resources from the published artifacts.
 
-GitHub publish workflows build publishable platform artifacts before Maven publication, not sample/test validation outputs. Windows, Linux, macOS x64, and macOS arm64 jobs build the desktop runtime fdx native resources for their runner target. The web job builds runtime fdx web resources. The Android job builds release AARs for runtime fdx Android, backend Android, and Android Vulkan/WGPU JNI providers. Optional Tint-backed shader compiler support is embedded into the same runtime fdx platform artifact only when the native build is explicitly invoked with `libfdx.runtimeFdx.shaderCompiler=true`; the normal build-and-upload job only packages and uploads already-built platform artifacts. The final publish job downloads desktop runtime artifacts into the generated resource directory of `fdx_desktop`, web runtime artifacts into `fdx_web`, plus Android AAR output directories, and verifies the downloaded files before deploy preparation. Deploy preparation does not compile C native artifacts; local deploy preparation requires current-host runtime fdx desktop resources, runtime fdx web resources, and Android release AARs to already exist, while CI verifies every required desktop runtime fdx classifier before packaging.
+GitHub publish workflows build publishable platform artifacts before Maven publication, not sample/test validation outputs. Windows, Linux, macOS x64, and macOS arm64 jobs build the desktop runtime fdx native resources for their runner target with the default Tint-backed shader compiler enabled. The web job builds runtime fdx web JS/WASM resources with FreeType and the Tint-backed shader compiler enabled by default. The Android job builds release AARs for runtime fdx Android, backend Android, and Android Vulkan/WGPU JNI providers; the runtime fdx Android native build includes FreeType and the default Tint-backed shader compiler. The workflow invokes clean Gradle task paths without any shader compiler project property. The final publish job downloads desktop runtime artifacts into the generated resource directory of `fdx_desktop`, web runtime artifacts into `fdx_web`, plus Android AAR output directories, and verifies the downloaded files before deploy preparation. Deploy preparation and snapshot upload do not compile C native artifacts; local deploy preparation requires current-host runtime fdx desktop resources, runtime fdx web resources, and Android release AARs to already exist, while CI verifies every required desktop runtime fdx classifier before packaging and uploads snapshots from the prepared `build/snapshot-deploy` repository.
 
 ### 9.1. Foundation Modules
 
@@ -955,7 +982,7 @@ GitHub publish workflows build publishable platform artifacts before Maven publi
 | --- | --- | --- |
 | `:libfdx:foundation:math` | `io.github.libfdx:math` | Pure math primitives: vectors, matrices, quaternions, bounds, and backend-independent color math. Should be usable without an application or backend. |
 | `:libfdx:foundation:json` | `io.github.libfdx:json` | Strict provider-neutral JSON tree parsing, writing, and manual callback-based class mapping. It must not use reflection, annotations, files, assets, graphics, backend services, or platform APIs. |
-| `:libfdx:foundation:collections` | `io.github.libfdx:collections` | Specialized collections and allocation-conscious data structures. This should exist only if standard Java collections are not enough for engine hot paths. |
+| `:libfdx:foundation:collections` | `io.github.libfdx:collections` | Specialized collections and allocation-conscious data structures for engine hot paths where standard Java collections are not enough. |
 
 ### 9.2. Runtime Modules
 
@@ -968,6 +995,7 @@ GitHub publish workflows build publishable platform artifacts before Maven publi
 | `:libfdx:runtime:fdx:platform:web` | `io.github.libfdx:fdx_web` | Web runtime fdx native-resource JAR from `libfdx/runtime/fdx/platform/web`; packages `fdx.js` and `fdx.wasm`. |
 | `:libfdx:runtime:application` | `io.github.libfdx:application` | Application lifecycle API: create, resize, render, pause, resume, dispose, main loop contracts, application configuration, and platform capability discovery. |
 | `:libfdx:runtime:files` | `io.github.libfdx:files` | File abstraction: classpath/internal/local/external files, virtual file handles, path normalization, read/write capabilities, and storage rules per backend. |
+| `:libfdx:runtime:storage` | `io.github.libfdx:storage` | Persistent key/value storage for local user data and rebuildable cache data. It supports primitives, strings, bytes, JSON trees, explicit JSON codecs, and user-provided byte transforms for encryption/compression without owning encryption itself. |
 | `:libfdx:runtime:input` | `io.github.libfdx:input` | Keyboard, mouse, touch, gestures, text input, cursor state, gamepad/controller contracts, mappings, hotplugging events, vibration contracts, dead zones, and input routing primitives. |
 | `:libfdx:runtime:display` | `io.github.libfdx:display` | Display/presentation abstraction: size, DPI, fullscreen, title where supported, icon where supported, orientation, visibility, resize events, and platform display handles for graphics providers. |
 | `:libfdx:runtime:audio` | `io.github.libfdx:audio` | Common audio runtime API: audio devices, sound handles, music streams, audio buffers, playback controls, and provider SPI. Normal game code should use this module. |
@@ -1015,15 +1043,16 @@ Gamepad common contracts live in `runtime/input`. These modules provide platform
 | --- | --- | --- |
 | `:libfdx:graphics:api` | `io.github.libfdx:graphics` | Low-level WebGPU-style graphics abstraction: adapters, devices, queues, buffers, textures, texture views, framebuffers, render targets, multi-render targets, samplers, shader modules, shader profiles/bundles, bind groups, pipelines, command encoders, command buffers, render passes, and surfaces. |
 
-Shader authoring is WGSL-first. The detailed shader architecture, including
-portable profiles, native descriptor escape hatches, Tint as the first compiler
-backend, runtime/setup-time compilation, and optional editor hot reload,
+Shader authoring is WGSL-only. The detailed shader architecture, including
+portable profiles, Tint as the first compiler backend, runtime/setup-time
+compilation, and optional editor hot reload,
 lives in [SHADERS.md](SHADERS.md).
 
 The short architecture rule is that normal game runtimes may pass WGSL directly.
 Providers that cannot consume WGSL translate it through the optional
-`runtime/fdx/core` shader compiler capability during shader-module creation.
-Direct GLSL, SPIR-V, and MSL descriptors remain explicit escape hatches.
+`runtime/fdx/core` shader compiler capability during shader-module creation
+when the active platform packages that capability. Direct GLSL, SPIR-V, and MSL
+are generated target artifacts, not public shader authoring sources.
 
 ### 9.7. wgpu/WebGPU Provider Modules
 
@@ -1065,17 +1094,23 @@ Use `g2d` instead of `2d` because Java package segments cannot start with a numb
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:graphics:g2d` | `io.github.libfdx:g2d` | Complete 2D toolkit: sprites, sprite batches, shape rendering, texture regions, atlases, bitmap fonts, vector-rasterized font atlases, text layout, 2D particles, tile maps, and 2D render helpers. Internally this module can still use packages such as `font`, `particles`, and `maps`, but users should depend on one `g2d` artifact. Camera state belongs to the shared `graphics/api` `Camera`, not a g2d-specific camera class. |
+| `:libfdx:graphics:g2d` | `io.github.libfdx:g2d` | Complete 2D toolkit: sprites, sprite batches, sprite shader effects, fog-of-war overlays, shape rendering, texture regions, atlases, bitmap fonts, vector-rasterized font atlases, text layout, 2D particles, tile maps, and 2D render helpers. Internally this module can still use packages such as `font`, `particles`, and `maps`, but users should depend on one `g2d` artifact. Camera state belongs to the shared `graphics/camera` `Camera`, not a g2d-specific camera class. |
 
-### 9.11. Graphics 3D Modules
+### 9.11. Graphics Camera Module
+
+| Gradle path | Tentative coordinate | Purpose |
+| --- | --- | --- |
+| `:libfdx:graphics:camera` | `io.github.libfdx:camera` | Shared camera state and focused camera controllers, including reusable 2D pan/zoom, free/editor, first-person, third-person, orbit, orthographic, cinematic controllers, and cinematic path samplers. This module depends on `runtime/input` for input-backed controllers and does not own renderer helpers. |
+
+### 9.12. Graphics 3D Modules
 
 Use `g3d` instead of `3d` because Java package segments cannot start with a number.
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:graphics:g3d` | `io.github.libfdx:g3d` | Complete 3D toolkit: `Batch3D`, `ModelBatch`, meshes, models, model instances, materials, PBR shader/material data, custom shader hooks, lights, environments, animation, render queues, render paths, frame target helpers, and scene rendering helpers. Internally this module can still use packages such as `models`, `animation`, `materials`, `shaders`, `render`, and `lighting`, but users should depend on one `g3d` artifact. Camera state belongs to the shared `graphics/api` `Camera`, not a g3d-specific camera class. |
+| `:libfdx:graphics:g3d` | `io.github.libfdx:g3d` | Complete 3D toolkit: `Batch3D`, `ModelBatch`, meshes, models, model instances, materials, PBR shader/material data, skinned PBR GPU path, custom shader hooks, lights, environments, sky environment lighting, point-light and spotlight shading, directional and cascaded shadow maps, distance fog, fog-of-war overlays, animation, glTF hierarchy/skin/animation loading, render queues, render paths, frame target helpers, and scene rendering helpers. Internally this module can still use packages such as `models`, `animation`, `materials`, `shaders`, `render`, and `lighting`, but users should depend on one `g3d` artifact. Shared camera state belongs to `graphics/camera`; input-backed camera controllers belong to `graphics/camera`'s controller subpackage. |
 
-### 9.12. UI Modules
+### 9.13. UI Modules
 
 UI modules contain built-in libfdx UI solutions. `ui-kit` is the default retained-mode UI toolkit and one user-facing library. Do not split `ui-kit` into separate scene graph and widget artifacts. See [UI_KIT.md](UI_KIT.md) for the detailed UI toolkit specification.
 
@@ -1120,7 +1155,7 @@ Artifact IDs should include the implementation name unless the implementation is
 | `:libfdx:backends:c_shared` | `io.github.libfdx:backend_c_shared` | Flat shared C build and native resource support, including TeaVM build execution, shared builder errors, optimization settings, and classpath resources copied into generated native projects. It is not a parent folder for web or native backend modules. |
 | `:libfdx:backends:desktop_c` | `io.github.libfdx:backend_desktop_c` | Desktop backend for native runtime desktop targets. It owns GLFW window/lifecycle wiring, `NativeBuilder`, desktop-c project generation, and currently exposes `DesktopCOpenGLProvider` and `DesktopCVulkanProvider` while keeping graphics attached through the common `graphics/api` SPI. |
 | `:libfdx:backends:psp` | `io.github.libfdx:backend_psp` | PSP TeaVM C backend module. It owns `PspBuilder`, PSP project generation, PSP native import declarations, PSP native resource payloads, `PspApplicationBackend`, `PspApplicationConfig`, and the first constrained PSP common graphics API slice for clear, non-indexed SpriteBatch-style rendering, and RGBA8 power-of-two sampled textures. The current application backend exposes fixed 480x272 display metadata, `PspGraphicsContext`, read-only internal/classpath assets staged through `libfdx.assets` or `PspBuilder.asset(...)`, and PSP controls as one standard-mapped gamepad plus controller-backed portable key events for focus/navigation. Physical keyboard, pointer, touch, text input, cursor, writable files, audio, and broader graphics runtime behavior belong here only when implemented as PSP backend classes. |
-| `:libfdx:backends:ios_c` | `io.github.libfdx:backend_ios_c` | Experimental iOS TeaVM C backend module. It owns the iOS C application lifecycle bridge, generated Xcode project shell, Swift/GLKit and MetalKit view controller templates, iOS GLES and native Metal provider/API adapters, graphics API project selection, and generated asset/native-resource layout. The `metal` graphics option uses a native Metal command-encoder path with backend-provided MSL shaders for the supported common 2D graphics slice. Launcher modules must declare this backend as an explicit `implementation` dependency; the Gradle plugin configures TeaVM C and Xcode generation tasks but does not add runtime dependencies to user projects. The generated Xcode project is the handoff point for simulator/device builds on macOS with Xcode. |
+| `:libfdx:backends:ios_c` | `io.github.libfdx:backend_ios_c` | Experimental iOS TeaVM C backend module. It owns the iOS C application lifecycle bridge, generated Xcode project shell, Swift/GLKit and MetalKit view controller templates, iOS GLES and native Metal provider/API adapters, graphics API project selection, and generated asset/native-resource layout. The `metal` graphics option uses a native Metal command-encoder path with reflected texture/sampler bindings, PBR named uniform-buffer uploads, and depth-state support when MSL is available. iOS C currently registers no runtime shader compiler provider, so WGSL-only built-in shaders require a future iOS compiler bridge on this backend. Launcher modules must declare this backend as an explicit `implementation` dependency; the Gradle plugin configures TeaVM C and Xcode generation tasks but does not add runtime dependencies to user projects. The generated Xcode project is the handoff point for simulator/device builds on macOS with Xcode. |
 | `:libfdx:backends:web` | `io.github.libfdx:backend_web` | Default browser backend using TeaVM internally for canvas/display integration, browser input and text-editor bridging, browser lifecycle, `WebBuilder`, and webapp asset metadata generation. It supports JS and Wasm build targets through the libfdx Gradle plugin and should not hard-code one graphics, audio, or gamepad provider. |
 | `:libfdx:backends:android` | `io.github.libfdx:backend_android` | Default Android backend: activity/view integration, Android input/files, and mobile lifecycle. Graphics, audio, and gamepad providers should remain replaceable. |
 | `:libfdx:backends:android_native` | `io.github.libfdx:backend_android_native` | Android backend for native runtime Android targets if that runtime is supported. |
@@ -1881,6 +1916,7 @@ public final class FdxTests {
         tests.add("graphics/Texture", TextureTest::new).requires(GraphicsCapability.TEXTURES);
         tests.add("g2d/SpriteBatch", SpriteBatchTest::new).requires(GraphicsCapability.RENDERING);
         tests.add("g3d/ModelBatch", ModelBatchTest::new).requires(GraphicsCapability.RENDERING);
+        tests.add("g3d/ModelSkinning", SkinnedModelBatchTest::new).requires(GraphicsCapability.RENDERING);
         tests.add("audio/Sound", SoundTest::new).requires(RuntimeCapability.AUDIO);
     }
 }
@@ -1932,8 +1968,9 @@ Asset, graphics, and UI packages:
 | `:libfdx:assets:manager` | `io.github.libfdx.assets` | Asset manager, asset references, handles, dependency tracking, async loading contracts, and lifetime rules. |
 | `:libfdx:assets:loaders` | `io.github.libfdx.assets.loaders` | Default provider-neutral asset loaders and loader support types. GPU resource objects should still belong to graphics modules, and provider-backed audio handles should still belong to audio modules/providers. |
 | `:libfdx:graphics:api` | `io.github.libfdx.graphics` | Common graphics API: adapters, devices, queues, buffers, textures, texture views, framebuffers, render targets, multi-render targets, samplers, shader modules, bind groups, pipelines, command encoders, render passes, and surfaces. |
-| `:libfdx:graphics:g2d` | `io.github.libfdx.graphics.g2d` | Complete 2D toolkit: sprites, sprite batches, texture regions, atlases, bitmap fonts, vector-rasterized font atlases, text layout, tile maps, particles, and 2D render helpers. Shared camera state lives in `io.github.libfdx.graphics.Camera`. |
-| `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` | Complete 3D toolkit: `Batch3D`, `ModelBatch`, `ModelBuilder`, meshes, models, materials, PBR/default shaders, custom shader hooks, lights, environments, animation, render queues, render paths, frame target helpers, glTF loading, and 3D render helpers. Shared camera state lives in `io.github.libfdx.graphics.Camera`. |
+| `:libfdx:graphics:camera` | `io.github.libfdx.graphics.camera`, `io.github.libfdx.graphics.camera.controller` | Shared camera state in the root package plus anchor contracts, pointer filters, input bindings, cinematic paths, and reusable 2D/3D camera controllers in the controller subpackage. |
+| `:libfdx:graphics:g2d` | `io.github.libfdx.graphics.g2d` | Complete 2D toolkit: sprites, sprite batches, texture regions, atlases, bitmap fonts, vector-rasterized font atlases, text layout, tile maps, particles, and 2D render helpers. Shared camera state lives in `io.github.libfdx.graphics.camera.Camera`. |
+| `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` | Complete 3D toolkit: `Batch3D`, `ModelBatch`, `ModelBuilder`, meshes, models, materials, PBR/default shaders, skinned PBR GPU path, custom shader hooks, lights, environments, sky environment lighting, directional and cascaded shadow maps, animation, render queues, render paths, frame target helpers, glTF loading, and 3D render helpers. Shared camera state lives in `io.github.libfdx.graphics.camera.Camera`; input-backed controllers live in `graphics/camera`. |
 | `:libfdx:ui:ui-kit` | `io.github.libfdx.ui` | Built-in UI toolkit: Compose-inspired declarative authoring over a retained runtime, widgets, layout, animation, themes, ninepatch styling, layers, focus, navigation, and input routing. |
 | `:libfdx:validation:scenario-validator` | `io.github.libfdx.validation.scenario` | Scenario validation engine: reusable catalogs, scenarios, runtime actions, assertions, waits, step pacing, events, probes, reports, and visual validation hooks. |
 | `:libfdx:validation:scenario-validator-ui-kit` | `io.github.libfdx.validation.scenario.ui.kit` | UI Kit adapter for scenario validation: UI targets, UI actions, UI assertions, UI waits, UI events, UI captures, and validation ID integration. |
@@ -1971,14 +2008,23 @@ Class placement examples:
 | `Texture` | `:libfdx:graphics:api` | `io.github.libfdx.graphics` |
 | `FrameBuffer` | `:libfdx:graphics:api` | `io.github.libfdx.graphics` |
 | `MultiRenderTarget` | `:libfdx:graphics:api` | `io.github.libfdx.graphics` |
-| `Camera` | `:libfdx:graphics:api` | `io.github.libfdx.graphics` |
+| `Camera`, `CameraProjection` | `:libfdx:graphics:camera` | `io.github.libfdx.graphics.camera` |
+| `ImmediateModeRenderer` | `:libfdx:graphics:api` | `io.github.libfdx.graphics` |
+| `CameraController2D`, focused camera controllers, cinematic camera paths, camera anchors, and camera input bindings | `:libfdx:graphics:camera` | `io.github.libfdx.graphics.camera.controller` |
 | `Batch2D` | `:libfdx:graphics:g2d` | `io.github.libfdx.graphics.g2d` |
 | `SpriteBatch` | `:libfdx:graphics:g2d` | `io.github.libfdx.graphics.g2d` |
 | `BitmapFont` | `:libfdx:graphics:g2d` | `io.github.libfdx.graphics.g2d` |
+| `TileMap` | `:libfdx:graphics:g2d` | `io.github.libfdx.graphics.g2d` |
+| `TileMapRenderer` | `:libfdx:graphics:g2d` | `io.github.libfdx.graphics.g2d` |
 | `Batch3D` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
 | `ModelBatch` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
 | `ModelBuilder` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
 | `ModelInstance` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
+| `CpuSkinnedModelAnimator` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
+| `BillboardRenderer3D` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
+| `ParticleEmitter3D` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
+| `FogOfWarRenderer3D` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
+| `CascadedShadowMap3D` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
 | `G3DAssetLoaders` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
 | `ModelBatchTest` | `:tests:core` | `io.github.libfdx.tests.graphics` |
 | `GraphicsAttachmentProvider` | `:libfdx:graphics:api` | `io.github.libfdx.graphics` |
@@ -2023,9 +2069,11 @@ Java packages should follow the package map above and include the project name o
 
 ```java
 package io.github.libfdx.graphics;
+package io.github.libfdx.graphics.camera;
+package io.github.libfdx.graphics.camera.controller;
 ```
 
-For 2D and 3D graphics, use `g2d` and `g3d` in package names:
+For 2D and 3D graphics, use `g2d` and `g3d` in package names. Public types may live in grouped subpackages when the group is a stable API area:
 
 ```java
 package io.github.libfdx.graphics.g2d;

@@ -10,6 +10,7 @@ import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentRequirements;
 import io.github.libfdx.graphics.GraphicsEnvironment;
 import io.github.libfdx.graphics.NativeWindow;
+import io.github.libfdx.graphics.NativeWindowPlatform;
 
 /**
  * Provides WGPU services.
@@ -83,7 +84,9 @@ public final class WGPUProvider implements GraphicsAttachmentProvider {
         }
 
         WGPUNativeSurface.SurfaceHandle surface = WGPUNativeSurface.create(instance, nativeWindow);
-        WGPUContext context = new WGPUContext(actualConfiguration, instance, surface.surface(), surface.owner());
+        boolean surfaceCopySrc = nativeWindow.platform() != NativeWindowPlatform.ANDROID;
+        WGPUContext context = new WGPUContext(actualConfiguration, instance, surface.surface(), surface.owner(),
+                surfaceCopySrc);
         context.initializeBlocking();
         context.resize(width, height);
         return context;

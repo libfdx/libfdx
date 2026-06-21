@@ -2,12 +2,30 @@ package io.github.libfdx.tests;
 
 import io.github.libfdx.application.ApplicationListener;
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.tests.graphics.Billboard3DTest;
+import io.github.libfdx.tests.graphics.CameraControllersShowcaseTest;
 import io.github.libfdx.tests.graphics.CircleTest;
+import io.github.libfdx.tests.graphics.Fog2DTest;
+import io.github.libfdx.tests.graphics.Fog3DTest;
+import io.github.libfdx.tests.graphics.FogOfWar2DTest;
+import io.github.libfdx.tests.graphics.FogOfWar3DTest;
 import io.github.libfdx.tests.graphics.ModelBatchTest;
+import io.github.libfdx.tests.graphics.Outline2DTest;
+import io.github.libfdx.tests.graphics.Outline3DTest;
+import io.github.libfdx.tests.graphics.Particles2DTest;
+import io.github.libfdx.tests.graphics.Particles3DTest;
+import io.github.libfdx.tests.graphics.PointLight3DTest;
 import io.github.libfdx.tests.graphics.ReadbackTest;
+import io.github.libfdx.tests.graphics.ShadowMap3DTest;
+import io.github.libfdx.tests.graphics.ShaderRuntimeTest;
+import io.github.libfdx.tests.graphics.ShaderSceneTest;
+import io.github.libfdx.tests.graphics.Skybox3DTest;
+import io.github.libfdx.tests.graphics.SkinnedModelBatchTest;
+import io.github.libfdx.tests.graphics.SpotLight3DTest;
 import io.github.libfdx.tests.graphics.SquareTest;
 import io.github.libfdx.tests.graphics.SpriteBatchTest;
 import io.github.libfdx.tests.graphics.TextureTest;
+import io.github.libfdx.tests.graphics.TileMapRuntimeTest;
 import io.github.libfdx.tests.graphics.TriangleTest;
 import io.github.libfdx.tests.ui.UiKitTest;
 
@@ -112,8 +130,28 @@ public final class TestSelector {
     private static final String CIRCLE = "circle";
     private static final String TEXTURE = "texture";
     private static final String SPRITE = "sprite";
+    private static final String OUTLINE_2D = "outline-2d";
+    private static final String FOG_2D = "fog-2d";
+    private static final String FOG_OF_WAR_2D = "fog-of-war-2d";
+    private static final String PARTICLES_2D = "particles-2d";
+    private static final String TILE_MAP = "tile-map";
     private static final String MODEL = "model";
+    private static final String MODEL_SKINNING = "model-skinning";
+    private static final String OUTLINE_3D = "outline-3d";
+    private static final String FOG_3D = "fog-3d";
+    private static final String FOG_OF_WAR_3D = "fog-of-war-3d";
+    private static final String SKYBOX_3D = "skybox-3d";
+    private static final String BILLBOARD_3D = "billboard-3d";
+    private static final String PARTICLES_3D = "particles-3d";
+    private static final String POINT_LIGHT_3D = "point-light-3d";
+    private static final String SPOT_LIGHT_3D = "spot-light-3d";
+    private static final String SHADOW_MAP_3D = "shadow-map-3d";
+    private static final String CASCADE_SHADOW_MAP_3D = "cascade-shadow-map-3d";
+    private static final String CAMERA_CONTROLLERS = "camera-controllers";
     private static final String READBACK = "readback";
+    private static final String STORAGE_RUNTIME = "storage-runtime";
+    private static final String SHADER_RUNTIME = "shader-runtime";
+    private static final String SHADER_SCENE = "shader-scene";
     private static final String UI = "ui";
     public static final String SELECTOR_NAME = "selector";
     public static final String AUTO_TEST_NAME = "auto";
@@ -149,16 +187,136 @@ public final class TestSelector {
                     return new SpriteBatchTest(exitAfterFrames);
                 }
             }),
+            descriptor(OUTLINE_2D, "Outline 2D", "Graphics 2D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new Outline2DTest(exitAfterFrames);
+                }
+            }),
+            descriptor(FOG_2D, "Fog 2D", "Graphics 2D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new Fog2DTest(exitAfterFrames);
+                }
+            }),
+            descriptor(FOG_OF_WAR_2D, "Fog of war 2D", "Graphics 2D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new FogOfWar2DTest(exitAfterFrames);
+                }
+            }),
+            descriptor(PARTICLES_2D, "Particles 2D", "Graphics 2D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new Particles2DTest(exitAfterFrames);
+                }
+            }),
+            descriptor(TILE_MAP, "Tile map", "Graphics 2D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new TileMapRuntimeTest(exitAfterFrames);
+                }
+            }),
             descriptor(MODEL, "Model batch", "Graphics 3D", 640, 480, new TestFactory() {
                 @Override
                 public ApplicationListener create(long exitAfterFrames) {
                     return new ModelBatchTest(exitAfterFrames);
                 }
             }),
+            descriptor(MODEL_SKINNING, "Model skinning", "Graphics 3D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new SkinnedModelBatchTest(exitAfterFrames);
+                }
+            }),
+            descriptor(OUTLINE_3D, "Outline 3D", "Graphics 3D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new Outline3DTest(exitAfterFrames);
+                }
+            }),
+            descriptor(FOG_3D, "Fog 3D", "Graphics 3D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new Fog3DTest(exitAfterFrames);
+                }
+            }),
+            descriptor(FOG_OF_WAR_3D, "Fog of war 3D", "Graphics 3D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new FogOfWar3DTest(exitAfterFrames);
+                }
+            }),
+            descriptor(SKYBOX_3D, "Skybox 3D", "Graphics 3D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new Skybox3DTest(exitAfterFrames);
+                }
+            }),
+            descriptor(BILLBOARD_3D, "Billboard 3D", "Graphics 3D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new Billboard3DTest(exitAfterFrames);
+                }
+            }),
+            descriptor(PARTICLES_3D, "Particles 3D", "Graphics 3D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new Particles3DTest(exitAfterFrames);
+                }
+            }),
+            descriptor(POINT_LIGHT_3D, "Point light 3D", "Graphics 3D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new PointLight3DTest(exitAfterFrames);
+                }
+            }),
+            descriptor(SPOT_LIGHT_3D, "Spot light 3D", "Graphics 3D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new SpotLight3DTest(exitAfterFrames);
+                }
+            }),
+            descriptor(SHADOW_MAP_3D, "Shadow map 3D", "Graphics 3D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new ShadowMap3DTest(exitAfterFrames);
+                }
+            }),
+            descriptor(CASCADE_SHADOW_MAP_3D, "Cascade shadow map 3D", "Graphics 3D", 1280, 720, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new ShadowMap3DTest(exitAfterFrames, true);
+                }
+            }),
+            descriptor(CAMERA_CONTROLLERS, "Camera controllers", "Graphics 3D", 1280, 720, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new CameraControllersShowcaseTest(exitAfterFrames);
+                }
+            }),
             descriptor(READBACK, "Readback", "Graphics", 640, 480, new TestFactory() {
                 @Override
                 public ApplicationListener create(long exitAfterFrames) {
                     return new ReadbackTest(exitAfterFrames);
+                }
+            }),
+            descriptor(STORAGE_RUNTIME, "Storage runtime", "Runtime", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new StorageRuntimeTest(exitAfterFrames);
+                }
+            }),
+            descriptor(SHADER_RUNTIME, "Shader runtime", "Graphics", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new ShaderRuntimeTest(exitAfterFrames);
+                }
+            }),
+            descriptor(SHADER_SCENE, "Shader scene", "Graphics", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new ShaderSceneTest(exitAfterFrames);
                 }
             }),
             descriptor(UI, "UI kit", "UI", 1440, 1000, new TestFactory() {

@@ -33,6 +33,22 @@ public final class TextureDescriptor {
     }
 
     /**
+     * Creates an RGBA8 texture descriptor for render-to-texture workflows.
+     *
+     * @param label the debug label
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @return a new texture descriptor
+     */
+    public static TextureDescriptor rgba8RenderTarget(String label, int width, int height) {
+        return new TextureDescriptor()
+                .label(label)
+                .size(width, height)
+                .format(TextureFormat.RGBA8_UNORM)
+                .usage(TextureUsage.SAMPLED_RENDER_ATTACHMENT);
+    }
+
+    /**
      * Returns the label.
      *
      * @return the label

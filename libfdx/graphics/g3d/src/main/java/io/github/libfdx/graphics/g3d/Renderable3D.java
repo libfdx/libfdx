@@ -15,6 +15,7 @@ public final class Renderable3D {
     private final Material material;
     private final Matrix4 worldTransform;
     private final BoundingBox bounds;
+    private final SkinningPalette skinningPalette;
 
     /**
      * Creates a renderable3 d.
@@ -25,6 +26,20 @@ public final class Renderable3D {
      * @param bounds the bounds
      */
     public Renderable3D(MeshPart meshPart, Material material, Matrix4 worldTransform, BoundingBox bounds) {
+        this(meshPart, material, worldTransform, bounds, null);
+    }
+
+    /**
+     * Creates a renderable3 d.
+     *
+     * @param meshPart the mesh part
+     * @param material the material
+     * @param worldTransform the world transform
+     * @param bounds the bounds
+     * @param skinningPalette the optional skinning palette
+     */
+    public Renderable3D(MeshPart meshPart, Material material, Matrix4 worldTransform, BoundingBox bounds,
+            SkinningPalette skinningPalette) {
         if (meshPart == null) {
             throw new FdxException("Renderable3D mesh part cannot be null");
         }
@@ -35,6 +50,7 @@ public final class Renderable3D {
         this.material = material;
         this.worldTransform = worldTransform != null ? worldTransform : Matrix4.IDENTITY;
         this.bounds = bounds != null ? bounds : meshPart.mesh().bounds();
+        this.skinningPalette = skinningPalette;
     }
 
     /**
@@ -71,5 +87,14 @@ public final class Renderable3D {
      */
     public BoundingBox bounds() {
         return bounds;
+    }
+
+    /**
+     * Returns the optional skinning palette.
+     *
+     * @return the skinning palette, or null when the renderable is not skinned
+     */
+    public SkinningPalette skinningPalette() {
+        return skinningPalette;
     }
 }

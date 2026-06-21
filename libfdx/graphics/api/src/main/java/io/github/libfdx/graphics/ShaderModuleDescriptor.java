@@ -32,52 +32,29 @@ public final class ShaderModuleDescriptor {
     public static ShaderModuleDescriptor wgsl(String label, String source) {
         return new ShaderModuleDescriptor()
                 .label(label)
-                .language(ShaderLanguage.WGSL)
+                .generatedLanguage(ShaderLanguage.WGSL)
                 .source(source);
     }
 
-    /**
-     * Creates a shader module descriptor.
-     *
-     * @param label the debug label
-     * @param vertexSource the vertex source
-     * @param fragmentSource the fragment source
-     * @return a new shader module descriptor
-     */
-    public static ShaderModuleDescriptor glsl(String label, String vertexSource, String fragmentSource) {
+    static ShaderModuleDescriptor generatedGlsl(String label, String vertexSource, String fragmentSource) {
         return new ShaderModuleDescriptor()
                 .label(label)
-                .language(ShaderLanguage.GLSL)
-                .glsl(vertexSource, fragmentSource);
+                .generatedLanguage(ShaderLanguage.GLSL)
+                .generatedGlsl(vertexSource, fragmentSource);
     }
 
-    /**
-     * Creates a shader module descriptor.
-     *
-     * @param label the debug label
-     * @param vertexWords the vertex words
-     * @param fragmentWords the fragment words
-     * @return a new shader module descriptor
-     */
-    public static ShaderModuleDescriptor spirv(String label, int[] vertexWords, int[] fragmentWords) {
+    static ShaderModuleDescriptor generatedSpirv(String label, int[] vertexWords, int[] fragmentWords) {
         return new ShaderModuleDescriptor()
                 .label(label)
-                .language(ShaderLanguage.SPIRV)
-                .spirv(vertexWords, fragmentWords);
+                .generatedLanguage(ShaderLanguage.SPIRV)
+                .generatedSpirv(vertexWords, fragmentWords);
     }
 
-    /**
-     * Creates a shader module descriptor.
-     *
-     * @param label the debug label
-     * @param source the source value
-     * @return a new shader module descriptor
-     */
-    public static ShaderModuleDescriptor msl(String label, String source) {
+    static ShaderModuleDescriptor generatedMsl(String label, String source) {
         return new ShaderModuleDescriptor()
                 .label(label)
-                .language(ShaderLanguage.MSL)
-                .msl(source);
+                .generatedLanguage(ShaderLanguage.MSL)
+                .generatedMsl(source);
     }
 
     /**
@@ -109,13 +86,7 @@ public final class ShaderModuleDescriptor {
         return language;
     }
 
-    /**
-     * Sets the language and returns this shader module descriptor.
-     *
-     * @param language the language
-     * @return this shader module descriptor for chaining
-     */
-    public ShaderModuleDescriptor language(ShaderLanguage language) {
+    ShaderModuleDescriptor generatedLanguage(ShaderLanguage language) {
         this.language = language != null ? language : ShaderLanguage.WGSL;
         return this;
     }
@@ -193,14 +164,7 @@ public final class ShaderModuleDescriptor {
         return wgslSource;
     }
 
-    /**
-     * Sets the glsl and returns this shader module descriptor.
-     *
-     * @param vertexSource the vertex source
-     * @param fragmentSource the fragment source
-     * @return this shader module descriptor for chaining
-     */
-    public ShaderModuleDescriptor glsl(String vertexSource, String fragmentSource) {
+    ShaderModuleDescriptor generatedGlsl(String vertexSource, String fragmentSource) {
         if (vertexSource == null || vertexSource.length() == 0) {
             throw new FdxException("GLSL vertex shader source cannot be empty");
         }
@@ -230,14 +194,7 @@ public final class ShaderModuleDescriptor {
         return glslFragmentSource;
     }
 
-    /**
-     * Sets the SPIR-V and returns this shader module descriptor.
-     *
-     * @param vertexWords the vertex words
-     * @param fragmentWords the fragment words
-     * @return this shader module descriptor for chaining
-     */
-    public ShaderModuleDescriptor spirv(int[] vertexWords, int[] fragmentWords) {
+    ShaderModuleDescriptor generatedSpirv(int[] vertexWords, int[] fragmentWords) {
         if (vertexWords == null || vertexWords.length == 0) {
             throw new FdxException("SPIR-V vertex shader words cannot be empty");
         }
@@ -267,13 +224,7 @@ public final class ShaderModuleDescriptor {
         return spirvFragmentWords != null ? spirvFragmentWords.clone() : null;
     }
 
-    /**
-     * Sets the MSL and returns this shader module descriptor.
-     *
-     * @param source the source value
-     * @return this shader module descriptor for chaining
-     */
-    public ShaderModuleDescriptor msl(String source) {
+    ShaderModuleDescriptor generatedMsl(String source) {
         if (source == null || source.length() == 0) {
             throw new FdxException("MSL shader source cannot be empty");
         }

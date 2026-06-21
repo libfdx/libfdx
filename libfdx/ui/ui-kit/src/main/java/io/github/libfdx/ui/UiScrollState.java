@@ -126,6 +126,65 @@ public final class UiScrollState {
         scrollTo(x + deltaX, y + deltaY);
     }
 
+    /**
+     * Returns whether a vertical content range intersects the current viewport.
+     *
+     * @param top the range top in content coordinates
+     * @param bottom the range bottom in content coordinates
+     * @return true if any part of the range is visible; false otherwise
+     */
+    public boolean isYRangeVisible(float top, float bottom) {
+        if (viewportHeight <= 0.0f) {
+            return false;
+        }
+        float rangeTop = Math.min(top, bottom);
+        float rangeBottom = Math.max(top, bottom);
+        float visibleTop = y;
+        float visibleBottom = y + viewportHeight;
+        return rangeBottom > visibleTop && rangeTop < visibleBottom;
+    }
+
+    /**
+     * Scrolls a vertical content range into view if it is not already visible.
+     *
+     * @param top the range top in content coordinates
+     * @param bottom the range bottom in content coordinates
+     */
+    public void scrollYRangeIntoView(float top, float bottom) {
+        scrollYRangeIntoView(top, bottom, 0.0f);
+    }
+
+    /**
+     * Scrolls a vertical content range into view if it is not already visible.
+     *
+     * @param top the range top in content coordinates
+     * @param bottom the range bottom in content coordinates
+     * @param padding preferred visible padding around the range
+     */
+    public void scrollYRangeIntoView(float top, float bottom, float padding) {
+        float rangeTop = Math.min(top, bottom);
+        float rangeBottom = Math.max(top, bottom);
+        float inset = Math.max(0.0f, padding);
+        if (isYRangeVisible(rangeTop, rangeBottom)) {
+            return;
+        }
+        if (viewportHeight <= 0.0f || rangeBottom - rangeTop >= viewportHeight) {
+            scrollTo(x, rangeTop - inset);
+            return;
+        }
+        float visibleTop = y + inset;
+        float visibleBottom = y + viewportHeight - inset;
+        if (visibleBottom <= visibleTop) {
+            visibleTop = y;
+            visibleBottom = y + viewportHeight;
+        }
+        if (rangeTop < visibleTop) {
+            scrollTo(x, rangeTop - inset);
+        } else if (rangeBottom > visibleBottom) {
+            scrollTo(x, rangeBottom + inset - viewportHeight);
+        }
+    }
+
     boolean updateMetrics(float viewportWidth, float viewportHeight, float contentWidth, float contentHeight) {
         this.viewportWidth = Math.max(0.0f, viewportWidth);
         this.viewportHeight = Math.max(0.0f, viewportHeight);

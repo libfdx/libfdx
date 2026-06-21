@@ -559,7 +559,7 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
         ShaderBinding[] bindings = descriptor.shaderReflection().bindings();
         for (int i = 0; i < bindings.length; i++) {
             ShaderBinding binding = bindings[i];
-            if (binding.group() == 1
+            if ((binding.group() == 0 || binding.group() == 1)
                     && binding.binding() == 0
                     && binding.type() == ShaderBindingType.UNIFORM_BUFFER
                     && "uniforms".equals(binding.name())) {
@@ -629,16 +629,48 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
      * @author xpenatan
      */
     private static final class DesktopCVulkanRenderPass implements RenderPass {
-        private static final int PBR_UNIFORM_BYTE_COUNT = 224;
+        private static final int PBR_UNIFORM_BYTE_COUNT = 5232;
         private static final int MATRIX_FLOAT_COUNT = 16;
         private static final int MODEL_OFFSET = 0;
         private static final int VIEW_PROJECTION_OFFSET = 16;
         private static final int CAMERA_POSITION_OFFSET = 32;
-        private static final int AMBIENT_COLOR_OFFSET = 36;
-        private static final int LIGHT_DIRECTION_OFFSET = 40;
-        private static final int LIGHT_COLOR_INTENSITY_OFFSET = 44;
-        private static final int TEXTURE_FLAGS_OFFSET = 48;
-        private static final int EMISSIVE_FLAGS_OFFSET = 52;
+        private static final int CAMERA_DIRECTION_OFFSET = 36;
+        private static final int AMBIENT_COLOR_OFFSET = 40;
+        private static final int LIGHT_DIRECTION_OFFSET = 44;
+        private static final int LIGHT_COLOR_INTENSITY_OFFSET = 48;
+        private static final int TEXTURE_FLAGS_OFFSET = 52;
+        private static final int EMISSIVE_FLAGS_OFFSET = 56;
+        private static final int FOG_COLOR_OFFSET = 60;
+        private static final int FOG_PARAMS_OFFSET = 64;
+        private static final int SKY_ZENITH_COLOR_OFFSET = 68;
+        private static final int SKY_HORIZON_COLOR_OFFSET = 72;
+        private static final int SKY_NADIR_COLOR_OFFSET = 76;
+        private static final int SKY_SUN_COLOR_OFFSET = 80;
+        private static final int SKY_SUN_DIRECTION_OFFSET = 84;
+        private static final int SKY_PARAMS_OFFSET = 88;
+        private static final int MAX_POINT_LIGHTS = 4;
+        private static final int POINT_LIGHT_COUNT_OFFSET = 92;
+        private static final int POINT_LIGHT_POSITIONS_OFFSET = POINT_LIGHT_COUNT_OFFSET + 4;
+        private static final int POINT_LIGHT_COLORS_OFFSET = POINT_LIGHT_POSITIONS_OFFSET + MAX_POINT_LIGHTS * 4;
+        private static final int MAX_SPOT_LIGHTS = 4;
+        private static final int SPOT_LIGHT_COUNT_OFFSET = POINT_LIGHT_COLORS_OFFSET + MAX_POINT_LIGHTS * 4;
+        private static final int SPOT_LIGHT_POSITIONS_OFFSET = SPOT_LIGHT_COUNT_OFFSET + 4;
+        private static final int SPOT_LIGHT_DIRECTIONS_OFFSET = SPOT_LIGHT_POSITIONS_OFFSET + MAX_SPOT_LIGHTS * 4;
+        private static final int SPOT_LIGHT_COLORS_OFFSET = SPOT_LIGHT_DIRECTIONS_OFFSET + MAX_SPOT_LIGHTS * 4;
+        private static final int SPOT_LIGHT_CONES_OFFSET = SPOT_LIGHT_COLORS_OFFSET + MAX_SPOT_LIGHTS * 4;
+        private static final int MAX_SHADOW_CASCADES = 4;
+        private static final int SHADOW_VIEW_PROJECTIONS_OFFSET = SPOT_LIGHT_CONES_OFFSET + MAX_SPOT_LIGHTS * 4;
+        private static final int SHADOW_PARAMS_OFFSET = SHADOW_VIEW_PROJECTIONS_OFFSET
+                + MAX_SHADOW_CASCADES * MATRIX_FLOAT_COUNT;
+        private static final int SHADOW_CASCADE_SPLITS_OFFSET = SHADOW_PARAMS_OFFSET + 4;
+        private static final int SHADOW_BIASES_OFFSET = SHADOW_CASCADE_SPLITS_OFFSET + 4;
+        private static final int SHADOW_CAMERA_POSITION_OFFSET = SHADOW_BIASES_OFFSET + 4;
+        private static final int SHADOW_CAMERA_DIRECTION_OFFSET = SHADOW_CAMERA_POSITION_OFFSET + 4;
+        private static final int SHADOW_CAMERA_UP_OFFSET = SHADOW_CAMERA_DIRECTION_OFFSET + 4;
+        private static final int SHADOW_CAMERA_PARAMS_OFFSET = SHADOW_CAMERA_UP_OFFSET + 4;
+        private static final int SKINNING_PARAMS_OFFSET = SHADOW_CAMERA_PARAMS_OFFSET + 4;
+        private static final int MAX_BONES = 64;
+        private static final int BONE_MATRICES_OFFSET = SKINNING_PARAMS_OFFSET + 4;
 
         private final DesktopCVulkanGraphicsAttachment attachment;
         private final ByteBuffer uniformBytes = ByteBuffer.allocateDirect(PBR_UNIFORM_BYTE_COUNT)
@@ -778,6 +810,12 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
             if ("u_lightIntensity".equals(name)) {
                 setUniformFloat(LIGHT_COLOR_INTENSITY_OFFSET + 3, value);
             }
+            else if ("u_pointLightCount".equals(name)) {
+                setUniformFloat(POINT_LIGHT_COUNT_OFFSET, value);
+            }
+            else if ("u_spotLightCount".equals(name)) {
+                setUniformFloat(SPOT_LIGHT_COUNT_OFFSET, value);
+            }
         }
 
         /**
@@ -793,6 +831,9 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
             if ("u_cameraPosition".equals(name)) {
                 setUniform4f(CAMERA_POSITION_OFFSET, x, y, z, 1.0f);
             }
+            else if ("u_cameraDirection".equals(name)) {
+                setUniform4f(CAMERA_DIRECTION_OFFSET, x, y, z, 0.0f);
+            }
             else if ("u_ambientColor".equals(name)) {
                 setUniform4f(AMBIENT_COLOR_OFFSET, x, y, z, 1.0f);
             }
@@ -802,6 +843,25 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
             else if ("u_lightColor".equals(name)) {
                 setUniform4f(LIGHT_COLOR_INTENSITY_OFFSET, x, y, z,
                         uniformFloats.get(LIGHT_COLOR_INTENSITY_OFFSET + 3));
+            }
+            else if ("u_fogColor".equals(name)) {
+                setUniform4f(FOG_COLOR_OFFSET, x, y, z, 1.0f);
+            }
+            else if ("u_skyZenithColor".equals(name)) {
+                setUniform4f(SKY_ZENITH_COLOR_OFFSET, x, y, z, 1.0f);
+            }
+            else if ("u_skyHorizonColor".equals(name)) {
+                setUniform4f(SKY_HORIZON_COLOR_OFFSET, x, y, z, 1.0f);
+            }
+            else if ("u_skyNadirColor".equals(name)) {
+                setUniform4f(SKY_NADIR_COLOR_OFFSET, x, y, z, 1.0f);
+            }
+            else if ("u_skySunColor".equals(name)) {
+                setUniform4f(SKY_SUN_COLOR_OFFSET, x, y, z,
+                        uniformFloats.get(SKY_SUN_COLOR_OFFSET + 3));
+            }
+            else if ("u_skySunDirection".equals(name)) {
+                setUniform4f(SKY_SUN_DIRECTION_OFFSET, x, y, z, 0.0f);
             }
         }
 
@@ -819,6 +879,9 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
             if ("u_cameraPosition".equals(name)) {
                 setUniform4f(CAMERA_POSITION_OFFSET, x, y, z, w);
             }
+            else if ("u_cameraDirection".equals(name)) {
+                setUniform4f(CAMERA_DIRECTION_OFFSET, x, y, z, w);
+            }
             else if ("u_ambientColor".equals(name)) {
                 setUniform4f(AMBIENT_COLOR_OFFSET, x, y, z, w);
             }
@@ -827,6 +890,86 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
             }
             else if ("u_lightColor".equals(name)) {
                 setUniform4f(LIGHT_COLOR_INTENSITY_OFFSET, x, y, z, w);
+            }
+            else if ("u_fogColor".equals(name)) {
+                setUniform4f(FOG_COLOR_OFFSET, x, y, z, w);
+            }
+            else if ("u_fogParams".equals(name)) {
+                setUniform4f(FOG_PARAMS_OFFSET, x, y, z, w);
+            }
+            else if ("u_skyZenithColor".equals(name)) {
+                setUniform4f(SKY_ZENITH_COLOR_OFFSET, x, y, z, w);
+            }
+            else if ("u_skyHorizonColor".equals(name)) {
+                setUniform4f(SKY_HORIZON_COLOR_OFFSET, x, y, z, w);
+            }
+            else if ("u_skyNadirColor".equals(name)) {
+                setUniform4f(SKY_NADIR_COLOR_OFFSET, x, y, z, w);
+            }
+            else if ("u_skySunColor".equals(name)) {
+                setUniform4f(SKY_SUN_COLOR_OFFSET, x, y, z, w);
+            }
+            else if ("u_skySunDirection".equals(name)) {
+                setUniform4f(SKY_SUN_DIRECTION_OFFSET, x, y, z, w);
+            }
+            else if ("u_skyParams".equals(name)) {
+                setUniform4f(SKY_PARAMS_OFFSET, x, y, z, w);
+            }
+            else {
+                int positionIndex = pointLightIndex(name, "PositionRange");
+                if (positionIndex >= 0) {
+                    setUniform4f(POINT_LIGHT_POSITIONS_OFFSET + positionIndex * 4, x, y, z, w);
+                    return;
+                }
+                int colorIndex = pointLightIndex(name, "ColorIntensity");
+                if (colorIndex >= 0) {
+                    setUniform4f(POINT_LIGHT_COLORS_OFFSET + colorIndex * 4, x, y, z, w);
+                    return;
+                }
+                int spotPositionIndex = spotLightIndex(name, "PositionRange");
+                if (spotPositionIndex >= 0) {
+                    setUniform4f(SPOT_LIGHT_POSITIONS_OFFSET + spotPositionIndex * 4, x, y, z, w);
+                    return;
+                }
+                int spotDirectionIndex = spotLightIndex(name, "DirectionInner");
+                if (spotDirectionIndex >= 0) {
+                    setUniform4f(SPOT_LIGHT_DIRECTIONS_OFFSET + spotDirectionIndex * 4, x, y, z, w);
+                    return;
+                }
+                int spotColorIndex = spotLightIndex(name, "ColorIntensity");
+                if (spotColorIndex >= 0) {
+                    setUniform4f(SPOT_LIGHT_COLORS_OFFSET + spotColorIndex * 4, x, y, z, w);
+                    return;
+                }
+                int spotConeIndex = spotLightIndex(name, "Cone");
+                if (spotConeIndex >= 0) {
+                    setUniform4f(SPOT_LIGHT_CONES_OFFSET + spotConeIndex * 4, x, y, z, w);
+                    return;
+                }
+                if ("u_shadowParams".equals(name)) {
+                    setUniform4f(SHADOW_PARAMS_OFFSET, x, y, z, w);
+                }
+                else if ("u_shadowCascadeSplits".equals(name)) {
+                    setUniform4f(SHADOW_CASCADE_SPLITS_OFFSET, x, y, z, w);
+                }
+                else if ("u_shadowBiases".equals(name)) {
+                    setUniform4f(SHADOW_BIASES_OFFSET, x, y, z, w);
+                }
+                else if ("u_shadowCameraPosition".equals(name)) {
+                    setUniform4f(SHADOW_CAMERA_POSITION_OFFSET, x, y, z, w);
+                }
+                else if ("u_shadowCameraDirection".equals(name)) {
+                    setUniform4f(SHADOW_CAMERA_DIRECTION_OFFSET, x, y, z, w);
+                }
+                else if ("u_shadowCameraUp".equals(name)) {
+                    setUniform4f(SHADOW_CAMERA_UP_OFFSET, x, y, z, w);
+                }
+                else if ("u_shadowCameraParams".equals(name)) {
+                    setUniform4f(SHADOW_CAMERA_PARAMS_OFFSET, x, y, z, w);
+                }
+                else if ("u_skinningParams".equals(name)) {
+                    setUniform4f(SKINNING_PARAMS_OFFSET, x, y, z, w);
+                }
             }
         }
 
@@ -847,6 +990,17 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
             }
             else if ("u_viewProjection".equals(name)) {
                 setUniformMatrix(VIEW_PROJECTION_OFFSET, values);
+            }
+            else {
+                int shadowIndex = shadowViewProjectionIndex(name);
+                if (shadowIndex >= 0) {
+                    setUniformMatrix(SHADOW_VIEW_PROJECTIONS_OFFSET + shadowIndex * MATRIX_FLOAT_COUNT, values);
+                    return;
+                }
+                int boneIndex = boneMatrixIndex(name);
+                if (boneIndex >= 0) {
+                    setUniformMatrix(BONE_MATRICES_OFFSET + boneIndex * MATRIX_FLOAT_COUNT, values);
+                }
             }
         }
 
@@ -976,6 +1130,57 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
             ensureOpen();
             uniformFloats.put(offset, value);
             markUniformDirty();
+        }
+
+        private int pointLightIndex(String name, String suffix) {
+            return lightIndex(name, "u_pointLight", suffix, MAX_POINT_LIGHTS);
+        }
+
+        private int spotLightIndex(String name, String suffix) {
+            return lightIndex(name, "u_spotLight", suffix, MAX_SPOT_LIGHTS);
+        }
+
+        private int boneMatrixIndex(String name) {
+            if (name == null || !name.startsWith("u_bone")) {
+                return -1;
+            }
+            int index = 0;
+            for (int i = 6; i < name.length(); i++) {
+                char ch = name.charAt(i);
+                if (ch < '0' || ch > '9') {
+                    return -1;
+                }
+                index = index * 10 + ch - '0';
+            }
+            return index >= 0 && index < MAX_BONES ? index : -1;
+        }
+
+        private int shadowViewProjectionIndex(String name) {
+            if ("u_shadowViewProjection".equals(name)) {
+                return 0;
+            }
+            if (name == null || !name.startsWith("u_shadowViewProjection")) {
+                return -1;
+            }
+            int suffixOffset = "u_shadowViewProjection".length();
+            if (name.length() != suffixOffset + 1) {
+                return -1;
+            }
+            int index = name.charAt(suffixOffset) - '0';
+            return index >= 0 && index < MAX_SHADOW_CASCADES ? index : -1;
+        }
+
+        private int lightIndex(String name, String prefix, String suffix, int maxLights) {
+            if (name == null || suffix == null || !name.startsWith(prefix) || !name.endsWith(suffix)) {
+                return -1;
+            }
+            int digitOffset = prefix.length();
+            int digitEnd = name.length() - suffix.length();
+            if (digitEnd != digitOffset + 1) {
+                return -1;
+            }
+            int index = name.charAt(digitOffset) - '0';
+            return index >= 0 && index < maxLights ? index : -1;
         }
 
         private void markUniformDirty() {

@@ -166,6 +166,7 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
         applyGraphicsWindowHints(requirements);
         DesktopCGLFW.windowHint(DesktopCGLFW.VISIBLE, DesktopCGLFW.FALSE);
         DesktopCGLFW.windowHint(DesktopCGLFW.RESIZABLE, config.resizable() ? DesktopCGLFW.TRUE : DesktopCGLFW.FALSE);
+        DesktopCGLFW.windowHint(DesktopCGLFW.MAXIMIZED, config.maximized() ? DesktopCGLFW.TRUE : DesktopCGLFW.FALSE);
         long windowHandle = DesktopCGLFW.createWindow(config.width(), config.height(), config.title());
         if (windowHandle == 0L) {
             throw new FdxException("Could not create GLFW window");

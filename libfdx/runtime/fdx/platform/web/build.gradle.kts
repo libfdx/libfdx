@@ -29,22 +29,36 @@ val shaderCompilerDawnSourceDir =
 val runtimeFdxWebCmakeDir = layout.projectDirectory.dir("src/main/cpp")
 val runtimeFdxWebBuildDir = layout.buildDirectory.dir("emscripten/freetype")
 val runtimeFdxWebGeneratedResources = layout.buildDirectory.dir("generated/resources/runtimeFdxWeb")
+
 val runtimeFdxShaderCompilerEnabled = providers.gradleProperty("libfdx.runtimeFdx.shaderCompiler")
     .map(String::toBoolean)
-    .orElse(false)
+    .orElse(true)
+val nativeBuildParallelism = providers.gradleProperty("libfdx.nativeBuildParallelism")
+    .map(String::toInt)
+    .orElse(Runtime.getRuntime().availableProcessors().coerceAtMost(8).coerceAtLeast(1))
 
 fun executableCommand(name: String): List<String> {
     val windows = System.getProperty("os.name").lowercase().contains("win")
     if (!windows) {
         return listOf(name)
     }
-    val path = System.getenv("PATH") ?: return listOf(name)
-    val candidates = listOf("$name.exe", "$name.bat", "$name.cmd", "$name.ps1", name)
-    for (entry in path.split(File.pathSeparatorChar)) {
-        val directory = entry.trim().trim('"')
-        if (directory.isEmpty()) {
-            continue
+    val searchDirectories = buildList {
+        val path = System.getenv("PATH")
+        if (path != null) {
+            path.split(File.pathSeparatorChar).forEach { entry ->
+                val directory = entry.trim().trim('"')
+                if (directory.isNotEmpty()) {
+                    add(directory)
+                }
+            }
         }
+        val emsdk = System.getenv("EMSDK")?.trim()?.trim('"')
+        if (!emsdk.isNullOrEmpty()) {
+            add(File(emsdk, "upstream/emscripten").absolutePath)
+        }
+    }
+    val candidates = listOf("$name.exe", "$name.bat", "$name.cmd", "$name.ps1", name)
+    for (directory in searchDirectories) {
         for (candidate in candidates) {
             val file = File(directory, candidate)
             if (file.isFile) {
@@ -57,6 +71,26 @@ fun executableCommand(name: String): List<String> {
         }
     }
     return listOf(name)
+}
+
+fun emsdkBundledPython(): File? {
+    if (!System.getenv("EMSDK_PYTHON").isNullOrBlank()) {
+        return null
+    }
+    val emsdk = System.getenv("EMSDK")?.trim()?.trim('"')
+    if (emsdk.isNullOrEmpty()) {
+        return null
+    }
+    val pythonDir = File(emsdk, "python")
+    return pythonDir.listFiles()
+        ?.map { File(it, "python.exe") }
+        ?.firstOrNull(File::isFile)
+}
+
+fun Exec.useEmsdkBundledPython() {
+    emsdkBundledPython()?.let { python ->
+        environment("EMSDK_PYTHON", python.absolutePath)
+    }
 }
 
 fun deleteUnexpectedWebRuntimeArtifacts(directory: File) {
@@ -93,11 +127,15 @@ fun runtimeFdxShaderCompilerCmakeArgs(): List<String> {
     if (!runtimeFdxShaderCompilerEnabled.get()) {
         return listOf("-DLIBFDX_ENABLE_SHADER_COMPILER=OFF")
     }
-    return listOf(
+    val args = mutableListOf(
         "-DLIBFDX_ENABLE_SHADER_COMPILER=ON",
         "-DLIBFDX_SHADERC_SOURCE_DIR=${shaderCompilerSourceDir.asFile.absolutePath}",
         "-DFDX_DAWN_SOURCE_DIR=${shaderCompilerDawnSourceDir.get().asFile.absolutePath}"
     )
+    emsdkBundledPython()?.let { python ->
+        args += "-DPython3_EXECUTABLE=${python.absolutePath}"
+    }
+    return args
 }
 
 fun Task.runtimeFdxShaderCompilerDependency() {
@@ -135,6 +173,7 @@ val configureRuntimeFdxWebNative = tasks.register<Exec>("configure_runtime_fdx_w
         if (buildDir.exists() && !hasValidEmscriptenCmakeCache(buildDir)) {
             buildDir.deleteRecursively()
         }
+        useEmsdkBundledPython()
         buildDir.mkdirs()
         runtimeFdxWebGeneratedResources.get().asFile.mkdirs()
     }
@@ -159,11 +198,13 @@ val buildRuntimeFdxWebNative = tasks.register<Exec>("build_runtime_fdx_web_nativ
     outputs.file(runtimeFdxWebGeneratedResources.map { it.file("fdx.js") })
     outputs.file(runtimeFdxWebGeneratedResources.map { it.file("fdx.wasm") })
     doFirst {
+        useEmsdkBundledPython()
         deleteUnexpectedWebRuntimeArtifacts(runtimeFdxWebGeneratedResources.get().asFile)
     }
     commandLine(executableCommand("cmake") + listOf(
         "--build", runtimeFdxWebBuildDir.get().asFile.absolutePath,
-        "--config", "Release"
+        "--config", "Release",
+        "--parallel", nativeBuildParallelism.get().toString()
     ))
 }
 

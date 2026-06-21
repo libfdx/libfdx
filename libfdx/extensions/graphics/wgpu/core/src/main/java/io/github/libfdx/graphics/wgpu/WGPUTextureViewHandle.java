@@ -13,14 +13,30 @@ import io.github.libfdx.graphics.TextureView;
 final class WGPUTextureViewHandle implements TextureView {
     private final WGPUTextureView nativeView;
     private final TextureFormat format;
+    private final int width;
+    private final int height;
 
     WGPUTextureViewHandle(WGPUTextureView nativeView, TextureFormat format) {
+        this(nativeView, format, 0, 0);
+    }
+
+    WGPUTextureViewHandle(WGPUTextureView nativeView, TextureFormat format, int width, int height) {
         this.nativeView = nativeView;
         this.format = format;
+        this.width = width;
+        this.height = height;
     }
 
     WGPUTextureView nativeView() {
         return nativeView;
+    }
+
+    int width() {
+        return width;
+    }
+
+    int height() {
+        return height;
     }
 
     /**

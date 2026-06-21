@@ -11,6 +11,7 @@ import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.NativeWindow;
 import io.github.libfdx.graphics.TextureFormat;
+import org.teavm.jso.JSBody;
 
 /**
  * Represents a WGPU web graphics attachment.
@@ -18,9 +19,12 @@ import io.github.libfdx.graphics.TextureFormat;
  * @author xpenatan
  */
 final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAttachmentReadiness {
+    private static final long LOAD_TIMEOUT_MILLIS = 10_000L;
+
     private final NativeWindow nativeWindow;
     private final WGPUConfiguration configuration;
     private final LoadState loadState = new LoadState();
+    private final long loadStartMillis;
     private WGPUContext context;
     private int width;
     private int height;
@@ -34,9 +38,14 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
         this.configuration = configuration != null ? configuration : new WGPUConfiguration();
         this.width = width;
         this.height = height;
+        this.loadStartMillis = System.currentTimeMillis();
+        publishDebugStatus("loader-start", null);
         JWebGPULoader.init(this.configuration.loaderBackend().toNative(), (success, error) -> {
             if (!success) {
                 loadState.error = error != null ? error : new FdxException("jWebGPU web backend failed to load");
+                publishDebugStatus("loader-error", loadState.error.getMessage());
+            } else {
+                publishDebugStatus("loader-complete", null);
             }
             loadState.complete = true;
         });
@@ -78,13 +87,22 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
             throw new FdxException("Failed to load jWebGPU web backend", loadState.error);
         }
         if (!loadState.complete) {
+            if (System.currentTimeMillis() - loadStartMillis > LOAD_TIMEOUT_MILLIS) {
+                String error = "Timed out while loading jWebGPU web backend";
+                loadState.error = new FdxException(error);
+                publishDebugStatus("loader-timeout", error);
+                throw new FdxException("Failed to load jWebGPU web backend", loadState.error);
+            }
             return;
         }
+        publishDebugStatus("context-create", null);
         WGPUInstance instance = WGPU.setupInstance();
         if (instance == null || !instance.isValid()) {
+            publishDebugStatus("instance-error", "Could not create a valid WGPU web instance");
             throw new FdxException("Could not create a valid WGPU web instance");
         }
         WGPUNativeSurface.SurfaceHandle surface = WGPUNativeSurface.create(instance, nativeWindow);
+        publishDebugStatus("surface-created", null);
         context = new WGPUContext(configuration, instance, surface.surface(), surface.owner());
         context.initializeAsync();
         context.resize(width, height);
@@ -213,6 +231,21 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
         }
         return context;
     }
+
+    private static void publishDebugStatus(String status, String error) {
+        if (Boolean.getBoolean("libfdx.wgpu.debugInit")) {
+            setDebugStatus(status, error);
+            System.out.println("[libfdx-wgpu-web] " + status + (error != null ? ": " + error : ""));
+        }
+    }
+
+    @JSBody(params = { "status", "error" }, script =
+            "var doc = typeof document !== 'undefined' ? document : null;\n" +
+            "if (!doc || !doc.documentElement) return;\n" +
+            "doc.documentElement.setAttribute('data-libfdx-wgpu-init-status', status || '');\n" +
+            "if (error) doc.documentElement.setAttribute('data-libfdx-wgpu-init-error', error);\n" +
+            "else doc.documentElement.removeAttribute('data-libfdx-wgpu-init-error');")
+    private static native void setDebugStatus(String status, String error);
 
     /**
      * Represents a load state.

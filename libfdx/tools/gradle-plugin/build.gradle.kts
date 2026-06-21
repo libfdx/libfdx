@@ -41,10 +41,12 @@ if (!LibExt.usePublishedLibfdx) {
         main {
             java.srcDirs(
                 "../../../libfdx/foundation/math/src/main/java",
+                "../../../libfdx/foundation/json/src/main/java",
                 "../../../libfdx/runtime/fdx/core/src/main/java",
                 "../../../libfdx/runtime/display/src/main/java",
                 "../../../libfdx/runtime/files/src/main/java",
                 "../../../libfdx/runtime/input/src/main/java",
+                "../../../libfdx/runtime/storage/src/main/java",
                 "../../../libfdx/runtime/application/src/main/java",
                 "../../../libfdx/graphics/api/src/main/java",
                 "../../../libfdx/extensions/graphics/gl/core/src/main/java",

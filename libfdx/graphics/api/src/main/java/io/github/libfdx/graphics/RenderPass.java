@@ -66,6 +66,18 @@ public interface RenderPass extends ProviderHandle {
     }
 
     /**
+     * Sets the viewport.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
+    default void setViewport(int x, int y, int width, int height) {
+        throw new FdxException("Viewports are not supported by this render pass");
+    }
+
+    /**
      * Sets the uniform1i.
      *
      * @param name the name

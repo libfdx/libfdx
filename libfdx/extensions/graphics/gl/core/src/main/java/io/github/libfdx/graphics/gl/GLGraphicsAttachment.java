@@ -246,6 +246,15 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
             if (!frameStarted) {
                 throw new FdxException("Cannot begin render pass outside a frame");
             }
+            GLTextureViewHandle attachment = descriptor.colorAttachment().as();
+            boolean textureBacked = attachment.textureBacked();
+            if (textureBacked) {
+                gl.bindFramebuffer(attachment.framebuffer(gl));
+                gl.viewport(0, 0, attachment.width(), attachment.height());
+            } else {
+                gl.bindFramebuffer(0);
+                gl.viewport(0, 0, width, height);
+            }
             if (descriptor.colorLoadOp().isClear()) {
                 LoadOp clear = descriptor.colorLoadOp();
                 gl.clearColor(clear.red(), clear.green(), clear.blue(), clear.alpha());
@@ -260,7 +269,7 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
                     gl.clearDepthBuffer();
                 }
             }
-            return new GLRenderPass(providerId, gl);
+            return new GLRenderPass(providerId, gl, textureBacked, width, height);
         }
 
         /**

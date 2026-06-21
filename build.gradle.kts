@@ -34,17 +34,19 @@ fun runtimeFdxHostNativeTaskPath(): String {
     }
 }
 
-tasks.register("build_native_artifacts") {
+val nativeArtifactTaskPaths = listOf(
+    runtimeFdxHostNativeTaskPath(),
+    ":libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native",
+    ":libfdx:runtime:fdx:platform:android:assembleRelease",
+    ":libfdx:backends:android:assembleRelease",
+    ":libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease",
+    ":libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease"
+)
+
+tasks.register("libfdx_build_native_artifacts") {
     group = "libfdx native"
-    description = "Builds generated native artifacts for the current host, web, and Android release packaging."
-    dependsOn(
-        runtimeFdxHostNativeTaskPath(),
-        ":libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native",
-        ":libfdx:runtime:fdx:platform:android:assembleRelease",
-        ":libfdx:backends:android:assembleRelease",
-        ":libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease",
-        ":libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease"
-    )
+    description = "Builds native artifacts with runtime shader compiler support for local libFDX development."
+    dependsOn(nativeArtifactTaskPaths)
 }
 
 tasks.register("printFdxVersion") {
@@ -255,6 +257,7 @@ fun isMavenPublishingTaskRequested(): Boolean {
         "prepareSnapshotDeploy",
         "publishRelease",
         "publishSnapshot",
+        "uploadSnapshotDeploy",
         "uploadToMavenCentral",
         "validateRuntimeFdxNativeResources",
         "zipStagingDeploy"

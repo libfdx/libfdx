@@ -21,6 +21,7 @@ dependencies {
         api("${LibExt.fdxGroup}:application:${LibExt.publishedLibfdxVersion}")
         api("${LibExt.fdxGroup}:input:${LibExt.publishedLibfdxVersion}")
         api("${LibExt.fdxGroup}:graphics:${LibExt.publishedLibfdxVersion}")
+        api("${LibExt.fdxGroup}:camera:${LibExt.publishedLibfdxVersion}")
         api("${LibExt.fdxGroup}:g2d:${LibExt.publishedLibfdxVersion}")
         api("${LibExt.fdxGroup}:g3d:${LibExt.publishedLibfdxVersion}")
         api("${LibExt.fdxGroup}:ui_kit:${LibExt.publishedLibfdxVersion}")
@@ -30,10 +31,18 @@ dependencies {
         api(project(":libfdx:runtime:application"))
         api(project(":libfdx:runtime:input"))
         api(project(":libfdx:graphics:api"))
+        api(project(":libfdx:graphics:camera"))
         api(project(":libfdx:graphics:g2d"))
         api(project(":libfdx:graphics:g3d"))
         api(project(":libfdx:ui:ui-kit"))
         api(project(":libfdx:validation:scenario-validator"))
         api(project(":libfdx:validation:scenario-validator-ui-kit"))
     }
+
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+tasks.named<Test>("test") {
+    useJUnitPlatform()
 }

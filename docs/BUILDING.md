@@ -27,6 +27,8 @@ start a sample.
 - Desktop runtime support for desktop launchers
 - Android SDK plus a connected device or emulator for Android launchers
 - Native platform toolchains only for platform-native artifact builds
+- Emscripten SDK for web native artifacts; activate it with `emsdk_env` or set
+  `EMSDK` so repository tasks can find the SDK checkout
 
 Modules target Java 25 source and bytecode compatibility.
 
@@ -37,8 +39,8 @@ proves the change:
 
 1. Use a desktop sample when checking application startup or a provider-neutral
    rendering path.
-2. Use `build_native_artifacts` only when the changed target consumes generated
-   native resources.
+2. Use `libfdx_build_native_artifacts` only when the changed target consumes
+   generated native resources.
 3. Use the commands in [Testing](TESTING.md) when checking a specific provider,
    widget, visual path, input path, or PSP capture.
 
@@ -97,22 +99,40 @@ The aggregate task is a convenience entry point for generating the native files
 that the current machine can build.
 
 Use the aggregate task when you want to build the native artifacts supported by
-the current machine:
+the current machine, including built-in WGSL shader support for GL, Vulkan,
+WebGL/GLES, or other providers that require runtime shader translation:
 
 ```powershell
-.\gradlew.bat build_native_artifacts
+.\gradlew.bat libfdx_build_native_artifacts
 ```
+
+Runtime fdx desktop, Android, and web native builds enable the Tint-backed
+runtime shader compiler by default. Web and Android runtime fdx native builds
+also compile FreeType. The aggregate task is the clean-safe setup command to run
+before desktop GL/UI samples or tests that use WGSL-only built-in renderers
+such as `SpriteBatch`. It can be run after the normal Gradle `clean` task when
+you want a fresh native rebuild.
 
 On Windows, this builds the current host runtime fdx desktop C file, the
 runtime fdx web JS/WASM files, and Android AAR outputs when the Android SDK is
 available. It does not prove that Linux or macOS native files were built; those
 must be built on their matching platform jobs or machines.
 
+If the web native configure step cannot start `emcmake` after a reinstall,
+confirm the Emscripten SDK is installed and either run `emsdk_env.bat`/
+`emsdk_env.ps1` in the shell before Gradle or set `EMSDK` to the SDK root.
+The repository task also uses the SDK-bundled Python when `EMSDK_PYTHON` is
+not already set, which avoids depending on a global Python installation.
+Do not disable the web shader compiler for WebGL renderer validation: WebGL
+executes generated GLSL ES, but built-in renderer shader source is WGSL-only.
+
 ## 5. Basic Desktop Sample
 
 The basic desktop sample is the fastest way to confirm that a desktop launcher
 starts and that a selected graphics provider can present a frame. Use the
 provider-specific task that matches the backend path you are checking.
+Desktop sample windows start maximized by default. Pass
+`-Dlibfdx.sample.maximized=false` to use the sample's configured startup size.
 
 From the repository root on Windows, use the task for the graphics stack you
 want:

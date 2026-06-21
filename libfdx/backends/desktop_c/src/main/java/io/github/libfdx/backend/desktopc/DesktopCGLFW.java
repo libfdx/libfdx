@@ -15,6 +15,7 @@ final class DesktopCGLFW {
     static final int FALSE = 0;
     static final int VISIBLE = 0x00020004;
     static final int RESIZABLE = 0x00020003;
+    static final int MAXIMIZED = 0x00020008;
     static final int CLIENT_API = 0x00022001;
     static final int CONTEXT_VERSION_MAJOR = 0x00022002;
     static final int CONTEXT_VERSION_MINOR = 0x00022003;

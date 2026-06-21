@@ -18,6 +18,7 @@ public final class DefaultModel implements Model {
     private final ArrayList<ModelNode> nodes;
     private final ArrayList<Material> materials;
     private final ArrayList<AnimationClip> animations;
+    private final ArrayList<Skin> skins;
     private final ArrayList<Mesh> meshes;
     private boolean disposed;
 
@@ -31,9 +32,24 @@ public final class DefaultModel implements Model {
      */
     public DefaultModel(List<ModelNode> nodes, List<Material> materials, List<AnimationClip> animations,
             List<Mesh> meshes) {
+        this(nodes, materials, animations, Collections.<Skin>emptyList(), meshes);
+    }
+
+    /**
+     * Creates a default model.
+     *
+     * @param nodes the nodes
+     * @param materials the materials
+     * @param animations the animations
+     * @param skins the skins
+     * @param meshes the meshes
+     */
+    public DefaultModel(List<ModelNode> nodes, List<Material> materials, List<AnimationClip> animations,
+            List<Skin> skins, List<Mesh> meshes) {
         this.nodes = copy(nodes);
         this.materials = copy(materials);
         this.animations = copy(animations);
+        this.skins = copy(skins);
         this.meshes = copy(meshes);
     }
 
@@ -89,6 +105,16 @@ public final class DefaultModel implements Model {
     @Override
     public List<AnimationClip> animations() {
         return Collections.unmodifiableList(animations);
+    }
+
+    /**
+     * Returns the skins.
+     *
+     * @return the skins
+     */
+    @Override
+    public List<Skin> skins() {
+        return Collections.unmodifiableList(skins);
     }
 
     /**

@@ -11,7 +11,7 @@ import io.github.libfdx.graphics.VertexLayout;
  * @author xpenatan
  */
 final class GLRenderPipelineHandle implements RenderPipeline {
-    static final int PBR_UNIFORM_BYTE_COUNT = 224;
+    static final int PBR_UNIFORM_BYTE_COUNT = 5232;
 
     private final ProviderId providerId;
     private final GLApi gl;

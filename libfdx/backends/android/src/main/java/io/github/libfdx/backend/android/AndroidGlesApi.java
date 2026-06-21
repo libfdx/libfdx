@@ -405,6 +405,115 @@ final class AndroidGlesApi implements GLApi {
     }
 
     /**
+     * Returns the gen framebuffer.
+     *
+     * @return the gen framebuffer
+     */
+    @Override
+    public int genFramebuffer() {
+        int[] framebuffers = new int[1];
+        GLES30.glGenFramebuffers(1, framebuffers, 0);
+        return framebuffers[0];
+    }
+
+    /**
+     * Runs the bind framebuffer step.
+     *
+     * @param framebuffer the framebuffer
+     */
+    @Override
+    public void bindFramebuffer(int framebuffer) {
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, framebuffer);
+    }
+
+    /**
+     * Runs the framebuffer texture2 d step.
+     *
+     * @param texture the texture
+     */
+    @Override
+    public void framebufferTexture2D(int texture) {
+        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0,
+                GLES30.GL_TEXTURE_2D, texture, 0);
+    }
+
+    /**
+     * Returns whether the currently bound framebuffer is complete.
+     *
+     * @return true if complete
+     */
+    @Override
+    public boolean framebufferComplete() {
+        return GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE;
+    }
+
+    /**
+     * Runs the delete framebuffer step.
+     *
+     * @param framebuffer the framebuffer
+     */
+    @Override
+    public void deleteFramebuffer(int framebuffer) {
+        int[] framebuffers = {framebuffer};
+        GLES30.glDeleteFramebuffers(1, framebuffers, 0);
+    }
+
+    /**
+     * Returns the gen renderbuffer.
+     *
+     * @return the gen renderbuffer
+     */
+    @Override
+    public int genRenderbuffer() {
+        int[] renderbuffers = new int[1];
+        GLES30.glGenRenderbuffers(1, renderbuffers, 0);
+        return renderbuffers[0];
+    }
+
+    /**
+     * Runs the bind renderbuffer step.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    @Override
+    public void bindRenderbuffer(int renderbuffer) {
+        GLES30.glBindRenderbuffer(GLES30.GL_RENDERBUFFER, renderbuffer);
+    }
+
+    /**
+     * Runs the renderbuffer depth storage step.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
+    @Override
+    public void renderbufferStorageDepth(int width, int height) {
+        GLES30.glRenderbufferStorage(GLES30.GL_RENDERBUFFER, GLES30.GL_DEPTH_COMPONENT16, width, height);
+    }
+
+    /**
+     * Runs the framebuffer depth renderbuffer attachment step.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    @Override
+    public void framebufferRenderbufferDepth(int renderbuffer) {
+        GLES30.glFramebufferRenderbuffer(GLES30.GL_FRAMEBUFFER, GLES30.GL_DEPTH_ATTACHMENT,
+                GLES30.GL_RENDERBUFFER, renderbuffer);
+    }
+
+    /**
+     * Runs the delete renderbuffer step.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    @Override
+    public void deleteRenderbuffer(int renderbuffer) {
+        int[] renderbuffers = {renderbuffer};
+        GLES30.glDeleteRenderbuffers(1, renderbuffers, 0);
+    }
+
+    /**
      * Runs the active texture step.
      *
      * @param slot the slot

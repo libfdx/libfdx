@@ -100,6 +100,17 @@ public final class DesktopApplicationConfig extends ApplicationConfig {
     }
 
     /**
+     * Sets the maximized startup state and returns this desktop application config.
+     *
+     * @param maximized the maximized startup state
+     * @return this desktop application config for chaining
+     */
+    public DesktopApplicationConfig maximized(boolean maximized) {
+        displayConfig.maximized(maximized);
+        return this;
+    }
+
+    /**
      * Sets the v sync and returns this desktop application config.
      *
      * @param vSync the v sync

@@ -44,20 +44,25 @@ public final class DesktopTestLauncher {
         int foregroundFps = Integer.parseInt(System.getProperty("libfdx.test.foregroundFps", "0"));
         long frames = exitAfterFrames();
         String testName = selectedTestName(frames);
-        int width = Integer.parseInt(System.getProperty("libfdx.test.width", defaultWidth(testName)));
-        int height = Integer.parseInt(System.getProperty("libfdx.test.height", defaultHeight(testName)));
+        boolean explicitSize = hasProperty("libfdx.test.width") || hasProperty("libfdx.test.height");
+        boolean maximized = Boolean.parseBoolean(System.getProperty("libfdx.test.maximized",
+                explicitSize ? "false" : "false"));
+        int width = intProperty("libfdx.test.width", defaultWidth(testName));
+        int height = intProperty("libfdx.test.height", defaultHeight(testName));
         System.out.println("[info] DesktopTestLauncher starting " + launchDisplayName(testName)
                 + " with " + graphicsDisplayName
                 + ", provider=" + graphics
                 + ", java=" + System.getProperty("java.version", "")
                 + ", multiRelease=" + System.getProperty("jdk.util.jar.enableMultiRelease", "true")
                 + ", size=" + width + "x" + height
+                + ", maximized=" + maximized
                 + ", vSync=" + vSync
                 + ", visible=" + visible
                 + ", foregroundFps=" + foregroundFps);
         DesktopApplicationConfig config = new DesktopApplicationConfig()
                 .title("libfdx Test: " + testName + " - " + graphicsDisplayName)
                 .size(width, height)
+                .maximized(maximized)
                 .visible(visible)
                 .vSync(vSync)
                 .foregroundFps(foregroundFps)
@@ -181,6 +186,15 @@ public final class DesktopTestLauncher {
         return Long.parseLong(value);
     }
 
+    private static int intProperty(String name, String fallback) {
+        return Integer.parseInt(System.getProperty(name, fallback));
+    }
+
+    private static boolean hasProperty(String name) {
+        String value = System.getProperty(name);
+        return value != null && value.trim().length() > 0;
+    }
+
     private static String defaultWidth(String testName) {
         if (isSelector(testName)) {
             return "900";
@@ -237,6 +251,9 @@ public final class DesktopTestLauncher {
             addSystemProperty(command, "libfdx.test.graphicsLabel", selectedGraphicsDisplayName(graphicsName));
             addSystemProperty(command, "libfdx.test.frames", "0");
             addCopiedProperty(command, "libfdx.test.vsync");
+            addCopiedProperty(command, "libfdx.test.width");
+            addCopiedProperty(command, "libfdx.test.height");
+            addCopiedProperty(command, "libfdx.test.maximized");
             addCopiedProperty(command, "libfdx.test.foregroundFps");
             addCopiedProperty(command, "libfdx.test.fpsLogSeconds");
             addCopiedProperty(command, "libfdx.test.modelAsset");

@@ -32,6 +32,7 @@ struct IosMetalShaderModule {
 
 struct IosMetalPipeline {
     __strong id<MTLRenderPipelineState> pipeline;
+    __strong id<MTLDepthStencilState> depthState;
     MTLPrimitiveType primitive = MTLPrimitiveTypeTriangle;
     int32_t sampledTextureCount = 0;
 };
@@ -43,6 +44,8 @@ struct IosMetalContext {
     __strong id<CAMetalDrawable> drawable;
     __strong id<MTLCommandBuffer> commandBuffer;
     __strong id<MTLRenderCommandEncoder> encoder;
+    __strong id<MTLTexture> depthTexture;
+    __strong NSMutableArray* transientUniformBuffers;
     IosMetalPipeline* currentPipeline = nullptr;
     IosMetalBuffer* indexBuffer = nullptr;
     int32_t width = 1;
@@ -106,8 +109,41 @@ MTLSamplerAddressMode address_mode(int32_t wrap) {
     return MTLSamplerAddressModeClampToEdge;
 }
 
+bool ensure_depth_texture(IosMetalContext* context) {
+    if (context == nullptr) {
+        return false;
+    }
+    if (context->depthTexture != nil
+            && static_cast<int32_t>(context->depthTexture.width) == context->width
+            && static_cast<int32_t>(context->depthTexture.height) == context->height) {
+        return true;
+    }
+    MTLTextureDescriptor* descriptor = [MTLTextureDescriptor
+            texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float
+                                         width:static_cast<NSUInteger>(context->width)
+                                        height:static_cast<NSUInteger>(context->height)
+                                     mipmapped:NO];
+    descriptor.usage = MTLTextureUsageRenderTarget;
+    descriptor.storageMode = MTLStorageModePrivate;
+    context->depthTexture = [context->device newTextureWithDescriptor:descriptor];
+    if (context->depthTexture == nil) {
+        log_error(@"Could not create Metal depth texture");
+        return false;
+    }
+    return true;
+}
+
 MTLRenderPassDescriptor* render_pass_descriptor(
-        IosMetalContext* context, bool clear, float red, float green, float blue, float alpha, bool store) {
+        IosMetalContext* context,
+        bool clear,
+        float red,
+        float green,
+        float blue,
+        float alpha,
+        bool store,
+        bool depth_enabled,
+        bool depth_clear,
+        float depth_clear_value) {
     if (context == nullptr || context->drawable == nil) {
         return nil;
     }
@@ -117,6 +153,16 @@ MTLRenderPassDescriptor* render_pass_descriptor(
     color.loadAction = clear ? MTLLoadActionClear : MTLLoadActionLoad;
     color.storeAction = store ? MTLStoreActionStore : MTLStoreActionDontCare;
     color.clearColor = MTLClearColorMake(red, green, blue, alpha);
+    if (depth_enabled) {
+        if (!ensure_depth_texture(context)) {
+            return nil;
+        }
+        MTLRenderPassDepthAttachmentDescriptor* depth = descriptor.depthAttachment;
+        depth.texture = context->depthTexture;
+        depth.loadAction = depth_clear ? MTLLoadActionClear : MTLLoadActionLoad;
+        depth.storeAction = MTLStoreActionDontCare;
+        depth.clearDepth = depth_clear_value;
+    }
     return descriptor;
 }
 
@@ -183,6 +229,7 @@ int64_t libfdx_ios_metal_create(int32_t width, int32_t height) {
     context->view = g_view;
     context->device = device;
     context->commandQueue = commandQueue;
+    context->transientUniformBuffers = [[NSMutableArray alloc] init];
     context->width = std::max(1, width);
     context->height = std::max(1, height);
     return to_handle(context);
@@ -196,6 +243,7 @@ void libfdx_ios_metal_resize(int64_t context_handle, int32_t width, int32_t heig
     context->width = std::max(1, width);
     context->height = std::max(1, height);
     context->view.drawableSize = CGSizeMake(context->width, context->height);
+    context->depthTexture = nil;
 }
 
 int32_t libfdx_ios_metal_begin_frame(int64_t context_handle) {
@@ -209,8 +257,16 @@ void libfdx_ios_metal_end_frame(int64_t context_handle) {
     }
     end_encoder(context);
     if (context->commandBuffer != nil && context->drawable != nil) {
+        NSMutableArray* frameUniformBuffers = context->transientUniformBuffers;
+        context->transientUniformBuffers = [[NSMutableArray alloc] init];
+        [context->commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> completedBuffer) {
+            (void)completedBuffer;
+            [frameUniformBuffers removeAllObjects];
+        }];
         [context->commandBuffer presentDrawable:context->drawable];
         [context->commandBuffer commit];
+    } else {
+        [context->transientUniformBuffers removeAllObjects];
     }
     context->commandBuffer = nil;
     context->drawable = nil;
@@ -252,7 +308,8 @@ void libfdx_ios_metal_clear(int64_t context_handle, float red, float green, floa
         return;
     }
     end_encoder(context);
-    MTLRenderPassDescriptor* descriptor = render_pass_descriptor(context, true, red, green, blue, alpha, true);
+    MTLRenderPassDescriptor* descriptor = render_pass_descriptor(
+            context, true, red, green, blue, alpha, true, false, false, 1.0f);
     if (descriptor == nil) {
         return;
     }
@@ -379,12 +436,16 @@ int64_t libfdx_ios_metal_create_render_pipeline(
         const int32_t* attribute_formats,
         const int32_t* attribute_offsets,
         int32_t attribute_count,
-        int32_t sampled_texture_count) {
+        int32_t sampled_texture_count,
+        int32_t pbr_uniforms_enabled,
+        int32_t depth_test_enabled,
+        int32_t depth_write_enabled) {
     IosMetalContext* context = from_handle<IosMetalContext>(context_handle);
     IosMetalShaderModule* shaderModule = from_handle<IosMetalShaderModule>(shader_module_handle);
     if (context == nullptr || shaderModule == nullptr || shaderModule->library == nil) {
         return 0;
     }
+    (void)pbr_uniforms_enabled;
     id<MTLFunction> vertexFunction = [shaderModule->library newFunctionWithName:@"vertexMain"];
     id<MTLFunction> fragmentFunction = [shaderModule->library newFunctionWithName:@"fragmentMain"];
     if (vertexFunction == nil || fragmentFunction == nil) {
@@ -396,6 +457,9 @@ int64_t libfdx_ios_metal_create_render_pipeline(
     descriptor.vertexFunction = vertexFunction;
     descriptor.fragmentFunction = fragmentFunction;
     descriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    if (depth_test_enabled != 0 || depth_write_enabled != 0) {
+        descriptor.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
+    }
     descriptor.colorAttachments[0].blendingEnabled = YES;
     descriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
     descriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
@@ -431,20 +495,42 @@ int64_t libfdx_ios_metal_create_render_pipeline(
     }
     IosMetalPipeline* handle = new IosMetalPipeline();
     handle->pipeline = pipeline;
+    if (depth_test_enabled != 0 || depth_write_enabled != 0) {
+        MTLDepthStencilDescriptor* depthDescriptor = [[MTLDepthStencilDescriptor alloc] init];
+        depthDescriptor.depthCompareFunction = depth_test_enabled != 0
+                ? MTLCompareFunctionLessEqual
+                : MTLCompareFunctionAlways;
+        depthDescriptor.depthWriteEnabled = depth_write_enabled != 0;
+        handle->depthState = [context->device newDepthStencilStateWithDescriptor:depthDescriptor];
+        if (handle->depthState == nil) {
+            log_error(@"Could not create Metal depth stencil state");
+            delete handle;
+            return 0;
+        }
+    }
     handle->primitive = primitive_type(primitive_topology);
     handle->sampledTextureCount = sampled_texture_count;
     return to_handle(handle);
 }
 
 void libfdx_ios_metal_begin_render_pass(
-        int64_t context_handle, int32_t clear, float red, float green, float blue, float alpha, int32_t store) {
+        int64_t context_handle,
+        int32_t clear,
+        float red,
+        float green,
+        float blue,
+        float alpha,
+        int32_t store,
+        int32_t depth_enabled,
+        int32_t depth_clear,
+        float depth_clear_value) {
     IosMetalContext* context = from_handle<IosMetalContext>(context_handle);
     if (!ensure_frame(context)) {
         return;
     }
     end_encoder(context);
-    MTLRenderPassDescriptor* descriptor = render_pass_descriptor(
-            context, clear != 0, red, green, blue, alpha, store != 0);
+    MTLRenderPassDescriptor* descriptor = render_pass_descriptor(context, clear != 0, red, green, blue, alpha,
+            store != 0, depth_enabled != 0, depth_clear != 0, depth_clear_value);
     if (descriptor == nil) {
         return;
     }
@@ -459,6 +545,7 @@ void libfdx_ios_metal_set_pipeline(int64_t context_handle, int64_t pipeline_hand
     }
     context->currentPipeline = pipeline;
     [context->encoder setRenderPipelineState:pipeline->pipeline];
+    [context->encoder setDepthStencilState:pipeline->depthState];
 }
 
 void libfdx_ios_metal_set_vertex_buffer(int64_t context_handle, int32_t slot, int64_t buffer_handle) {
@@ -479,15 +566,33 @@ void libfdx_ios_metal_set_index_buffer(int64_t context_handle, int64_t buffer_ha
     context->indexBuffer = buffer;
 }
 
-void libfdx_ios_metal_set_texture(int64_t context_handle, int32_t slot, int64_t texture_handle) {
+void libfdx_ios_metal_set_texture(
+        int64_t context_handle, int32_t texture_slot, int32_t sampler_slot, int64_t texture_handle) {
     IosMetalContext* context = from_handle<IosMetalContext>(context_handle);
     IosMetalTexture* texture = from_handle<IosMetalTexture>(texture_handle);
-    if (context == nullptr || context->encoder == nil || texture == nullptr || texture->texture == nil || slot < 0) {
+    if (context == nullptr || context->encoder == nil || texture == nullptr || texture->texture == nil
+            || texture_slot < 0 || sampler_slot < 0) {
         return;
     }
-    NSUInteger index = static_cast<NSUInteger>(slot);
-    [context->encoder setFragmentTexture:texture->texture atIndex:index];
-    [context->encoder setFragmentSamplerState:texture->sampler atIndex:index];
+    [context->encoder setFragmentTexture:texture->texture atIndex:static_cast<NSUInteger>(texture_slot)];
+    [context->encoder setFragmentSamplerState:texture->sampler atIndex:static_cast<NSUInteger>(sampler_slot)];
+}
+
+void libfdx_ios_metal_set_uniform_buffer(int64_t context_handle, const void* data, int32_t byte_count) {
+    IosMetalContext* context = from_handle<IosMetalContext>(context_handle);
+    if (context == nullptr || context->encoder == nil || data == nullptr || byte_count <= 0) {
+        return;
+    }
+    id<MTLBuffer> buffer = [context->device newBufferWithLength:static_cast<NSUInteger>(byte_count)
+                                                        options:MTLResourceStorageModeShared];
+    if (buffer == nil) {
+        log_error(@"Could not create Metal uniform buffer");
+        return;
+    }
+    std::memcpy([buffer contents], data, static_cast<size_t>(byte_count));
+    [context->transientUniformBuffers addObject:buffer];
+    [context->encoder setVertexBuffer:buffer offset:0 atIndex:0];
+    [context->encoder setFragmentBuffer:buffer offset:0 atIndex:0];
 }
 
 void libfdx_ios_metal_draw(
@@ -553,6 +658,9 @@ void libfdx_ios_metal_destroy(int64_t context_handle) {
     end_encoder(context);
     context->commandBuffer = nil;
     context->drawable = nil;
+    [context->transientUniformBuffers removeAllObjects];
+    context->transientUniformBuffers = nil;
+    context->depthTexture = nil;
     delete context;
 }
 

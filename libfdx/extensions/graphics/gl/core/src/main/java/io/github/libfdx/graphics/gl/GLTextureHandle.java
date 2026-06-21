@@ -4,6 +4,7 @@ import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.TextureUsage;
+import io.github.libfdx.graphics.TextureView;
 
 /**
  * Represents a GL texture handle.
@@ -18,6 +19,7 @@ final class GLTextureHandle implements Texture {
     private final int height;
     private final TextureFormat format;
     private final TextureUsage usage;
+    private final GLTextureViewHandle view;
     private boolean disposed;
 
     GLTextureHandle(ProviderId providerId, GLApi gl, int texture, int width, int height,
@@ -29,6 +31,7 @@ final class GLTextureHandle implements Texture {
         this.height = height;
         this.format = format != null ? format : TextureFormat.RGBA8_UNORM;
         this.usage = usage != null ? usage : TextureUsage.SAMPLED;
+        view = new GLTextureViewHandle(providerId, this.format, texture, width, height, this.usage);
     }
 
     int texture() {
@@ -76,6 +79,16 @@ final class GLTextureHandle implements Texture {
     }
 
     /**
+     * Returns the default texture view.
+     *
+     * @return the default texture view
+     */
+    @Override
+    public TextureView view() {
+        return view;
+    }
+
+    /**
      * Returns the identifier of the provider backing this object.
      *
      * @return the provider ID
@@ -106,6 +119,7 @@ final class GLTextureHandle implements Texture {
             return;
         }
         disposed = true;
+        view.dispose(gl);
         gl.deleteTexture(texture);
     }
 

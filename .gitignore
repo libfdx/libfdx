@@ -65,3 +65,4 @@ CURRENT_CHAT_CONTEXT
 
 # Local agent recovery state
 .agents/*
+.codex/*

@@ -13,6 +13,7 @@ import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.TextureUsage;
+import io.github.libfdx.graphics.TextureView;
 
 /**
  * Represents a WGPU texture handle.
@@ -23,6 +24,7 @@ final class WGPUTextureHandle implements Texture {
     private final WGPUTexture nativeTexture;
     private final WGPUTextureView nativeView;
     private final WGPUSampler nativeSampler;
+    private final WGPUTextureViewHandle view;
     private final int width;
     private final int height;
     private final int mipLevelCount;
@@ -42,6 +44,7 @@ final class WGPUTextureHandle implements Texture {
         this.mipLevelCount = Math.max(1, mipLevelCount);
         this.format = format != null ? format : TextureFormat.RGBA8_UNORM;
         this.usage = usage != null ? usage : TextureUsage.SAMPLED;
+        view = new WGPUTextureViewHandle(nativeView, this.format, width, height);
     }
 
     WGPUTexture nativeTexture() {
@@ -129,6 +132,16 @@ final class WGPUTextureHandle implements Texture {
     @Override
     public TextureUsage usage() {
         return usage;
+    }
+
+    /**
+     * Returns the default texture view.
+     *
+     * @return the default texture view
+     */
+    @Override
+    public TextureView view() {
+        return view;
     }
 
     /**

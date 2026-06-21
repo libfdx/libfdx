@@ -46,6 +46,10 @@ base {
     archivesName.set("vulkan_android_jni")
 }
 
+tasks.named<Delete>("clean") {
+    delete(layout.projectDirectory.dir(".cxx"))
+}
+
 dependencies {
     api(project(":libfdx:extensions:graphics:vulkan:core"))
 }

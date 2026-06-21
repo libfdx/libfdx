@@ -2,7 +2,7 @@
 
 This document defines the provider-neutral public API contracts for libfdx-owned modules.
 
-Use this document to decide what a common API type means, what module owns it, and what behavior provider implementations must support. Use [ARCHITECTURE.md](ARCHITECTURE.md) to decide folder layout, Gradle module names, Maven artifact names, dependency direction, and package roots. Use [SHADERS.md](SHADERS.md) for the WGSL-first shader architecture, runtime compilation flow, and optional editor/runtime compiler model.
+Use this document to decide what a common API type means, what module owns it, and what behavior provider implementations must support. Use [ARCHITECTURE.md](ARCHITECTURE.md) to decide folder layout, Gradle module names, Maven artifact names, dependency direction, and package roots. Use [SHADERS.md](SHADERS.md) for the WGSL-only shader architecture, runtime compilation flow, and optional editor/runtime compiler model.
 
 ## Index
 
@@ -14,6 +14,7 @@ Use this document to decide what a common API type means, what module owns it, a
     1. [Core Base Contracts](#51-core-base-contracts)
     2. [Foundation Math Types](#52-foundation-math-types)
     3. [Foundation JSON Types](#53-foundation-json-types)
+    4. [Foundation Collections Types](#54-foundation-collections-types)
 6. [Application](#6-application)
     1. [ApplicationListener Contract](#61-applicationlistener-contract)
     2. [Fdx Runtime Root Contract](#62-fdx-runtime-root-contract)
@@ -22,6 +23,7 @@ Use this document to decide what a common API type means, what module owns it, a
     5. [ApplicationConfig Contract](#65-applicationconfig-contract)
 7. [Files](#7-files)
     1. [FileSystem And FileHandle Contracts](#71-filesystem-and-filehandle-contracts)
+    2. [Persistent Storage](#72-persistent-storage)
 8. [Input](#8-input)
     1. [Input And Gamepad Contracts](#81-input-and-gamepad-contracts)
 9. [Display](#9-display)
@@ -447,6 +449,53 @@ Rules:
 - `foundation/json` must not depend on files, assets, graphics, UI, extensions, backends, or platform APIs.
 - Asset workflows may use `JsonAssetLoader` from `assets/loaders` to load a `JsonValue`, but parsing and writing remain usable directly from `foundation/json`.
 
+### 5.4. Foundation Collections Types
+
+Module:
+
+```text
+:libfdx:foundation:collections
+```
+
+Package:
+
+```text
+io.github.libfdx.collections
+```
+
+Collections owns backend-neutral, allocation-conscious data structures for engine hot paths and user game code that needs tighter control than standard Java collections.
+
+Defined types:
+
+| Type | Role |
+| --- | --- |
+| `FdxArray<T>` | Growable array with ordered or unordered removal, positional helpers, and stack helpers. |
+| `IntArray` | Growable primitive `int` array with ordered or unordered removal, positional helpers, and stack helpers. |
+| `FloatArray` | Growable primitive `float` array with ordered or unordered removal, positional helpers, stack helpers, and `Float.floatToIntBits` value identity for searches. |
+| `LongArray` | Growable primitive `long` array with ordered or unordered removal, positional helpers, and stack helpers. |
+| `ObjectMap<K, V>` | Open-addressed object-key map with reusable entry iteration, key/value views, value lookup helpers, and explicit capacity controls. |
+| `IntMap<V>` | Open-addressed primitive `int` key map with reusable entry iteration, key/value views, value lookup helpers, and explicit capacity controls. |
+| `LongMap<V>` | Open-addressed primitive `long` key map with reusable entry iteration, key/value views, value lookup helpers, and explicit capacity controls. |
+| `FloatMap<V>` | Open-addressed primitive `float` key map using `Float.floatToIntBits` key identity, reusable entry iteration, key/value views, value lookup helpers, and explicit capacity controls. |
+| `FdxLinkedList<T>` | Doubly linked list that returns removable node handles and exposes empty-state helpers. |
+
+Rules:
+
+- Collections must remain pure Java and provider-neutral. They must not depend on files, assets, graphics, UI, extensions, backends, or platform APIs.
+- Collection APIs must not depend on `runtime/fdx/core` unless they use a shared base contract. The initial collection types have no runtime behavior and no runtime module dependency.
+- Primitive arrays must avoid boxing values in their storage, lookup, and removal paths.
+- Primitive-key maps must avoid boxing keys in their storage and lookup paths.
+- Maps must distinguish a missing key from a present key whose value is `null`; callers use `containsKey(...)` when that distinction matters.
+- Maps expose `containsValue(...)`, identity-aware `containsValue(..., true)`, and `findKey(...)` helpers. Primitive-key maps return a caller-provided default key when no value matches.
+- Maps expose `ensureCapacity(...)` for expected additional entries and `shrink()` to reduce table storage and compact removed-slot tombstones after heavy churn.
+- `ObjectMap.entries()`, `IntMap.entries()`, `LongMap.entries()`, and `FloatMap.entries()` return iterable views over occupied slots. Their iterators may reuse one entry object per iterator to avoid per-entry allocation, so callers that need to retain entries should copy the key and value. `keys()` and `values()` expose direct views over occupied slots. Primitive-key map key iterators expose `nextInt()`, `nextLong()`, and `nextFloat()` to avoid boxing in the common path.
+- `ObjectMap` does not accept `null` keys.
+- `FdxArray` ordered removal preserves item order. Unordered removal may replace the removed index or inclusive removed range with tail values.
+- `FdxArray` exposes equality and identity variants for `contains(...)`, `indexOf(...)`, `lastIndexOf(...)`, `removeValue(...)`, and `removeAll(...)`.
+- Collection containers expose `notEmpty()` as the direct inverse of `isEmpty()`.
+- Arrays expose `insert(...)`, `lastIndexOf(...)`, `removeAll(...)`, `removeRange(start, end)`, `swap(...)`, `reverse()`, `truncate(...)`, `first()`, `peek()`, `pop()`, and `notEmpty()` helpers. `removeAll(...)` removes the first matching occurrence for each supplied value. `removeRange(...)` uses inclusive indexes. `first()`, `peek()`, and `pop()` throw `NoSuchElementException` when the array is empty.
+- These types are correctness-tested in this repository. Performance benchmarks belong in the external benchmark repository.
+
 ## 6. Application
 
 Module:
@@ -474,7 +523,7 @@ Defined types:
 
 ### 6.1. ApplicationListener Contract
 
-`ApplicationListener` is implemented by the user's game/application class. The backend creates a typed `Fdx` root, attaches the selected backend-owned runtime systems, and passes it to `create()`. `render()` is the only per-frame callback; frame timing is read from the `Application` interface returned by `fdx.app()`.
+`ApplicationListener` is implemented by the user's game/application class. The backend creates a typed `Fdx` root, attaches the selected backend-owned runtime systems, and passes it to `create()`. `render()` is the primary per-frame callback; frame timing is read from the `Application` interface returned by `fdx.app()`. Backends call `onFrameEnd()` after `render()` while the current frame is still active, so validation and readback code can capture the just-rendered frame before presentation cleanup.
 
 Defined shape:
 
@@ -483,6 +532,8 @@ public interface ApplicationListener {
     void create(Fdx fdx);
     void resize(int width, int height);
     void render();
+    default void onFrameEnd() {
+    }
     void pause();
     void resume();
     void dispose();
@@ -517,6 +568,7 @@ Rules:
 - Common application code should not depend on backend packages.
 - Backend code wires platform lifecycle into the common `ApplicationListener`.
 - `ApplicationListener` does not have `update(float deltaTime)`. Game code updates simulation from `render()` or from user-owned systems called by `render()`.
+- `onFrameEnd()` is for backend-owned frame-end hooks such as screenshot capture and validation readback. Normal game simulation and rendering should stay in `render()`.
 - Application code receives the typed `Fdx` root during `create(Fdx fdx)`. It should not resolve arbitrary classes from a generic service locator.
 
 ### 6.2. Fdx Runtime Root Contract
@@ -531,6 +583,7 @@ public interface Fdx {
     Displays displays();
     Graphics graphics();
     FileSystem files();
+    Storage storage();
     Input input();
     AudioDevice audio();
     Network network();
@@ -556,6 +609,7 @@ Rules:
 - `Fdx` must not expose a generic class-based lookup API.
 - `Fdx` must not expose normal user-created feature objects such as `AssetManager`, `Batch2D`/`SpriteBatch`, UI roots, physics worlds, or scene objects.
 - `Fdx.files()` returns the backend-owned file system when one exists, or `null` on a backend that does not expose files.
+- `Fdx.storage()` returns the backend-owned persistent storage service when one exists, or `null` on a backend that does not expose persistence.
 - `Fdx.input()`, `Fdx.audio()`, and `Fdx.network()` return `null` when the backend has no implementation for that system.
 - If a backend keeps an internal mutable registry for wiring, that registry is private backend implementation detail, not the public programming model.
 
@@ -687,6 +741,10 @@ Defined types:
 | `FileMetadata` | File size, modification time, and type metadata when available. |
 | `FileWatch` | File watching contract for platforms that support it. |
 | `FileWatchListener` | File watching callback contract. |
+| `Storage` | Persistent local/cache storage service returned by `Fdx.storage()`. |
+| `KeyValueStore` | Named loaded key/value store for settings, save data, and rebuildable caches. |
+| `StorageScope` | Local or cache persistence scope. |
+| `StorageCodec` | Optional user-supplied byte transform for encryption, compression, or other encoding. |
 
 ### 7.1. FileSystem And FileHandle Contracts
 
@@ -756,6 +814,75 @@ Rules:
 - Platform-specific native file handles should be reachable only through provider/backend-specific APIs.
 - `FileSystem.as()` is the advanced access path for backend-specific filesystem services.
 - `FileWatch` is provider-backed because file watching is implemented differently across platforms.
+
+### 7.2. Persistent Storage
+
+`Storage` is the service users ask for persistent named stores. It is intended for small settings/preferences, save metadata, editor state, and rebuildable cache records. It is not an asset manager and not a database abstraction.
+
+Defined shape:
+
+```java
+public interface Storage extends ProviderHandle {
+    KeyValueStore local(String name);
+    KeyValueStore local(String name, StorageCodec codec);
+    KeyValueStore cache(String name);
+    KeyValueStore cache(String name, StorageCodec codec);
+}
+
+public interface KeyValueStore {
+    String name();
+    StorageScope scope();
+    boolean loaded();
+    boolean dirty();
+    KeyValueStore load();
+    KeyValueStore flush();
+    boolean contains(String key);
+    String[] keys();
+    KeyValueStore remove(String key);
+    KeyValueStore clear();
+    String getString(String key, String fallback);
+    KeyValueStore putString(String key, String value);
+    int getInt(String key, int fallback);
+    KeyValueStore putInt(String key, int value);
+    long getLong(String key, long fallback);
+    KeyValueStore putLong(String key, long value);
+    float getFloat(String key, float fallback);
+    KeyValueStore putFloat(String key, float value);
+    double getDouble(String key, double fallback);
+    KeyValueStore putDouble(String key, double value);
+    boolean getBoolean(String key, boolean fallback);
+    KeyValueStore putBoolean(String key, boolean value);
+    byte[] getBytes(String key, byte[] fallback);
+    KeyValueStore putBytes(String key, byte[] value);
+    JsonValue getJson(String key, JsonValue fallback);
+    KeyValueStore putJson(String key, JsonValue value);
+    <T> T getJson(String key, Class<T> type, Json json, T fallback);
+    <T> KeyValueStore putJson(String key, Class<T> type, Json json, T value);
+}
+```
+
+Example:
+
+```java
+KeyValueStore settings = fdx.storage().local("settings").load();
+
+settings.putString("playerName", "Ada")
+        .putInt("volume", 80)
+        .putJson("profile", JsonValue.object().put("level", 3))
+        .flush();
+```
+
+Rules:
+
+- `local(name)` is durable user-owned data such as preferences, save data, editor state, recent files, and key bindings.
+- `cache(name)` is rebuildable data such as generated shader outputs, thumbnails, downloaded metadata, and pipeline caches. It may survive between runs, but the app must tolerate losing it.
+- Storage has no `temp` scope. Use `FileSystem.temp(...)` for short-lived files.
+- Stores load into memory and write changes only when `flush()` is called.
+- `load()` and `flush()` may throw `FdxException` when backend persistence fails.
+- Default native/JVM-style storage is file-backed through `FileSystem.local(...)` and `FileSystem.cache(...)`.
+- Web storage uses browser persistence, currently `localStorage`, because the web file system's writable handles are not guaranteed to survive page reloads.
+- The base storage API is not encrypted. `StorageCodec` is only a byte transform hook for user-owned encryption, compression, or encoding. libFDX does not provide encryption algorithms or manage encryption keys.
+- Typed JSON uses the existing explicit `Json` and `JsonCodec<T>` registry. Storage must not introduce reflection, annotations, field scanning, class-name lookup, or polymorphic guessing.
 
 ## 8. Input
 
@@ -1034,6 +1161,7 @@ Rules:
 - `Displays.main()` returns the backend-created main display, or `null` on headless backends.
 - `Displays.create(DisplayConfig)` creates another display only when the backend and platform support it. Desktop backends may support this; mobile and web backends may return unsupported capability or fail clearly.
 - `DisplayConfig.size(...)` is a requested startup size where the platform can honor it. Mobile backends should report the actual platform view/surface size and render to that size instead of stretching a fixed-size framebuffer to fill the device display.
+- `DisplayConfig.maximized(...)` is a requested startup window state for windowed desktop-style platforms. If a backend cannot honor maximized startup, it should still report the actual display size after creation or resize.
 - `Display.contentScaleX()`, `contentScaleY()`, and `contentScale()` expose the platform content scale for DPI/high-density presentation. Desktop backends should use platform window content scale, web backends should use browser device pixel ratio, mobile backends should use platform display density, and generic implementations may fall back to framebuffer-size-to-logical-size ratio.
 - `Display` belongs to runtime and must not depend on `graphics/api`.
 - `Surface` belongs to `graphics/api` and represents the connection between a `GraphicsContext` and a `Display`.
@@ -1503,7 +1631,7 @@ Defined root, context, and setup types:
 | `GraphicsDevice` | Provider-backed device interface used by common code to create first rendering resources. |
 | `GraphicsFrame` | Current backend-owned frame view exposed during `ApplicationListener.render()`. |
 | `FrameBuffer` | Current frame drawable and readback view. |
-| `Camera`, `CameraProjection` | Shared mutable camera state for orthographic and perspective projection. |
+| `ImmediateModeRenderer` | Provider-neutral immediate-style renderer for simple 2D and 3D diagnostic lines. |
 
 `Fdx.graphics()` returns the graphics manager, not "the one active graphics API". Simple apps use `fdx.graphics().main()`. Advanced desktop apps can ask the manager to create another context, then attach that context to a display/surface when the backend supports it. Provider-specific frame plumbing such as surface acquisition, native command encoder creation, submission, and presentation is owned by the backend/provider attachment. Common game code should use `GraphicsContext`, not `WGPUContext`, Vulkan objects, or backend-native window handles.
 
@@ -1566,31 +1694,20 @@ public interface FrameBuffer extends ProviderHandle {
     ByteBuffer readPixelsRgba8();
 }
 
-public enum CameraProjection {
-    ORTHOGRAPHIC,
-    PERSPECTIVE
-}
-
-public final class Camera {
-    public Camera projection(CameraProjection projection);
-    public CameraProjection projection();
-    public Camera viewport(float width, float height);
-    public Camera fieldOfView(float fieldOfViewDegrees);
-    public Camera nearFar(float near, float far);
-    public Camera zoom(float zoom);
-    public Camera position(float x, float y, float z);
-    public Camera direction(float x, float y, float z);
-    public Camera lookAt(float x, float y, float z);
-    public Camera up(float x, float y, float z);
-    public Camera update();
-    public Vector3 position();
-    public Vector3 direction();
-    public Vector3 up();
-    public Matrix4 projectionMatrix();
-    public Matrix4 view();
-    public Matrix4 combined();
-    public float near();
-    public float far();
+public final class ImmediateModeRenderer implements Disposable {
+    public ImmediateModeRenderer(GraphicsContext graphics);
+    public void clear();
+    public void clear2D();
+    public void clear3D();
+    public void line2D(float x1, float y1, float x2, float y2,
+            float red, float green, float blue, float alpha);
+    public void line3D(float x1, float y1, float z1, float x2, float y2, float z2,
+            float red, float green, float blue, float alpha);
+    public void render2D();
+    public void render2D(int x, int y, int width, int height);
+    public void render3D(float[] viewProjection);
+    public void render3D(float[] viewProjection, int x, int y, int width, int height);
+    public void dispose();
 }
 
 public interface GraphicsAttachmentProvider {
@@ -1651,6 +1768,7 @@ Rules:
 - `GraphicsContext.as()` is the advanced provider-specific escape hatch.
 - `GraphicsContext.device()` returns a common device interface backed by the selected provider.
 - `GraphicsContext.surfaceFormat()` returns the current presentation color format used for render pipeline creation.
+- `ImmediateModeRenderer` belongs to `graphics/api`. It queues colored line-list vertices on the CPU, supports normalized-device-coordinate 2D lines and matrix-projected 3D lines, and uses depth testing only for the 3D render path.
 - `GraphicsContext.currentFrame()` is valid only during a backend-owned frame, normally inside `ApplicationListener.render()`.
 - Resources are owned by one `GraphicsContext`. A texture created by a GL context is not automatically usable by a Vulkan context.
 - Shared game modules should depend on `graphics/api`, not on `extensions/graphics/<provider>`.
@@ -1664,7 +1782,250 @@ Rules:
 - Provider-specific graphics configuration should be stored on the provider setup object itself, not looked up through `GraphicsEnvironment`.
 - `FrameBuffer` is the provider-neutral current drawable view. GL implementations may use the default framebuffer, Vulkan implementations may use the current swapchain image, and WGPU implementations may use the acquired surface texture.
 - Multi-render targets should be exposed as an ordered color attachment list with one optional depth/stencil attachment. The public API should not expose provider-specific subpass, layout transition, or framebuffer handle details.
-- `Camera` is one mutable graphics API type. It must not split into separate 2D, 3D, orthographic, or perspective subclasses. A camera changes mode through `projection(CameraProjection)` and keeps the same instance identity.
+- Camera state belongs to `graphics/camera`; `graphics/api` must stay independent from camera input/controller concerns.
+
+### 13.3.1. Graphics Camera
+
+Module:
+
+```text
+:libfdx:graphics:camera
+```
+
+Packages:
+
+```text
+io.github.libfdx.graphics.camera
+io.github.libfdx.graphics.camera.controller
+```
+
+`graphics/camera` contains shared camera state in `io.github.libfdx.graphics.camera` and input-backed camera controllers in `io.github.libfdx.graphics.camera.controller`. It depends on `runtime/input` for controllers; renderer helpers belong to `graphics/api`.
+
+Defined shape:
+
+```java
+public enum CameraProjection {
+    ORTHOGRAPHIC,
+    PERSPECTIVE
+}
+
+public final class Camera {
+    public Camera projection(CameraProjection projection);
+    public CameraProjection projection();
+    public Camera viewport(float width, float height);
+    public Camera fieldOfView(float fieldOfViewDegrees);
+    public Camera nearFar(float near, float far);
+    public Camera zoom(float zoom);
+    public Camera position(float x, float y, float z);
+    public Camera direction(float x, float y, float z);
+    public Camera lookAt(float x, float y, float z);
+    public Camera up(float x, float y, float z);
+    public Camera update();
+    public Vector3 position();
+    public Vector3 direction();
+    public Vector3 up();
+    public Matrix4 projectionMatrix();
+    public Matrix4 view();
+    public Matrix4 combined();
+    public float near();
+    public float far();
+}
+
+public interface CameraAnchor2D {
+    void position(Vector2 out);
+}
+
+public interface CameraAnchor3D {
+    void position(Vector3 out);
+    void up(Vector3 out);
+}
+
+public interface CameraPointerRegion {
+    boolean contains(int x, int y);
+}
+
+public final class CameraInputBindings3D {
+    public static CameraInputBindings3D defaults();
+    public CameraInputBindings3D forwardKey(Key key);
+    public CameraInputBindings3D backwardKey(Key key);
+    public CameraInputBindings3D leftKey(Key key);
+    public CameraInputBindings3D rightKey(Key key);
+    public CameraInputBindings3D upKey(Key key);
+    public CameraInputBindings3D downKey(Key key);
+    public CameraInputBindings3D alternateForwardKey(Key key);
+    public CameraInputBindings3D alternateBackwardKey(Key key);
+    public CameraInputBindings3D alternateLeftKey(Key key);
+    public CameraInputBindings3D alternateRightKey(Key key);
+    public CameraInputBindings3D alternateUpKey(Key key);
+    public CameraInputBindings3D alternateDownKey(Key key);
+    public CameraInputBindings3D fastKey(Key key);
+    public CameraInputBindings3D alternateFastKey(Key key);
+    public CameraInputBindings3D boostKey(Key key);
+    public CameraInputBindings3D alternateBoostKey(Key key);
+    public CameraInputBindings3D lookButton(MouseButton button);
+    public CameraInputBindings3D touchLookButton(MouseButton button);
+}
+
+public final class CinematicCameraPathSample3D {
+    public CinematicCameraPathSample3D camera(float x, float y, float z);
+    public CinematicCameraPathSample3D lookAt(float x, float y, float z);
+    public CinematicCameraPathSample3D up(float x, float y, float z);
+    public float cameraX();
+    public float cameraY();
+    public float cameraZ();
+    public float lookAtX();
+    public float lookAtY();
+    public float lookAtZ();
+    public float upX();
+    public float upY();
+    public float upZ();
+}
+
+public interface CinematicCameraPath3D {
+    void sample(float timeSeconds, CinematicCameraPathSample3D out);
+}
+
+public final class KeyframeCinematicCameraPath3D implements CinematicCameraPath3D {
+    public KeyframeCinematicCameraPath3D(float durationSeconds,
+            float[] cameraPoints, float[] lookAtPoints);
+    public KeyframeCinematicCameraPath3D(float durationSeconds,
+            float[] cameraPoints, float[] lookAtPoints, float[] upPoints);
+    public KeyframeCinematicCameraPath3D loop(boolean loop);
+    public boolean loop();
+    public float durationSeconds();
+    public int pointCount();
+    public void sample(float timeSeconds, CinematicCameraPathSample3D out);
+}
+
+public final class CameraController2D implements Disposable {
+    public CameraController2D(Input input, Camera camera);
+    public CameraController2D position(float x, float y);
+    public CameraController2D pointerRegion(CameraPointerRegion pointerRegion);
+    public CameraController2D activationListener(Runnable activationListener);
+    public CameraController2D enabled(boolean enabled);
+    public CameraController2D touchEnabled(boolean touchEnabled);
+    public CameraController2D zoomRange(float minZoom, float maxZoom);
+    public CameraController2D zoomSpeed(float zoomSpeed);
+    public CameraController2D update(float deltaSeconds);
+    public void dispose();
+
+    public interface PointerRegion extends CameraPointerRegion {
+        boolean contains(int x, int y);
+    }
+}
+
+public class FreeCameraController3D implements Disposable {
+    public FreeCameraController3D(Input input, Camera camera);
+    public FreeCameraController3D position(float x, float y, float z);
+    public FreeCameraController3D up(float x, float y, float z);
+    public FreeCameraController3D speed(float speed);
+    public float speed();
+    public FreeCameraController3D speedRange(float minSpeed, float maxSpeed);
+    public FreeCameraController3D scrollSpeedFactor(float scrollSpeedFactor);
+    public FreeCameraController3D speedMultipliers(float fastMultiplier, float boostMultiplier);
+    public FreeCameraController3D inputBindings(CameraInputBindings3D bindings);
+    public FreeCameraController3D pointerRegion(CameraPointerRegion pointerRegion);
+    public FreeCameraController3D activationListener(Runnable activationListener);
+    public FreeCameraController3D enabled(boolean enabled);
+    public FreeCameraController3D keyboardEnabled(boolean keyboardEnabled);
+    public FreeCameraController3D touchEnabled(boolean touchEnabled);
+    public FreeCameraController3D sensitivity(float sensitivityDegrees);
+    public FreeCameraController3D invert(boolean invertX, boolean invertY);
+    public FreeCameraController3D update(float deltaSeconds);
+}
+
+public class FirstPersonCameraController3D implements Disposable {
+    public FirstPersonCameraController3D(Input input, Camera camera, CameraAnchor3D anchor);
+    public FirstPersonCameraController3D anchor(CameraAnchor3D anchor);
+    public FirstPersonCameraController3D eyeOffset(float right, float up, float forward);
+    public FirstPersonCameraController3D inputBindings(CameraInputBindings3D bindings);
+    public FirstPersonCameraController3D pointerRegion(CameraPointerRegion pointerRegion);
+    public FirstPersonCameraController3D activationListener(Runnable activationListener);
+    public FirstPersonCameraController3D enabled(boolean enabled);
+    public FirstPersonCameraController3D touchEnabled(boolean touchEnabled);
+    public FirstPersonCameraController3D sensitivity(float sensitivityDegrees);
+    public FirstPersonCameraController3D invert(boolean invertX, boolean invertY);
+    public FirstPersonCameraController3D update(float deltaSeconds);
+}
+
+public class ThirdPersonCameraController3D implements Disposable {
+    public ThirdPersonCameraController3D(Input input, Camera camera, CameraAnchor3D anchor);
+    public ThirdPersonCameraController3D anchor(CameraAnchor3D anchor);
+    public ThirdPersonCameraController3D distance(float distance);
+    public ThirdPersonCameraController3D distanceRange(float minDistance, float maxDistance);
+    public ThirdPersonCameraController3D offsets(float shoulderOffset, float heightOffset, float lookHeight);
+    public ThirdPersonCameraController3D damping(float damping);
+    public ThirdPersonCameraController3D scrollDistanceFactor(float scrollDistanceFactor);
+    public ThirdPersonCameraController3D inputBindings(CameraInputBindings3D bindings);
+    public ThirdPersonCameraController3D pointerRegion(CameraPointerRegion pointerRegion);
+    public ThirdPersonCameraController3D activationListener(Runnable activationListener);
+    public ThirdPersonCameraController3D enabled(boolean enabled);
+    public ThirdPersonCameraController3D sensitivity(float sensitivityDegrees);
+    public ThirdPersonCameraController3D update(float deltaSeconds);
+}
+
+public class OrbitCameraController3D implements Disposable {
+    public OrbitCameraController3D(Input input, Camera camera);
+    public OrbitCameraController3D target(float x, float y, float z);
+    public OrbitCameraController3D position(float cameraX, float cameraY, float cameraZ,
+            float targetX, float targetY, float targetZ);
+    public OrbitCameraController3D radiusRange(float minRadius, float maxRadius);
+    public OrbitCameraController3D radius(float radius);
+    public OrbitCameraController3D inputBindings(CameraInputBindings3D bindings);
+    public OrbitCameraController3D pointerRegion(CameraPointerRegion pointerRegion);
+    public OrbitCameraController3D activationListener(Runnable activationListener);
+    public OrbitCameraController3D enabled(boolean enabled);
+    public OrbitCameraController3D sensitivity(float sensitivityDegrees);
+    public OrbitCameraController3D keyboardEnabled(boolean keyboardEnabled);
+    public OrbitCameraController3D autoOrbit(boolean enabled, float yawDegreesPerFrame,
+            long frames, float startDegrees, float totalDegrees);
+    public OrbitCameraController3D update(float deltaSeconds);
+}
+
+public class OrthographicCameraController3D implements Disposable {
+    public OrthographicCameraController3D(Input input, Camera camera);
+    public OrthographicCameraController3D position(float x, float y, float z);
+    public OrthographicCameraController3D zoomRange(float minZoom, float maxZoom);
+    public OrthographicCameraController3D zoomSpeed(float zoomSpeed);
+    public OrthographicCameraController3D pointerRegion(CameraPointerRegion pointerRegion);
+    public OrthographicCameraController3D enabled(boolean enabled);
+    public OrthographicCameraController3D keyboardEnabled(boolean keyboardEnabled);
+    public OrthographicCameraController3D update(float deltaSeconds);
+}
+
+public class CinematicCameraController {
+    public CinematicCameraController(Camera camera);
+    public CinematicCameraController anchor(CameraAnchor2D anchor);
+    public CinematicCameraController anchor(CameraAnchor3D anchor);
+    public CinematicCameraController path3D(CinematicCameraPath3D path);
+    public CinematicCameraController pathTime(float timeSeconds);
+    public CinematicCameraController pathPlaybackSpeed(float secondsPerSecond);
+    public CinematicCameraController damping(float damping);
+    public CinematicCameraController offset2D(float x, float y);
+    public CinematicCameraController zoom(float zoom);
+    public CinematicCameraController rotation(float radians);
+    public CinematicCameraController orbit(float yawDegrees, float pitchDegrees, float distance);
+    public CinematicCameraController rotate(float yawDegrees, float pitchDegrees);
+    public CinematicCameraController offsets3D(float shoulderOffset, float heightOffset, float lookHeight);
+    public CinematicCameraController update(float deltaSeconds);
+}
+
+```
+
+Rules:
+
+- Camera controllers are user-created helpers, not `Fdx` root services.
+- `Camera` is one mutable graphics camera type. It must not split into separate 2D, 3D, orthographic, or perspective subclasses. A camera changes mode through `projection(CameraProjection)` and keeps the same instance identity.
+- Camera controllers manipulate a caller-owned `graphics/camera` `Camera`; they do not own or replace it.
+- Camera controllers register input processors when constructed and must be disposed or disabled when no longer active.
+- `CameraController2D` is for orthographic 2D pan and zoom.
+- `FreeCameraController3D` moves a camera directly and is intended for editor, debug, sample, and test fly cameras. Scroll changes movement speed multiplicatively; fast and boost modifiers come from `CameraInputBindings3D`.
+- `FirstPersonCameraController3D` attaches to a caller-owned `CameraAnchor3D`, rotates the camera view, and must not translate the anchor or player body.
+- `ThirdPersonCameraController3D` follows a caller-owned `CameraAnchor3D` with distance, offset, smoothing, and zoom. It does not own collision, physics, character movement, or obstruction handling.
+- `FirstPersonCameraController3D`, `ThirdPersonCameraController3D`, and 3D `CinematicCameraController` derive right, forward, and up axes from the anchor's local up each frame so games can use slopes, spherical worlds, wall walking, and space scenes.
+- `CinematicCameraController` is projection-aware and supports smooth 2D follow/pan/zoom/rotation, smooth 3D follow/look-at/orbit/offset around anchors, and explicit 3D sampled paths for authored shots. It is for trailers, intros, flybys, and scene presentation, not gameplay movement ownership.
+- `CinematicCameraPath3D` samples into caller-owned `CinematicCameraPathSample3D` output so path playback does not allocate every frame. `KeyframeCinematicCameraPath3D` is a built-in spline-smoothed, constant-distance keyframe path for steady camera travel without hard target changes; custom path implementations can use timelines, rails, easing, or gameplay-authored camera tracks.
+- Focused controllers do not contain hardcoded mode-switch keys. Any optional mode switching belongs to caller code.
 
 Defined resource and command types in the first rendering slice:
 
@@ -1686,8 +2047,8 @@ Defined descriptor types:
 | --- | --- |
 | `BufferDescriptor` | Buffer creation label, size, usage, and dynamic/static update intent. |
 | `TextureDescriptor` | Texture creation label, size, format, usage, and sampler wrap state. |
-| `ShaderModuleDescriptor` | Provider-facing shader source or bytecode plus shader language metadata. |
-| `ShaderBundle` | Optional WGSL source-of-truth container plus native target artifacts when a tool or user intentionally supplies them. |
+| `ShaderModuleDescriptor` | WGSL shader source plus provider-ready generated shader output used internally after runtime compilation. Public shader authoring uses WGSL only. |
+| `ShaderBundle` | Optional WGSL source-of-truth container plus profile and reflection metadata. |
 | `ShaderReflection`, `ShaderBinding`, `ShaderAttribute` | Setup-time metadata for shader bindings and vertex inputs declared by a shader owner or produced by shader tooling. |
 | `RenderPassDescriptor` | Color/depth attachments, load/store operations, clear values. |
 | `RenderPipelineDescriptor` | Shader module, entry points, target format, shader reflection metadata, primitive topology, vertex layouts, sampled texture count, depth state, and debug label. |
@@ -1704,7 +2065,7 @@ Defined value/state types:
 | `ShaderValidationResult`, `ShaderValidationDiagnostic`, `ShaderValidationSeverity` | Build/setup-time shader profile validation result types. |
 | `PrimitiveTopology` | Primitive assembly mode for first render pipelines. |
 | `BufferUsage` | Portable buffer usage. The first implementation defines vertex and index buffers. |
-| `TextureUsage` | Portable texture usage. The first implementation defines sampled textures. |
+| `TextureUsage` | Portable texture usage. The current slice defines sampled textures, render-attachment textures, and sampled render-attachment textures. |
 | `TextureWrap` | Portable sampled-texture coordinate wrap mode. |
 | `VertexLayout`, `VertexStepMode`, `VertexAttribute`, `VertexFormat` | Portable vertex input layout for render pipelines. |
 | `LoadOp`, `StoreOp` | Render pass attachment load/store behavior. |
@@ -1716,13 +2077,7 @@ Descriptor construction helpers used by examples:
 ```java
 public final class ShaderModuleDescriptor {
     public static ShaderModuleDescriptor wgsl(String label, String source);
-    public static ShaderModuleDescriptor glsl(String label, String vertexSource, String fragmentSource);
-    public static ShaderModuleDescriptor spirv(String label, int[] vertexWords, int[] fragmentWords);
-    public static ShaderModuleDescriptor msl(String label, String source);
     public ShaderModuleDescriptor wgsl(String source);
-    public ShaderModuleDescriptor glsl(String vertexSource, String fragmentSource);
-    public ShaderModuleDescriptor spirv(int[] vertexWords, int[] fragmentWords);
-    public ShaderModuleDescriptor msl(String source);
     public ShaderModuleDescriptor entryPoints(String vertexEntryPoint, String fragmentEntryPoint);
     public boolean hasSource(ShaderLanguage language);
 }
@@ -1744,14 +2099,6 @@ public final class ShaderBundle {
     public static ShaderBundle.Builder builder(String label);
     public ShaderProfile profile();
     public String wgslSource();
-    public String glslVertexSource();
-    public String glslFragmentSource();
-    public String glslEsVertexSource();
-    public String glslEsFragmentSource();
-    public int[] spirvVertexWords();
-    public int[] spirvFragmentWords();
-    public String mslSource();
-    public String hlslSource();
     public ShaderReflection reflection();
     public boolean hasTarget(ShaderTarget target);
     public ShaderValidationResult validateProfile();
@@ -1762,11 +2109,6 @@ public final class ShaderBundle {
     public static final class Builder {
         public Builder profile(ShaderProfile profile);
         public Builder wgsl(String source);
-        public Builder glsl(String vertexSource, String fragmentSource);
-        public Builder glslEs(String vertexSource, String fragmentSource);
-        public Builder spirv(int[] vertexWords, int[] fragmentWords);
-        public Builder msl(String source);
-        public Builder hlsl(String source);
         public Builder reflection(ShaderReflection reflection);
         public ShaderBundle build();
     }
@@ -1787,6 +2129,7 @@ public final class BufferDescriptor {
 
 public final class TextureDescriptor {
     public static TextureDescriptor rgba8(String label, int width, int height);
+    public static TextureDescriptor rgba8RenderTarget(String label, int width, int height);
     public TextureDescriptor label(String label);
     public TextureDescriptor size(int width, int height);
     public TextureDescriptor format(TextureFormat format);
@@ -1905,6 +2248,7 @@ public interface Buffer extends ProviderHandle, Disposable {
 public final class Mesh implements Disposable {
     public static final VertexLayout POSITION_COLOR_LAYOUT;
     public static final VertexLayout PBR_LAYOUT;
+    public static final VertexLayout PBR_SKINNED_LAYOUT;
     public Mesh(GraphicsContext graphics, String id, VertexLayout vertexLayout, float[] vertices, int vertexCount);
     public Mesh(GraphicsContext graphics, String id, VertexLayout vertexLayout, float[] vertices, int vertexCount,
             BoundingBox bounds);
@@ -1917,6 +2261,10 @@ public final class Mesh implements Disposable {
             float[] sourceColors, float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords,
             float[] sourcePbr, float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive,
             BoundingBox bounds, boolean retainSourceData);
+    public static Mesh positionColor3D(GraphicsContext graphics, String id, float[] sourcePositions,
+            float[] sourceColors, float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords,
+            float[] sourcePbr, float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive,
+            int[] sourceJoints, float[] sourceWeights, BoundingBox bounds, boolean retainSourceData);
     public String id();
     public Buffer vertexBuffer();
     public Buffer indexBuffer();
@@ -1934,6 +2282,8 @@ public final class Mesh implements Disposable {
     public float[] sourceBakedPbr();
     public float[] sourceEmissive();
     public float[] sourceBakedEmissive();
+    public int[] sourceJoints();
+    public float[] sourceWeights();
 }
 
 public interface ShaderModule extends ProviderHandle, Disposable {
@@ -1972,11 +2322,11 @@ Rules:
 
 - Descriptor objects carry creation parameters; resource interfaces expose stable identity, metadata, lifecycle, and provider access.
 - Resource metadata methods should return the values the resource was created with.
-- `ShaderModuleDescriptor` may contain WGSL and/or native source-language variants for the same shader intent. Providers use native GLSL, SPIR-V, or MSL descriptors directly when present. If only WGSL is present and the provider needs another language, the provider may translate through the optional `runtime/fdx/core` shader compiler capability during shader-module creation.
-- `ShaderBundle` remains an optional setup-time wrapper for tools and users that want to group WGSL, profile metadata, reflection metadata, and manually supplied native artifacts. Normal built-in renderers pass WGSL `ShaderModuleDescriptor` values directly and let the selected provider compile when translation is required.
+- `ShaderModuleDescriptor` public authoring is WGSL-only. Providers that need GLSL, SPIR-V, or MSL receive descriptors generated from WGSL through the `runtime/fdx/core` shader compiler capability during shader-module creation.
+- `ShaderBundle` remains an optional setup-time wrapper for tools and users that want to group WGSL, profile metadata, and reflection metadata. Normal built-in renderers pass WGSL `ShaderModuleDescriptor` values directly and let the selected provider compile when translation is required.
 - Runtime WGSL-to-GLSL/SPIR-V/MSL translation is an explicit provider feature backed by `runtime/fdx/core`. It happens at shader-module creation/setup time, not in a render loop. If the active runtime does not provide the compiler capability for a provider that needs translation, shader creation must fail clearly.
 - A shader that passes WebGPU/WGSL validation is not automatically portable to WebGL/OpenGL ES. Use `ShaderProfile.PORTABLE_WEBGL2` for shaders that must run on WebGL2/GLES-style targets and `ShaderProfile.PORTABLE_WEBGPU` for shaders that only need modern WebGPU/wgpu-class targets.
-- Metal uses translated or authored MSL through the same WGSL-first descriptor contract. DirectX/HLSL remains a future target until the language enum, descriptor shape, and provider path are implemented. Neither target should require a second authoring language unless the shader declares `ShaderProfile.NATIVE` and the owning module documents the native-only behavior.
+- Metal uses translated MSL through the same WGSL-only descriptor contract. DirectX/HLSL remains a future target until the language enum, descriptor shape, and provider path are implemented.
 - `BufferDescriptor.vertex(label, size)` creates provider-backed vertex storage. `BufferDescriptor.index(label, size)` creates provider-backed index storage. Buffers are dynamic by default for frequent writes; `staticVertex(...)`, `staticIndex(...)`, or `dynamic(false)` mark storage that is optimized for infrequent uploads and repeated draws.
 - The first common indexed draw shape uses unsigned 16-bit indices. `GraphicsDevice.writeBuffer(buffer, data)` uploads the bytes in the provided `ByteBuffer` range.
 - `Mesh` is the single concrete graphics API mesh class, not a g3d type. It can be used by 2D, UI, custom renderers, and 3D. It owns static vertex and optional unsigned 16-bit index buffers, exposes its `VertexLayout`, counts, optional bounds metadata, and disposes the underlying buffers.
@@ -1987,7 +2337,8 @@ Rules:
 - A pipeline only needs a `VertexLayout` when shader inputs read vertex attributes. Procedural shaders may continue to use no vertex layout. Pipelines that read multiple vertex buffers use `RenderPipelineDescriptor.vertexLayouts(...)` and bind them with `RenderPass.setVertexBuffer(slot, buffer)`.
 - `VertexLayout.of(...)` creates per-vertex input by default. `VertexLayout.instance(...)` or `VertexLayout.of(..., VertexStepMode.INSTANCE, ...)` creates per-instance input for instanced draws.
 - `VertexFormat.UNORM8X4` is a packed four-component unsigned-byte normalized vertex format for colors and other compact attributes. Providers must map it to normalized attribute input, not four raw floats.
-- `TextureDescriptor.rgba8(label, width, height)` creates an RGBA8 sampled texture descriptor for the first sprite rendering slice.
+- `TextureDescriptor.rgba8(label, width, height)` creates an RGBA8 sampled texture descriptor.
+- `TextureDescriptor.rgba8RenderTarget(label, width, height)` creates an RGBA8 texture descriptor that can be rendered into and sampled later, for example by a shadow-map or post-processing pass.
 - Texture wrap defaults to `TextureWrap.CLAMP_TO_EDGE`. Call `TextureDescriptor.wrap(...)` to request `REPEAT` or `MIRRORED_REPEAT` sampled-texture addressing.
 - `GraphicsFrame.frameBuffer()` exposes the current drawable. `FrameBuffer.readPixelsRgba8()` is an end-of-frame capture operation: after it succeeds, no more commands should be recorded against that frame, and a later `GraphicsAttachment.endFrame()` for the same frame may be a no-op.
 - `GraphicsDevice.writeTexture(texture, data)` uploads the full RGBA byte range from the provided `ByteBuffer`.
@@ -1995,7 +2346,7 @@ Rules:
 - `RenderPass.setTexture(slot, texture)` binds a sampled texture for subsequent draws in the active pass.
 - `RenderPass.setIndexBuffer(buffer)` binds an index buffer for subsequent `drawIndexed(...)` calls in the active pass.
 - `RenderPass.setScissor(x, y, width, height)` sets the active pass clip rectangle for subsequent draws. Coordinates are framebuffer pixel coordinates in the provider's render-target origin convention. Higher-level renderers that target multiple providers are responsible for converting their logical clip origin before calling this method.
-- The current `TextureView` shape is still a frame color attachment view. Texture-created views can be added when view descriptors are implemented.
+- `Texture.view()` returns the default texture view when the selected provider supports texture-backed attachments.
 - Frame command encoders are owned by the backend/provider attachment. Game code records passes through `Graphics.currentFrame().commandEncoder()`.
 - Pass objects are scoped. Once `end()` is called, the pass should not accept more commands.
 - `ShaderModule` and `RenderPipeline` are application-owned disposable resources.
@@ -2033,8 +2384,6 @@ GraphicsContext gfx = fdx.graphics().main();
 
 ShaderModule shader = gfx.device().createShaderModule(
     ShaderModuleDescriptor.wgsl("triangle", wgslSource)
-        .glsl(glslVertexSource, glslFragmentSource)
-        .spirv(spirvVertexWords, spirvFragmentWords)
 );
 
 RenderPipeline pipeline = gfx.device().createRenderPipeline(
@@ -2109,6 +2458,7 @@ Current implemented texture slice:
 
 - `Texture` exposes width, height, format, usage, provider identity, disposal, and `as()`.
 - `TextureDescriptor.rgba8(label, width, height)` creates sampled RGBA8 textures.
+- `TextureDescriptor.rgba8RenderTarget(label, width, height)` creates RGBA8 textures with both render-attachment and sampled usage for offscreen passes that feed later draw calls.
 - `TextureDescriptor.wrap(...)` controls sampled-texture coordinate addressing. The default is `TextureWrap.CLAMP_TO_EDGE`.
 - `GraphicsDevice.writeTexture(texture, data)` uploads full RGBA image data.
 - `RenderPass.setTexture(slot, texture)` binds sampled textures for draw calls.
@@ -2197,7 +2547,14 @@ Defined types:
 | --- | --- |
 | `Batch2D` | Common textured 2D batch contract. |
 | `SpriteBatch` | Default batched sprite renderer implementation. |
+| `SpriteOutlineRenderer2D` | WGSL-authored sprite outline effect renderer. |
+| `FogOfWarRenderer2D` | WGSL-authored 2D fog-of-war overlay renderer. |
+| `ParticleEmitter2D` | Fixed-capacity 2D particle emitter that renders through `Batch2D`. |
 | `TextureRegion` | Region of a `Texture`. |
+| `TileLayer` | Tile id grid for one tile-map layer. |
+| `TileMap` | Tile-map dimensions and ordered layers. |
+| `TileSet` | Positive tile id to `TextureRegion` mapping. |
+| `TileMapRenderer` | Provider-neutral renderer that draws tile maps through `Batch2D`. |
 | `ShapeRenderer2D` | Debug/simple 2D shape rendering. |
 | `BitmapFont`, `BitmapFontGlyph`, `BitmapFontLayout` | Bitmap font data, glyph regions, metrics, and text layout. |
 | `BitmapFontFiles`, `FreeTypeFontOptions` | `.fnt` bitmap font loading and FreeType-style vector font rasterization options. |
@@ -2245,6 +2602,68 @@ public final class SpriteBatch implements Batch2D {
     public void end();
 }
 
+public final class SpriteOutlineRenderer2D implements Disposable {
+    public SpriteOutlineRenderer2D(GraphicsContext graphics);
+    public SpriteOutlineRenderer2D(GraphicsContext graphics, int initialMaxSprites);
+    public void begin();
+    public void begin(LoadOp loadOp);
+    public void begin(RenderPass pass);
+    public SpriteOutlineRenderer2D color(float red, float green, float blue, float alpha);
+    public SpriteOutlineRenderer2D outlineColor(float red, float green, float blue, float alpha);
+    public SpriteOutlineRenderer2D outlineWidth(float width);
+    public void draw(TextureRegion region, float x, float y, float width, float height);
+    public void end();
+}
+
+public final class FogOfWarRenderer2D implements Disposable {
+    public static final int MAX_LIGHTS = 4;
+    public FogOfWarRenderer2D(GraphicsContext graphics);
+    public FogOfWarRenderer2D(GraphicsContext graphics, int initialMaxQuads);
+    public void begin();
+    public void begin(LoadOp loadOp);
+    public void begin(RenderPass pass);
+    public FogOfWarRenderer2D color(float red, float green, float blue, float alpha);
+    public FogOfWarRenderer2D clearLights();
+    public FogOfWarRenderer2D light(float x, float y, float radius, float softness);
+    public void draw(float x, float y, float width, float height);
+    public void end();
+}
+
+public final class ParticleEmitter2D {
+    public ParticleEmitter2D(int maxParticles);
+    public ParticleEmitter2D seed(int seed);
+    public ParticleEmitter2D position(float x, float y);
+    public ParticleEmitter2D emissionRate(float particlesPerSecond);
+    public ParticleEmitter2D lifetime(float seconds);
+    public ParticleEmitter2D lifetime(float minSeconds, float maxSeconds);
+    public ParticleEmitter2D speed(float unitsPerSecond);
+    public ParticleEmitter2D speed(float minUnitsPerSecond, float maxUnitsPerSecond);
+    public ParticleEmitter2D direction(float degrees, float spreadDegrees);
+    public ParticleEmitter2D gravity(float x, float y);
+    public ParticleEmitter2D size(float start, float end);
+    public ParticleEmitter2D size(float minStart, float maxStart, float minEnd, float maxEnd);
+    public ParticleEmitter2D color(float startRed, float startGreen, float startBlue, float startAlpha,
+        float endRed, float endGreen, float endBlue, float endAlpha);
+    public ParticleEmitter2D rotation(float minDegrees, float maxDegrees,
+        float minAngularVelocityDegrees, float maxAngularVelocityDegrees);
+    public int update(float deltaSeconds);
+    public int emit(int count);
+    public ParticleEmitter2D clear();
+    public int render(TextureRegion region, Batch2D batch);
+    public int maxParticles();
+    public int activeCount();
+    public float x(int index);
+    public float y(int index);
+    public float age(int index);
+    public float lifetime(int index);
+    public float size(int index);
+    public float red(int index);
+    public float green(int index);
+    public float blue(int index);
+    public float alpha(int index);
+    public float rotationDegrees(int index);
+}
+
 public final class TextureRegion {
     public TextureRegion(Texture texture);
     public TextureRegion(Texture texture, int x, int y, int width, int height);
@@ -2258,6 +2677,52 @@ public final class TextureRegion {
     public float v();
     public float u2();
     public float v2();
+}
+
+public final class TileLayer {
+    public TileLayer(int width, int height);
+    public int tile(int x, int y);
+    public TileLayer tile(int x, int y, int tileId);
+    public TileLayer fill(int tileId);
+    public boolean isVisible();
+    public TileLayer visible(boolean visible);
+    public int width();
+    public int height();
+    public int size();
+    public int[] tiles();
+}
+
+public final class TileMap {
+    public TileMap(int width, int height, float tileWidth, float tileHeight);
+    public TileLayer addLayer();
+    public TileMap addLayer(TileLayer layer);
+    public TileLayer layer(int index);
+    public TileLayer removeLayer(int index);
+    public void clearLayers();
+    public int layerCount();
+    public int width();
+    public int height();
+    public float tileWidth();
+    public float tileHeight();
+    public float worldWidth();
+    public float worldHeight();
+}
+
+public final class TileSet {
+    public static final int EMPTY_TILE = 0;
+    public static TileSet from(TextureRegion[][] regions);
+    public TileSet region(int tileId, TextureRegion region);
+    public TextureRegion region(int tileId);
+    public boolean contains(int tileId);
+    public TextureRegion remove(int tileId);
+    public void clear();
+    public int size();
+}
+
+public final class TileMapRenderer {
+    public int render(TileMap map, TileSet tileSet, Batch2D batch, float x, float y);
+    public int render(TileMap map, TileSet tileSet, Batch2D batch, float x, float y,
+        float visibleX, float visibleY, float visibleWidth, float visibleHeight);
 }
 
 public final class BitmapFont implements Disposable {
@@ -2311,8 +2776,13 @@ Rules:
 - `g2d` should hide `TextureView` from simple sprite users when possible.
 - `ShapeRenderer2D` is the first g2d implementation. It streams CPU-generated vertices into common `Buffer` objects and currently uses normalized -1..1 coordinates.
 - `Batch2D` is the common textured g2d batch contract. `SpriteBatch` is the first implementation. It streams quad vertices into common `Buffer` objects, binds common `Texture` handles, and currently uses normalized -1..1 coordinates. Rotation is expressed in degrees around the supplied local origin. `viewport(width, height)` supplies the framebuffer size used to keep rotated sprites pixel-proportional while coordinates are still normalized. The array-based `draw(TextureRegion, float[], float[], ...)` overload submits repeated same-region sprites in one logical batch and may use instanced/static GPU buffers internally.
+- `SpriteOutlineRenderer2D` is a provider-neutral effect renderer for `TextureRegion` sprites. It owns a WGSL shader module, streams reusable quad vertex data into common `Buffer` objects, binds common `Texture` handles, and currently uses normalized -1..1 coordinates. `outlineWidth(float)` is measured in source texture texels. Neighbor samples are clamped to the source region UV bounds to avoid sampling adjacent atlas regions.
+- `FogOfWarRenderer2D` is a provider-neutral overlay renderer. It owns a WGSL shader module, streams reusable quad vertex data into common `Buffer` objects, and currently uses normalized -1..1 coordinates. `light(x, y, radius, softness)` adds circular reveal areas in the same coordinate space as the drawn fog rectangle. At most `FogOfWarRenderer2D.MAX_LIGHTS` reveal circles are submitted per draw call.
+- `ParticleEmitter2D` is provider-neutral particle simulation data plus a `Batch2D` draw helper. It owns fixed-capacity primitive arrays, does not allocate per particle, updates with explicit `deltaSeconds`, and renders through a caller-owned, already-begun `Batch2D`. Rendering resets the batch color to white after submitting active particles.
+- Tile maps are provider-neutral data and draw helpers. `TileMap` tile sizes are `float` render units so the same API can work with normalized, pixel, or camera-transformed 2D coordinates. `TileSet.EMPTY_TILE` (`0`) means no tile. Positive tile ids map to `TextureRegion` values. `TileSet.region(tileId)` returns `null` for empty or missing ids, and `TileMapRenderer` skips both empty and missing ids.
+- `TileMapRenderer` draws through a caller-owned, already-begun `Batch2D`. It does not create graphics resources and does not call `begin()` or `end()`. The visible-rectangle overload treats the rectangle as world-space coordinates, clamps the tile loops to cells intersecting that rectangle, returns `0` for empty rectangles, and preserves full-map rendering through the shorter overload.
 - Bitmap fonts are provider-neutral glyph metadata plus provider-backed page textures. `BitmapFontFiles.loadBitmap(...)` reads AngelCode BMFont-style `.fnt` files and page images. `BitmapFontFiles.loadFreeType(...)` rasterizes `.ttf`/`.otf` font assets into a bitmap atlas when the selected backend has registered a runtime fdx FreeType provider. `BitmapFontFiles.generateFreeType(...)` is reserved for backend-specific system-font providers and must fail clearly until a provider exists. Generated atlases should match or oversample the effective UI scale because rendering still submits texture quads.
-- Future tile maps, particles, sprites, and additional 2D helpers belong in `g2d`, not separate required user dependencies.
+- Particles, sprites, and additional 2D helpers belong in `g2d`, not separate required user dependencies.
 
 ## 15. Graphics 3D
 
@@ -2328,16 +2798,20 @@ Package:
 io.github.libfdx.graphics.g3d
 ```
 
-`g3d` is a complete 3D toolkit built on `graphics/api`. It owns model, material, shader, animation, scene, and render-path concepts. `Batch3D` is the common 3D submission contract; `ModelBatch` is the first implementation.
+`g3d` is a complete 3D toolkit built on `graphics/api` and the shared `graphics/camera` camera types. It owns model, material, shader, animation, scene, and render-path concepts. `Batch3D` is the common 3D submission contract; `ModelBatch` is the first implementation.
 
 Defined types:
 
 | Type | Role |
 | --- | --- |
-| `Camera` | Shared graphics camera from `graphics/api` used for 3D render submissions. |
+| `Camera` | Shared graphics camera from `graphics/camera` used for 3D render submissions. |
 | `Color`, `Vector3`, `Matrix4`, `BoundingBox` | Shared math types from `foundation/math` used in 3D materials, transforms, and bounds. |
 | `Batch3D` | Common 3D render submission contract. |
 | `ModelBatch` | Default optimized model batch implementation. |
+| `OutlineRenderer3D` | WGSL-authored shell outline renderer for PBR-layout 3D meshes. |
+| `FogOfWarRenderer3D` | WGSL-authored world-space 3D fog-of-war overlay renderer. |
+| `SkyboxRenderer3D` | WGSL-authored procedural world-space sky/background renderer for 3D scenes. |
+| `SkyEnvironment3D` | Procedural sky environment description sampled by the default PBR path for IBL-style diffuse and specular lighting. |
 | `ModelBuilder` | Programmatic primitive model construction for cubes, boxes, spheres, and custom triangle meshes. |
 | `Mesh` | Concrete low-level mesh from `graphics/api` used by 3D model parts. |
 | `MeshPart` | 3D subset of a graphics `Mesh` rendered with one material and primitive topology. |
@@ -2355,15 +2829,19 @@ Defined types:
 | `PbrShaderProvider` | Default PBR shader provider. |
 | `PbrShaderConfig` | Default PBR shader provider configuration. |
 | `ShaderMaterial` | Material that opts into a custom shader provider. |
-| `AnimationClip` | 3D animation data. |
+| `AnimationClip` | 3D node animation data. |
 | `AnimationController` | Animation playback controller. |
-| `Skeleton`, `Skin`, `Bone` | Skeletal animation data. |
+| `Skeleton`, `Skin`, `Bone`, `SkinningPalette`, `CpuSkinningMeshUpdater`, `CpuSkinnedModelAnimator` | Skeletal animation data and CPU skinning helpers. |
 | `MorphTarget` | Morph/blend-shape animation target. |
 | `Light` | Base light description. |
 | `DirectionalLight` | Directional light description. |
 | `PointLight` | Point light description. |
 | `SpotLight` | Spot light description. |
-| `Environment3D` | Scene/environment lighting, skybox, fog, and image-based lighting data. |
+| `Environment3D` | Scene/environment lighting, directional and cascaded shadow-map references, sky environment lighting, and fog data. |
+| `DirectionalShadowMap3D` | Helper that renders a directional-light shadow map into a sampled render target for the default PBR path. |
+| `CascadedShadowMap3D` | Helper that manages multiple directional shadow maps split from a view camera for default PBR cascade sampling. |
+| `BillboardRenderer3D` | WGSL-authored camera-facing textured quad renderer for 3D markers, effects, impostors, and simple particles. |
+| `ParticleEmitter3D` | Fixed-capacity 3D particle emitter that renders through `BillboardRenderer3D`. |
 | `RenderTarget3D` | High-level 3D render target view backed by `graphics/api` attachments. |
 | `DefaultRenderTarget3D` | Default wrapper around color/depth attachments for a 3D pass. |
 | `RenderPath3D` | Forward, deferred, shadow, post-processing, or custom render path. |
@@ -2375,7 +2853,7 @@ Defined types:
 
 `g3d` provides scene/model helpers on top of `graphics/api`. Normal 3D code should use `g3d` types and not provider-specific graphics classes.
 
-Framebuffers are graphics concepts, not GL-only concepts. The common API exposes the current drawable as a provider-neutral `FrameBuffer`; GL maps it to the default framebuffer, Vulkan maps it to the current swapchain image, and WGPU maps it to the acquired surface texture. Future offscreen and multi-render-target APIs should stay provider-neutral as well, so `g3d` can consume them for shadow maps, environment maps, deferred G-buffers, post-processing, and custom render paths.
+Framebuffers and render targets are graphics concepts, not GL-only concepts. The common API exposes the current drawable as a provider-neutral `FrameBuffer`; GL maps it to the default framebuffer, Vulkan maps it to the current swapchain image, and WGPU maps it to the acquired surface texture. Offscreen render targets use `TextureUsage.SAMPLED_RENDER_ATTACHMENT` and the texture's default `TextureView`, so `g3d` can render shadow maps, cascaded shadow maps, environment maps, post-processing passes, and custom render paths without naming a provider.
 
 Defined shape:
 
@@ -2408,6 +2886,125 @@ public final class ModelBatch implements Batch3D {
     public void render(Iterable<? extends ModelInstance> instances);
     public void flush();
     public void end();
+}
+
+public final class OutlineRenderer3D implements Disposable {
+    public OutlineRenderer3D(GraphicsContext graphics);
+    public void begin(Camera camera);
+    public void begin(LoadOp loadOp, Camera camera);
+    public void begin(RenderPass pass, Camera camera);
+    public OutlineRenderer3D outlineColor(float red, float green, float blue, float alpha);
+    public OutlineRenderer3D outlineWidth(float width);
+    public void render(ModelInstance instance);
+    public void render(ModelInstance[] instances);
+    public void render(Renderable3D renderable);
+    public void render(Iterable<? extends ModelInstance> instances);
+    public void flush();
+    public void end();
+}
+
+public final class FogOfWarRenderer3D implements Disposable {
+    public static final int MAX_LIGHTS = 4;
+    public FogOfWarRenderer3D(GraphicsContext graphics);
+    public FogOfWarRenderer3D(GraphicsContext graphics, int initialMaxQuads);
+    public void begin();
+    public void begin(LoadOp loadOp);
+    public void begin(RenderPass pass);
+    public FogOfWarRenderer3D color(float red, float green, float blue, float alpha);
+    public FogOfWarRenderer3D clearLights();
+    public FogOfWarRenderer3D light(float x, float y, float z, float radius, float softness);
+    public void draw(Camera camera, float x, float z, float width, float depth, float y);
+    public void end();
+}
+
+public final class BillboardRenderer3D implements Disposable {
+    public BillboardRenderer3D(GraphicsContext graphics);
+    public BillboardRenderer3D(GraphicsContext graphics, int initialMaxBillboards);
+    public void begin();
+    public void begin(LoadOp loadOp);
+    public void begin(RenderPass pass);
+    public BillboardRenderer3D color(float red, float green, float blue, float alpha);
+    public void draw(Texture texture, Camera camera, float centerX, float centerY, float centerZ,
+            float width, float height);
+    public void draw(Texture texture, Camera camera, float centerX, float centerY, float centerZ,
+            float width, float height, float rotationDegrees);
+    public void draw(Texture texture, Camera camera, float centerX, float centerY, float centerZ,
+            float width, float height, float rotationDegrees, float u, float v, float u2, float v2);
+    public void end();
+}
+
+public final class ParticleEmitter3D {
+    public ParticleEmitter3D(int maxParticles);
+    public ParticleEmitter3D seed(int seed);
+    public ParticleEmitter3D position(float x, float y, float z);
+    public ParticleEmitter3D emissionRate(float particlesPerSecond);
+    public ParticleEmitter3D lifetime(float seconds);
+    public ParticleEmitter3D lifetime(float minSeconds, float maxSeconds);
+    public ParticleEmitter3D speed(float unitsPerSecond);
+    public ParticleEmitter3D speed(float minUnitsPerSecond, float maxUnitsPerSecond);
+    public ParticleEmitter3D direction(float x, float y, float z, float spreadDegrees);
+    public ParticleEmitter3D gravity(float x, float y, float z);
+    public ParticleEmitter3D size(float start, float end);
+    public ParticleEmitter3D size(float minStart, float maxStart, float minEnd, float maxEnd);
+    public ParticleEmitter3D color(float startRed, float startGreen, float startBlue, float startAlpha,
+            float endRed, float endGreen, float endBlue, float endAlpha);
+    public ParticleEmitter3D rotation(float minDegrees, float maxDegrees,
+            float minAngularVelocityDegrees, float maxAngularVelocityDegrees);
+    public int update(float deltaSeconds);
+    public int emit(int count);
+    public ParticleEmitter3D clear();
+    public int render(Texture texture, Camera camera, BillboardRenderer3D renderer);
+    public int maxParticles();
+    public int activeCount();
+    public float x(int index);
+    public float y(int index);
+    public float z(int index);
+    public float age(int index);
+    public float lifetime(int index);
+    public float size(int index);
+    public float red(int index);
+    public float green(int index);
+    public float blue(int index);
+    public float alpha(int index);
+    public float rotationDegrees(int index);
+}
+
+public final class SkyboxRenderer3D implements Disposable {
+    public SkyboxRenderer3D(GraphicsContext graphics);
+    public void begin();
+    public void begin(LoadOp loadOp);
+    public void begin(RenderPass pass);
+    public SkyboxRenderer3D zenithColor(float red, float green, float blue);
+    public SkyboxRenderer3D horizonColor(float red, float green, float blue);
+    public SkyboxRenderer3D nadirColor(float red, float green, float blue);
+    public SkyboxRenderer3D sunColor(float red, float green, float blue, float intensity);
+    public SkyboxRenderer3D sunPosition(float x, float y);
+    public SkyboxRenderer3D sunDirection(float x, float y, float z);
+    public SkyboxRenderer3D sunSize(float size);
+    public void draw(Camera camera);
+    public void end();
+}
+
+public final class SkyEnvironment3D {
+    public SkyEnvironment3D zenithColor(float red, float green, float blue);
+    public SkyEnvironment3D horizonColor(float red, float green, float blue);
+    public SkyEnvironment3D nadirColor(float red, float green, float blue);
+    public SkyEnvironment3D sunColor(float red, float green, float blue);
+    public SkyEnvironment3D sunDirection(float x, float y, float z);
+    public SkyEnvironment3D intensity(float diffuseIntensity, float specularIntensity);
+    public SkyEnvironment3D sunIntensity(float sunIntensity);
+    public SkyEnvironment3D horizonBlend(float horizonBlend);
+    public Color zenithColor();
+    public Color horizonColor();
+    public Color nadirColor();
+    public Color sunColor();
+    public float sunDirectionX();
+    public float sunDirectionY();
+    public float sunDirectionZ();
+    public float diffuseIntensity();
+    public float specularIntensity();
+    public float sunIntensity();
+    public float horizonBlend();
 }
 
 public final class ModelBatchConfig {
@@ -2449,12 +3046,27 @@ public interface Model extends Disposable {
     List<ModelNode> nodes();
     List<Material> materials();
     List<AnimationClip> animations();
+    List<Skin> skins();
 }
 
 public interface ModelInstance {
     Model model();
     Matrix4 transform();
     void collectRenderables(RenderQueue3D queue);
+}
+
+public final class DefaultModelInstance implements ModelInstance {
+    public DefaultModelInstance(Model model);
+    public DefaultModelInstance transform(Matrix4 transform);
+    public DefaultModelInstance nodeTransform(String nodeId, Matrix4 localTransform);
+    public Matrix4 copyNodeTransform(String nodeId, Matrix4 out);
+    public Matrix4 copyNodeModelTransform(String nodeId, Matrix4 out);
+    public Matrix4 copyNodeWorldTransform(String nodeId, Matrix4 out);
+    public Matrix4 nodeTransform(String nodeId);
+    public Matrix4 nodeModelTransform(String nodeId);
+    public Matrix4 nodeWorldTransform(String nodeId);
+    public DefaultModelInstance resetNodeTransforms();
+    public boolean hasNode(String nodeId);
 }
 
 public final class ModelNode {
@@ -2468,6 +3080,9 @@ public final class ModelNodePart {
     public MeshPart meshPart();
     public Material material();
     public int[] bones();
+    public Skin skin();
+    public int[] joints();
+    public float[] weights();
 }
 
 public final class Renderable3D {
@@ -2475,6 +3090,7 @@ public final class Renderable3D {
     public Material material();
     public Matrix4 worldTransform();
     public BoundingBox bounds();
+    public SkinningPalette skinningPalette();
 }
 
 public interface RenderQueue3D {
@@ -2547,8 +3163,77 @@ public final class RenderContext3D {
 }
 
 public final class Environment3D {
+    public Environment3D ambientColor(Color ambientColor);
+    public Environment3D add(Light light);
+    public Environment3D clearLights();
+    public Environment3D skyEnvironment(SkyEnvironment3D skyEnvironment);
+    public Environment3D clearSkyEnvironment();
+    public Environment3D directionalShadowMap(DirectionalShadowMap3D shadowMap);
+    public Environment3D cascadedShadowMap(CascadedShadowMap3D shadowMap);
+    public Environment3D clearDirectionalShadowMap();
+    public Environment3D clearCascadedShadowMap();
+    public Environment3D fog(Color fogColor, float startDistance, float endDistance);
+    public Environment3D fog(float red, float green, float blue, float alpha,
+            float startDistance, float endDistance);
+    public Environment3D clearFog();
     public Color ambientColor();
+    public SkyEnvironment3D skyEnvironment();
     public List<Light> lights();
+    public DirectionalShadowMap3D directionalShadowMap();
+    public CascadedShadowMap3D cascadedShadowMap();
+    public boolean fogEnabled();
+    public Color fogColor();
+    public float fogStartDistance();
+    public float fogEndDistance();
+}
+
+public final class DirectionalShadowMap3D implements Disposable {
+    public DirectionalShadowMap3D(GraphicsContext graphics, int width, int height);
+    public DirectionalShadowMap3D bounds(float centerX, float centerY, float centerZ,
+            float halfSize, float near, float far);
+    public DirectionalShadowMap3D bias(float bias);
+    public DirectionalShadowMap3D strength(float strength);
+    public void render(DirectionalLight light, ModelInstance[] instances);
+    public void render(DirectionalLight light, Iterable<? extends ModelInstance> instances);
+    public Texture texture();
+    public Matrix4 lightViewProjection();
+    public float bias();
+    public float strength();
+}
+
+public final class CascadedShadowMap3D implements Disposable {
+    public CascadedShadowMap3D(GraphicsContext graphics, int cascadeCount, int width, int height);
+    public CascadedShadowMap3D splitLambda(float splitLambda);
+    public CascadedShadowMap3D padding(float padding);
+    public CascadedShadowMap3D maxDistance(float maxDistance);
+    public CascadedShadowMap3D clearMaxDistance();
+    public CascadedShadowMap3D bias(float bias);
+    public CascadedShadowMap3D minTexelBias(float texels);
+    public CascadedShadowMap3D strength(float strength);
+    public CascadedShadowMap3D update(Camera viewCamera);
+    public void render(DirectionalLight light, Camera viewCamera, ModelInstance[] instances);
+    public void render(DirectionalLight light, Camera viewCamera,
+            Iterable<? extends ModelInstance> instances);
+    public int cascadeCount();
+    public DirectionalShadowMap3D cascade(int index);
+    public DirectionalShadowMap3D activeShadowMap();
+    public float cascadeBias(int index);
+    public Vector3 viewCameraPosition();
+    public Vector3 viewCameraDirection();
+    public Vector3 viewCameraUp();
+    public float viewCameraNear();
+    public float viewCameraFar();
+    public float viewCameraTanHalfFov();
+    public float viewCameraAspect();
+    public float splitDistance(int index);
+    public float cascadeCenterX(int index);
+    public float cascadeCenterY(int index);
+    public float cascadeCenterZ(int index);
+    public float cascadeHalfSize(int index);
+    public float splitLambda();
+    public float padding();
+    public float maxDistance();
+    public float minTexelBias();
 }
 
 public interface Light {
@@ -2574,8 +3259,36 @@ public final class SpotLight implements Light {
 }
 
 public final class AnimationClip {
-    String id();
-    float durationSeconds();
+    public AnimationClip(String id, float durationSeconds);
+    public AnimationClip(String id, float durationSeconds,
+            AnimationClip.NodeTransformChannel[] nodeTransformChannels);
+    public static AnimationClip.NodeTransformChannel nodeTransform(String nodeId,
+            AnimationClip.TransformKeyframe... keyframes);
+    public static AnimationClip.TransformKeyframe keyframe(float timeSeconds,
+            float translationX, float translationY, float translationZ);
+    public static AnimationClip.TransformKeyframe keyframe(float timeSeconds,
+            float translationX, float translationY, float translationZ,
+            float rotationX, float rotationY, float rotationZ, float rotationW,
+            float scaleX, float scaleY, float scaleZ);
+    public String id();
+    public float durationSeconds();
+    public AnimationClip.NodeTransformChannel[] nodeTransformChannels();
+
+    public static final class NodeTransformChannel {
+        public NodeTransformChannel(String nodeId, AnimationClip.TransformKeyframe... keyframes);
+        public String nodeId();
+        public AnimationClip.TransformKeyframe[] keyframes();
+        public Matrix4 sample(float timeSeconds, Matrix4 out);
+    }
+
+    public static final class TransformKeyframe {
+        public TransformKeyframe(float timeSeconds,
+                float translationX, float translationY, float translationZ,
+                float rotationX, float rotationY, float rotationZ, float rotationW,
+                float scaleX, float scaleY, float scaleZ);
+        public float timeSeconds();
+        public Matrix4 toMatrix(Matrix4 out);
+    }
 }
 
 public final class Skeleton {
@@ -2593,6 +3306,36 @@ public final class Skin {
     Skeleton skeleton();
 }
 
+public final class SkinningPalette {
+    public SkinningPalette(Skin skin);
+    public SkinningPalette update(DefaultModelInstance instance);
+    public Skin skin();
+    public int size();
+    public Matrix4 boneMatrix(int index);
+    public Matrix4 copyBoneMatrix(int index, Matrix4 out);
+    public float[] values();
+    public float[] copyValues(float[] out);
+    public float[] copyValues(float[] out, int offset);
+}
+
+public final class CpuSkinningMeshUpdater {
+    public CpuSkinningMeshUpdater(GraphicsContext graphics, Mesh mesh, int[] joints, float[] weights);
+    public CpuSkinningMeshUpdater update(SkinningPalette palette);
+}
+
+public final class CpuSkinnedModelAnimator {
+    public CpuSkinnedModelAnimator(GraphicsContext graphics, DefaultModelInstance instance);
+    public CpuSkinnedModelAnimator play(AnimationClip clip, boolean looping);
+    public CpuSkinnedModelAnimator time(float timeSeconds);
+    public CpuSkinnedModelAnimator update(float deltaSeconds);
+    public CpuSkinnedModelAnimator stop();
+    public CpuSkinnedModelAnimator updateSkinning();
+    public DefaultModelInstance instance();
+    public AnimationController controller();
+    public int skinCount();
+    public int skinnedPartCount();
+}
+
 public final class MorphTarget {
     String id();
     float weight();
@@ -2603,7 +3346,9 @@ public final class AnimationController {
     public AnimationClip clip();
     public float timeSeconds();
     public AnimationController play(AnimationClip clip, boolean looping);
+    public AnimationController time(float timeSeconds);
     public AnimationController update(float deltaSeconds);
+    public AnimationController stop();
 }
 
 public interface RenderTarget3D {
@@ -2644,14 +3389,33 @@ Rules:
 
 - `g3d` should use `graphics/api`, not provider-specific graphics types.
 - `Batch3D` is the common model/renderable submission contract. `ModelBatch` is the first implementation.
-- The first `ModelBatch` source slice renders static position/color meshes through reusable `Buffer`, `ShaderModule`, and `RenderPipeline` objects. The default `PbrShaderProvider` also owns the current static metallic-roughness PBR path for retained glTF mesh data and creates its built-in shader modules from WGSL `ShaderModuleDescriptor` values plus explicit setup-time reflection metadata.
+- The first `ModelBatch` source slice renders static position/color meshes through reusable `Buffer`, `ShaderModule`, and `RenderPipeline` objects. The default `PbrShaderProvider` also owns metallic-roughness PBR paths for `Mesh.PBR_LAYOUT` and `Mesh.PBR_SKINNED_LAYOUT` mesh data and creates its built-in shader modules from WGSL `ShaderModuleDescriptor` values plus explicit setup-time reflection metadata.
 - `ModelBuilder` creates simple primitive models and custom triangle meshes using the current position/color renderer path.
-- `G3DAssetLoaders.register(...)` installs the initial glTF loader. The current glTF slice supports static glTF 2.0 `.gltf`/`.glb` triangle meshes with `POSITION`, optional `NORMAL`, optional `TEXCOORD_0`, optional `COLOR_0`, optional indices, metallic-roughness factors, and base-color, metallic-roughness, normal, occlusion, and emissive textures. Node transforms, skins, morph targets, animations, and broader material policies are later slices.
+- `G3DAssetLoaders.register(...)` installs the initial glTF loader. The current glTF slice supports glTF 2.0 `.gltf`/`.glb` triangle meshes with `POSITION`, optional `NORMAL`, optional `TEXCOORD_0`, optional `COLOR_0`, optional indices, node hierarchy/local transforms, skins, `JOINTS_0`/`WEIGHTS_0`, inverse bind matrices, LINEAR translation/rotation/scale animation channels, metallic-roughness factors, and base-color, metallic-roughness, normal, occlusion, and emissive textures. Morph targets, non-LINEAR animation interpolation, sparse accessors, and broader material policies are later slices.
+- The default `PbrShaderProvider` consumes ambient light, an optional `SkyEnvironment3D`, the first directional light, the first four point lights, and the first four spot lights from `Environment3D`. Point lights use distance falloff from `PointLight.position()` and `PointLight.range()`. Spot lights use distance falloff plus cone falloff from `SpotLight.position()`, `SpotLight.direction()`, `SpotLight.range()`, `SpotLight.innerConeDegrees()`, and `SpotLight.outerConeDegrees()`. These default light rules share the same behavior in the GPU WGSL PBR path and CPU-projected fallback path.
+- `Environment3D.directionalShadowMap(...)` stores a non-owning reference to a `DirectionalShadowMap3D`. `Environment3D.cascadedShadowMap(...)` stores a non-owning reference to a `CascadedShadowMap3D`. The application owns disposal and should render the selected shadow helper before the main `ModelBatch` pass each frame. When a non-disposed cascaded shadow map is present, the default WGSL PBR path uploads up to four cascade view-projection matrices, split distances, computed per-cascade biases, the cascade driver camera, and shadow textures, then selects the cascade per fragment from that driver camera. If no cascaded map is present, the PBR path falls back to the single `DirectionalShadowMap3D` binding.
+- `DirectionalShadowMap3D.bias(...)` is a direct normalized depth comparison bias. `CascadedShadowMap3D.bias(...)` is a base world-space bias; each cascade converts it to normalized depth bias with a minimum texel-sized floor from `minTexelBias(...)`.
+- `Environment3D` distance fog is disabled by default. `fog(color, startDistance, endDistance)` enables linear distance fog for the default `PbrShaderProvider`; `color.alpha()` is the maximum fog amount. `clearFog()` disables it. Distances are measured from the active `Camera` position to each shaded world position, and the same environment state is used by both the GPU PBR shader path and the CPU-projected fallback path.
+- `Environment3D.skyEnvironment(...)` stores a non-owning `SkyEnvironment3D` reference. The default `PbrShaderProvider` samples that procedural sky analytically as IBL-style diffuse irradiance plus roughness-aware specular reflection, including a sun reflection lobe from `sunDirection(...)`, `sunColor(...)`, and `sunIntensity(...)`. This is provider-neutral and does not require cubemap texture support. Future texture-backed cubemap/IBL support should add explicit texture/environment-map types and may use the same environment slot as its public entry point.
+- `OutlineRenderer3D` owns a WGSL shader module and cached render pipelines. It renders `Mesh.PBR_LAYOUT` renderables by expanding vertex positions along normals in world space. The intended first-pass usage is to draw the outline with a clear or loaded color attachment, then draw the normal `ModelBatch` pass with `LoadOp.load()` so the model covers the shell center.
+- `FogOfWarRenderer3D` owns a WGSL shader module and streams reusable overlay vertices into common `Buffer` objects. It projects horizontal world-space rectangles through the supplied `Camera`, draws them after the main scene with `LoadOp.load()`, and uses world-space reveal spheres from `light(x, y, z, radius, softness)`. At most `FogOfWarRenderer3D.MAX_LIGHTS` reveal spheres are submitted per draw call. It is independent from `Environment3D` distance fog and does not mutate the default PBR uniform layout.
+- `BillboardRenderer3D` owns a WGSL shader module and streams reusable camera-facing textured quad vertices into common `Buffer` objects. It uses `Texture` directly instead of `graphics/g2d.TextureRegion` so `g3d` remains independent from `g2d`; atlas users can pass normalized `u`, `v`, `u2`, and `v2` coordinates explicitly. The renderer depth-tests billboards and disables depth writes. For scene occlusion, draw it inside the same depth-enabled `RenderPass` as `ModelBatch` by using `begin(RenderPass)`.
+- `ParticleEmitter3D` is provider-neutral particle simulation data plus a `BillboardRenderer3D` draw helper. It owns fixed-capacity primitive arrays, does not allocate per particle, updates with explicit `deltaSeconds`, and renders through a caller-owned, already-begun `BillboardRenderer3D`. Rendering resets the billboard color to white after submitting active particles.
+- `SkyboxRenderer3D` owns a WGSL shader module and renders a procedural sky from world-space view rays into the active color attachment. The sky rotates correctly with the camera orientation because each fragment is shaded from its world direction, and `sunDirection(...)` anchors the sun in world space. `sunPosition(...)` remains a normalized-sky-coordinate convenience for simple demos. It should normally draw before `ModelBatch`, then the model pass should use `LoadOp.load()` so geometry appears over the sky. It is a background renderer; use `SkyEnvironment3D` on `Environment3D` when the same sky should affect PBR lighting.
+- `AnimationClip` currently owns provider-neutral node transform channels. `AnimationController` samples translation, quaternion rotation, and scale keyframes into instance-local `DefaultModelInstance` node transforms without per-frame channel-array allocation. `DefaultModelInstance` exposes allocation-free copy methods for local, model-space, and world-space node transforms; convenience getters return copies.
+- `SkinningPalette` prepares bone matrices from a `Skin` and an animated `DefaultModelInstance`. Each bone matrix is `boneModelTransform * inverseBindTransform` in model space, which lets the renderer apply the model transform once. The palette reuses `Matrix4` objects and packed float storage across `update(...)` calls.
+- `ModelNodePart` may carry an imported `Skin` plus four joint indices and four joint weights per expanded mesh vertex. `bones()` is a compatibility alias for `joints()` until a broader animation API cleanup removes the old name. `DefaultModelInstance` keeps one `SkinningPalette` per `Skin`, updates those palettes when node transforms change, and exposes the matching palette through each skinned `Renderable3D`.
+- `Mesh.PBR_SKINNED_LAYOUT` appends joint and weight `vec4f` attributes to the normal PBR vertex data. glTF primitives with `JOINTS_0` and `WEIGHTS_0` use this layout so the default WGSL PBR path can skin vertices on the GPU when the selected provider has the PBR uniform-block path.
+- `PbrShaderProvider` uploads skinned renderable palettes as a fixed 64-matrix uniform array and applies them in the WGSL vertex shader. `PbrShaderConfig.maxBones(...)` may lower that limit per shader. The current Java mappings cover GL/GLES/WebGL, WGPU, Vulkan, and iOS C Metal render passes. iOS C Metal can receive the PBR uniform block and depth state when MSL is available, but the iOS C backend still does not register a runtime shader compiler provider, so WGSL-only built-in shaders require a future iOS compiler bridge there.
+- `CpuSkinningMeshUpdater` is a compatibility and validation path that rewrites an existing `Mesh.PBR_LAYOUT`, `Mesh.PBR_SKINNED_LAYOUT`, or `Mesh.POSITION_COLOR_LAYOUT` vertex buffer from retained source arrays, four joint indices per vertex, four joint weights per vertex, and a `SkinningPalette`. It reuses its staging byte buffer across updates.
+- `CpuSkinnedModelAnimator` is the convenience CPU path for imported skinned models. It owns one `AnimationController`, caches one `SkinningPalette` per `Skin`, caches one `CpuSkinningMeshUpdater` per skinned `ModelNodePart`, and updates every skinned mesh with `play(...)`, `time(...)`, `update(...)`, or `updateSkinning()`.
+- CPU skinned animation mutates the model mesh vertex buffers. It is appropriate for compatibility, validation, and single-instance use of a loaded skinned model. Independent simultaneous animation of several instances that share one `Model` should use the GPU skinning path or cloned meshes for the CPU path.
+- This is node-pose playback, skin-palette preparation, glTF skin/animation import, CPU mesh-update compatibility, and a first WGSL GPU skinning path for PBR meshes. Morph targets, non-LINEAR glTF animation interpolation, and broader material policies remain later layers.
 - `g3d` should keep model loading, materials, PBR data, custom shaders, animation, lighting, frame targets, render paths, and rendering helpers in one user-facing artifact.
 - Provider-specific rendering paths can exist internally, but normal user code should not need provider-specific graphics classes.
 - `ModelBatch` should batch by shader key, material state, mesh, primitive topology, vertex layout, and render target. It should sort opaque renderables for state locality and depth efficiency, sort transparent renderables back-to-front, and keep stable ordering where required.
 - `ModelBatch` should use API-neutral performance features through `graphics/api`: immutable/static mesh buffers, dynamic uniform or storage buffers, per-context pipeline caches, material/shader variant caches, texture and sampler binding reuse, instancing for repeated meshes, GPU skinning where supported, and clear fallbacks where a provider lacks an optimization.
-- Later PBR slices should broaden material policy and lighting support, including alpha mode, double-sided state, image-based lighting, shadows, instancing, GPU skinning, morph targets, and render-target integration.
+- Later PBR slices should broaden material policy and lighting support, including alpha mode, double-sided state, texture-backed cubemap/environment maps, shadow quality, instancing, morph targets, and render-target integration.
 - Custom shaders should plug in through `ShaderProvider3D` and still receive standard camera, model, material, light, animation, and render-target inputs through `RenderContext3D`.
 - Framebuffer and future multi-render-target support belongs in `graphics/api`; `g3d` render paths should consume those targets for capture, shadow maps, G-buffers, reflection/environment captures, post-processing, and user-created offscreen passes.
 - Animation should support node transforms first, then skeletal skinning and morph targets. CPU skinning may exist as a compatibility fallback, but GPU skinning should be the optimized default when the selected provider can support it.
@@ -2694,7 +3458,7 @@ Defined types:
 | `UiLayer`, `UiPopup`, `UiModal`, `UiTooltip` | Ordered UI layers, popups, modal input blocking, and anchored tooltips. |
 | `UiWindowState` | Retained position and size for movable and resizable UI windows. |
 | `UiFocusScope`, `UiNavigation` | Keyboard/gamepad focus scopes and navigation rules. |
-| `UiListState`, `UiScrollState` | Retained scroll and virtualized list/grid state. |
+| `UiListState`, `UiScrollState` | Retained scroll and virtualized list/grid state. `UiScrollState` supports vertical range visibility checks and scroll-into-view behavior that does not move already-visible content. |
 | `UiTextAreaOptions` | Text-area sizing policy for fixed-height and bounded auto-grow behavior. |
 
 ### 16.1. UI Kit Contracts
@@ -2828,7 +3592,7 @@ These decisions are part of the common API contract:
 - Use `HttpClient` as the HTTP entry point type.
 - Keep `AudioSource` as the advanced persistent playback source/channel type. Basic playback should still use `Sound`, `Music`, and `PlaybackHandle`.
 - Use descriptor names ending in `Descriptor` for graphics creation inputs, such as `TextureDescriptor`, `BufferDescriptor`, and `RenderPipelineDescriptor`.
-- Include `ShaderLanguage`, `ShaderProfile`, `ShaderTarget`, and `ShaderBundle` from the start. WGSL is the default authoring source for portable shaders. GL/WebGL/GLES may translate WGSL to GLSL or accept direct GLSL, Vulkan may translate WGSL to SPIR-V or accept direct SPIR-V, Metal may translate WGSL to MSL or accept direct MSL, and HLSL is a future DirectX target.
+- Include `ShaderLanguage`, `ShaderProfile`, `ShaderTarget`, and `ShaderBundle` from the start. WGSL is the only shader authoring source of truth. GL/WebGL/GLES translate WGSL to GLSL/GLSL ES through Tint, Vulkan translates WGSL to SPIR-V through Tint, Metal translates WGSL to MSL through Tint, and HLSL is a future DirectX target.
 - Keep `TextureView` as a required common graphics type. Advanced view behavior is capability-gated.
 
 ## 19. Runtime Core
@@ -2885,10 +3649,10 @@ Rules:
 - UI and g2d rendering consume cached `BitmapFont` atlas data after rasterization.
 - Backends must register a platform-specific `RuntimeCoreProvider` before code loads `.ttf`/`.otf` fonts through `UiFont.freeType(...)` or `BitmapFontFiles.loadFreeType(...)`.
 - Shader compilation happens when a shader module is created, an editor explicitly recompiles, or tooling validates a shader. It must not happen inside a frame loop.
-- Providers that consume WGSL directly do not require the shader compiler capability. Providers that need GLSL, SPIR-V, or MSL may request the capability only when the descriptor does not already provide the native language.
+- Providers that consume WGSL directly do not require the shader compiler capability. Providers that need GLSL, SPIR-V, or MSL request the capability for normal built-in renderer shaders because those descriptors are WGSL-only.
 - Platforms that do not need shader translation, such as PSP, must not be forced to package the compiler capability.
 - If no platform provider is registered, `runtime/fdx/core` must fail clearly. Do not silently fall back to a Java rasterizer or any non-FreeType implementation.
-- Desktop JVM registers a provider backed by LWJGL FreeType and may also expose the native runtime shader compiler when the selected desktop `fdx` native library includes it. Desktop C and Android register providers backed by the runtime fdx C/C++ bridge linked with downloaded FreeType source and optional shader compiler source. Web registers a provider backed by the runtime fdx Emscripten JS/WASM bridge.
+- Desktop JVM registers a provider backed by LWJGL FreeType and may also expose the native runtime shader compiler when the selected desktop `fdx` native library includes it. Desktop C and Android register providers backed by the runtime fdx C/C++ bridge linked with downloaded FreeType source and shader compiler source when enabled. Web registers a provider backed by the runtime fdx Emscripten JS/WASM bridge and enables the shader compiler by default so WebGL can translate WGSL-only built-in shaders. iOS C currently registers no runtime shader compiler provider.
 - Native bridge source is owned by `runtime/fdx/platform/*`, not by the Java core module. The core module owns Java contracts. `fdx_shared` packages the shared native source payload needed by TeaVM/native project generation, and `fdx_desktop`, `fdx_android`, and `fdx_web` package platform native outputs.
 - Third-party FreeType source is not committed into the repository. The `runtime/fdx/platform` build prepares the pinned FreeType source archive under `build/third-party/...`; Android and web runtime fdx platform builds use that source when compiling the native bridge.
 - Platform-specific native resources generated for the core JAR are scoped under `libfdx-native/<platform>/...` in generated resource output.

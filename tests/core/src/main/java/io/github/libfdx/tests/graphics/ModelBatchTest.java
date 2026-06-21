@@ -9,8 +9,9 @@ import io.github.libfdx.assets.DefaultAssetManager;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.Logger;
 import io.github.libfdx.display.Display;
-import io.github.libfdx.graphics.Camera;
-import io.github.libfdx.graphics.CameraProjection;
+import io.github.libfdx.graphics.camera.Camera;
+import io.github.libfdx.graphics.camera.CameraProjection;
+import io.github.libfdx.graphics.camera.controller.OrbitCameraController3D;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.math.Color;
@@ -44,6 +45,7 @@ public final class ModelBatchTest extends ApplicationAdapter {
     private GraphicsContext graphics;
     private ModelBatch batch;
     private Camera camera;
+    private OrbitCameraController3D cameraInput;
     private Model model;
     private DefaultModelInstance instance;
     private boolean created;
@@ -104,8 +106,11 @@ public final class ModelBatchTest extends ApplicationAdapter {
                 .projection(CameraProjection.PERSPECTIVE)
                 .fieldOfView(67.0f)
                 .viewport(framebufferWidth(), framebufferHeight())
-                .position(0.0f, 0.18f, 3.25f)
-                .lookAt(0.0f, 0.0f, 0.0f);
+                .nearFar(0.1f, 40.0f);
+        cameraInput = new OrbitCameraController3D(fdx.input(), camera)
+                .position(0.0f, 0.18f, 3.25f, 0.0f, 0.0f, 0.0f)
+                .autoOrbit(TestCameraControllers.autoOrbitEnabled(), 0.75f, exitAfterFrames,
+                        TestCameraControllers.autoOrbitStartDegrees(), TestCameraControllers.autoOrbitDegrees());
         capturePath = System.getProperty("libfdx.test.capture", "");
         captureEvery = Integer.parseInt(System.getProperty("libfdx.test.captureEvery", "0"));
 
@@ -122,6 +127,7 @@ public final class ModelBatchTest extends ApplicationAdapter {
         float deltaSeconds = application.deltaTime();
         assets.update();
         camera.viewport(framebufferWidth(), framebufferHeight());
+        cameraInput.update(deltaSeconds);
         float seconds = renderedFrames / 60.0f;
         instance.transform(Matrix4.rotationY(seconds * 0.45f));
         batch.begin(LoadOp.clear(0.04f, 0.045f, 0.06f, 1.0f), camera);

@@ -30,4 +30,11 @@ public interface Model extends Disposable {
      * @return the animations
      */
     List<AnimationClip> animations();
+
+    /**
+     * Returns the skins.
+     *
+     * @return the skins
+     */
+    List<Skin> skins();
 }

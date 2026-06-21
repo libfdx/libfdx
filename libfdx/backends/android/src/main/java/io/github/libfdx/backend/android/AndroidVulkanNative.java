@@ -60,22 +60,25 @@ final class AndroidVulkanNative {
 
     static native void writeBuffer(long buffer, ByteBuffer data, int size);
 
-    static native long createTexture(long context, int width, int height, int format, int wrapS, int wrapT);
+    static native long createTexture(long context, int width, int height, int format, int wrapS, int wrapT,
+            boolean sampled, boolean renderAttachment);
 
     static native void writeTexture(long texture, ByteBuffer data, int size);
 
     static native long createShaderModule(long context, int[] vertexWords, int[] fragmentWords);
 
-    static native long createRenderPipeline(long context, long shaderModule, int primitiveTopology, int vertexStride,
-            int[] attributeLocations, int[] attributeFormats, int[] attributeOffsets, int sampledTextureCount,
-            boolean pbrUniformsEnabled, boolean depthTestEnabled, boolean depthWriteEnabled);
+    static native long createRenderPipeline(long context, long shaderModule, int colorFormat, int primitiveTopology,
+            int[] vertexStrides, int[] vertexStepModes, int[] attributeBindings, int[] attributeLocations,
+            int[] attributeFormats, int[] attributeOffsets, int sampledTextureCount, boolean pbrUniformsEnabled,
+            boolean depthTestEnabled, boolean depthWriteEnabled);
 
-    static native void beginRenderPass(long context, boolean clear, float red, float green, float blue,
-            float alpha, boolean store, boolean depthClear, float depthClearValue);
+    static native void beginRenderPass(long context, long colorTexture, int colorFormat, int width, int height,
+            boolean clear, float red, float green, float blue, float alpha, boolean store, boolean depthClear,
+            float depthClearValue);
 
     static native void setPipeline(long context, long pipeline);
 
-    static native void setVertexBuffer(long context, long buffer);
+    static native void setVertexBuffer(long context, int slot, long buffer);
 
     static native void setIndexBuffer(long context, long buffer);
 

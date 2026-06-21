@@ -11,6 +11,7 @@ public final class DisplayConfig {
     private int height = 600;
     private boolean resizable = true;
     private boolean visible = true;
+    private boolean maximized;
     private boolean vSync = true;
     private int foregroundFps = 60;
 
@@ -102,6 +103,26 @@ public final class DisplayConfig {
      */
     public DisplayConfig visible(boolean visible) {
         this.visible = visible;
+        return this;
+    }
+
+    /**
+     * Returns the maximized startup state.
+     *
+     * @return true if the display should start maximized; false otherwise
+     */
+    public boolean maximized() {
+        return maximized;
+    }
+
+    /**
+     * Sets the maximized startup state and returns this display config.
+     *
+     * @param maximized the maximized startup state
+     * @return this display config for chaining
+     */
+    public DisplayConfig maximized(boolean maximized) {
+        this.maximized = maximized;
         return this;
     }
 

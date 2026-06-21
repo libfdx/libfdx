@@ -38,6 +38,12 @@ final class WebGLApi implements GLApi {
     private static final int COMPILE_STATUS = 0x8B81;
     private static final int LINK_STATUS = 0x8B82;
     private static final int TEXTURE_2D = 0x0DE1;
+    private static final int FRAMEBUFFER = 0x8D40;
+    private static final int RENDERBUFFER = 0x8D41;
+    private static final int COLOR_ATTACHMENT0 = 0x8CE0;
+    private static final int DEPTH_ATTACHMENT = 0x8D00;
+    private static final int FRAMEBUFFER_COMPLETE = 0x8CD5;
+    private static final int DEPTH_COMPONENT16 = 0x81A5;
     private static final int TEXTURE_MIN_FILTER = 0x2801;
     private static final int TEXTURE_MAG_FILTER = 0x2800;
     private static final int TEXTURE_WRAP_S = 0x2802;
@@ -96,6 +102,8 @@ final class WebGLApi implements GLApi {
     private final HandleMap<WebGLShader> shaders = HandleMap.create();
     private final HandleMap<WebGLBuffer> buffers = HandleMap.create();
     private final HandleMap<WebGLTexture> textures = HandleMap.create();
+    private final HandleMap<JSObject> framebuffers = HandleMap.create();
+    private final HandleMap<JSObject> renderbuffers = HandleMap.create();
     private final HandleMap<HandleMap<WebGLUniformLocation>> uniforms = HandleMap.create();
     private final Map<Integer, GLShaderType> shaderTypes = new HashMap<Integer, GLShaderType>();
     private int currentProgram;
@@ -478,6 +486,111 @@ final class WebGLApi implements GLApi {
     }
 
     /**
+     * Returns the gen framebuffer.
+     *
+     * @return the gen framebuffer
+     */
+    @Override
+    public int genFramebuffer() {
+        return framebuffers.add(createFramebuffer(gl));
+    }
+
+    /**
+     * Runs the bind framebuffer step.
+     *
+     * @param framebuffer the framebuffer
+     */
+    @Override
+    public void bindFramebuffer(int framebuffer) {
+        bindFramebuffer(gl, FRAMEBUFFER, framebuffer == 0 ? null : framebuffers.get(framebuffer));
+    }
+
+    /**
+     * Runs the framebuffer texture2 d step.
+     *
+     * @param texture the texture
+     */
+    @Override
+    public void framebufferTexture2D(int texture) {
+        framebufferTexture2D(gl, FRAMEBUFFER, COLOR_ATTACHMENT0, TEXTURE_2D, textures.get(texture), 0);
+    }
+
+    /**
+     * Returns whether the currently bound framebuffer is complete.
+     *
+     * @return true if complete
+     */
+    @Override
+    public boolean framebufferComplete() {
+        return checkFramebufferStatus(gl, FRAMEBUFFER) == FRAMEBUFFER_COMPLETE;
+    }
+
+    /**
+     * Runs the delete framebuffer step.
+     *
+     * @param framebuffer the framebuffer
+     */
+    @Override
+    public void deleteFramebuffer(int framebuffer) {
+        if (framebuffer != 0) {
+            deleteFramebuffer(gl, framebuffers.remove(framebuffer));
+        }
+    }
+
+    /**
+     * Returns the gen renderbuffer.
+     *
+     * @return the gen renderbuffer
+     */
+    @Override
+    public int genRenderbuffer() {
+        return renderbuffers.add(createRenderbuffer(gl));
+    }
+
+    /**
+     * Runs the bind renderbuffer step.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    @Override
+    public void bindRenderbuffer(int renderbuffer) {
+        bindRenderbuffer(gl, RENDERBUFFER, renderbuffer == 0 ? null : renderbuffers.get(renderbuffer));
+    }
+
+    /**
+     * Runs the renderbuffer depth storage step.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
+    @Override
+    public void renderbufferStorageDepth(int width, int height) {
+        renderbufferStorage(gl, RENDERBUFFER, DEPTH_COMPONENT16, width, height);
+    }
+
+    /**
+     * Runs the framebuffer depth renderbuffer attachment step.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    @Override
+    public void framebufferRenderbufferDepth(int renderbuffer) {
+        framebufferRenderbuffer(gl, FRAMEBUFFER, DEPTH_ATTACHMENT, RENDERBUFFER, renderbuffers.get(renderbuffer));
+    }
+
+    /**
+     * Runs the delete renderbuffer step.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    @Override
+    public void deleteRenderbuffer(int renderbuffer) {
+        if (renderbuffer != 0) {
+            deleteRenderbuffer(gl, renderbuffers.remove(renderbuffer));
+        }
+    }
+
+    /**
      * Runs the active texture step.
      *
      * @param slot the slot
@@ -795,6 +908,24 @@ final class WebGLApi implements GLApi {
     }
 
     /**
+     * Runs the read pixels RGBA8 step.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @return the read pixels RGBA8
+     */
+    @Override
+    public ByteBuffer readPixelsRgba8(int width, int height) {
+        if (width <= 0 || height <= 0) {
+            return ByteBuffer.allocateDirect(0);
+        }
+        ByteBuffer pixels = ByteBuffer.allocateDirect(width * height * 4);
+        readPixelsRgba8(gl, width, height, Uint8Array.fromJavaBuffer(pixels));
+        pixels.position(0);
+        return pixels;
+    }
+
+    /**
      * Draws arrays.
      *
      * @param topology the topology
@@ -948,4 +1079,45 @@ final class WebGLApi implements GLApi {
             "gl.uniformBlockBinding(program, blockIndex, binding);")
     private static native void uniformBlockBinding(WebGLRenderingContext gl, WebGLProgram program, int blockIndex,
             int binding);
+
+    @JSBody(params = { "gl" }, script = "return gl.createFramebuffer();")
+    private static native JSObject createFramebuffer(WebGLRenderingContext gl);
+
+    @JSBody(params = { "gl", "target", "framebuffer" }, script = "gl.bindFramebuffer(target, framebuffer);")
+    private static native void bindFramebuffer(WebGLRenderingContext gl, int target, JSObject framebuffer);
+
+    @JSBody(params = { "gl", "target", "attachment", "textarget", "texture", "level" }, script =
+            "gl.framebufferTexture2D(target, attachment, textarget, texture, level);")
+    private static native void framebufferTexture2D(WebGLRenderingContext gl, int target, int attachment,
+            int textarget, WebGLTexture texture, int level);
+
+    @JSBody(params = { "gl", "target" }, script = "return gl.checkFramebufferStatus(target);")
+    private static native int checkFramebufferStatus(WebGLRenderingContext gl, int target);
+
+    @JSBody(params = { "gl", "framebuffer" }, script = "gl.deleteFramebuffer(framebuffer);")
+    private static native void deleteFramebuffer(WebGLRenderingContext gl, JSObject framebuffer);
+
+    @JSBody(params = { "gl" }, script = "return gl.createRenderbuffer();")
+    private static native JSObject createRenderbuffer(WebGLRenderingContext gl);
+
+    @JSBody(params = { "gl", "target", "renderbuffer" }, script = "gl.bindRenderbuffer(target, renderbuffer);")
+    private static native void bindRenderbuffer(WebGLRenderingContext gl, int target, JSObject renderbuffer);
+
+    @JSBody(params = { "gl", "target", "internalformat", "width", "height" }, script =
+            "gl.renderbufferStorage(target, internalformat, width, height);")
+    private static native void renderbufferStorage(WebGLRenderingContext gl, int target, int internalformat,
+            int width, int height);
+
+    @JSBody(params = { "gl", "target", "attachment", "renderbuffertarget", "renderbuffer" }, script =
+            "gl.framebufferRenderbuffer(target, attachment, renderbuffertarget, renderbuffer);")
+    private static native void framebufferRenderbuffer(WebGLRenderingContext gl, int target, int attachment,
+            int renderbuffertarget, JSObject renderbuffer);
+
+    @JSBody(params = { "gl", "renderbuffer" }, script = "gl.deleteRenderbuffer(renderbuffer);")
+    private static native void deleteRenderbuffer(WebGLRenderingContext gl, JSObject renderbuffer);
+
+    @JSBody(params = { "gl", "width", "height", "target" }, script =
+            "gl.readPixels(0, 0, width, height, 0x1908, 0x1401, target);")
+    private static native void readPixelsRgba8(WebGLRenderingContext gl, int width, int height,
+            ArrayBufferView target);
 }

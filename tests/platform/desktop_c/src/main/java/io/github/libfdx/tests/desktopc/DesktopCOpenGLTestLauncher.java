@@ -22,15 +22,28 @@ public final class DesktopCOpenGLTestLauncher {
      */
     public static void main(String[] args) {
         String testName = TestSelector.DEFAULT_TEST_NAME;
-        int width = TestSelector.defaultWidth(testName);
-        int height = TestSelector.defaultHeight(testName);
+        boolean explicitSize = hasProperty("libfdx.test.width") || hasProperty("libfdx.test.height");
+        boolean maximized = Boolean.parseBoolean(System.getProperty("libfdx.test.maximized",
+                explicitSize ? "false" : "true"));
+        int width = intProperty("libfdx.test.width", TestSelector.defaultWidth(testName));
+        int height = intProperty("libfdx.test.height", TestSelector.defaultHeight(testName));
 
         DesktopCApplicationConfig config = new DesktopCApplicationConfig()
                 .title("libfdx Test: " + testName + " - desktop_c OpenGL")
                 .size(width, height)
+                .maximized(maximized)
                 .graphics(new DesktopCOpenGLProvider());
 
         ApplicationListener test = TestSelector.create(testName, 0L);
         new DesktopCApplicationBackend().start(config, test);
+    }
+
+    private static int intProperty(String name, int fallback) {
+        return Integer.parseInt(System.getProperty(name, String.valueOf(fallback)));
+    }
+
+    private static boolean hasProperty(String name) {
+        String value = System.getProperty(name);
+        return value != null && value.trim().length() > 0;
     }
 }

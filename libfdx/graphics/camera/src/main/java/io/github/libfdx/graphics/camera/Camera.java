@@ -1,4 +1,4 @@
-package io.github.libfdx.graphics;
+package io.github.libfdx.graphics.camera;
 
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.math.Matrix4;

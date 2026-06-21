@@ -10,6 +10,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #define LOG_TAG "libfdx-vulkan"
@@ -69,6 +70,12 @@ struct Buffer {
     int usage = 0;
 };
 
+struct DepthAttachment {
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImageView imageView = VK_NULL_HANDLE;
+};
+
 struct Texture {
     Context* context = nullptr;
     VkImage image = VK_NULL_HANDLE;
@@ -79,12 +86,20 @@ struct Texture {
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
     uint32_t width = 1;
     uint32_t height = 1;
+    bool sampled = false;
+    bool renderAttachment = false;
+    DepthAttachment depthAttachment;
+    std::vector<std::pair<VkRenderPass, VkFramebuffer>> framebuffers;
 };
 
-struct DepthAttachment {
-    VkImage image = VK_NULL_HANDLE;
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    VkImageView imageView = VK_NULL_HANDLE;
+struct TextureRenderPass {
+    VkFormat colorFormat = VK_FORMAT_UNDEFINED;
+    VkAttachmentLoadOp colorLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    VkAttachmentStoreOp colorStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+    VkAttachmentLoadOp depthLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageLayout finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkRenderPass renderPass = VK_NULL_HANDLE;
 };
 
 struct Context {
@@ -106,6 +121,7 @@ struct Context {
     std::vector<DepthAttachment> depthAttachments;
     std::vector<VkFramebuffer> framebuffers;
     VkRenderPass renderPasses[2][2][2] = {};
+    std::vector<TextureRenderPass> textureRenderPasses;
     VkCommandPool commandPool = VK_NULL_HANDLE;
     std::vector<FrameSync> frames;
     uint32_t frameIndex = 0;
@@ -118,6 +134,8 @@ struct Context {
     bool frameStarted = false;
     bool renderPassStarted = false;
     bool pendingResize = false;
+    Texture* activeRenderTarget = nullptr;
+    VkImageLayout activeRenderTargetFinalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 };
 
 template <typename T>
@@ -129,12 +147,11 @@ jlong handle(void* pointer) {
     return static_cast<jlong>(reinterpret_cast<intptr_t>(pointer));
 }
 
-constexpr int PBR_UNIFORM_BYTE_COUNT = 224;
-constexpr int PBR_TEXTURE_DESCRIPTOR_COUNT = 5;
+constexpr int PBR_UNIFORM_BYTE_COUNT = 5088;
 constexpr int MAX_FRAME_DESCRIPTOR_SETS = 1024;
 constexpr int MAX_FRAME_SAMPLED_IMAGES = 4096;
 constexpr int MAX_FRAME_UNIFORM_BUFFERS = 1024;
-constexpr int MAX_TEXTURE_DESCRIPTOR_SLOTS = 8;
+constexpr int MAX_TEXTURE_DESCRIPTOR_SLOTS = 16;
 constexpr VkFormat DEPTH_FORMAT = VK_FORMAT_D32_SFLOAT;
 constexpr uint64_t FRAME_FENCE_TIMEOUT_NS = 33000000ULL;
 constexpr uint64_t FRAME_ACQUIRE_TIMEOUT_NS = 33000000ULL;
@@ -520,17 +537,18 @@ VkSurfaceTransformFlagBitsKHR choosePreTransform(const VkSurfaceCapabilitiesKHR&
     return capabilities.currentTransform;
 }
 
-VkRenderPass createRenderPass(Context* context, VkAttachmentLoadOp colorLoadOp,
-        VkAttachmentStoreOp colorStoreOp, VkAttachmentLoadOp depthLoadOp) {
+VkRenderPass createRenderPass(Context* context, VkFormat colorFormat, VkAttachmentLoadOp colorLoadOp,
+        VkAttachmentStoreOp colorStoreOp, VkAttachmentLoadOp depthLoadOp, VkImageLayout colorInitialLayout,
+        VkImageLayout colorFinalLayout) {
     VkAttachmentDescription attachments[2]{};
-    attachments[0].format = context->surfaceFormat;
+    attachments[0].format = colorFormat;
     attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
     attachments[0].loadOp = colorLoadOp;
     attachments[0].storeOp = colorStoreOp;
     attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    attachments[0].initialLayout = colorInitialLayout;
+    attachments[0].finalLayout = colorFinalLayout;
 
     attachments[1].format = DEPTH_FORMAT;
     attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
@@ -580,13 +598,13 @@ VkRenderPass createRenderPass(Context* context, VkAttachmentLoadOp colorLoadOp,
     return renderPass;
 }
 
-DepthAttachment createDepthAttachment(Context* context) {
+DepthAttachment createDepthAttachment(Context* context, uint32_t width, uint32_t height) {
     DepthAttachment depth{};
 
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.extent = {context->extent.width, context->extent.height, 1};
+    imageInfo.extent = {width, height, 1};
     imageInfo.mipLevels = 1;
     imageInfo.arrayLayers = 1;
     imageInfo.format = DEPTH_FORMAT;
@@ -640,6 +658,24 @@ DepthAttachment createDepthAttachment(Context* context) {
     }
 }
 
+void destroyDepthAttachment(Context* context, DepthAttachment* depth) {
+    if (depth == nullptr) {
+        return;
+    }
+    if (depth->imageView != VK_NULL_HANDLE) {
+        vkDestroyImageView(context->device, depth->imageView, nullptr);
+        depth->imageView = VK_NULL_HANDLE;
+    }
+    if (depth->image != VK_NULL_HANDLE) {
+        vkDestroyImage(context->device, depth->image, nullptr);
+        depth->image = VK_NULL_HANDLE;
+    }
+    if (depth->memory != VK_NULL_HANDLE) {
+        vkFreeMemory(context->device, depth->memory, nullptr);
+        depth->memory = VK_NULL_HANDLE;
+    }
+}
+
 void destroySwapchainResources(Context* context) {
     if (context->device == VK_NULL_HANDLE) {
         return;
@@ -655,15 +691,7 @@ void destroySwapchainResources(Context* context) {
     context->imageViews.clear();
 
     for (DepthAttachment& depth : context->depthAttachments) {
-        if (depth.imageView != VK_NULL_HANDLE) {
-            vkDestroyImageView(context->device, depth.imageView, nullptr);
-        }
-        if (depth.image != VK_NULL_HANDLE) {
-            vkDestroyImage(context->device, depth.image, nullptr);
-        }
-        if (depth.memory != VK_NULL_HANDLE) {
-            vkFreeMemory(context->device, depth.memory, nullptr);
-        }
+        destroyDepthAttachment(context, &depth);
     }
     context->depthAttachments.clear();
     context->swapchainImages.clear();
@@ -782,16 +810,20 @@ void createSwapchain(Context* context) {
         for (int store = 0; store < 2; store++) {
             for (int depthClear = 0; depthClear < 2; depthClear++) {
                 context->renderPasses[clear][store][depthClear] = createRenderPass(context,
+                        context->surfaceFormat,
                         clear != 0 ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
                         store != 0 ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                        depthClear != 0 ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD);
+                        depthClear != 0 ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
+                        clear != 0 ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
             }
         }
     }
 
     context->depthAttachments.resize(context->imageViews.size());
     for (size_t i = 0; i < context->depthAttachments.size(); i++) {
-        context->depthAttachments[i] = createDepthAttachment(context);
+        context->depthAttachments[i] = createDepthAttachment(context, context->extent.width,
+                context->extent.height);
     }
 
     context->framebuffers.resize(context->imageViews.size());
@@ -1052,6 +1084,8 @@ void createCommandResources(Context* context, int framesInFlight) {
     }
 }
 
+void destroyTextureRenderPasses(Context* context);
+
 void destroyContext(Context* context) {
     if (context == nullptr) {
         return;
@@ -1059,6 +1093,7 @@ void destroyContext(Context* context) {
     if (context->device != VK_NULL_HANDLE) {
         ensureNoActiveFramesOrThrow(context, FRAME_FENCE_TIMEOUT_NS, "Android Vulkan context destroy");
         destroySwapchainResources(context);
+        destroyTextureRenderPasses(context);
         for (FrameSync& frame : context->frames) {
             destroyTransientBuffers(context, frame);
             if (frame.descriptorPool != VK_NULL_HANDLE) {
@@ -1093,6 +1128,91 @@ void destroyContext(Context* context) {
 
 VkRenderPass selectRenderPass(Context* context, bool clear, bool store, bool depthClear) {
     return context->renderPasses[clear ? 1 : 0][store ? 1 : 0][depthClear ? 1 : 0];
+}
+
+VkRenderPass textureRenderPass(Context* context, VkFormat colorFormat, VkAttachmentLoadOp colorLoadOp,
+        VkAttachmentStoreOp colorStoreOp, VkAttachmentLoadOp depthLoadOp, VkImageLayout initialLayout,
+        VkImageLayout finalLayout) {
+    for (TextureRenderPass& candidate : context->textureRenderPasses) {
+        if (candidate.colorFormat == colorFormat
+                && candidate.colorLoadOp == colorLoadOp
+                && candidate.colorStoreOp == colorStoreOp
+                && candidate.depthLoadOp == depthLoadOp
+                && candidate.initialLayout == initialLayout
+                && candidate.finalLayout == finalLayout) {
+            return candidate.renderPass;
+        }
+    }
+
+    TextureRenderPass created{};
+    created.colorFormat = colorFormat;
+    created.colorLoadOp = colorLoadOp;
+    created.colorStoreOp = colorStoreOp;
+    created.depthLoadOp = depthLoadOp;
+    created.initialLayout = initialLayout;
+    created.finalLayout = finalLayout;
+    created.renderPass = createRenderPass(context, colorFormat, colorLoadOp, colorStoreOp, depthLoadOp,
+            initialLayout, finalLayout);
+    context->textureRenderPasses.push_back(created);
+    return created.renderPass;
+}
+
+VkRenderPass selectTextureRenderPass(Context* context, Texture* texture, bool clear, bool store, bool depthClear,
+        VkImageLayout finalLayout) {
+    VkAttachmentLoadOp colorLoadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+    VkAttachmentStoreOp colorStoreOp = store ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    VkAttachmentLoadOp depthLoadOp = depthClear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+    VkImageLayout initialLayout = clear ? VK_IMAGE_LAYOUT_UNDEFINED : texture->layout;
+    return textureRenderPass(context, texture->format, colorLoadOp, colorStoreOp, depthLoadOp, initialLayout,
+            finalLayout);
+}
+
+VkRenderPass pipelineRenderPass(Context* context, VkFormat colorFormat) {
+    if (colorFormat == context->surfaceFormat) {
+        return context->renderPasses[1][1][1];
+    }
+    return textureRenderPass(context, colorFormat, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+            VK_ATTACHMENT_LOAD_OP_CLEAR, VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+}
+
+VkFramebuffer textureFramebuffer(Context* context, Texture* texture, VkRenderPass renderPass) {
+    if (texture == nullptr || !texture->renderAttachment) {
+        throw std::runtime_error("Android Vulkan texture is not a render attachment");
+    }
+    for (const auto& entry : texture->framebuffers) {
+        if (entry.first == renderPass) {
+            return entry.second;
+        }
+    }
+    if (texture->depthAttachment.imageView == VK_NULL_HANDLE) {
+        texture->depthAttachment = createDepthAttachment(context, texture->width, texture->height);
+    }
+    VkImageView attachments[] = {texture->imageView, texture->depthAttachment.imageView};
+    VkFramebufferCreateInfo framebufferInfo{};
+    framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferInfo.renderPass = renderPass;
+    framebufferInfo.attachmentCount = 2;
+    framebufferInfo.pAttachments = attachments;
+    framebufferInfo.width = texture->width;
+    framebufferInfo.height = texture->height;
+    framebufferInfo.layers = 1;
+
+    VkFramebuffer framebuffer = VK_NULL_HANDLE;
+    check(vkCreateFramebuffer(context->device, &framebufferInfo, nullptr, &framebuffer),
+            "Could not create Android Vulkan texture framebuffer");
+    texture->framebuffers.push_back(std::make_pair(renderPass, framebuffer));
+    return framebuffer;
+}
+
+void destroyTextureRenderPasses(Context* context) {
+    for (TextureRenderPass& renderPass : context->textureRenderPasses) {
+        if (renderPass.renderPass != VK_NULL_HANDLE) {
+            vkDestroyRenderPass(context->device, renderPass.renderPass, nullptr);
+            renderPass.renderPass = VK_NULL_HANDLE;
+        }
+    }
+    context->textureRenderPasses.clear();
 }
 
 FrameSync& currentFrame(Context* context) {
@@ -1577,12 +1697,16 @@ VkSampler createTextureSampler(Context* context, int wrapS, int wrapT) {
     return sampler;
 }
 
-Texture* createTextureResource(Context* context, int width, int height, VkFormat format, int wrapS, int wrapT) {
+Texture* createTextureResource(Context* context, int width, int height, VkFormat format, int wrapS, int wrapT,
+        bool sampled, bool renderAttachment) {
     if (width <= 0 || height <= 0) {
         throw std::runtime_error("Android Vulkan texture size must be greater than zero");
     }
-    if (format != VK_FORMAT_R8G8B8A8_UNORM) {
-        throw std::runtime_error("Android Vulkan currently supports RGBA8_UNORM sampled textures only");
+    if (format != VK_FORMAT_R8G8B8A8_UNORM && format != VK_FORMAT_R8G8B8A8_SRGB) {
+        throw std::runtime_error("Android Vulkan currently supports RGBA8 textures only");
+    }
+    if (!sampled && !renderAttachment) {
+        throw std::runtime_error("Android Vulkan texture usage must allow sampling or render attachment binding");
     }
 
     Texture* texture = new Texture();
@@ -1590,6 +1714,8 @@ Texture* createTextureResource(Context* context, int width, int height, VkFormat
     texture->width = static_cast<uint32_t>(width);
     texture->height = static_cast<uint32_t>(height);
     texture->format = format;
+    texture->sampled = sampled;
+    texture->renderAttachment = renderAttachment;
 
     try {
         VkImageCreateInfo imageInfo{};
@@ -1601,7 +1727,13 @@ Texture* createTextureResource(Context* context, int width, int height, VkFormat
         imageInfo.format = format;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageInfo.usage = 0;
+        if (sampled) {
+            imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        }
+        if (renderAttachment) {
+            imageInfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        }
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         check(vkCreateImage(context->device, &imageInfo, nullptr, &texture->image),
@@ -1621,7 +1753,9 @@ Texture* createTextureResource(Context* context, int width, int height, VkFormat
                 "Could not bind Android Vulkan texture memory");
 
         texture->imageView = createTextureImageView(context, texture->image, format);
-        texture->sampler = createTextureSampler(context, wrapS, wrapT);
+        if (sampled) {
+            texture->sampler = createTextureSampler(context, wrapS, wrapT);
+        }
         return texture;
     } catch (...) {
         if (texture->sampler != VK_NULL_HANDLE) {
@@ -1669,6 +1803,12 @@ void transitionTextureLayout(VkCommandBuffer commandBuffer, Texture* texture,
         barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
         barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } else if (oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+            && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        sourceStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
     } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
             && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
@@ -1819,7 +1959,7 @@ void bindUniformDescriptor(Context* context, Pipeline* pipeline, const void* sou
         return;
     }
     if (size != PBR_UNIFORM_BYTE_COUNT) {
-        throw std::runtime_error("Android Vulkan PBR uniform upload has an unexpected size");
+        throw std::runtime_error("Android Vulkan uniform upload has an unexpected size");
     }
     TransientBuffer uniformBuffer = createHostVisibleBuffer(context, PBR_UNIFORM_BYTE_COUNT,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, "Could not create Android Vulkan uniform buffer");
@@ -1962,6 +2102,8 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_beginFrame(JNIEnv* env
 
         context->frameStarted = true;
         context->renderPassStarted = false;
+        context->activeRenderTarget = nullptr;
+        context->activeRenderTargetFinalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         return JNI_TRUE;
     } catch (const std::exception& error) {
         if (imageAcquired) {
@@ -2095,11 +2237,13 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_writeBuffer(JNIEnv* en
 
 extern "C" JNIEXPORT jlong JNICALL
 Java_io_github_libfdx_backend_android_AndroidVulkanNative_createTexture(JNIEnv* env, jclass,
-        jlong contextHandle, jint width, jint height, jint format, jint wrapS, jint wrapT) {
+        jlong contextHandle, jint width, jint height, jint format, jint wrapS, jint wrapT,
+        jboolean sampled, jboolean renderAttachment) {
     Context* context = ptr<Context>(contextHandle);
     try {
         return handle(createTextureResource(context, static_cast<int>(width), static_cast<int>(height),
-                static_cast<VkFormat>(format), static_cast<int>(wrapS), static_cast<int>(wrapT)));
+                static_cast<VkFormat>(format), static_cast<int>(wrapS), static_cast<int>(wrapT),
+                sampled == JNI_TRUE, renderAttachment == JNI_TRUE));
     } catch (const std::exception& error) {
         throwFdx(env, error.what());
         return 0;
@@ -2146,7 +2290,8 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createShaderModule(JNI
 
 extern "C" JNIEXPORT jlong JNICALL
 Java_io_github_libfdx_backend_android_AndroidVulkanNative_createRenderPipeline(JNIEnv* env, jclass,
-        jlong contextHandle, jlong shaderModuleHandle, jint primitiveTopology, jint vertexStride,
+        jlong contextHandle, jlong shaderModuleHandle, jint colorFormat, jint primitiveTopology,
+        jintArray vertexStridesArray, jintArray vertexStepModesArray, jintArray attributeBindingsArray,
         jintArray attributeLocationsArray, jintArray attributeFormatsArray, jintArray attributeOffsetsArray,
         jint sampledTextureCountValue, jboolean pbrUniformsEnabled, jboolean depthTestEnabled,
         jboolean depthWriteEnabled) {
@@ -2162,10 +2307,6 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createRenderPipeline(J
         if (pipeline->sampledTextureCount < 0 || pipeline->sampledTextureCount > MAX_TEXTURE_DESCRIPTOR_SLOTS) {
             throw std::runtime_error("Android Vulkan sampled texture count exceeds the descriptor slot limit");
         }
-        if (pipeline->uniformBufferEnabled
-                && pipeline->sampledTextureCount != PBR_TEXTURE_DESCRIPTOR_COUNT) {
-            throw std::runtime_error("Android Vulkan PBR uniform pipelines must declare five sampled textures");
-        }
         VkPipelineShaderStageCreateInfo shaderStages[2]{};
         shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -2176,36 +2317,56 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createRenderPipeline(J
         shaderStages[1].module = shaderModule->fragment;
         shaderStages[1].pName = "fragmentMain";
 
+        std::vector<int> vertexStrides = intsFromJava(env, vertexStridesArray,
+                "Vertex layout strides", true);
+        std::vector<int> vertexStepModes = intsFromJava(env, vertexStepModesArray,
+                "Vertex layout step modes", true);
+        std::vector<int> attributeBindings = intsFromJava(env, attributeBindingsArray,
+                "Vertex attribute bindings", true);
         std::vector<int> attributeLocations = intsFromJava(env, attributeLocationsArray,
                 "Vertex attribute locations", true);
         std::vector<int> attributeFormats = intsFromJava(env, attributeFormatsArray,
                 "Vertex attribute formats", true);
         std::vector<int> attributeOffsets = intsFromJava(env, attributeOffsetsArray,
                 "Vertex attribute offsets", true);
-        if (attributeLocations.size() != attributeFormats.size()
+        if (vertexStrides.size() != vertexStepModes.size()) {
+            throw std::runtime_error("Android Vulkan vertex layout arrays must have the same length");
+        }
+        if (attributeBindings.size() != attributeLocations.size()
+                || attributeLocations.size() != attributeFormats.size()
                 || attributeLocations.size() != attributeOffsets.size()) {
             throw std::runtime_error("Android Vulkan vertex attribute arrays must have the same length");
         }
 
-        VkVertexInputBindingDescription bindingDescription{};
+        std::vector<VkVertexInputBindingDescription> bindingDescriptions(vertexStrides.size());
         std::vector<VkVertexInputAttributeDescription> attributeDescriptions(attributeLocations.size());
-        if (!attributeLocations.empty()) {
-            bindingDescription.binding = 0;
-            bindingDescription.stride = static_cast<uint32_t>(vertexStride);
-            bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-            for (size_t i = 0; i < attributeLocations.size(); i++) {
-                attributeDescriptions[i].binding = 0;
-                attributeDescriptions[i].location = static_cast<uint32_t>(attributeLocations[i]);
-                attributeDescriptions[i].format = static_cast<VkFormat>(attributeFormats[i]);
-                attributeDescriptions[i].offset = static_cast<uint32_t>(attributeOffsets[i]);
+        for (size_t i = 0; i < vertexStrides.size(); i++) {
+            if (vertexStrides[i] <= 0) {
+                throw std::runtime_error("Android Vulkan vertex layout stride must be greater than zero");
             }
+            bindingDescriptions[i].binding = static_cast<uint32_t>(i);
+            bindingDescriptions[i].stride = static_cast<uint32_t>(vertexStrides[i]);
+            bindingDescriptions[i].inputRate = vertexStepModes[i] == 1
+                    ? VK_VERTEX_INPUT_RATE_INSTANCE : VK_VERTEX_INPUT_RATE_VERTEX;
+        }
+        for (size_t i = 0; i < attributeLocations.size(); i++) {
+            int binding = attributeBindings[i];
+            if (binding < 0 || binding >= static_cast<int>(vertexStrides.size())) {
+                throw std::runtime_error("Android Vulkan vertex attribute binding is out of range");
+            }
+            attributeDescriptions[i].binding = static_cast<uint32_t>(binding);
+            attributeDescriptions[i].location = static_cast<uint32_t>(attributeLocations[i]);
+            attributeDescriptions[i].format = static_cast<VkFormat>(attributeFormats[i]);
+            attributeDescriptions[i].offset = static_cast<uint32_t>(attributeOffsets[i]);
         }
 
         VkPipelineVertexInputStateCreateInfo vertexInput{};
         vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        if (!attributeLocations.empty()) {
-            vertexInput.vertexBindingDescriptionCount = 1;
-            vertexInput.pVertexBindingDescriptions = &bindingDescription;
+        if (!bindingDescriptions.empty()) {
+            vertexInput.vertexBindingDescriptionCount = static_cast<uint32_t>(bindingDescriptions.size());
+            vertexInput.pVertexBindingDescriptions = bindingDescriptions.data();
+        }
+        if (!attributeDescriptions.empty()) {
             vertexInput.vertexAttributeDescriptionCount =
                     static_cast<uint32_t>(attributeDescriptions.size());
             vertexInput.pVertexAttributeDescriptions = attributeDescriptions.data();
@@ -2300,7 +2461,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createRenderPipeline(J
         pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.layout = pipeline->layout;
-        pipelineInfo.renderPass = context->renderPasses[1][1][1];
+        pipelineInfo.renderPass = pipelineRenderPass(context, static_cast<VkFormat>(colorFormat));
         pipelineInfo.subpass = 0;
 
         check(vkCreateGraphicsPipelines(context->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
@@ -2327,8 +2488,9 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createRenderPipeline(J
 
 extern "C" JNIEXPORT void JNICALL
 Java_io_github_libfdx_backend_android_AndroidVulkanNative_beginRenderPass(JNIEnv* env, jclass,
-        jlong contextHandle, jboolean clear, jfloat red, jfloat green, jfloat blue, jfloat alpha,
-        jboolean store, jboolean depthClear, jfloat depthClearValue) {
+        jlong contextHandle, jlong colorTextureHandle, jint, jint, jint, jboolean clear,
+        jfloat red, jfloat green, jfloat blue, jfloat alpha, jboolean store, jboolean depthClear,
+        jfloat depthClearValue) {
     Context* context = ptr<Context>(contextHandle);
     try {
         if (!context->frameStarted) {
@@ -2345,13 +2507,33 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_beginRenderPass(JNIEnv
         clearValues[1].depthStencil.depth = depthClearValue;
         clearValues[1].depthStencil.stencil = 0;
 
+        Texture* colorTexture = ptr<Texture>(colorTextureHandle);
+        bool textureBacked = colorTexture != nullptr;
+        VkExtent2D passExtent = context->extent;
+        VkFramebuffer framebuffer = context->framebuffers[context->imageIndex];
+        VkRenderPass renderPass = selectRenderPass(context, clear == JNI_TRUE, store == JNI_TRUE,
+                depthClear == JNI_TRUE);
+        context->activeRenderTarget = nullptr;
+        context->activeRenderTargetFinalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        if (textureBacked) {
+            VkImageLayout finalLayout = colorTexture->sampled
+                    ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                    : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            renderPass = selectTextureRenderPass(context, colorTexture, clear == JNI_TRUE, store == JNI_TRUE,
+                    depthClear == JNI_TRUE, finalLayout);
+            framebuffer = textureFramebuffer(context, colorTexture, renderPass);
+            passExtent = {colorTexture->width, colorTexture->height};
+            context->activeRenderTarget = colorTexture;
+            context->activeRenderTargetFinalLayout = finalLayout;
+            colorTexture->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        }
+
         VkRenderPassBeginInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = selectRenderPass(context, clear == JNI_TRUE, store == JNI_TRUE,
-                depthClear == JNI_TRUE);
-        renderPassInfo.framebuffer = context->framebuffers[context->imageIndex];
+        renderPassInfo.renderPass = renderPass;
+        renderPassInfo.framebuffer = framebuffer;
         renderPassInfo.renderArea.offset = {0, 0};
-        renderPassInfo.renderArea.extent = context->extent;
+        renderPassInfo.renderArea.extent = passExtent;
         renderPassInfo.clearValueCount = 2;
         renderPassInfo.pClearValues = clearValues;
 
@@ -2360,14 +2542,14 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_beginRenderPass(JNIEnv
 
         VkViewport viewport{};
         viewport.x = 0.0f;
-        viewport.y = static_cast<float>(context->extent.height);
-        viewport.width = static_cast<float>(context->extent.width);
-        viewport.height = -static_cast<float>(context->extent.height);
+        viewport.y = static_cast<float>(passExtent.height);
+        viewport.width = static_cast<float>(passExtent.width);
+        viewport.height = -static_cast<float>(passExtent.height);
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         VkRect2D scissor{};
         scissor.offset = {0, 0};
-        scissor.extent = context->extent;
+        scissor.extent = passExtent;
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
         context->renderPassStarted = true;
@@ -2394,15 +2576,19 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_setPipeline(JNIEnv* en
 
 extern "C" JNIEXPORT void JNICALL
 Java_io_github_libfdx_backend_android_AndroidVulkanNative_setVertexBuffer(JNIEnv* env, jclass,
-        jlong contextHandle, jlong bufferHandle) {
+        jlong contextHandle, jint slot, jlong bufferHandle) {
     Context* context = ptr<Context>(contextHandle);
     Buffer* buffer = ptr<Buffer>(bufferHandle);
     try {
         if (!context->renderPassStarted) {
             throw std::runtime_error("Cannot bind Android Vulkan vertex buffer outside a render pass");
         }
+        if (slot < 0) {
+            throw std::runtime_error("Android Vulkan vertex buffer slot cannot be negative");
+        }
         VkDeviceSize offset = 0;
-        vkCmdBindVertexBuffers(currentFrame(context).commandBuffer, 0, 1, &buffer->buffer, &offset);
+        uint32_t binding = static_cast<uint32_t>(slot);
+        vkCmdBindVertexBuffers(currentFrame(context).commandBuffer, binding, 1, &buffer->buffer, &offset);
     } catch (const std::exception& error) {
         throwFdx(env, error.what());
     }
@@ -2527,6 +2713,11 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_endRenderPass(JNIEnv* 
             return;
         }
         vkCmdEndRenderPass(currentFrame(context).commandBuffer);
+        if (context->activeRenderTarget != nullptr) {
+            context->activeRenderTarget->layout = context->activeRenderTargetFinalLayout;
+            context->activeRenderTarget = nullptr;
+            context->activeRenderTargetFinalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
         context->renderPassStarted = false;
     } catch (const std::exception& error) {
         throwFdx(env, error.what());
@@ -2613,6 +2804,13 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_destroyTexture(JNIEnv*
     }
     if (texture->context != nullptr && texture->context->device != VK_NULL_HANDLE) {
         waitDeviceIdleBeforeDestroy(texture->context, "texture");
+        for (const auto& entry : texture->framebuffers) {
+            if (entry.second != VK_NULL_HANDLE) {
+                vkDestroyFramebuffer(texture->context->device, entry.second, nullptr);
+            }
+        }
+        texture->framebuffers.clear();
+        destroyDepthAttachment(texture->context, &texture->depthAttachment);
         if (texture->sampler != VK_NULL_HANDLE) {
             vkDestroySampler(texture->context->device, texture->sampler, nullptr);
         }

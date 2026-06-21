@@ -20,9 +20,11 @@ public final class BasicDesktopCLauncher {
      * @param args the args
      */
     public static void main(String[] args) {
+        boolean maximized = Boolean.parseBoolean(System.getProperty("libfdx.sample.maximized", "true"));
         DesktopCApplicationConfig config = new DesktopCApplicationConfig()
                 .title("libfdx Basic - GL Desktop C")
                 .size(640, 480)
+                .maximized(maximized)
                 .graphics(new DesktopCOpenGLProvider());
 
         new DesktopCApplicationBackend().start(config, new BasicApplication(exitAfterFrames(args)));

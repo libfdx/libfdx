@@ -28,6 +28,7 @@ import io.github.libfdx.input.DefaultInputCapabilities;
 import io.github.libfdx.input.Key;
 import io.github.libfdx.input.MouseButton;
 import io.github.libfdx.runtime.core.RuntimeCore;
+import io.github.libfdx.storage.DefaultStorage;
 import java.util.ArrayList;
 import java.util.List;
 import org.teavm.jso.JSBody;
@@ -50,6 +51,7 @@ import org.teavm.runtime.Fiber;
  */
 public final class WebApplicationBackend implements ApplicationBackend, Application, AnimationFrameCallback {
     public static final ProviderId ID = ProviderId.of("web");
+    private static final List<WebApplicationBackend> ACTIVE_BACKENDS = new ArrayList<WebApplicationBackend>();
 
     private final SystemLogger logger = new SystemLogger();
     private final Fiber.FiberRunner frameRunner = new Fiber.FiberRunner() {
@@ -71,6 +73,7 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
     private boolean running;
     private boolean disposed = true;
     private boolean listenerCreated;
+    private boolean activeRetained;
     private long lastFrameMillis;
     private float deltaTime;
     private long frameId;
@@ -97,47 +100,53 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         if (listener == null) {
             throw new FdxException("ApplicationListener cannot be null");
         }
-        WebAssetPreloader.installAndPreload();
-        WebApplicationConfig actualConfig = toWebConfig(config);
-        GraphicsAttachmentProvider graphicsProvider = actualConfig.graphics();
-        if (graphicsProvider == null) {
-            throw new FdxException("No web graphics provider configured");
-        }
-        if (actualConfig.graphicsProvider() != null
-                && !actualConfig.graphicsProvider().equals(graphicsProvider.providerId())) {
-            throw new FdxException("Configured graphics provider ID does not match attached GraphicsAttachmentProvider");
-        }
-        if (graphicsProvider instanceof GraphicsProviderSupport
-                && !((GraphicsProviderSupport) graphicsProvider).isSupported()) {
-            String reason = ((GraphicsProviderSupport) graphicsProvider).supportFailureReason();
-            throw new FdxException(reason != null ? reason : "Web graphics provider is not supported");
-        }
+        retainActiveBackend();
+        try {
+            WebAssetPreloader.installAndPreload();
+            WebApplicationConfig actualConfig = toWebConfig(config);
+            GraphicsAttachmentProvider graphicsProvider = actualConfig.graphics();
+            if (graphicsProvider == null) {
+                throw new FdxException("No web graphics provider configured");
+            }
+            if (actualConfig.graphicsProvider() != null
+                    && !actualConfig.graphicsProvider().equals(graphicsProvider.providerId())) {
+                throw new FdxException("Configured graphics provider ID does not match attached GraphicsAttachmentProvider");
+            }
+            if (graphicsProvider instanceof GraphicsProviderSupport
+                    && !((GraphicsProviderSupport) graphicsProvider).isSupported()) {
+                String reason = ((GraphicsProviderSupport) graphicsProvider).supportFailureReason();
+                throw new FdxException(reason != null ? reason : "Web graphics provider is not supported");
+            }
 
-        this.config = actualConfig;
-        this.listener = listener;
-        DisplayConfig displayConfig = actualConfig.displayConfig();
-        setDocumentTitle(displayConfig.title());
-        canvas = getOrCreateCanvas(actualConfig.canvasId(), displayConfig.width(), displayConfig.height());
-        setCanvasInteractive(canvas);
-        display = new WebDisplay(displayConfig.title());
-        refreshDisplaySize();
-        input = createInput();
-        installInputListeners();
+            this.config = actualConfig;
+            this.listener = listener;
+            DisplayConfig displayConfig = actualConfig.displayConfig();
+            setDocumentTitle(displayConfig.title());
+            canvas = getOrCreateCanvas(actualConfig.canvasId(), displayConfig.width(), displayConfig.height());
+            setCanvasInteractive(canvas);
+            display = new WebDisplay(displayConfig.title());
+            refreshDisplaySize();
+            input = createInput();
+            installInputListeners();
 
-        graphics = graphicsProvider.create(new WebGraphicsEnvironment(display,
-                NativeWindow.web(canvas, "#" + actualConfig.canvasId())));
-        fdx = new DefaultFdx(this, new DefaultDisplays(display), new DefaultGraphics(graphics), input,
-                new WebFileSystem(), logger);
-        RuntimeCore.registerProvider(new WebRuntimeCoreProvider());
+            graphics = graphicsProvider.create(new WebGraphicsEnvironment(display,
+                    NativeWindow.web(canvas, "#" + actualConfig.canvasId())));
+            fdx = new DefaultFdx(this, new DefaultDisplays(display), new DefaultGraphics(graphics), input,
+                    new WebFileSystem(), new DefaultStorage(new WebStorageBackend()), logger);
+            RuntimeCore.registerProvider(new WebRuntimeCoreProvider());
 
-        disposed = false;
-        running = true;
-        lifecycle = ApplicationLifecycle.CREATED;
+            disposed = false;
+            running = true;
+            lifecycle = ApplicationLifecycle.CREATED;
 
-        if (isGraphicsReady()) {
-            createListener();
+            if (isGraphicsReady()) {
+                createListener();
+            }
+            Window.requestAnimationFrame(this);
+        } catch (RuntimeException | Error error) {
+            releaseActiveBackend();
+            throw error;
         }
-        Window.requestAnimationFrame(this);
     }
 
     /**
@@ -350,6 +359,10 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             }
             throw error instanceof RuntimeException ? (RuntimeException) error : new FdxException("Web frame failed", error);
         }
+        if (!running && !disposed) {
+            dispose();
+            return;
+        }
         if (running && !disposed) {
             Window.requestAnimationFrame(this);
         }
@@ -380,6 +393,7 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         if (graphics == null || graphics.beginFrame()) {
             try {
                 listener.render();
+                listener.onFrameEnd();
             } finally {
                 if (graphics != null) {
                     graphics.endFrame();
@@ -498,7 +512,22 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             display = null;
             canvas = null;
             RuntimeCore.registerProvider(null);
+            releaseActiveBackend();
             disposed = true;
+        }
+    }
+
+    private void retainActiveBackend() {
+        if (!activeRetained) {
+            ACTIVE_BACKENDS.add(this);
+            activeRetained = true;
+        }
+    }
+
+    private void releaseActiveBackend() {
+        if (activeRetained) {
+            ACTIVE_BACKENDS.remove(this);
+            activeRetained = false;
         }
     }
 
@@ -563,7 +592,8 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             "canvas.style.outline = 'none';\n" +
             "canvas.style.touchAction = 'none';\n" +
             "canvas.style.userSelect = 'none';\n" +
-            "canvas.style.webkitUserSelect = 'none';")
+            "canvas.style.webkitUserSelect = 'none';\n" +
+            "canvas.oncontextmenu = function(event) { event.preventDefault(); return false; };")
     private static native void setCanvasInteractive(HTMLCanvasElement canvas);
 
     @JSBody(params = { "canvas" }, script = "canvas.focus();")

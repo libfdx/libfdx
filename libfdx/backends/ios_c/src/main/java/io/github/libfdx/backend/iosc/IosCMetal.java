@@ -76,20 +76,23 @@ final class IosCMetal {
 
     static long createRenderPipeline(long context, long shaderModule, int primitiveTopology, int[] vertexStrides,
             int[] vertexStepModes, int[] attributeBindings, int[] attributeLocations, int[] attributeFormats,
-            int[] attributeOffsets, int sampledTextureCount) {
+            int[] attributeOffsets, int sampledTextureCount, boolean pbrUniformsEnabled, boolean depthTestEnabled,
+            boolean depthWriteEnabled) {
         int vertexLayoutCount = vertexStrides != null ? vertexStrides.length : 0;
         int attributeCount = attributeLocations != null ? attributeLocations.length : 0;
         return requireHandle(libfdxIosMetalCreateRenderPipeline(context, shaderModule, primitiveTopology,
                 addressOf(vertexStrides, vertexLayoutCount), addressOf(vertexStepModes, vertexLayoutCount),
                 vertexLayoutCount, addressOf(attributeBindings, attributeCount),
                 addressOf(attributeLocations, attributeCount), addressOf(attributeFormats, attributeCount),
-                addressOf(attributeOffsets, attributeCount), attributeCount, sampledTextureCount),
+                addressOf(attributeOffsets, attributeCount), attributeCount, sampledTextureCount,
+                bool(pbrUniformsEnabled), bool(depthTestEnabled), bool(depthWriteEnabled)),
                 "Could not create iOS C Metal render pipeline");
     }
 
     static void beginRenderPass(long context, boolean clear, float red, float green, float blue, float alpha,
-            boolean store) {
-        libfdxIosMetalBeginRenderPass(context, bool(clear), red, green, blue, alpha, bool(store));
+            boolean store, boolean depthEnabled, boolean depthClear, float depthClearValue) {
+        libfdxIosMetalBeginRenderPass(context, bool(clear), red, green, blue, alpha, bool(store),
+                bool(depthEnabled), bool(depthClear), depthClearValue);
     }
 
     static void setPipeline(long context, long pipeline) {
@@ -104,8 +107,12 @@ final class IosCMetal {
         libfdxIosMetalSetIndexBuffer(context, buffer);
     }
 
-    static void setTexture(long context, int slot, long texture) {
-        libfdxIosMetalSetTexture(context, slot, texture);
+    static void setTexture(long context, int textureSlot, int samplerSlot, long texture) {
+        libfdxIosMetalSetTexture(context, textureSlot, samplerSlot, texture);
+    }
+
+    static void setUniformBuffer(long context, ByteBuffer data, int byteCount) {
+        libfdxIosMetalSetUniformBuffer(context, data, byteCount);
     }
 
     static void draw(long context, int vertexCount, int instanceCount, int firstVertex, int firstInstance) {
@@ -202,11 +209,12 @@ final class IosCMetal {
     private static native long libfdxIosMetalCreateRenderPipeline(long context, long shaderModule,
             int primitiveTopology, Address vertexStrides, Address vertexStepModes, int vertexLayoutCount,
             Address attributeBindings, Address attributeLocations, Address attributeFormats, Address attributeOffsets,
-            int attributeCount, int sampledTextureCount);
+            int attributeCount, int sampledTextureCount, int pbrUniformsEnabled, int depthTestEnabled,
+            int depthWriteEnabled);
 
     @Import(name = "libfdx_ios_metal_begin_render_pass")
     private static native void libfdxIosMetalBeginRenderPass(long context, int clear, float red, float green,
-            float blue, float alpha, int store);
+            float blue, float alpha, int store, int depthEnabled, int depthClear, float depthClearValue);
 
     @Import(name = "libfdx_ios_metal_set_pipeline")
     private static native void libfdxIosMetalSetPipeline(long context, long pipeline);
@@ -218,7 +226,10 @@ final class IosCMetal {
     private static native void libfdxIosMetalSetIndexBuffer(long context, long buffer);
 
     @Import(name = "libfdx_ios_metal_set_texture")
-    private static native void libfdxIosMetalSetTexture(long context, int slot, long texture);
+    private static native void libfdxIosMetalSetTexture(long context, int textureSlot, int samplerSlot, long texture);
+
+    @Import(name = "libfdx_ios_metal_set_uniform_buffer")
+    private static native void libfdxIosMetalSetUniformBuffer(long context, ByteBuffer data, int byteCount);
 
     @Import(name = "libfdx_ios_metal_draw")
     private static native void libfdxIosMetalDraw(long context, int vertexCount, int instanceCount,

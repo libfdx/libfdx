@@ -6,6 +6,7 @@ import io.github.libfdx.display.Displays;
 import io.github.libfdx.files.FileSystem;
 import io.github.libfdx.graphics.Graphics;
 import io.github.libfdx.input.Input;
+import io.github.libfdx.storage.Storage;
 
 /**
  * Defines the contract for fdx implementations.
@@ -47,6 +48,13 @@ public interface Fdx {
      * @return the files
      */
     FileSystem files();
+
+    /**
+     * Returns the storage.
+     *
+     * @return the storage
+     */
+    Storage storage();
 
     /**
      * Returns the logger.

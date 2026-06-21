@@ -43,8 +43,35 @@ better when a change needs deterministic pass/fail evidence.
 ## 2. Provider Test Selector
 
 Interactive test launchers open a UI selector when no test is requested. Select
-a specific test with `-Dlibfdx.test.name=ui`, `texture`, `triangle`, `square`,
-`circle`, `sprite`, `model`, or `readback`.
+a specific test with `-Dlibfdx.test.name=<name>`. Core names include
+`triangle`, `square`, `circle`, `texture`, `sprite`, `model`, `readback`, and
+`ui`. Feature/runtime names include `shader-runtime`, `shader-scene`,
+`outline-2d`, `fog-2d`, `fog-of-war-2d`, `particles-2d`, `tile-map`,
+`model-skinning`, `outline-3d`, `fog-3d`, `fog-of-war-3d`, `skybox-3d`,
+`billboard-3d`, `particles-3d`, `point-light-3d`, `spot-light-3d`,
+`shadow-map-3d`, `cascade-shadow-map-3d`, and `camera-controllers`.
+`model-skinning` renders a chained CPU-skinned bone strip so hierarchy and
+palette updates are covered by a visible runtime scene.
+`camera-controllers` renders the focused camera controller families in one
+active showcase, including slower path-driven cinematic 3D motion and a
+SpriteBatch-rendered cinematic 2D player scene.
+
+3D graphics tests with a camera use focused camera controllers from
+`io.github.libfdx.graphics.camera.controller`. Most model, lighting, fog,
+particle, and billboard scenes use orbit/editor controls for inspection. Shadow
+map scenes split the viewport between the game/player camera and the editor
+camera. Dragging on the active viewport selects the matching controller, and only
+that controller consumes keyboard movement while active. Set
+`-Dlibfdx.test.cameraOrbit=true` to rotate camera-backed 3D tests automatically
+during finite capture runs. A
+multi-capture request with `-Dlibfdx.test.capture=...%02d.ppm` and
+`-Dlibfdx.test.captureEvery=<n>` also enables orbit by default, so validation
+runs capture more than the front view unless `-Dlibfdx.test.cameraOrbit=false`
+is set. Use
+`-Dlibfdx.test.cameraOrbitStartDegrees=<degrees>` to offset the first capture
+angle and `-Dlibfdx.test.cameraOrbitDegrees=<degrees>` to control the full
+finite-run orbit span. Tests that do not receive a finite frame count keep using
+their per-frame orbit speed.
 
 Use `-Dlibfdx.test.mode=auto` to cycle through the registered tests
 automatically after stable frames.
@@ -85,8 +112,11 @@ Use this PowerShell-safe form for system properties:
 .\gradlew.bat "-Dlibfdx.test.name=ui" :tests:platform:desktop:test_desktop_gl_run
 ```
 
-Desktop tests accept `-Dlibfdx.test.width=...`,
-`-Dlibfdx.test.height=...`, `-Dlibfdx.test.visible=false`, and
+Desktop tests start maximized by default. Pass `-Dlibfdx.test.maximized=false`
+to use the configured startup size instead. Supplying
+`-Dlibfdx.test.width=...` or `-Dlibfdx.test.height=...` also disables the
+maximized default unless `-Dlibfdx.test.maximized=true` is set explicitly.
+Desktop tests also accept `-Dlibfdx.test.visible=false` and
 `-Dlibfdx.test.safeArea=12` to adjust layout tests.
 
 Additional runtime toggles include:
@@ -212,11 +242,60 @@ or model rendering in a browser.
 The web test webapps open the selector by default. Selected tests run in the
 same canvas and show a `Back` overlay to return to the list.
 
-Direct URLs support `?test=triangle`, `square`, `circle`, `texture`, `sprite`,
-`readback`, `model`, or `ui`; auto mode supports `?mode=auto` or `?auto`. Test
-FPS logging is console-only and can be tuned with `?fpsLogSeconds=1`. UIKit
-section and render timing probes can be loaded with query values such as
+Direct URLs support the same selector names as the desktop and Android
+launchers. Examples include `?test=shader-runtime`, `?test=shader-scene`,
+`?test=fog-of-war-2d`, `?test=particles-2d`, `?test=tile-map`,
+`?test=model-skinning`, `?test=fog-of-war-3d`, `?test=skybox-3d`, `?test=billboard-3d`,
+`?test=particles-3d`,
+`?test=shadow-map-3d`, `?test=cascade-shadow-map-3d`, and `?test=camera-controllers`;
+auto mode supports `?mode=auto` or `?auto`.
+Test FPS logging is console-only and can be tuned with `?fpsLogSeconds=1`.
+UIKit section and render timing probes can be loaded with query values such as
 `?test=ui&uiSection=5&uiPerfLogSeconds=1`.
+For 3D tests, pointer dragging inside the active viewport routes input to that
+viewport's controller, and the mouse wheel adjusts the controller's configured
+zoom or movement speed. The web canvas disables the browser context menu so this
+drag path remains available. Use `cameraOrbit=true` in web URLs to force
+automatic camera orbit, or use `cameraOrbit=false` to keep a static camera. Web
+URLs that request a formatted multi-capture path with `captureEvery` orbit
+automatically by default.
+
+For browser-side visual checks, add `capture=<name>.ppm` and optionally
+`captureFrame=<n>` to the URL. The web test launcher captures the active
+framebuffer at frame end and exposes a base64 PPM record as
+`window.libfdxLastTestCapture`, which avoids relying on post-frame canvas
+exports from non-preserved WebGL drawing buffers.
+
+For WebGPU browser checks, the same `capture=` query publishes a PNG canvas
+capture after the rendered frame is presented. If the requested name does not
+end in `.png`, the web launcher rewrites only the published capture name to
+`.png` and sets `mime` to `image/png`. When using `captureEvery` with WebGPU,
+keep `frames` greater than the last requested capture frame so the asynchronous
+canvas capture runs before the test app shuts down.
+
+For 3D shadow-map checks, treat a static front camera capture as a smoke check
+only. Shadow correctness validation must use a multi-view capture so
+front, side, and rear views can reveal projection, cascade selection, texture
+orientation, or camera-dependent sampling defects. Use `shadow-map-3d` or
+`cascade-shadow-map-3d`, add a capture name with an integer placeholder, and set
+`captureEvery` so the shared 3D camera controller publishes multiple views
+through `window.libfdxTestCaptures`. Browser URLs must encode the placeholder
+percent sign as `%25` so Java receives `%02d` after query decoding:
+
+```text
+?graphics=webgl&test=cascade-shadow-map-3d&frames=46&capture=shadow-%2502d.ppm&captureFrame=1&captureEvery=15
+```
+
+Automatic orbit can be enabled on camera-backed 3D tests with
+`-Dlibfdx.test.cameraOrbit=true`, including `model`, `model-skinning`,
+`outline-3d`, `fog-3d`, `fog-of-war-3d`, `skybox-3d`, `billboard-3d`,
+`particles-3d`, `point-light-3d`, `spot-light-3d`, and the shadow-map tests.
+Formatted multi-capture runs with `-Dlibfdx.test.capture=...%02d.ppm` and
+`-Dlibfdx.test.captureEvery=15` orbit automatically by default. Any automatic orbit source can
+be disabled with `-Dlibfdx.test.cameraOrbit=false`. Add
+`-Dlibfdx.test.cameraOrbitStartDegrees=90` or
+`-Dlibfdx.test.cameraOrbitDegrees=180` when a validation run should focus on a
+specific side arc instead of the default full finite-run orbit.
 
 The default model test uses
 `data/g3d/gltf/DamagedHelmet/DamagedHelmet.gltf` and preloads declared test

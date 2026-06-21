@@ -36,4 +36,13 @@ public interface Texture extends ProviderHandle, Disposable {
      * @return the usage
      */
     TextureUsage usage();
+
+    /**
+     * Returns the default texture view.
+     *
+     * @return the default texture view
+     */
+    default TextureView view() {
+        throw new UnsupportedOperationException("Texture views are not supported by this provider");
+    }
 }

@@ -151,16 +151,6 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         }
     }
 
-    /**
-     * Runs the start step.
-     *
-     * @param config the configuration
-     * @param listener the listener
-     */
-    public void start(DesktopApplicationConfig config, ApplicationListener listener) {
-        start((ApplicationConfig) config, listener);
-    }
-
     private DesktopApplicationConfig toDesktopConfig(ApplicationConfig config) {
         if (config == null) {
             return new DesktopApplicationConfig();
@@ -184,12 +174,15 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         applyGraphicsWindowHints(graphicsRequirements);
         GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE, GLFW.GLFW_FALSE);
         GLFW.glfwWindowHint(GLFW.GLFW_RESIZABLE, config.resizable() ? GLFW.GLFW_TRUE : GLFW.GLFW_FALSE);
+        GLFW.glfwWindowHint(GLFW.GLFW_MAXIMIZED, config.maximized() ? GLFW.GLFW_TRUE : GLFW.GLFW_FALSE);
 
         long windowHandle = GLFW.glfwCreateWindow(config.width(), config.height(), config.title(), 0L, 0L);
         if (windowHandle == 0L) {
             throw new FdxException("Could not create GLFW window");
         }
-        centerWindow(windowHandle, config.width(), config.height());
+        if (!config.maximized()) {
+            centerWindow(windowHandle, config.width(), config.height());
+        }
         return windowHandle;
     }
 

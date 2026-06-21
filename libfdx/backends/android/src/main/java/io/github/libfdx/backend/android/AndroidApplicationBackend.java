@@ -393,6 +393,9 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         if (graphics == null || graphics.beginFrame()) {
             try {
                 listener.render();
+                if (graphics != null) {
+                    listener.onFrameEnd();
+                }
             } finally {
                 if (graphics != null) {
                     graphics.endFrame();

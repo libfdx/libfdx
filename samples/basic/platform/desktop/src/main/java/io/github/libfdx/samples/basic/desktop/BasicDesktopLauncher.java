@@ -30,9 +30,12 @@ public final class BasicDesktopLauncher {
      */
     public static void main(String[] args) {
         String graphics = graphicsName(args);
+        boolean maximized = Boolean.parseBoolean(option(args, "--maximized=",
+                System.getProperty("libfdx.sample.maximized", "true")));
         DesktopApplicationConfig config = new DesktopApplicationConfig()
                 .title("libfdx Basic - " + graphicsDisplayName(args, graphics))
                 .size(640, 480)
+                .maximized(maximized)
                 .vSync(true)
                 .foregroundFps(60)
                 .graphics(graphicsProvider(graphics));

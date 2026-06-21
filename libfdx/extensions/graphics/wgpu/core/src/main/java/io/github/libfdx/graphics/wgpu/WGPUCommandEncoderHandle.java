@@ -68,7 +68,7 @@ final class WGPUCommandEncoderHandle implements CommandEncoder {
         passDescriptor.setColorAttachments(colorAttachments);
         if (descriptor.depthEnabled()) {
             WGPURenderPassDepthStencilAttachment depthAttachment = WGPURenderPassDepthStencilAttachment.obtain();
-            depthAttachment.setView(context.depthTextureView());
+            depthAttachment.setView(context.depthTextureView(attachment.width(), attachment.height()));
             depthAttachment.setDepthLoadOp(descriptor.depthClearEnabled() ? WGPULoadOp.Clear : WGPULoadOp.Load);
             depthAttachment.setDepthStoreOp(WGPUStoreOp.Store);
             depthAttachment.setDepthClearValue(descriptor.depthClearValue());

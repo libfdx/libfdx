@@ -11,6 +11,7 @@ import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.input.InputAdapter;
 import io.github.libfdx.input.Key;
 import io.github.libfdx.input.KeyEvent;
+import io.github.libfdx.storage.KeyValueStore;
 import io.github.libfdx.tests.graphics.FramebufferCapture;
 import io.github.libfdx.ui.Ui;
 import io.github.libfdx.ui.UiBooleanState;
@@ -36,6 +37,11 @@ import java.nio.ByteBuffer;
 public final class TestChooserApplication extends ApplicationAdapter {
     private static final String FREETYPE_FONT_ASSET = "font/freetype/lsans.ttf";
     private static final String[] DEFAULT_GRAPHICS = { "wgpu" };
+    private static final String SELECTED_TEST_PROPERTY = "libfdx.test.selected";
+    private static final String SELECTED_TEST_STORE = "test-selector";
+    private static final String SELECTED_TEST_KEY = "selected";
+    private static final float TEST_ROW_HEIGHT = 40.0f;
+    private static final float TEST_ROW_MARGIN = 2.0f;
 
     private final String[] graphicsOptions;
     private final TestLaunchHandler launchHandler;
@@ -59,8 +65,10 @@ public final class TestChooserApplication extends ApplicationAdapter {
     private TestFpsLogger fpsLogger;
     private UiRoot root;
     private UiScrollState testScroll;
+    private KeyValueStore selectedTestStore;
     private UiBooleanState debugLines;
     private UiIntState selectedGraphicsIndex;
+    private UiIntState selectedTestIndex;
     private ApplicationListener currentTest;
     private String currentTestName;
     private String pendingLaunchName;
@@ -71,6 +79,7 @@ public final class TestChooserApplication extends ApplicationAdapter {
     private long renderedFrames;
     private boolean captured;
     private boolean pendingReturnToList;
+    private boolean scrollToSelectedTestPending = true;
     private String status = "Ready";
 
     /**
@@ -102,6 +111,7 @@ public final class TestChooserApplication extends ApplicationAdapter {
         this.embeddedFallback = embeddedFallback;
         this.compactLayout = compactLayout;
         this.selectedGraphicsIndex = Ui.state(initialGraphicsIndex(this.graphicsOptions, initialGraphics));
+        this.selectedTestIndex = Ui.state(initialTestIndex());
     }
 
     /**
@@ -120,6 +130,8 @@ public final class TestChooserApplication extends ApplicationAdapter {
         exitAfterFrames = longProperty("libfdx.test.frames", 0L);
         captureFrame = longProperty("libfdx.test.captureFrame", 0L);
         capturePath = trim(System.getProperty("libfdx.test.capture"));
+        selectedTestStore = fdx.storage().cache(SELECTED_TEST_STORE).load();
+        restoreSelectedTest();
         testScroll = new UiScrollState();
         debugLines = Ui.state(Boolean.parseBoolean(System.getProperty("libfdx.test.uiDebugLines", "false")));
         fdx.input().addProcessor(returnInputProcessor);
@@ -171,6 +183,7 @@ public final class TestChooserApplication extends ApplicationAdapter {
             if (pendingReturnToList) {
                 disposeCurrentTest();
                 pendingReturnToList = false;
+                scrollToSelectedTestPending = true;
                 status = pendingReturnStatus != null ? pendingReturnStatus : "Returned to test list";
                 pendingReturnStatus = null;
                 if (root != null) {
@@ -339,6 +352,7 @@ public final class TestChooserApplication extends ApplicationAdapter {
     }
 
     private void requestLaunch(String testName) {
+        selectTest(testName);
         pendingLaunchName = testName;
     }
 
@@ -361,13 +375,14 @@ public final class TestChooserApplication extends ApplicationAdapter {
     private void buildMenu(UiScope ui) {
         float pagePadding = compactLayout ? 8.0f : 14.0f;
         float pageGap = compactLayout ? 6.0f : 10.0f;
+        scrollToSelectedTestIfNeeded();
         ui.column(Ui.modifier().fill().padding(pagePadding).gap(pageGap), page -> {
             buildMenuHeader(page);
             page.scroll(Ui.modifier().fill().weight(1.0f), testScroll, list -> {
                 TestSelector.TestDescriptor[] descriptors = TestSelector.descriptors();
                 for (int i = 0; i < descriptors.length; i++) {
                     final TestSelector.TestDescriptor descriptor = descriptors[i];
-                    buildTestRow(list, descriptor);
+                    buildTestRow(list, descriptor, i);
                 }
             });
         });
@@ -399,32 +414,19 @@ public final class TestChooserApplication extends ApplicationAdapter {
         });
     }
 
-    private void buildTestRow(UiScope list, TestSelector.TestDescriptor descriptor) {
-        float padding = compactLayout ? 6.0f : 8.0f;
-        float gap = compactLayout ? 6.0f : 8.0f;
-        list.panel(Ui.modifier().fillWidth().padding(padding).gap(6.0f).style("test-row"), rowPanel -> {
-            rowPanel.row(Ui.modifier().fillWidth().gap(gap), row -> {
-                if (!compactLayout) {
-                    row.spacer(Ui.modifier().fillWidth().weight(1.0f));
-                }
-                row.column((compactLayout ? Ui.modifier().fillWidth().weight(1.0f) : Ui.modifier().width(240.0f))
-                        .gap(2.0f), text -> {
-                    text.text(descriptor.displayName(), Ui.modifier().style("section"));
-                    text.text(descriptor.name() + " - " + descriptor.category(), Ui.modifier().style("muted"));
+    private void buildTestRow(UiScope list, TestSelector.TestDescriptor descriptor, int index) {
+        boolean selected = selectedTestIndex.get() == index;
+        String style = selected ? "test-row-selected" : "test-row-button";
+        list.button(descriptor.displayName(), Ui.modifier()
+                .fillWidth()
+                .height(TEST_ROW_HEIGHT)
+                .margin(TEST_ROW_MARGIN)
+                .style(style)
+                .semanticLabel(descriptor.name()), () -> {
+                    selectedTestIndex.set(index);
+                    rememberSelectedTest(descriptor.name());
+                    requestLaunch(descriptor.name());
                 });
-                row.column(Ui.modifier().width(compactLayout ? 74.0f : 72.0f), action -> {
-                    if (compactLayout) {
-                        action.button("Run", Ui.modifier().fillWidth().height(34.0f),
-                                () -> requestLaunch(descriptor.name()));
-                    } else {
-                        action.button("Run", Ui.modifier().fillWidth(), () -> requestLaunch(descriptor.name()));
-                    }
-                });
-                if (!compactLayout) {
-                    row.spacer(Ui.modifier().fillWidth().weight(1.0f));
-                }
-            });
-        });
     }
 
     private void buildGraphicsSelector(UiScope header) {
@@ -467,6 +469,62 @@ public final class TestChooserApplication extends ApplicationAdapter {
             return graphicsOptions[0];
         }
         return graphicsOptions[index];
+    }
+
+    private void selectTest(String testName) {
+        if (TestSelector.AUTO_TEST_NAME.equals(testName)) {
+            return;
+        }
+        int index = testIndex(testName);
+        if (index < 0) {
+            return;
+        }
+        selectedTestIndex.set(index);
+        rememberSelectedTest(testName);
+        scrollToSelectedTestPending = true;
+    }
+
+    private void scrollToSelectedTestIfNeeded() {
+        if (!scrollToSelectedTestPending || testScroll == null) {
+            return;
+        }
+        scrollToSelectedTestPending = false;
+        int index = selectedTestIndex.get();
+        if (index < 0) {
+            return;
+        }
+        float rowPitch = TEST_ROW_HEIGHT + TEST_ROW_MARGIN * 2.0f;
+        float rowTop = index * rowPitch;
+        testScroll.scrollYRangeIntoView(rowTop, rowTop + rowPitch, rowPitch);
+    }
+
+    private void rememberSelectedTest(String testName) {
+        TestSelector.TestDescriptor descriptor = TestSelector.descriptor(testName);
+        if (descriptor == null) {
+            return;
+        }
+        System.setProperty(SELECTED_TEST_PROPERTY, descriptor.name());
+        if (selectedTestStore != null) {
+            selectedTestStore.putString(SELECTED_TEST_KEY, descriptor.name()).flush();
+        }
+    }
+
+    private void restoreSelectedTest() {
+        int propertyIndex = testIndex(System.getProperty(SELECTED_TEST_PROPERTY));
+        if (propertyIndex >= 0) {
+            selectedTestIndex.set(propertyIndex);
+            rememberSelectedTest(TestSelector.descriptors()[propertyIndex].name());
+            return;
+        }
+        if (selectedTestStore == null) {
+            return;
+        }
+        String storedTestName = selectedTestStore.getString(SELECTED_TEST_KEY, "");
+        int storedIndex = testIndex(storedTestName);
+        if (storedIndex >= 0) {
+            selectedTestIndex.set(storedIndex);
+            System.setProperty(SELECTED_TEST_PROPERTY, TestSelector.descriptors()[storedIndex].name());
+        }
     }
 
     private void syncDebugLineProperty() {
@@ -534,6 +592,37 @@ public final class TestChooserApplication extends ApplicationAdapter {
             }
         }
         return 0;
+    }
+
+    private static int initialTestIndex() {
+        String selected = trim(System.getProperty(SELECTED_TEST_PROPERTY));
+        int selectedIndex = testIndex(selected);
+        if (selectedIndex >= 0) {
+            return selectedIndex;
+        }
+        String requested = trim(System.getProperty("libfdx.test.name"));
+        int requestedIndex = testIndex(requested);
+        if (requestedIndex >= 0) {
+            return requestedIndex;
+        }
+        int defaultIndex = testIndex(TestSelector.DEFAULT_TEST_NAME);
+        return defaultIndex >= 0 ? defaultIndex : 0;
+    }
+
+    private static int testIndex(String testName) {
+        if (testName == null || TestSelector.AUTO_TEST_NAME.equalsIgnoreCase(testName)
+                || TestSelector.SELECTOR_NAME.equalsIgnoreCase(testName)
+                || "menu".equalsIgnoreCase(testName)
+                || "chooser".equalsIgnoreCase(testName)) {
+            return -1;
+        }
+        TestSelector.TestDescriptor[] descriptors = TestSelector.descriptors();
+        for (int i = 0; i < descriptors.length; i++) {
+            if (descriptors[i].name().equalsIgnoreCase(testName)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private void captureIfRequested() {
@@ -625,6 +714,8 @@ public final class TestChooserApplication extends ApplicationAdapter {
                 .lineHeight(mutedLineHeight)
                 .color(UiColor.rgba8888(0xaeb7c4ff));
         UiTextStyle buttonText = text.align(UiTextAlign.CENTER);
+        UiTextStyle listButtonText = text.align(UiTextAlign.START).ellipsis(true).wrap(false);
+        UiTextStyle selectedListButtonText = listButtonText.color(UiColor.rgba8888(0xffffffff));
         UiStyle button = UiStyle.button()
                 .text(buttonText)
                 .background(UiDrawable.color(UiColor.rgba8888(0x2f4052ff)))
@@ -636,6 +727,30 @@ public final class TestChooserApplication extends ApplicationAdapter {
         UiStyle accent = UiStyle.button()
                 .text(buttonText)
                 .background(UiDrawable.color(UiColor.rgba8888(0x4b7f52ff)));
+        UiStyle testRow = UiStyle.button()
+                .padding(14.0f, 7.0f)
+                .text(listButtonText)
+                .background(UiDrawable.color(UiColor.rgba8888(0x101820ff)))
+                .hover(UiStyle.button()
+                        .padding(14.0f, 7.0f)
+                        .text(listButtonText)
+                        .background(UiDrawable.color(UiColor.rgba8888(0x182637ff))))
+                .pressed(UiStyle.button()
+                        .padding(14.0f, 7.0f)
+                        .text(listButtonText)
+                        .background(UiDrawable.color(UiColor.rgba8888(0x0d151fff))));
+        UiStyle selectedTestRow = UiStyle.button()
+                .padding(14.0f, 7.0f)
+                .text(selectedListButtonText)
+                .background(UiDrawable.color(UiColor.rgba8888(0x315f9eff)))
+                .hover(UiStyle.button()
+                        .padding(14.0f, 7.0f)
+                        .text(selectedListButtonText)
+                        .background(UiDrawable.color(UiColor.rgba8888(0x3f71b9ff))))
+                .pressed(UiStyle.button()
+                        .padding(14.0f, 7.0f)
+                        .text(selectedListButtonText)
+                        .background(UiDrawable.color(UiColor.rgba8888(0x274d83ff))));
         return Ui.darkTheme()
                 .colors(UiColor.rgba8888(0x0d1117ff), UiColor.rgba8888(0xf2f4f8ff))
                 .text(UiStyle.style().text(text))
@@ -646,9 +761,8 @@ public final class TestChooserApplication extends ApplicationAdapter {
                 .style("panel-strong", UiStyle.style()
                         .padding(12.0f)
                         .background(UiDrawable.color(UiColor.rgba8888(0x161b22ff))))
-                .style("test-row", UiStyle.style()
-                        .padding(8.0f)
-                        .background(UiDrawable.color(UiColor.rgba8888(0x101820ff))))
+                .style("test-row-button", testRow)
+                .style("test-row-selected", selectedTestRow)
                 .style("title", UiStyle.style().text(title))
                 .style("section", UiStyle.style().text(section))
                 .style("muted", UiStyle.style().text(muted));

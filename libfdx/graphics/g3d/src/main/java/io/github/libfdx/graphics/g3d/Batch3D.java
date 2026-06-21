@@ -1,6 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
-import io.github.libfdx.graphics.Camera;
+import io.github.libfdx.graphics.camera.Camera;
 
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.graphics.LoadOp;

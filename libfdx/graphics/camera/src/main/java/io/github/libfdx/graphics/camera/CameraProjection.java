@@ -1,4 +1,4 @@
-package io.github.libfdx.graphics;
+package io.github.libfdx.graphics.camera;
 
 /**
  * Lists the supported camera projection values.

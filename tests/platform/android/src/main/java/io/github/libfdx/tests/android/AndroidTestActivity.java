@@ -11,10 +11,12 @@ import io.github.libfdx.backend.android.AndroidGlesProvider;
 import io.github.libfdx.backend.android.AndroidTextEditorStyle;
 import io.github.libfdx.backend.android.AndroidVulkanProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
+import io.github.libfdx.graphics.wgpu.WGPUConfiguration;
 import io.github.libfdx.graphics.wgpu.WGPUProvider;
 import io.github.libfdx.tests.AutoTestApplication;
 import io.github.libfdx.tests.TestChooserApplication;
 import io.github.libfdx.tests.TestSelector;
+import java.io.File;
 
 /**
  * Represents an android test activity.
@@ -25,6 +27,7 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
     @Override
     protected AndroidApplicationConfig createApplicationConfig() {
         applyIntentTestProperties();
+        configureAndroidCapturePath();
         String testName = selectedTestName();
         int width = intProperty("libfdx.test.width", defaultWidth(testName));
         int height = intProperty("libfdx.test.height", defaultHeight(testName));
@@ -41,6 +44,7 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
     @Override
     protected ApplicationListener createApplicationListener() {
         applyIntentTestProperties();
+        configureAndroidCapturePath();
         configurePlatformTestProperties();
         String testName = selectedTestName();
         if (isSelector(testName)) {
@@ -49,7 +53,7 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
         if (TestSelector.AUTO_TEST_NAME.equalsIgnoreCase(testName)) {
             return new AutoTestApplication();
         }
-        return TestSelector.create(testName, 0L);
+        return TestSelector.create(testName, longProperty("libfdx.test.frames", 0L));
     }
 
     private void applyIntentTestProperties() {
@@ -91,7 +95,27 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
         if ("vulkan".equalsIgnoreCase(graphicsName()) || "vk".equalsIgnoreCase(graphicsName())) {
             return new AndroidVulkanProvider();
         }
-        return new WGPUProvider();
+        WGPUProvider provider = new WGPUProvider();
+        if (captureRequested()) {
+            provider.configuration(new WGPUConfiguration().offscreenReadback(true));
+        }
+        return provider;
+    }
+
+    private boolean captureRequested() {
+        String capture = System.getProperty("libfdx.test.capture", "");
+        return capture != null && capture.trim().length() > 0;
+    }
+
+    private void configureAndroidCapturePath() {
+        String capture = System.getProperty("libfdx.test.capture", "");
+        if (capture == null || capture.trim().length() == 0) {
+            return;
+        }
+        File captureFile = new File(capture);
+        if (!captureFile.isAbsolute()) {
+            System.setProperty("libfdx.test.capture", new File(getFilesDir(), capture).getAbsolutePath());
+        }
     }
 
     private AndroidTextEditorStyle nativeTextEditorStyle() {

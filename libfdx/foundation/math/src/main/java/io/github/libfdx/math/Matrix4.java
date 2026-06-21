@@ -126,6 +126,28 @@ public final class Matrix4 {
     }
 
     /**
+     * Creates a translation, rotation, and scale matrix.
+     *
+     * @param translationX the translation x
+     * @param translationY the translation y
+     * @param translationZ the translation z
+     * @param rotationX the rotation quaternion x
+     * @param rotationY the rotation quaternion y
+     * @param rotationZ the rotation quaternion z
+     * @param rotationW the rotation quaternion w
+     * @param scaleX the scale x
+     * @param scaleY the scale y
+     * @param scaleZ the scale z
+     * @return a new matrix4
+     */
+    public static Matrix4 trs(float translationX, float translationY, float translationZ,
+            float rotationX, float rotationY, float rotationZ, float rotationW,
+            float scaleX, float scaleY, float scaleZ) {
+        return new Matrix4().setToTrs(translationX, translationY, translationZ,
+                rotationX, rotationY, rotationZ, rotationW, scaleX, scaleY, scaleZ);
+    }
+
+    /**
      * Creates a matrix4.
      *
      * @param fieldOfViewDegrees the field of view degrees
@@ -332,6 +354,69 @@ public final class Matrix4 {
         values[8] = 2.0f * (xz + wy);
         values[9] = 2.0f * (yz - wx);
         values[10] = 1.0f - 2.0f * (xx + yy);
+        return this;
+    }
+
+    /**
+     * Sets the to translation, rotation, and scale.
+     *
+     * @param translationX the translation x
+     * @param translationY the translation y
+     * @param translationZ the translation z
+     * @param rotationX the rotation quaternion x
+     * @param rotationY the rotation quaternion y
+     * @param rotationZ the rotation quaternion z
+     * @param rotationW the rotation quaternion w
+     * @param scaleX the scale x
+     * @param scaleY the scale y
+     * @param scaleZ the scale z
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 setToTrs(float translationX, float translationY, float translationZ,
+            float rotationX, float rotationY, float rotationZ, float rotationW,
+            float scaleX, float scaleY, float scaleZ) {
+        float len = (float)Math.sqrt(rotationX * rotationX + rotationY * rotationY
+                + rotationZ * rotationZ + rotationW * rotationW);
+        if (len == 0.0f) {
+            rotationX = 0.0f;
+            rotationY = 0.0f;
+            rotationZ = 0.0f;
+            rotationW = 1.0f;
+        }
+        else {
+            float invLen = 1.0f / len;
+            rotationX *= invLen;
+            rotationY *= invLen;
+            rotationZ *= invLen;
+            rotationW *= invLen;
+        }
+
+        float xx = rotationX * rotationX;
+        float yy = rotationY * rotationY;
+        float zz = rotationZ * rotationZ;
+        float xy = rotationX * rotationY;
+        float xz = rotationX * rotationZ;
+        float yz = rotationY * rotationZ;
+        float wx = rotationW * rotationX;
+        float wy = rotationW * rotationY;
+        float wz = rotationW * rotationZ;
+
+        values[0] = (1.0f - 2.0f * (yy + zz)) * scaleX;
+        values[1] = (2.0f * (xy + wz)) * scaleX;
+        values[2] = (2.0f * (xz - wy)) * scaleX;
+        values[3] = 0.0f;
+        values[4] = (2.0f * (xy - wz)) * scaleY;
+        values[5] = (1.0f - 2.0f * (xx + zz)) * scaleY;
+        values[6] = (2.0f * (yz + wx)) * scaleY;
+        values[7] = 0.0f;
+        values[8] = (2.0f * (xz + wy)) * scaleZ;
+        values[9] = (2.0f * (yz - wx)) * scaleZ;
+        values[10] = (1.0f - 2.0f * (xx + yy)) * scaleZ;
+        values[11] = 0.0f;
+        values[12] = translationX;
+        values[13] = translationY;
+        values[14] = translationZ;
+        values[15] = 1.0f;
         return this;
     }
 
@@ -593,6 +678,21 @@ public final class Matrix4 {
      */
     public float[] values() {
         return values.clone();
+    }
+
+    /**
+     * Copies the values into the target array.
+     *
+     * @param target the target values
+     * @param offset the target offset
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 copyValues(float[] target, int offset) {
+        if (target == null || offset < 0 || target.length - offset < VALUE_COUNT) {
+            throw new FdxException("Matrix4 target requires 16 values");
+        }
+        System.arraycopy(values, 0, target, offset, VALUE_COUNT);
+        return this;
     }
 
     /**

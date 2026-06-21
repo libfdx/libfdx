@@ -66,6 +66,8 @@ import io.github.libfdx.graphics.TextureFormat;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Represents a WGPU context.
@@ -82,6 +84,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     private final WGPUInstance instance;
     private final WGPUSurface surface;
     private final Object surfaceOwner;
+    private final boolean surfaceCopySrc;
     private WGPUAdapter adapter;
     private WGPUDevice device;
     private WGPUQueue queue;
@@ -90,8 +93,12 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     private WGPUCommandBuffer frameCommandBuffer;
     private WGPUTexture frameTexture;
     private WGPUTextureView frameTextureView;
+    private WGPUTexture offscreenColorTexture;
+    private WGPUTextureView offscreenColorRenderTextureView;
     private WGPUTexture depthTexture;
     private WGPUTextureView depthTextureView;
+    private final Map<Long, OffscreenDepthResources> offscreenDepthResources =
+            new HashMap<Long, OffscreenDepthResources>();
     private final ArrayList<WGPUBindGroup> submittedBindGroups = new ArrayList<WGPUBindGroup>();
     private final ArrayList<WGPUBuffer> submittedBuffers = new ArrayList<WGPUBuffer>();
     private final ArrayList<WGPUBufferHandle> usedBufferHandles = new ArrayList<WGPUBufferHandle>();
@@ -133,6 +140,20 @@ public final class WGPUContext implements GraphicsContext, Disposable {
      */
     public WGPUContext(WGPUConfiguration configuration, WGPUInstance instance, WGPUSurface surface,
             Object surfaceOwner) {
+        this(configuration, instance, surface, surfaceOwner, true);
+    }
+
+    /**
+     * Creates a WGPU context.
+     *
+     * @param configuration the configuration
+     * @param instance the instance
+     * @param surface the surface
+     * @param surfaceOwner the surface owner
+     * @param surfaceCopySrc whether the surface may be configured for copy-source readback
+     */
+    WGPUContext(WGPUConfiguration configuration, WGPUInstance instance, WGPUSurface surface,
+            Object surfaceOwner, boolean surfaceCopySrc) {
         if (configuration == null) {
             throw new FdxException("WGPUConfiguration cannot be null");
         }
@@ -146,6 +167,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         this.instance = instance;
         this.surface = surface;
         this.surfaceOwner = surfaceOwner;
+        this.surfaceCopySrc = surfaceCopySrc;
     }
 
     /**
@@ -171,6 +193,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         }
         initializationStarted = true;
         initState = new InitState();
+        debugInit("adapter-request");
         WGPURequestAdapterOptions options = WGPURequestAdapterOptions.obtain();
         options.setPowerPreference(WGPUPowerPreference.HighPerformance);
         options.setBackendType(configuration.backend().toNative());
@@ -179,6 +202,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         instance.requestAdapter(options, WGPUCallbackMode.AllowProcessEvents, new WGPURequestAdapterCallback() {
             @Override
             protected void onCallback(WGPURequestAdapterStatus status, WGPUAdapter selectedAdapter, String message) {
+                debugInit("adapter-callback " + status + (message != null ? ": " + message : ""));
                 if (status != WGPURequestAdapterStatus.Success) {
                     initState.fail("Could not request WGPU adapter: " + message);
                     return;
@@ -208,12 +232,17 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         frameCommandBuffer = new WGPUCommandBuffer();
         frameTexture = new WGPUTexture();
         frameTextureView = new WGPUTextureView();
+        if (usesOffscreenFrame()) {
+            offscreenColorRenderTextureView = new WGPUTextureView();
+        }
         graphicsDevice = new WGPUGraphicsDevice(this);
         commandEncoder = new WGPUCommandEncoderHandle(this);
-        colorAttachment = new WGPUTextureViewHandle(frameTextureView, WGPUTextureFormats.toCommon(surfaceFormat));
+        colorAttachment = new WGPUTextureViewHandle(activeColorAttachmentView(),
+                WGPUTextureFormats.toCommon(surfaceFormat));
         frameBuffer = new WGPUFrameBuffer(this, colorAttachment);
         currentFrame = new WGPUGraphicsFrame(this, commandEncoder, frameBuffer, colorAttachment);
         ready = true;
+        debugInit("ready");
         applyPendingResize();
     }
 
@@ -226,6 +255,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         selectedAdapter.requestDevice(descriptor, WGPUCallbackMode.AllowProcessEvents, new WGPURequestDeviceCallback() {
             @Override
             protected void onCallback(WGPURequestDeviceStatus status, WGPUDevice selectedDevice, String message) {
+                debugInit("device-callback " + status + (message != null ? ": " + message : ""));
                 if (status != WGPURequestDeviceStatus.Success) {
                     state.fail("Could not request WGPU device: " + message);
                     return;
@@ -258,6 +288,12 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         }
         if (state.error != null) {
             throw new FdxException(state.error);
+        }
+    }
+
+    private static void debugInit(String message) {
+        if (Boolean.getBoolean("libfdx.wgpu.debugInit")) {
+            System.out.println("[libfdx-wgpu] " + message);
         }
     }
 
@@ -324,13 +360,19 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             surfaceConfigured = false;
         }
         releaseDepthResources();
+        releaseOffscreenDepthResources();
+        releaseOffscreenColorResources();
 
         WGPUSurfaceConfiguration surfaceConfiguration = WGPUSurfaceConfiguration.obtain();
         surfaceConfiguration.setWidth(width);
         surfaceConfiguration.setHeight(height);
         surfaceConfiguration.setFormat(surfaceFormat);
         surfaceConfiguration.setViewFormats(WGPUVectorTextureFormat.NULL);
-        surfaceConfiguration.setUsage(WGPUTextureUsage.RenderAttachment.or(WGPUTextureUsage.CopySrc));
+        WGPUTextureUsage usage = WGPUTextureUsage.RenderAttachment;
+        if (surfaceCopySrc) {
+            usage = usage.or(WGPUTextureUsage.CopySrc);
+        }
+        surfaceConfiguration.setUsage(usage);
         surfaceConfiguration.setDevice(device);
         surfaceConfiguration.setPresentMode(configuration.vSync() ? WGPUPresentMode.Fifo : WGPUPresentMode.Immediate);
         surfaceConfiguration.setAlphaMode(WGPUCompositeAlphaMode.Auto);
@@ -338,8 +380,44 @@ public final class WGPUContext implements GraphicsContext, Disposable {
 
         this.width = width;
         this.height = height;
+        if (usesOffscreenFrame()) {
+            createOffscreenColorResources(width, height);
+        }
         createDepthResources(width, height);
         surfaceConfigured = true;
+    }
+
+    private void createOffscreenColorResources(int width, int height) {
+        WGPUTextureDescriptor textureDescriptor = WGPUTextureDescriptor.obtain();
+        textureDescriptor.setNextInChain(WGPUChainedStruct.NULL);
+        textureDescriptor.setLabel("libfdx offscreen color texture");
+        textureDescriptor.setUsage(WGPUTextureUsage.RenderAttachment
+                .or(WGPUTextureUsage.CopySrc));
+        textureDescriptor.setDimension(WGPUTextureDimension._2D);
+        textureDescriptor.getSize().setWidth(width);
+        textureDescriptor.getSize().setHeight(height);
+        textureDescriptor.getSize().setDepthOrArrayLayers(1);
+        textureDescriptor.setFormat(surfaceFormat);
+        textureDescriptor.setMipLevelCount(1);
+        textureDescriptor.setSampleCount(1);
+        textureDescriptor.setViewFormats(WGPUVectorTextureFormat.NULL);
+
+        offscreenColorTexture = new WGPUTexture();
+        device.createTexture(textureDescriptor, offscreenColorTexture);
+
+        WGPUTextureViewDescriptor viewDescriptor = WGPUTextureViewDescriptor.obtain();
+        viewDescriptor.setNextInChain(WGPUChainedStruct.NULL);
+        viewDescriptor.setLabel("libfdx offscreen color render texture view");
+        viewDescriptor.setFormat(surfaceFormat);
+        viewDescriptor.setDimension(WGPUTextureViewDimension._2D);
+        viewDescriptor.setBaseMipLevel(0);
+        viewDescriptor.setMipLevelCount(1);
+        viewDescriptor.setBaseArrayLayer(0);
+        viewDescriptor.setArrayLayerCount(1);
+        viewDescriptor.setAspect(WGPUTextureAspect.All);
+        viewDescriptor.setUsage(WGPUTextureUsage.RenderAttachment);
+
+        offscreenColorTexture.createView(viewDescriptor, offscreenColorRenderTextureView);
     }
 
     private void createDepthResources(int width, int height) {
@@ -393,6 +471,62 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         }
     }
 
+    private WGPUTextureView createDepthTextureView(String label, int width, int height, WGPUTexture[] outTexture) {
+        WGPUTextureDescriptor textureDescriptor = WGPUTextureDescriptor.obtain();
+        textureDescriptor.setNextInChain(WGPUChainedStruct.NULL);
+        textureDescriptor.setLabel(label);
+        textureDescriptor.setUsage(WGPUTextureUsage.RenderAttachment);
+        textureDescriptor.setDimension(WGPUTextureDimension._2D);
+        textureDescriptor.getSize().setWidth(width);
+        textureDescriptor.getSize().setHeight(height);
+        textureDescriptor.getSize().setDepthOrArrayLayers(1);
+        textureDescriptor.setFormat(DEPTH_FORMAT);
+        textureDescriptor.setMipLevelCount(1);
+        textureDescriptor.setSampleCount(1);
+        textureDescriptor.setViewFormats(WGPUVectorTextureFormat.NULL);
+
+        WGPUTexture texture = new WGPUTexture();
+        device.createTexture(textureDescriptor, texture);
+
+        WGPUTextureViewDescriptor viewDescriptor = WGPUTextureViewDescriptor.obtain();
+        viewDescriptor.setNextInChain(WGPUChainedStruct.NULL);
+        viewDescriptor.setLabel(label + " view");
+        viewDescriptor.setFormat(DEPTH_FORMAT);
+        viewDescriptor.setDimension(WGPUTextureViewDimension._2D);
+        viewDescriptor.setBaseMipLevel(0);
+        viewDescriptor.setMipLevelCount(1);
+        viewDescriptor.setBaseArrayLayer(0);
+        viewDescriptor.setArrayLayerCount(1);
+        viewDescriptor.setAspect(WGPUTextureAspect.DepthOnly);
+        viewDescriptor.setUsage(WGPUTextureUsage.RenderAttachment);
+
+        WGPUTextureView view = new WGPUTextureView();
+        texture.createView(viewDescriptor, view);
+        outTexture[0] = texture;
+        return view;
+    }
+
+    private void releaseOffscreenDepthResources() {
+        for (OffscreenDepthResources resources : offscreenDepthResources.values()) {
+            resources.dispose();
+        }
+        offscreenDepthResources.clear();
+    }
+
+    private void releaseOffscreenColorResources() {
+        if (offscreenColorRenderTextureView != null && offscreenColorRenderTextureView.isValid()) {
+            offscreenColorRenderTextureView.release();
+        }
+        if (offscreenColorTexture != null) {
+            if (offscreenColorTexture.isValid()) {
+                offscreenColorTexture.destroy();
+                offscreenColorTexture.release();
+            }
+            offscreenColorTexture.dispose();
+            offscreenColorTexture = null;
+        }
+    }
+
     /**
      * Returns the begin frame.
      *
@@ -406,31 +540,33 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             throw new FdxException("WGPU frame is already started");
         }
 
-        WGPUSurfaceTexture surfaceTexture = WGPUSurfaceTexture.obtain();
-        surface.getCurrentTexture(surfaceTexture);
-        WGPUSurfaceGetCurrentTextureStatus status = surfaceTexture.getStatus();
-        if (status != WGPUSurfaceGetCurrentTextureStatus.SuccessOptimal
-                && status != WGPUSurfaceGetCurrentTextureStatus.SuccessSuboptimal) {
-            applyPendingResize();
-            return false;
-        }
+        if (!usesOffscreenFrame()) {
+            WGPUSurfaceTexture surfaceTexture = WGPUSurfaceTexture.obtain();
+            surface.getCurrentTexture(surfaceTexture);
+            WGPUSurfaceGetCurrentTextureStatus status = surfaceTexture.getStatus();
+            if (status != WGPUSurfaceGetCurrentTextureStatus.SuccessOptimal
+                    && status != WGPUSurfaceGetCurrentTextureStatus.SuccessSuboptimal) {
+                applyPendingResize();
+                return false;
+            }
 
-        surfaceTexture.getTexture(frameTexture);
-        if (!frameTexture.isValid()) {
-            applyPendingResize();
-            return false;
-        }
+            surfaceTexture.getTexture(frameTexture);
+            if (!frameTexture.isValid()) {
+                applyPendingResize();
+                return false;
+            }
 
-        WGPUTextureViewDescriptor viewDescriptor = WGPUTextureViewDescriptor.obtain();
-        viewDescriptor.setLabel("libfdx surface texture view");
-        viewDescriptor.setFormat(frameTexture.getFormat());
-        viewDescriptor.setDimension(WGPUTextureViewDimension._2D);
-        viewDescriptor.setBaseMipLevel(0);
-        viewDescriptor.setMipLevelCount(1);
-        viewDescriptor.setBaseArrayLayer(0);
-        viewDescriptor.setArrayLayerCount(1);
-        viewDescriptor.setAspect(WGPUTextureAspect.All);
-        frameTexture.createView(viewDescriptor, frameTextureView);
+            WGPUTextureViewDescriptor viewDescriptor = WGPUTextureViewDescriptor.obtain();
+            viewDescriptor.setLabel("libfdx surface texture view");
+            viewDescriptor.setFormat(frameTexture.getFormat());
+            viewDescriptor.setDimension(WGPUTextureViewDimension._2D);
+            viewDescriptor.setBaseMipLevel(0);
+            viewDescriptor.setMipLevelCount(1);
+            viewDescriptor.setBaseArrayLayer(0);
+            viewDescriptor.setArrayLayerCount(1);
+            viewDescriptor.setAspect(WGPUTextureAspect.All);
+            frameTexture.createView(viewDescriptor, frameTextureView);
+        }
 
         WGPUCommandEncoderDescriptor encoderDescriptor = WGPUCommandEncoderDescriptor.obtain();
         encoderDescriptor.setLabel("libfdx frame command encoder");
@@ -494,7 +630,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
 
         WGPURenderPassColorAttachment colorAttachment = WGPURenderPassColorAttachment.obtain();
         colorAttachment.setNextInChain(WGPUChainedStruct.NULL);
-        colorAttachment.setView(frameTextureView);
+        colorAttachment.setView(activeColorAttachmentView());
         colorAttachment.setResolveTarget(WGPUTextureView.NULL);
         colorAttachment.setLoadOp(WGPULoadOp.Clear);
         colorAttachment.setStoreOp(WGPUStoreOp.Store);
@@ -533,13 +669,14 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         if (!frameStarted) {
             throw new FdxException("Cannot read pixels before beginFrame()");
         }
+        WGPUTexture sourceTexture = readbackTexture();
 
         int rowBytes = width * 4;
         int bytesPerRow = align(rowBytes, COPY_BYTES_PER_ROW_ALIGNMENT);
         int readbackSize = bytesPerRow * height;
         WGPUBuffer readbackBuffer = createReadbackBuffer(readbackSize);
         try {
-            copyFrameTextureToBuffer(readbackBuffer, bytesPerRow);
+            copyTextureToBuffer(sourceTexture, readbackBuffer, bytesPerRow);
             submitCurrentFrame();
             ByteBuffer paddedPixels = mapReadbackBuffer(readbackBuffer, readbackSize);
             return packRows(paddedPixels, rowBytes, bytesPerRow, height, isBgraSurfaceFormat());
@@ -565,11 +702,13 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         resetUsedBufferHandles();
         frameCommandBuffer.release();
 
-        frameTextureView.release();
-        if (com.github.xpenatan.webgpu.WGPU.getPlatformType() != WGPUPlatformType.WGPU_Web) {
-            surface.present();
+        if (!usesOffscreenFrame()) {
+            frameTextureView.release();
+            if (com.github.xpenatan.webgpu.WGPU.getPlatformType() != WGPUPlatformType.WGPU_Web) {
+                surface.present();
+            }
+            frameTexture.release();
         }
-        frameTexture.release();
 
         applyPendingResize();
     }
@@ -588,9 +727,9 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         return buffer;
     }
 
-    private void copyFrameTextureToBuffer(WGPUBuffer readbackBuffer, int bytesPerRow) {
+    private void copyTextureToBuffer(WGPUTexture sourceTexture, WGPUBuffer readbackBuffer, int bytesPerRow) {
         WGPUTexelCopyTextureInfo source = WGPUTexelCopyTextureInfo.obtain();
-        source.setTexture(frameTexture);
+        source.setTexture(sourceTexture);
         source.setMipLevel(0);
         source.getOrigin().setX(0);
         source.getOrigin().setY(0);
@@ -719,6 +858,23 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         return depthTextureView;
     }
 
+    WGPUTextureView depthTextureView(int attachmentWidth, int attachmentHeight) {
+        if (attachmentWidth <= 0 || attachmentHeight <= 0
+                || (attachmentWidth == width && attachmentHeight == height)) {
+            return depthTextureView;
+        }
+        long key = (((long)attachmentWidth) << 32) ^ (attachmentHeight & 0xffffffffL);
+        OffscreenDepthResources resources = offscreenDepthResources.get(key);
+        if (resources == null) {
+            WGPUTexture[] texture = new WGPUTexture[1];
+            WGPUTextureView view = createDepthTextureView("libfdx offscreen depth texture",
+                    attachmentWidth, attachmentHeight, texture);
+            resources = new OffscreenDepthResources(texture[0], view);
+            offscreenDepthResources.put(key, resources);
+        }
+        return resources.view;
+    }
+
     void releaseAfterSubmit(WGPUBindGroup bindGroup) {
         if (bindGroup != null) {
             submittedBindGroups.add(bindGroup);
@@ -763,6 +919,22 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             usedBufferHandles.get(i).resetUsedByRecordedCommand();
         }
         usedBufferHandles.clear();
+    }
+
+    private boolean usesOffscreenFrame() {
+        return !surfaceCopySrc && configuration.offscreenReadback();
+    }
+
+    private WGPUTextureView activeColorAttachmentView() {
+        return usesOffscreenFrame() ? offscreenColorRenderTextureView : frameTextureView;
+    }
+
+    private WGPUTexture readbackTexture() {
+        WGPUTexture texture = usesOffscreenFrame() ? offscreenColorTexture : frameTexture;
+        if (texture == null || !texture.isValid()) {
+            throw new FdxException("WGPU readback texture is not valid");
+        }
+        return texture;
     }
 
     private void applyPendingResize() {
@@ -927,6 +1099,8 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         }
         releaseSubmittedResources();
         releaseDepthResources();
+        releaseOffscreenDepthResources();
+        releaseOffscreenColorResources();
         if (frameCommandBuffer != null) {
             frameCommandBuffer.dispose();
         }
@@ -935,6 +1109,9 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         }
         if (frameTextureView != null) {
             frameTextureView.dispose();
+        }
+        if (offscreenColorRenderTextureView != null) {
+            offscreenColorRenderTextureView.dispose();
         }
         if (frameTexture != null) {
             frameTexture.dispose();
@@ -992,5 +1169,31 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         boolean complete;
         WGPUMapAsyncStatus status;
         String message;
+    }
+
+    private static final class OffscreenDepthResources {
+        private final WGPUTexture texture;
+        private final WGPUTextureView view;
+
+        OffscreenDepthResources(WGPUTexture texture, WGPUTextureView view) {
+            this.texture = texture;
+            this.view = view;
+        }
+
+        void dispose() {
+            if (view != null) {
+                if (view.isValid()) {
+                    view.release();
+                }
+                view.dispose();
+            }
+            if (texture != null) {
+                if (texture.isValid()) {
+                    texture.destroy();
+                    texture.release();
+                }
+                texture.dispose();
+            }
+        }
     }
 }

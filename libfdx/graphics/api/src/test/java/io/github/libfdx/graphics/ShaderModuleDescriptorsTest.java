@@ -21,7 +21,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -39,17 +38,21 @@ final class ShaderModuleDescriptorsTest {
     }
 
     @Test
-    void requireGlslTargetUsesNativeSourceWithoutCompiler() {
-        RuntimeCore.registerProvider(new TestRuntimeCoreProvider(null));
-        ShaderModuleDescriptor descriptor = ShaderModuleDescriptor.wgsl("mixed", "wgsl")
-                .glsl("native vertex", "native fragment");
-
-        ShaderModuleDescriptor ready =
-                ShaderModuleDescriptors.requireTarget(descriptor, ShaderTarget.GLES_GLSL_ES, "GLES");
-
-        assertSame(descriptor, ready);
-        assertEquals("native vertex", ready.glslVertexSource());
-        assertEquals("native fragment", ready.glslFragmentSource());
+    void publicDescriptorApiIsWgslOnly() {
+        assertThrows(NoSuchMethodException.class, () ->
+                ShaderModuleDescriptor.class.getMethod("glsl", String.class, String.class, String.class));
+        assertThrows(NoSuchMethodException.class, () ->
+                ShaderModuleDescriptor.class.getMethod("spirv", String.class, int[].class, int[].class));
+        assertThrows(NoSuchMethodException.class, () ->
+                ShaderModuleDescriptor.class.getMethod("msl", String.class, String.class));
+        assertThrows(NoSuchMethodException.class, () ->
+                ShaderModuleDescriptor.class.getMethod("glsl", String.class, String.class));
+        assertThrows(NoSuchMethodException.class, () ->
+                ShaderModuleDescriptor.class.getMethod("spirv", int[].class, int[].class));
+        assertThrows(NoSuchMethodException.class, () ->
+                ShaderModuleDescriptor.class.getMethod("msl", String.class));
+        assertThrows(NoSuchMethodException.class, () ->
+                ShaderModuleDescriptor.class.getMethod("language", ShaderLanguage.class));
     }
 
     @Test
@@ -167,6 +170,19 @@ final class ShaderModuleDescriptorsTest {
 
         assertTrue(exception.getMessage().contains("runtime shader compiler is not available"));
         assertTrue(exception.getMessage().contains("only provides WGSL"));
+    }
+
+    @Test
+    void nativeTargetWithoutWgslFailsEvenIfDescriptorIsGeneratedOutput() {
+        RuntimeCore.registerProvider(new TestRuntimeCoreProvider(null));
+
+        FdxException exception = assertThrows(FdxException.class, () ->
+                ShaderModuleDescriptors.requireTarget(
+                        ShaderModuleDescriptor.generatedGlsl("generated", "vertex", "fragment"),
+                        ShaderTarget.OPENGL_GLSL,
+                        "OpenGL"));
+
+        assertTrue(exception.getMessage().contains("must provide WGSL"));
     }
 
     @Test

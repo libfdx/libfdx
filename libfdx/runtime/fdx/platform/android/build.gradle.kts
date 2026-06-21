@@ -16,9 +16,10 @@ val shaderCompilerSourceDir =
     rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/shader_compiler")
 val shaderCompilerDawnSourceDir =
     project(":libfdx:runtime:fdx:platform:shared").layout.buildDirectory.dir("third-party/dawn/source")
+
 val runtimeFdxShaderCompilerEnabled = providers.gradleProperty("libfdx.runtimeFdx.shaderCompiler")
     .map(String::toBoolean)
-    .orElse(false)
+    .orElse(true)
 
 fun runtimeFdxShaderCompilerCmakeArgs(): List<String> {
     if (!runtimeFdxShaderCompilerEnabled.get()) {
@@ -87,8 +88,13 @@ tasks.register("prepare_runtime_fdx_android_native") {
     }
 }
 
+tasks.named<Delete>("clean") {
+    delete(layout.projectDirectory.dir(".cxx"))
+}
+
 tasks.matching {
-    it.name.startsWith("configureCMake") || it.name.startsWith("externalNativeBuild")
+    it.name.startsWith("configureCMake") ||
+        (it.name.startsWith("externalNativeBuild") && !it.name.startsWith("externalNativeBuildClean"))
 }.configureEach {
     runtimeFdxNativeInputsDependency()
 }

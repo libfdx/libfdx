@@ -6,8 +6,8 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 libFDX is a modular Java game framework focused on provider-neutral application,
-runtime, and graphics APIs. Game code is intended to depend on common API
-modules, while platform launchers choose the backend and provider stack.
+runtime, storage, and graphics APIs. Game code is intended to depend on common
+API modules, while platform launchers choose the backend and provider stack.
 
 libFDX is inspired by libGDX, but it is a new framework rather than a fork,
 port, or compatibility layer.
@@ -51,6 +51,8 @@ To open the desktop test selector:
   package roots, artifact naming, Maven artifacts, and backend boundaries.
 - [Common API](docs/COMMON_API.md): provider-neutral public API contracts,
   lifecycle rules, and provider boundaries.
+- [Shaders](docs/SHADERS.md): WGSL-only shader authoring, runtime translation,
+  Tint-backed compiler packaging, and validation expectations.
 - [UI Kit](docs/UI_KIT.md): retained UI toolkit specification.
 - [Scenario Validator](docs/SCENARIO_VALIDATOR.md): scenario validation
   engine contract.

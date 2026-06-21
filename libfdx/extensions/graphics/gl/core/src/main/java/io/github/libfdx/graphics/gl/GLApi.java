@@ -279,6 +279,97 @@ public interface GLApi {
     }
 
     /**
+     * Returns the gen framebuffer.
+     *
+     * @return the gen framebuffer
+     */
+    default int genFramebuffer() {
+        throw new UnsupportedOperationException("Framebuffers are not supported");
+    }
+
+    /**
+     * Runs the bind framebuffer step.
+     *
+     * @param framebuffer the framebuffer
+     */
+    default void bindFramebuffer(int framebuffer) {
+        throw new UnsupportedOperationException("Framebuffers are not supported");
+    }
+
+    /**
+     * Runs the framebuffer texture2 d step.
+     *
+     * @param texture the texture
+     */
+    default void framebufferTexture2D(int texture) {
+        throw new UnsupportedOperationException("Framebuffers are not supported");
+    }
+
+    /**
+     * Returns whether the currently bound framebuffer is complete.
+     *
+     * @return true if complete
+     */
+    default boolean framebufferComplete() {
+        throw new UnsupportedOperationException("Framebuffers are not supported");
+    }
+
+    /**
+     * Runs the delete framebuffer step.
+     *
+     * @param framebuffer the framebuffer
+     */
+    default void deleteFramebuffer(int framebuffer) {
+        throw new UnsupportedOperationException("Framebuffers are not supported");
+    }
+
+    /**
+     * Returns the gen renderbuffer.
+     *
+     * @return the gen renderbuffer
+     */
+    default int genRenderbuffer() {
+        throw new UnsupportedOperationException("Renderbuffers are not supported");
+    }
+
+    /**
+     * Runs the bind renderbuffer step.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    default void bindRenderbuffer(int renderbuffer) {
+        throw new UnsupportedOperationException("Renderbuffers are not supported");
+    }
+
+    /**
+     * Runs the renderbuffer depth storage step.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
+    default void renderbufferStorageDepth(int width, int height) {
+        throw new UnsupportedOperationException("Renderbuffers are not supported");
+    }
+
+    /**
+     * Runs the framebuffer depth renderbuffer attachment step.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    default void framebufferRenderbufferDepth(int renderbuffer) {
+        throw new UnsupportedOperationException("Renderbuffers are not supported");
+    }
+
+    /**
+     * Runs the delete renderbuffer step.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    default void deleteRenderbuffer(int renderbuffer) {
+        throw new UnsupportedOperationException("Renderbuffers are not supported");
+    }
+
+    /**
      * Runs the active texture step.
      *
      * @param slot the slot

@@ -7,6 +7,8 @@ import io.github.libfdx.display.Displays;
 import io.github.libfdx.files.FileSystem;
 import io.github.libfdx.graphics.Graphics;
 import io.github.libfdx.input.Input;
+import io.github.libfdx.storage.DefaultStorage;
+import io.github.libfdx.storage.Storage;
 
 /**
  * Provides the default implementation of a fdx.
@@ -19,6 +21,7 @@ public final class DefaultFdx implements Fdx {
     private final Graphics graphics;
     private final Input input;
     private final FileSystem files;
+    private final Storage storage;
     private final Logger logger;
 
     /**
@@ -45,6 +48,22 @@ public final class DefaultFdx implements Fdx {
      * @param logger the logger
      */
     public DefaultFdx(Application app, Displays displays, Graphics graphics, Input input, FileSystem files, Logger logger) {
+        this(app, displays, graphics, input, files, files != null ? new DefaultStorage(files) : null, logger);
+    }
+
+    /**
+     * Creates a default fdx.
+     *
+     * @param app the app
+     * @param displays the displays
+     * @param graphics the graphics context
+     * @param input the input
+     * @param files the files
+     * @param storage the storage
+     * @param logger the logger
+     */
+    public DefaultFdx(Application app, Displays displays, Graphics graphics, Input input, FileSystem files,
+            Storage storage, Logger logger) {
         if (app == null) {
             throw new FdxException("Application cannot be null");
         }
@@ -62,6 +81,7 @@ public final class DefaultFdx implements Fdx {
         this.graphics = graphics;
         this.input = input;
         this.files = files;
+        this.storage = storage;
         this.logger = logger;
     }
 
@@ -113,6 +133,16 @@ public final class DefaultFdx implements Fdx {
     @Override
     public FileSystem files() {
         return files;
+    }
+
+    /**
+     * Returns the storage.
+     *
+     * @return the storage
+     */
+    @Override
+    public Storage storage() {
+        return storage;
     }
 
     /**
