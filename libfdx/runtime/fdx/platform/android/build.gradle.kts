@@ -1,4 +1,5 @@
 import io.github.libfdx.build.LibExt
+import org.gradle.api.GradleException
 
 plugins {
     alias(libs.plugins.android.library)
@@ -8,38 +9,9 @@ group = "${LibExt.fdxGroup}.runtime.fdx"
 
 val androidCompileSdkVersion = providers.gradleProperty("androidCompileSdk").get().toInt()
 val androidMinSdkVersion = providers.gradleProperty("androidMinSdk").get().toInt()
-val freetypeVersion = "2.14.3"
-val freetypeSourceDir =
-    rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/build/third-party/freetype/freetype-$freetypeVersion")
-val runtimeFdxNativeDir = rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/runtime_fdx")
-val shaderCompilerSourceDir =
-    rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp/shader_compiler")
-val shaderCompilerDawnSourceDir =
-    project(":libfdx:runtime:fdx:platform:shared").layout.buildDirectory.dir("third-party/dawn/source")
-
-val runtimeFdxShaderCompilerEnabled = providers.gradleProperty("libfdx.runtimeFdx.shaderCompiler")
-    .map(String::toBoolean)
-    .orElse(true)
-
-fun runtimeFdxShaderCompilerCmakeArgs(): List<String> {
-    if (!runtimeFdxShaderCompilerEnabled.get()) {
-        return listOf("-DLIBFDX_ENABLE_SHADER_COMPILER=OFF")
-    }
-    return listOf(
-        "-DLIBFDX_ENABLE_SHADER_COMPILER=ON",
-        "-DLIBFDX_SHADERC_SOURCE_DIR=${shaderCompilerSourceDir.asFile.absolutePath}",
-        "-DFDX_DAWN_SOURCE_DIR=${shaderCompilerDawnSourceDir.get().asFile.absolutePath}"
-    )
-}
-
-fun Task.runtimeFdxNativeInputsDependency() {
-    dependsOn(":libfdx:runtime:fdx:platform:shared:extract_freetype_source")
-    inputs.dir(runtimeFdxNativeDir)
-    if (runtimeFdxShaderCompilerEnabled.get()) {
-        dependsOn(":libfdx:runtime:fdx:platform:shared:resolve_runtime_fdx_tint_source")
-        inputs.dir(shaderCompilerSourceDir)
-    }
-}
+val fdxBuildProject = project(":libfdx:runtime:fdx:fdx-build")
+val runtimeFdxAndroidJniLibs = fdxBuildProject.layout.buildDirectory.dir("generated/jniLibs/runtimeFdxAndroid")
+val runtimeFdxAndroidAbis = listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
 
 android {
     namespace = "io.github.libfdx.runtime.fdx.android"
@@ -47,13 +19,11 @@ android {
 
     defaultConfig {
         minSdk = androidMinSdkVersion
-        externalNativeBuild {
-            cmake {
-                arguments += listOf(
-                    "-DLIBFDX_FREETYPE_SOURCE_DIR=${freetypeSourceDir.asFile.absolutePath}",
-                    "-DLIBFDX_RUNTIME_FDX_NATIVE_DIR=${runtimeFdxNativeDir.asFile.absolutePath}"
-                ) + runtimeFdxShaderCompilerCmakeArgs()
-            }
+    }
+
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDir(runtimeFdxAndroidJniLibs)
         }
     }
 
@@ -67,34 +37,42 @@ android {
             withSourcesJar()
         }
     }
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-        }
-    }
 }
 
 base {
     archivesName.set("fdx_android")
 }
 
-tasks.register("prepare_runtime_fdx_android_native") {
+val prepareRuntimeFdxAndroidNative = tasks.register("prepare_runtime_fdx_android_native") {
     group = "libfdx native"
-    description = "Prepares native dependencies used by runtime fdx Android builds."
-    dependsOn(":libfdx:runtime:fdx:platform:shared:prepare_runtime_fdx_shared")
-    if (runtimeFdxShaderCompilerEnabled.get()) {
-        dependsOn(":libfdx:runtime:fdx:platform:shared:resolve_runtime_fdx_tint_source")
+    description = "Builds runtime fdx Android JNI libraries through fdx-build before packaging."
+    dependsOn(":libfdx:runtime:fdx:fdx-build:build_runtime_fdx_android_native")
+}
+
+tasks.register("assemble_runtime_fdx_android_release_prebuilt") {
+    group = "libfdx native"
+    description = "Builds the runtime fdx Android release AAR using fdx-natives prebuilt dependencies."
+    dependsOn("assembleRelease")
+}
+
+tasks.named("preBuild") {
+    dependsOn(prepareRuntimeFdxAndroidNative)
+}
+
+tasks.register("validate_runtime_fdx_android_jni_libs") {
+    group = "libfdx native"
+    description = "Validates generated fdx_android JNI libraries before packaging."
+    doLast {
+        val root = runtimeFdxAndroidJniLibs.get().asFile
+        val missing = runtimeFdxAndroidAbis
+            .map { root.resolve("$it/libfdx.so") }
+            .filterNot(File::isFile)
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "Missing generated fdx_android JNI libraries:\n" +
+                    missing.joinToString(separator = "\n") { " - ${it.absolutePath}" } + "\n" +
+                    "Run :libfdx:runtime:fdx:platform:android:prepare_runtime_fdx_android_native first."
+            )
+        }
     }
-}
-
-tasks.named<Delete>("clean") {
-    delete(layout.projectDirectory.dir(".cxx"))
-}
-
-tasks.matching {
-    it.name.startsWith("configureCMake") ||
-        (it.name.startsWith("externalNativeBuild") && !it.name.startsWith("externalNativeBuildClean"))
-}.configureEach {
-    runtimeFdxNativeInputsDependency()
 }

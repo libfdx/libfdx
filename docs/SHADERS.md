@@ -129,10 +129,13 @@ capability and target.
 
 ## 6. Compiler Backend
 
-Tint is the first compiler backend. Dawn/Tint source is downloaded into Gradle
-build output and is not committed to the repository. The shared C bridge exposes
-a small ABI that is linked into platform `fdx` runtime artifacts when the
-platform opts into shader compilation.
+Tint is the first compiler backend. Dawn/Tint source is not committed to this
+repository and libFDX native tasks do not build it locally. The internal
+`:libfdx:runtime:fdx:fdx-build` module consumes checksum-verified static
+dependency packages from the sibling `fdx-natives` release project, then links
+those packages into the platform runtime `fdx` artifacts.
+The shared C bridge exposes a small ABI that is linked into platform `fdx`
+runtime artifacts when the platform opts into shader compilation.
 
 Web Emscripten Tint builds use conservative `-O0` code generation because the
 optimized Wasm path has been unstable. Treat any higher optimization level as a
@@ -231,6 +234,7 @@ Stable ownership:
 | Built-in 3D shader WGSL sources | `:libfdx:graphics:g3d` |
 | Runtime shader compiler Java contract | `:libfdx:runtime:fdx:core` |
 | Shader compiler native C ABI source | `:libfdx:runtime:fdx:platform:shared` |
+| Runtime fdx native dependency and CMake task ownership | `:libfdx:runtime:fdx:fdx-build` |
 | Desktop runtime shader compiler packaging | `:libfdx:runtime:fdx:platform:desktop` |
 | Android runtime shader compiler packaging | `:libfdx:runtime:fdx:platform:android` |
 | Web runtime shader compiler packaging | `:libfdx:runtime:fdx:platform:web` |
@@ -239,10 +243,11 @@ Stable ownership:
 | Provider-specific shader module creation | selected graphics provider or backend-owned provider |
 
 There is no runtime `tools/shader` module. Runtime shader compilation is a
-runtime fdx platform capability for providers that cannot consume WGSL directly,
-and Tint/Dawn source is resolved by `:libfdx:runtime:fdx:platform:shared` under
-build output. Web runtime fdx builds enable the compiler by default because
-WebGL depends on WGSL-to-GLSL ES translation for built-in renderers.
+runtime fdx platform capability for providers that cannot consume WGSL directly.
+Tint/Dawn dependency resolution is handled by `:libfdx:runtime:fdx:fdx-build`,
+which imports static libraries from `fdx-natives` packages for all runtime fdx
+native task names. Web runtime fdx builds enable the compiler by default
+because WebGL depends on WGSL-to-GLSL ES translation for built-in renderers.
 
 ## 11. Validation Requirements
 
@@ -288,7 +293,8 @@ For visual renderer changes:
    generated target artifacts owned by the runtime compiler path, not user
    fallback sources.
 4. Tint is the first compiler backend and is packaged by default in desktop,
-   Android, and web runtime fdx native builds.
+   Android, and web runtime fdx native builds. Those builds link against
+   prebuilt static Tint/FreeType packages from `fdx-natives`.
 5. PSP is intentionally outside the Tint runtime compiler path.
 6. HLSL remains a future generated target for DirectX, not a second authoring
    source.

@@ -45,8 +45,49 @@ val nativeArtifactTaskPaths = listOf(
 
 tasks.register("libfdx_build_native_artifacts") {
     group = "libfdx native"
-    description = "Builds native artifacts with runtime shader compiler support for local libFDX development."
+    description = "Builds native artifacts using prebuilt fdx-natives dependency packages."
     dependsOn(nativeArtifactTaskPaths)
+}
+
+tasks.register("libfdx_build_native_artifacts_prebuilt") {
+    group = "libfdx native"
+    description = "Builds native artifacts using prebuilt fdx-natives dependency packages."
+    dependsOn(nativeArtifactTaskPaths)
+}
+
+tasks.register("libfdx_build_windows_native_artifact_prebuilt") {
+    group = "libfdx native"
+    description = "Builds the Windows runtime fdx native artifact using prebuilt fdx-natives dependency packages."
+    dependsOn(":libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_windows_native_prebuilt")
+}
+
+tasks.register("libfdx_build_linux_native_artifact_prebuilt") {
+    group = "libfdx native"
+    description = "Builds the Linux runtime fdx native artifact using prebuilt fdx-natives dependency packages."
+    dependsOn(":libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_linux_native_prebuilt")
+}
+
+tasks.register("libfdx_build_macos_native_artifact_prebuilt") {
+    group = "libfdx native"
+    description = "Builds the macOS runtime fdx native artifact for the current runner using prebuilt fdx-natives dependency packages."
+    dependsOn(":libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native_prebuilt")
+}
+
+tasks.register("libfdx_build_web_native_artifacts_prebuilt") {
+    group = "libfdx native"
+    description = "Builds web runtime fdx native artifacts using prebuilt fdx-natives dependency packages."
+    dependsOn(":libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native_prebuilt")
+}
+
+tasks.register("libfdx_build_android_native_artifacts_prebuilt") {
+    group = "libfdx native"
+    description = "Builds Android native/library artifacts using prebuilt fdx-natives dependency packages for runtime fdx."
+    dependsOn(
+        ":libfdx:runtime:fdx:platform:android:assemble_runtime_fdx_android_release_prebuilt",
+        ":libfdx:backends:android:assembleRelease",
+        ":libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease",
+        ":libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease"
+    )
 }
 
 tasks.register("printFdxVersion") {

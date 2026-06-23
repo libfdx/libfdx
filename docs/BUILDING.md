@@ -26,7 +26,8 @@ start a sample.
 - Gradle wrapper from this repository
 - Desktop runtime support for desktop launchers
 - Android SDK plus a connected device or emulator for Android launchers
-- Native platform toolchains only for platform-native artifact builds
+- Native platform toolchains only for compiling the libFDX runtime bridge and
+  linking prebuilt dependency packages
 - Emscripten SDK for web native artifacts; activate it with `emsdk_env` or set
   `EMSDK` so repository tasks can find the SDK checkout
 
@@ -107,11 +108,13 @@ WebGL/GLES, or other providers that require runtime shader translation:
 ```
 
 Runtime fdx desktop, Android, and web native builds enable the Tint-backed
-runtime shader compiler by default. Web and Android runtime fdx native builds
-also compile FreeType. The aggregate task is the clean-safe setup command to run
-before desktop GL/UI samples or tests that use WGSL-only built-in renderers
-such as `SpriteBatch`. It can be run after the normal Gradle `clean` task when
-you want a fresh native rebuild.
+runtime shader compiler by default. They do not build FreeType or Tint/Dawn
+from source in libFDX; those static libraries are downloaded from the pinned
+`fdx-natives` release and linked into the final runtime `fdx` artifacts. The
+aggregate task is the clean-safe setup command to run before desktop GL/UI
+samples or tests that use WGSL-only built-in renderers such as `SpriteBatch`.
+It can be run after the normal Gradle `clean` task when you want a fresh native
+rebuild of the libFDX bridge artifacts.
 
 On Windows, this builds the current host runtime fdx desktop C file, the
 runtime fdx web JS/WASM files, and Android AAR outputs when the Android SDK is
