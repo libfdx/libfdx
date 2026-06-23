@@ -98,6 +98,24 @@ tasks.register("printFdxVersion") {
     }
 }
 
+tasks.register("benchmark_desktop") {
+    group = "benchmark"
+    description = "Runs the full desktop JVM benchmark suite and generates Markdown reports."
+    dependsOn(":benchmark:platform:desktop:benchmark_desktop")
+}
+
+tasks.register("benchmark_desktop_c_debug") {
+    group = "benchmark"
+    description = "Runs the full desktop_c Debug benchmark suite and generates Markdown reports."
+    dependsOn(":benchmark:platform:desktop_c:benchmark_desktop_c_debug")
+}
+
+tasks.register("benchmark_desktop_c_release") {
+    group = "benchmark"
+    description = "Runs the full desktop_c Release benchmark suite and generates Markdown reports."
+    dependsOn(":benchmark:platform:desktop_c:benchmark_desktop_c_release")
+}
+
 val pagesStagingDir = layout.buildDirectory.dir("pages")
 
 tasks.register<Sync>("stage_pages") {

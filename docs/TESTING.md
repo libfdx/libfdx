@@ -34,7 +34,7 @@ Use this order when deciding what to run:
    the generated native output.
 4. For browser changes, use the web test launcher and query parameters for the
    smallest affected scenario.
-5. For performance changes, use the external benchmark repository after
+5. For performance changes, use the in-repository benchmark tasks after
    correctness has already been validated.
 
 Interactive launchers are useful for manual inspection. Validation tasks are
@@ -314,8 +314,38 @@ Benchmarks measure performance after correctness is already established. They
 should not be used as the first validation step for a rendering or backend
 change, because a fast broken frame is still a failing frame.
 
-The benchmark project now lives outside this repository at
-`https://github.com/libfdx/benchmark`. Use that repository for SpriteBatch
-stress benchmark runs, provider comparisons, generated benchmark reports, and
-future libGDX comparison work. This repository no longer defines `:benchmark:*`
-Gradle tasks.
+The benchmark modules live under `benchmark/` in this repository. Use them for
+SpriteBatch stress benchmark runs, provider comparisons, and generated
+benchmark reports after correctness has already been validated.
+
+Desktop JVM benchmark suite:
+
+```powershell
+.\gradlew.bat :benchmark:platform:desktop:benchmark_desktop
+```
+
+Individual desktop JVM providers are also available:
+
+```powershell
+.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_gl_ffm
+.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_gl_jni
+.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_wgpu_jni
+.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_wgpu_ffm
+.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_vulkan_ffm
+.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_vulkan_jni
+```
+
+Desktop C benchmark tasks build one generated desktop_c executable and run it
+with GL or Vulkan arguments:
+
+```powershell
+.\gradlew.bat :benchmark:platform:desktop_c:benchmark_desktop_c_gl_debug
+.\gradlew.bat :benchmark:platform:desktop_c:benchmark_desktop_c_vulkan_debug
+.\gradlew.bat :benchmark:platform:desktop_c:benchmark_desktop_c_debug
+.\gradlew.bat :benchmark:platform:desktop_c:benchmark_desktop_c_release
+```
+
+Benchmark reports are written under `build/reports/benchmark`. Tune duration
+and window behavior with `-Dlibfdx.benchmark.seconds=<seconds>` and
+`-Dlibfdx.benchmark.visible=false`. On Windows, use
+`"-Plibfdx.desktopC.openConsole=false"` for inline desktop_c run output.

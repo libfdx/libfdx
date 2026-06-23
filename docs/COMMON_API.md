@@ -494,7 +494,7 @@ Rules:
 - `FdxArray` exposes equality and identity variants for `contains(...)`, `indexOf(...)`, `lastIndexOf(...)`, `removeValue(...)`, and `removeAll(...)`.
 - Collection containers expose `notEmpty()` as the direct inverse of `isEmpty()`.
 - Arrays expose `insert(...)`, `lastIndexOf(...)`, `removeAll(...)`, `removeRange(start, end)`, `swap(...)`, `reverse()`, `truncate(...)`, `first()`, `peek()`, `pop()`, and `notEmpty()` helpers. `removeAll(...)` removes the first matching occurrence for each supplied value. `removeRange(...)` uses inclusive indexes. `first()`, `peek()`, and `pop()` throw `NoSuchElementException` when the array is empty.
-- These types are correctness-tested in this repository. Performance benchmarks belong in the external benchmark repository.
+- These types are correctness-tested in this repository. Performance benchmarks belong under the root `benchmark/` modules.
 
 ## 6. Application
 
@@ -3534,7 +3534,7 @@ UI Kit adapter package:
 io.github.libfdx.validation.scenario.ui.kit
 ```
 
-`scenario-validator` is an optional public validation engine for complete runtime scenarios. The detailed contract lives in [SCENARIO_VALIDATOR.md](SCENARIO_VALIDATOR.md). It is reusable by libfdx's own tests, samples, tools, external benchmark projects, and user projects, but it is not required for normal runtime execution or rendering. UI Kit validation is an optional adapter capability, not the whole validator.
+`scenario-validator` is an optional public validation engine for complete runtime scenarios. The detailed contract lives in [SCENARIO_VALIDATOR.md](SCENARIO_VALIDATOR.md). It is reusable by libfdx's own tests, samples, tools, benchmark modules, and user projects, but it is not required for normal runtime execution or rendering. UI Kit validation is an optional adapter capability, not the whole validator.
 
 Defined types:
 

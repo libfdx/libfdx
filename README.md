@@ -60,8 +60,8 @@ To open the desktop test selector:
   launch commands.
 - [Testing](docs/TESTING.md): provider tests, platform test launchers, PSP
   capture, and validation tasks.
-- [Benchmarks](https://github.com/libfdx/benchmark): external performance
-  benchmark project.
+- [Benchmarks](benchmark/README.md): in-repository performance benchmark
+  tasks.
 - [Builders](docs/BUILDERS.md): Gradle plugin usage, bitmap font generation,
   and standalone Java builders.
 

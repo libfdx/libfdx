@@ -36,7 +36,7 @@ editor/runtime compiler behavior, see [SHADERS.md](SHADERS.md).
 
 ## 2. Folder Rules
 
-Use a small number of broad folders. A new top-level folder should exist only when it gives a clear ownership rule for several modules. Framework folders live under `libfdx/`. Repository-only test and sample folders live at the repository root, not under `libfdx/`.
+Use a small number of broad folders. A new top-level folder should exist only when it gives a clear ownership rule for several modules. Framework folders live under `libfdx/`. Repository-only test, sample, and benchmark folders live at the repository root, not under `libfdx/`.
 
 | Folder | Rule |
 | --- | --- |
@@ -51,6 +51,7 @@ Use a small number of broad folders. A new top-level folder should exist only wh
 | `tools/` | Build-time and command-line tools. |
 | `tests/` | Cross-platform framework test projects: core tests plus platform/backend test runners. |
 | `samples/` | Example applications. |
+| `benchmark/` | Performance benchmark projects: shared benchmark cases plus platform/backend benchmark runners and generated reports. |
 
 Extension module shape:
 
@@ -214,6 +215,14 @@ repo-root/
         web/
         android/
         ios_c/
+
+  benchmark/
+    core/
+    assets/
+    platform/
+      desktop/
+      desktop_c/
+      plugin/
 ```
 
 ## 4. Dependency Direction
@@ -255,6 +264,10 @@ samples/*/platform/<platform> -> sample core, selected backend, selected platfor
 
 tests/core -> public modules being tested
 tests/platform/<backend_variant> -> tests/core, selected backend, selected platform providers chosen by dedicated Gradle tasks or platform build variants
+
+benchmark/core -> public framework APIs and feature modules needed by benchmark cases
+benchmark/platform/<backend_variant> -> benchmark/core, selected backend, selected platform providers chosen by dedicated Gradle tasks or platform build variants
+benchmark/platform/plugin -> benchmark platform modules and generated platform task wiring
 
 ```
 
@@ -1198,9 +1211,16 @@ Project-generator submodules are internal launch tooling in the first implementa
 | `:tests:platform:ios` | internal | iOS test runner. Dedicated Gradle tasks or platform build variants select iOS backend/provider variants when iOS support is available. |
 | `:tests:platform:ios_native` | internal | Native iOS runtime test runner when that backend family exists. |
 
-### 9.17. External Benchmark Repository
+### 9.17. Benchmark Modules
 
-Performance benchmarks live in the external `libfdx/benchmark` repository. Keep correctness assertions in this repository's tests and use the external benchmark repository only after correctness is established. The benchmark repository owns benchmark cases, platform runners, provider comparisons, and generated performance reports.
+Performance benchmarks live under the root `benchmark/` folder. Keep correctness assertions in `tests/` and use benchmark modules only after correctness is established. The benchmark modules own benchmark cases, platform runners, provider comparisons, and generated performance reports.
+
+| Gradle path | Purpose |
+| --- | --- |
+| `:benchmark:core` | Shared benchmark cases and result writing. |
+| `:benchmark:platform:desktop` | Desktop JVM benchmark runner using `backends/desktop` with GL, WGPU JNI, WGPU FFM, and Vulkan task variants. |
+| `:benchmark:platform:desktop_c` | Desktop C benchmark launcher module using `backends/desktop_c` with thin benchmark task aliases. |
+| `:benchmark:platform:plugin` | Dedicated benchmark-side Gradle plugin DSL module that generates the desktop_c executable used by desktop C benchmark aliases. |
 
 ### 9.18. Sample Modules
 
@@ -1931,7 +1951,7 @@ Each module should still keep its local unit tests in:
 module/src/test/java
 ```
 
-Benchmark code lives outside this repository because it measures performance instead of correctness. Use the external `libfdx/benchmark` repository for benchmark cases, platform runners, provider comparisons, and generated performance reports. Correctness tests in this repository should not depend on benchmark code.
+Benchmark code lives under `benchmark/` because performance checks need to stay close to local framework changes. It still measures performance instead of correctness, so correctness tests should not depend on benchmark code. Benchmark modules may depend on public framework modules and platform launchers, but shared framework modules must not depend on benchmarks.
 
 ## 16. Java Package Map
 
