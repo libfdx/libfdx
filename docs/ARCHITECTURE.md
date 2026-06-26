@@ -135,6 +135,14 @@ repo-root/
           core/
           desktop_jni/
           desktop_ffm/
+      net/
+        webrtc/
+          core/
+          server/
+          platform/
+            desktop_jni/
+            web/
+            android_jni/
       graphics/
         wgpu/
           core/
@@ -344,6 +352,7 @@ API modules define the interfaces, handles, descriptors, and service contracts t
 ```text
 runtime/input
 runtime/audio
+runtime/net
 graphics/api
 ```
 
@@ -367,6 +376,11 @@ extensions/audio/webaudio/web
 extensions/audio/openal/core
 extensions/audio/openal/desktop_jni
 extensions/audio/openal/desktop_ffm
+extensions/net/webrtc/core
+extensions/net/webrtc/signaling_server
+extensions/net/webrtc/platform/desktop_jni
+extensions/net/webrtc/platform/web
+extensions/net/webrtc/platform/android_jni
 extensions/graphics/wgpu/core
 extensions/graphics/gl/core
 extensions/graphics/gl/platform/desktop
@@ -405,7 +419,9 @@ Audio provider runtime modules should use concrete platform variant folders unde
 
 Graphics provider runtime modules should use a provider root with `core` directly under it and concrete platform variants under `platform/`. Avoid a generic `native` module or a plain platform module when there are multiple implementation choices because it does not say which binding/runtime owns the binaries or packaging. Shared Java provider classes should live in the provider `core` module and depend only on provider-neutral APIs, not concrete backends. If a backend technology already owns the graphics binding and context model, such as desktop GL, the backend may expose a selectable `GraphicsAttachmentProvider` while reusing the provider-neutral shared implementation from the extension `core` module. The matching graphics extension platform module, such as `extensions/graphics/gl/platform/desktop`, still owns the optional runtime/native dependencies. For web, use `extensions/graphics/<provider>/platform/web` as the Gradle module and put `js` or `wasm` only in the published artifact ID.
 
-Extension artifacts should not repeat the `extensions` category. Graphics provider artifacts also should not repeat the `graphics` category. For example, `extensions/graphics/wgpu/core` publishes as `wgpu_core`, `extensions/graphics/wgpu/platform/desktop_jni` publishes as `wgpu_desktop_jni`, `extensions/graphics/gl/core` publishes as `gl_core`, and `extensions/graphics/gl/platform/desktop` publishes as `gl_desktop`.
+Network transport provider modules should build on `runtime/net`. Provider-specific shared types live in `extensions/net/<provider>/core`, concrete runtime/binding variants live under `extensions/net/<provider>/platform/<platform_variant>`, and optional provider tools or services may live beside `core` when they are not platform bindings. WebRTC follows this shape so `WebRtcClientConfig`, `WebRtcServerConfig`, `WebRtcPeerConfig`, signaling contracts, and bridge interfaces stay in the WebRTC core module; the customizable signaling server lives in `extensions/net/webrtc/signaling_server`; desktop, web, Android, and future iOS bindings remain platform-specific. Normal game code should use `Network`, `NetTransports`, `NetClient`, `NetServer`, `NetPeerGroup`, `NetConnection`, and channel IDs rather than WebRTC data-channel classes.
+
+Extension artifacts should not repeat the `extensions` category. Graphics provider artifacts also should not repeat the `graphics` category. For example, `extensions/graphics/wgpu/core` publishes as `wgpu_core`, `extensions/graphics/wgpu/platform/desktop_jni` publishes as `wgpu_desktop_jni`, `extensions/graphics/gl/core` publishes as `gl_core`, and `extensions/graphics/gl/platform/desktop` publishes as `gl_desktop`. WebRTC network artifacts publish as `webrtc_core`, `webrtc_signaling_server`, `webrtc_desktop_jni`, `webrtc_web`, and `webrtc_android_jni`.
 
 External bindings should not be hidden behind fake shared APIs when the underlying libraries have different concepts. A project should choose the binding module it actually uses.
 
@@ -765,7 +781,8 @@ Common type summary:
 | `Display` | `runtime/display` | Presentation area abstraction for desktop windows, browser canvases, Android views, and future platform surfaces. |
 | `DisplayMode`, `Monitor`, `DisplayConfig`, `Orientation` | `runtime/display` | Display configuration and metadata. |
 | `Network` | `runtime/net` | Network service. |
-| `HttpRequest`, `HttpResponse`, `WebSocket` | `runtime/net` | Portable network contracts. |
+| `http.HttpRequest`, `http.HttpResponse`, `websocket.WebSocket` | `runtime/net` | Portable request/response and WebSocket contracts. |
+| `transport.NetTransports`, `transport.NetClient`, `transport.NetServer`, `transport.NetPeerGroup`, `transport.NetConnection`, `packet.NetPacket`, `packet.NetPacketQueue`, `buffer.NetBuffer`, `transform.NetPacketTransform`, `codec.NetMessageCodec` | `runtime/net` | Provider-neutral multiplayer transport contracts, inbound queue dispatch, pooled packet storage, packet transforms, and manual message serialization. |
 
 ### 8.4. Assets Common Types
 
@@ -1015,7 +1032,7 @@ GitHub publish workflows build publishable platform artifacts before Maven publi
 | `:libfdx:runtime:input` | `io.github.libfdx:input` | Keyboard, mouse, touch, gestures, text input, cursor state, gamepad/controller contracts, mappings, hotplugging events, vibration contracts, dead zones, and input routing primitives. |
 | `:libfdx:runtime:display` | `io.github.libfdx:display` | Display/presentation abstraction: size, DPI, fullscreen, title where supported, icon where supported, orientation, visibility, resize events, and platform display handles for graphics providers. |
 | `:libfdx:runtime:audio` | `io.github.libfdx:audio` | Common audio runtime API: audio devices, sound handles, music streams, audio buffers, playback controls, and provider SPI. Normal game code should use this module. |
-| `:libfdx:runtime:net` | `io.github.libfdx:net` | Networking API: HTTP, WebSocket, request/response abstractions, async network tasks, and backend-specific transport adapters. |
+| `:libfdx:runtime:net` | `io.github.libfdx:net` | Networking API: HTTP, WebSocket, provider-neutral multiplayer transports, reusable packet buffers, reusable inbound queue dispatch, tick-limited processing, packet transforms, manual message codecs, and transport provider SPI. |
 
 ### 9.3. Input Extension Modules
 
@@ -1053,7 +1070,19 @@ Gamepad common contracts live in `runtime/input`. These modules provide platform
 | `:libfdx:extensions:audio:openal:desktop_jni` | `io.github.libfdx:openal_desktop_jni` | Future desktop OpenAL runtime using JNI bindings. |
 | `:libfdx:extensions:audio:openal:desktop_ffm` | `io.github.libfdx:openal_desktop_ffm` | Future desktop OpenAL runtime using Java FFM bindings if useful. |
 
-### 9.6. Graphics Modules
+### 9.6. Net Extension Modules
+
+Net transport provider modules build on `runtime/net`. WebRTC is kept in this repository so Gradle/Maven wiring stays with the rest of libFDX.
+
+| Gradle path | Tentative coordinate | Purpose |
+| --- | --- | --- |
+| `:libfdx:extensions:net:webrtc:core` | `io.github.libfdx:webrtc_core` | WebRTC provider-specific public types, provider ID, ICE/STUN/TURN configuration, signaling contracts/codecs, provider-neutral bridge interfaces, and shared Java transport glue that depends on `runtime/net` and `foundation/json`. |
+| `:libfdx:extensions:net:webrtc:signaling_server` | `io.github.libfdx:webrtc_signaling_server` | Standalone Java-WebSocket signaling server app/library for rooms, peer discovery, SDP/ICE relay, auth/session hooks, room and join policies, message policy, peer ID generation, tick-limited processing, reusable queued event storage, max peers, idle cleanup, and logging hooks. It exposes the `webrtc_signaling_server_run` task. It is not a gameplay/TCP server and it is not a TURN server. |
+| `:libfdx:extensions:net:webrtc:platform:desktop_jni` | `io.github.libfdx:webrtc_desktop_jni` | Desktop WebRTC runtime/binding variant using `dev.onvoid.webrtc:webrtc-java`, native runtime classifiers, and Java-WebSocket signaling. |
+| `:libfdx:extensions:net:webrtc:platform:web` | `io.github.libfdx:webrtc_web` | Browser WebRTC runtime/binding variant using TeaVM JS interop over browser `RTCPeerConnection`, data channels, and WebSocket signaling. |
+| `:libfdx:extensions:net:webrtc:platform:android_jni` | `io.github.libfdx:webrtc_android_jni` | Android WebRTC runtime/binding variant using `io.github.webrtc-sdk:android` and Java-WebSocket signaling. |
+
+### 9.7. Graphics Modules
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
@@ -1070,7 +1099,7 @@ Providers that cannot consume WGSL translate it through the optional
 when the active platform packages that capability. Direct GLSL, SPIR-V, and MSL
 are generated target artifacts, not public shader authoring sources.
 
-### 9.7. wgpu/WebGPU Provider Modules
+### 9.8. wgpu/WebGPU Provider Modules
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
@@ -1083,7 +1112,7 @@ are generated target artifacts, not public shader authoring sources.
 | `:libfdx:extensions:graphics:wgpu:platform:android_native` | `io.github.libfdx:wgpu_android_native` | Android WebGPU/wgpu runtime packaging for the native runtime stack if feasible. |
 | `:libfdx:extensions:graphics:wgpu:platform:ios_native` | `io.github.libfdx:wgpu_ios_native` | iOS WebGPU/wgpu runtime packaging and surface integration for the native runtime stack if feasible. |
 
-### 9.8. GL/WebGL Provider Modules
+### 9.9. GL/WebGL Provider Modules
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
@@ -1092,7 +1121,7 @@ are generated target artifacts, not public shader authoring sources.
 | `:libfdx:extensions:graphics:gl:platform:desktop_c` | `io.github.libfdx:gl_desktop_c` | Desktop GL native resource module for the desktop_c backend. It contributes GLEW headers and Windows libraries for generated C builds, reuses shared C native resources from `:libfdx:backends:c_shared`, and should not contain GL provider Java classes. |
 | `:libfdx:extensions:graphics:gl:platform:web` | `io.github.libfdx:gl_web_js` | Browser WebGL provider for web JS/Wasm targets. It adapts the shared GL-family implementation to WebGL semantics directly, not by forcing desktop GL assumptions onto WebGL. |
 
-### 9.9. Vulkan Provider Modules
+### 9.10. Vulkan Provider Modules
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
@@ -1104,7 +1133,7 @@ are generated target artifacts, not public shader authoring sources.
 | `:libfdx:extensions:graphics:vulkan:platform:android_native` | `io.github.libfdx:vulkan_android_native` | Android Vulkan-family runtime packaging for the native runtime stack if feasible. |
 | `:libfdx:extensions:graphics:vulkan:platform:ios_native` | `io.github.libfdx:vulkan_ios_native` | Future iOS Vulkan-family target for the native runtime stack if feasible through a portability layer. |
 
-### 9.10. Graphics 2D Modules
+### 9.11. Graphics 2D Modules
 
 Use `g2d` instead of `2d` because Java package segments cannot start with a number.
 
@@ -1112,13 +1141,13 @@ Use `g2d` instead of `2d` because Java package segments cannot start with a numb
 | --- | --- | --- |
 | `:libfdx:graphics:g2d` | `io.github.libfdx:g2d` | Complete 2D toolkit: sprites, sprite batches, sprite shader effects, fog-of-war overlays, shape rendering, texture regions, atlases, bitmap fonts, vector-rasterized font atlases, text layout, 2D particles, tile maps, and 2D render helpers. Internally this module can still use packages such as `font`, `particles`, and `maps`, but users should depend on one `g2d` artifact. Camera state belongs to the shared `graphics/camera` `Camera`, not a g2d-specific camera class. |
 
-### 9.11. Graphics Camera Module
+### 9.12. Graphics Camera Module
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
 | `:libfdx:graphics:camera` | `io.github.libfdx:camera` | Shared camera state and focused camera controllers, including reusable 2D pan/zoom, free/editor, first-person, third-person, orbit, orthographic, cinematic controllers, and cinematic path samplers. This module depends on `runtime/input` for input-backed controllers and does not own renderer helpers. |
 
-### 9.12. Graphics 3D Modules
+### 9.13. Graphics 3D Modules
 
 Use `g3d` instead of `3d` because Java package segments cannot start with a number.
 
@@ -1126,7 +1155,7 @@ Use `g3d` instead of `3d` because Java package segments cannot start with a numb
 | --- | --- | --- |
 | `:libfdx:graphics:g3d` | `io.github.libfdx:g3d` | Complete 3D toolkit: `Batch3D`, `ModelBatch`, meshes, models, model instances, materials, PBR shader/material data, skinned PBR GPU path, custom shader hooks, lights, environments, sky environment lighting, point-light and spotlight shading, directional and cascaded shadow maps, distance fog, fog-of-war overlays, animation, glTF hierarchy/skin/animation loading, render queues, render paths, frame target helpers, and scene rendering helpers. Internally this module can still use packages such as `models`, `animation`, `materials`, `shaders`, `render`, and `lighting`, but users should depend on one `g3d` artifact. Shared camera state belongs to `graphics/camera`; input-backed camera controllers belong to `graphics/camera`'s controller subpackage. |
 
-### 9.13. UI Modules
+### 9.14. UI Modules
 
 UI modules contain built-in libfdx UI solutions. `ui-kit` is the default retained-mode UI toolkit and one user-facing library. Do not split `ui-kit` into separate scene graph and widget artifacts. See [UI_KIT.md](UI_KIT.md) for the detailed UI toolkit specification.
 
@@ -1134,7 +1163,7 @@ UI modules contain built-in libfdx UI solutions. `ui-kit` is the default retaine
 | --- | --- | --- |
 | `:libfdx:ui:ui-kit` | `io.github.libfdx:ui_kit` | Default libfdx UI toolkit: Compose-inspired declarative authoring over a retained runtime, widgets, layout, animation, themes, ninepatch styling, hit detection, input focus, and 2D rendering integration. Users should depend on one `ui_kit` artifact for this UI solution. The folder repeats `ui` for clarity inside the repository, but the artifact must stay `ui_kit`, not `ui_ui_kit`. |
 
-### 9.13. Validation Modules
+### 9.15. Validation Modules
 
 Validation modules contain reusable scenario validation engines and optional domain adapters. `scenario-validator` is not UI-only and not game-only. It can validate complete runtime flows, UI flows, input sequences, captures, events, and project probes. UI Kit validation is provided by an adapter module. See [SCENARIO_VALIDATOR.md](SCENARIO_VALIDATOR.md) for the detailed scenario validator contract.
 
@@ -1143,7 +1172,7 @@ Validation modules contain reusable scenario validation engines and optional dom
 | `:libfdx:validation:scenario-validator` | `io.github.libfdx:scenario_validator` | Optional scenario validation engine: reusable catalogs, scenarios, runtime actions, waits, events, assertions, probes, reports, and visual capture integration. It is a user-facing engine/tooling module, not an internal test runner and not a dependency of normal runtime execution. |
 | `:libfdx:validation:scenario-validator-ui-kit` | `io.github.libfdx:scenario_validator_ui_kit` | Optional UI Kit adapter for `scenario-validator`: UI targets, UI actions, UI assertions, UI waits, UI events, UI captures, and validation ID integration for projects that use `ui-kit`. |
 
-### 9.14. Backend Modules
+### 9.16. Backend Modules
 
 Backend modules use one flat folder segment per concrete backend variant:
 
@@ -1180,7 +1209,7 @@ Artifact IDs should include the implementation name unless the implementation is
 
 Additional backend implementations should be added as new flat variant folders only when there is a real second backend choice to support. Until then, keep the default platform backend at the platform folder itself.
 
-### 9.15. Tool Modules
+### 9.17. Tool Modules
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
@@ -1194,7 +1223,7 @@ Additional backend implementations should be added as new flat variant folders o
 
 Project-generator submodules are internal launch tooling in the first implementation. Add them to the Maven deploy allowlist only after the public distribution shape is decided.
 
-### 9.16. Test Modules
+### 9.18. Test Modules
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
@@ -1211,7 +1240,7 @@ Project-generator submodules are internal launch tooling in the first implementa
 | `:tests:platform:ios` | internal | iOS test runner. Dedicated Gradle tasks or platform build variants select iOS backend/provider variants when iOS support is available. |
 | `:tests:platform:ios_native` | internal | Native iOS runtime test runner when that backend family exists. |
 
-### 9.17. Benchmark Modules
+### 9.19. Benchmark Modules
 
 Performance benchmarks live under the root `benchmark/` folder. Keep correctness assertions in `tests/` and use benchmark modules only after correctness is established. The benchmark modules own benchmark cases, platform runners, provider comparisons, and generated performance reports.
 
@@ -1222,7 +1251,7 @@ Performance benchmarks live under the root `benchmark/` folder. Keep correctness
 | `:benchmark:platform:desktop_c` | Desktop C benchmark launcher module using `backends/desktop_c` with thin benchmark task aliases. |
 | `:benchmark:platform:plugin` | Dedicated benchmark-side Gradle plugin DSL module that generates the desktop_c executable used by desktop C benchmark aliases. |
 
-### 9.18. Sample Modules
+### 9.20. Sample Modules
 
 Every sample must be a sample family, not one flat module. New samples should start with this structure:
 
@@ -1339,6 +1368,11 @@ dependencies {
     runtimeOnly("io.github.libfdx:openal_desktop_jni:$libfdxVersion")
     runtimeOnly("io.github.libfdx:openal_desktop_ffm:$libfdxVersion")
     implementation("io.github.libfdx:net:$libfdxVersion")
+    implementation("io.github.libfdx:webrtc_core:$libfdxVersion")
+    implementation("io.github.libfdx:webrtc_signaling_server:$libfdxVersion") // only for apps/tools that host signaling
+    runtimeOnly("io.github.libfdx:webrtc_desktop_jni:$libfdxVersion")
+    runtimeOnly("io.github.libfdx:webrtc_web:$libfdxVersion")
+    runtimeOnly("io.github.libfdx:webrtc_android_jni:$libfdxVersion")
 
     implementation("io.github.libfdx:assets:$libfdxVersion")
     implementation("io.github.libfdx:asset_loaders:$libfdxVersion")
@@ -1982,7 +2016,7 @@ Core and runtime packages:
 | `:libfdx:runtime:input` | `io.github.libfdx.input` | Keyboard, mouse, touch, gestures, text input, cursor state, gamepad contracts, and input routing primitives. |
 | `:libfdx:runtime:display` | `io.github.libfdx.display` | Display state, size, DPI, fullscreen, orientation, visibility, resize events, and display handles. |
 | `:libfdx:runtime:audio` | `io.github.libfdx.audio` | Common audio devices, sounds, music streams, audio buffers, playback controls, and audio provider SPI. |
-| `:libfdx:runtime:net` | `io.github.libfdx.net` | HTTP, WebSocket, request/response abstractions, async network tasks, and transport adapters. |
+| `:libfdx:runtime:net` | `io.github.libfdx.net` plus focused subpackages | Root `Network` and `NetworkCapabilities`; HTTP in `net.http`; WebSocket in `net.websocket`; reusable packet storage in `net.buffer`; packet views/queues in `net.packet`; message codecs in `net.codec`; transform hooks in `net.transform`; endpoint configs in `net.config`; multiplayer endpoints/providers in `net.transport`; fixed-rate helpers in `net.processing`; backend/provider setup types in `net.spi`. |
 
 Asset, graphics, and UI packages:
 
@@ -2005,6 +2039,9 @@ Provider and extension packages:
 | `:libfdx:extensions:input:gamepads:<variant>` | `io.github.libfdx.input.gamepads.<platform_or_provider>` | Platform gamepad providers and provider IDs. For example, `desktop` maps to `input.gamepads.desktop`; `desktop_c` maps to `input.gamepads.desktop`. |
 | `:libfdx:extensions:audio:<provider>:core` | `io.github.libfdx.audio.<provider>` | Provider-specific audio public types and shared provider glue. |
 | `:libfdx:extensions:audio:<provider>:<platform_variant>` | `io.github.libfdx.audio.<provider>.<platform>` | Platform audio provider runtime code. For example, `miniaudio:desktop_jni` maps to `audio.miniaudio.desktop`. |
+| `:libfdx:extensions:net:<provider>:core` | `io.github.libfdx.net.<provider>` plus focused subpackages | Provider-specific network transport public types and shared provider glue. WebRTC keeps only `WebRtcProvider` at `net.webrtc`; endpoint configs live in `net.webrtc.config`, protocol contracts in `net.webrtc.signaling`, bridge interfaces in `net.webrtc.platform`, and transport implementations in `net.webrtc.transport`. |
+| `:libfdx:extensions:net:<provider>:<service>` provider service modules | `io.github.libfdx.net.<provider>.<service>` | Optional provider-owned service processes or tools. For WebRTC, `webrtc:signaling_server` maps to `net.webrtc.signaling.server` and owns only the standalone Java-WebSocket signaling server app/library, including its auth/session, join, message policy, and tick-limited processing extension hooks. |
+| `:libfdx:extensions:net:<provider>:platform:<platform_variant>` | `io.github.libfdx.net.<provider>.<platform>` when Java code is required | Platform network transport binding/runtime packaging. For example, `webrtc:platform:desktop_jni` maps to `net.webrtc.desktop`, `webrtc:platform:web` maps to `net.webrtc.web`, and `webrtc:platform:android_jni` maps to `net.webrtc.android`. |
 | `:libfdx:extensions:graphics:<provider>:core` | `io.github.libfdx.graphics.<provider>` | Provider-specific graphics public types, escape hatches, and shared Java provider glue, such as `WGPUDevice`, `WGPUTexture`, `VkDevice`, `VkTexture`, or graphics attachment classes that depend only on provider-neutral SPI. |
 | `:libfdx:extensions:graphics:<provider>:platform:<platform_variant>` | `io.github.libfdx.graphics.<provider>.<platform>` when Java code is required | Platform graphics binding/runtime packaging. These modules may be dependency-only and should contain Java code only for variant-specific glue that cannot live in `core`. |
 Backend, tool, test, and sample packages:

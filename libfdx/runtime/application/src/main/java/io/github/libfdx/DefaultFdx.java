@@ -7,6 +7,7 @@ import io.github.libfdx.display.Displays;
 import io.github.libfdx.files.FileSystem;
 import io.github.libfdx.graphics.Graphics;
 import io.github.libfdx.input.Input;
+import io.github.libfdx.net.Network;
 import io.github.libfdx.storage.DefaultStorage;
 import io.github.libfdx.storage.Storage;
 
@@ -22,6 +23,7 @@ public final class DefaultFdx implements Fdx {
     private final Input input;
     private final FileSystem files;
     private final Storage storage;
+    private final Network network;
     private final Logger logger;
 
     /**
@@ -64,6 +66,23 @@ public final class DefaultFdx implements Fdx {
      */
     public DefaultFdx(Application app, Displays displays, Graphics graphics, Input input, FileSystem files,
             Storage storage, Logger logger) {
+        this(app, displays, graphics, input, files, storage, null, logger);
+    }
+
+    /**
+     * Creates a default fdx.
+     *
+     * @param app the app
+     * @param displays the displays
+     * @param graphics the graphics context
+     * @param input the input
+     * @param files the files
+     * @param storage the storage
+     * @param network the network service, or null
+     * @param logger the logger
+     */
+    public DefaultFdx(Application app, Displays displays, Graphics graphics, Input input, FileSystem files,
+            Storage storage, Network network, Logger logger) {
         if (app == null) {
             throw new FdxException("Application cannot be null");
         }
@@ -82,6 +101,7 @@ public final class DefaultFdx implements Fdx {
         this.input = input;
         this.files = files;
         this.storage = storage;
+        this.network = network;
         this.logger = logger;
     }
 
@@ -143,6 +163,16 @@ public final class DefaultFdx implements Fdx {
     @Override
     public Storage storage() {
         return storage;
+    }
+
+    /**
+     * Returns the network service, or null.
+     *
+     * @return the network service, or null
+     */
+    @Override
+    public Network network() {
+        return network;
     }
 
     /**

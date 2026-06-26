@@ -1,5 +1,6 @@
 import io.github.libfdx.build.LibExt
 import org.gradle.api.publish.tasks.GenerateModuleMetadata
+import org.gradle.api.tasks.Sync
 
 plugins {
     `kotlin-dsl`
@@ -21,6 +22,7 @@ dependencies {
     if (LibExt.usePublishedLibfdx) {
         implementation("${LibExt.fdxGroup}:tools_font:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:graphics:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:net:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:backend_web:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:backend_desktop_c:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:backend_ios_c:${LibExt.publishedLibfdxVersion}")
@@ -36,29 +38,60 @@ dependencies {
     }
 }
 
+// Keep borrowed helpers in this build directory so IntelliJ does not assign libFDX runtime sources to the plugin module.
+val borrowedLibfdxSources = layout.buildDirectory.dir("generated/sources/libfdx-borrowed/java")
+
+val syncBorrowedLibfdxSources = tasks.register<Sync>("syncBorrowedLibfdxSources") {
+    into(borrowedLibfdxSources)
+    from("../../../libfdx/runtime/fdx/core/src/main/java") {
+        include("io/github/libfdx/core/FdxException.java")
+    }
+    from("../../../libfdx/graphics/api/src/main/java") {
+        include("io/github/libfdx/graphics/ShaderProfile.java")
+        include("io/github/libfdx/graphics/ShaderProfileValidator.java")
+        include("io/github/libfdx/graphics/ShaderValidationDiagnostic.java")
+        include("io/github/libfdx/graphics/ShaderValidationResult.java")
+        include("io/github/libfdx/graphics/ShaderValidationSeverity.java")
+    }
+    from("../../../libfdx/tools/font/src/main/java") {
+        include("io/github/libfdx/tools/font/*.java")
+    }
+    from("../../../libfdx/backends/c_shared/src/main/java") {
+        include("io/github/libfdx/backend/cshared/BuilderException.java")
+    }
+    from("../../../libfdx/backends/web/src/main/java") {
+        include("io/github/libfdx/backend/web/TeaVMAssetProperties.java")
+        include("io/github/libfdx/backend/web/WebApp.java")
+        include("io/github/libfdx/backend/web/WebAppWriter.java")
+        include("io/github/libfdx/backend/web/WebAsset.java")
+        include("io/github/libfdx/backend/web/WebAssets.java")
+    }
+    from("../../../libfdx/backends/desktop_c/src/main/java") {
+        include("io/github/libfdx/backend/desktopc/NativeProject.java")
+        include("io/github/libfdx/backend/desktopc/NativeProjectWriter.java")
+    }
+    from("../../../libfdx/backends/ios_c/src/main/java") {
+        include("io/github/libfdx/backend/iosc/IosCGraphicsApi.java")
+        include("io/github/libfdx/backend/iosc/IosCProject.java")
+        include("io/github/libfdx/backend/iosc/IosCProjectWriter.java")
+    }
+    from("../../../libfdx/backends/psp/src/main/java") {
+        include("io/github/libfdx/backend/psp/PspProject.java")
+        include("io/github/libfdx/backend/psp/PspProjectWriter.java")
+    }
+}
+
 if (!LibExt.usePublishedLibfdx) {
     sourceSets {
         main {
-            java.srcDirs(
-                "../../../libfdx/foundation/math/src/main/java",
-                "../../../libfdx/foundation/json/src/main/java",
-                "../../../libfdx/runtime/fdx/core/src/main/java",
-                "../../../libfdx/runtime/display/src/main/java",
-                "../../../libfdx/runtime/files/src/main/java",
-                "../../../libfdx/runtime/input/src/main/java",
-                "../../../libfdx/runtime/storage/src/main/java",
-                "../../../libfdx/runtime/application/src/main/java",
-                "../../../libfdx/graphics/api/src/main/java",
-                "../../../libfdx/extensions/graphics/gl/core/src/main/java",
-                "../../../libfdx/extensions/graphics/vulkan/core/src/main/java",
-                "../../../libfdx/tools/font/src/main/java",
-                "../../../libfdx/backends/c_shared/src/main/java",
-                "../../../libfdx/backends/web/src/main/java",
-                "../../../libfdx/backends/desktop_c/src/main/java",
-                "../../../libfdx/backends/ios_c/src/main/java",
-                "../../../libfdx/backends/psp/src/main/java"
-            )
+            java.srcDir(borrowedLibfdxSources)
         }
+    }
+    tasks.named("compileKotlin") {
+        dependsOn(syncBorrowedLibfdxSources)
+    }
+    tasks.named("compileJava") {
+        dependsOn(syncBorrowedLibfdxSources)
     }
 }
 

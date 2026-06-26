@@ -45,6 +45,14 @@ To open the desktop test selector:
 .\gradlew.bat :tests:platform:desktop:test_desktop_gl_run
 ```
 
+To run the WebRTC multiplayer sample, start the standalone signaling server
+first, then launch the sample clients:
+
+```powershell
+.\gradlew.bat :libfdx:extensions:net:webrtc:signaling_server:webrtc_signaling_server_run
+.\gradlew.bat :samples:multiplayer:2d-webrtc:platform:desktop:multiplayer_2d_webrtc_desktop_wgpu_run
+```
+
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md): module layout, dependency direction,

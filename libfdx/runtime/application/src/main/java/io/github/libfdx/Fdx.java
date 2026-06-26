@@ -6,6 +6,7 @@ import io.github.libfdx.display.Displays;
 import io.github.libfdx.files.FileSystem;
 import io.github.libfdx.graphics.Graphics;
 import io.github.libfdx.input.Input;
+import io.github.libfdx.net.Network;
 import io.github.libfdx.storage.Storage;
 
 /**
@@ -55,6 +56,13 @@ public interface Fdx {
      * @return the storage
      */
     Storage storage();
+
+    /**
+     * Returns the network service, or {@code null} when the active backend does not provide one.
+     *
+     * @return the network service, or null
+     */
+    Network network();
 
     /**
      * Returns the logger.

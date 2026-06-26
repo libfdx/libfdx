@@ -1332,34 +1332,47 @@ Module:
 :libfdx:runtime:net
 ```
 
-Package:
+Packages:
 
 ```text
 io.github.libfdx.net
+io.github.libfdx.net.http
+io.github.libfdx.net.websocket
+io.github.libfdx.net.buffer
+io.github.libfdx.net.packet
+io.github.libfdx.net.codec
+io.github.libfdx.net.transform
+io.github.libfdx.net.config
+io.github.libfdx.net.transport
+io.github.libfdx.net.processing
+io.github.libfdx.net.spi
 ```
+
+`io.github.libfdx.net` is the small service entry package. Focused subpackages own HTTP,
+WebSocket, reusable packet storage, packet dispatch, manual message codecs, packet transforms,
+endpoint configuration, multiplayer transports, processing helpers, and provider/backend SPI.
 
 Defined types:
 
 | Type | Role |
 | --- | --- |
-| `Network` | Main network service. |
-| `HttpClient` | HTTP entry point. |
-| `HttpRequest` | HTTP request descriptor. |
-| `HttpResponse` | HTTP response data. |
-| `HttpMethod` | GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS. |
-| `HttpHeaders` | Header collection. |
-| `HttpBody` | Request or response body abstraction. |
-| `HttpStatus` | Response status code helper. |
-| `WebSocketClient` | WebSocket connection entry point. |
-| `WebSocketConfig` | WebSocket URL, headers, protocols, and connection options. |
-| `WebSocket` | Active WebSocket connection. |
-| `WebSocketListener` | WebSocket callback/listener contract. |
-| `NetworkCapabilities` | Supported network features. |
-| `NetworkProvider` | Provider/backend network SPI if needed. |
+| `Network`, `NetworkCapabilities` | Main network service and supported network feature query. |
+| `http.HttpClient`, `http.HttpRequest`, `http.HttpResponse`, `http.HttpMethod`, `http.HttpHeaders`, `http.HttpBody`, `http.HttpStatus` | HTTP entry point, descriptors, response data, headers, bodies, and status helpers. |
+| `websocket.WebSocketClient`, `websocket.WebSocketConfig`, `websocket.WebSocket`, `websocket.WebSocketListener` | WebSocket connection entry point, config, active socket, and listener contract. |
+| `buffer.NetBuffer`, `buffer.NetBufferPool`, `buffer.NetBufferPoolConfig`, `buffer.NetReader`, `buffer.NetWriter` | Reusable packet byte storage, pool configuration, and primitive packet readers/writers. |
+| `packet.NetPacket`, `packet.NetPacketQueue`, `packet.NetPacketHandler` | Reusable packet view, inbound queue, and queue dispatch handler. |
+| `codec.NetMessageCodec<T>` | Manual reusable message serialization contract. |
+| `transform.NetPacketTransform`, `transform.NetTransformContext`, `transform.NetTransformResult` | User-provided packet transform hook for encryption, compression, authentication, or other byte transforms. |
+| `config.NetClientConfig`, `config.NetServerConfig`, `config.NetPeerConfig`, `config.NetEndpointConfig`, `config.NetChannelConfig`, `config.NetProcessingConfig` | Provider-typed endpoint, channel, buffer, transform, and processing configuration base types. |
+| `processing.NetProcessingState` | Fixed-rate processing helper used by reusable packet queues and providers. |
+| `transport.NetTransports`, `transport.NetTransportProvider` | Factory and provider SPI for transport families such as WebRTC, TCP, UDP, Bluetooth, or in-memory test transports. |
+| `transport.NetClient`, `transport.NetServer`, `transport.NetPeerGroup`, `transport.NetConnection` | Connected multiplayer endpoints and common connection handle. |
+| `transport.NetDelivery`, `transport.NetSendResult`, `transport.NetConnectionState`, `transport.NetStats`, `transport.NetClientListener`, `transport.NetServerListener`, `transport.NetPeerListener` | Transport delivery values, send results, state, counters, and callbacks. |
+| `spi.NetworkProvider`, `spi.DefaultNetwork`, `spi.DefaultNetworkCapabilities`, `spi.DefaultNetTransports` | Provider/backend setup SPI and reusable default implementations. |
 
 ### 11.1. Network Contracts
 
-`Network` is async-first so the same API works on desktop, web, Android, iOS, and C-backed targets.
+`Network` is async-first for request/response and socket APIs. Multiplayer transports are process-driven: native, WebRTC, socket, Bluetooth, or test-provider threads may enqueue inbound data, but normal user callbacks dispatch only when the endpoint's `process(float deltaTime)` method is called from the application thread.
 
 Defined shape:
 
@@ -1368,6 +1381,7 @@ public interface Network extends FdxService, ProviderHandle {
     NetworkCapabilities capabilities();
     HttpClient httpClient();
     WebSocketClient webSocketClient();
+    NetTransports transports();
 }
 
 public interface NetworkProvider {
@@ -1378,6 +1392,8 @@ public interface NetworkProvider {
 public interface NetworkCapabilities {
     boolean supportsHttp();
     boolean supportsWebSocket();
+    boolean supportsTransports();
+    boolean supportsTransport(ProviderId providerId);
 }
 
 public interface HttpClient {
@@ -1434,18 +1450,107 @@ public interface WebSocketListener {
     void error(WebSocket socket, Throwable error);
     void closed(WebSocket socket, int code, String reason);
 }
+
+public interface NetTransports {
+    boolean supports(ProviderId providerId);
+    NetClient connect(NetClientConfig config, NetClientListener listener);
+    NetServer listen(NetServerConfig config, NetServerListener listener);
+    NetPeerGroup join(NetPeerConfig config, NetPeerListener listener);
+}
+
+public interface NetClient extends ProviderHandle, Disposable {
+    void process(float deltaTime);
+    NetConnection connection();
+    boolean isConnected();
+    NetBufferPool buffers();
+    NetStats stats();
+}
+
+public interface NetServer extends ProviderHandle, Disposable {
+    void process(float deltaTime);
+    NetBufferPool buffers();
+    NetStats stats();
+    int connectionCount();
+    NetConnection connectionAt(int index);
+    NetSendResult broadcast(int channelId, NetBuffer buffer);
+}
+
+public interface NetPeerGroup extends ProviderHandle, Disposable {
+    void process(float deltaTime);
+    NetBufferPool buffers();
+    NetStats stats();
+    int peerCount();
+    NetConnection peerAt(int index);
+}
+
+public interface NetConnection extends ProviderHandle, Disposable {
+    int id();
+    NetConnectionState state();
+    NetSendResult send(int channelId, NetBuffer buffer);
+    NetSendResult send(int channelId, byte[] bytes, int offset, int length);
+    void setTransform(int channelId, NetPacketTransform transform);
+    void close();
+}
+
+public interface NetPacketHandler {
+    void message(NetConnection connection, NetPacket packet);
+}
+
+public interface NetPacketTransform {
+    int maxOutputBytes(int inputBytes);
+    NetTransformResult encode(NetTransformContext context, NetReader input, NetWriter output);
+    NetTransformResult decode(NetTransformContext context, NetReader input, NetWriter output);
+}
+
+public interface NetMessageCodec<T> {
+    void write(T message, NetWriter out);
+    void read(NetReader in, T target);
+}
 ```
 
 Example:
 
 ```java
 Network network = fdx.network();
-HttpClient http = network.httpClient();
+if (network != null) {
+    HttpClient http = network.httpClient();
+    if (http != null) {
+        http.send(HttpRequest.get("https://example.com/status"))
+            .onSuccess(response -> logger.info("Status: " + response.status().code()));
+    }
+}
+```
 
-HttpRequest request = HttpRequest.get("https://example.com/status");
-if (http != null) {
-    http.send(request)
-        .onSuccess(response -> logger.info("Status: " + response.status().code()));
+Multiplayer example:
+
+```java
+Network network = fdx.network();
+NetTransports transports = network != null ? network.transports() : null;
+
+if (transports != null && transports.supports(WebRtcProvider.ID)) {
+    WebRtcClientConfig config = WebRtcClientConfig.builder()
+        .signalingUrl("wss://example.com/signaling")
+        .roomId("lobby-1")
+        .buffers(NetBufferPoolConfig.builder()
+            .initialPackets(256)
+            .maxPackets(1024)
+            .packetBytes(1400)
+            .build())
+        .processing(NetProcessingConfig.builder()
+            .tickRate(30)
+            .maxTicksPerFrame(2)
+            .maxReceivePacketsPerTick(64)
+            .maxReceiveBytesPerTick(64 * 1024)
+            .dropUnreliableWhenBehind(true)
+            .build())
+        .build();
+
+    NetClient client = transports.connect(config, listener);
+    client.process(fdx.app().deltaTime());
+
+    NetBuffer packet = client.buffers().acquire();
+    packet.writer().putByte(MSG_INPUT).putFloat(x).putFloat(y);
+    client.connection().send(0, packet);
 }
 ```
 
@@ -1453,22 +1558,44 @@ Rules:
 
 - Network APIs should be async-first.
 - Do not design network APIs around blocking calls because browser/web targets cannot support that reliably.
-- HTTP redirects, cookies, TLS details, streaming bodies, and custom transports should be capability-aware.
+- HTTP redirects, cookies, TLS details, streaming bodies, and custom transports must be capability-aware.
 - WebSocket lifecycle should clearly define open, message, error, close, and dispose behavior.
 - Backend-specific transport details should not leak into common request/response types.
 - `Network.as()` is the advanced access path for backend/provider-specific network services.
+- `Fdx.network()` returns `null` when the backend has no networking implementation.
 - `Network.httpClient()` returns `null` when HTTP is not supported by the active backend/provider.
 - `Network.webSocketClient()` returns `null` when WebSocket is not supported by the active backend/provider.
+- `Network.transports()` returns `null` when multiplayer transports are not supported by the active backend/provider.
+- Use `NetworkCapabilities` or `NetTransports.supports(ProviderId)` before assuming a platform supports HTTP, WebSocket, WebRTC, TCP, UDP, Bluetooth, or another transport.
+- Provider configs stay typed. WebRTC uses `WebRtcClientConfig`, `WebRtcServerConfig`, and `WebRtcPeerConfig`; future Bluetooth, TCP, UDP, or platform-specific transports should add their own typed config classes.
+- Multiplayer callbacks must not fire directly from socket, WebRTC, Bluetooth, native, or worker threads. Providers enqueue work and dispatch `NetClientListener`, `NetServerListener`, and `NetPeerListener` callbacks only during `process(float deltaTime)`.
+- Connected endpoints should be processed explicitly, normally once from the game frame:
+
+```java
+client.process(fdx.app().deltaTime());
+server.process(fdx.app().deltaTime());
+```
+
+- `NetProcessingConfig` controls tick rate, maximum ticks per frame, receive packet/byte limits, send packet limits, and whether unreliable packets may be dropped when the endpoint falls behind.
+- `NetBufferPoolConfig` controls reusable packet storage. Sending through `NetBuffer` should avoid per-frame packet allocation after the configured pool has been created.
+- `NetPacketQueue` is the common reusable inbound queue helper for providers. It stores queued packets in `NetBufferPool` buffers, dispatches through `NetPacketHandler` only during `dispatch(float, NetPacketHandler)`, applies `NetProcessingConfig` tick/receive limits, reports reliable backpressure, and counts unreliable drops.
+- Received `NetPacket` views are valid during the callback. User code must explicitly retain the backing `NetBuffer` when packet data needs to outlive the callback.
+- Reliable transports should report backpressure through `NetSendResult` instead of allocating unbounded queues. Unreliable transports may drop packets according to processing limits and provider/channel configuration.
+- Packet transforms are user-provided byte hooks. libFDX provides the `NetPacketTransform` contract but does not implement encryption, compression, or authentication algorithms.
+- Transforms may be configured at endpoint, channel, or connection/channel override boundaries. Providers apply transform changes at processing boundaries.
+- V1 serialization is manual and allocation-conscious through `NetMessageCodec<T>`, where `read(NetReader, T target)` fills a reusable target object. Automatic no-reflection serialization may be added later through code generation that emits `NetMessageCodec` implementations.
 - `HttpRequest.body()` returns `null` for requests without a body.
 - `HttpResponse.body()` returns `null` for responses without a body.
 - `HttpHeaders.first(String name)` returns `null` when the header is not present.
-- `NetworkProvider` is a provider/backend SPI used by backend setup and should not be registered as a normal `FdxService`.
+- `spi.NetworkProvider` is a provider/backend SPI used by backend setup and should not be registered as a normal `FdxService`.
+- `transport.NetTransportProvider` is provider SPI used by backend setup and should not be registered as a normal `FdxService`.
 
 Async shape:
 
 ```java
 HttpClient http = network.httpClient();
 WebSocketClient webSocket = network.webSocketClient();
+NetTransports transports = network.transports();
 
 if (http != null) {
     FdxFuture<HttpResponse> response = http.send(request);
@@ -1477,9 +1604,42 @@ if (http != null) {
 if (webSocket != null) {
     FdxFuture<WebSocket> socket = webSocket.connect(config, listener);
 }
+
+if (transports != null && transports.supports(WebRtcProvider.ID)) {
+    NetClient client = transports.connect(webRtcConfig, listener);
+}
 ```
 
 Use `FdxFuture<T>` consistently across net, assets, and other common async APIs.
+
+WebRTC provider-specific types live under `:libfdx:extensions:net:webrtc:core`. `WebRtcProvider.ID` remains in `io.github.libfdx.net.webrtc`; endpoint configs live in `io.github.libfdx.net.webrtc.config`; signaling contracts live in `io.github.libfdx.net.webrtc.signaling`; platform bridge interfaces live in `io.github.libfdx.net.webrtc.platform`; transport implementations live in `io.github.libfdx.net.webrtc.transport`. `WebRtcClientConfig`, `WebRtcServerConfig`, and `WebRtcPeerConfig` map reliable and unreliable common channels to WebRTC data channels internally; common game code still uses `NetConnection` and integer channel ids.
+
+WebRTC provider-defined types:
+
+| Type | Role |
+| --- | --- |
+| `transport.WebRtcNetworkProvider` | Creates a `Network` service with WebRTC transports installed. |
+| `transport.WebRtcNetTransportProvider` | Installs `WebRtcNetClient`, `WebRtcNetServer`, and `WebRtcNetPeerGroup` behind `NetTransports`. |
+| `transport.WebRtcNetClient`, `transport.WebRtcNetServer`, `transport.WebRtcNetPeerGroup`, `transport.WebRtcNetConnection` | WebRTC-backed implementations of the provider-neutral net endpoint contracts. |
+| `signaling.WebRtcSignalingClient`, `signaling.WebRtcSignalingListener`, `signaling.WebRtcSignalingMessage`, `signaling.WebRtcSignalingMessageType`, `signaling.WebRtcSignalingCodec` | JSON signaling contracts for `welcome`, `peer_joined`, `peer_left`, `offer`, `answer`, `ice`, `connect_request`, `error`, `ping`, and `pong`. |
+| `signaling.WebRtcRoomPolicy` | Room join policy hook used by signaling servers. |
+| `platform.WebRtcPeerConnectionProvider`, `platform.WebRtcPeerConnection`, `platform.WebRtcDataChannel`, `platform.WebRtcIceCandidate`, `platform.WebRtcSessionDescription`, `platform.WebRtcPlatformFactory` | Provider-neutral bridge interfaces implemented by desktop, web, Android, and future platform binding modules. `WebRtcPlatformFactory` is disposable because it owns native/provider peer-connection resources. |
+
+The WebRTC signaling server lives under `:libfdx:extensions:net:webrtc:signaling_server` in package `io.github.libfdx.net.webrtc.signaling.server`. It uses Java-WebSocket for peer discovery and SDP/ICE relay only; game data travels through WebRTC data channels. It is a standalone infrastructure process, not a sample client feature and not a gameplay/TCP server. `WebRtcSignalingServerConfig` controls bind host, port, auth hook, room policy, join policy, message policy, peer ID generation, processing config, maximum peers per room, idle timeout, and logging. The repository run task is `:libfdx:extensions:net:webrtc:signaling_server:webrtc_signaling_server_run`; clients connect through endpoint configs such as `WebRtcClientConfig.signalingUrl(...)` and `WebRtcServerConfig.signalingUrl(...)`. V1 supports external STUN/TURN configuration through endpoint configs and does not embed a TURN server.
+
+Signaling server work is process-driven like the multiplayer endpoint API. Java-WebSocket callbacks enqueue reusable internal event objects only; auth, join policy, message policy, room mutation, SDP/ICE relay, directory updates, and disconnect cleanup run during `WebRtcSignalingServer.process(float deltaTime)`. `WebRtcSignalingProcessingConfig` controls tick rate, max ticks per frame, events per tick, bytes per tick, initial preallocated events, and max queued events. Embedded backend tools should call `process(...)` from their backend loop. The standalone launcher runs this loop internally, so the Gradle `webrtc_signaling_server_run` task remains a one-command server.
+
+Custom signaling deployments may extend access control without changing the WebRTC clients. `WebRtcSignalingJoinRequest` exposes the requested room/peer, token query value, resource path, parsed query values, request headers, and remote address. Simple auth can still use `WebRtcSignalingAuth.allow(...)`; protected servers can override `WebRtcSignalingAuth.authenticate(...)` and return `WebRtcSignalingAuthResult.accepted(session)` to attach application-owned session metadata. `WebRtcSignalingJoinPolicy` can reject a specific join after peer ID generation, and `WebRtcSignalingMessagePolicy` can reject individual signaling messages such as room registration or SDP relay based on the session, room, source peer, target peer, and peer count. libFDX does not implement or prescribe token validation, login, encryption, or authorization storage; applications supply those policies.
+
+Platform setup entry points:
+
+```java
+NetworkProvider desktopProvider = DesktopWebRtcPlatform.networkProvider();
+NetworkProvider webProvider = WebWebRtcPlatform.networkProvider();
+NetworkProvider androidProvider = AndroidWebRtcPlatform.networkProvider(androidContext);
+```
+
+Backends may install the returned provider into the typed `Fdx` root setup path. User code should still obtain WebRTC through `Fdx.network().transports()` and typed `WebRtc*Config` objects rather than static global factories.
 
 ## 12. Assets
 

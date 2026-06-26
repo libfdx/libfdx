@@ -18,7 +18,9 @@ start a sample.
 - [4. Native Artifacts](#4-native-artifacts)
 - [5. Basic Desktop Sample](#5-basic-desktop-sample)
 - [6. Basic Android Sample](#6-basic-android-sample)
-- [7. Basic Web Sample](#7-basic-web-sample)
+- [7. Basic iOS C Sample](#7-basic-ios-c-sample)
+- [8. Basic Web Sample](#8-basic-web-sample)
+- [9. WebRTC Multiplayer Sample](#9-webrtc-multiplayer-sample)
 
 ## 1. Requirements
 
@@ -208,3 +210,56 @@ module exposes WebGL and WebGPU JavaScript/Wasm aliases:
 
 For web launchers, a width or height of `0` or a negative value means the
 canvas fills the browser window.
+
+## 9. WebRTC Multiplayer Sample
+
+The WebRTC multiplayer sample requires a standalone signaling server process.
+Start the signaling server first:
+
+```powershell
+.\gradlew.bat :libfdx:extensions:net:webrtc:signaling_server:webrtc_signaling_server_run
+```
+
+The default endpoint is `ws://127.0.0.1:7777`. Configure it with Gradle system
+properties when needed:
+
+```powershell
+.\gradlew.bat `
+  -Dlibfdx.webrtc.signaling.host=0.0.0.0 `
+  -Dlibfdx.webrtc.signaling.port=7777 `
+  -Dlibfdx.webrtc.signaling.tickRate=30 `
+  -Dlibfdx.webrtc.signaling.maxEventsPerTick=128 `
+  -Dlibfdx.webrtc.signaling.maxQueuedEvents=4096 `
+  :libfdx:extensions:net:webrtc:signaling_server:webrtc_signaling_server_run
+```
+
+The standalone server runs its own processing loop. Embedded tools that create
+`WebRtcSignalingServer` directly should call `server.process(deltaTime)` from
+their backend loop.
+
+Then run the desktop sample clients in separate terminals. One client can host
+a room:
+
+```powershell
+.\gradlew.bat `
+  -Dlibfdx.sample.playerName=Host `
+  -Dlibfdx.sample.autoHost=true `
+  -Dlibfdx.sample.hostRoomId=test-room `
+  :samples:multiplayer:2d-webrtc:platform:desktop:multiplayer_2d_webrtc_desktop_wgpu_run
+```
+
+Another client can join the same room:
+
+```powershell
+.\gradlew.bat `
+  -Dlibfdx.sample.playerName=Client `
+  -Dlibfdx.sample.autoJoinRoom=test-room `
+  :samples:multiplayer:2d-webrtc:platform:desktop:multiplayer_2d_webrtc_desktop_wgpu_run
+```
+
+Web clients also connect to the standalone signaling server. Use the `signaling`
+query parameter when the server is not on the default local endpoint.
+
+```powershell
+.\gradlew.bat :samples:multiplayer:2d-webrtc:platform:web:multiplayer_2d_webrtc_webgl_js_run
+```
