@@ -50,6 +50,7 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:assets:manager",
     ":libfdx:assets:loaders",
     ":libfdx:graphics:api",
+    ":libfdx:graphics:camera",
     ":libfdx:graphics:g2d",
     ":libfdx:graphics:g3d",
     ":libfdx:ui:ui-kit",
