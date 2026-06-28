@@ -27,6 +27,7 @@ val taskNames = gradle.startParameter.taskNames
 val libfdxBaseVersion = LibExt.fdxVersion
 val libfdxGroup = LibExt.fdxGroup
 val publishTargetProperty = "libfdxPublishTarget"
+val gradlePluginDependencyArtifactsProperty = "libfdxGradlePluginDependencyArtifacts"
 val publishTarget = if(extensions.extraProperties.has(publishTargetProperty)) {
     extensions.extraProperties.get(publishTargetProperty).toString()
 } else {
@@ -46,6 +47,7 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:runtime:display",
     ":libfdx:runtime:files",
     ":libfdx:runtime:input",
+    ":libfdx:runtime:net",
     ":libfdx:runtime:storage",
     ":libfdx:assets:manager",
     ":libfdx:assets:loaders",
@@ -463,12 +465,64 @@ fun Project.configurePomDependencies(pom: MavenPom, replaceExisting: Boolean) {
     }
 }
 
+fun Node.nodeLocalName(): String {
+    return name().toString().substringAfterLast('}').substringAfterLast(':')
+}
+
+fun Node.childText(name: String): String? {
+    return children()
+        .filterIsInstance<Node>()
+        .firstOrNull { it.nodeLocalName() == name }
+        ?.text()
+}
+
+fun Project.gradlePluginDependencyArtifacts(): List<String> {
+    if(!extensions.extraProperties.has(gradlePluginDependencyArtifactsProperty)) {
+        return emptyList()
+    }
+    val value = extensions.extraProperties.get(gradlePluginDependencyArtifactsProperty)
+    return when(value) {
+        is Iterable<*> -> value.mapNotNull { it?.toString()?.takeIf(String::isNotBlank) }
+        is Array<*> -> value.mapNotNull { it?.toString()?.takeIf(String::isNotBlank) }
+        else -> listOf(value.toString()).filter(String::isNotBlank)
+    }
+}
+
 fun Project.configureManualPomDependencies(pom: MavenPom) {
     configurePomDependencies(pom, replaceExisting = false)
 }
 
 fun Project.configureGradlePluginImplementationPomDependencies(pom: MavenPom) {
     configurePomDependencies(pom, replaceExisting = true)
+    val dependencyArtifacts = gradlePluginDependencyArtifacts()
+    if(dependencyArtifacts.isEmpty()) {
+        return
+    }
+    pom.withXml {
+        val projectNode = asNode()
+        val dependenciesNode = projectNode.children()
+            .filterIsInstance<Node>()
+            .firstOrNull { it.nodeLocalName() == "dependencies" }
+            ?: projectNode.appendNode("dependencies")
+        val seen = dependenciesNode.children()
+            .filterIsInstance<Node>()
+            .mapNotNull { dependency ->
+                val group = dependency.childText("groupId")
+                val artifact = dependency.childText("artifactId")
+                if(group == null || artifact == null) null else "$group:$artifact"
+            }
+            .toMutableSet()
+        dependencyArtifacts.forEach { artifact ->
+            if(!seen.add("$libfdxGroup:$artifact")) {
+                return@forEach
+            }
+            val dependencyNode = dependenciesNode.appendNode("dependency")
+            dependencyNode.appendNode("groupId", libfdxGroup)
+            dependencyNode.appendNode("artifactId", artifact)
+            dependencyNode.appendNode("version", libfdxVersion)
+            dependencyNode.appendNode("scope", "runtime")
+        }
+    }
 }
 
 fun Project.configureLibfdxMavenRepository() {
@@ -699,6 +753,7 @@ fun Project.configureLibraryPublishing() {
         group = "publishing"
         description = "Prepare local snapshot deploy files for the libFDX Gradle plugin."
         dependsOn(validateRuntimeFdxNativeResources)
+        dependsOn(libraryPublishTasks)
         mustRunAfter(cleanSnapshotDeployDirectory)
         dir = gradlePluginBuildDir
         tasks = listOf("prepareSnapshotDeploy")
@@ -708,6 +763,7 @@ fun Project.configureLibraryPublishing() {
         group = "publishing"
         description = "Prepare local release deploy files for the libFDX Gradle plugin."
         dependsOn(validateRuntimeFdxNativeResources)
+        dependsOn(libraryPublishTasks)
         mustRunAfter(cleanReleaseStagingDirectory)
         dir = gradlePluginBuildDir
         tasks = listOf("prepareReleaseDeploy")
