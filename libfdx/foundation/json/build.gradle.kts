@@ -1,4 +1,5 @@
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -7,8 +8,10 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
+val moduleName = "json"
+
 base {
-    archivesName.set("json")
+    archivesName.set(moduleName)
 }
 
 dependencies {
@@ -19,4 +22,17 @@ dependencies {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

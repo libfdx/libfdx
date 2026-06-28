@@ -3,6 +3,7 @@ import io.github.libfdx.build.LibExt
 import org.gradle.api.attributes.java.TargetJvmVersion
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -13,8 +14,10 @@ java {
 
 group = "${LibExt.fdxGroup}.assets"
 
+val moduleName = "asset_loaders"
+
 base {
-    archivesName.set("asset_loaders")
+    archivesName.set(moduleName)
 }
 
 dependencies {
@@ -29,5 +32,18 @@ dependencies {
 configurations.compileClasspath {
     attributes {
         attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 25)
+    }
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
     }
 }

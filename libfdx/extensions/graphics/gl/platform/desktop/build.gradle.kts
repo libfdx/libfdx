@@ -1,6 +1,7 @@
 import io.github.libfdx.build.LibExt
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -11,8 +12,10 @@ java {
 
 group = "${LibExt.fdxGroup}.gl"
 
+val moduleName = "gl_desktop"
+
 base {
-    archivesName.set("gl_desktop")
+    archivesName.set(moduleName)
 }
 
 dependencies {
@@ -21,4 +24,17 @@ dependencies {
     api(variantOf(libs.lwjgl.opengl) { classifier("natives-linux") })
     api(variantOf(libs.lwjgl.opengl) { classifier("natives-macos") })
     api(variantOf(libs.lwjgl.opengl) { classifier("natives-macos-arm64") })
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

@@ -1,4 +1,5 @@
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -7,8 +8,10 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
+val moduleName = "backend_desktop"
+
 base {
-    archivesName.set("backend_desktop")
+    archivesName.set(moduleName)
 }
 
 dependencies {
@@ -45,4 +48,17 @@ dependencies {
     api(variantOf(libs.lwjgl.glfw) { classifier("natives-linux") })
     api(variantOf(libs.lwjgl.glfw) { classifier("natives-macos") })
     api(variantOf(libs.lwjgl.glfw) { classifier("natives-macos-arm64") })
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

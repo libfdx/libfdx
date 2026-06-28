@@ -1,4 +1,5 @@
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -7,8 +8,10 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
+val moduleName = "backend_ios_c"
+
 base {
-    archivesName.set("backend_ios_c")
+    archivesName.set(moduleName)
 }
 
 dependencies {
@@ -24,4 +27,17 @@ dependencies {
     api(libs.teavm.interop)
 
     runtimeOnly(project(":libfdx:runtime:fdx:platform:shared"))
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

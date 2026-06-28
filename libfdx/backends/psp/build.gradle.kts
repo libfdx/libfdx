@@ -1,4 +1,5 @@
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -7,8 +8,10 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
+val moduleName = "backend_psp"
+
 base {
-    archivesName.set("backend_psp")
+    archivesName.set(moduleName)
 }
 
 dependencies {
@@ -21,4 +24,17 @@ dependencies {
     compileOnly("org.teavm:teavm-core:${libs.versions.teavm.get()}")
 
     runtimeOnly(project(":libfdx:runtime:fdx:platform:shared"))
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

@@ -1,4 +1,5 @@
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -7,12 +8,27 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
+val moduleName = "wgpu_desktop_jni"
+
 base {
-    archivesName.set("wgpu_desktop_jni")
+    archivesName.set(moduleName)
 }
 
 dependencies {
     api(project(":libfdx:extensions:graphics:wgpu:core"))
     runtimeOnly(libs.jwebgpu.jni)
     runtimeOnly(libs.jwebgpu.jni.desktop)
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

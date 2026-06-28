@@ -1,37 +1,44 @@
+import groovy.util.Node
 import io.github.libfdx.build.LibExt
+import java.io.File
 import java.net.URLEncoder
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.util.Locale
+import org.gradle.api.GradleException
 import org.gradle.api.Project
+import org.gradle.api.Task
 import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.plugins.BasePluginExtension
-import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.maven.MavenPom
 import org.gradle.api.publish.maven.MavenPublication
-import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 import org.gradle.api.tasks.GradleBuild
 import org.gradle.api.tasks.TaskProvider
-import org.gradle.api.tasks.bundling.Jar
 import org.gradle.api.tasks.bundling.Zip
 import org.gradle.api.tasks.javadoc.Javadoc
 import org.gradle.external.javadoc.StandardJavadocDocletOptions
+import org.gradle.kotlin.dsl.configure
+import org.gradle.kotlin.dsl.getByType
+import org.gradle.plugins.signing.Sign
 import org.gradle.plugins.signing.SigningExtension
-import groovy.util.Node
 
+// Constants and publishable module allowlist.
 val libfdxName = "libfdx"
 val snapshotRepositoryUrl = "https://central.sonatype.com/repository/maven-snapshots/"
-val taskNames = gradle.startParameter.taskNames
 val libfdxBaseVersion = LibExt.fdxVersion
-val libfdxGroup = LibExt.fdxGroup
-val publishTargetProperty = "libfdxPublishTarget"
-val gradlePluginDependencyArtifactsProperty = "libfdxGradlePluginDependencyArtifacts"
-val publishTarget = if(extensions.extraProperties.has(publishTargetProperty)) {
-    extensions.extraProperties.get(publishTargetProperty).toString()
-} else {
-    throw GradleException("$publishTargetProperty must be configured before applying publish.gradle.kts")
+
+val requestedTaskNames = gradle.startParameter.taskNames.map { it.substringAfterLast(":") }.toSet()
+fun requested(vararg names: String): Boolean = names.any { it in requestedTaskNames }
+
+val snapshotRequested = requested("prepareSnapshotDeploy", "publishSnapshot", "uploadSnapshotDeploy") ||
+    (plugins.hasPlugin("java-gradle-plugin") && requested("publish"))
+val deployPreparationRequested = requested("prepareSnapshotDeploy", "prepareReleaseDeploy")
+val libfdxVersion = if(snapshotRequested) "$libfdxBaseVersion-SNAPSHOT" else libfdxBaseVersion
+
+if(libfdxBaseVersion.endsWith("-SNAPSHOT")) {
+    throw GradleException("The libFDX base version must not include -SNAPSHOT. Use the upcoming release version only.")
 }
 
 val libfdxPublishableProjectPaths = listOf(
@@ -88,99 +95,475 @@ fun Project.libfdxPublishableProjects(): List<Project> {
     }
 }
 
-fun isTaskRequested(taskName: String): Boolean {
-    return taskNames.any { it == taskName || it.endsWith(":$taskName") }
+fun Project.hasLibfdxPublishableProjects(): Boolean {
+    return libfdxPublishableProjectPaths.all { path -> rootProject.findProject(path) != null }
 }
 
-val isPrepareSnapshotDeploy = isTaskRequested("prepareSnapshotDeploy")
-val isPrepareReleaseDeploy = isTaskRequested("prepareReleaseDeploy")
-val isPublishSnapshot = isTaskRequested("publishSnapshot")
-val isPublishRelease = isTaskRequested("publishRelease")
-val isUploadSnapshotDeploy = isTaskRequested("uploadSnapshotDeploy")
-val isUploadToMavenCentral = isTaskRequested("uploadToMavenCentral")
-val isZipStagingDeploy = isTaskRequested("zipStagingDeploy")
-val isPublish = isTaskRequested("publish")
-val isSnapshotLocalDeploy = isPrepareSnapshotDeploy || isPublishSnapshot
-val isDeployPreparationTask = isSnapshotLocalDeploy || isPrepareReleaseDeploy || isZipStagingDeploy
-val isReleaseLocalDeploy = isPrepareReleaseDeploy || isZipStagingDeploy
-val isReleasePublishMode = isPrepareReleaseDeploy || isPublishRelease || isUploadToMavenCentral || isZipStagingDeploy
-val isGradlePluginTarget = publishTarget == "GRADLE_PLUGIN"
-val isSnapshotPublishMode = isSnapshotLocalDeploy || isUploadSnapshotDeploy || (isGradlePluginTarget && isPublish)
-val libfdxVersion = if(isSnapshotPublishMode) "-SNAPSHOT" else libfdxBaseVersion
+// Tiny helpers for paths, environment, and artifact ids.
+fun Project.snapshotDeployDirectory(): File = File(LibExt.rootDirectory, "build/snapshot-deploy")
+fun Project.releaseDeployDirectory(): File = File(LibExt.rootDirectory, "build/release-deploy")
+fun Project.releaseDeployZipFile(): File = File(LibExt.rootDirectory, "build/release-deploy.zip")
 
-if(libfdxBaseVersion.endsWith("-SNAPSHOT")) {
-    throw GradleException("The libFDX base version must not include -SNAPSHOT. Use the upcoming release version only.")
+fun optionalEnvironment(vararg names: String): String? {
+    return names.firstNotNullOfOrNull { name -> System.getenv(name)?.takeIf { it.isNotBlank() } }
 }
 
 fun requiredEnvironment(name: String): String {
-    return System.getenv(name)
-        ?: throw GradleException("$name environment variable not set")
-}
-
-fun optionalEnvironment(vararg names: String): String? {
-    return names.firstNotNullOfOrNull { name ->
-        System.getenv(name)?.takeIf { it.isNotBlank() }
-    }
-}
-
-fun releaseSigningKey(): String? {
-    val value = optionalEnvironment("SIGNING_KEY", "PGP_SECRET") ?: return null
-    val file = File(value)
-    return if(file.isFile) {
-        file.readText(Charsets.UTF_8)
-    } else {
-        value
-    }
-}
-
-fun releaseSigningPassword(): String? {
-    return optionalEnvironment("SIGNING_PASSWORD", "PGP_PASSPHRASE")
+    return System.getenv(name) ?: throw GradleException("$name environment variable not set")
 }
 
 fun centralPublishingType(): String {
-    val value = optionalEnvironment("CENTRAL_PUBLISHING_TYPE")
-        ?.uppercase(Locale.ROOT)
-        ?: "USER_MANAGED"
+    val value = optionalEnvironment("CENTRAL_PUBLISHING_TYPE")?.uppercase(Locale.ROOT) ?: "USER_MANAGED"
     if(value != "AUTOMATIC" && value != "USER_MANAGED") {
         throw GradleException("CENTRAL_PUBLISHING_TYPE must be AUTOMATIC or USER_MANAGED, got '$value'.")
     }
     return value
 }
 
-fun requireReleaseSigning(signingKey: String?, signingPassword: String?) {
-    if(!isReleasePublishMode || libfdxVersion.endsWith("-SNAPSHOT")) {
+fun Project.publishArtifactId(): String {
+    return extensions.findByType(BasePluginExtension::class.java)?.archivesName?.orNull
+        ?: name.replace('-', '_')
+}
+
+fun Project.isAndroidLibraryProject(): Boolean = plugins.hasPlugin("com.android.library")
+fun Project.isGradlePluginProject(): Boolean = plugins.hasPlugin("java-gradle-plugin")
+
+// Publication conventions shared by libraries and the Gradle plugin.
+fun Project.applyPublishingConventions() {
+    pluginManager.withPlugin("maven-publish") {
+        configureMavenDeployRepository()
+        configureJavadocOptions()
+
+        afterEvaluate {
+            val publishing = extensions.getByType<PublishingExtension>()
+            val publications = publishing.publications.withType(MavenPublication::class.java)
+            if(publications.isEmpty()) {
+                throw GradleException("$path must declare at least one MavenPublication in its own build.gradle.kts.")
+            }
+
+            publications.configureEach {
+                configureMavenPublication(this@applyPublishingConventions, this)
+            }
+            if(deployPreparationRequested) {
+                addNoBuildDeployPublications(publishing)
+            }
+        }
+    }
+
+    afterEvaluate {
+        if(!plugins.hasPlugin("maven-publish")) {
+            throw GradleException("$path must apply 'maven-publish' in its own plugins block before applying publish.gradle.kts.")
+        }
+    }
+}
+
+fun Project.configureMavenDeployRepository() {
+    extensions.configure<PublishingExtension> {
+        repositories {
+            maven {
+                name = "libfdxDeploy"
+                url = when {
+                    deployPreparationRequested && libfdxVersion.endsWith("-SNAPSHOT") -> uri(snapshotDeployDirectory())
+                    deployPreparationRequested -> uri(releaseDeployDirectory())
+                    libfdxVersion.endsWith("-SNAPSHOT") -> uri(snapshotRepositoryUrl)
+                    else -> uri(releaseDeployDirectory())
+                }
+                if(!deployPreparationRequested && libfdxVersion.endsWith("-SNAPSHOT")) {
+                    credentials {
+                        username = System.getenv("CENTRAL_PORTAL_USERNAME")
+                        password = System.getenv("CENTRAL_PORTAL_PASSWORD")
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun Project.configureJavadocOptions() {
+    tasks.withType(Javadoc::class.java).configureEach {
+        options.encoding = "UTF-8"
+        (options as StandardJavadocDocletOptions).addStringOption("Xdoclint:none", "-quiet")
+    }
+}
+
+fun MavenPublication.configureMavenPublication(owner: Project, publication: MavenPublication) {
+    groupId = LibExt.fdxGroup
+    version = libfdxVersion
+    if(artifactId.isBlank()) {
+        artifactId = owner.publishArtifactId()
+    }
+
+    pom.configureLibfdxPom(owner, artifactId)
+    when {
+        owner.isGradlePluginProject() && artifactId == "io.github.libfdx.gradle.plugin" -> {
+            pom.configureGradlePluginMarkerPom()
+        }
+        owner.isGradlePluginProject() -> {
+            owner.configureGradlePluginPomDependencies(pom)
+        }
+        else -> {
+            owner.configurePomDependencies(pom)
+        }
+    }
+
+}
+
+// Deploy preparation uses deploy-only publications so no compile/jar tasks enter the graph.
+fun Project.addNoBuildDeployPublications(publishing: PublishingExtension) {
+    if(isGradlePluginProject()) {
+        if(publishing.publications.findByName("deployPluginMaven") == null) {
+            publishing.publications.create("deployPluginMaven", MavenPublication::class.java) {
+                groupId = LibExt.fdxGroup
+                artifactId = "gradle-plugin"
+                version = libfdxVersion
+                pom.configureLibfdxPom(this@addNoBuildDeployPublications, artifactId)
+                configureGradlePluginPomDependencies(pom)
+                configureDeployArtifacts(this)
+            }
+        }
+        if(publishing.publications.findByName("deployLibfdxPluginMarkerMaven") == null) {
+            publishing.publications.create("deployLibfdxPluginMarkerMaven", MavenPublication::class.java) {
+                groupId = LibExt.fdxGroup
+                artifactId = "io.github.libfdx.gradle.plugin"
+                version = libfdxVersion
+                pom.configureLibfdxPom(this@addNoBuildDeployPublications, artifactId)
+                pom.configureGradlePluginMarkerPom()
+            }
+        }
         return
     }
-    val missing = mutableListOf<String>()
-    if(signingKey.isNullOrBlank()) {
-        missing.add("SIGNING_KEY or PGP_SECRET")
-    }
-    if(signingPassword.isNullOrBlank()) {
-        missing.add("SIGNING_PASSWORD or PGP_PASSPHRASE")
-    }
-    if(missing.isNotEmpty()) {
-        throw GradleException("Release publishing requires signing credentials: ${missing.joinToString(", ")}.")
+
+    if(publishing.publications.findByName("deployMaven") == null) {
+        publishing.publications.create("deployMaven", MavenPublication::class.java) {
+            groupId = LibExt.fdxGroup
+            artifactId = publishArtifactId()
+            version = libfdxVersion
+            pom.configureLibfdxPom(this@addNoBuildDeployPublications, artifactId)
+            configurePomDependencies(pom)
+            configureDeployArtifacts(this)
+        }
     }
 }
 
-fun Project.snapshotDeployDirectory(): File {
-    return File(LibExt.rootDirectory, "build/snapshot-deploy")
+fun MavenPom.configureLibfdxPom(owner: Project, artifactId: String) {
+    val isMarker = artifactId == "io.github.libfdx.gradle.plugin"
+    name.set(
+        when {
+            owner.isGradlePluginProject() && isMarker -> "libFDX Gradle plugin marker"
+            owner.isGradlePluginProject() -> "libFDX Gradle plugin"
+            else -> "libFDX $artifactId"
+        }
+    )
+    description.set(
+        when {
+            owner.isGradlePluginProject() && isMarker -> "Gradle plugin marker for io.github.libfdx."
+            owner.isGradlePluginProject() -> "Gradle plugin for building libFDX web, desktop_c, PSP, and asset tasks."
+            else -> owner.publishDescription(artifactId)
+        }
+    )
+    url.set("https://github.com/libmdx/libfdx")
+    developers {
+        developer {
+            id.set("Xpe")
+            name.set("Natan")
+        }
+    }
+    scm {
+        connection.set("scm:git:git://github.com/libmdx/libfdx.git")
+        developerConnection.set("scm:git:ssh://github.com/libmdx/libfdx.git")
+        url.set("https://github.com/libmdx/libfdx")
+    }
+    licenses {
+        license {
+            name.set("The Apache License, Version 2.0")
+            url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+        }
+    }
 }
 
-fun Project.releaseStagingDirectory(): File {
-    return File(LibExt.rootDirectory, "build/staging-deploy")
+fun Project.publishDescription(artifactId: String): String {
+    return when {
+        path.contains(":backends:") -> "libFDX backend module $artifactId"
+        path.contains(":extensions:graphics:") -> "libFDX graphics provider module $artifactId"
+        path.contains(":graphics:") -> "libFDX graphics module $artifactId"
+        path.contains(":runtime:") -> "libFDX runtime module $artifactId"
+        path.contains(":foundation:") -> "libFDX foundation module $artifactId"
+        path.contains(":validation:") -> "libFDX validation module $artifactId"
+        path.contains(":tools:") -> "libFDX tool module $artifactId"
+        path.contains(":ui:") -> "libFDX UI module $artifactId"
+        path.contains(":assets:") -> "libFDX asset module $artifactId"
+        else -> "libFDX module $artifactId"
+    }
 }
 
-fun Project.releaseStagingZipFile(): File {
-    return File(LibExt.rootDirectory, "build/staging-deploy.zip")
+fun Project.configurePomDependencies(pom: MavenPom) {
+    pom.withXml {
+        val projectNode = asNode()
+        projectNode.removeDependencyNodes()
+        val dependenciesNode = projectNode.appendNode("dependencies")
+        val seen = mutableSetOf<String>()
+
+        fun addDependency(group: String, artifact: String, version: String, scope: String) {
+            if(!seen.add("$group:$artifact:$scope")) {
+                return
+            }
+            val dependencyNode = dependenciesNode.appendNode("dependency")
+            dependencyNode.appendNode("groupId", group)
+            dependencyNode.appendNode("artifactId", artifact)
+            dependencyNode.appendNode("version", version)
+            dependencyNode.appendNode("scope", scope)
+        }
+
+        fun addConfigurationDependencies(configurationName: String, scope: String) {
+            configurations.findByName(configurationName)?.dependencies?.forEach { dependency: Dependency ->
+                if(dependency is ProjectDependency) {
+                    val dependencyProject = rootProject.findProject(dependency.path)
+                        ?: throw GradleException("Could not resolve project dependency ${dependency.path} for ${project.path}")
+                    addDependency(LibExt.fdxGroup, dependencyProject.publishArtifactId(), libfdxVersion, scope)
+                } else {
+                    val group = dependency.group
+                    val version = dependency.version
+                    if(group != null && version != null) {
+                        addDependency(group, dependency.name, version, scope)
+                    }
+                }
+            }
+        }
+
+        addConfigurationDependencies("api", "compile")
+        addConfigurationDependencies("implementation", "runtime")
+        addConfigurationDependencies("runtimeOnly", "runtime")
+
+        if(dependenciesNode.children().isEmpty()) {
+            projectNode.remove(dependenciesNode)
+        }
+    }
+}
+
+fun Project.configureGradlePluginPomDependencies(pom: MavenPom) {
+    pom.withXml {
+        val projectNode = asNode()
+        projectNode.removeDependencyNodes()
+        val dependenciesNode = projectNode.appendNode("dependencies")
+        val seen = mutableSetOf<String>()
+
+        fun addDependency(group: String, artifact: String, version: String, scope: String) {
+            if(!seen.add("$group:$artifact:$scope")) {
+                return
+            }
+            val dependencyNode = dependenciesNode.appendNode("dependency")
+            dependencyNode.appendNode("groupId", group)
+            dependencyNode.appendNode("artifactId", artifact)
+            dependencyNode.appendNode("version", version)
+            dependencyNode.appendNode("scope", scope)
+        }
+
+        configurations.findByName("implementation")?.dependencies?.forEach { dependency ->
+            val group = dependency.group
+            val version = dependency.version
+            if(group != null && version != null && group != LibExt.fdxGroup) {
+                addDependency(group, dependency.name, version, "runtime")
+            }
+        }
+
+        gradlePluginDependencyArtifacts().forEach { artifact ->
+            addDependency(LibExt.fdxGroup, artifact, libfdxVersion, "runtime")
+        }
+
+        if(dependenciesNode.children().isEmpty()) {
+            projectNode.remove(dependenciesNode)
+        }
+    }
+}
+
+fun MavenPom.configureGradlePluginMarkerPom() {
+    withXml {
+        val projectNode = asNode()
+        projectNode.removeDependencyNodes()
+        val dependenciesNode = projectNode.appendNode("dependencies")
+        val dependencyNode = dependenciesNode.appendNode("dependency")
+        dependencyNode.appendNode("groupId", LibExt.fdxGroup)
+        dependencyNode.appendNode("artifactId", "gradle-plugin")
+        dependencyNode.appendNode("version", libfdxVersion)
+    }
+}
+
+fun Project.gradlePluginDependencyArtifacts(): List<String> {
+    if(!extensions.extraProperties.has("libfdxGradlePluginDependencyArtifacts")) {
+        return emptyList()
+    }
+    val value = extensions.extraProperties.get("libfdxGradlePluginDependencyArtifacts")
+    return when(value) {
+        is Iterable<*> -> value.mapNotNull { it?.toString()?.takeIf(String::isNotBlank) }
+        is Array<*> -> value.mapNotNull { it?.toString()?.takeIf(String::isNotBlank) }
+        else -> listOf(value.toString()).filter(String::isNotBlank)
+    }
+}
+
+fun Project.configureDeployArtifacts(publication: MavenPublication) {
+    if(isGradlePluginProject() && publication.artifactId == "io.github.libfdx.gradle.plugin") {
+        return
+    }
+
+    val files = deployArtifactFiles(publication.artifactId)
+    val validateArtifacts = validateExistingDeployArtifactsTask(publication.artifactId, files)
+    publication.setArtifacts(emptyList<Any>())
+    files.forEach { artifact ->
+        publication.artifact(artifact.file) {
+            artifact.classifier?.let { classifier = it }
+            artifact.extension?.let { extension = it }
+            builtBy(validateArtifacts)
+        }
+    }
+}
+
+data class DeployArtifact(
+    val file: File,
+    val classifier: String? = null,
+    val extension: String? = null
+)
+
+fun Project.deployArtifactFiles(artifactId: String): List<DeployArtifact> {
+    return if(isAndroidLibraryProject()) {
+        listOf(
+            DeployArtifact(layout.buildDirectory.file("outputs/aar/$artifactId-release.aar").get().asFile, extension = "aar"),
+            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}-sources.jar").get().asFile, classifier = "sources"),
+            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}-javadoc.jar").get().asFile, classifier = "javadoc")
+        )
+    } else {
+        listOf(
+            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}.jar").get().asFile),
+            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}-sources.jar").get().asFile, classifier = "sources"),
+            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}-javadoc.jar").get().asFile, classifier = "javadoc")
+        )
+    }
+}
+
+fun Project.validateExistingDeployArtifactsTask(
+    artifactId: String,
+    artifacts: List<DeployArtifact>
+): TaskProvider<Task> {
+    val taskName = "validate${artifactId.toTaskNamePart()}DeployArtifacts"
+    return tasks.register(taskName) {
+        group = "publishing"
+        description = "Validates that existing deploy artifacts for $artifactId are present."
+        doLast {
+            val missing = artifacts.map { it.file }.filterNot { it.isFile }
+            if(missing.isNotEmpty()) {
+                val listed = missing.joinToString(System.lineSeparator()) { " - ${it.absolutePath}" }
+                throw GradleException(
+                    "Deploy preparation only stages existing artifacts and does not build them." +
+                        "${System.lineSeparator()}Missing artifact file(s):" +
+                        "${System.lineSeparator()}$listed" +
+                        "${System.lineSeparator()}Build ${project.path} artifacts before deploy preparation."
+                )
+            }
+        }
+    }
+}
+
+fun String.toTaskNamePart(): String {
+    return split('_', '-')
+        .filter(String::isNotBlank)
+        .joinToString("") { part -> part.replaceFirstChar { it.uppercase(Locale.ROOT) } }
+}
+
+fun Project.configureReleaseSigningCredentials() {
+    pluginManager.apply("signing")
+    extensions.configure<SigningExtension> {
+        val signingKey = releaseSigningKey()
+        val signingPassword = releaseSigningPassword()
+        if(signingKey != null && signingPassword != null) {
+            useInMemoryPgpKeys(signingKey, signingPassword)
+        }
+    }
+}
+
+fun releaseSigningKey(): String? {
+    val value = optionalEnvironment("SIGNING_KEY", "PGP_SECRET") ?: return null
+    val file = File(value)
+    return if(file.isFile) file.readText(Charsets.UTF_8) else value
+}
+
+fun releaseSigningPassword(): String? {
+    return optionalEnvironment("SIGNING_PASSWORD", "PGP_PASSPHRASE")
+}
+
+fun runtimeFdxNativeValidationTaskPaths(): List<String> {
+    return listOf(
+        ":libfdx:runtime:fdx:platform:desktop:validate_runtime_fdx_desktop_c_resources",
+        ":libfdx:runtime:fdx:platform:web:validate_runtime_fdx_web_native_resources"
+    )
+}
+
+fun isCentralReleaseArtifact(file: File): Boolean {
+    val name = file.name
+    return file.isFile && (name.endsWith(".jar") || name.endsWith(".aar") || name.endsWith(".pom") || name.endsWith(".module"))
+}
+
+fun isPrimaryCentralReleaseArtifact(file: File): Boolean {
+    val name = file.name
+    return file.isFile && (name.endsWith(".aar") || (name.endsWith(".jar") &&
+        !name.endsWith("-sources.jar") && !name.endsWith("-javadoc.jar")))
+}
+
+fun Project.releaseDeployArtifacts(): List<File> {
+    val releaseDirectory = releaseDeployDirectory()
+    if(!releaseDirectory.isDirectory) {
+        return emptyList()
+    }
+    return releaseDirectory.walkTopDown().filter(::isCentralReleaseArtifact).toList()
+}
+
+fun Project.verifyReleaseDeployArtifacts(requireSignatures: Boolean) {
+    val releaseDirectory = releaseDeployDirectory()
+    if(!releaseDirectory.isDirectory) {
+        throw GradleException("Release deploy directory ${releaseDirectory.absolutePath} does not exist. Run prepareReleaseDeploy first.")
+    }
+    val artifacts = releaseDeployArtifacts()
+    if(artifacts.isEmpty()) {
+        throw GradleException("Release deploy directory ${releaseDirectory.absolutePath} does not contain Maven Central artifacts.")
+    }
+
+    val releasePath = releaseDirectory.toPath()
+    fun relativePath(file: File): String = releasePath.relativize(file.toPath()).toString().replace('\\', '/')
+    val errors = mutableListOf<String>()
+
+    val missingSignatures = if(requireSignatures) artifacts.filter { !File("${it.absolutePath}.asc").isFile } else emptyList()
+    if(missingSignatures.isNotEmpty()) {
+        val listed = missingSignatures.take(40).joinToString(System.lineSeparator()) { " - ${relativePath(it)}.asc" }
+        val suffix = if(missingSignatures.size > 40) {
+            "${System.lineSeparator()} - ... ${missingSignatures.size - 40} more missing signatures"
+        } else {
+            ""
+        }
+        errors.add("Release deploy is missing ${missingSignatures.size} signature file(s):${System.lineSeparator()}$listed$suffix")
+    }
+
+    val missingSources = artifacts.groupBy { it.parentFile }
+        .filter { (_, files) -> files.any(::isPrimaryCentralReleaseArtifact) && files.none { it.name.endsWith("-sources.jar") } }
+        .keys
+        .toList()
+    if(missingSources.isNotEmpty()) {
+        val listed = missingSources.take(40).joinToString(System.lineSeparator()) { " - ${relativePath(it)}/*-sources.jar" }
+        val suffix = if(missingSources.size > 40) {
+            "${System.lineSeparator()} - ... ${missingSources.size - 40} more missing sources jars"
+        } else {
+            ""
+        }
+        errors.add("Release deploy is missing sources jar(s) for ${missingSources.size} component(s):${System.lineSeparator()}$listed$suffix")
+    }
+
+    if(errors.isNotEmpty()) {
+        throw GradleException(errors.joinToString("${System.lineSeparator()}${System.lineSeparator()}"))
+    }
 }
 
 fun encodeMavenRepositoryPath(path: String): String {
-    return path.split('/').joinToString("/") { segment ->
-        URLEncoder.encode(segment, "UTF-8").replace("+", "%20")
-    }
+    return path.split('/').joinToString("/") { segment -> URLEncoder.encode(segment, "UTF-8").replace("+", "%20") }
 }
 
+// Upload tasks operate only on existing deploy files.
 fun snapshotDeployUploadPriority(relativePath: String): Int {
     return when {
         relativePath.endsWith("maven-metadata.xml") -> 1
@@ -191,29 +574,18 @@ fun snapshotDeployUploadPriority(relativePath: String): Int {
 
 fun Project.uploadSnapshotDeployDirectory() {
     val deployDirectory = snapshotDeployDirectory()
-    if(!deployDirectory.exists()) {
-        throw GradleException("Snapshot deploy directory ${deployDirectory.absolutePath} does not exist. Run prepareSnapshotDeploy first.")
-    }
     if(!deployDirectory.isDirectory) {
-        throw GradleException("Snapshot deploy path ${deployDirectory.absolutePath} is not a directory.")
+        throw GradleException("Snapshot deploy directory ${deployDirectory.absolutePath} does not exist. Run prepareSnapshotDeploy first.")
     }
     if(!Files.isReadable(Paths.get(deployDirectory.absolutePath))) {
         throw GradleException("Snapshot deploy directory ${deployDirectory.absolutePath} is not readable.")
     }
-
     val deployPath = deployDirectory.toPath()
     val files = deployDirectory.walkTopDown()
         .filter { it.isFile }
-        .map { file ->
-            val relativePath = deployPath.relativize(file.toPath()).toString().replace('\\', '/')
-            relativePath to file
-        }
-        .sortedWith(
-            compareBy<Pair<String, File>> { (relativePath, _) -> snapshotDeployUploadPriority(relativePath) }
-                .thenBy { (relativePath, _) -> relativePath }
-        )
+        .map { file -> deployPath.relativize(file.toPath()).toString().replace('\\', '/') to file }
+        .sortedWith(compareBy<Pair<String, File>> { snapshotDeployUploadPriority(it.first) }.thenBy { it.first })
         .toList()
-
     if(files.isEmpty()) {
         throw GradleException("Snapshot deploy directory ${deployDirectory.absolutePath} does not contain files to upload.")
     }
@@ -222,7 +594,6 @@ fun Project.uploadSnapshotDeployDirectory() {
     val password = requiredEnvironment("CENTRAL_PORTAL_PASSWORD")
     val repositoryBaseUrl = snapshotRepositoryUrl.trimEnd('/')
     files.forEach { (relativePath, file) ->
-        val uploadUrl = "$repositoryBaseUrl/${encodeMavenRepositoryPath(relativePath)}"
         providers.exec {
             commandLine(
                 "curl",
@@ -235,103 +606,20 @@ fun Project.uploadSnapshotDeployDirectory() {
                 "PUT",
                 "--upload-file",
                 file.absolutePath,
-                uploadUrl
+                "$repositoryBaseUrl/${encodeMavenRepositoryPath(relativePath)}"
             )
         }.result.get()
     }
     println("Uploaded ${files.size} snapshot deploy file(s) from ${deployDirectory.absolutePath}.")
 }
 
-fun isCentralReleaseArtifact(file: File): Boolean {
-    if(!file.isFile) {
-        return false
-    }
-    val name = file.name
-    return name.endsWith(".jar")
-        || name.endsWith(".aar")
-        || name.endsWith(".pom")
-        || name.endsWith(".module")
-}
-
-fun isPrimaryCentralReleaseArtifact(file: File): Boolean {
-    if(!file.isFile) {
-        return false
-    }
-    val name = file.name
-    if(name.endsWith(".aar")) {
-        return true
-    }
-    return name.endsWith(".jar")
-        && !name.endsWith("-sources.jar")
-        && !name.endsWith("-javadoc.jar")
-}
-
-fun Project.verifyReleaseStagingArtifacts() {
-    val stagingDirectory = releaseStagingDirectory()
-    if(!stagingDirectory.isDirectory) {
-        throw GradleException("Release staging directory ${stagingDirectory.absolutePath} does not exist. Run prepareReleaseDeploy first.")
-    }
-    val artifacts = stagingDirectory.walkTopDown()
-        .filter(::isCentralReleaseArtifact)
-        .toList()
-    if(artifacts.isEmpty()) {
-        throw GradleException("Release staging directory ${stagingDirectory.absolutePath} does not contain Maven Central artifacts.")
-    }
-    val stagingPath = stagingDirectory.toPath()
-    fun relativePath(file: File): String {
-        return stagingPath.relativize(file.toPath()).toString().replace('\\', '/')
-    }
-
-    val errors = mutableListOf<String>()
-    val missingSignatures = artifacts.filter { artifact ->
-        !File("${artifact.absolutePath}.asc").isFile
-    }
-    if(missingSignatures.isNotEmpty()) {
-        val listed = missingSignatures.take(40).joinToString(System.lineSeparator()) { artifact ->
-            " - ${relativePath(artifact)}.asc"
-        }
-        val suffix = if(missingSignatures.size > 40) {
-            "${System.lineSeparator()} - ... ${missingSignatures.size - 40} more missing signatures"
-        } else {
-            ""
-        }
-        errors.add("Release staging is missing ${missingSignatures.size} signature file(s):${System.lineSeparator()}$listed$suffix")
-    }
-
-    val missingSources = artifacts.groupBy { it.parentFile }
-        .filter { (_, files) ->
-            files.any(::isPrimaryCentralReleaseArtifact)
-                && files.none { it.name.endsWith("-sources.jar") }
-        }
-        .keys
-        .toList()
-    if(missingSources.isNotEmpty()) {
-        val listed = missingSources.take(40).joinToString(System.lineSeparator()) { directory ->
-            " - ${relativePath(directory)}/*-sources.jar"
-        }
-        val suffix = if(missingSources.size > 40) {
-            "${System.lineSeparator()} - ... ${missingSources.size - 40} more missing sources jars"
-        } else {
-            ""
-        }
-        errors.add("Release staging is missing sources jar(s) for ${missingSources.size} component(s):${System.lineSeparator()}$listed$suffix")
-    }
-
-    if(errors.isNotEmpty()) {
-        throw GradleException(errors.joinToString("${System.lineSeparator()}${System.lineSeparator()}"))
-    }
-}
-
-fun Project.uploadReleaseStagingZip() {
-    val zipFile = releaseStagingZipFile()
-    if(!zipFile.exists()) {
-        throw GradleException("Release staging zip ${zipFile.absolutePath} does not exist. Run prepareReleaseDeploy first.")
-    }
+fun Project.uploadReleaseDeployZip() {
+    val zipFile = releaseDeployZipFile()
     if(!zipFile.isFile) {
-        throw GradleException("Release staging zip ${zipFile.absolutePath} is not a file.")
+        throw GradleException("Release deploy zip ${zipFile.absolutePath} does not exist. Run prepareReleaseDeploy first.")
     }
     if(!Files.isReadable(Paths.get(zipFile.absolutePath))) {
-        throw GradleException("Release staging zip ${zipFile.absolutePath} is not readable.")
+        throw GradleException("Release deploy zip ${zipFile.absolutePath} is not readable.")
     }
 
     val username = requiredEnvironment("CENTRAL_PORTAL_USERNAME")
@@ -355,357 +643,104 @@ fun Project.uploadReleaseStagingZip() {
     }.result.get()
 }
 
-fun MavenPom.configureLibfdxPom(nameValue: String, descriptionValue: String) {
-    name.set(nameValue)
-    description.set(descriptionValue)
-    url.set("https://github.com/libmdx/libfdx")
-    developers {
-        developer {
-            id.set("Xpe")
-            name.set("Natan")
-        }
-    }
-    scm {
-        connection.set("scm:git:git://github.com/libmdx/libfdx.git")
-        developerConnection.set("scm:git:ssh://github.com/libmdx/libfdx.git")
-        url.set("https://github.com/libmdx/libfdx")
-    }
-    licenses {
-        license {
-            name.set("The Apache License, Version 2.0")
-            url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
-        }
-    }
-}
+fun Project.configureUploadTasks() {
+    configureReleaseSigningCredentials()
 
-fun Project.publishArtifactId(): String {
-    return extensions.findByType(BasePluginExtension::class.java)?.archivesName?.orNull
-            ?: name.replace('-', '_')
-}
-
-fun Project.publishDescription(): String {
-    return when {
-        path.contains(":backends:") -> "libFDX backend module ${publishArtifactId()}"
-        path.contains(":extensions:graphics:") -> "libFDX graphics provider module ${publishArtifactId()}"
-        path.contains(":graphics:") -> "libFDX graphics module ${publishArtifactId()}"
-        path.contains(":runtime:") -> "libFDX runtime module ${publishArtifactId()}"
-        path.contains(":foundation:") -> "libFDX foundation module ${publishArtifactId()}"
-        path.contains(":validation:") -> "libFDX validation module ${publishArtifactId()}"
-        path.contains(":tools:") -> "libFDX tool module ${publishArtifactId()}"
-        path.contains(":ui:") -> "libFDX UI module ${publishArtifactId()}"
-        path.contains(":assets:") -> "libFDX asset module ${publishArtifactId()}"
-        else -> "libFDX module ${publishArtifactId()}"
-    }
-}
-
-fun runtimeFdxNativeValidationTaskPaths(): List<String> {
-    return listOf(
-        ":libfdx:runtime:fdx:platform:desktop:validate_runtime_fdx_desktop_c_resources",
-        ":libfdx:runtime:fdx:platform:web:validate_runtime_fdx_web_native_resources"
-    )
-}
-
-fun Project.androidReleaseAarFile(): File {
-    return layout.buildDirectory.file("outputs/aar/${publishArtifactId()}-release.aar").get().asFile
-}
-
-fun Project.configurePomDependencies(pom: MavenPom, replaceExisting: Boolean) {
-    pom.withXml {
-        val projectNode = asNode()
-        if(replaceExisting) {
-            val existingDependencies = projectNode.children()
-                .filterIsInstance<Node>()
-                .filter { it.name().toString().substringAfterLast('}').substringAfterLast(':') == "dependencies" }
-            existingDependencies.forEach { projectNode.remove(it) }
-        }
-
-        val dependenciesNode = projectNode.appendNode("dependencies")
-        val seen = mutableSetOf<String>()
-
-        fun addDependency(group: String, artifact: String, version: String, scope: String) {
-            val key = "$group:$artifact"
-            if(!seen.add(key)) {
-                return
-            }
-            val dependencyNode = dependenciesNode.appendNode("dependency")
-            dependencyNode.appendNode("groupId", group)
-            dependencyNode.appendNode("artifactId", artifact)
-            dependencyNode.appendNode("version", version)
-            dependencyNode.appendNode("scope", scope)
-        }
-
-        fun addConfigurationDependencies(configurationName: String, scope: String) {
-            configurations.findByName(configurationName)?.dependencies?.forEach { dependency: Dependency ->
-                if(dependency is ProjectDependency) {
-                    val dependencyProject = rootProject.findProject(dependency.path)
-                        ?: throw GradleException("Could not resolve project dependency ${dependency.path} for ${project.path}")
-                    addDependency(
-                        libfdxGroup,
-                        dependencyProject.publishArtifactId(),
-                        libfdxVersion,
-                        scope
-                    )
-                } else {
-                    val group = dependency.group
-                    val version = dependency.version
-                    if(group != null && version != null) {
-                        addDependency(group, dependency.name, version, scope)
-                    }
-                }
-            }
-        }
-
-        addConfigurationDependencies("api", "compile")
-        addConfigurationDependencies("implementation", "runtime")
-
-        if(!dependenciesNode.children().isEmpty()) {
-            return@withXml
-        }
-        projectNode.remove(dependenciesNode)
-    }
-}
-
-fun Node.nodeLocalName(): String {
-    return name().toString().substringAfterLast('}').substringAfterLast(':')
-}
-
-fun Node.childText(name: String): String? {
-    return children()
-        .filterIsInstance<Node>()
-        .firstOrNull { it.nodeLocalName() == name }
-        ?.text()
-}
-
-fun Project.gradlePluginDependencyArtifacts(): List<String> {
-    if(!extensions.extraProperties.has(gradlePluginDependencyArtifactsProperty)) {
-        return emptyList()
-    }
-    val value = extensions.extraProperties.get(gradlePluginDependencyArtifactsProperty)
-    return when(value) {
-        is Iterable<*> -> value.mapNotNull { it?.toString()?.takeIf(String::isNotBlank) }
-        is Array<*> -> value.mapNotNull { it?.toString()?.takeIf(String::isNotBlank) }
-        else -> listOf(value.toString()).filter(String::isNotBlank)
-    }
-}
-
-fun Project.configureManualPomDependencies(pom: MavenPom) {
-    configurePomDependencies(pom, replaceExisting = false)
-}
-
-fun Project.configureGradlePluginImplementationPomDependencies(pom: MavenPom) {
-    configurePomDependencies(pom, replaceExisting = true)
-    val dependencyArtifacts = gradlePluginDependencyArtifacts()
-    if(dependencyArtifacts.isEmpty()) {
-        return
-    }
-    pom.withXml {
-        val projectNode = asNode()
-        val dependenciesNode = projectNode.children()
-            .filterIsInstance<Node>()
-            .firstOrNull { it.nodeLocalName() == "dependencies" }
-            ?: projectNode.appendNode("dependencies")
-        val seen = dependenciesNode.children()
-            .filterIsInstance<Node>()
-            .mapNotNull { dependency ->
-                val group = dependency.childText("groupId")
-                val artifact = dependency.childText("artifactId")
-                if(group == null || artifact == null) null else "$group:$artifact"
-            }
-            .toMutableSet()
-        dependencyArtifacts.forEach { artifact ->
-            if(!seen.add("$libfdxGroup:$artifact")) {
-                return@forEach
-            }
-            val dependencyNode = dependenciesNode.appendNode("dependency")
-            dependencyNode.appendNode("groupId", libfdxGroup)
-            dependencyNode.appendNode("artifactId", artifact)
-            dependencyNode.appendNode("version", libfdxVersion)
-            dependencyNode.appendNode("scope", "runtime")
-        }
-    }
-}
-
-fun Project.configureLibfdxMavenRepository() {
-    extensions.configure<PublishingExtension> {
-        repositories {
-            maven {
-                name = "libfdxDeploy"
-                url = when {
-                    isSnapshotLocalDeploy -> uri(snapshotDeployDirectory())
-                    isReleaseLocalDeploy -> uri(releaseStagingDirectory())
-                    libfdxVersion.endsWith("-SNAPSHOT") -> uri(snapshotRepositoryUrl)
-                    else -> uri(releaseStagingDirectory())
-                }
-                if(!isSnapshotLocalDeploy && !isReleaseLocalDeploy && libfdxVersion.endsWith("-SNAPSHOT")) {
-                    credentials {
-                        username = System.getenv("CENTRAL_PORTAL_USERNAME")
-                        password = System.getenv("CENTRAL_PORTAL_PASSWORD")
-                    }
-                }
-            }
-        }
-    }
-}
-
-fun Project.configureLibfdxSigning() {
-    if(libfdxVersion.endsWith("-SNAPSHOT")) {
-        return
-    }
-    val signingKey = releaseSigningKey()
-    val signingPassword = releaseSigningPassword()
-    requireReleaseSigning(signingKey, signingPassword)
-    if(signingKey != null && signingPassword != null) {
-        extensions.configure<SigningExtension> {
-            useInMemoryPgpKeys(signingKey, signingPassword)
-            sign(extensions.getByType(PublishingExtension::class.java).publications)
-        }
-    }
-}
-
-fun Project.configureLibfdxJavaPublishArtifacts(): TaskProvider<Jar> {
-    tasks.withType(Javadoc::class.java).configureEach {
-        options.encoding = "UTF-8"
-        (options as StandardJavadocDocletOptions).addStringOption("Xdoclint:none", "-quiet")
-    }
-    extensions.configure<JavaPluginExtension> {
-        withJavadocJar()
-    }
-    val javaExtension = extensions.getByType(JavaPluginExtension::class.java)
-    return tasks.register("sourcesJar", Jar::class.java) {
-        archiveClassifier.set("sources")
-        from(javaExtension.sourceSets.named("main").get().allJava)
-    }
-}
-
-fun Project.configureLibfdxLibraryPomMetadata() {
-    extensions.configure<PublishingExtension> {
-        publications.withType(MavenPublication::class.java).configureEach {
-            val artifact = publishArtifactId()
-            groupId = libfdxGroup
-            artifactId = artifact
-            version = libfdxVersion
-            pom.configureLibfdxPom("libFDX $artifact", publishDescription())
-        }
-    }
-}
-
-fun Project.configureLibfdxGradlePluginPomMetadata() {
-    extensions.configure<PublishingExtension> {
-        publications.withType(MavenPublication::class.java).configureEach {
-            groupId = libfdxGroup
-            version = libfdxVersion
-            pom.configureLibfdxPom(
-                "libFDX Gradle plugin",
-                "Gradle plugin for building libFDX web, desktop_c, PSP, and asset tasks."
-            )
-        }
-    }
-}
-
-fun Project.configureJavaPublication() {
-    apply(plugin = "maven-publish")
-    apply(plugin = "signing")
-    val sourcesJar = configureLibfdxJavaPublishArtifacts()
-    extensions.configure<PublishingExtension> {
-        publications.register("mavenJava", MavenPublication::class.java) {
-            from(components.getByName("java"))
-            artifact(sourcesJar)
-        }
-    }
-    afterEvaluate {
-        configureLibfdxLibraryPomMetadata()
-    }
-    configureLibfdxMavenRepository()
-    configureLibfdxSigning()
-}
-
-fun Project.configureAndroidPublication() {
-    apply(plugin = "maven-publish")
-    apply(plugin = "signing")
-    val androidJavadocJar = tasks.register("androidJavadocJar", Jar::class.java) {
-        archiveClassifier.set("javadoc")
-    }
-    val androidSourcesJar = tasks.register("androidSourcesJar", Jar::class.java) {
-        archiveClassifier.set("sources")
-        from(layout.projectDirectory.dir("src/main/java"))
-        from(layout.projectDirectory.dir("src/main/kotlin"))
-    }
-    val validateAndroidReleaseAar = tasks.register("validateAndroidReleaseAar") {
+    val signReleaseDeploy = tasks.register<Sign>("signReleaseDeploy") {
         group = "publishing"
-        description = "Validates that the generated Android release AAR exists before deploy publication."
-        doLast {
-            val aarFile = androidReleaseAarFile()
-            if(!aarFile.isFile) {
-                throw GradleException("Missing generated Android release AAR ${aarFile.absolutePath}. Build the Android release artifact before running deploy preparation.")
+        description = "Signs existing build/release-deploy Maven Central artifacts."
+        onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
+        doFirst {
+            val signingKey = releaseSigningKey()
+            val signingPassword = releaseSigningPassword()
+            if(signingKey == null || signingPassword == null) {
+                throw GradleException(
+                    "publishRelease requires release signing credentials because it signs existing build/release-deploy files. " +
+                        "Set SIGNING_KEY or PGP_SECRET, and SIGNING_PASSWORD or PGP_PASSPHRASE."
+                )
             }
+            val artifacts = releaseDeployArtifacts()
+            if(artifacts.isEmpty()) {
+                throw GradleException("Release deploy directory ${releaseDeployDirectory().absolutePath} does not contain Maven Central artifacts. Run prepareReleaseDeploy first.")
+            }
+            sign(*artifacts.toTypedArray())
         }
     }
-    afterEvaluate {
-        extensions.configure<PublishingExtension> {
-            publications.register("release", MavenPublication::class.java) {
-                if(isDeployPreparationTask) {
-                    artifact(androidReleaseAarFile()) {
-                        extension = "aar"
-                        builtBy(validateAndroidReleaseAar)
-                    }
-                    artifact(androidSourcesJar)
-                    configureManualPomDependencies(pom)
-                } else {
-                    from(components.getByName("release"))
-                }
-                artifact(androidJavadocJar)
-            }
-        }
-        configureLibfdxLibraryPomMetadata()
-        configureLibfdxMavenRepository()
-        configureLibfdxSigning()
-    }
-}
-
-fun Project.configureGradlePluginPublishing() {
-    apply(plugin = "maven-publish")
-    apply(plugin = "signing")
-
-    group = libfdxGroup
-    version = libfdxVersion
-
-    val sourcesJar = configureLibfdxJavaPublishArtifacts()
-    extensions.configure<PublishingExtension> {
-        publications.withType(MavenPublication::class.java).configureEach {
-            if(name == "pluginMaven") {
-                artifact(sourcesJar)
-                configureGradlePluginImplementationPomDependencies(pom)
-            }
-        }
-    }
-    configureLibfdxMavenRepository()
-    configureLibfdxGradlePluginPomMetadata()
-    configureLibfdxSigning()
-
-    tasks.register("prepareSnapshotDeploy") {
+    val verifyReleaseDeployArtifacts = tasks.register("verifyReleaseDeployArtifacts") {
         group = "publishing"
-        description = "Publish the libFDX Gradle plugin snapshot marker and implementation artifacts to a local repository."
-        dependsOn(tasks.withType(PublishToMavenRepository::class.java))
+        description = "Validates that release deploy artifacts have required sources jars and .asc signatures."
+        dependsOn(signReleaseDeploy)
+        doLast { verifyReleaseDeployArtifacts(requireSignatures = true) }
+    }
+    val zipReleaseDeploy = tasks.register<Zip>("zipReleaseDeploy") {
+        group = "publishing"
+        description = "Zips signed build/release-deploy files as build/release-deploy.zip."
+        dependsOn(verifyReleaseDeployArtifacts)
+        from(releaseDeployDirectory())
+        archiveFileName.set("release-deploy.zip")
+        destinationDirectory.set(releaseDeployZipFile().parentFile)
+    }
+    tasks.register("uploadSnapshotDeploy") {
+        group = "publishing"
+        description = "Uploads existing build/snapshot-deploy files to the Central Portal snapshot repository."
+        mustRunAfter("prepareSnapshotDeploy")
+        doLast { uploadSnapshotDeployDirectory() }
+    }
+    tasks.register("uploadReleaseDeploy") {
+        group = "publishing"
+        description = "Uploads existing build/release-deploy.zip to Maven Central Portal."
+        dependsOn(zipReleaseDeploy)
+        mustRunAfter("prepareReleaseDeploy")
+        doLast { uploadReleaseDeployZip() }
+    }
+    tasks.register("publishSnapshot") {
+        group = "publishing"
+        description = "Uploads existing build/snapshot-deploy files to the Central Portal snapshot repository."
+        dependsOn("uploadSnapshotDeploy")
         onlyIf { libfdxVersion.endsWith("-SNAPSHOT") }
     }
-
-    tasks.register("prepareReleaseDeploy") {
+    tasks.register("publishRelease") {
         group = "publishing"
-        description = "Publish the libFDX Gradle plugin release marker and implementation artifacts to a local repository."
-        dependsOn(tasks.withType(PublishToMavenRepository::class.java))
+        description = "Signs, zips, and uploads existing build/release-deploy files to Maven Central Portal."
+        dependsOn("uploadReleaseDeploy")
         onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
     }
 }
 
-fun Project.configureLibraryPublishing() {
+fun Project.configureGradlePluginDeploy() {
+    configureUploadTasks()
+    applyPublishingConventions()
+
+    val pluginPublishTasks = listOf(
+        "publishDeployLibfdxPluginMarkerMavenPublicationToLibfdxDeployRepository",
+        "publishDeployPluginMavenPublicationToLibfdxDeployRepository"
+    )
+    val verifyPreparedReleaseDeployArtifacts = tasks.register("verifyPreparedReleaseDeployArtifacts") {
+        group = "publishing"
+        description = "Validates that prepared release deploy artifacts have required sources jars."
+        dependsOn(pluginPublishTasks)
+        doLast { verifyReleaseDeployArtifacts(requireSignatures = false) }
+    }
+    tasks.register("prepareSnapshotDeploy") {
+        group = "publishing"
+        description = "Prepares libFDX Gradle plugin snapshot artifacts in build/snapshot-deploy."
+        dependsOn(pluginPublishTasks)
+        onlyIf { libfdxVersion.endsWith("-SNAPSHOT") }
+    }
+    tasks.register("prepareReleaseDeploy") {
+        group = "publishing"
+        description = "Prepares libFDX Gradle plugin release artifacts in build/release-deploy."
+        dependsOn(pluginPublishTasks, verifyPreparedReleaseDeployArtifacts)
+        onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
+    }
+}
+
+fun Project.configureRootLibraryDeploy() {
+    configureUploadTasks()
+
     val publishableProjects = libfdxPublishableProjects()
     publishableProjects.forEach { publishProject ->
-        publishProject.plugins.withId("java-library") {
-            publishProject.configureJavaPublication()
-        }
-        publishProject.plugins.withId("com.android.library") {
-            publishProject.configureAndroidPublication()
-        }
+        publishProject.applyPublishingConventions()
     }
 
     tasks.register("listMavenDeployProjects") {
@@ -718,29 +753,19 @@ fun Project.configureLibraryPublishing() {
         }
     }
 
-    val libraryPublishTasks = publishableProjects.map { project ->
-        project.tasks.withType(PublishToMavenRepository::class.java)
-    }
+    val libraryPublishTasks = publishableProjects.map { "${it.path}:publishDeployMavenPublicationToLibfdxDeployRepository" }
     val gradlePluginBuildDir = layout.projectDirectory.dir("libfdx/tools/gradle-plugin").asFile
     val cleanSnapshotDeployDirectory = tasks.register("cleanSnapshotDeployDirectory") {
         group = "publishing"
-        description = "Deletes the local snapshot deploy directory before preparing deploy artifacts."
-        doLast {
-            snapshotDeployDirectory().deleteRecursively()
-        }
+        description = "Deletes build/snapshot-deploy."
+        doLast { snapshotDeployDirectory().deleteRecursively() }
     }
-    val cleanReleaseStagingDirectory = tasks.register("cleanReleaseStagingDirectory") {
+    val cleanReleaseDeployDirectory = tasks.register("cleanReleaseDeployDirectory") {
         group = "publishing"
-        description = "Deletes the local release staging deploy directory before preparing deploy artifacts."
+        description = "Deletes build/release-deploy and build/release-deploy.zip."
         doLast {
-            releaseStagingDirectory().deleteRecursively()
-            releaseStagingZipFile().delete()
-        }
-    }
-    libraryPublishTasks.forEach { publishTasks ->
-        publishTasks.configureEach {
-            mustRunAfter(cleanSnapshotDeployDirectory)
-            mustRunAfter(cleanReleaseStagingDirectory)
+            releaseDeployDirectory().deleteRecursively()
+            releaseDeployZipFile().delete()
         }
     }
     val validateRuntimeFdxNativeResources = tasks.register("validateRuntimeFdxNativeResources") {
@@ -749,113 +774,63 @@ fun Project.configureLibraryPublishing() {
         dependsOn(runtimeFdxNativeValidationTaskPaths())
     }
 
-    tasks.register<GradleBuild>("prepareGradlePluginSnapshotDeploy") {
+    publishableProjects.forEach { project ->
+        project.tasks.matching { it.name == "publishDeployMavenPublicationToLibfdxDeployRepository" }.configureEach {
+            mustRunAfter(cleanSnapshotDeployDirectory, cleanReleaseDeployDirectory)
+        }
+    }
+
+    val prepareGradlePluginSnapshotDeploy = tasks.register<GradleBuild>("prepareGradlePluginSnapshotDeploy") {
         group = "publishing"
-        description = "Prepare local snapshot deploy files for the libFDX Gradle plugin."
-        dependsOn(validateRuntimeFdxNativeResources)
-        dependsOn(libraryPublishTasks)
+        description = "Prepares Gradle plugin snapshot artifacts in build/snapshot-deploy."
+        dependsOn(validateRuntimeFdxNativeResources, libraryPublishTasks)
         mustRunAfter(cleanSnapshotDeployDirectory)
         dir = gradlePluginBuildDir
         tasks = listOf("prepareSnapshotDeploy")
     }
-
-    tasks.register<GradleBuild>("prepareGradlePluginReleaseDeploy") {
+    val prepareGradlePluginReleaseDeploy = tasks.register<GradleBuild>("prepareGradlePluginReleaseDeploy") {
         group = "publishing"
-        description = "Prepare local release deploy files for the libFDX Gradle plugin."
-        dependsOn(validateRuntimeFdxNativeResources)
-        dependsOn(libraryPublishTasks)
-        mustRunAfter(cleanReleaseStagingDirectory)
+        description = "Prepares Gradle plugin release artifacts in build/release-deploy."
+        dependsOn(validateRuntimeFdxNativeResources, libraryPublishTasks)
+        mustRunAfter(cleanReleaseDeployDirectory)
         dir = gradlePluginBuildDir
         tasks = listOf("prepareReleaseDeploy")
     }
-
-    val verifyReleaseStagingArtifacts = tasks.register("verifyReleaseStagingArtifacts") {
+    val verifyPreparedReleaseDeployArtifacts = tasks.register("verifyPreparedReleaseDeployArtifacts") {
         group = "publishing"
-        description = "Validates that staged release artifacts have required sources jars and .asc signatures."
-        dependsOn(libraryPublishTasks)
-        dependsOn("prepareGradlePluginReleaseDeploy")
-        mustRunAfter(cleanReleaseStagingDirectory)
-        onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
-        doLast {
-            verifyReleaseStagingArtifacts()
-        }
+        description = "Validates that prepared release deploy artifacts have required sources jars."
+        dependsOn(libraryPublishTasks, prepareGradlePluginReleaseDeploy)
+        mustRunAfter(cleanReleaseDeployDirectory)
+        doLast { verifyReleaseDeployArtifacts(requireSignatures = false) }
     }
 
     tasks.register("prepareSnapshotDeploy") {
         group = "publishing"
-        description = "Publish all libFDX snapshot artifacts to build/snapshot-deploy."
-        dependsOn(cleanSnapshotDeployDirectory)
-        dependsOn(validateRuntimeFdxNativeResources)
-        dependsOn(libraryPublishTasks)
-        dependsOn("prepareGradlePluginSnapshotDeploy")
+        description = "Prepares snapshot deploy files in build/snapshot-deploy."
+        dependsOn(cleanSnapshotDeployDirectory, validateRuntimeFdxNativeResources, libraryPublishTasks, prepareGradlePluginSnapshotDeploy)
         onlyIf { libfdxVersion.endsWith("-SNAPSHOT") }
     }
-
-    tasks.register<Zip>("zipStagingDeploy") {
-        group = "publishing"
-        description = "Zip staged libFDX release artifacts for Central Portal upload."
-        dependsOn(cleanReleaseStagingDirectory)
-        dependsOn(validateRuntimeFdxNativeResources)
-        dependsOn(verifyReleaseStagingArtifacts)
-        from(releaseStagingDirectory())
-        archiveFileName.set("staging-deploy.zip")
-        destinationDirectory.set(releaseStagingZipFile().parentFile)
-        onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
-    }
-
     tasks.register("prepareReleaseDeploy") {
         group = "publishing"
-        description = "Publish all libFDX release artifacts to build/staging-deploy and create staging-deploy.zip."
-        dependsOn("zipStagingDeploy")
-        onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
-    }
-
-    tasks.register<GradleBuild>("publishGradlePluginSnapshot") {
-        group = "publishing"
-        description = "Publish the libFDX Gradle plugin snapshot marker and implementation artifacts."
-        dir = gradlePluginBuildDir
-        tasks = listOf("publish")
-    }
-
-    tasks.register("publishSnapshot") {
-        group = "publishing"
-        description = "Prepare and upload build/snapshot-deploy to the Central Portal snapshot repository."
-        dependsOn("prepareSnapshotDeploy")
-        dependsOn("uploadSnapshotDeploy")
-        onlyIf { libfdxVersion.endsWith("-SNAPSHOT") }
-    }
-
-    tasks.register("uploadSnapshotDeploy") {
-        group = "publishing"
-        description = "Upload build/snapshot-deploy to the Central Portal snapshot repository."
-        mustRunAfter("prepareSnapshotDeploy")
-        onlyIf { libfdxVersion.endsWith("-SNAPSHOT") }
-        doLast {
-            uploadSnapshotDeployDirectory()
-        }
-    }
-
-    tasks.register("uploadToMavenCentral") {
-        group = "publishing"
-        description = "Upload build/staging-deploy.zip to Maven Central Portal."
-        dependsOn("zipStagingDeploy")
-        onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
-        doLast {
-            uploadReleaseStagingZip()
-        }
-    }
-
-    tasks.register("publishRelease") {
-        group = "publishing"
-        description = "Prepare libFDX release deploy files and upload them to Maven Central Portal."
-        dependsOn("prepareReleaseDeploy")
-        finalizedBy("uploadToMavenCentral")
+        description = "Prepares unsigned release deploy files in build/release-deploy."
+        dependsOn(cleanReleaseDeployDirectory, validateRuntimeFdxNativeResources, libraryPublishTasks, prepareGradlePluginReleaseDeploy, verifyPreparedReleaseDeployArtifacts)
         onlyIf { !libfdxVersion.endsWith("-SNAPSHOT") }
     }
 }
 
-when(publishTarget) {
-    "LIBRARIES" -> configureLibraryPublishing()
-    "GRADLE_PLUGIN" -> configureGradlePluginPublishing()
-    else -> throw GradleException("$publishTargetProperty has unsupported value '$publishTarget'")
+fun Node.removeDependencyNodes() {
+    children()
+        .filterIsInstance<Node>()
+        .filter { it.nodeLocalName() == "dependencies" }
+        .forEach { remove(it) }
+}
+
+fun Node.nodeLocalName(): String {
+    return name().toString().substringAfterLast('}').substringAfterLast(':')
+}
+
+when {
+    plugins.hasPlugin("java-gradle-plugin") -> configureGradlePluginDeploy()
+    hasLibfdxPublishableProjects() -> configureRootLibraryDeploy()
+    else -> throw GradleException("publish.gradle.kts must be applied to the libFDX root build or the libFDX Gradle plugin build.")
 }

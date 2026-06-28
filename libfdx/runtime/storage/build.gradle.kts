@@ -1,6 +1,7 @@
 import io.github.libfdx.build.LibExt
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -11,8 +12,10 @@ java {
 
 group = "${LibExt.fdxGroup}.storage"
 
+val moduleName = "storage"
+
 base {
-    archivesName.set("storage")
+    archivesName.set(moduleName)
 }
 
 dependencies {
@@ -25,4 +28,17 @@ dependencies {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

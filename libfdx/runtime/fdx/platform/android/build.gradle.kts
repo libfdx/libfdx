@@ -2,6 +2,7 @@ import io.github.libfdx.build.LibExt
 import org.gradle.api.GradleException
 
 plugins {
+    id("maven-publish")
     alias(libs.plugins.android.library)
 }
 
@@ -39,8 +40,10 @@ android {
     }
 }
 
+val moduleName = "fdx_android"
+
 base {
-    archivesName.set("fdx_android")
+    archivesName.set(moduleName)
 }
 
 val prepareRuntimeFdxAndroidNative = tasks.register("prepare_runtime_fdx_android_native") {
@@ -73,6 +76,26 @@ tasks.register("validate_runtime_fdx_android_jni_libs") {
                     missing.joinToString(separator = "\n") { " - ${it.absolutePath}" } + "\n" +
                     "Run :libfdx:runtime:fdx:platform:android:prepare_runtime_fdx_android_native first."
             )
+        }
+    }
+}
+val androidJavadocJar = tasks.register("androidJavadocJar", org.gradle.api.tasks.bundling.Jar::class) {
+    archiveClassifier.set("javadoc")
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            artifact(androidJavadocJar)
+        }
+    }
+}
+
+afterEvaluate {
+    publishing {
+        publications.named<MavenPublication>("maven") {
+            from(components["release"])
         }
     }
 }

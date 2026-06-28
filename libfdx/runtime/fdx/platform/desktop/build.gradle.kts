@@ -4,6 +4,7 @@ import org.gradle.api.tasks.Copy
 import org.gradle.language.jvm.tasks.ProcessResources
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -14,8 +15,10 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
+val moduleName = "fdx_desktop"
+
 base {
-    archivesName.set("fdx_desktop")
+    archivesName.set(moduleName)
 }
 
 val fdxBuildProject = project(":libfdx:runtime:fdx:fdx-build")
@@ -149,6 +152,19 @@ tasks.register("validate_runtime_fdx_desktop_c_resources") {
                 "Missing generated fdx_desktop C resources:\n" +
                     missingRequiredFiles.joinToString(separator = "\n") { " - ${it.absolutePath}" }
             )
+        }
+    }
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
         }
     }
 }

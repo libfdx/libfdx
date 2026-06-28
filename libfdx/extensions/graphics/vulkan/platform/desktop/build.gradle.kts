@@ -1,6 +1,7 @@
 import io.github.libfdx.build.LibExt
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -11,11 +12,26 @@ java {
 
 group = "${LibExt.fdxGroup}.vulkan"
 
+val moduleName = "vulkan_desktop"
+
 base {
-    archivesName.set("vulkan_desktop")
+    archivesName.set(moduleName)
 }
 
 dependencies {
     api(project(":libfdx:extensions:graphics:vulkan:core"))
     runtimeOnly(libs.lwjgl.vulkan)
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

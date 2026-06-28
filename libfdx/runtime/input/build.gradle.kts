@@ -1,6 +1,7 @@
 import io.github.libfdx.build.LibExt
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -11,10 +12,25 @@ java {
 
 group = "${LibExt.fdxGroup}.input"
 
+val moduleName = "input"
+
 base {
-    archivesName.set("input")
+    archivesName.set(moduleName)
 }
 
 dependencies {
     api(project(":libfdx:runtime:fdx:core"))
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

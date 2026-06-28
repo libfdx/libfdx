@@ -1,4 +1,5 @@
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -7,8 +8,10 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
+val moduleName = "backend_web"
+
 base {
-    archivesName.set("backend_web")
+    archivesName.set(moduleName)
 }
 
 dependencies {
@@ -28,4 +31,17 @@ dependencies {
     implementation(libs.teavm.jso.impl)
     implementation("org.teavm:teavm-platform:${libs.versions.teavm.get()}")
     compileOnly("org.teavm:teavm-core:${libs.versions.teavm.get()}")
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

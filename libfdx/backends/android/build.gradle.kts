@@ -1,4 +1,5 @@
 plugins {
+    id("maven-publish")
     alias(libs.plugins.android.library)
 }
 
@@ -25,8 +26,10 @@ android {
     }
 }
 
+val moduleName = "backend_android"
+
 base {
-    archivesName.set("backend_android")
+    archivesName.set(moduleName)
 }
 
 dependencies {
@@ -41,4 +44,24 @@ dependencies {
     api(project(":libfdx:graphics:api"))
     api(project(":libfdx:extensions:graphics:gl:core"))
     api(project(":libfdx:extensions:graphics:vulkan:core"))
+}
+val androidJavadocJar = tasks.register("androidJavadocJar", org.gradle.api.tasks.bundling.Jar::class) {
+    archiveClassifier.set("javadoc")
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            artifact(androidJavadocJar)
+        }
+    }
+}
+
+afterEvaluate {
+    publishing {
+        publications.named<MavenPublication>("maven") {
+            from(components["release"])
+        }
+    }
 }

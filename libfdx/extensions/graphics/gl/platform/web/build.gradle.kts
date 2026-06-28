@@ -1,6 +1,7 @@
 import io.github.libfdx.build.LibExt
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -11,8 +12,10 @@ java {
 
 group = "${LibExt.fdxGroup}.gl"
 
+val moduleName = "gl_web"
+
 base {
-    archivesName.set("gl_web")
+    archivesName.set(moduleName)
 }
 
 dependencies {
@@ -21,4 +24,17 @@ dependencies {
     implementation(libs.teavm.jso)
     implementation(libs.teavm.jso.apis)
     implementation(libs.teavm.jso.impl)
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

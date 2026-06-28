@@ -2,6 +2,7 @@ import io.github.libfdx.build.LibExt
 import org.gradle.api.tasks.Copy
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -12,8 +13,10 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
+val moduleName = "fdx_shared"
+
 base {
-    archivesName.set("fdx_shared")
+    archivesName.set(moduleName)
 }
 
 val runtimeFdxSharedNativeResources = layout.buildDirectory.dir("generated/resources/runtimeFdxSharedNative")
@@ -42,4 +45,17 @@ sourceSets {
 
 tasks.named("processResources") {
     dependsOn(copyRuntimeFdxSharedNativeSources)
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

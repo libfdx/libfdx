@@ -1,6 +1,7 @@
 import org.gradle.api.tasks.Copy
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -9,8 +10,10 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
+val moduleName = "backend_desktop_c"
+
 base {
-    archivesName.set("backend_desktop_c")
+    archivesName.set(moduleName)
 }
 
 val runtimeFdxSharedNativeSourceDir = rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp")
@@ -49,4 +52,17 @@ dependencies {
     api(libs.teavm.interop)
 
     runtimeOnly(project(":libfdx:runtime:fdx:platform:shared"))
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

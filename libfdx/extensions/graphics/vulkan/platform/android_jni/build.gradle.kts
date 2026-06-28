@@ -1,6 +1,7 @@
 import io.github.libfdx.build.LibExt
 
 plugins {
+    id("maven-publish")
     alias(libs.plugins.android.library)
 }
 
@@ -42,8 +43,10 @@ android {
     }
 }
 
+val moduleName = "vulkan_android_jni"
+
 base {
-    archivesName.set("vulkan_android_jni")
+    archivesName.set(moduleName)
 }
 
 tasks.named<Delete>("clean") {
@@ -52,4 +55,24 @@ tasks.named<Delete>("clean") {
 
 dependencies {
     api(project(":libfdx:extensions:graphics:vulkan:core"))
+}
+val androidJavadocJar = tasks.register("androidJavadocJar", org.gradle.api.tasks.bundling.Jar::class) {
+    archiveClassifier.set("javadoc")
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            artifact(androidJavadocJar)
+        }
+    }
+}
+
+afterEvaluate {
+    publishing {
+        publications.named<MavenPublication>("maven") {
+            from(components["release"])
+        }
+    }
 }

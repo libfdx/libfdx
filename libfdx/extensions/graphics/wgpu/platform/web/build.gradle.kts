@@ -1,6 +1,7 @@
 import io.github.libfdx.build.LibExt
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -11,8 +12,10 @@ java {
 
 group = "${LibExt.fdxGroup}.wgpu"
 
+val moduleName = "wgpu_web"
+
 base {
-    archivesName.set("wgpu_web")
+    archivesName.set(moduleName)
 }
 
 dependencies {
@@ -25,4 +28,17 @@ dependencies {
     implementation(libs.teavm.jso)
     implementation(libs.teavm.jso.apis)
     implementation(libs.teavm.jso.impl)
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

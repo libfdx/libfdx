@@ -305,30 +305,4 @@ fun writeSelectorPage(output: File, title: String, links: List<Pair<String, Stri
     )
 }
 
-fun isMavenPublishingTaskRequested(): Boolean {
-    val explicitPublishingTasks = setOf(
-        "cleanReleaseStagingDirectory",
-        "cleanSnapshotDeployDirectory",
-        "listMavenDeployProjects",
-        "prepareGradlePluginReleaseDeploy",
-        "prepareGradlePluginSnapshotDeploy",
-        "prepareReleaseDeploy",
-        "prepareSnapshotDeploy",
-        "publishRelease",
-        "publishSnapshot",
-        "uploadSnapshotDeploy",
-        "uploadToMavenCentral",
-        "validateRuntimeFdxNativeResources",
-        "zipStagingDeploy"
-    )
-    return gradle.startParameter.taskNames
-        .map { it.substringAfterLast(":") }
-        .any { taskName ->
-            taskName in explicitPublishingTasks || taskName.startsWith("publish")
-        }
-}
-
-if (isMavenPublishingTaskRequested()) {
-    extra["libfdxPublishTarget"] = LibfdxPublishTarget.LIBRARIES
-    apply(plugin = "publish")
-}
+apply(plugin = "publish")

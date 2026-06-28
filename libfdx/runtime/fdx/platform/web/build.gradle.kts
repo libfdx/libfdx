@@ -4,6 +4,7 @@ import org.gradle.api.tasks.Copy
 import org.gradle.language.jvm.tasks.ProcessResources
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -14,8 +15,10 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
+val moduleName = "fdx_web"
+
 base {
-    archivesName.set("fdx_web")
+    archivesName.set(moduleName)
 }
 
 val fdxBuildProject = project(":libfdx:runtime:fdx:fdx-build")
@@ -82,6 +85,19 @@ tasks.register("validate_runtime_fdx_web_native_resources") {
                     missing.joinToString(separator = "\n") { " - ${it.absolutePath}" } + "\n" +
                     "Run :libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native first."
             )
+        }
+    }
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
         }
     }
 }

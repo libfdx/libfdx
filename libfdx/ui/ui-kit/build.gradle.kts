@@ -1,6 +1,7 @@
 import io.github.libfdx.build.LibExt
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -11,8 +12,10 @@ java {
 
 group = "${LibExt.fdxGroup}.ui"
 
+val moduleName = "ui_kit"
+
 base {
-    archivesName.set("ui_kit")
+    archivesName.set(moduleName)
 }
 
 dependencies {
@@ -23,4 +26,17 @@ dependencies {
     api(project(":libfdx:assets:loaders"))
     api(project(":libfdx:graphics:api"))
     api(project(":libfdx:graphics:g2d"))
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

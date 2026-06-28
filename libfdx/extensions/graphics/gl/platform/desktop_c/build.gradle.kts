@@ -1,6 +1,7 @@
 import io.github.libfdx.build.LibExt
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -11,11 +12,26 @@ java {
 
 group = "${LibExt.fdxGroup}.gl"
 
+val moduleName = "gl_desktop_c"
+
 base {
-    archivesName.set("gl_desktop_c")
+    archivesName.set(moduleName)
 }
 
 dependencies {
     api(project(":libfdx:extensions:graphics:gl:core"))
     runtimeOnly(project(":libfdx:backends:c_shared"))
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }

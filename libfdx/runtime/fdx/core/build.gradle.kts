@@ -1,4 +1,5 @@
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -7,6 +8,21 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
+val moduleName = "fdx"
+
 base {
-    archivesName.set("fdx")
+    archivesName.set(moduleName)
+}
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }
