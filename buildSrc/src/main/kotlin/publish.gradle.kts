@@ -407,34 +407,41 @@ fun Project.configureDeployArtifacts(publication: MavenPublication) {
 
     val files = deployArtifactFiles(publication.artifactId)
     val validateArtifacts = validateExistingDeployArtifactsTask(publication.artifactId, files)
+    val artifactBuildTasks = files.flatMap { it.buildTasks }.distinct()
+    val artifactBuildTaskCollections = artifactBuildTasks.map { taskName -> tasks.matching { it.name == taskName } }
     publication.setArtifacts(emptyList<Any>())
     files.forEach { artifact ->
         publication.artifact(artifact.file) {
             artifact.classifier?.let { classifier = it }
             artifact.extension?.let { extension = it }
+            artifact.buildTasks.forEach { taskName -> builtBy(tasks.matching { it.name == taskName }) }
             builtBy(validateArtifacts)
         }
+    }
+    tasks.matching { it.name == validateArtifacts.name }.configureEach {
+        artifactBuildTaskCollections.forEach { dependsOn(it) }
     }
 }
 
 data class DeployArtifact(
     val file: File,
     val classifier: String? = null,
-    val extension: String? = null
+    val extension: String? = null,
+    val buildTasks: List<String> = emptyList()
 )
 
 fun Project.deployArtifactFiles(artifactId: String): List<DeployArtifact> {
     return if(isAndroidLibraryProject()) {
         listOf(
             DeployArtifact(layout.buildDirectory.file("outputs/aar/$artifactId-release.aar").get().asFile, extension = "aar"),
-            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}-sources.jar").get().asFile, classifier = "sources"),
-            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}-javadoc.jar").get().asFile, classifier = "javadoc")
+            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}-sources.jar").get().asFile, classifier = "sources", buildTasks = listOf("androidSourcesJar")),
+            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}-javadoc.jar").get().asFile, classifier = "javadoc", buildTasks = listOf("androidJavadocJar"))
         )
     } else {
         listOf(
-            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}.jar").get().asFile),
-            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}-sources.jar").get().asFile, classifier = "sources"),
-            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}-javadoc.jar").get().asFile, classifier = "javadoc")
+            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}.jar").get().asFile, buildTasks = listOf("jar")),
+            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}-sources.jar").get().asFile, classifier = "sources", buildTasks = listOf("sourcesJar")),
+            DeployArtifact(layout.buildDirectory.file("libs/$artifactId-${LibExt.fdxVersion}-javadoc.jar").get().asFile, classifier = "javadoc", buildTasks = listOf("javadocJar"))
         )
     }
 }
@@ -452,10 +459,10 @@ fun Project.validateExistingDeployArtifactsTask(
             if(missing.isNotEmpty()) {
                 val listed = missing.joinToString(System.lineSeparator()) { " - ${it.absolutePath}" }
                 throw GradleException(
-                    "Deploy preparation only stages existing artifacts and does not build them." +
+                    "Deploy preparation builds Java deploy artifacts and stages existing native/Android artifacts." +
                         "${System.lineSeparator()}Missing artifact file(s):" +
                         "${System.lineSeparator()}$listed" +
-                        "${System.lineSeparator()}Build ${project.path} artifacts before deploy preparation."
+                        "${System.lineSeparator()}Build or download required native/Android artifacts before deploy preparation."
                 )
             }
         }

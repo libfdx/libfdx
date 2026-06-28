@@ -60,6 +60,11 @@ val androidJavadocJar = tasks.register("androidJavadocJar", org.gradle.api.tasks
     archiveClassifier.set("javadoc")
 }
 
+tasks.register("androidSourcesJar", org.gradle.api.tasks.bundling.Jar::class) {
+    archiveClassifier.set("sources")
+    from(android.sourceSets.getByName("main").java.srcDirs)
+}
+
 publishing {
     publications {
         create<MavenPublication>("maven") {

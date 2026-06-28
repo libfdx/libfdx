@@ -51,6 +51,10 @@ java {
     withJavadocJar()
 }
 
+tasks.named("sourcesJar") {
+    dependsOn(copyRuntimeFdxSharedNativeSources)
+}
+
 publishing {
     publications {
         create<MavenPublication>("maven") {
