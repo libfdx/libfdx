@@ -54,16 +54,7 @@ change needs deterministic pass/fail evidence.
 ## 3. Repository Dependency Mode
 
 Tests and samples can run against either the local source modules or already
-published libFDX artifacts. This is controlled by the development block in
-`libfdx.toml`, with local overrides from ignored `local.properties`:
-
-```toml
-[development]
-usePublishedLibfdx = false
-publishedLibfdxVersion = "-SNAPSHOT"
-```
-
-This TOML default makes a clean checkout compile and exercise the local
+published libFDX artifacts. A clean checkout compiles and exercises the local
 `:libfdx:*` project dependencies and the local `libfdx/tools/gradle-plugin`
 build. That is the expected mode for repository development and CI because
 task wiring, samples, and tests must match the source that was checked out.
@@ -72,7 +63,7 @@ instead of applying the plugin. The included plugin build must stay isolated to
 the plugin project; it must not include or remap root `:libfdx:*` source modules
 under the plugin build id.
 
-Use ignored `local.properties` overrides when checking published artifacts:
+Use ignored root `local.properties` overrides when checking published artifacts:
 
 ```properties
 development.usePublishedLibfdx=true

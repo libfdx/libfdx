@@ -2,6 +2,7 @@ import io.github.libfdx.build.LibExt
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -12,8 +13,10 @@ java {
 
 group = "${LibExt.fdxGroup}.webrtc"
 
+val moduleName = "webrtc_signaling_server"
+
 base {
-    archivesName.set("webrtc_signaling_server")
+    archivesName.set(moduleName)
 }
 
 dependencies {
@@ -25,6 +28,20 @@ dependencies {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+}
+
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }
 
 val signalingMainClass = "io.github.libfdx.net.webrtc.signaling.server.WebRtcSignalingServerLauncher"

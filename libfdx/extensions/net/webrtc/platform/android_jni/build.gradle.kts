@@ -1,6 +1,7 @@
 import io.github.libfdx.build.LibExt
 
 plugins {
+    id("maven-publish")
     alias(libs.plugins.android.library)
 }
 
@@ -29,12 +30,40 @@ android {
     }
 }
 
+val moduleName = "webrtc_android_jni"
+
 base {
-    archivesName.set("webrtc_android_jni")
+    archivesName.set(moduleName)
 }
 
 dependencies {
     api(project(":libfdx:extensions:net:webrtc:core"))
     api(libs.webrtc.android)
     implementation(libs.java.websocket)
+}
+
+val androidJavadocJar = tasks.register("androidJavadocJar", org.gradle.api.tasks.bundling.Jar::class) {
+    archiveClassifier.set("javadoc")
+}
+
+tasks.register("androidSourcesJar", org.gradle.api.tasks.bundling.Jar::class) {
+    archiveClassifier.set("sources")
+    from(android.sourceSets.getByName("main").java.srcDirs)
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            artifact(androidJavadocJar)
+        }
+    }
+}
+
+afterEvaluate {
+    publishing {
+        publications.named<MavenPublication>("maven") {
+            from(components["release"])
+        }
+    }
 }

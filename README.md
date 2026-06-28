@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/libfdx/libfdx/actions/workflows/workflow_snapshot.yml/badge.svg)](https://github.com/libfdx/libfdx/actions/workflows/workflow_snapshot.yml)
 [![Maven Central Version](https://img.shields.io/maven-central/v/io.github.libfdx/fdx)](https://central.sonatype.com/artifact/io.github.libfdx/fdx)
-[![Snapshot](https://img.shields.io/badge/snapshot--SNAPSHOT-red)](https://central.sonatype.com/service/rest/repository/browse/maven-snapshots/io/github/libfdx/fdx/)
+[![Snapshot](https://img.shields.io/badge/snapshot-0.0.1--SNAPSHOT-red)](https://central.sonatype.com/service/rest/repository/browse/maven-snapshots/io/github/libfdx/fdx/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 libFDX is a modular Java game framework focused on provider-neutral application,

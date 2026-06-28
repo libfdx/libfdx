@@ -1,6 +1,7 @@
 import io.github.libfdx.build.LibExt
 
 plugins {
+    id("maven-publish")
     id("java-library")
 }
 
@@ -11,8 +12,10 @@ java {
 
 group = "${LibExt.fdxGroup}.webrtc"
 
+val moduleName = "webrtc_desktop_jni"
+
 base {
-    archivesName.set("webrtc_desktop_jni")
+    archivesName.set(moduleName)
 }
 
 dependencies {
@@ -31,4 +34,18 @@ dependencies {
 tasks.named<Test>("test") {
     useJUnitPlatform()
     jvmArgs("--enable-native-access=ALL-UNNAMED")
+}
+
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = moduleName
+            from(components["java"])
+        }
+    }
 }
