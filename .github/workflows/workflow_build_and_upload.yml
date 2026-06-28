@@ -205,6 +205,7 @@ jobs:
             libfdx/backends/android/build/outputs/aar/*.aar
             libfdx/extensions/graphics/vulkan/platform/android_jni/build/outputs/aar/*.aar
             libfdx/extensions/graphics/wgpu/platform/android_jni/build/outputs/aar/*.aar
+            libfdx/extensions/net/webrtc/platform/android_jni/build/outputs/aar/*.aar
           if-no-files-found: error
 
   publish:
@@ -314,6 +315,7 @@ jobs:
             "libfdx/backends/android/build/outputs/aar/backend_android-release.aar"
             "libfdx/extensions/graphics/vulkan/platform/android_jni/build/outputs/aar/vulkan_android_jni-release.aar"
             "libfdx/extensions/graphics/wgpu/platform/android_jni/build/outputs/aar/wgpu_android_jni-release.aar"
+            "libfdx/extensions/net/webrtc/platform/android_jni/build/outputs/aar/webrtc_android_jni-release.aar"
           )
           for file in "${required_files[@]}"; do
             if [ ! -f "$file" ]; then

@@ -40,7 +40,8 @@ val nativeArtifactTaskPaths = listOf(
     ":libfdx:runtime:fdx:platform:android:assembleRelease",
     ":libfdx:backends:android:assembleRelease",
     ":libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease",
-    ":libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease"
+    ":libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease",
+    ":libfdx:extensions:net:webrtc:platform:android_jni:assembleRelease"
 )
 
 tasks.register("libfdx_build_native_artifacts") {
@@ -86,7 +87,8 @@ tasks.register("libfdx_build_android_native_artifacts_prebuilt") {
         ":libfdx:runtime:fdx:platform:android:assemble_runtime_fdx_android_release_prebuilt",
         ":libfdx:backends:android:assembleRelease",
         ":libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease",
-        ":libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease"
+        ":libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease",
+        ":libfdx:extensions:net:webrtc:platform:android_jni:assembleRelease"
     )
 }
 
