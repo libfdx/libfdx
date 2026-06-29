@@ -29,7 +29,7 @@ editor/runtime compiler behavior, see [SHADERS.md](SHADERS.md).
 ## 1. Goals
 
 - Build a modular Java game framework.
-- Keep the core module small and avoid forcing optional systems into foundation modules.
+- Keep the core module small and avoid forcing optional systems into foundation-style modules.
 - Start with a modern WebGPU/wgpu graphics direction.
 - Keep modules plug-and-play, including UI, rendering helpers, tools, external extensions, and backends.
 - Keep dependency boundaries clear and explicit.
@@ -40,11 +40,7 @@ Use a small number of broad folders. A new top-level folder should exist only wh
 
 | Folder | Rule |
 | --- | --- |
-| `foundation/` | Tiny backend-neutral foundation only: base contracts, math, JSON, collections. If a module talks to platform services, assets, graphics, audio devices, or user input, it does not belong here. |
-| `runtime/` | Runtime-facing engine services: core native/runtime services, app lifecycle, files, input, display/presentation area, audio, networking. These are backend-neutral APIs implemented or supplied by backends. |
-| `assets/` | Asset management and asset loading. Assets are not foundation code because they involve lifetime, loading, dependencies, and often files or graphics resources. |
-| `graphics/` | Common GPU API plus built-in 2D/3D rendering toolkits. Platform-backed graphics providers such as wgpu and Vulkan belong in `extensions/graphics`. |
-| `ui/` | Built-in libfdx UI modules, starting with `ui-kit`. |
+| `framework/` | Portable first-party framework modules. This includes the `fdx` runtime service family, foundation-style helpers such as math/JSON/collections, runtime-facing APIs, assets, common graphics, built-in 2D/3D toolkits, and `ui-kit`. `framework` is a source/Gradle organization parent only; Java packages and Maven artifact IDs stay module-specific. |
 | `validation/` | Reusable scenario validation engines and domain adapters. |
 | `extensions/` | Platform-backed provider/library families such as input, graphics, audio, and optional external bindings. Use this for modules that need desktop/web/android/iOS variants. |
 | `backends/` | Platform/runtime implementation families. Each concrete backend uses one flat folder segment, such as `headless`, `headless_native`, `desktop`, or `desktop_c`. Shared TeaVM build and native resource support belongs in `c_shared`. Do not make a backend folder both a source module and a parent namespace for more backend modules. |
@@ -79,32 +75,32 @@ repo-root/
   libfdx/
     build.gradle.kts
 
-    foundation/
-      core/
+    framework/
+      fdx/
+        core/
+        fdx-build/
+        platform/
+          shared/
+          desktop/
+          android/
+          web/
       math/
       json/
       collections/
-
-    runtime/
-      core/
       application/
+      display/
       files/
       input/
-      storage/
-      display/
       audio/
       net/
-
-    assets/
-      manager/
-      loaders/
-
-    graphics/
-      api/
+      storage/
+      assets/
+        manager/
+        loaders/
+      graphics/
+      camera/
       g2d/
       g3d/
-
-    ui/
       ui-kit/
 
     validation/
@@ -240,30 +236,30 @@ Dependencies should point from higher-level modules to lower-level contracts, ne
 Allowed dependency shape:
 
 ```text
-foundation/math, foundation/json, foundation/collections -> runtime/fdx/core
+framework/math, framework/json, framework/collections -> framework/fdx/core
 
-runtime/fdx/core -> no lower libFDX module
-runtime/* -> runtime/fdx/core and selected foundation helpers
-runtime/storage -> runtime/fdx/core, runtime/files, and foundation/json
-runtime/application -> runtime/fdx/core plus typed runtime root systems
+framework/fdx/core -> no lower libFDX module
+framework runtime-facing APIs -> framework/fdx/core and selected framework helpers
+framework/storage -> framework/fdx/core, framework/files, and framework/json
+framework/application -> framework/fdx/core plus typed runtime root systems
 
-assets/* -> runtime/fdx/core, foundation/*, and runtime/files when file access is needed
+framework/assets/* -> framework/fdx/core, framework helpers, and framework/files when file access is needed
 
-graphics/api -> runtime/fdx/core, foundation/*, and runtime/display for presentation handles
-graphics/camera -> runtime/fdx/core, foundation/math, and runtime/input
-graphics/g2d -> graphics/api, foundation/*, assets/* when asset integration is needed
-graphics/g3d -> graphics/api, graphics/camera, foundation/*, assets/* when asset integration is needed
+framework/graphics -> framework/fdx/core, framework/math, and framework/display for presentation handles
+framework/camera -> framework/fdx/core, framework/math, and framework/input
+framework/g2d -> framework/graphics, framework helpers, framework/assets/* when asset integration is needed
+framework/g3d -> framework/graphics, framework/camera, framework helpers, framework/assets/* when asset integration is needed
 
-ui/ui-kit -> runtime/display, runtime/files, runtime/input, assets/loaders, graphics/api, graphics/g2d
-validation/scenario-validator -> runtime/display, runtime/input, graphics/api when visual capture integration is needed
-validation/scenario-validator-ui-kit -> validation/scenario-validator, ui/ui-kit
+framework/ui-kit -> framework/display, framework/files, framework/input, framework/assets/loaders, framework/graphics, framework/g2d
+validation/scenario-validator -> framework/display, framework/input, framework/graphics when visual capture integration is needed
+validation/scenario-validator-ui-kit -> validation/scenario-validator, framework/ui-kit
 
-extensions/input/* -> runtime/input
-extensions/audio/* -> runtime/audio
-extensions/graphics/* -> graphics/api and runtime/display integration points
+extensions/input/* -> framework/input
+extensions/audio/* -> framework/audio
+extensions/graphics/* -> framework/graphics and framework/display integration points
 extensions/* -> the public modules needed by that provider or binding family
 
-backends/* -> runtime/* plus selected provider SPI modules needed for platform wiring
+backends/* -> framework runtime-facing APIs plus selected provider SPI modules needed for platform wiring
 
 tools/* -> only the public modules that tool needs
 
@@ -279,34 +275,34 @@ benchmark/platform/plugin -> benchmark platform modules and generated platform t
 
 ```
 
-The arrows above mean "depends on". For example, `graphics/g2d` may depend on `graphics/api`, but `graphics/api` must not depend on `graphics/g2d`.
+The arrows above mean "depends on". For example, `framework/g2d` may depend on `framework/graphics`, but `framework/graphics` must not depend on `framework/g2d`.
 
 General rules:
 
-- `runtime/fdx/core` is the single public `core` module and should stay small.
-- Non-required systems must not be placed in `runtime/fdx/core`.
+- `framework/fdx/core` is the single public `core` module and should stay small.
+- Non-required systems must not be placed in `framework/fdx/core`.
 - Runtime APIs should be backend-neutral.
-- `runtime/fdx/core` owns base framework contracts and default runtime services shared by all systems, such as framework exceptions, provider identity, logging, async primitives, FreeType font rasterization, optional WGSL shader compilation, and native math/image helpers later. User code normally reaches runtime services through higher-level APIs such as `UiFont`, `BitmapFontFiles`, graphics shader creation, or math classes, not by calling native runtime bindings directly.
-- Backends and platform launchers register the platform implementation for `runtime/fdx/core`. Common modules consume the shared Java contracts and must not know the concrete native file layout.
-- `runtime/fdx/core` owns the Java contracts and does not compile or package platform native code directly.
-- `runtime/fdx/fdx-build` owns runtime fdx native compilation and dependency resolution for Windows, Linux, macOS, Android, and web. The desktop, Android, and web platform modules package generated native outputs into their published JAR/AAR artifacts and validate required files; they do not own CMake, dependency resolution, host classifiers, or toolchain arguments. Desktop, Android, and web runtime fdx native builds include the Tint-backed shader compiler by default so WGSL remains the single built-in shader source across GL/GLES/WebGL, Vulkan, and WGPU paths.
+- `framework/fdx/core` owns base framework contracts and default runtime services shared by all systems, such as framework exceptions, provider identity, logging, async primitives, FreeType font rasterization, optional WGSL shader compilation, and native math/image helpers later. User code normally reaches runtime services through higher-level APIs such as `UiFont`, `BitmapFontFiles`, graphics shader creation, or math classes, not by calling native runtime bindings directly.
+- Backends and platform launchers register the platform implementation for `framework/fdx/core`. Common modules consume the shared Java contracts and must not know the concrete native file layout.
+- `framework/fdx/core` owns the Java contracts and does not compile or package platform native code directly.
+- `framework/fdx/fdx-build` owns runtime fdx native compilation and dependency resolution for Windows, Linux, macOS, Android, and web. The desktop, Android, and web platform modules package generated native outputs into their published JAR/AAR artifacts and validate required files; they do not own CMake, dependency resolution, host classifiers, or toolchain arguments. Desktop, Android, and web runtime fdx native builds include the Tint-backed shader compiler by default so WGSL remains the single built-in shader source across GL/GLES/WebGL, Vulkan, and WGPU paths.
 - Third-party FreeType and Tint/Dawn source are not committed into this repository and are not built by libFDX native tasks. Runtime fdx builds download checksum-verified static dependency packages from the external `libfdx/fdx-natives` release project, then compile only libFDX's small runtime bridge/glue sources.
-- Runtime fdx C/C++ implementation files should be shared by default under `runtime/fdx/platform/shared`. Platform modules should add only thin adapters required by the platform ABI or toolchain, such as JNI for Android or JS/WASM loading for web. Do not fork the FreeType rasterizer implementation per platform.
+- Runtime fdx C/C++ implementation files should be shared by default under `framework/fdx/platform/shared`. Platform modules should add only thin adapters required by the platform ABI or toolchain, such as JNI for Android or JS/WASM loading for web. Do not fork the FreeType rasterizer implementation per platform.
 - Runtime fdx native artifacts use the framework core name, not feature-specific names. Web emits `fdx.js` and `fdx.wasm`; native shared-library platforms should emit the platform convention for `fdx`, such as `fdx.dll` on Windows and `libfdx.so` on Android/Linux. Platforms that do not need shader translation, such as PSP, must not package the Tint compiler capability.
-- `runtime/application` owns application lifecycle and the base `ApplicationConfig`. Backend-specific startup classes such as `DesktopApplicationConfig` should expose direct typed setters instead of requiring generic config keys in launcher code.
-- Backends should implement APIs instead of being depended on by foundation/runtime APIs.
+- `framework/application` owns application lifecycle and the base `ApplicationConfig`. Backend-specific startup classes such as `DesktopApplicationConfig` should expose direct typed setters instead of requiring generic config keys in launcher code.
+- Backends should implement APIs instead of being depended on by portable framework APIs.
 - Opt-in feature objects such as `AssetManager`, UI roots, and physics worlds should be created by user/framework feature code from explicit dependencies. Backends should not be forced to depend on those feature modules just because examples need them.
-- Input extensions should build on `runtime/input`, not leak through normal game code.
-- Audio extensions should build on `runtime/audio`, not leak through normal game code.
-- Audio extensions that register loaders for provider-backed audio handles may also depend on `assets/manager`.
-- Shared graphics helpers should build on `graphics/api`, not on a specific backend.
-- Graphics extensions should build on `graphics/api`, not leak through normal game code.
-- `assets/loaders` owns provider-neutral source-data loaders only. Loaders that create provider-backed `Texture`, `Sound`, or `Music` objects belong in a module that already depends on the relevant graphics or audio API/provider.
-- 2D rendering, fonts, particles, and tile maps should stay in `graphics/g2d`.
-- 3D rendering, models, animation, materials, and lighting should stay in `graphics/g3d`.
+- Input extensions should build on `framework/input`, not leak through normal game code.
+- Audio extensions should build on `framework/audio`, not leak through normal game code.
+- Audio extensions that register loaders for provider-backed audio handles may also depend on `framework/assets/manager`.
+- Shared graphics helpers should build on `framework/graphics`, not on a specific backend.
+- Graphics extensions should build on `framework/graphics`, not leak through normal game code.
+- `framework/assets/loaders` owns provider-neutral source-data loaders only. Loaders that create provider-backed `Texture`, `Sound`, or `Music` objects belong in a module that already depends on the relevant graphics or audio API/provider.
+- 2D rendering, fonts, particles, and tile maps should stay in `framework/g2d`.
+- 3D rendering, models, animation, materials, and lighting should stay in `framework/g3d`.
 - Built-in UI modules should build on the graphics/runtime modules they need and stay optional. A project can use `ui-kit`, another UI solution, or no UI.
 - Validation modules should stay optional and should not be required by normal runtime execution or rendering. A project can use `scenario-validator` for generic runtime flows and add domain adapters such as `scenario-validator-ui-kit` only when needed.
-- Platform-backed libraries belong in `extensions/`, not directly under `audio/`, `graphics/`, `input/`, `ui/`, or a root `physics/` folder.
+- Platform-backed libraries belong in `extensions/`, not directly under `framework/audio`, `framework/graphics`, `framework/input`, `framework/ui-kit`, or a root `physics/` folder.
 - Physics engine extensions should not depend on UI.
 - Web targets copy declared web assets into `webapp/assets`, pass their paths and sizes into TeaVM properties, generate structured asset metadata through the web backend TeaVM plugin, and expose those files through the web backend file system. Gradle builds declare these assets through `libfdx.assets`; standalone tools and editors can declare them through `WebBuilder`. The web runtime obtains the preload list from the generated metadata class, not from an external JavaScript file or text manifest.
 - Web target `htmlWidth`/`htmlHeight` values of `0` or negative values mark the generated canvas as browser-window sized.
@@ -338,8 +334,8 @@ Graphics needs a running application to present frames to a real display/canvas/
 The practical relationship is:
 
 ```text
-runtime/display exposes displays/windows/canvases and platform display handles
-graphics/api exposes the Graphics manager and provider-backed GraphicsContext objects
+framework/display exposes displays/windows/canvases and platform display handles
+framework/graphics exposes the Graphics manager and provider-backed GraphicsContext objects
 backend creates the typed Fdx root and attaches the selected runtime/provider systems
 ```
 
@@ -350,10 +346,10 @@ Swappable systems should be designed as API modules plus provider modules.
 API modules define the interfaces, handles, descriptors, and service contracts that normal game code uses:
 
 ```text
-runtime/input
-runtime/audio
-runtime/net
-graphics/api
+framework/input
+framework/audio
+framework/net
+framework/graphics
 ```
 
 Extension provider modules implement those contracts:
@@ -413,13 +409,13 @@ Use these Gradle dependency rules:
 - Use `implementation` instead of `runtimeOnly` for any module whose provider-specific classes are imported directly by user code or launcher code.
 - Keep runtime families consistent. For example, `backends/desktop_c` may use `gl_desktop_c` or future `wgpu_desktop_c`, but it must not mix in `gl_desktop`, `wgpu_desktop_jni`, or `wgpu_desktop_ffm`.
 
-Gamepad support is part of the `runtime/input` API because gamepads are input devices. Platform-specific gamepad providers belong under `extensions/input/gamepads` because desktop, web, Android, and iOS use different native APIs and may have more than one valid implementation path.
+Gamepad support is part of the `framework/input` API because gamepads are input devices. Platform-specific gamepad providers belong under `extensions/input/gamepads` because desktop, web, Android, and iOS use different native APIs and may have more than one valid implementation path.
 
 Audio provider runtime modules should use concrete platform variant folders under `extensions/audio`. A root module such as `extensions/audio/miniaudio` is not enough because audio bindings and packaging differ between desktop, web, Android, and iOS. Use one segment such as `desktop_jni`, `desktop_ffm`, `desktop_c`, `android_jni`, or `ios_native` when the platform has multiple implementation choices. For web, use `extensions/audio/<provider>/web` as the Gradle module and put `js` or `wasm` only in the published artifact ID.
 
 Graphics provider runtime modules should use a provider root with `core` directly under it and concrete platform variants under `platform/`. Avoid a generic `native` module or a plain platform module when there are multiple implementation choices because it does not say which binding/runtime owns the binaries or packaging. Shared Java provider classes should live in the provider `core` module and depend only on provider-neutral APIs, not concrete backends. If a backend technology already owns the graphics binding and context model, such as desktop GL, the backend may expose a selectable `GraphicsAttachmentProvider` while reusing the provider-neutral shared implementation from the extension `core` module. The matching graphics extension platform module, such as `extensions/graphics/gl/platform/desktop`, still owns the optional runtime/native dependencies. For web, use `extensions/graphics/<provider>/platform/web` as the Gradle module and put `js` or `wasm` only in the published artifact ID.
 
-Network transport provider modules should build on `runtime/net`. Provider-specific shared types live in `extensions/net/<provider>/core`, concrete runtime/binding variants live under `extensions/net/<provider>/platform/<platform_variant>`, and optional provider tools or services may live beside `core` when they are not platform bindings. WebRTC follows this shape so `WebRtcClientConfig`, `WebRtcServerConfig`, `WebRtcPeerConfig`, signaling contracts, and bridge interfaces stay in the WebRTC core module; the customizable signaling server lives in `extensions/net/webrtc/signaling_server`; desktop, web, Android, and future iOS bindings remain platform-specific. Normal game code should use `Network`, `NetTransports`, `NetClient`, `NetServer`, `NetPeerGroup`, `NetConnection`, and channel IDs rather than WebRTC data-channel classes.
+Network transport provider modules should build on `framework/net`. Provider-specific shared types live in `extensions/net/<provider>/core`, concrete runtime/binding variants live under `extensions/net/<provider>/platform/<platform_variant>`, and optional provider tools or services may live beside `core` when they are not platform bindings. WebRTC follows this shape so `WebRtcClientConfig`, `WebRtcServerConfig`, `WebRtcPeerConfig`, signaling contracts, and bridge interfaces stay in the WebRTC core module; the customizable signaling server lives in `extensions/net/webrtc/signaling_server`; desktop, web, Android, and future iOS bindings remain platform-specific. Normal game code should use `Network`, `NetTransports`, `NetClient`, `NetServer`, `NetPeerGroup`, `NetConnection`, and channel IDs rather than WebRTC data-channel classes.
 
 Extension artifacts should not repeat the `extensions` category. Graphics provider artifacts also should not repeat the `graphics` category. For example, `extensions/graphics/wgpu/core` publishes as `wgpu_core`, `extensions/graphics/wgpu/platform/desktop_jni` publishes as `wgpu_desktop_jni`, `extensions/graphics/gl/core` publishes as `gl_core`, and `extensions/graphics/gl/platform/desktop` publishes as `gl_desktop`. WebRTC network artifacts publish as `webrtc_core`, `webrtc_signaling_server`, `webrtc_desktop_jni`, `webrtc_web`, and `webrtc_android_jni`.
 
@@ -587,7 +583,7 @@ Naming rule:
 
 - `Texture`, `GraphicsDevice`, `AudioDevice`, `Sound`, `Music`, `Gamepads`, and `Gamepad` are common API types.
 - `WGPUTexture`, `WGPUDevice`, `VkTexture`, `MiniAudioDevice`, `WebAudioDevice`, and `DesktopGamepadProvider` are provider-specific types.
-- High-level modules such as `g2d`, `g3d`, `ui-kit`, and `assets/loaders` should use common API types unless they are explicitly provider-specific modules.
+- High-level modules such as `g2d`, `g3d`, `ui-kit`, and `framework/assets/loaders` should use common API types unless they are explicitly provider-specific modules.
 
 This avoids a design where a generic type is secretly tied to one graphics API. A `Texture` in libfdx should mean "portable texture handle"; a `WGPUTexture` should clearly mean "wgpu/WebGPU-specific texture".
 
@@ -734,9 +730,9 @@ ComputePass
 
 ### 8.2. Core And Foundation Common Types
 
-Common type summary for `runtime/fdx/core`:
+Common type summary for `framework/fdx/core`:
 
-`runtime/fdx/core` is the only public `core` module. It owns the tiny shared base contracts in package `io.github.libfdx.core`, shared runtime-service contracts in package `io.github.libfdx.runtime.core`, and shader compiler contracts in package `io.github.libfdx.runtime.core.shader`. It is not only interfaces. It can contain interfaces, abstract contracts, small final value classes, exceptions, and lightweight helpers that every module can safely depend on.
+`framework/fdx/core` is the only public `core` module. It owns the tiny shared base contracts in package `io.github.libfdx.core`, shared runtime-service contracts in package `io.github.libfdx.runtime.core`, and shader compiler contracts in package `io.github.libfdx.runtime.core.shader`. It is not only interfaces. It can contain interfaces, abstract contracts, small final value classes, exceptions, and lightweight helpers that every module can safely depend on.
 
 It should not contain solution APIs such as graphics, audio, files, assets, application lifecycle, UI, or physics.
 
@@ -750,7 +746,7 @@ It should not contain solution APIs such as graphics, audio, files, assets, appl
 | `ProviderHandle` | Base contract for common handles that can expose provider-specific internals through `as()`. |
 | `FdxFuture<T>` and callbacks | Portable async result and callback contracts. |
 
-Common type summary for `foundation/math`:
+Common type summary for `framework/math`:
 
 | Type | Purpose |
 | --- | --- |
@@ -766,27 +762,27 @@ Common type summary:
 
 | Type | Module | Purpose |
 | --- | --- | --- |
-| `Fdx` | `runtime/application` | Typed runtime root passed to user code by the backend. |
-| `Application` | `runtime/application` | Running application lifecycle and frame timing. |
-| `ApplicationListener` | `runtime/application` | User lifecycle callbacks with `render()` as the per-frame method. |
-| `ApplicationConfig` | `runtime/application` | Startup configuration. |
-| `ApplicationBackend` | `runtime/application` | Launcher-side backend lifecycle implementation contract; not a context service. |
-| `FileSystem` | `runtime/files` | File service. |
-| `FileHandle` | `runtime/files` | Portable file reference. |
-| `Storage`, `KeyValueStore` | `runtime/storage` | Persistent local settings/preferences and rebuildable cache stores. |
-| `Input` | `runtime/input` | Input service. |
-| `Key`, `MouseButton`, `TouchPoint` | `runtime/input` | Portable input values. |
-| `InputProcessor` | `runtime/input` | Input event callback/routing contract. |
-| `Gamepads`, `Gamepad`, `GamepadMapping` | `runtime/input` | Portable controller/gamepad contracts implemented by gamepad providers. |
-| `Display` | `runtime/display` | Presentation area abstraction for desktop windows, browser canvases, Android views, and future platform surfaces. |
-| `DisplayMode`, `Monitor`, `DisplayConfig`, `Orientation` | `runtime/display` | Display configuration and metadata. |
-| `Network` | `runtime/net` | Network service. |
-| `http.HttpRequest`, `http.HttpResponse`, `websocket.WebSocket` | `runtime/net` | Portable request/response and WebSocket contracts. |
-| `transport.NetTransports`, `transport.NetClient`, `transport.NetServer`, `transport.NetPeerGroup`, `transport.NetConnection`, `packet.NetPacket`, `packet.NetPacketQueue`, `buffer.NetBuffer`, `transform.NetPacketTransform`, `codec.NetMessageCodec` | `runtime/net` | Provider-neutral multiplayer transport contracts, inbound queue dispatch, pooled packet storage, packet transforms, and manual message serialization. |
+| `Fdx` | `framework/application` | Typed runtime root passed to user code by the backend. |
+| `Application` | `framework/application` | Running application lifecycle and frame timing. |
+| `ApplicationListener` | `framework/application` | User lifecycle callbacks with `render()` as the per-frame method. |
+| `ApplicationConfig` | `framework/application` | Startup configuration. |
+| `ApplicationBackend` | `framework/application` | Launcher-side backend lifecycle implementation contract; not a context service. |
+| `FileSystem` | `framework/files` | File service. |
+| `FileHandle` | `framework/files` | Portable file reference. |
+| `Storage`, `KeyValueStore` | `framework/storage` | Persistent local settings/preferences and rebuildable cache stores. |
+| `Input` | `framework/input` | Input service. |
+| `Key`, `MouseButton`, `TouchPoint` | `framework/input` | Portable input values. |
+| `InputProcessor` | `framework/input` | Input event callback/routing contract. |
+| `Gamepads`, `Gamepad`, `GamepadMapping` | `framework/input` | Portable controller/gamepad contracts implemented by gamepad providers. |
+| `Display` | `framework/display` | Presentation area abstraction for desktop windows, browser canvases, Android views, and future platform surfaces. |
+| `DisplayMode`, `Monitor`, `DisplayConfig`, `Orientation` | `framework/display` | Display configuration and metadata. |
+| `Network` | `framework/net` | Network service. |
+| `http.HttpRequest`, `http.HttpResponse`, `websocket.WebSocket` | `framework/net` | Portable request/response and WebSocket contracts. |
+| `transport.NetTransports`, `transport.NetClient`, `transport.NetServer`, `transport.NetPeerGroup`, `transport.NetConnection`, `packet.NetPacket`, `packet.NetPacketQueue`, `buffer.NetBuffer`, `transform.NetPacketTransform`, `codec.NetMessageCodec` | `framework/net` | Provider-neutral multiplayer transport contracts, inbound queue dispatch, pooled packet storage, packet transforms, and manual message serialization. |
 
 ### 8.4. Assets Common Types
 
-Common type summary for `assets/manager`:
+Common type summary for `framework/assets/manager`:
 
 | Type | Purpose |
 | --- | --- |
@@ -796,7 +792,7 @@ Common type summary for `assets/manager`:
 | `AssetLoader<T>` | Loader contract implemented by format loaders. |
 | `AssetLoadContext` | Loader context for file access, asset dependencies, and application-thread completion. |
 
-Common loader-facing type summary for `assets/loaders`:
+Common loader-facing type summary for `framework/assets/loaders`:
 
 | Type | Purpose |
 | --- | --- |
@@ -805,7 +801,7 @@ Common loader-facing type summary for `assets/loaders`:
 
 ### 8.5. Runtime Audio Common Types
 
-Common type summary for `runtime/audio`:
+Common type summary for `framework/audio`:
 
 | Type | Purpose |
 | --- | --- |
@@ -830,7 +826,7 @@ OpenAlAudioDevice
 
 ### 8.6. Graphics Common Types
 
-Common type summary for `graphics/api`:
+Common type summary for `framework/graphics`:
 
 | Type | Purpose |
 | --- | --- |
@@ -861,7 +857,7 @@ Common type summary for `graphics/api`:
 | `TextureFormat`, `TextureUsage`, `TextureWrap`, `BufferUsage` | Portable enum/value types. |
 | `BlendState`, `DepthStencilState`, `RasterState` | Portable render state descriptors. |
 
-Common type summary for `graphics/camera`:
+Common type summary for `framework/camera`:
 
 | Type | Purpose |
 | --- | --- |
@@ -885,7 +881,7 @@ VkTexture
 
 ### 8.7. Graphics 2D Common Types
 
-Common type summary for `graphics/g2d`:
+Common type summary for `framework/g2d`:
 
 | Type | Module | Purpose |
 | --- | --- | --- |
@@ -902,12 +898,12 @@ Common type summary for `graphics/g2d`:
 
 ### 8.8. Graphics 3D Common Types
 
-Common type summary for `graphics/g3d`:
+Common type summary for `framework/g3d`:
 
 | Type | Module | Purpose |
 | --- | --- | --- |
-| `Camera` | `graphics/camera` | Shared mutable graphics camera that can switch between orthographic and perspective projection. |
-| `Color`, `Vector3`, `Matrix4`, `BoundingBox` | `foundation/math` | Shared math types used by 3D materials, transforms, and bounds. |
+| `Camera` | `framework/camera` | Shared mutable graphics camera that can switch between orthographic and perspective projection. |
+| `Color`, `Vector3`, `Matrix4`, `BoundingBox` | `framework/math` | Shared math types used by 3D materials, transforms, and bounds. |
 | `Batch3D` | `g3d` | Common 3D render submission contract. |
 | `ModelBatch` | `g3d` | Default optimized model batch implementation, including WGSL PBR and skinned PBR paths. |
 | `SkyboxRenderer3D` | `g3d` | WGSL-authored procedural world-space sky/background renderer for 3D scenes. |
@@ -917,7 +913,7 @@ Common type summary for `graphics/g3d`:
 | `OutlineRenderer3D` | `g3d` | WGSL-authored shell outline renderer for PBR-layout 3D meshes. |
 | `FogOfWarRenderer3D` | `g3d` | WGSL-authored world-space 3D fog-of-war overlay renderer. |
 | `ModelBuilder` | `g3d` | Programmatic primitive model construction for cubes, boxes, spheres, and custom triangle meshes. |
-| `Mesh` | `graphics/api` | Concrete low-level GPU mesh usable by 2D, UI, custom renderers, and 3D, including PBR and skinned PBR layouts. |
+| `Mesh` | `framework/graphics` | Concrete low-level GPU mesh usable by 2D, UI, custom renderers, and 3D, including PBR and skinned PBR layouts. |
 | `MeshPart` | `g3d` | 3D subset of a graphics `Mesh` rendered with one material. |
 | `Model` | `g3d` | Loaded 3D model asset. |
 | `DefaultModel` | `g3d` | Default loaded-model implementation. |
@@ -934,9 +930,9 @@ Common type summary for `graphics/g3d`:
 | `CascadedShadowMap3D` | `g3d` | Provider-neutral manager for up to four directional shadow maps split from a driver view camera and sampled by the default PBR shader. |
 | `RenderQueue3D`, `DefaultRenderQueue3D`, `RenderTarget3D`, `DefaultRenderTarget3D`, `RenderPath3D`, `RenderGraph3D` | `g3d` | Culling, sorting, pass orchestration, render target views, and render path helpers. |
 | `G3DAssetLoaders` | `g3d` | Asset loader registration for 3D formats such as glTF. |
-| `FrameBuffer`, `MultiRenderTarget` | `graphics/api` | Provider-neutral offscreen and multiple render target support used by 3D render paths. |
+| `FrameBuffer`, `MultiRenderTarget` | `framework/graphics` | Provider-neutral offscreen and multiple render target support used by 3D render paths. |
 
-3D types should use common graphics API types and should not require provider-specific classes for normal rendering. GL FBOs, Vulkan image/framebuffer setup, and WGPU texture-view attachments should be hidden behind `graphics/api` render-target abstractions.
+3D types should use common graphics API types and should not require provider-specific classes for normal rendering. GL FBOs, Vulkan image/framebuffer setup, and WGPU texture-view attachments should be hidden behind `framework/graphics` render-target abstractions.
 
 ### 8.9. UI Toolkit Types
 
@@ -1000,7 +996,7 @@ In module names, `_native` means the native runtime family, not a specific compi
 
 Internal Gradle paths should remain the source of truth while the project is young.
 
-The sibling `fdx-natives` repository builds static FreeType and Tint/Dawn dependency packages for `linux-x64-gcc`, `windows-x64-msvc`, `macos-x64-appleclang`, `macos-arm64-appleclang`, `android-arm64-v8a`, `android-armeabi-v7a`, `android-x86`, `android-x86_64`, and `web-emscripten`. Its `fdx-natives.toml` file owns dependency and toolchain pins, with Gradle update tasks for FreeType, Dawn/Tint, Android, and Emscripten versions. libFDX consumes those packages through clean task names such as `libfdx_build_native_artifacts`, `libfdx_build_windows_native_artifact_prebuilt`, `libfdx_build_web_native_artifacts_prebuilt`, and `libfdx_build_android_native_artifacts_prebuilt`; the `_prebuilt` names remain explicit aliases, not a separate dependency mode. The checked-in resolver default targets the current verified `fdx-natives` v0.1.1 release from one fixed top-level version in `:libfdx:runtime:fdx:fdx-build`; advanced local overrides may still use `libfdx.runtimeFdx.nativeDepsBaseUrl` for mirror testing. Prebuilt packages are a build-time optimization only and must not become user-visible runtime dependencies.
+The sibling `fdx-natives` repository builds static FreeType and Tint/Dawn dependency packages for `linux-x64-gcc`, `windows-x64-msvc`, `macos-x64-appleclang`, `macos-arm64-appleclang`, `android-arm64-v8a`, `android-armeabi-v7a`, `android-x86`, `android-x86_64`, and `web-emscripten`. Its `fdx-natives.toml` file owns dependency and toolchain pins, with Gradle update tasks for FreeType, Dawn/Tint, Android, and Emscripten versions. libFDX consumes those packages through clean task names such as `libfdx_build_native_artifacts`, `libfdx_build_windows_native_artifact_prebuilt`, `libfdx_build_web_native_artifacts_prebuilt`, and `libfdx_build_android_native_artifacts_prebuilt`; the `_prebuilt` names remain explicit aliases, not a separate dependency mode. The checked-in resolver default targets the current verified `fdx-natives` v0.1.1 release from one fixed top-level version in `:libfdx:framework:fdx:fdx-build`; advanced local overrides may still use `libfdx.runtimeFdx.nativeDepsBaseUrl` for mirror testing. Prebuilt packages are a build-time optimization only and must not become user-visible runtime dependencies.
 
 The configured dependency mode controls repository consumer wiring for tests and samples. `LibExt` reads `libfdx.toml` `[development]` values, then lets ignored root `local.properties` keys `development.usePublishedLibfdx` and `development.publishedLibfdxVersion` override them for one checkout. Settings always includes the local `:libfdx:*` source modules. The checked-in default is false so clean source checkouts and CI use the local Gradle plugin build for the dedicated plugin-use modules and local project dependencies for consumers. That included plugin build must stay isolated to the plugin project; it must not include or remap root `:libfdx:*` source modules under the plugin build id. When true, plugin-use modules resolve the Gradle plugin from Maven and consumers resolve libFDX dependencies as published `<fdxGroup>:<artifact>:<publishedLibfdxVersion>` coordinates. Builder-backed web tasks attach local generated runtime fdx web resources only when the consumer runtime classpath has direct or transitive local `:libfdx:*` project dependencies; Maven-backed consumers must get those resources from the published artifacts.
 
@@ -1008,31 +1004,31 @@ The configured dependency mode controls repository consumer wiring for tests and
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:foundation:math` | `io.github.libfdx:math` | Pure math primitives: vectors, matrices, quaternions, bounds, and backend-independent color math. Should be usable without an application or backend. |
-| `:libfdx:foundation:json` | `io.github.libfdx:json` | Strict provider-neutral JSON tree parsing, writing, and manual callback-based class mapping. It must not use reflection, annotations, files, assets, graphics, backend services, or platform APIs. |
-| `:libfdx:foundation:collections` | `io.github.libfdx:collections` | Specialized collections and allocation-conscious data structures for engine hot paths where standard Java collections are not enough. |
+| `:libfdx:framework:math` | `io.github.libfdx:math` | Pure math primitives: vectors, matrices, quaternions, bounds, and backend-independent color math. Should be usable without an application or backend. |
+| `:libfdx:framework:json` | `io.github.libfdx:json` | Strict provider-neutral JSON tree parsing, writing, and manual callback-based class mapping. It must not use reflection, annotations, files, assets, graphics, backend services, or platform APIs. |
+| `:libfdx:framework:collections` | `io.github.libfdx:collections` | Specialized collections and allocation-conscious data structures for engine hot paths where standard Java collections are not enough. |
 
 ### 9.2. Runtime Modules
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:runtime:fdx:core` | `io.github.libfdx:fdx` | Single public fdx module: lifecycle primitives, resource ownership, errors, logging API, provider identity, async primitives, and shared runtime services such as FreeType rasterization and optional native math helpers. This should not contain files, input, audio, assets, rendering, UI, physics, or backend code. |
-| `:libfdx:runtime:fdx:fdx-build` | internal | Internal Gradle build module that owns runtime fdx native dependency resolution through `fdx-natives` prebuilt packages plus desktop, Android, and web CMake task configuration. It is not published to Maven. |
-| `:libfdx:runtime:fdx:platform:shared` | `io.github.libfdx:fdx_shared` | Shared runtime fdx native-source/tooling artifact from `libfdx/runtime/fdx/platform/shared`. It packages `libfdx-native/...` C/C++ source resources used by the Gradle plugin and standalone builders when TeaVM/native output is generated in a user project. It is resolved transitively by native backend artifacts and is not a normal user `implementation` dependency. |
-| `:libfdx:runtime:fdx:platform:desktop` | `io.github.libfdx:fdx_desktop` | Desktop runtime fdx native-resource JAR from `libfdx/runtime/fdx/platform/desktop`; packages `fdx-build` generated `fdx.dll`, `libfdx.so`, and `libfdx.dylib` under `libfdx-native/desktop/<classifier>/` for the classifiers generated by the current build. |
-| `:libfdx:runtime:fdx:platform:android` | `io.github.libfdx:fdx_android` | Android runtime fdx native AAR from `libfdx/runtime/fdx/platform/android` that packages `fdx-build` generated `libfdx.so` files for Android ABIs. Android backends depend on this module instead of compiling runtime fdx native code themselves. |
-| `:libfdx:runtime:fdx:platform:web` | `io.github.libfdx:fdx_web` | Web runtime fdx native-resource JAR from `libfdx/runtime/fdx/platform/web`; packages `fdx-build` generated `fdx.js` and `fdx.wasm`. |
-| `:libfdx:runtime:application` | `io.github.libfdx:application` | Application lifecycle API: create, resize, render, pause, resume, dispose, main loop contracts, application configuration, and platform capability discovery. |
-| `:libfdx:runtime:files` | `io.github.libfdx:files` | File abstraction: classpath/internal/local/external files, virtual file handles, path normalization, read/write capabilities, and storage rules per backend. |
-| `:libfdx:runtime:storage` | `io.github.libfdx:storage` | Persistent key/value storage for local user data and rebuildable cache data. It supports primitives, strings, bytes, JSON trees, explicit JSON codecs, and user-provided byte transforms for encryption/compression without owning encryption itself. |
-| `:libfdx:runtime:input` | `io.github.libfdx:input` | Keyboard, mouse, touch, gestures, text input, cursor state, gamepad/controller contracts, mappings, hotplugging events, vibration contracts, dead zones, and input routing primitives. |
-| `:libfdx:runtime:display` | `io.github.libfdx:display` | Display/presentation abstraction: size, DPI, fullscreen, title where supported, icon where supported, orientation, visibility, resize events, and platform display handles for graphics providers. |
-| `:libfdx:runtime:audio` | `io.github.libfdx:audio` | Common audio runtime API: audio devices, sound handles, music streams, audio buffers, playback controls, and provider SPI. Normal game code should use this module. |
-| `:libfdx:runtime:net` | `io.github.libfdx:net` | Networking API: HTTP, WebSocket, provider-neutral multiplayer transports, reusable packet buffers, reusable inbound queue dispatch, tick-limited processing, packet transforms, manual message codecs, and transport provider SPI. |
+| `:libfdx:framework:fdx:core` | `io.github.libfdx:fdx` | Single public fdx module: lifecycle primitives, resource ownership, errors, logging API, provider identity, async primitives, and shared runtime services such as FreeType rasterization and optional native math helpers. This should not contain files, input, audio, assets, rendering, UI, physics, or backend code. |
+| `:libfdx:framework:fdx:fdx-build` | internal | Internal Gradle build module that owns runtime fdx native dependency resolution through `fdx-natives` prebuilt packages plus desktop, Android, and web CMake task configuration. It is not published to Maven. |
+| `:libfdx:framework:fdx:platform:shared` | `io.github.libfdx:fdx_shared` | Shared runtime fdx native-source/tooling artifact from `libfdx/framework/fdx/platform/shared`. It packages `libfdx-native/...` C/C++ source resources used by the Gradle plugin and standalone builders when TeaVM/native output is generated in a user project. It is resolved transitively by native backend artifacts and is not a normal user `implementation` dependency. |
+| `:libfdx:framework:fdx:platform:desktop` | `io.github.libfdx:fdx_desktop` | Desktop runtime fdx native-resource JAR from `libfdx/framework/fdx/platform/desktop`; packages `fdx-build` generated `fdx.dll`, `libfdx.so`, and `libfdx.dylib` under `libfdx-native/desktop/<classifier>/` for the classifiers generated by the current build. |
+| `:libfdx:framework:fdx:platform:android` | `io.github.libfdx:fdx_android` | Android runtime fdx native AAR from `libfdx/framework/fdx/platform/android` that packages `fdx-build` generated `libfdx.so` files for Android ABIs. Android backends depend on this module instead of compiling runtime fdx native code themselves. |
+| `:libfdx:framework:fdx:platform:web` | `io.github.libfdx:fdx_web` | Web runtime fdx native-resource JAR from `libfdx/framework/fdx/platform/web`; packages `fdx-build` generated `fdx.js` and `fdx.wasm`. |
+| `:libfdx:framework:application` | `io.github.libfdx:application` | Application lifecycle API: create, resize, render, pause, resume, dispose, main loop contracts, application configuration, and platform capability discovery. |
+| `:libfdx:framework:files` | `io.github.libfdx:files` | File abstraction: classpath/internal/local/external files, virtual file handles, path normalization, read/write capabilities, and storage rules per backend. |
+| `:libfdx:framework:storage` | `io.github.libfdx:storage` | Persistent key/value storage for local user data and rebuildable cache data. It supports primitives, strings, bytes, JSON trees, explicit JSON codecs, and user-provided byte transforms for encryption/compression without owning encryption itself. |
+| `:libfdx:framework:input` | `io.github.libfdx:input` | Keyboard, mouse, touch, gestures, text input, cursor state, gamepad/controller contracts, mappings, hotplugging events, vibration contracts, dead zones, and input routing primitives. |
+| `:libfdx:framework:display` | `io.github.libfdx:display` | Display/presentation abstraction: size, DPI, fullscreen, title where supported, icon where supported, orientation, visibility, resize events, and platform display handles for graphics providers. |
+| `:libfdx:framework:audio` | `io.github.libfdx:audio` | Common audio runtime API: audio devices, sound handles, music streams, audio buffers, playback controls, and provider SPI. Normal game code should use this module. |
+| `:libfdx:framework:net` | `io.github.libfdx:net` | Networking API: HTTP, WebSocket, provider-neutral multiplayer transports, reusable packet buffers, reusable inbound queue dispatch, tick-limited processing, packet transforms, manual message codecs, and transport provider SPI. |
 
 ### 9.3. Input Extension Modules
 
-Gamepad common contracts live in `runtime/input`. These modules provide platform-specific gamepad implementations.
+Gamepad common contracts live in `framework/input`. These modules provide platform-specific gamepad implementations.
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
@@ -1046,8 +1042,8 @@ Gamepad common contracts live in `runtime/input`. These modules provide platform
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:assets:manager` | `io.github.libfdx:assets` | Asset manager API: descriptors, handles, dependencies, async loading contracts, update-thread completion, and cache/lifetime rules. It should not force specific file formats. |
-| `:libfdx:assets:loaders` | `io.github.libfdx:asset_loaders` | Common provider-neutral loaders built on `assets/manager`: currently PNG/JPG image loading to `ImageData` and JSON loading to `JsonValue`, with future room for atlases, fonts, properties, shader sources, and audio source data. Format-specific heavy dependencies should stay optional. This module must not create provider-backed `Texture`, `Sound`, or `Music` handles directly. |
+| `:libfdx:framework:assets:manager` | `io.github.libfdx:asset_manager` | Asset manager API: descriptors, handles, dependencies, async loading contracts, update-thread completion, and cache/lifetime rules. It should not force specific file formats. |
+| `:libfdx:framework:assets:loaders` | `io.github.libfdx:asset_loaders` | Common provider-neutral loaders built on `framework/assets/manager`: currently PNG/JPG image loading to `ImageData` and JSON loading to `JsonValue`, with future room for atlases, fonts, properties, shader sources, and audio source data. Format-specific heavy dependencies should stay optional. This module must not create provider-backed `Texture`, `Sound`, or `Music` handles directly. |
 
 ### 9.5. Audio Extension Modules
 
@@ -1068,11 +1064,11 @@ Gamepad common contracts live in `runtime/input`. These modules provide platform
 
 ### 9.6. Net Extension Modules
 
-Net transport provider modules build on `runtime/net`. WebRTC is kept in this repository so Gradle/Maven wiring stays with the rest of libFDX.
+Net transport provider modules build on `framework/net`. WebRTC is kept in this repository so Gradle/Maven wiring stays with the rest of libFDX.
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:extensions:net:webrtc:core` | `io.github.libfdx:webrtc_core` | WebRTC provider-specific public types, provider ID, ICE/STUN/TURN configuration, signaling contracts/codecs, provider-neutral bridge interfaces, and shared Java transport glue that depends on `runtime/net` and `foundation/json`. |
+| `:libfdx:extensions:net:webrtc:core` | `io.github.libfdx:webrtc_core` | WebRTC provider-specific public types, provider ID, ICE/STUN/TURN configuration, signaling contracts/codecs, provider-neutral bridge interfaces, and shared Java transport glue that depends on `framework/net` and `framework/json`. |
 | `:libfdx:extensions:net:webrtc:signaling_server` | `io.github.libfdx:webrtc_signaling_server` | Standalone Java-WebSocket signaling server app/library for rooms, peer discovery, SDP/ICE relay, auth/session hooks, room and join policies, message policy, peer ID generation, tick-limited processing, reusable queued event storage, max peers, idle cleanup, and logging hooks. It exposes the `webrtc_signaling_server_run` task. It is not a gameplay/TCP server and it is not a TURN server. |
 | `:libfdx:extensions:net:webrtc:platform:desktop_jni` | `io.github.libfdx:webrtc_desktop_jni` | Desktop WebRTC runtime/binding variant using `dev.onvoid.webrtc:webrtc-java`, native runtime classifiers, and Java-WebSocket signaling. |
 | `:libfdx:extensions:net:webrtc:platform:web` | `io.github.libfdx:webrtc_web` | Browser WebRTC runtime/binding variant using TeaVM JS interop over browser `RTCPeerConnection`, data channels, and WebSocket signaling. |
@@ -1082,7 +1078,7 @@ Net transport provider modules build on `runtime/net`. WebRTC is kept in this re
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:graphics:api` | `io.github.libfdx:graphics` | Low-level WebGPU-style graphics abstraction: adapters, devices, queues, buffers, textures, texture views, framebuffers, render targets, multi-render targets, samplers, shader modules, shader profiles/bundles, bind groups, pipelines, command encoders, command buffers, render passes, and surfaces. |
+| `:libfdx:framework:graphics` | `io.github.libfdx:graphics` | Low-level WebGPU-style graphics abstraction: adapters, devices, queues, buffers, textures, texture views, framebuffers, render targets, multi-render targets, samplers, shader modules, shader profiles/bundles, bind groups, pipelines, command encoders, command buffers, render passes, and surfaces. |
 
 Shader authoring is WGSL-only. The detailed shader architecture, including
 portable profiles, Tint as the first compiler backend, runtime/setup-time
@@ -1091,7 +1087,7 @@ lives in [SHADERS.md](SHADERS.md).
 
 The short architecture rule is that normal game runtimes may pass WGSL directly.
 Providers that cannot consume WGSL translate it through the optional
-`runtime/fdx/core` shader compiler capability during shader-module creation
+`framework/fdx/core` shader compiler capability during shader-module creation
 when the active platform packages that capability. Direct GLSL, SPIR-V, and MSL
 are generated target artifacts, not public shader authoring sources.
 
@@ -1099,7 +1095,7 @@ are generated target artifacts, not public shader authoring sources.
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:extensions:graphics:wgpu:core` | `io.github.libfdx:wgpu_core` | Base WebGPU/wgpu provider. It implements `graphics/api`, owns WebGPU-specific public classes such as `WGPUDevice`, `WGPUTexture`, and other wgpu escape-hatch types, and contains backend-neutral Java attachment code that consumes the `graphics/api` native-window bridge. |
+| `:libfdx:extensions:graphics:wgpu:core` | `io.github.libfdx:wgpu_core` | Base WebGPU/wgpu provider. It implements `framework/graphics`, owns WebGPU-specific public classes such as `WGPUDevice`, `WGPUTexture`, and other wgpu escape-hatch types, and contains backend-neutral Java attachment code that consumes the `framework/graphics` native-window bridge. |
 | `:libfdx:extensions:graphics:wgpu:platform:desktop_jni` | `io.github.libfdx:wgpu_desktop_jni` | Desktop jWebGPU JNI runtime dependency module. It contributes the JNI binding/native libraries and should not contain WGPU provider Java classes unless the JNI binding requires variant-specific Java code. |
 | `:libfdx:extensions:graphics:wgpu:platform:desktop_ffm` | `io.github.libfdx:wgpu_desktop_ffm` | Desktop WebGPU/wgpu runtime dependency module using Java FFM bindings. This module requires Java 25 because the current jWebGPU FFM runtime is Java 25-only. |
 | `:libfdx:extensions:graphics:wgpu:platform:desktop_c` | `io.github.libfdx:wgpu_desktop_c` | Desktop WebGPU/wgpu runtime dependency module for the native runtime stack if feasible. |
@@ -1135,13 +1131,13 @@ Use `g2d` instead of `2d` because Java package segments cannot start with a numb
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:graphics:g2d` | `io.github.libfdx:g2d` | Complete 2D toolkit: sprites, sprite batches, sprite shader effects, fog-of-war overlays, shape rendering, texture regions, atlases, bitmap fonts, vector-rasterized font atlases, text layout, 2D particles, tile maps, and 2D render helpers. Internally this module can still use packages such as `font`, `particles`, and `maps`, but users should depend on one `g2d` artifact. Camera state belongs to the shared `graphics/camera` `Camera`, not a g2d-specific camera class. |
+| `:libfdx:framework:g2d` | `io.github.libfdx:g2d` | Complete 2D toolkit: sprites, sprite batches, sprite shader effects, fog-of-war overlays, shape rendering, texture regions, atlases, bitmap fonts, vector-rasterized font atlases, text layout, 2D particles, tile maps, and 2D render helpers. Internally this module can still use packages such as `font`, `particles`, and `maps`, but users should depend on one `g2d` artifact. Camera state belongs to the shared `framework/camera` `Camera`, not a g2d-specific camera class. |
 
 ### 9.12. Graphics Camera Module
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:graphics:camera` | `io.github.libfdx:camera` | Shared camera state and focused camera controllers, including reusable 2D pan/zoom, free/editor, first-person, third-person, orbit, orthographic, cinematic controllers, and cinematic path samplers. This module depends on `runtime/input` for input-backed controllers and does not own renderer helpers. |
+| `:libfdx:framework:camera` | `io.github.libfdx:camera` | Shared camera state and focused camera controllers, including reusable 2D pan/zoom, free/editor, first-person, third-person, orbit, orthographic, cinematic controllers, and cinematic path samplers. This module depends on `framework/input` for input-backed controllers and does not own renderer helpers. |
 
 ### 9.13. Graphics 3D Modules
 
@@ -1149,7 +1145,7 @@ Use `g3d` instead of `3d` because Java package segments cannot start with a numb
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:graphics:g3d` | `io.github.libfdx:g3d` | Complete 3D toolkit: `Batch3D`, `ModelBatch`, meshes, models, model instances, materials, PBR shader/material data, skinned PBR GPU path, custom shader hooks, lights, environments, sky environment lighting, point-light and spotlight shading, directional and cascaded shadow maps, distance fog, fog-of-war overlays, animation, glTF hierarchy/skin/animation loading, render queues, render paths, frame target helpers, and scene rendering helpers. Internally this module can still use packages such as `models`, `animation`, `materials`, `shaders`, `render`, and `lighting`, but users should depend on one `g3d` artifact. Shared camera state belongs to `graphics/camera`; input-backed camera controllers belong to `graphics/camera`'s controller subpackage. |
+| `:libfdx:framework:g3d` | `io.github.libfdx:g3d` | Complete 3D toolkit: `Batch3D`, `ModelBatch`, meshes, models, model instances, materials, PBR shader/material data, skinned PBR GPU path, custom shader hooks, lights, environments, sky environment lighting, point-light and spotlight shading, directional and cascaded shadow maps, distance fog, fog-of-war overlays, animation, glTF hierarchy/skin/animation loading, render queues, render paths, frame target helpers, and scene rendering helpers. Internally this module can still use packages such as `models`, `animation`, `materials`, `shaders`, `render`, and `lighting`, but users should depend on one `g3d` artifact. Shared camera state belongs to `framework/camera`; input-backed camera controllers belong to `framework/camera`'s controller subpackage. |
 
 ### 9.14. UI Modules
 
@@ -1157,7 +1153,7 @@ UI modules contain built-in libfdx UI solutions. `ui-kit` is the default retaine
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:ui:ui-kit` | `io.github.libfdx:ui_kit` | Default libfdx UI toolkit: Compose-inspired declarative authoring over a retained runtime, widgets, layout, animation, themes, ninepatch styling, hit detection, input focus, and 2D rendering integration. Users should depend on one `ui_kit` artifact for this UI solution. The folder repeats `ui` for clarity inside the repository, but the artifact must stay `ui_kit`, not `ui_ui_kit`. |
+| `:libfdx:framework:ui-kit` | `io.github.libfdx:ui_kit` | Default libfdx UI toolkit: Compose-inspired declarative authoring over a retained runtime, widgets, layout, animation, themes, ninepatch styling, hit detection, input focus, and 2D rendering integration. Users should depend on one `ui_kit` artifact for this UI solution. The folder repeats `ui` for clarity inside the repository, but the artifact must stay `ui_kit`, not `ui_ui_kit`. |
 
 ### 9.15. Validation Modules
 
@@ -1180,7 +1176,7 @@ backends/<platform>_<implementation>
 
 The concrete backend module owns the launcher, lifecycle wiring, platform event loop integration, display creation, file/input bridge, and service registration. This allows several backend choices for the same platform without pretending that one module can represent every runtime.
 
-Backends should attach graphics through the provider-neutral `graphics/api` attachment SPI instead of constructing one graphics provider directly. For example, `backends/desktop` creates the GLFW window, exports a generic `NativeWindow`, and drives a `GraphicsAttachment` supplied by the launcher. `extensions/graphics/wgpu/core` consumes that generic native-window bridge, and `extensions/graphics/wgpu/platform/desktop_jni` supplies only the JNI runtime libraries. Shared game code still sees only `Graphics`.
+Backends should attach graphics through the provider-neutral `framework/graphics` attachment SPI instead of constructing one graphics provider directly. For example, `backends/desktop` creates the GLFW window, exports a generic `NativeWindow`, and drives a `GraphicsAttachment` supplied by the launcher. `extensions/graphics/wgpu/core` consumes that generic native-window bridge, and `extensions/graphics/wgpu/platform/desktop_jni` supplies only the JNI runtime libraries. Shared game code still sees only `Graphics`.
 
 Do not create a backend module that is also a parent folder for another backend module. For example, use `backends/android` and `backends/android_native`, not `backends/android` plus `backends/android/c`. Shared TeaVM build and native resource payloads belong in the flat `backends/c_shared` sibling.
 
@@ -1194,7 +1190,7 @@ Artifact IDs should include the implementation name unless the implementation is
 | `:libfdx:backends:headless_native` | `io.github.libfdx:backend_headless_native` | Headless backend for native runtime targets if that runtime is supported. |
 | `:libfdx:backends:desktop` | `io.github.libfdx:backend_desktop` | Default desktop backend using LWJGL3 internally for application lifecycle, OS display/window creation, input, and files. It can expose desktop-owned provider setup classes such as `DesktopOpenGLProvider`, but graphics runtime/native modules such as `gl_desktop` and `wgpu_desktop_jni` are still selected by launcher dependencies. |
 | `:libfdx:backends:c_shared` | `io.github.libfdx:backend_c_shared` | Flat shared C build and native resource support, including TeaVM build execution, shared builder errors, optimization settings, and classpath resources copied into generated native projects. It is not a parent folder for web or native backend modules. |
-| `:libfdx:backends:desktop_c` | `io.github.libfdx:backend_desktop_c` | Desktop backend for native runtime desktop targets. It owns GLFW window/lifecycle wiring, `NativeBuilder`, desktop-c project generation, and currently exposes `DesktopCOpenGLProvider` and `DesktopCVulkanProvider` while keeping graphics attached through the common `graphics/api` SPI. |
+| `:libfdx:backends:desktop_c` | `io.github.libfdx:backend_desktop_c` | Desktop backend for native runtime desktop targets. It owns GLFW window/lifecycle wiring, `NativeBuilder`, desktop-c project generation, and currently exposes `DesktopCOpenGLProvider` and `DesktopCVulkanProvider` while keeping graphics attached through the common `framework/graphics` SPI. |
 | `:libfdx:backends:psp` | `io.github.libfdx:backend_psp` | PSP TeaVM C backend module. It owns `PspBuilder`, PSP project generation, PSP native import declarations, PSP native resource payloads, `PspApplicationBackend`, `PspApplicationConfig`, and the first constrained PSP common graphics API slice for clear, non-indexed SpriteBatch-style rendering, and RGBA8 power-of-two sampled textures. The current application backend exposes fixed 480x272 display metadata, `PspGraphicsContext`, read-only internal/classpath assets staged through `libfdx.assets` or `PspBuilder.asset(...)`, and PSP controls as one standard-mapped gamepad plus controller-backed portable key events for focus/navigation. Physical keyboard, pointer, touch, text input, cursor, writable files, audio, and broader graphics runtime behavior belong here only when implemented as PSP backend classes. |
 | `:libfdx:backends:ios_c` | `io.github.libfdx:backend_ios_c` | Experimental iOS TeaVM C backend module. It owns the iOS C application lifecycle bridge, generated Xcode project shell, Swift/GLKit and MetalKit view controller templates, iOS GLES and native Metal provider/API adapters, graphics API project selection, and generated asset/native-resource layout. The `metal` graphics option uses a native Metal command-encoder path with reflected texture/sampler bindings, PBR named uniform-buffer uploads, and depth-state support when MSL is available. iOS C currently registers no runtime shader compiler provider, so WGSL-only built-in shaders require a future iOS compiler bridge on this backend. Launcher modules must declare this backend as an explicit `implementation` dependency; the Gradle plugin configures TeaVM C and Xcode generation tasks but does not add runtime dependencies to user projects. The generated Xcode project is the handoff point for simulator/device builds on macOS with Xcode. |
 | `:libfdx:backends:web` | `io.github.libfdx:backend_web` | Default browser backend using TeaVM internally for canvas/display integration, browser input and text-editor bridging, browser lifecycle, `WebBuilder`, and webapp asset metadata generation. It supports JS and Wasm build targets through the libfdx Gradle plugin and should not hard-code one graphics, audio, or gamepad provider. |
@@ -1323,7 +1319,7 @@ Inside this repository, tests and samples should keep the source-versus-publishe
 if (LibExt.usePublishedLibfdx) {
     implementation("${LibExt.fdxGroup}:fdx:${LibExt.publishedLibfdxVersion}")
 } else {
-    implementation(project(":libfdx:runtime:fdx:core"))
+    implementation(project(":libfdx:framework:fdx:core"))
 }
 ```
 
@@ -1370,7 +1366,7 @@ dependencies {
     runtimeOnly("io.github.libfdx:webrtc_web:$libfdxVersion")
     runtimeOnly("io.github.libfdx:webrtc_android_jni:$libfdxVersion")
 
-    implementation("io.github.libfdx:assets:$libfdxVersion")
+    implementation("io.github.libfdx:asset_manager:$libfdxVersion")
     implementation("io.github.libfdx:asset_loaders:$libfdxVersion")
 
     implementation("io.github.libfdx:graphics:$libfdxVersion")
@@ -1462,7 +1458,7 @@ dependencies {
     implementation("io.github.libfdx:audio:$libfdxVersion")
     implementation("io.github.libfdx:display:$libfdxVersion")
 
-    implementation("io.github.libfdx:assets:$libfdxVersion")
+    implementation("io.github.libfdx:asset_manager:$libfdxVersion")
     implementation("io.github.libfdx:asset_loaders:$libfdxVersion")
 
     implementation("io.github.libfdx:graphics:$libfdxVersion")
@@ -1477,7 +1473,7 @@ dependencies {
 
 ### 10.4. Desktop 3D Game
 
-3D rendering uses `graphics/g3d` instead of `graphics/g2d`.
+3D rendering uses `framework/g3d` instead of `framework/g2d`.
 
 ```kotlin
 dependencies {
@@ -1489,7 +1485,7 @@ dependencies {
     implementation("io.github.libfdx:input:$libfdxVersion")
     implementation("io.github.libfdx:display:$libfdxVersion")
 
-    implementation("io.github.libfdx:assets:$libfdxVersion")
+    implementation("io.github.libfdx:asset_manager:$libfdxVersion")
     implementation("io.github.libfdx:asset_loaders:$libfdxVersion")
 
     implementation("io.github.libfdx:graphics:$libfdxVersion")
@@ -1571,7 +1567,7 @@ dependencies {
     implementation("io.github.libfdx:input:$libfdxVersion")
     implementation("io.github.libfdx:files:$libfdxVersion")
 
-    implementation("io.github.libfdx:assets:$libfdxVersion")
+    implementation("io.github.libfdx:asset_manager:$libfdxVersion")
     implementation("io.github.libfdx:asset_loaders:$libfdxVersion")
 
     implementation("io.github.libfdx:graphics:$libfdxVersion")
@@ -1602,7 +1598,7 @@ dependencies {
     implementation("io.github.libfdx:display:$libfdxVersion")
     implementation("io.github.libfdx:audio:$libfdxVersion")
 
-    implementation("io.github.libfdx:assets:$libfdxVersion")
+    implementation("io.github.libfdx:asset_manager:$libfdxVersion")
 
     implementation("io.github.libfdx:graphics:$libfdxVersion")
     runtimeOnly("io.github.libfdx:wgpu_core:$libfdxVersion")
@@ -1640,9 +1636,9 @@ dependencies {
         implementation("${LibExt.fdxGroup}:graphics:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:g2d:${LibExt.publishedLibfdxVersion}")
     } else {
-        api(project(":libfdx:runtime:application"))
-        implementation(project(":libfdx:graphics:api"))
-        implementation(project(":libfdx:graphics:g2d"))
+        api(project(":libfdx:framework:application"))
+        implementation(project(":libfdx:framework:graphics"))
+        implementation(project(":libfdx:framework:g2d"))
     }
 }
 ```
@@ -1663,8 +1659,8 @@ dependencies {
         vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.publishedLibfdxVersion}")
         wgpuRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.publishedLibfdxVersion}")
     } else {
-        implementation(project(":libfdx:runtime:application"))
-        implementation(project(":libfdx:runtime:display"))
+        implementation(project(":libfdx:framework:application"))
+        implementation(project(":libfdx:framework:display"))
         implementation(project(":libfdx:extensions:graphics:wgpu:core"))
         implementation(project(":libfdx:backends:desktop"))
 
@@ -1747,9 +1743,9 @@ dependencies {
 
 ## 11. Graphics Direction
 
-The first graphics path should be WebGPU/wgpu oriented, with GL/WebGL available as a comparison provider family through the same `graphics/api` contracts. Vulkan should follow the same provider-family shape so all APIs can implement the common contracts while keeping API-specific public classes in their own modules.
+The first graphics path should be WebGPU/wgpu oriented, with GL/WebGL available as a comparison provider family through the same `framework/graphics` contracts. Vulkan should follow the same provider-family shape so all APIs can implement the common contracts while keeping API-specific public classes in their own modules.
 
-Initial low-level `graphics/api` concepts:
+Initial low-level `framework/graphics` concepts:
 
 - adapters
 - devices
@@ -1767,15 +1763,15 @@ Initial low-level `graphics/api` concepts:
 2D and 3D are separate layers above this low-level API:
 
 ```text
-graphics/api
+framework/graphics
   -> extensions/graphics/wgpu/core
   -> extensions/graphics/gl/core
   -> extensions/graphics/vulkan/core
-  -> graphics/g2d
-  -> graphics/g3d
+  -> framework/g2d
+  -> framework/g3d
 ```
 
-The low-level GPU API should not contain SpriteBatch-style 2D concepts or model/material/lighting-style 3D concepts. Those belong in `graphics/g2d` and `graphics/g3d`.
+The low-level GPU API should not contain SpriteBatch-style 2D concepts or model/material/lighting-style 3D concepts. Those belong in `framework/g2d` and `framework/g3d`.
 
 ## 12. Backends
 
@@ -1787,7 +1783,7 @@ Game and sample code should not depend on a platform namespace such as `backends
 
 ## 13. Input Direction
 
-Input common API belongs in `runtime/input`. Keyboard, mouse, touch, text input, and gamepad contracts should be available through the same input service so user code has one place to read input state and subscribe to input events.
+Input common API belongs in `framework/input`. Keyboard, mouse, touch, text input, and gamepad contracts should be available through the same input service so user code has one place to read input state and subscribe to input events.
 
 Gamepad implementation is provider-backed because each platform has different native APIs:
 
@@ -1823,7 +1819,7 @@ if (gamepads != null && gamepads.providerId().equals(DesktopGamepadProvider.ID))
 
 Audio should follow the same API/provider model as graphics.
 
-Common `runtime/audio` concepts:
+Common `framework/audio` concepts:
 
 - audio system/device service
 - sound buffer or sound handle
@@ -1842,7 +1838,7 @@ Provider modules:
 - `extensions/audio/miniaudio/web` for a web miniaudio runtime if it is useful.
 - `extensions/audio/webaudio/web` for browser WebAudio.
 - `extensions/audio/openal/core` and platform OpenAL runtimes only if there is a real reason to support OpenAL later.
-- Custom external providers should be possible without changing game code that uses `runtime/audio`.
+- Custom external providers should be possible without changing game code that uses `framework/audio`.
 
 Normal code should use:
 
@@ -1897,8 +1893,8 @@ The core test project should be organized by solution/package, not by platform:
 
 ```text
 tests/core/src/main/java/io/github/libfdx/tests/
-  foundation/
-  runtime/
+  core/
+  framework/
   input/
   assets/
   audio/
@@ -2003,28 +1999,28 @@ Core and runtime packages:
 
 | Gradle module | Java package root | What belongs there |
 | --- | --- | --- |
-| `:libfdx:runtime:fdx:core` | `io.github.libfdx.core`, `io.github.libfdx.runtime.core`, `io.github.libfdx.runtime.core.shader` | Minimal framework core types plus shared runtime services and native-service contracts. |
-| `:libfdx:foundation:math` | `io.github.libfdx.math` | Vectors, matrices, quaternions, bounds, and backend-independent color math. |
-| `:libfdx:foundation:json` | `io.github.libfdx.json` | Strict JSON value tree, reader, writer, and callback-based class codecs. |
-| `:libfdx:foundation:collections` | `io.github.libfdx.collections` | Specialized collections and allocation-conscious data structures. |
-| `:libfdx:runtime:application` | `io.github.libfdx.application` | Application lifecycle, config, loop contracts, platform capabilities, and application startup contracts. |
-| `:libfdx:runtime:files` | `io.github.libfdx.files` | File handles, storage locations, path normalization, and file read/write abstractions. |
-| `:libfdx:runtime:input` | `io.github.libfdx.input` | Keyboard, mouse, touch, gestures, text input, cursor state, gamepad contracts, and input routing primitives. |
-| `:libfdx:runtime:display` | `io.github.libfdx.display` | Display state, size, DPI, fullscreen, orientation, visibility, resize events, and display handles. |
-| `:libfdx:runtime:audio` | `io.github.libfdx.audio` | Common audio devices, sounds, music streams, audio buffers, playback controls, and audio provider SPI. |
-| `:libfdx:runtime:net` | `io.github.libfdx.net` plus focused subpackages | Root `Network` and `NetworkCapabilities`; HTTP in `net.http`; WebSocket in `net.websocket`; reusable packet storage in `net.buffer`; packet views/queues in `net.packet`; message codecs in `net.codec`; transform hooks in `net.transform`; endpoint configs in `net.config`; multiplayer endpoints/providers in `net.transport`; fixed-rate helpers in `net.processing`; backend/provider setup types in `net.spi`. |
+| `:libfdx:framework:fdx:core` | `io.github.libfdx.core`, `io.github.libfdx.runtime.core`, `io.github.libfdx.runtime.core.shader` | Minimal framework core types plus shared runtime services and native-service contracts. |
+| `:libfdx:framework:math` | `io.github.libfdx.math` | Vectors, matrices, quaternions, bounds, and backend-independent color math. |
+| `:libfdx:framework:json` | `io.github.libfdx.json` | Strict JSON value tree, reader, writer, and callback-based class codecs. |
+| `:libfdx:framework:collections` | `io.github.libfdx.collections` | Specialized collections and allocation-conscious data structures. |
+| `:libfdx:framework:application` | `io.github.libfdx.application` | Application lifecycle, config, loop contracts, platform capabilities, and application startup contracts. |
+| `:libfdx:framework:files` | `io.github.libfdx.files` | File handles, storage locations, path normalization, and file read/write abstractions. |
+| `:libfdx:framework:input` | `io.github.libfdx.input` | Keyboard, mouse, touch, gestures, text input, cursor state, gamepad contracts, and input routing primitives. |
+| `:libfdx:framework:display` | `io.github.libfdx.display` | Display state, size, DPI, fullscreen, orientation, visibility, resize events, and display handles. |
+| `:libfdx:framework:audio` | `io.github.libfdx.audio` | Common audio devices, sounds, music streams, audio buffers, playback controls, and audio provider SPI. |
+| `:libfdx:framework:net` | `io.github.libfdx.net` plus focused subpackages | Root `Network` and `NetworkCapabilities`; HTTP in `net.http`; WebSocket in `net.websocket`; reusable packet storage in `net.buffer`; packet views/queues in `net.packet`; message codecs in `net.codec`; transform hooks in `net.transform`; endpoint configs in `net.config`; multiplayer endpoints/providers in `net.transport`; fixed-rate helpers in `net.processing`; backend/provider setup types in `net.spi`. |
 
 Asset, graphics, and UI packages:
 
 | Gradle module | Java package root | What belongs there |
 | --- | --- | --- |
-| `:libfdx:assets:manager` | `io.github.libfdx.assets` | Asset manager, asset references, handles, dependency tracking, async loading contracts, and lifetime rules. |
-| `:libfdx:assets:loaders` | `io.github.libfdx.assets.loaders` | Default provider-neutral asset loaders and loader support types. GPU resource objects should still belong to graphics modules, and provider-backed audio handles should still belong to audio modules/providers. |
-| `:libfdx:graphics:api` | `io.github.libfdx.graphics` | Common graphics API: adapters, devices, queues, buffers, textures, texture views, framebuffers, render targets, multi-render targets, samplers, shader modules, bind groups, pipelines, command encoders, render passes, and surfaces. |
-| `:libfdx:graphics:camera` | `io.github.libfdx.graphics.camera`, `io.github.libfdx.graphics.camera.controller` | Shared camera state in the root package plus anchor contracts, pointer filters, input bindings, cinematic paths, and reusable 2D/3D camera controllers in the controller subpackage. |
-| `:libfdx:graphics:g2d` | `io.github.libfdx.graphics.g2d` | Complete 2D toolkit: sprites, sprite batches, texture regions, atlases, bitmap fonts, vector-rasterized font atlases, text layout, tile maps, particles, and 2D render helpers. Shared camera state lives in `io.github.libfdx.graphics.camera.Camera`. |
-| `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` | Complete 3D toolkit: `Batch3D`, `ModelBatch`, `ModelBuilder`, meshes, models, materials, PBR/default shaders, skinned PBR GPU path, custom shader hooks, lights, environments, sky environment lighting, directional and cascaded shadow maps, animation, render queues, render paths, frame target helpers, glTF loading, and 3D render helpers. Shared camera state lives in `io.github.libfdx.graphics.camera.Camera`; input-backed controllers live in `graphics/camera`. |
-| `:libfdx:ui:ui-kit` | `io.github.libfdx.ui` | Built-in UI toolkit: Compose-inspired declarative authoring over a retained runtime, widgets, layout, animation, themes, ninepatch styling, layers, focus, navigation, and input routing. |
+| `:libfdx:framework:assets:manager` | `io.github.libfdx.assets` | Asset manager, asset references, handles, dependency tracking, async loading contracts, and lifetime rules. |
+| `:libfdx:framework:assets:loaders` | `io.github.libfdx.assets.loaders` | Default provider-neutral asset loaders and loader support types. GPU resource objects should still belong to graphics modules, and provider-backed audio handles should still belong to audio modules/providers. |
+| `:libfdx:framework:graphics` | `io.github.libfdx.graphics` | Common graphics API: adapters, devices, queues, buffers, textures, texture views, framebuffers, render targets, multi-render targets, samplers, shader modules, bind groups, pipelines, command encoders, render passes, and surfaces. |
+| `:libfdx:framework:camera` | `io.github.libfdx.graphics.camera`, `io.github.libfdx.graphics.camera.controller` | Shared camera state in the root package plus anchor contracts, pointer filters, input bindings, cinematic paths, and reusable 2D/3D camera controllers in the controller subpackage. |
+| `:libfdx:framework:g2d` | `io.github.libfdx.graphics.g2d` | Complete 2D toolkit: sprites, sprite batches, texture regions, atlases, bitmap fonts, vector-rasterized font atlases, text layout, tile maps, particles, and 2D render helpers. Shared camera state lives in `io.github.libfdx.graphics.camera.Camera`. |
+| `:libfdx:framework:g3d` | `io.github.libfdx.graphics.g3d` | Complete 3D toolkit: `Batch3D`, `ModelBatch`, `ModelBuilder`, meshes, models, materials, PBR/default shaders, skinned PBR GPU path, custom shader hooks, lights, environments, sky environment lighting, directional and cascaded shadow maps, animation, render queues, render paths, frame target helpers, glTF loading, and 3D render helpers. Shared camera state lives in `io.github.libfdx.graphics.camera.Camera`; input-backed controllers live in `framework/camera`. |
+| `:libfdx:framework:ui-kit` | `io.github.libfdx.ui` | Built-in UI toolkit: Compose-inspired declarative authoring over a retained runtime, widgets, layout, animation, themes, ninepatch styling, layers, focus, navigation, and input routing. |
 | `:libfdx:validation:scenario-validator` | `io.github.libfdx.validation.scenario` | Scenario validation engine: reusable catalogs, scenarios, runtime actions, assertions, waits, step pacing, events, probes, reports, and visual validation hooks. |
 | `:libfdx:validation:scenario-validator-ui-kit` | `io.github.libfdx.validation.scenario.ui.kit` | UI Kit adapter for scenario validation: UI targets, UI actions, UI assertions, UI waits, UI events, UI captures, and validation ID integration. |
 
@@ -2058,33 +2054,33 @@ Class placement examples:
 
 | Class | Module | Package |
 | --- | --- | --- |
-| `ProviderId` | `:libfdx:runtime:fdx:core` | `io.github.libfdx.core` |
-| `ApplicationConfig` | `:libfdx:runtime:application` | `io.github.libfdx.application` |
-| `FileHandle` | `:libfdx:runtime:files` | `io.github.libfdx.files` |
-| `Texture` | `:libfdx:graphics:api` | `io.github.libfdx.graphics` |
-| `FrameBuffer` | `:libfdx:graphics:api` | `io.github.libfdx.graphics` |
-| `MultiRenderTarget` | `:libfdx:graphics:api` | `io.github.libfdx.graphics` |
-| `Camera`, `CameraProjection` | `:libfdx:graphics:camera` | `io.github.libfdx.graphics.camera` |
-| `ImmediateModeRenderer` | `:libfdx:graphics:api` | `io.github.libfdx.graphics` |
-| `CameraController2D`, focused camera controllers, cinematic camera paths, camera anchors, and camera input bindings | `:libfdx:graphics:camera` | `io.github.libfdx.graphics.camera.controller` |
-| `Batch2D` | `:libfdx:graphics:g2d` | `io.github.libfdx.graphics.g2d` |
-| `SpriteBatch` | `:libfdx:graphics:g2d` | `io.github.libfdx.graphics.g2d` |
-| `BitmapFont` | `:libfdx:graphics:g2d` | `io.github.libfdx.graphics.g2d` |
-| `TileMap` | `:libfdx:graphics:g2d` | `io.github.libfdx.graphics.g2d` |
-| `TileMapRenderer` | `:libfdx:graphics:g2d` | `io.github.libfdx.graphics.g2d` |
-| `Batch3D` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
-| `ModelBatch` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
-| `ModelBuilder` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
-| `ModelInstance` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
-| `CpuSkinnedModelAnimator` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
-| `BillboardRenderer3D` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
-| `ParticleEmitter3D` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
-| `FogOfWarRenderer3D` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
-| `CascadedShadowMap3D` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
-| `G3DAssetLoaders` | `:libfdx:graphics:g3d` | `io.github.libfdx.graphics.g3d` |
+| `ProviderId` | `:libfdx:framework:fdx:core` | `io.github.libfdx.core` |
+| `ApplicationConfig` | `:libfdx:framework:application` | `io.github.libfdx.application` |
+| `FileHandle` | `:libfdx:framework:files` | `io.github.libfdx.files` |
+| `Texture` | `:libfdx:framework:graphics` | `io.github.libfdx.graphics` |
+| `FrameBuffer` | `:libfdx:framework:graphics` | `io.github.libfdx.graphics` |
+| `MultiRenderTarget` | `:libfdx:framework:graphics` | `io.github.libfdx.graphics` |
+| `Camera`, `CameraProjection` | `:libfdx:framework:camera` | `io.github.libfdx.graphics.camera` |
+| `ImmediateModeRenderer` | `:libfdx:framework:graphics` | `io.github.libfdx.graphics` |
+| `CameraController2D`, focused camera controllers, cinematic camera paths, camera anchors, and camera input bindings | `:libfdx:framework:camera` | `io.github.libfdx.graphics.camera.controller` |
+| `Batch2D` | `:libfdx:framework:g2d` | `io.github.libfdx.graphics.g2d` |
+| `SpriteBatch` | `:libfdx:framework:g2d` | `io.github.libfdx.graphics.g2d` |
+| `BitmapFont` | `:libfdx:framework:g2d` | `io.github.libfdx.graphics.g2d` |
+| `TileMap` | `:libfdx:framework:g2d` | `io.github.libfdx.graphics.g2d` |
+| `TileMapRenderer` | `:libfdx:framework:g2d` | `io.github.libfdx.graphics.g2d` |
+| `Batch3D` | `:libfdx:framework:g3d` | `io.github.libfdx.graphics.g3d` |
+| `ModelBatch` | `:libfdx:framework:g3d` | `io.github.libfdx.graphics.g3d` |
+| `ModelBuilder` | `:libfdx:framework:g3d` | `io.github.libfdx.graphics.g3d` |
+| `ModelInstance` | `:libfdx:framework:g3d` | `io.github.libfdx.graphics.g3d` |
+| `CpuSkinnedModelAnimator` | `:libfdx:framework:g3d` | `io.github.libfdx.graphics.g3d` |
+| `BillboardRenderer3D` | `:libfdx:framework:g3d` | `io.github.libfdx.graphics.g3d` |
+| `ParticleEmitter3D` | `:libfdx:framework:g3d` | `io.github.libfdx.graphics.g3d` |
+| `FogOfWarRenderer3D` | `:libfdx:framework:g3d` | `io.github.libfdx.graphics.g3d` |
+| `CascadedShadowMap3D` | `:libfdx:framework:g3d` | `io.github.libfdx.graphics.g3d` |
+| `G3DAssetLoaders` | `:libfdx:framework:g3d` | `io.github.libfdx.graphics.g3d` |
 | `ModelBatchTest` | `:tests:core` | `io.github.libfdx.tests.graphics` |
-| `GraphicsAttachmentProvider` | `:libfdx:graphics:api` | `io.github.libfdx.graphics` |
-| `NativeWindow` | `:libfdx:graphics:api` | `io.github.libfdx.graphics` |
+| `GraphicsAttachmentProvider` | `:libfdx:framework:graphics` | `io.github.libfdx.graphics` |
+| `NativeWindow` | `:libfdx:framework:graphics` | `io.github.libfdx.graphics` |
 | `WGPUTexture` | `:libfdx:extensions:graphics:wgpu:core` | `io.github.libfdx.graphics.wgpu` |
 | `WGPUProvider` | `:libfdx:extensions:graphics:wgpu:core` | `io.github.libfdx.graphics.wgpu` |
 | `GLConfiguration` | `:libfdx:extensions:graphics:gl:core` | `io.github.libfdx.graphics.gl` |
@@ -2116,7 +2112,7 @@ Internal module folders and Gradle paths should avoid the `fdx-` prefix because 
 Example:
 
 ```text
-:libfdx:graphics:api
+:libfdx:framework:graphics
 ```
 
 Do not add another project prefix inside path segments, because `:libfdx` already scopes every internal module.
@@ -2171,7 +2167,7 @@ Prefer short names when there is no collision:
 ```text
 io.github.libfdx:math
 io.github.libfdx:display
-io.github.libfdx:assets
+io.github.libfdx:asset_manager
 ```
 
 Use prefixes only when the short name would be ambiguous or collide with another module:

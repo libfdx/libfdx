@@ -19,9 +19,9 @@ base {
 }
 
 dependencies {
-    api(project(":libfdx:runtime:fdx:core"))
-    api(project(":libfdx:runtime:display"))
-    api(project(":libfdx:runtime:input"))
+    api(project(":libfdx:framework:fdx:core"))
+    api(project(":libfdx:framework:display"))
+    api(project(":libfdx:framework:input"))
 }
 java {
     withSourcesJar()

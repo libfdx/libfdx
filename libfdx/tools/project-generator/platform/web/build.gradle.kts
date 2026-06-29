@@ -45,7 +45,7 @@ fun registerWebBuild(taskName: String, descriptionText: String, target: String, 
         group = "application"
         description = descriptionText
         if (!LibExt.usePublishedLibfdx) {
-            dependsOn(":libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native")
+            dependsOn(":libfdx:framework:fdx:platform:web:generate_runtime_fdx_web_native")
         }
         dependsOn(builderClasspath)
         inputs.files(builderClasspath)

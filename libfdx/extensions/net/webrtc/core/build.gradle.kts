@@ -19,8 +19,8 @@ base {
 }
 
 dependencies {
-    api(project(":libfdx:runtime:net"))
-    api(project(":libfdx:foundation:json"))
+    api(project(":libfdx:framework:net"))
+    api(project(":libfdx:framework:json"))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
 }

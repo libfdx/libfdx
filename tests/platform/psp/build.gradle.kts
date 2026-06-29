@@ -23,8 +23,8 @@ dependencies {
         implementation("${LibExt.fdxGroup}:ui_kit:${LibExt.publishedLibfdxVersion}")
     } else {
         implementation(project(":libfdx:backends:psp"))
-        implementation(project(":libfdx:graphics:g2d"))
-        implementation(project(":libfdx:ui:ui-kit"))
+        implementation(project(":libfdx:framework:g2d"))
+        implementation(project(":libfdx:framework:ui-kit"))
     }
 }
 

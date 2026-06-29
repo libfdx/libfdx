@@ -19,8 +19,8 @@ base {
 }
 
 dependencies {
-    api(project(":libfdx:runtime:fdx:core"))
-    api(project(":libfdx:graphics:api"))
+    api(project(":libfdx:framework:fdx:core"))
+    api(project(":libfdx:framework:graphics"))
     compileOnlyApi(libs.jwebgpu.core)
     compileOnly(libs.jwebgpu.jni)
 }

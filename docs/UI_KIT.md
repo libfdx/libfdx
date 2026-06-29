@@ -1,6 +1,6 @@
 # libFDX UI Kit Specification
 
-This document defines the implementation contract for `:libfdx:ui:ui-kit`. It keeps detailed UI rules out of `ARCHITECTURE.md` and `COMMON_API.md` while giving implementation work a stable specification.
+This document defines the implementation contract for `:libfdx:framework:ui-kit`. It keeps detailed UI rules out of `ARCHITECTURE.md` and `COMMON_API.md` while giving implementation work a stable specification.
 
 ## Index
 
@@ -222,7 +222,7 @@ Ninepatch influences preferred/minimum size through content padding and fixed co
 
 ### 7.1. Text, Fonts, And Localization
 
-Game UI depends heavily on text. The baseline text implementation uses `graphics:g2d` bitmap font layout and rendering. It supports AngelCode BMFont-style `.fnt` bitmap fonts, direct `BitmapFont` instances, and `.ttf`/`.otf` vector font assets rasterized into bitmap atlases through the FreeType path exposed by `g2d`. Family-font descriptors exist, but default system-family rasterization must fail clearly until a backend-specific provider exists. Generated font atlases should be created at the target UI scale, or oversampled, so DPI scaling does not blur text by stretching a small source atlas.
+Game UI depends heavily on text. The baseline text implementation uses `framework/g2d` bitmap font layout and rendering. It supports AngelCode BMFont-style `.fnt` bitmap fonts, direct `BitmapFont` instances, and `.ttf`/`.otf` vector font assets rasterized into bitmap atlases through the FreeType path exposed by `g2d`. Family-font descriptors exist, but default system-family rasterization must fail clearly until a backend-specific provider exists. Generated font atlases should be created at the target UI scale, or oversampled, so DPI scaling does not blur text by stretching a small source atlas.
 
 Required text features:
 
@@ -436,8 +436,8 @@ ui.tooltip(Ui.tooltip("profile.name").delayMillis(2000), tooltip -> {
 
 Rendering is backend-neutral and uses libfdx rendering helpers:
 
-- Use `graphics:g2d` for batched rectangles, images, ninepatches, and text.
-- Use `graphics/api` only where lower-level render target or clipping support is required.
+- Use `framework/g2d` for batched rectangles, images, ninepatches, and text.
+- Use `framework/graphics` only where lower-level render target or clipping support is required.
 - Do not depend on GL, Vulkan, WGPU, desktop, Android, or web provider classes.
 - Keep render state changes predictable and batched where possible.
 - Support clipping for scroll panes, text fields, and text areas.
@@ -500,7 +500,7 @@ Constructor signatures are implementation details. The lifecycle rule is stable:
 Module:
 
 ```text
-:libfdx:ui:ui-kit
+:libfdx:framework:ui-kit
 ```
 
 Artifact:
@@ -518,7 +518,7 @@ io.github.libfdx.ui
 Rules:
 
 - Keep `ui-kit` as one user-facing module. Do not split it into scene graph, layout, and widget artifacts.
-- `ui-kit` may depend on `runtime/fdx/core`, display/application runtime APIs, `graphics/api`, `graphics:g2d`, and asset modules needed for fonts, skins, and ninepatches.
+- `ui-kit` may depend on `framework/fdx/core`, display/application runtime APIs, `framework/graphics`, `framework/g2d`, and asset modules needed for fonts, skins, and ninepatches.
 - `ui-kit` must not depend on backend modules or provider-specific graphics modules.
 - `ui-kit` is not exposed from `Fdx`; users create `UiToolkit`/`UiRoot` explicitly.
 
@@ -548,7 +548,7 @@ Non-goals:
 
 ## 14. Implementation Order
 
-1. Create `:libfdx:ui:ui-kit` with public type skeletons, module metadata, and a basic sample.
+1. Create `:libfdx:framework:ui-kit` with public type skeletons, module metadata, and a basic sample.
 2. Implement `UiRoot`, retained nodes, composition, explicit `UiState`, and dirty recomposition.
 3. Implement row, column, stack, spacer, panel, and basic modifiers.
 4. Render rectangles, images, and text through `g2d`.

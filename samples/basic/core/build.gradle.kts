@@ -23,9 +23,9 @@ dependencies {
         implementation("${LibExt.fdxGroup}:g2d:${LibExt.publishedLibfdxVersion}")
         implementation("${LibExt.fdxGroup}:ui_kit:${LibExt.publishedLibfdxVersion}")
     } else {
-        api(project(":libfdx:runtime:application"))
-        implementation(project(":libfdx:graphics:api"))
-        implementation(project(":libfdx:graphics:g2d"))
-        implementation(project(":libfdx:ui:ui-kit"))
+        api(project(":libfdx:framework:application"))
+        implementation(project(":libfdx:framework:graphics"))
+        implementation(project(":libfdx:framework:g2d"))
+        implementation(project(":libfdx:framework:ui-kit"))
     }
 }

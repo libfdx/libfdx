@@ -18,13 +18,13 @@ dependencies {
     implementation(project(":libfdx:backends:c_shared"))
     implementation(project(":libfdx:tools:font"))
 
-    api(project(":libfdx:runtime:fdx:core"))
-    api(project(":libfdx:runtime:application"))
-    api(project(":libfdx:runtime:display"))
-    api(project(":libfdx:runtime:files"))
-    api(project(":libfdx:graphics:api"))
+    api(project(":libfdx:framework:fdx:core"))
+    api(project(":libfdx:framework:application"))
+    api(project(":libfdx:framework:display"))
+    api(project(":libfdx:framework:files"))
+    api(project(":libfdx:framework:graphics"))
 
-    runtimeOnly(project(":libfdx:runtime:fdx:platform:web"))
+    runtimeOnly(project(":libfdx:framework:fdx:platform:web"))
 
     implementation(libs.teavm.jso)
     implementation(libs.teavm.jso.apis)

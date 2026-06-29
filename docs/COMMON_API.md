@@ -97,7 +97,7 @@ Rules:
 - Objects returned by `as()` are valid only for the lifetime of the backing provider/device/resource.
 - Portable modules should not require `as()` for normal behavior.
 - Native handles should not appear in normal game-facing common APIs. The `NativeWindow` type is the explicit backend/provider setup exception and should be created by backends and consumed by graphics providers, not used by shared game code.
-- `runtime/fdx/core` services are framework-internal runtime capabilities. Game code should normally use higher-level APIs such as `UiFont.freeType(...)`, `BitmapFontFiles.loadFreeType(...)`, and math classes. Those APIs may use `runtime/fdx/core` internally for default native-backed behavior.
+- `framework/fdx/core` services are framework-internal runtime capabilities. Game code should normally use higher-level APIs such as `UiFont.freeType(...)`, `BitmapFontFiles.loadFreeType(...)`, and math classes. Those APIs may use `framework/fdx/core` internally for default native-backed behavior.
 
 Common handles backed by provider state should implement `ProviderHandle`, including:
 
@@ -228,7 +228,7 @@ External binding extensions should not rename public binding classes just to mat
 Module:
 
 ```text
-:libfdx:runtime:fdx:core
+:libfdx:framework:fdx:core
 ```
 
 Package:
@@ -318,7 +318,7 @@ Rules:
 
 - `Disposable.dispose()` should be safe to call more than once.
 - Using a disposed provider-backed object should fail clearly.
-- Core must not depend on assets, graphics, audio, UI, physics, extensions, or backends. Foundation modules may depend on `runtime/fdx/core` for shared base contracts, but not on higher runtime systems.
+- Core must not depend on assets, graphics, audio, UI, physics, extensions, or backends. Foundation modules may depend on `framework/fdx/core` for shared base contracts, but not on higher runtime systems.
 - Async APIs should not assume blocking threads are available on every platform.
 - When a method returns an object and that object does not exist, it returns `null`.
 - `FdxFuture.get()` and `FdxFuture.join()` return the completed value and fail clearly if the future has not completed or completed with an error.
@@ -340,7 +340,7 @@ Rules:
 Module:
 
 ```text
-:libfdx:foundation:math
+:libfdx:framework:math
 ```
 
 Package:
@@ -373,7 +373,7 @@ Rules:
 Module:
 
 ```text
-:libfdx:foundation:json
+:libfdx:framework:json
 ```
 
 Package:
@@ -446,15 +446,15 @@ Rules:
 - `JsonValue` preserves JSON object member order.
 - `JsonReader` parses strict JSON and fails clearly for invalid syntax.
 - `JsonWriter` must emit valid JSON with correct string escaping.
-- `foundation/json` must not depend on files, assets, graphics, UI, extensions, backends, or platform APIs.
-- Asset workflows may use `JsonAssetLoader` from `assets/loaders` to load a `JsonValue`, but parsing and writing remain usable directly from `foundation/json`.
+- `framework/json` must not depend on files, assets, graphics, UI, extensions, backends, or platform APIs.
+- Asset workflows may use `JsonAssetLoader` from `framework/assets/loaders` to load a `JsonValue`, but parsing and writing remain usable directly from `framework/json`.
 
 ### 5.4. Foundation Collections Types
 
 Module:
 
 ```text
-:libfdx:foundation:collections
+:libfdx:framework:collections
 ```
 
 Package:
@@ -482,7 +482,7 @@ Defined types:
 Rules:
 
 - Collections must remain pure Java and provider-neutral. They must not depend on files, assets, graphics, UI, extensions, backends, or platform APIs.
-- Collection APIs must not depend on `runtime/fdx/core` unless they use a shared base contract. The initial collection types have no runtime behavior and no runtime module dependency.
+- Collection APIs must not depend on `framework/fdx/core` unless they use a shared base contract. The initial collection types have no runtime behavior and no runtime module dependency.
 - Primitive arrays must avoid boxing values in their storage, lookup, and removal paths.
 - Primitive-key maps must avoid boxing keys in their storage and lookup paths.
 - Maps must distinguish a missing key from a present key whose value is `null`; callers use `containsKey(...)` when that distinction matters.
@@ -501,7 +501,7 @@ Rules:
 Module:
 
 ```text
-:libfdx:runtime:application
+:libfdx:framework:application
 ```
 
 Package:
@@ -712,7 +712,7 @@ Rules:
 - If multiple compatible providers are available, the backend should require an explicit `ProviderId` or fail with a clear configuration error.
 - `ApplicationConfig` uses `ProviderId`, not Maven artifact names.
 - String values loaded from user settings should be converted with `ProviderId.of(String)` before being stored in `ApplicationConfig`.
-- `ApplicationConfig` is owned by `runtime/application` and must not depend on `assets`, `ui-kit`, extensions, or backend modules.
+- `ApplicationConfig` is owned by `framework/application` and must not depend on `assets`, `ui-kit`, extensions, or backend modules.
 - Do not add a generic key/value config map to `ApplicationConfig`. Startup options should be discoverable through typed backend/provider config APIs.
 - Backend-specific values such as window title, size, foreground FPS, and Android native text editor style belong on backend config classes such as `DesktopApplicationConfig` and `AndroidApplicationConfig`.
 - Provider-specific values such as WGPU backend selection belong on provider setup types such as `WGPUProvider` or provider-owned configuration descriptors.
@@ -722,7 +722,7 @@ Rules:
 Module:
 
 ```text
-:libfdx:runtime:files
+:libfdx:framework:files
 ```
 
 Package:
@@ -889,7 +889,7 @@ Rules:
 Module:
 
 ```text
-:libfdx:runtime:input
+:libfdx:framework:input
 ```
 
 Package:
@@ -1053,7 +1053,7 @@ if (gamepads != null) {
 Rules:
 
 - Keyboard, mouse, touch, text input, and gamepad access should be available from one `Input` service.
-- Gamepads are part of `runtime/input`; platform-specific gamepad providers live under `extensions/input/gamepads`.
+- Gamepads are part of `framework/input`; platform-specific gamepad providers live under `extensions/input/gamepads`.
 - Text input is not the same as key input. UI and text fields should use text input events.
 - `Input.showTextInput(...)` requests a platform text-input session for the supplied value, selection, multiline, password, read-only, keyboard-type, and optional display-space focused text bounds. Multiline widgets should use the active caret or selected line bounds so mobile backends can keep the edited line visible.
 - `Input.updateTextInput(...)` refreshes platform text-input state after cursor, selection, or text changes. It must not dispatch a duplicate text event by itself.
@@ -1087,7 +1087,7 @@ AndroidApplicationConfig config = new AndroidApplicationConfig()
 Module:
 
 ```text
-:libfdx:runtime:display
+:libfdx:framework:display
 ```
 
 Package:
@@ -1110,7 +1110,7 @@ Defined types:
 
 ### 9.1. Display Contract
 
-`Display` is a runtime/platform presentation area: a desktop window, browser canvas, Android view, iOS view, or backend-owned presentation target. `Displays` owns the main display and optional creation of additional displays. Graphics contexts can create surfaces for displays, but display code itself must stay independent from `graphics/api`.
+`Display` is a runtime/platform presentation area: a desktop window, browser canvas, Android view, iOS view, or backend-owned presentation target. `Displays` owns the main display and optional creation of additional displays. Graphics contexts can create surfaces for displays, but display code itself must stay independent from `framework/graphics`.
 
 Defined shape:
 
@@ -1163,19 +1163,19 @@ Rules:
 - `DisplayConfig.size(...)` is a requested startup size where the platform can honor it. Mobile backends should report the actual platform view/surface size and render to that size instead of stretching a fixed-size framebuffer to fill the device display.
 - `DisplayConfig.maximized(...)` is a requested startup window state for windowed desktop-style platforms. If a backend cannot honor maximized startup, it should still report the actual display size after creation or resize.
 - `Display.contentScaleX()`, `contentScaleY()`, and `contentScale()` expose the platform content scale for DPI/high-density presentation. Desktop backends should use platform window content scale, web backends should use browser device pixel ratio, mobile backends should use platform display density, and generic implementations may fall back to framebuffer-size-to-logical-size ratio.
-- `Display` belongs to runtime and must not depend on `graphics/api`.
-- `Surface` belongs to `graphics/api` and represents the connection between a `GraphicsContext` and a `Display`.
+- `Display` belongs to runtime and must not depend on `framework/graphics`.
+- `Surface` belongs to `framework/graphics` and represents the connection between a `GraphicsContext` and a `Display`.
 - `Display` implements `ProviderHandle` so provider/backend-specific display handles are available through `as()`.
 - Fullscreen, icons, cursor capture, DPI, monitor metadata, and orientation should be added only through capability-aware APIs.
-- `DisplayConfig` is owned by `runtime/display`. Concrete backend config classes may wrap or compose it through direct methods so launchers do not need generic config keys.
+- `DisplayConfig` is owned by `framework/display`. Concrete backend config classes may wrap or compose it through direct methods so launchers do not need generic config keys.
 
 Boundary:
 
 ```text
-runtime/display Display
-  -> no dependency on graphics/api
+framework/display Display
+  -> no dependency on framework/graphics
 
-graphics/api Surface
+framework/graphics Surface
   -> may use a Display to create/configure a render target
 ```
 
@@ -1184,7 +1184,7 @@ graphics/api Surface
 Module:
 
 ```text
-:libfdx:runtime:audio
+:libfdx:framework:audio
 ```
 
 Package:
@@ -1313,7 +1313,7 @@ Rules:
 - Provider-specific device handles and native details should be available only through provider-specific types or `as()`.
 - Spatial audio, capture/microphone, device hotplug, and advanced mixing should be capability-gated or added as separate modules later.
 - `AudioProvider` is a provider factory/SPI used by backend setup and should not be registered as a normal `FdxService`.
-- `AudioConfig` is owned by `runtime/audio`. Concrete backend or audio-provider config classes should expose direct methods for audio startup values instead of using a generic config map.
+- `AudioConfig` is owned by `framework/audio`. Concrete backend or audio-provider config classes should expose direct methods for audio startup values instead of using a generic config map.
 
 Basic usage:
 
@@ -1329,7 +1329,7 @@ playback.volume(0.5f);
 Module:
 
 ```text
-:libfdx:runtime:net
+:libfdx:framework:net
 ```
 
 Packages:
@@ -1646,8 +1646,8 @@ Backends may install the returned provider into the typed `Fdx` root setup path.
 Modules:
 
 ```text
-:libfdx:assets:manager
-:libfdx:assets:loaders
+:libfdx:framework:assets:manager
+:libfdx:framework:assets:loaders
 ```
 
 Packages:
@@ -1742,12 +1742,12 @@ Rules:
 - Base asset loaders should not force a graphics provider.
 - `AssetManager` is user-created or framework-feature code, not a backend-owned service returned by `Fdx`.
 - `AssetLoadContext` exposes file and asset-dependency loading support, not the root `Fdx` object.
-- `ImageData` is asset/source data. `Texture` is a GPU resource owned by `graphics/api`.
-- Future audio source data should stay provider-neutral. `Sound` and `Music` are provider-backed audio handles owned by `runtime/audio` and the selected audio provider.
-- `assets/loaders` may provide provider-neutral loaders such as image, JSON, properties, atlas metadata, font metadata, shader-source, and audio-source data. JSON loading produces the `JsonValue` tree owned by `foundation/json`.
-- `assets/loaders` must not create provider-backed `Texture`, `Sound`, or `Music` objects directly.
-- Graphics-aware loaders for `Texture`, `TextureRegion`, bitmap fonts, atlases, models, or other GPU-backed assets should live in a high-level module or explicit bridge that already depends on both `assets/manager` and the relevant graphics module.
-- Audio-aware loaders for `Sound` and `Music` should live in the selected audio provider module or an explicit audio asset bridge that depends on both `assets/manager` and `runtime/audio`.
+- `ImageData` is asset/source data. `Texture` is a GPU resource owned by `framework/graphics`.
+- Future audio source data should stay provider-neutral. `Sound` and `Music` are provider-backed audio handles owned by `framework/audio` and the selected audio provider.
+- `framework/assets/loaders` may provide provider-neutral loaders such as image, JSON, properties, atlas metadata, font metadata, shader-source, and audio-source data. JSON loading produces the `JsonValue` tree owned by `framework/json`.
+- `framework/assets/loaders` must not create provider-backed `Texture`, `Sound`, or `Music` objects directly.
+- Graphics-aware loaders for `Texture`, `TextureRegion`, bitmap fonts, atlases, models, or other GPU-backed assets should live in a high-level module or explicit bridge that already depends on both `framework/assets/manager` and the relevant graphics module.
+- Audio-aware loaders for `Sound` and `Music` should live in the selected audio provider module or an explicit audio asset bridge that depends on both `framework/assets/manager` and `framework/audio`.
 - Examples that load `Texture`, `Sound`, or `Music` through `AssetManager` assume the corresponding optional loader has been registered during startup.
 - Asset loading should support async implementations.
 - `AssetManager.update()` runs completion work that must happen on the application/update thread, such as GPU texture creation after image decode.
@@ -1763,7 +1763,7 @@ Rules:
 Module:
 
 ```text
-:libfdx:graphics:api
+:libfdx:framework:graphics
 ```
 
 Package:
@@ -1928,10 +1928,10 @@ Rules:
 - `GraphicsContext.as()` is the advanced provider-specific escape hatch.
 - `GraphicsContext.device()` returns a common device interface backed by the selected provider.
 - `GraphicsContext.surfaceFormat()` returns the current presentation color format used for render pipeline creation.
-- `ImmediateModeRenderer` belongs to `graphics/api`. It queues colored line-list vertices on the CPU, supports normalized-device-coordinate 2D lines and matrix-projected 3D lines, and uses depth testing only for the 3D render path.
+- `ImmediateModeRenderer` belongs to `framework/graphics`. It queues colored line-list vertices on the CPU, supports normalized-device-coordinate 2D lines and matrix-projected 3D lines, and uses depth testing only for the 3D render path.
 - `GraphicsContext.currentFrame()` is valid only during a backend-owned frame, normally inside `ApplicationListener.render()`.
 - Resources are owned by one `GraphicsContext`. A texture created by a GL context is not automatically usable by a Vulkan context.
-- Shared game modules should depend on `graphics/api`, not on `extensions/graphics/<provider>`.
+- Shared game modules should depend on `framework/graphics`, not on `extensions/graphics/<provider>`.
 - Backends must read `GraphicsAttachmentProvider.requirements()` before creating the window or canvas. WGPU normally requests `NO_API`; desktop GL requests a GL context; Vulkan requests `VULKAN`, which desktop backends usually realize as a no-client-API native window plus Vulkan support checks.
 - Backends that receive a `GraphicsAttachmentReadiness` attachment must wait for `isReady()` before calling `ApplicationListener.create(...)`.
 - Backend/provider code owns frame begin/end and presentation. Normal game code should not call provider-specific frame lifecycle methods such as wgpu surface acquisition directly.
@@ -1942,14 +1942,14 @@ Rules:
 - Provider-specific graphics configuration should be stored on the provider setup object itself, not looked up through `GraphicsEnvironment`.
 - `FrameBuffer` is the provider-neutral current drawable view. GL implementations may use the default framebuffer, Vulkan implementations may use the current swapchain image, and WGPU implementations may use the acquired surface texture.
 - Multi-render targets should be exposed as an ordered color attachment list with one optional depth/stencil attachment. The public API should not expose provider-specific subpass, layout transition, or framebuffer handle details.
-- Camera state belongs to `graphics/camera`; `graphics/api` must stay independent from camera input/controller concerns.
+- Camera state belongs to `framework/camera`; `framework/graphics` must stay independent from camera input/controller concerns.
 
 ### 13.3.1. Graphics Camera
 
 Module:
 
 ```text
-:libfdx:graphics:camera
+:libfdx:framework:camera
 ```
 
 Packages:
@@ -1959,7 +1959,7 @@ io.github.libfdx.graphics.camera
 io.github.libfdx.graphics.camera.controller
 ```
 
-`graphics/camera` contains shared camera state in `io.github.libfdx.graphics.camera` and input-backed camera controllers in `io.github.libfdx.graphics.camera.controller`. It depends on `runtime/input` for controllers; renderer helpers belong to `graphics/api`.
+`framework/camera` contains shared camera state in `io.github.libfdx.graphics.camera` and input-backed camera controllers in `io.github.libfdx.graphics.camera.controller`. It depends on `framework/input` for controllers; renderer helpers belong to `framework/graphics`.
 
 Defined shape:
 
@@ -2176,7 +2176,7 @@ Rules:
 
 - Camera controllers are user-created helpers, not `Fdx` root services.
 - `Camera` is one mutable graphics camera type. It must not split into separate 2D, 3D, orthographic, or perspective subclasses. A camera changes mode through `projection(CameraProjection)` and keeps the same instance identity.
-- Camera controllers manipulate a caller-owned `graphics/camera` `Camera`; they do not own or replace it.
+- Camera controllers manipulate a caller-owned `framework/camera` `Camera`; they do not own or replace it.
 - Camera controllers register input processors when constructed and must be disposed or disabled when no longer active.
 - `CameraController2D` is for orthographic 2D pan and zoom.
 - `FreeCameraController3D` moves a camera directly and is intended for editor, debug, sample, and test fly cameras. Scroll changes movement speed multiplicatively; fast and boost modifiers come from `CameraInputBindings3D`.
@@ -2482,9 +2482,9 @@ Rules:
 
 - Descriptor objects carry creation parameters; resource interfaces expose stable identity, metadata, lifecycle, and provider access.
 - Resource metadata methods should return the values the resource was created with.
-- `ShaderModuleDescriptor` public authoring is WGSL-only. Providers that need GLSL, SPIR-V, or MSL receive descriptors generated from WGSL through the `runtime/fdx/core` shader compiler capability during shader-module creation.
+- `ShaderModuleDescriptor` public authoring is WGSL-only. Providers that need GLSL, SPIR-V, or MSL receive descriptors generated from WGSL through the `framework/fdx/core` shader compiler capability during shader-module creation.
 - `ShaderBundle` remains an optional setup-time wrapper for tools and users that want to group WGSL, profile metadata, and reflection metadata. Normal built-in renderers pass WGSL `ShaderModuleDescriptor` values directly and let the selected provider compile when translation is required.
-- Runtime WGSL-to-GLSL/SPIR-V/MSL translation is an explicit provider feature backed by `runtime/fdx/core`. It happens at shader-module creation/setup time, not in a render loop. If the active runtime does not provide the compiler capability for a provider that needs translation, shader creation must fail clearly.
+- Runtime WGSL-to-GLSL/SPIR-V/MSL translation is an explicit provider feature backed by `framework/fdx/core`. It happens at shader-module creation/setup time, not in a render loop. If the active runtime does not provide the compiler capability for a provider that needs translation, shader creation must fail clearly.
 - A shader that passes WebGPU/WGSL validation is not automatically portable to WebGL/OpenGL ES. Use `ShaderProfile.PORTABLE_WEBGL2` for shaders that must run on WebGL2/GLES-style targets and `ShaderProfile.PORTABLE_WEBGPU` for shaders that only need modern WebGPU/wgpu-class targets.
 - Metal uses translated MSL through the same WGSL-only descriptor contract. DirectX/HLSL remains a future target until the language enum, descriptor shape, and provider path are implemented.
 - `BufferDescriptor.vertex(label, size)` creates provider-backed vertex storage. `BufferDescriptor.index(label, size)` creates provider-backed index storage. Buffers are dynamic by default for frequent writes; `staticVertex(...)`, `staticIndex(...)`, or `dynamic(false)` mark storage that is optimized for infrequent uploads and repeated draws.
@@ -2622,7 +2622,7 @@ Current implemented texture slice:
 - `TextureDescriptor.wrap(...)` controls sampled-texture coordinate addressing. The default is `TextureWrap.CLAMP_TO_EDGE`.
 - `GraphicsDevice.writeTexture(texture, data)` uploads full RGBA image data.
 - `RenderPass.setTexture(slot, texture)` binds sampled textures for draw calls.
-- `TextureRegion` in `graphics/g2d` maps sub-rectangles of a `Texture` to normalized UV coordinates.
+- `TextureRegion` in `framework/g2d` maps sub-rectangles of a `Texture` to normalized UV coordinates.
 
 `TextureView` is common because modern graphics APIs need a way to bind or render to a specific interpretation, mip range, layer range, or aspect of a texture.
 
@@ -2651,16 +2651,16 @@ Rules:
 `Display` and `Surface` are separate:
 
 ```text
-runtime/display Display
-graphics/api Surface
+framework/display Display
+framework/graphics Surface
 ```
 
 `Display` is the platform presentation area. `Surface` is the graphics API object used for rendering/presentation.
 
 Rules:
 
-- `runtime/display` must not depend on `graphics/api`.
-- `graphics/api` may depend on `runtime/display` for surface creation or presentation handles.
+- `framework/display` must not depend on `framework/graphics`.
+- `framework/graphics` may depend on `framework/display` for surface creation or presentation handles.
 - Headless backends may not expose a display-backed surface.
 - Offscreen rendering should not require a `Display`.
 
@@ -2690,7 +2690,7 @@ Provider implementations should validate descriptors against capabilities at cre
 Module:
 
 ```text
-:libfdx:graphics:g2d
+:libfdx:framework:g2d
 ```
 
 Package:
@@ -2699,7 +2699,7 @@ Package:
 io.github.libfdx.graphics.g2d
 ```
 
-`g2d` is a complete 2D toolkit built on `graphics/api`.
+`g2d` is a complete 2D toolkit built on `framework/graphics`.
 
 Defined types:
 
@@ -2721,7 +2721,7 @@ Defined types:
 
 ### 14.1. Graphics 2D Contracts
 
-`g2d` provides higher-level rendering helpers on top of `graphics/api`. It should hide low-level graphics details where possible, but it still renders through common `RenderPass`, `Texture`, and `Buffer` concepts internally.
+`g2d` provides higher-level rendering helpers on top of `framework/graphics`. It should hide low-level graphics details where possible, but it still renders through common `RenderPass`, `Texture`, and `Buffer` concepts internally.
 
 Defined shape:
 
@@ -2932,7 +2932,7 @@ spriteBatch.end();
 
 Rules:
 
-- `g2d` should use `graphics/api`, not provider-specific graphics types.
+- `g2d` should use `framework/graphics`, not provider-specific graphics types.
 - `g2d` should hide `TextureView` from simple sprite users when possible.
 - `ShapeRenderer2D` is the first g2d implementation. It streams CPU-generated vertices into common `Buffer` objects and currently uses normalized -1..1 coordinates.
 - `Batch2D` is the common textured g2d batch contract. `SpriteBatch` is the first implementation. It streams quad vertices into common `Buffer` objects, binds common `Texture` handles, and currently uses normalized -1..1 coordinates. Rotation is expressed in degrees around the supplied local origin. `viewport(width, height)` supplies the framebuffer size used to keep rotated sprites pixel-proportional while coordinates are still normalized. The array-based `draw(TextureRegion, float[], float[], ...)` overload submits repeated same-region sprites in one logical batch and may use instanced/static GPU buffers internally.
@@ -2949,7 +2949,7 @@ Rules:
 Module:
 
 ```text
-:libfdx:graphics:g3d
+:libfdx:framework:g3d
 ```
 
 Package:
@@ -2958,14 +2958,14 @@ Package:
 io.github.libfdx.graphics.g3d
 ```
 
-`g3d` is a complete 3D toolkit built on `graphics/api` and the shared `graphics/camera` camera types. It owns model, material, shader, animation, scene, and render-path concepts. `Batch3D` is the common 3D submission contract; `ModelBatch` is the first implementation.
+`g3d` is a complete 3D toolkit built on `framework/graphics` and the shared `framework/camera` camera types. It owns model, material, shader, animation, scene, and render-path concepts. `Batch3D` is the common 3D submission contract; `ModelBatch` is the first implementation.
 
 Defined types:
 
 | Type | Role |
 | --- | --- |
-| `Camera` | Shared graphics camera from `graphics/camera` used for 3D render submissions. |
-| `Color`, `Vector3`, `Matrix4`, `BoundingBox` | Shared math types from `foundation/math` used in 3D materials, transforms, and bounds. |
+| `Camera` | Shared graphics camera from `framework/camera` used for 3D render submissions. |
+| `Color`, `Vector3`, `Matrix4`, `BoundingBox` | Shared math types from `framework/math` used in 3D materials, transforms, and bounds. |
 | `Batch3D` | Common 3D render submission contract. |
 | `ModelBatch` | Default optimized model batch implementation. |
 | `OutlineRenderer3D` | WGSL-authored shell outline renderer for PBR-layout 3D meshes. |
@@ -2973,7 +2973,7 @@ Defined types:
 | `SkyboxRenderer3D` | WGSL-authored procedural world-space sky/background renderer for 3D scenes. |
 | `SkyEnvironment3D` | Procedural sky environment description sampled by the default PBR path for IBL-style diffuse and specular lighting. |
 | `ModelBuilder` | Programmatic primitive model construction for cubes, boxes, spheres, and custom triangle meshes. |
-| `Mesh` | Concrete low-level mesh from `graphics/api` used by 3D model parts. |
+| `Mesh` | Concrete low-level mesh from `framework/graphics` used by 3D model parts. |
 | `MeshPart` | 3D subset of a graphics `Mesh` rendered with one material and primitive topology. |
 | `Model` | Loaded 3D model asset. |
 | `DefaultModel` | Default loaded-model implementation. |
@@ -3002,16 +3002,16 @@ Defined types:
 | `CascadedShadowMap3D` | Helper that manages multiple directional shadow maps split from a view camera for default PBR cascade sampling. |
 | `BillboardRenderer3D` | WGSL-authored camera-facing textured quad renderer for 3D markers, effects, impostors, and simple particles. |
 | `ParticleEmitter3D` | Fixed-capacity 3D particle emitter that renders through `BillboardRenderer3D`. |
-| `RenderTarget3D` | High-level 3D render target view backed by `graphics/api` attachments. |
+| `RenderTarget3D` | High-level 3D render target view backed by `framework/graphics` attachments. |
 | `DefaultRenderTarget3D` | Default wrapper around color/depth attachments for a 3D pass. |
 | `RenderPath3D` | Forward, deferred, shadow, post-processing, or custom render path. |
 | `RenderGraph3D` | Ordered set of 3D passes and their render targets. |
 | `G3DAssetLoaders` | Asset loader registration for 3D formats such as glTF. |
-| `FrameBuffer` | Provider-neutral current drawable view owned by `graphics/api` and used by `g3d` capture paths. |
+| `FrameBuffer` | Provider-neutral current drawable view owned by `framework/graphics` and used by `g3d` capture paths. |
 
 ### 15.1. Graphics 3D Contracts
 
-`g3d` provides scene/model helpers on top of `graphics/api`. Normal 3D code should use `g3d` types and not provider-specific graphics classes.
+`g3d` provides scene/model helpers on top of `framework/graphics`. Normal 3D code should use `g3d` types and not provider-specific graphics classes.
 
 Framebuffers and render targets are graphics concepts, not GL-only concepts. The common API exposes the current drawable as a provider-neutral `FrameBuffer`; GL maps it to the default framebuffer, Vulkan maps it to the current swapchain image, and WGPU maps it to the acquired surface texture. Offscreen render targets use `TextureUsage.SAMPLED_RENDER_ATTACHMENT` and the texture's default `TextureView`, so `g3d` can render shadow maps, cascaded shadow maps, environment maps, post-processing passes, and custom render paths without naming a provider.
 
@@ -3547,7 +3547,7 @@ pass.end();
 
 Rules:
 
-- `g3d` should use `graphics/api`, not provider-specific graphics types.
+- `g3d` should use `framework/graphics`, not provider-specific graphics types.
 - `Batch3D` is the common model/renderable submission contract. `ModelBatch` is the first implementation.
 - The first `ModelBatch` source slice renders static position/color meshes through reusable `Buffer`, `ShaderModule`, and `RenderPipeline` objects. The default `PbrShaderProvider` also owns metallic-roughness PBR paths for `Mesh.PBR_LAYOUT` and `Mesh.PBR_SKINNED_LAYOUT` mesh data and creates its built-in shader modules from WGSL `ShaderModuleDescriptor` values plus explicit setup-time reflection metadata.
 - `ModelBuilder` creates simple primitive models and custom triangle meshes using the current position/color renderer path.
@@ -3559,7 +3559,7 @@ Rules:
 - `Environment3D.skyEnvironment(...)` stores a non-owning `SkyEnvironment3D` reference. The default `PbrShaderProvider` samples that procedural sky analytically as IBL-style diffuse irradiance plus roughness-aware specular reflection, including a sun reflection lobe from `sunDirection(...)`, `sunColor(...)`, and `sunIntensity(...)`. This is provider-neutral and does not require cubemap texture support. Future texture-backed cubemap/IBL support should add explicit texture/environment-map types and may use the same environment slot as its public entry point.
 - `OutlineRenderer3D` owns a WGSL shader module and cached render pipelines. It renders `Mesh.PBR_LAYOUT` renderables by expanding vertex positions along normals in world space. The intended first-pass usage is to draw the outline with a clear or loaded color attachment, then draw the normal `ModelBatch` pass with `LoadOp.load()` so the model covers the shell center.
 - `FogOfWarRenderer3D` owns a WGSL shader module and streams reusable overlay vertices into common `Buffer` objects. It projects horizontal world-space rectangles through the supplied `Camera`, draws them after the main scene with `LoadOp.load()`, and uses world-space reveal spheres from `light(x, y, z, radius, softness)`. At most `FogOfWarRenderer3D.MAX_LIGHTS` reveal spheres are submitted per draw call. It is independent from `Environment3D` distance fog and does not mutate the default PBR uniform layout.
-- `BillboardRenderer3D` owns a WGSL shader module and streams reusable camera-facing textured quad vertices into common `Buffer` objects. It uses `Texture` directly instead of `graphics/g2d.TextureRegion` so `g3d` remains independent from `g2d`; atlas users can pass normalized `u`, `v`, `u2`, and `v2` coordinates explicitly. The renderer depth-tests billboards and disables depth writes. For scene occlusion, draw it inside the same depth-enabled `RenderPass` as `ModelBatch` by using `begin(RenderPass)`.
+- `BillboardRenderer3D` owns a WGSL shader module and streams reusable camera-facing textured quad vertices into common `Buffer` objects. It uses `Texture` directly instead of `framework/g2d.TextureRegion` so `g3d` remains independent from `g2d`; atlas users can pass normalized `u`, `v`, `u2`, and `v2` coordinates explicitly. The renderer depth-tests billboards and disables depth writes. For scene occlusion, draw it inside the same depth-enabled `RenderPass` as `ModelBatch` by using `begin(RenderPass)`.
 - `ParticleEmitter3D` is provider-neutral particle simulation data plus a `BillboardRenderer3D` draw helper. It owns fixed-capacity primitive arrays, does not allocate per particle, updates with explicit `deltaSeconds`, and renders through a caller-owned, already-begun `BillboardRenderer3D`. Rendering resets the billboard color to white after submitting active particles.
 - `SkyboxRenderer3D` owns a WGSL shader module and renders a procedural sky from world-space view rays into the active color attachment. The sky rotates correctly with the camera orientation because each fragment is shaded from its world direction, and `sunDirection(...)` anchors the sun in world space. `sunPosition(...)` remains a normalized-sky-coordinate convenience for simple demos. It should normally draw before `ModelBatch`, then the model pass should use `LoadOp.load()` so geometry appears over the sky. It is a background renderer; use `SkyEnvironment3D` on `Environment3D` when the same sky should affect PBR lighting.
 - `AnimationClip` currently owns provider-neutral node transform channels. `AnimationController` samples translation, quaternion rotation, and scale keyframes into instance-local `DefaultModelInstance` node transforms without per-frame channel-array allocation. `DefaultModelInstance` exposes allocation-free copy methods for local, model-space, and world-space node transforms; convenience getters return copies.
@@ -3574,10 +3574,10 @@ Rules:
 - `g3d` should keep model loading, materials, PBR data, custom shaders, animation, lighting, frame targets, render paths, and rendering helpers in one user-facing artifact.
 - Provider-specific rendering paths can exist internally, but normal user code should not need provider-specific graphics classes.
 - `ModelBatch` should batch by shader key, material state, mesh, primitive topology, vertex layout, and render target. It should sort opaque renderables for state locality and depth efficiency, sort transparent renderables back-to-front, and keep stable ordering where required.
-- `ModelBatch` should use API-neutral performance features through `graphics/api`: immutable/static mesh buffers, dynamic uniform or storage buffers, per-context pipeline caches, material/shader variant caches, texture and sampler binding reuse, instancing for repeated meshes, GPU skinning where supported, and clear fallbacks where a provider lacks an optimization.
+- `ModelBatch` should use API-neutral performance features through `framework/graphics`: immutable/static mesh buffers, dynamic uniform or storage buffers, per-context pipeline caches, material/shader variant caches, texture and sampler binding reuse, instancing for repeated meshes, GPU skinning where supported, and clear fallbacks where a provider lacks an optimization.
 - Later PBR slices should broaden material policy and lighting support, including alpha mode, double-sided state, texture-backed cubemap/environment maps, shadow quality, instancing, morph targets, and render-target integration.
 - Custom shaders should plug in through `ShaderProvider3D` and still receive standard camera, model, material, light, animation, and render-target inputs through `RenderContext3D`.
-- Framebuffer and future multi-render-target support belongs in `graphics/api`; `g3d` render paths should consume those targets for capture, shadow maps, G-buffers, reflection/environment captures, post-processing, and user-created offscreen passes.
+- Framebuffer and future multi-render-target support belongs in `framework/graphics`; `g3d` render paths should consume those targets for capture, shadow maps, G-buffers, reflection/environment captures, post-processing, and user-created offscreen passes.
 - Animation should support node transforms first, then skeletal skinning and morph targets. CPU skinning may exist as a compatibility fallback, but GPU skinning should be the optimized default when the selected provider can support it.
 - The public API should prefer immutable descriptors and reusable render objects in hot paths. Per-frame submission should avoid object allocation once models, materials, shaders, and queues have been created.
 
@@ -3586,7 +3586,7 @@ Rules:
 Module:
 
 ```text
-:libfdx:ui:ui-kit
+:libfdx:framework:ui-kit
 ```
 
 Package:
@@ -3650,7 +3650,7 @@ Rules:
 - `ui-kit` is plain Java: no annotations, no reflection, no compiler plugin, and no generated source requirement.
 - `ui-kit` is user-created and must not add a `ui()` accessor to `Fdx`.
 - Primitive UI state must use dedicated primitive classes such as `UiBooleanState`, `UiIntState`, `UiFloatState`, `UiLongState`, and `UiDoubleState`, not `UiState<Boolean>`, `UiState<Integer>`, or `UiState<Float>`.
-- `ui-kit` uses runtime display/input APIs for routing and `graphics/g2d` for rendering.
+- `ui-kit` uses runtime display/input APIs for routing and `framework/g2d` for rendering.
 - `UiRoot` is the public root update/render entry point for normal UI rendering.
 - `UiRoot.uiScale(...)` scales logical UI units for DPI and accessibility. `autoUiScale(true)` multiplies the root scale by `Display.contentScale()` so high-DPI desktops, browser device-pixel-ratio displays, and mobile density are handled through the runtime display API.
 - Low-level retained nodes and event listeners may exist for advanced/custom widgets, but the normal authoring style should be declarative `UiScope` calls.
@@ -3730,7 +3730,7 @@ Defined types:
 Rules:
 
 - `scenario-validator` is not UI-only and not game-only.
-- `scenario-validator` depends on portable runtime/input/display concepts as needed, not on backend implementations, platform-specific launchers, UI Kit, JUnit, or external test frameworks.
+- `scenario-validator` depends on portable framework/input/display concepts as needed, not on backend implementations, platform-specific launchers, UI Kit, JUnit, or external test frameworks.
 - `scenario-validator-ui-kit` depends on `scenario-validator` and `ui-kit`.
 - Normal runtime execution and normal UI rendering must not depend on scenario validation modules.
 - Built-in actions, waits, and assertions cover normal runtime behavior flows, including input, wait-for-event, capture, probe, and adapter validation.
@@ -3748,7 +3748,7 @@ Rules:
 These decisions are part of the common API contract:
 
 - Use `FdxFuture<T>` for portable async APIs.
-- Use `runtime/fdx/core` as the shared framework runtime service layer. Its first default service is FreeType font rasterization for `.ttf`/`.otf` assets. Backends provide the platform implementation; higher-level APIs consume it and keep rendering cached atlas data every frame.
+- Use `framework/fdx/core` as the shared framework runtime service layer. Its first default service is FreeType font rasterization for `.ttf`/`.otf` assets. Backends provide the platform implementation; higher-level APIs consume it and keep rendering cached atlas data every frame.
 - Use `HttpClient` as the HTTP entry point type.
 - Keep `AudioSource` as the advanced persistent playback source/channel type. Basic playback should still use `Sound`, `Music`, and `PlaybackHandle`.
 - Use descriptor names ending in `Descriptor` for graphics creation inputs, such as `TextureDescriptor`, `BufferDescriptor`, and `RenderPipelineDescriptor`.
@@ -3760,7 +3760,7 @@ These decisions are part of the common API contract:
 Module:
 
 ```text
-:libfdx:runtime:fdx:core
+:libfdx:framework:fdx:core
 ```
 
 Package:
@@ -3770,7 +3770,7 @@ io.github.libfdx.runtime.core
 io.github.libfdx.runtime.core.shader
 ```
 
-`runtime/fdx/core` is the shared framework runtime service layer. It is not a user-created feature object and it is not a generic service locator. It provides small framework-wide services that common modules can use by default when the selected backend/platform has supplied the implementation.
+`framework/fdx/core` is the shared framework runtime service layer. It is not a user-created feature object and it is not a generic service locator. It provides small framework-wide services that common modules can use by default when the selected backend/platform has supplied the implementation.
 
 Initial scope:
 
@@ -3811,12 +3811,12 @@ Rules:
 - Shader compilation happens when a shader module is created, an editor explicitly recompiles, or tooling validates a shader. It must not happen inside a frame loop.
 - Providers that consume WGSL directly do not require the shader compiler capability. Providers that need GLSL, SPIR-V, or MSL request the capability for normal built-in renderer shaders because those descriptors are WGSL-only.
 - Platforms that do not need shader translation, such as PSP, must not be forced to package the compiler capability.
-- If no platform provider is registered, `runtime/fdx/core` must fail clearly. Do not silently fall back to a Java rasterizer or any non-FreeType implementation.
+- If no platform provider is registered, `framework/fdx/core` must fail clearly. Do not silently fall back to a Java rasterizer or any non-FreeType implementation.
 - Desktop JVM registers a provider backed by LWJGL FreeType and may also expose the native runtime shader compiler when the selected desktop `fdx` native library includes it. Desktop C and Android register providers backed by the runtime fdx C/C++ bridge linked with FreeType and shader compiler dependencies imported from `fdx-natives` prebuilt packages. Web registers a provider backed by the runtime fdx Emscripten JS/WASM bridge and enables the shader compiler by default so WebGL can translate WGSL-only built-in shaders. iOS C currently registers no runtime shader compiler provider.
-- Native bridge source is owned by `runtime/fdx/platform/*`, not by the Java core module. The core module owns Java contracts. `fdx_shared` packages the shared native source payload needed by TeaVM/native project generation, and `fdx_desktop`, `fdx_android`, and `fdx_web` package platform native outputs generated by the internal `fdx-build` module.
-- Third-party FreeType and Tint/Dawn source are not committed into the repository and are not built by libFDX native tasks. `:libfdx:runtime:fdx:fdx-build` links checksum-verified static dependency packages from `fdx-natives`.
+- Native bridge source is owned by `framework/fdx/platform/*`, not by the Java core module. The core module owns Java contracts. `fdx_shared` packages the shared native source payload needed by TeaVM/native project generation, and `fdx_desktop`, `fdx_android`, and `fdx_web` package platform native outputs generated by the internal `fdx-build` module.
+- Third-party FreeType and Tint/Dawn source are not committed into the repository and are not built by libFDX native tasks. `:libfdx:framework:fdx:fdx-build` links checksum-verified static dependency packages from `fdx-natives`.
 - Platform-specific native resources generated for the core JAR are scoped under `libfdx-native/<platform>/...` in generated resource output.
-- The shared runtime fdx FreeType bridge source is scoped under `runtime/fdx/platform/shared/src/main/cpp/runtime_fdx/...` until a platform needs a separate bridge source.
+- The shared runtime fdx FreeType bridge source is scoped under `framework/fdx/platform/shared/src/main/cpp/runtime_fdx/...` until a platform needs a separate bridge source.
 - Native implementation code should be reused across platforms. Platform-specific code should be limited to small ABI adapters, not duplicated copies of the same FreeType rasterizer.
 - Runtime fdx native artifacts use core framework names. Web runtime fdx output is `fdx.js` plus `fdx.wasm`; shared-library outputs should use the platform's `fdx` library filename convention, such as `fdx.dll` or `libfdx.so`, even when the first exported service is FreeType.
-- `:libfdx:runtime:fdx:fdx-build` is responsible for compiling and linking runtime fdx native outputs. Backend/platform package modules are responsible for copying or loading the matching platform resources.
+- `:libfdx:framework:fdx:fdx-build` is responsible for compiling and linking runtime fdx native outputs. Backend/platform package modules are responsible for copying or loading the matching platform resources.

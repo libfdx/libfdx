@@ -17,16 +17,16 @@ base {
 dependencies {
     implementation(project(":libfdx:backends:c_shared"))
 
-    api(project(":libfdx:runtime:fdx:core"))
-    api(project(":libfdx:runtime:application"))
-    api(project(":libfdx:runtime:display"))
-    api(project(":libfdx:runtime:files"))
-    api(project(":libfdx:runtime:input"))
-    api(project(":libfdx:graphics:api"))
+    api(project(":libfdx:framework:fdx:core"))
+    api(project(":libfdx:framework:application"))
+    api(project(":libfdx:framework:display"))
+    api(project(":libfdx:framework:files"))
+    api(project(":libfdx:framework:input"))
+    api(project(":libfdx:framework:graphics"))
     api(project(":libfdx:extensions:graphics:gl:core"))
     api(libs.teavm.interop)
 
-    runtimeOnly(project(":libfdx:runtime:fdx:platform:shared"))
+    runtimeOnly(project(":libfdx:framework:fdx:platform:shared"))
 }
 java {
     withSourcesJar()

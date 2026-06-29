@@ -16,8 +16,8 @@ dependencies {
         api("${LibExt.fdxGroup}:graphics:${LibExt.publishedLibfdxVersion}")
         api("${LibExt.fdxGroup}:g2d:${LibExt.publishedLibfdxVersion}")
     } else {
-        api(project(":libfdx:runtime:application"))
-        api(project(":libfdx:graphics:api"))
-        api(project(":libfdx:graphics:g2d"))
+        api(project(":libfdx:framework:application"))
+        api(project(":libfdx:framework:graphics"))
+        api(project(":libfdx:framework:g2d"))
     }
 }

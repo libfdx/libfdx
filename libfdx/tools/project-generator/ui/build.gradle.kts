@@ -17,6 +17,6 @@ group = "${LibExt.fdxGroup}.tools.projectgenerator"
 
 dependencies {
     api(project(":libfdx:tools:project-generator:core"))
-    api(project(":libfdx:runtime:application"))
-    implementation(project(":libfdx:ui:ui-kit"))
+    api(project(":libfdx:framework:application"))
+    implementation(project(":libfdx:framework:ui-kit"))
 }

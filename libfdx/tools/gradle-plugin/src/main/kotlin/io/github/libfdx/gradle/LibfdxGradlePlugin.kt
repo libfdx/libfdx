@@ -488,7 +488,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
         val runtimeClasspath = project.extensions.getByType<SourceSetContainer>().getByName("main").runtimeClasspath
         val runtimeFdxWeb = project.takeIf { usesLocalLibfdxRuntime(it) }
             ?.rootProject
-            ?.findProject(":libfdx:runtime:fdx:platform:web")
+            ?.findProject(":libfdx:framework:fdx:platform:web")
         val runtimeFdxWebResources = runtimeFdxWeb?.tasks?.matching { it.name == "generate_runtime_fdx_web_native" }
         val runtimeFdxWebResourcesDir = runtimeFdxWeb?.layout?.buildDirectory?.dir("generated/resources/runtimeFdxWeb")
         val hasTargets = extension.js.targets.isNotEmpty()
@@ -534,7 +534,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
         val runtimeClasspath = project.extensions.getByType<SourceSetContainer>().getByName("main").runtimeClasspath
         val runtimeFdxWeb = project.takeIf { usesLocalLibfdxRuntime(it) }
             ?.rootProject
-            ?.findProject(":libfdx:runtime:fdx:platform:web")
+            ?.findProject(":libfdx:framework:fdx:platform:web")
         val runtimeFdxWebResources = runtimeFdxWeb?.tasks?.matching { it.name == "generate_runtime_fdx_web_native" }
         val runtimeFdxWebResourcesDir = runtimeFdxWeb?.layout?.buildDirectory?.dir("generated/resources/runtimeFdxWeb")
         val hasTargets = extension.wasm.targets.isNotEmpty()

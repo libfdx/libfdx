@@ -42,27 +42,27 @@ if(libfdxBaseVersion.endsWith("-SNAPSHOT")) {
 }
 
 val libfdxPublishableProjectPaths = listOf(
-    ":libfdx:foundation:math",
-    ":libfdx:foundation:json",
-    ":libfdx:foundation:collections",
-    ":libfdx:runtime:fdx:core",
-    ":libfdx:runtime:fdx:platform:shared",
-    ":libfdx:runtime:fdx:platform:desktop",
-    ":libfdx:runtime:fdx:platform:android",
-    ":libfdx:runtime:fdx:platform:web",
-    ":libfdx:runtime:application",
-    ":libfdx:runtime:display",
-    ":libfdx:runtime:files",
-    ":libfdx:runtime:input",
-    ":libfdx:runtime:net",
-    ":libfdx:runtime:storage",
-    ":libfdx:assets:manager",
-    ":libfdx:assets:loaders",
-    ":libfdx:graphics:api",
-    ":libfdx:graphics:camera",
-    ":libfdx:graphics:g2d",
-    ":libfdx:graphics:g3d",
-    ":libfdx:ui:ui-kit",
+    ":libfdx:framework:math",
+    ":libfdx:framework:json",
+    ":libfdx:framework:collections",
+    ":libfdx:framework:fdx:core",
+    ":libfdx:framework:fdx:platform:shared",
+    ":libfdx:framework:fdx:platform:desktop",
+    ":libfdx:framework:fdx:platform:android",
+    ":libfdx:framework:fdx:platform:web",
+    ":libfdx:framework:application",
+    ":libfdx:framework:display",
+    ":libfdx:framework:files",
+    ":libfdx:framework:input",
+    ":libfdx:framework:net",
+    ":libfdx:framework:storage",
+    ":libfdx:framework:assets:manager",
+    ":libfdx:framework:assets:loaders",
+    ":libfdx:framework:graphics",
+    ":libfdx:framework:camera",
+    ":libfdx:framework:g2d",
+    ":libfdx:framework:g3d",
+    ":libfdx:framework:ui-kit",
     ":libfdx:validation:scenario-validator",
     ":libfdx:validation:scenario-validator-ui-kit",
     ":libfdx:tools:font",
@@ -290,13 +290,28 @@ fun Project.publishDescription(artifactId: String): String {
     return when {
         path.contains(":backends:") -> "libFDX backend module $artifactId"
         path.contains(":extensions:graphics:") -> "libFDX graphics provider module $artifactId"
-        path.contains(":graphics:") -> "libFDX graphics module $artifactId"
-        path.contains(":runtime:") -> "libFDX runtime module $artifactId"
-        path.contains(":foundation:") -> "libFDX foundation module $artifactId"
+        path == ":libfdx:framework:graphics" ||
+            path == ":libfdx:framework:camera" ||
+            path == ":libfdx:framework:g2d" ||
+            path == ":libfdx:framework:g3d" -> "libFDX graphics module $artifactId"
+        path == ":libfdx:framework:fdx:core" ||
+            path == ":libfdx:framework:fdx:platform:shared" ||
+            path == ":libfdx:framework:fdx:platform:desktop" ||
+            path == ":libfdx:framework:fdx:platform:android" ||
+            path == ":libfdx:framework:fdx:platform:web" ||
+            path == ":libfdx:framework:application" ||
+            path == ":libfdx:framework:display" ||
+            path == ":libfdx:framework:files" ||
+            path == ":libfdx:framework:input" ||
+            path == ":libfdx:framework:net" ||
+            path == ":libfdx:framework:storage" -> "libFDX runtime module $artifactId"
+        path == ":libfdx:framework:math" ||
+            path == ":libfdx:framework:json" ||
+            path == ":libfdx:framework:collections" -> "libFDX foundation module $artifactId"
         path.contains(":validation:") -> "libFDX validation module $artifactId"
         path.contains(":tools:") -> "libFDX tool module $artifactId"
-        path.contains(":ui:") -> "libFDX UI module $artifactId"
-        path.contains(":assets:") -> "libFDX asset module $artifactId"
+        path == ":libfdx:framework:ui-kit" -> "libFDX UI module $artifactId"
+        path.contains(":framework:assets:") -> "libFDX asset module $artifactId"
         else -> "libFDX module $artifactId"
     }
 }
@@ -503,8 +518,8 @@ fun releaseSigningPassword(): String? {
 
 fun runtimeFdxNativeValidationTaskPaths(): List<String> {
     return listOf(
-        ":libfdx:runtime:fdx:platform:desktop:validate_runtime_fdx_desktop_c_resources",
-        ":libfdx:runtime:fdx:platform:web:validate_runtime_fdx_web_native_resources"
+        ":libfdx:framework:fdx:platform:desktop:validate_runtime_fdx_desktop_c_resources",
+        ":libfdx:framework:fdx:platform:web:validate_runtime_fdx_web_native_resources"
     )
 }
 

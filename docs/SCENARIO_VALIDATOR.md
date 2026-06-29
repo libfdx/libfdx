@@ -373,7 +373,7 @@ internals. The context exposes:
 
 ## 12. UI Kit Adapter
 
-The UI Kit adapter validates UI built with `:libfdx:ui:ui-kit`. It is not the UI
+The UI Kit adapter validates UI built with `:libfdx:framework:ui-kit`. It is not the UI
 widget contract source. `docs/UI_KIT.md` remains the source of truth for UI Kit
 widgets, state, layout, animation, styling, and input behavior.
 

@@ -49,8 +49,8 @@ dependencies {
         vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.publishedLibfdxVersion}")
         wgpuRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.publishedLibfdxVersion}")
     } else {
-        implementation(project(":libfdx:runtime:application"))
-        implementation(project(":libfdx:runtime:display"))
+        implementation(project(":libfdx:framework:application"))
+        implementation(project(":libfdx:framework:display"))
         implementation(project(":libfdx:extensions:graphics:wgpu:core"))
         implementation(project(":libfdx:backends:desktop"))
 

@@ -20,7 +20,7 @@ base {
 
 dependencies {
     api(project(":libfdx:validation:scenario-validator"))
-    api(project(":libfdx:ui:ui-kit"))
+    api(project(":libfdx:framework:ui-kit"))
 }
 java {
     withSourcesJar()

@@ -16,7 +16,7 @@ base {
     archivesName.set(moduleName)
 }
 
-val runtimeFdxSharedNativeSourceDir = rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp")
+val runtimeFdxSharedNativeSourceDir = rootProject.layout.projectDirectory.dir("libfdx/framework/fdx/platform/shared/src/main/cpp")
 val generatedRuntimeFdxNativeResources = layout.buildDirectory.dir("generated/resources/runtimeFdxNative")
 
 val copyRuntimeFdxDesktopCSources = tasks.register<Copy>("copy_runtime_fdx_desktop_c_sources") {
@@ -41,17 +41,17 @@ tasks.named("processResources") {
 dependencies {
     implementation(project(":libfdx:backends:c_shared"))
 
-    api(project(":libfdx:runtime:fdx:core"))
-    api(project(":libfdx:runtime:application"))
-    api(project(":libfdx:runtime:display"))
-    api(project(":libfdx:runtime:files"))
-    api(project(":libfdx:runtime:input"))
-    api(project(":libfdx:graphics:api"))
+    api(project(":libfdx:framework:fdx:core"))
+    api(project(":libfdx:framework:application"))
+    api(project(":libfdx:framework:display"))
+    api(project(":libfdx:framework:files"))
+    api(project(":libfdx:framework:input"))
+    api(project(":libfdx:framework:graphics"))
     api(project(":libfdx:extensions:graphics:gl:core"))
     api(project(":libfdx:extensions:graphics:vulkan:core"))
     api(libs.teavm.interop)
 
-    runtimeOnly(project(":libfdx:runtime:fdx:platform:shared"))
+    runtimeOnly(project(":libfdx:framework:fdx:platform:shared"))
 }
 java {
     withSourcesJar()

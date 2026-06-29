@@ -17,7 +17,7 @@ base {
 }
 
 val runtimeFdxSharedNativeSourceDir =
-    rootProject.layout.projectDirectory.dir("libfdx/runtime/fdx/platform/shared/src/main/cpp")
+    rootProject.layout.projectDirectory.dir("libfdx/framework/fdx/platform/shared/src/main/cpp")
 val generatedRuntimeFdxSharedNativeResources =
     layout.buildDirectory.dir("generated/resources/runtimeFdxSharedNative")
 

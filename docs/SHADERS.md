@@ -94,7 +94,7 @@ Tint/runtime compilation when their GPU API needs another language.
 
 ## 5. Runtime Compilation Contract
 
-`runtime/fdx/core` owns the provider-neutral shader compiler contract. It is an
+`framework/fdx/core` owns the provider-neutral shader compiler contract. It is an
 optional runtime capability supplied by backends that package the matching
 native `fdx` runtime library.
 
@@ -118,7 +118,7 @@ version, and options.
 
 WGSL is the only authored shader source accepted by public shader descriptors
 and bundles. If a provider needs GLSL, GLSL ES, SPIR-V, or MSL, it must request
-runtime compilation from WGSL through the Tint-backed `runtime/fdx/core`
+runtime compilation from WGSL through the Tint-backed `framework/fdx/core`
 compiler path during shader-module creation. Generated target descriptors are
 internal handoffs from the compiler path to the provider and must not become a
 second user-maintained source of truth.
@@ -131,7 +131,7 @@ capability and target.
 
 Tint is the first compiler backend. Dawn/Tint source is not committed to this
 repository and libFDX native tasks do not build it locally. The internal
-`:libfdx:runtime:fdx:fdx-build` module consumes checksum-verified static
+`:libfdx:framework:fdx:fdx-build` module consumes checksum-verified static
 dependency packages from the sibling `fdx-natives` release project, then links
 those packages into the platform runtime `fdx` artifacts.
 The shared C bridge exposes a small ABI that is linked into platform `fdx`
@@ -174,7 +174,7 @@ Provider target mapping:
 Built-in renderer shader modules are authored as WGSL-only descriptors. They
 must not attach handwritten GLSL, SPIR-V, or MSL fallbacks. WGPU/WebGPU
 providers consume WGSL directly. GL, Vulkan, and Metal providers compile WGSL
-through `runtime/fdx/core` when they need native backend shader code. PSP does
+through `framework/fdx/core` when they need native backend shader code. PSP does
 not include Tint and does not use the runtime shader compiler. iOS C Metal
 currently accepts MSL through its provider path but does not register a runtime
 compiler provider, so WGSL-only built-in shaders require a future iOS compiler
@@ -229,22 +229,22 @@ Stable ownership:
 
 | Area | Owner |
 | --- | --- |
-| `ShaderLanguage`, `ShaderProfile`, `ShaderTarget`, descriptors, reflection values | `:libfdx:graphics:api` |
-| Built-in 2D shader WGSL sources | `:libfdx:graphics:g2d` |
-| Built-in 3D shader WGSL sources | `:libfdx:graphics:g3d` |
-| Runtime shader compiler Java contract | `:libfdx:runtime:fdx:core` |
-| Shader compiler native C ABI source | `:libfdx:runtime:fdx:platform:shared` |
-| Runtime fdx native dependency and CMake task ownership | `:libfdx:runtime:fdx:fdx-build` |
-| Desktop runtime shader compiler packaging | `:libfdx:runtime:fdx:platform:desktop` |
-| Android runtime shader compiler packaging | `:libfdx:runtime:fdx:platform:android` |
-| Web runtime shader compiler packaging | `:libfdx:runtime:fdx:platform:web` |
+| `ShaderLanguage`, `ShaderProfile`, `ShaderTarget`, descriptors, reflection values | `:libfdx:framework:graphics` |
+| Built-in 2D shader WGSL sources | `:libfdx:framework:g2d` |
+| Built-in 3D shader WGSL sources | `:libfdx:framework:g3d` |
+| Runtime shader compiler Java contract | `:libfdx:framework:fdx:core` |
+| Shader compiler native C ABI source | `:libfdx:framework:fdx:platform:shared` |
+| Runtime fdx native dependency and CMake task ownership | `:libfdx:framework:fdx:fdx-build` |
+| Desktop runtime shader compiler packaging | `:libfdx:framework:fdx:platform:desktop` |
+| Android runtime shader compiler packaging | `:libfdx:framework:fdx:platform:android` |
+| Web runtime shader compiler packaging | `:libfdx:framework:fdx:platform:web` |
 | iOS C Metal shader module creation | `:libfdx:backends:ios_c` with authored MSL until an iOS compiler bridge exists |
 | WGSL profile validation, Gradle task wiring, and user project DSL | `libfdx/tools/gradle-plugin` |
 | Provider-specific shader module creation | selected graphics provider or backend-owned provider |
 
 There is no runtime `tools/shader` module. Runtime shader compilation is a
 runtime fdx platform capability for providers that cannot consume WGSL directly.
-Tint/Dawn dependency resolution is handled by `:libfdx:runtime:fdx:fdx-build`,
+Tint/Dawn dependency resolution is handled by `:libfdx:framework:fdx:fdx-build`,
 which imports static libraries from `fdx-natives` packages for all runtime fdx
 native task names. Web runtime fdx builds enable the compiler by default
 because WebGL depends on WGSL-to-GLSL ES translation for built-in renderers.
@@ -253,9 +253,9 @@ because WebGL depends on WGSL-to-GLSL ES translation for built-in renderers.
 
 For shader runtime/compiler changes:
 
-- validate Java compile for `runtime/fdx/core` and `graphics/api`;
-- validate affected high-level renderer modules such as `graphics/g2d` and
-  `graphics/g3d`;
+- validate Java compile for `framework/fdx/core` and `framework/graphics`;
+- validate affected high-level renderer modules such as `framework/g2d` and
+  `framework/g3d`;
 - validate affected providers whose shader creation path changed;
 - run the `shader-runtime` test to create a WGSL-only shader module and render
   pipeline through the active `GraphicsDevice`;

@@ -15,18 +15,18 @@ base {
 }
 
 dependencies {
-    api(project(":libfdx:runtime:fdx:core"))
-    implementation(project(":libfdx:foundation:math"))
-    api(project(":libfdx:assets:manager"))
-    api(project(":libfdx:runtime:application"))
-    api(project(":libfdx:runtime:display"))
-    api(project(":libfdx:runtime:files"))
-    api(project(":libfdx:runtime:input"))
-    api(project(":libfdx:graphics:api"))
+    api(project(":libfdx:framework:fdx:core"))
+    implementation(project(":libfdx:framework:math"))
+    api(project(":libfdx:framework:assets:manager"))
+    api(project(":libfdx:framework:application"))
+    api(project(":libfdx:framework:display"))
+    api(project(":libfdx:framework:files"))
+    api(project(":libfdx:framework:input"))
+    api(project(":libfdx:framework:graphics"))
     api(project(":libfdx:extensions:graphics:gl:core"))
     api(project(":libfdx:extensions:graphics:vulkan:core"))
 
-    runtimeOnly(project(":libfdx:runtime:fdx:platform:desktop"))
+    runtimeOnly(project(":libfdx:framework:fdx:platform:desktop"))
 
     api(libs.lwjgl)
     api(libs.lwjgl.freetype)

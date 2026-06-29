@@ -27,17 +27,17 @@ allprojects {
 fun runtimeFdxHostNativeTaskPath(): String {
     val os = System.getProperty("os.name").lowercase()
     return when {
-        os.contains("windows") -> ":libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_windows_native"
-        os.contains("linux") -> ":libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_linux_native"
-        os.contains("mac") || os.contains("darwin") -> ":libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native"
+        os.contains("windows") -> ":libfdx:framework:fdx:platform:desktop:generate_runtime_fdx_windows_native"
+        os.contains("linux") -> ":libfdx:framework:fdx:platform:desktop:generate_runtime_fdx_linux_native"
+        os.contains("mac") || os.contains("darwin") -> ":libfdx:framework:fdx:platform:desktop:generate_runtime_fdx_macos_native"
         else -> throw GradleException("Unsupported host OS for runtime fdx native artifacts: ${System.getProperty("os.name")}")
     }
 }
 
 val nativeArtifactTaskPaths = listOf(
     runtimeFdxHostNativeTaskPath(),
-    ":libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native",
-    ":libfdx:runtime:fdx:platform:android:assembleRelease",
+    ":libfdx:framework:fdx:platform:web:generate_runtime_fdx_web_native",
+    ":libfdx:framework:fdx:platform:android:assembleRelease",
     ":libfdx:backends:android:assembleRelease",
     ":libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease",
     ":libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease",
@@ -59,32 +59,32 @@ tasks.register("libfdx_build_native_artifacts_prebuilt") {
 tasks.register("libfdx_build_windows_native_artifact_prebuilt") {
     group = "libfdx native"
     description = "Builds the Windows runtime fdx native artifact using prebuilt fdx-natives dependency packages."
-    dependsOn(":libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_windows_native_prebuilt")
+    dependsOn(":libfdx:framework:fdx:platform:desktop:generate_runtime_fdx_windows_native_prebuilt")
 }
 
 tasks.register("libfdx_build_linux_native_artifact_prebuilt") {
     group = "libfdx native"
     description = "Builds the Linux runtime fdx native artifact using prebuilt fdx-natives dependency packages."
-    dependsOn(":libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_linux_native_prebuilt")
+    dependsOn(":libfdx:framework:fdx:platform:desktop:generate_runtime_fdx_linux_native_prebuilt")
 }
 
 tasks.register("libfdx_build_macos_native_artifact_prebuilt") {
     group = "libfdx native"
     description = "Builds the macOS runtime fdx native artifact for the current runner using prebuilt fdx-natives dependency packages."
-    dependsOn(":libfdx:runtime:fdx:platform:desktop:generate_runtime_fdx_macos_native_prebuilt")
+    dependsOn(":libfdx:framework:fdx:platform:desktop:generate_runtime_fdx_macos_native_prebuilt")
 }
 
 tasks.register("libfdx_build_web_native_artifacts_prebuilt") {
     group = "libfdx native"
     description = "Builds web runtime fdx native artifacts using prebuilt fdx-natives dependency packages."
-    dependsOn(":libfdx:runtime:fdx:platform:web:generate_runtime_fdx_web_native_prebuilt")
+    dependsOn(":libfdx:framework:fdx:platform:web:generate_runtime_fdx_web_native_prebuilt")
 }
 
 tasks.register("libfdx_build_android_native_artifacts_prebuilt") {
     group = "libfdx native"
     description = "Builds Android native/library artifacts using prebuilt fdx-natives dependency packages for runtime fdx."
     dependsOn(
-        ":libfdx:runtime:fdx:platform:android:assemble_runtime_fdx_android_release_prebuilt",
+        ":libfdx:framework:fdx:platform:android:assemble_runtime_fdx_android_release_prebuilt",
         ":libfdx:backends:android:assembleRelease",
         ":libfdx:extensions:graphics:vulkan:platform:android_jni:assembleRelease",
         ":libfdx:extensions:graphics:wgpu:platform:android_jni:assembleRelease",
