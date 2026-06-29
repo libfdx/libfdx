@@ -103,11 +103,10 @@ repo-root/
       g3d/
       ui-kit/
 
-    validation/
-      scenario-validator/
-      scenario-validator-ui-kit/
-
     extensions/
+      scenario_validator/
+        core/
+        ui-kit/
       input/
         gamepads/
           desktop/
@@ -251,8 +250,8 @@ framework/g2d -> framework/graphics, framework helpers, framework/assets/* when 
 framework/g3d -> framework/graphics, framework/camera, framework helpers, framework/assets/* when asset integration is needed
 
 framework/ui-kit -> framework/display, framework/files, framework/input, framework/assets/loaders, framework/graphics, framework/g2d
-validation/scenario-validator -> framework/display, framework/input, framework/graphics when visual capture integration is needed
-validation/scenario-validator-ui-kit -> validation/scenario-validator, framework/ui-kit
+extensions/scenario_validator/core -> framework/display, framework/input, framework/graphics when visual capture integration is needed
+extensions/scenario_validator/ui-kit -> extensions/scenario_validator/core, framework/ui-kit
 
 extensions/input/* -> framework/input
 extensions/audio/* -> framework/audio
@@ -301,7 +300,8 @@ General rules:
 - 2D rendering, fonts, particles, and tile maps should stay in `framework/g2d`.
 - 3D rendering, models, animation, materials, and lighting should stay in `framework/g3d`.
 - Built-in UI modules should build on the graphics/runtime modules they need and stay optional. A project can use `ui-kit`, another UI solution, or no UI.
-- Validation modules should stay optional and should not be required by normal runtime execution or rendering. A project can use `scenario-validator` for generic runtime flows and add domain adapters such as `scenario-validator-ui-kit` only when needed.
+- Extension modules are optional capability add-ons. They include provider/platform integrations and other opt-in capabilities that extend libFDX, such as `extensions/scenario_validator`.
+- Scenario validator modules should stay optional and should not be required by normal runtime execution or rendering. A project can use `extensions/scenario_validator/core` for generic runtime flows and add domain adapters such as `extensions/scenario_validator/ui-kit` only when needed.
 - Platform-backed libraries belong in `extensions/`, not directly under `framework/audio`, `framework/graphics`, `framework/input`, `framework/ui-kit`, or a root `physics/` folder.
 - Physics engine extensions should not depend on UI.
 - Web targets copy declared web assets into `webapp/assets`, pass their paths and sizes into TeaVM properties, generate structured asset metadata through the web backend TeaVM plugin, and expose those files through the web backend file system. Gradle builds declare these assets through `libfdx.assets`; standalone tools and editors can declare them through `WebBuilder`. The web runtime obtains the preload list from the generated metadata class, not from an external JavaScript file or text manifest.
@@ -396,6 +396,8 @@ extensions/graphics/vulkan/platform/web
 extensions/graphics/vulkan/platform/android_jni
 extensions/graphics/vulkan/platform/android_native
 extensions/graphics/vulkan/platform/ios_native
+extensions/scenario_validator/core
+extensions/scenario_validator/ui-kit
 ```
 
 Normal game code should depend on API modules and high-level feature modules. Provider platform modules should usually be selected in the launcher/platform module, not in shared game code. The user-facing root object is `Fdx`, a typed runtime root, not a generic service locator.
@@ -417,7 +419,7 @@ Graphics provider runtime modules should use a provider root with `core` directl
 
 Network transport provider modules should build on `framework/net`. Provider-specific shared types live in `extensions/net/<provider>/core`, concrete runtime/binding variants live under `extensions/net/<provider>/platform/<platform_variant>`, and optional provider tools or services may live beside `core` when they are not platform bindings. WebRTC follows this shape so `WebRtcClientConfig`, `WebRtcServerConfig`, `WebRtcPeerConfig`, signaling contracts, and bridge interfaces stay in the WebRTC core module; the customizable signaling server lives in `extensions/net/webrtc/signaling_server`; desktop, web, Android, and future iOS bindings remain platform-specific. Normal game code should use `Network`, `NetTransports`, `NetClient`, `NetServer`, `NetPeerGroup`, `NetConnection`, and channel IDs rather than WebRTC data-channel classes.
 
-Extension artifacts should not repeat the `extensions` category. Graphics provider artifacts also should not repeat the `graphics` category. For example, `extensions/graphics/wgpu/core` publishes as `wgpu_core`, `extensions/graphics/wgpu/platform/desktop_jni` publishes as `wgpu_desktop_jni`, `extensions/graphics/gl/core` publishes as `gl_core`, and `extensions/graphics/gl/platform/desktop` publishes as `gl_desktop`. WebRTC network artifacts publish as `webrtc_core`, `webrtc_signaling_server`, `webrtc_desktop_jni`, `webrtc_web`, and `webrtc_android_jni`.
+Extension artifacts should not repeat the `extensions` category. Graphics provider artifacts also should not repeat the `graphics` category. For example, `extensions/graphics/wgpu/core` publishes as `wgpu_core`, `extensions/graphics/wgpu/platform/desktop_jni` publishes as `wgpu_desktop_jni`, `extensions/graphics/gl/core` publishes as `gl_core`, and `extensions/graphics/gl/platform/desktop` publishes as `gl_desktop`. WebRTC network artifacts publish as `webrtc_core`, `webrtc_signaling_server`, `webrtc_desktop_jni`, `webrtc_web`, and `webrtc_android_jni`. Scenario validator extension artifacts publish as `scenario_validator` and `scenario_validator_ui_kit`.
 
 External bindings should not be hidden behind fake shared APIs when the underlying libraries have different concepts. A project should choose the binding module it actually uses.
 
@@ -1155,14 +1157,14 @@ UI modules contain built-in libfdx UI solutions. `ui-kit` is the default retaine
 | --- | --- | --- |
 | `:libfdx:framework:ui-kit` | `io.github.libfdx:ui_kit` | Default libfdx UI toolkit: Compose-inspired declarative authoring over a retained runtime, widgets, layout, animation, themes, ninepatch styling, hit detection, input focus, and 2D rendering integration. Users should depend on one `ui_kit` artifact for this UI solution. The folder repeats `ui` for clarity inside the repository, but the artifact must stay `ui_kit`, not `ui_ui_kit`. |
 
-### 9.15. Validation Modules
+### 9.15. Scenario Validator Modules
 
-Validation modules contain reusable scenario validation engines and optional domain adapters. `scenario-validator` is not UI-only and not game-only. It can validate complete runtime flows, UI flows, input sequences, captures, events, and project probes. UI Kit validation is provided by an adapter module. See [SCENARIO_VALIDATOR.md](SCENARIO_VALIDATOR.md) for the detailed scenario validator contract.
+Scenario validator modules are optional extension modules that contain reusable scenario validation engines and domain adapters. `extensions/scenario_validator/core` is not UI-only and not game-only. It can validate complete runtime flows, UI flows, input sequences, captures, events, and project probes. UI Kit validation is provided by an adapter module. See [SCENARIO_VALIDATOR.md](SCENARIO_VALIDATOR.md) for the detailed scenario validator contract.
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `:libfdx:validation:scenario-validator` | `io.github.libfdx:scenario_validator` | Optional scenario validation engine: reusable catalogs, scenarios, runtime actions, waits, events, assertions, probes, reports, and visual capture integration. It is a user-facing engine/tooling module, not an internal test runner and not a dependency of normal runtime execution. |
-| `:libfdx:validation:scenario-validator-ui-kit` | `io.github.libfdx:scenario_validator_ui_kit` | Optional UI Kit adapter for `scenario-validator`: UI targets, UI actions, UI assertions, UI waits, UI events, UI captures, and validation ID integration for projects that use `ui-kit`. |
+| `:libfdx:extensions:scenario_validator:core` | `io.github.libfdx:scenario_validator` | Optional scenario validation engine: reusable catalogs, scenarios, runtime actions, waits, events, assertions, probes, reports, and visual capture integration. It is a user-facing engine/tooling module, not an internal test runner and not a dependency of normal runtime execution. |
+| `:libfdx:extensions:scenario_validator:ui-kit` | `io.github.libfdx:scenario_validator_ui_kit` | Optional UI Kit adapter for `extensions/scenario_validator/core`: UI targets, UI actions, UI assertions, UI waits, UI events, UI captures, and validation ID integration for projects that use `ui-kit`. |
 
 ### 9.16. Backend Modules
 
@@ -2021,8 +2023,8 @@ Asset, graphics, and UI packages:
 | `:libfdx:framework:g2d` | `io.github.libfdx.graphics.g2d` | Complete 2D toolkit: sprites, sprite batches, texture regions, atlases, bitmap fonts, vector-rasterized font atlases, text layout, tile maps, particles, and 2D render helpers. Shared camera state lives in `io.github.libfdx.graphics.camera.Camera`. |
 | `:libfdx:framework:g3d` | `io.github.libfdx.graphics.g3d` | Complete 3D toolkit: `Batch3D`, `ModelBatch`, `ModelBuilder`, meshes, models, materials, PBR/default shaders, skinned PBR GPU path, custom shader hooks, lights, environments, sky environment lighting, directional and cascaded shadow maps, animation, render queues, render paths, frame target helpers, glTF loading, and 3D render helpers. Shared camera state lives in `io.github.libfdx.graphics.camera.Camera`; input-backed controllers live in `framework/camera`. |
 | `:libfdx:framework:ui-kit` | `io.github.libfdx.ui` | Built-in UI toolkit: Compose-inspired declarative authoring over a retained runtime, widgets, layout, animation, themes, ninepatch styling, layers, focus, navigation, and input routing. |
-| `:libfdx:validation:scenario-validator` | `io.github.libfdx.validation.scenario` | Scenario validation engine: reusable catalogs, scenarios, runtime actions, assertions, waits, step pacing, events, probes, reports, and visual validation hooks. |
-| `:libfdx:validation:scenario-validator-ui-kit` | `io.github.libfdx.validation.scenario.ui.kit` | UI Kit adapter for scenario validation: UI targets, UI actions, UI assertions, UI waits, UI events, UI captures, and validation ID integration. |
+| `:libfdx:extensions:scenario_validator:core` | `io.github.libfdx.validation.scenario` | Scenario validation engine: reusable catalogs, scenarios, runtime actions, assertions, waits, step pacing, events, probes, reports, and visual validation hooks. |
+| `:libfdx:extensions:scenario_validator:ui-kit` | `io.github.libfdx.validation.scenario.ui.kit` | UI Kit adapter for scenario validation: UI targets, UI actions, UI assertions, UI waits, UI events, UI captures, and validation ID integration. |
 
 Provider and extension packages:
 

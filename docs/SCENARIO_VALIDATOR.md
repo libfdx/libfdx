@@ -37,7 +37,7 @@ canonical docs in the same change.
 
 ## 1. Purpose
 
-`scenario-validator` is a reusable validation engine for complete runtime
+`scenario_validator` is a reusable validation engine for complete runtime
 flows. It links named scenarios to setups or screens, drives input and time
 through the normal runtime, waits for visible or scenario-local events, verifies
 behavior and state, coordinates visual captures, and produces structured
@@ -81,7 +81,7 @@ The scenario validator does not:
 Core module:
 
 ```text
-:libfdx:validation:scenario-validator
+:libfdx:extensions:scenario_validator:core
 ```
 
 Core artifact:
@@ -99,7 +99,7 @@ io.github.libfdx.validation.scenario
 UI Kit adapter module:
 
 ```text
-:libfdx:validation:scenario-validator-ui-kit
+:libfdx:extensions:scenario_validator:ui-kit
 ```
 
 UI Kit adapter artifact:
@@ -114,13 +114,13 @@ UI Kit adapter package:
 io.github.libfdx.validation.scenario.ui.kit
 ```
 
-`scenario-validator` is an optional public engine module. It depends on
+`scenario_validator` is an optional public engine module. It depends on
 portable runtime input/display concepts as needed. It must not depend on UI Kit,
 libfdx internal test runners, JUnit, desktop-only APIs, Android-only APIs,
 web-only APIs, native-only APIs, or backend implementations.
 
-`scenario-validator-ui-kit` is an optional adapter module. It depends on
-`scenario-validator` and `ui-kit`. Projects that only need generic runtime
+The `extensions/scenario_validator/ui-kit` module is an optional adapter. It depends on
+`extensions/scenario_validator/core` and `ui-kit`. Projects that only need generic runtime
 scenario validation do not depend on the UI Kit adapter.
 
 Normal runtime execution and normal UI rendering must not depend on scenario
@@ -501,7 +501,7 @@ wiring is affected, and any affected task or user docs.
 
 ## 17. Architecture Invariants
 
-- `scenario-validator` is a user-facing engine/tooling module, not an internal
+- `scenario_validator` is a user-facing engine/tooling module, not an internal
   test class.
 - Scenario validation is not UI-only and not game-only.
 - UI Kit validation is an adapter capability, not the whole validator.

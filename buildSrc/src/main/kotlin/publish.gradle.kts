@@ -63,8 +63,8 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:framework:g2d",
     ":libfdx:framework:g3d",
     ":libfdx:framework:ui-kit",
-    ":libfdx:validation:scenario-validator",
-    ":libfdx:validation:scenario-validator-ui-kit",
+    ":libfdx:extensions:scenario_validator:core",
+    ":libfdx:extensions:scenario_validator:ui-kit",
     ":libfdx:tools:font",
     ":libfdx:extensions:graphics:gl:core",
     ":libfdx:extensions:graphics:gl:platform:desktop",
@@ -308,7 +308,7 @@ fun Project.publishDescription(artifactId: String): String {
         path == ":libfdx:framework:math" ||
             path == ":libfdx:framework:json" ||
             path == ":libfdx:framework:collections" -> "libFDX foundation module $artifactId"
-        path.contains(":validation:") -> "libFDX validation module $artifactId"
+        path.contains(":scenario_validator:") -> "libFDX scenario validator module $artifactId"
         path.contains(":tools:") -> "libFDX tool module $artifactId"
         path == ":libfdx:framework:ui-kit" -> "libFDX UI module $artifactId"
         path.contains(":framework:assets:") -> "libFDX asset module $artifactId"

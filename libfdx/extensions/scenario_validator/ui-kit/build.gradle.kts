@@ -10,18 +10,17 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = LibExt.fdxGroup
+val moduleName = "scenario_validator_ui_kit"
 
-val moduleName = "scenario_validator"
+group = "${LibExt.fdxGroup}.scenario_validator"
 
 base {
     archivesName.set(moduleName)
 }
 
 dependencies {
-    api(project(":libfdx:framework:fdx:core"))
-    api(project(":libfdx:framework:display"))
-    api(project(":libfdx:framework:input"))
+    api(project(":libfdx:extensions:scenario_validator:core"))
+    api(project(":libfdx:framework:ui-kit"))
 }
 java {
     withSourcesJar()

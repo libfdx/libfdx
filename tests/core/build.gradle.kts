@@ -35,8 +35,8 @@ dependencies {
         api(project(":libfdx:framework:g2d"))
         api(project(":libfdx:framework:g3d"))
         api(project(":libfdx:framework:ui-kit"))
-        api(project(":libfdx:validation:scenario-validator"))
-        api(project(":libfdx:validation:scenario-validator-ui-kit"))
+        api(project(":libfdx:extensions:scenario_validator:core"))
+        api(project(":libfdx:extensions:scenario_validator:ui-kit"))
     }
 
     testImplementation(libs.junit.jupiter)

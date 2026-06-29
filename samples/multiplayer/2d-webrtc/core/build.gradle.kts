@@ -32,7 +32,7 @@ dependencies {
         implementation(project(":libfdx:framework:ui-kit"))
         implementation(project(":libfdx:framework:net"))
         implementation(project(":libfdx:extensions:net:webrtc:core"))
-        implementation(project(":libfdx:validation:scenario-validator"))
-        implementation(project(":libfdx:validation:scenario-validator-ui-kit"))
+        implementation(project(":libfdx:extensions:scenario_validator:core"))
+        implementation(project(":libfdx:extensions:scenario_validator:ui-kit"))
     }
 }

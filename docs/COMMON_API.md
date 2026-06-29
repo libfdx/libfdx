@@ -59,7 +59,7 @@ Use this document to decide what a common API type means, what module owns it, a
 - Keep provider-specific APIs explicit through provider modules and `ProviderHandle.as()`.
 - Avoid common APIs that secretly assume one graphics, audio, input, or platform backend.
 - Use capabilities for optional behavior instead of pretending every provider supports everything.
-- Keep low-level APIs explicit enough that high-level modules such as `g2d`, `g3d`, `ui-kit`, and `scenario-validator` can be built without provider-specific code.
+- Keep low-level APIs explicit enough that high-level modules such as `g2d`, `g3d`, `ui-kit`, and `scenario_validator` can be built without provider-specific code.
 
 ## 2. API Source Of Truth
 
@@ -69,7 +69,7 @@ The type names below are the Java source names unless a section explicitly says 
 
 If source code and this document disagree, treat it as an API design issue to resolve instead of allowing the implementation to silently drift.
 
-- common API types live in foundation, runtime, assets, graphics, g2d, g3d, ui-kit, and scenario-validator modules
+- common API types live in foundation, runtime, assets, graphics, g2d, g3d, ui-kit, and scenario_validator modules
 - provider-specific types live in extension modules
 - backend launcher/runtime types live in backend modules
 
@@ -3673,7 +3673,7 @@ Rules:
 Core module:
 
 ```text
-:libfdx:validation:scenario-validator
+:libfdx:extensions:scenario_validator:core
 ```
 
 Core package:
@@ -3685,7 +3685,7 @@ io.github.libfdx.validation.scenario
 UI Kit adapter module:
 
 ```text
-:libfdx:validation:scenario-validator-ui-kit
+:libfdx:extensions:scenario_validator:ui-kit
 ```
 
 UI Kit adapter package:
@@ -3694,7 +3694,7 @@ UI Kit adapter package:
 io.github.libfdx.validation.scenario.ui.kit
 ```
 
-`scenario-validator` is an optional public validation engine for complete runtime scenarios. The detailed contract lives in [SCENARIO_VALIDATOR.md](SCENARIO_VALIDATOR.md). It is reusable by libfdx's own tests, samples, tools, benchmark modules, and user projects, but it is not required for normal runtime execution or rendering. UI Kit validation is an optional adapter capability, not the whole validator.
+`scenario_validator` is an optional public validation engine for complete runtime scenarios. The detailed contract lives in [SCENARIO_VALIDATOR.md](SCENARIO_VALIDATOR.md). It is reusable by libfdx's own tests, samples, tools, benchmark modules, and user projects, but it is not required for normal runtime execution or rendering. UI Kit validation is an optional adapter capability, not the whole validator.
 
 Defined types:
 
@@ -3729,9 +3729,9 @@ Defined types:
 
 Rules:
 
-- `scenario-validator` is not UI-only and not game-only.
-- `scenario-validator` depends on portable framework/input/display concepts as needed, not on backend implementations, platform-specific launchers, UI Kit, JUnit, or external test frameworks.
-- `scenario-validator-ui-kit` depends on `scenario-validator` and `ui-kit`.
+- `scenario_validator` is not UI-only and not game-only.
+- `scenario_validator` depends on portable framework/input/display concepts as needed, not on backend implementations, platform-specific launchers, UI Kit, JUnit, or external test frameworks.
+- `extensions/scenario_validator/ui-kit` depends on `extensions/scenario_validator/core` and `ui-kit`.
 - Normal runtime execution and normal UI rendering must not depend on scenario validation modules.
 - Built-in actions, waits, and assertions cover normal runtime behavior flows, including input, wait-for-event, capture, probe, and adapter validation.
 - Custom callbacks are escape hatches for project-specific behavior that cannot be expressed by built-in operations, adapters, captures, or probes.
