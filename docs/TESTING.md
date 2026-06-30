@@ -46,10 +46,18 @@ Interactive test launchers open a UI selector when no test is requested. Select
 a specific test with `-Dlibfdx.test.name=<name>`. Core names include
 `triangle`, `square`, `circle`, `texture`, `sprite`, `model`, `readback`, and
 `ui`. Feature/runtime names include `shader-runtime`, `shader-scene`,
+`mesh-basic`, `instancing-basic`, `scissor-viewport`,
+`render-target-chain`, `dynamic-texture`, `depth-preserve`,
+`sprite-batch-stress`,
 `outline-2d`, `fog-2d`, `fog-of-war-2d`, `particles-2d`, `tile-map`,
 `model-skinning`, `outline-3d`, `fog-3d`, `fog-of-war-3d`, `skybox-3d`,
 `billboard-3d`, `particles-3d`, `point-light-3d`, `spot-light-3d`,
 `shadow-map-3d`, `cascade-shadow-map-3d`, and `camera-controllers`.
+The provider parity tests cover raw mesh draws, indexed draws, instance-step
+vertex buffers, viewport/scissor behavior, render-target sampling chains,
+per-frame texture uploads, depth preservation across color clears, and
+SpriteBatch stress rendering. `sprite-batch-stress` defaults to 20,000 sprites;
+override it with `-Dlibfdx.test.spriteCount=<n>`.
 `model-skinning` renders a chained CPU-skinned bone strip so hierarchy and
 palette updates are covered by a visible runtime scene.
 `camera-controllers` renders the focused camera controller families in one
@@ -175,6 +183,16 @@ Use `"-Plibfdx.desktopC.openConsole=false"` for inline/headless Gradle
 runs, and `"-Plibfdx.desktopC.showConsole=false"` only when a GUI-subsystem
 executable is wanted.
 
+Desktop C run tasks pass native executable arguments through
+`-Plibfdx.desktopC.runArgs=...`. The test launchers accept Java-style
+`-Dlibfdx.test.*` arguments, named native options, and a positional
+`<test> <frames> <capture>` fallback:
+
+```powershell
+.\gradlew.bat "--project-prop=libfdx.desktopC.runArgs=mesh-basic 4" :tests:platform:desktop_c:test_desktop_c_opengl_run_debug
+.\gradlew.bat "--project-prop=libfdx.desktopC.runArgs=--test=mesh-basic --frames=4 --capture=build/reports/libfdx/parity/desktop-c-opengl/mesh-basic.ppm" :tests:platform:desktop_c:test_desktop_c_opengl_run_debug
+```
+
 ## 5. PSP Tests
 
 PSP tests use the same shared `tests/core` selector as desktop. The PSP module
@@ -244,6 +262,9 @@ same canvas and show a `Back` overlay to return to the list.
 
 Direct URLs support the same selector names as the desktop and Android
 launchers. Examples include `?test=shader-runtime`, `?test=shader-scene`,
+`?test=mesh-basic`, `?test=instancing-basic`, `?test=scissor-viewport`,
+`?test=render-target-chain`, `?test=dynamic-texture`,
+`?test=depth-preserve`, `?test=sprite-batch-stress`,
 `?test=fog-of-war-2d`, `?test=particles-2d`, `?test=tile-map`,
 `?test=model-skinning`, `?test=fog-of-war-3d`, `?test=skybox-3d`, `?test=billboard-3d`,
 `?test=particles-3d`,

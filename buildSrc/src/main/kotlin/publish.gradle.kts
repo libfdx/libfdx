@@ -9,6 +9,7 @@ import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.Task
 import org.gradle.api.artifacts.Dependency
+import org.gradle.api.artifacts.ModuleDependency
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.plugins.BasePluginExtension
 import org.gradle.api.publish.PublishingExtension
@@ -323,14 +324,23 @@ fun Project.configurePomDependencies(pom: MavenPom) {
         val dependenciesNode = projectNode.appendNode("dependencies")
         val seen = mutableSetOf<String>()
 
-        fun addDependency(group: String, artifact: String, version: String, scope: String) {
-            if(!seen.add("$group:$artifact:$scope")) {
+        fun addDependency(
+            group: String,
+            artifact: String,
+            version: String,
+            scope: String,
+            classifier: String? = null,
+            type: String? = null
+        ) {
+            if(!seen.add("$group:$artifact:$version:$scope:${classifier.orEmpty()}:${type.orEmpty()}")) {
                 return
             }
             val dependencyNode = dependenciesNode.appendNode("dependency")
             dependencyNode.appendNode("groupId", group)
             dependencyNode.appendNode("artifactId", artifact)
             dependencyNode.appendNode("version", version)
+            classifier?.let { dependencyNode.appendNode("classifier", it) }
+            type?.let { dependencyNode.appendNode("type", it) }
             dependencyNode.appendNode("scope", scope)
         }
 
@@ -344,7 +354,16 @@ fun Project.configurePomDependencies(pom: MavenPom) {
                     val group = dependency.group
                     val version = dependency.version
                     if(group != null && version != null) {
-                        addDependency(group, dependency.name, version, scope)
+                        val artifacts = (dependency as? ModuleDependency)?.artifacts.orEmpty()
+                        if(artifacts.isEmpty()) {
+                            addDependency(group, dependency.name, version, scope)
+                        } else {
+                            artifacts.forEach { artifact ->
+                                val classifier = artifact.classifier?.takeIf(String::isNotBlank)
+                                val type = artifact.type.takeIf { it.isNotBlank() && it != "jar" }
+                                addDependency(group, dependency.name, version, scope, classifier, type)
+                            }
+                        }
                     }
                 }
             }

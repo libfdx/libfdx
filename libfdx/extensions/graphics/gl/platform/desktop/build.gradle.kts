@@ -13,6 +13,13 @@ java {
 group = "${LibExt.fdxGroup}.gl"
 
 val moduleName = "gl_desktop"
+val lwjglVersion = libs.versions.lwjgl.get()
+val lwjglNativeClassifiers = arrayOf(
+    "natives-windows",
+    "natives-linux",
+    "natives-macos",
+    "natives-macos-arm64"
+)
 
 base {
     archivesName.set(moduleName)
@@ -20,10 +27,9 @@ base {
 
 dependencies {
     api(libs.lwjgl.opengl)
-    api(variantOf(libs.lwjgl.opengl) { classifier("natives-windows") })
-    api(variantOf(libs.lwjgl.opengl) { classifier("natives-linux") })
-    api(variantOf(libs.lwjgl.opengl) { classifier("natives-macos") })
-    api(variantOf(libs.lwjgl.opengl) { classifier("natives-macos-arm64") })
+    lwjglNativeClassifiers.forEach { classifier ->
+        api("org.lwjgl:lwjgl-opengl:$lwjglVersion:$classifier")
+    }
 }
 java {
     withSourcesJar()

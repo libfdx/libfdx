@@ -153,6 +153,7 @@ import static org.lwjgl.vulkan.KHRSwapchain.vkDestroySwapchainKHR;
 import static org.lwjgl.vulkan.KHRSwapchain.vkGetSwapchainImagesKHR;
 import static org.lwjgl.vulkan.KHRSwapchain.vkQueuePresentKHR;
 import static org.lwjgl.vulkan.VK10.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+import static org.lwjgl.vulkan.VK10.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
 import static org.lwjgl.vulkan.VK10.VK_ACCESS_TRANSFER_READ_BIT;
 import static org.lwjgl.vulkan.VK10.VK_API_VERSION_1_0;
 import static org.lwjgl.vulkan.VK10.VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -571,10 +572,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         private long[] swapchainImages = new long[0];
         private long[] imageViews = new long[0];
         private long[] framebuffers = new long[0];
-        private long renderPassClearStore;
-        private long renderPassClearDiscard;
-        private long renderPassLoadStore;
-        private long renderPassLoadDiscard;
+        private final long[][][] renderPasses = new long[2][2][2];
         private final Map<VulkanRenderPassKey, Long> textureRenderPasses =
                 new HashMap<VulkanRenderPassKey, Long>();
         private int swapchainImageFormat;
@@ -1195,18 +1193,21 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
 
         private void createRenderPasses(MemoryStack stack) {
-            renderPassClearStore = createRenderPass(stack, swapchainImageFormat, VK_ATTACHMENT_LOAD_OP_CLEAR,
-                    VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-            renderPassClearDiscard = createRenderPass(stack, swapchainImageFormat, VK_ATTACHMENT_LOAD_OP_CLEAR,
-                    VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-            renderPassLoadStore = createRenderPass(stack, swapchainImageFormat, VK_ATTACHMENT_LOAD_OP_LOAD,
-                    VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-            renderPassLoadDiscard = createRenderPass(stack, swapchainImageFormat, VK_ATTACHMENT_LOAD_OP_LOAD,
-                    VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+            for (int clear = 0; clear < 2; clear++) {
+                for (int store = 0; store < 2; store++) {
+                    for (int depthClear = 0; depthClear < 2; depthClear++) {
+                        renderPasses[clear][store][depthClear] = createRenderPass(stack, swapchainImageFormat,
+                                clear != 0 ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
+                                store != 0 ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                                depthClear != 0 ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
+                                clear != 0 ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                                VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+                    }
+                }
+            }
         }
 
-        private long createRenderPass(MemoryStack stack, int colorFormat, int loadOp, int storeOp,
+        private long createRenderPass(MemoryStack stack, int colorFormat, int loadOp, int storeOp, int depthLoadOp,
                 int initialLayout, int finalLayout) {
             VkAttachmentDescription.Buffer attachments = VkAttachmentDescription.calloc(2, stack);
             attachments.get(0)
@@ -1221,11 +1222,13 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             attachments.get(1)
                     .format(DEPTH_FORMAT)
                     .samples(VK_SAMPLE_COUNT_1_BIT)
-                    .loadOp(VK_ATTACHMENT_LOAD_OP_CLEAR)
-                    .storeOp(VK_ATTACHMENT_STORE_OP_DONT_CARE)
+                    .loadOp(depthLoadOp)
+                    .storeOp(VK_ATTACHMENT_STORE_OP_STORE)
                     .stencilLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE)
                     .stencilStoreOp(VK_ATTACHMENT_STORE_OP_DONT_CARE)
-                    .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED)
+                    .initialLayout(depthLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD
+                            ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                            : VK_IMAGE_LAYOUT_UNDEFINED)
                     .finalLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
             VkAttachmentReference.Buffer colorAttachmentRef = VkAttachmentReference.calloc(1, stack)
@@ -1246,10 +1249,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                     .dstSubpass(0)
                     .srcStageMask(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
                             | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT)
-                    .srcAccessMask(0)
+                    .srcAccessMask(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+                            | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
                     .dstStageMask(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
                             | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT)
                     .dstAccessMask(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+                            | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT
                             | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
 
             VkRenderPassCreateInfo renderPassInfo = VkRenderPassCreateInfo.calloc(stack)
@@ -1269,7 +1274,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 LongBuffer attachments = stack.longs(imageViews[i], depthImageViews[i]);
                 VkFramebufferCreateInfo framebufferInfo = VkFramebufferCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO)
-                        .renderPass(renderPassClearStore)
+                        .renderPass(renderPasses[1][1][1])
                         .pAttachments(attachments)
                         .width(width)
                         .height(height)
@@ -1946,15 +1951,16 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
 
         long pipelineRenderPass() {
-            return renderPassClearStore;
+            return renderPasses[1][1][1];
         }
 
         long pipelineRenderPass(TextureFormat colorFormat) {
             if (toNativeFormat(colorFormat) == swapchainImageFormat) {
-                return renderPassClearStore;
+                return renderPasses[1][1][1];
             }
             return textureRenderPass(colorFormat, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
-                    VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                    VK_ATTACHMENT_LOAD_OP_CLEAR, VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
 
         VkCommandBuffer commandBuffer() {
@@ -1969,38 +1975,31 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return imageViews[currentImageIndex];
         }
 
-        long selectRenderPass(LoadOp loadOp, StoreOp storeOp) {
+        long selectRenderPass(LoadOp loadOp, StoreOp storeOp, boolean depthClear) {
             boolean clear = loadOp != null && loadOp.isClear();
             boolean store = storeOp == null || storeOp.isStore();
-            if (clear && store) {
-                return renderPassClearStore;
-            }
-            if (clear) {
-                return renderPassClearDiscard;
-            }
-            if (store) {
-                return renderPassLoadStore;
-            }
-            return renderPassLoadDiscard;
+            return renderPasses[clear ? 1 : 0][store ? 1 : 0][depthClear ? 1 : 0];
         }
 
-        long selectTextureRenderPass(TextureFormat colorFormat, LoadOp loadOp, StoreOp storeOp, int finalLayout) {
+        long selectTextureRenderPass(TextureFormat colorFormat, LoadOp loadOp, StoreOp storeOp, boolean depthClear,
+                int finalLayout) {
             boolean clear = loadOp != null && loadOp.isClear();
             int initialLayout = clear ? VK_IMAGE_LAYOUT_UNDEFINED : finalLayout;
             return textureRenderPass(colorFormat, toNativeLoadOp(loadOp), toNativeStoreOp(storeOp),
-                    initialLayout, finalLayout);
+                    depthClear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD, initialLayout,
+                    finalLayout);
         }
 
-        private long textureRenderPass(TextureFormat colorFormat, int loadOp, int storeOp, int initialLayout,
-                int finalLayout) {
+        private long textureRenderPass(TextureFormat colorFormat, int loadOp, int storeOp, int depthLoadOp,
+                int initialLayout, int finalLayout) {
             VulkanRenderPassKey key = new VulkanRenderPassKey(toNativeFormat(colorFormat), loadOp, storeOp,
-                    initialLayout, finalLayout);
+                    depthLoadOp, initialLayout, finalLayout);
             Long renderPass = textureRenderPasses.get(key);
             if (renderPass != null) {
                 return renderPass;
             }
             try (MemoryStack stack = stackPush()) {
-                long created = createRenderPass(stack, key.colorFormat, key.loadOp, key.storeOp,
+                long created = createRenderPass(stack, key.colorFormat, key.loadOp, key.storeOp, key.depthLoadOp,
                         key.initialLayout, key.finalLayout);
                 textureRenderPasses.put(key, created);
                 return created;
@@ -2124,14 +2123,14 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 }
             }
             framebuffers = new long[0];
-            destroyRenderPass(renderPassClearStore);
-            destroyRenderPass(renderPassClearDiscard);
-            destroyRenderPass(renderPassLoadStore);
-            destroyRenderPass(renderPassLoadDiscard);
-            renderPassClearStore = VK_NULL_HANDLE;
-            renderPassClearDiscard = VK_NULL_HANDLE;
-            renderPassLoadStore = VK_NULL_HANDLE;
-            renderPassLoadDiscard = VK_NULL_HANDLE;
+            for (int clear = 0; clear < 2; clear++) {
+                for (int store = 0; store < 2; store++) {
+                    for (int depthClear = 0; depthClear < 2; depthClear++) {
+                        destroyRenderPass(renderPasses[clear][store][depthClear]);
+                        renderPasses[clear][store][depthClear] = VK_NULL_HANDLE;
+                    }
+                }
+            }
             destroyDepthResources();
             for (long imageView : imageViews) {
                 if (imageView != VK_NULL_HANDLE) {
@@ -3098,8 +3097,9 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             int finalLayout = attachment.finalLayout();
             long renderPass = textureBacked
                     ? context.selectTextureRenderPass(attachment.format(), descriptor.colorLoadOp(),
-                            descriptor.colorStoreOp(), finalLayout)
-                    : context.selectRenderPass(descriptor.colorLoadOp(), descriptor.colorStoreOp());
+                            descriptor.colorStoreOp(), descriptor.depthClearEnabled(), finalLayout)
+                    : context.selectRenderPass(descriptor.colorLoadOp(), descriptor.colorStoreOp(),
+                            descriptor.depthClearEnabled());
             long framebuffer = textureBacked ? attachment.framebuffer(context, renderPass) : context.framebuffer();
             int passWidth = attachment.width();
             int passHeight = attachment.height();
@@ -4781,13 +4781,16 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         private final int colorFormat;
         private final int loadOp;
         private final int storeOp;
+        private final int depthLoadOp;
         private final int initialLayout;
         private final int finalLayout;
 
-        VulkanRenderPassKey(int colorFormat, int loadOp, int storeOp, int initialLayout, int finalLayout) {
+        VulkanRenderPassKey(int colorFormat, int loadOp, int storeOp, int depthLoadOp, int initialLayout,
+                int finalLayout) {
             this.colorFormat = colorFormat;
             this.loadOp = loadOp;
             this.storeOp = storeOp;
+            this.depthLoadOp = depthLoadOp;
             this.initialLayout = initialLayout;
             this.finalLayout = finalLayout;
         }
@@ -4804,6 +4807,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return colorFormat == key.colorFormat
                     && loadOp == key.loadOp
                     && storeOp == key.storeOp
+                    && depthLoadOp == key.depthLoadOp
                     && initialLayout == key.initialLayout
                     && finalLayout == key.finalLayout;
         }
@@ -4813,6 +4817,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             int result = colorFormat;
             result = 31 * result + loadOp;
             result = 31 * result + storeOp;
+            result = 31 * result + depthLoadOp;
             result = 31 * result + initialLayout;
             result = 31 * result + finalLayout;
             return result;

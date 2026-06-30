@@ -5,10 +5,14 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.tests.graphics.Billboard3DTest;
 import io.github.libfdx.tests.graphics.CameraControllersShowcaseTest;
 import io.github.libfdx.tests.graphics.CircleTest;
+import io.github.libfdx.tests.graphics.DepthPreserveTest;
+import io.github.libfdx.tests.graphics.DynamicTextureTest;
 import io.github.libfdx.tests.graphics.Fog2DTest;
 import io.github.libfdx.tests.graphics.Fog3DTest;
 import io.github.libfdx.tests.graphics.FogOfWar2DTest;
 import io.github.libfdx.tests.graphics.FogOfWar3DTest;
+import io.github.libfdx.tests.graphics.InstancingBasicTest;
+import io.github.libfdx.tests.graphics.MeshBasicTest;
 import io.github.libfdx.tests.graphics.ModelBatchTest;
 import io.github.libfdx.tests.graphics.Outline2DTest;
 import io.github.libfdx.tests.graphics.Outline3DTest;
@@ -16,6 +20,8 @@ import io.github.libfdx.tests.graphics.Particles2DTest;
 import io.github.libfdx.tests.graphics.Particles3DTest;
 import io.github.libfdx.tests.graphics.PointLight3DTest;
 import io.github.libfdx.tests.graphics.ReadbackTest;
+import io.github.libfdx.tests.graphics.RenderTargetChainTest;
+import io.github.libfdx.tests.graphics.ScissorViewportTest;
 import io.github.libfdx.tests.graphics.ShadowMap3DTest;
 import io.github.libfdx.tests.graphics.ShaderRuntimeTest;
 import io.github.libfdx.tests.graphics.ShaderSceneTest;
@@ -23,6 +29,7 @@ import io.github.libfdx.tests.graphics.Skybox3DTest;
 import io.github.libfdx.tests.graphics.SkinnedModelBatchTest;
 import io.github.libfdx.tests.graphics.SpotLight3DTest;
 import io.github.libfdx.tests.graphics.SquareTest;
+import io.github.libfdx.tests.graphics.SpriteBatchStressTest;
 import io.github.libfdx.tests.graphics.SpriteBatchTest;
 import io.github.libfdx.tests.graphics.TextureTest;
 import io.github.libfdx.tests.graphics.TileMapRuntimeTest;
@@ -152,6 +159,13 @@ public final class TestSelector {
     private static final String STORAGE_RUNTIME = "storage-runtime";
     private static final String SHADER_RUNTIME = "shader-runtime";
     private static final String SHADER_SCENE = "shader-scene";
+    private static final String MESH_BASIC = "mesh-basic";
+    private static final String INSTANCING_BASIC = "instancing-basic";
+    private static final String SCISSOR_VIEWPORT = "scissor-viewport";
+    private static final String RENDER_TARGET_CHAIN = "render-target-chain";
+    private static final String DYNAMIC_TEXTURE = "dynamic-texture";
+    private static final String DEPTH_PRESERVE = "depth-preserve";
+    private static final String SPRITE_BATCH_STRESS = "sprite-batch-stress";
     private static final String UI = "ui";
     public static final String SELECTOR_NAME = "selector";
     public static final String AUTO_TEST_NAME = "auto";
@@ -317,6 +331,48 @@ public final class TestSelector {
                 @Override
                 public ApplicationListener create(long exitAfterFrames) {
                     return new ShaderSceneTest(exitAfterFrames);
+                }
+            }),
+            descriptor(MESH_BASIC, "Mesh basic", "Graphics", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new MeshBasicTest(exitAfterFrames);
+                }
+            }),
+            descriptor(INSTANCING_BASIC, "Instancing basic", "Graphics", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new InstancingBasicTest(exitAfterFrames);
+                }
+            }),
+            descriptor(SCISSOR_VIEWPORT, "Scissor viewport", "Graphics", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new ScissorViewportTest(exitAfterFrames);
+                }
+            }),
+            descriptor(RENDER_TARGET_CHAIN, "Render target chain", "Graphics", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new RenderTargetChainTest(exitAfterFrames);
+                }
+            }),
+            descriptor(DYNAMIC_TEXTURE, "Dynamic texture", "Graphics", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new DynamicTextureTest(exitAfterFrames);
+                }
+            }),
+            descriptor(DEPTH_PRESERVE, "Depth preserve", "Graphics", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new DepthPreserveTest(exitAfterFrames);
+                }
+            }),
+            descriptor(SPRITE_BATCH_STRESS, "Sprite batch stress", "Graphics", 1280, 720, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new SpriteBatchStressTest(exitAfterFrames);
                 }
             }),
             descriptor(UI, "UI kit", "UI", 1440, 1000, new TestFactory() {

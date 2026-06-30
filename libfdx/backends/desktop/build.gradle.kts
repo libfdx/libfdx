@@ -9,6 +9,13 @@ java {
 }
 
 val moduleName = "backend_desktop"
+val lwjglVersion = libs.versions.lwjgl.get()
+val lwjglNativeClassifiers = arrayOf(
+    "natives-windows",
+    "natives-linux",
+    "natives-macos",
+    "natives-macos-arm64"
+)
 
 base {
     archivesName.set(moduleName)
@@ -34,20 +41,11 @@ dependencies {
     compileOnly(libs.lwjgl.opengl)
     compileOnly(libs.lwjgl.vulkan)
 
-    api(variantOf(libs.lwjgl) { classifier("natives-windows") })
-    api(variantOf(libs.lwjgl) { classifier("natives-linux") })
-    api(variantOf(libs.lwjgl) { classifier("natives-macos") })
-    api(variantOf(libs.lwjgl) { classifier("natives-macos-arm64") })
-
-    api(variantOf(libs.lwjgl.freetype) { classifier("natives-windows") })
-    api(variantOf(libs.lwjgl.freetype) { classifier("natives-linux") })
-    api(variantOf(libs.lwjgl.freetype) { classifier("natives-macos") })
-    api(variantOf(libs.lwjgl.freetype) { classifier("natives-macos-arm64") })
-
-    api(variantOf(libs.lwjgl.glfw) { classifier("natives-windows") })
-    api(variantOf(libs.lwjgl.glfw) { classifier("natives-linux") })
-    api(variantOf(libs.lwjgl.glfw) { classifier("natives-macos") })
-    api(variantOf(libs.lwjgl.glfw) { classifier("natives-macos-arm64") })
+    lwjglNativeClassifiers.forEach { classifier ->
+        api("org.lwjgl:lwjgl:$lwjglVersion:$classifier")
+        api("org.lwjgl:lwjgl-freetype:$lwjglVersion:$classifier")
+        api("org.lwjgl:lwjgl-glfw:$lwjglVersion:$classifier")
+    }
 }
 java {
     withSourcesJar()

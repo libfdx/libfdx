@@ -21,12 +21,14 @@ public final class DesktopCOpenGLTestLauncher {
      * @param args the args
      */
     public static void main(String[] args) {
-        String testName = TestSelector.DEFAULT_TEST_NAME;
-        boolean explicitSize = hasProperty("libfdx.test.width") || hasProperty("libfdx.test.height");
-        boolean maximized = Boolean.parseBoolean(System.getProperty("libfdx.test.maximized",
-                explicitSize ? "false" : "true"));
-        int width = intProperty("libfdx.test.width", TestSelector.defaultWidth(testName));
-        int height = intProperty("libfdx.test.height", TestSelector.defaultHeight(testName));
+        DesktopCTestLauncherArgs launcherArgs = DesktopCTestLauncherArgs.apply(args);
+        String testName = launcherArgs.testName();
+        long frames = launcherArgs.frames();
+        boolean explicitSize = launcherArgs.hasProperty("libfdx.test.width")
+                || launcherArgs.hasProperty("libfdx.test.height");
+        boolean maximized = launcherArgs.maximized(explicitSize);
+        int width = launcherArgs.width(testName);
+        int height = launcherArgs.height(testName);
 
         DesktopCApplicationConfig config = new DesktopCApplicationConfig()
                 .title("libfdx Test: " + testName + " - desktop_c OpenGL")
@@ -34,16 +36,7 @@ public final class DesktopCOpenGLTestLauncher {
                 .maximized(maximized)
                 .graphics(new DesktopCOpenGLProvider());
 
-        ApplicationListener test = TestSelector.create(testName, 0L);
+        ApplicationListener test = TestSelector.create(testName, frames);
         new DesktopCApplicationBackend().start(config, test);
-    }
-
-    private static int intProperty(String name, int fallback) {
-        return Integer.parseInt(System.getProperty(name, String.valueOf(fallback)));
-    }
-
-    private static boolean hasProperty(String name) {
-        String value = System.getProperty(name);
-        return value != null && value.trim().length() > 0;
     }
 }
