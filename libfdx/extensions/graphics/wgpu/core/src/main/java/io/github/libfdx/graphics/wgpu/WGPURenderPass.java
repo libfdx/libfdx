@@ -74,6 +74,7 @@ final class WGPURenderPass implements RenderPass {
 
     private final WGPUContext context;
     private final WGPURenderPassEncoder nativePass;
+    private final int renderTargetHeight;
     private final ByteBuffer uniformBytes = ByteBuffer.allocateDirect(PBR_UNIFORM_BYTE_COUNT)
             .order(ByteOrder.nativeOrder());
     private final FloatBuffer uniformFloats = uniformBytes.asFloatBuffer();
@@ -88,9 +89,10 @@ final class WGPURenderPass implements RenderPass {
     private boolean hasUniformData;
     private boolean ended;
 
-    WGPURenderPass(WGPUContext context, WGPURenderPassEncoder nativePass) {
+    WGPURenderPass(WGPUContext context, WGPURenderPassEncoder nativePass, int renderTargetHeight) {
         this.context = context;
         this.nativePass = nativePass;
+        this.renderTargetHeight = renderTargetHeight;
         resetUniformData();
     }
 
@@ -201,7 +203,7 @@ final class WGPURenderPass implements RenderPass {
         if (width <= 0 || height <= 0) {
             throw new FdxException("Scissor size must be greater than zero");
         }
-        nativePass.setScissorRect(x, y, width, height);
+        nativePass.setScissorRect(x, renderTargetHeight - y - height, width, height);
     }
 
     /**
@@ -218,7 +220,7 @@ final class WGPURenderPass implements RenderPass {
         if (width <= 0 || height <= 0) {
             throw new FdxException("Viewport size must be greater than zero");
         }
-        nativePass.setViewport(x, y, width, height, 0.0f, 1.0f);
+        nativePass.setViewport(x, renderTargetHeight - y - height, width, height, 0.0f, 1.0f);
     }
 
     /**

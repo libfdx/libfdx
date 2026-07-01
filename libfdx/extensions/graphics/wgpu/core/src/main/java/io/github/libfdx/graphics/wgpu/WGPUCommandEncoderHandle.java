@@ -43,6 +43,8 @@ final class WGPUCommandEncoderHandle implements CommandEncoder {
             throw new FdxException("Cannot begin render pass outside a frame");
         }
         WGPUTextureViewHandle attachment = descriptor.colorAttachment().as();
+        int attachmentHeight = attachment.height();
+        int renderTargetHeight = attachmentHeight > 0 ? attachmentHeight : context.height();
 
         WGPURenderPassDescriptor passDescriptor = WGPURenderPassDescriptor.obtain();
         passDescriptor.setNextInChain(WGPUChainedStruct.NULL);
@@ -82,7 +84,7 @@ final class WGPUCommandEncoderHandle implements CommandEncoder {
 
         WGPURenderPassEncoder passEncoder = new WGPURenderPassEncoder();
         context.frameEncoder().beginRenderPass(passDescriptor, passEncoder);
-        return new WGPURenderPass(context, passEncoder);
+        return new WGPURenderPass(context, passEncoder, renderTargetHeight);
     }
 
     /**

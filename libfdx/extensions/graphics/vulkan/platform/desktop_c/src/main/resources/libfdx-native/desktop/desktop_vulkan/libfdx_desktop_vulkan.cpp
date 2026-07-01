@@ -2800,6 +2800,25 @@ extern "C" void fdx_desktop_vulkan_set_index_buffer(int64_t contextHandle, int64
     }
 }
 
+extern "C" void fdx_desktop_vulkan_set_scissor(int64_t contextHandle, int32_t x, int32_t y,
+        int32_t width, int32_t height) {
+    Context* context = ptr<Context>(contextHandle);
+    try {
+        if (!context->renderPassStarted) {
+            throw std::runtime_error("Cannot set desktop C Vulkan scissor outside a render pass");
+        }
+        if (width <= 0 || height <= 0) {
+            throw std::runtime_error("desktop C Vulkan scissor size must be greater than zero");
+        }
+        VkRect2D scissor{};
+        scissor.offset = {static_cast<int32_t>(x), static_cast<int32_t>(y)};
+        scissor.extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+        vkCmdSetScissor(currentFrame(context).commandBuffer, 0, 1, &scissor);
+    } catch (const std::exception& error) {
+        logNativeError("Could not set desktop C Vulkan scissor", error);
+    }
+}
+
 extern "C" void fdx_desktop_vulkan_bind_textures(int64_t contextHandle, int64_t pipelineHandle,
         const int64_t* textureHandles, int32_t count) {
     Context* context = ptr<Context>(contextHandle);

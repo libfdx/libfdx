@@ -35,6 +35,8 @@ void fdx_desktop_vulkan_begin_render_pass(int64_t contextHandle, int32_t clear,
 void fdx_desktop_vulkan_set_pipeline(int64_t contextHandle, int64_t pipelineHandle);
 void fdx_desktop_vulkan_set_vertex_buffer(int64_t contextHandle, int32_t slot, int64_t bufferHandle);
 void fdx_desktop_vulkan_set_index_buffer(int64_t contextHandle, int64_t bufferHandle);
+void fdx_desktop_vulkan_set_scissor(int64_t contextHandle, int32_t x, int32_t y,
+        int32_t width, int32_t height);
 void fdx_desktop_vulkan_bind_textures(int64_t contextHandle, int64_t pipelineHandle,
         const int64_t* textureHandles, int32_t count);
 void fdx_desktop_vulkan_bind_uniforms(int64_t contextHandle, int64_t pipelineHandle, void* data, int32_t size);

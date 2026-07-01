@@ -3136,7 +3136,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 vkCmdSetViewport(context.commandBuffer(), 0, viewport);
                 vkCmdSetScissor(context.commandBuffer(), 0, scissor);
             }
-            return new VulkanRenderPass(context, textureBacked ? attachment : null);
+            return new VulkanRenderPass(context, textureBacked ? attachment : null, passHeight);
         }
 
         /**
@@ -3212,6 +3212,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
 
         private final VulkanContext context;
         private final VulkanTextureViewHandle colorAttachment;
+        private final int renderTargetHeight;
         private final ByteBuffer uniformBytes = ByteBuffer.allocateDirect(PBR_UNIFORM_BYTE_COUNT)
                 .order(ByteOrder.nativeOrder());
         private final FloatBuffer uniformFloats = uniformBytes.asFloatBuffer();
@@ -3224,9 +3225,10 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         private boolean hasUniformData;
         private boolean ended;
 
-        VulkanRenderPass(VulkanContext context, VulkanTextureViewHandle colorAttachment) {
+        VulkanRenderPass(VulkanContext context, VulkanTextureViewHandle colorAttachment, int renderTargetHeight) {
             this.context = context;
             this.colorAttachment = colorAttachment;
+            this.renderTargetHeight = renderTargetHeight;
             resetUniformData();
         }
 
@@ -3337,7 +3339,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
             try (MemoryStack stack = stackPush()) {
                 VkRect2D.Buffer scissor = VkRect2D.calloc(1, stack);
-                scissor.offset().set(x, y);
+                scissor.offset().set(x, renderTargetHeight - y - height);
                 scissor.extent().set(width, height);
                 vkCmdSetScissor(context.commandBuffer(), 0, scissor);
             }

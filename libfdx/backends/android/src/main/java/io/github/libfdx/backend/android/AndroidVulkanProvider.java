@@ -598,7 +598,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                     toNativeTextureFormat(colorAttachment.format()), colorAttachment.width(), colorAttachment.height(),
                     loadOp.isClear(), loadOp.red(), loadOp.green(), loadOp.blue(), loadOp.alpha(),
                     storeOp.isStore(), descriptor.depthClearEnabled(), descriptor.depthClearValue());
-            return new AndroidVulkanRenderPass(attachment);
+            return new AndroidVulkanRenderPass(attachment, colorAttachment.height());
         }
 
         /**
@@ -674,6 +674,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         private static final int BONE_MATRICES_OFFSET = SKINNING_PARAMS_OFFSET + 4;
 
         private final AndroidVulkanGraphicsAttachment attachment;
+        private final int renderTargetHeight;
         private final ByteBuffer uniformBytes = ByteBuffer.allocateDirect(PBR_UNIFORM_BYTE_COUNT)
                 .order(ByteOrder.nativeOrder());
         private final FloatBuffer uniformFloats = uniformBytes.asFloatBuffer();
@@ -685,8 +686,9 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         private boolean hasUniformData;
         private boolean ended;
 
-        AndroidVulkanRenderPass(AndroidVulkanGraphicsAttachment attachment) {
+        AndroidVulkanRenderPass(AndroidVulkanGraphicsAttachment attachment, int renderTargetHeight) {
             this.attachment = attachment;
+            this.renderTargetHeight = renderTargetHeight;
             resetUniformData();
         }
 
@@ -789,7 +791,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (width <= 0 || height <= 0) {
                 throw new FdxException("Scissor size must be greater than zero");
             }
-            AndroidVulkanNative.setScissor(attachment.context, x, y, width, height);
+            AndroidVulkanNative.setScissor(attachment.context, x, renderTargetHeight - y - height, width, height);
         }
 
         /**

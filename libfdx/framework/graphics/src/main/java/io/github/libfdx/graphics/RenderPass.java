@@ -56,8 +56,8 @@ public interface RenderPass extends ProviderHandle {
     /**
      * Sets the scissor.
      *
-     * @param x the x coordinate
-     * @param y the y coordinate
+     * @param x the lower-left x coordinate in framebuffer pixels
+     * @param y the lower-left y coordinate in framebuffer pixels
      * @param width the width in pixels
      * @param height the height in pixels
      */
@@ -68,8 +68,8 @@ public interface RenderPass extends ProviderHandle {
     /**
      * Sets the viewport.
      *
-     * @param x the x coordinate
-     * @param y the y coordinate
+     * @param x the lower-left x coordinate in framebuffer pixels
+     * @param y the lower-left y coordinate in framebuffer pixels
      * @param width the width in pixels
      * @param height the height in pixels
      */

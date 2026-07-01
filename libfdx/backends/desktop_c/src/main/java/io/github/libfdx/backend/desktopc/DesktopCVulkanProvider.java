@@ -754,6 +754,23 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
         }
 
         /**
+         * Sets the scissor.
+         *
+         * @param x the lower-left x coordinate in framebuffer pixels
+         * @param y the lower-left y coordinate in framebuffer pixels
+         * @param width the width in pixels
+         * @param height the height in pixels
+         */
+        @Override
+        public void setScissor(int x, int y, int width, int height) {
+            ensureOpen();
+            if (width <= 0 || height <= 0) {
+                throw new FdxException("Scissor size must be greater than zero");
+            }
+            DesktopCVulkan.setScissor(attachment.context, x, attachment.height - y - height, width, height);
+        }
+
+        /**
          * Sets the texture.
          *
          * @param slot the slot

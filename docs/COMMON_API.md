@@ -2472,6 +2472,7 @@ public interface RenderPass extends ProviderHandle {
     void setIndexBuffer(Buffer buffer);
     void setTexture(int slot, Texture texture);
     void setScissor(int x, int y, int width, int height);
+    void setViewport(int x, int y, int width, int height);
     void draw(int vertexCount, int instanceCount, int firstVertex, int firstInstance);
     void drawIndexed(int indexCount, int instanceCount, int firstIndex, int baseVertex, int firstInstance);
     void end();
@@ -2505,7 +2506,8 @@ Rules:
 - Pipelines that sample textures declare the number of sampled textures they expect with `RenderPipelineDescriptor.sampledTextureCount(...)`.
 - `RenderPass.setTexture(slot, texture)` binds a sampled texture for subsequent draws in the active pass.
 - `RenderPass.setIndexBuffer(buffer)` binds an index buffer for subsequent `drawIndexed(...)` calls in the active pass.
-- `RenderPass.setScissor(x, y, width, height)` sets the active pass clip rectangle for subsequent draws. Coordinates are framebuffer pixel coordinates in the provider's render-target origin convention. Higher-level renderers that target multiple providers are responsible for converting their logical clip origin before calling this method.
+- `RenderPass.setScissor(x, y, width, height)` sets the active pass clip rectangle for subsequent draws. Coordinates are framebuffer pixel coordinates with `(0, 0)` at the lower-left corner of the active render target. Providers with native top-left scissor origins must convert internally.
+- `RenderPass.setViewport(x, y, width, height)` sets the active pass viewport for subsequent draws. Coordinates use the same lower-left framebuffer origin as `setScissor`.
 - `Texture.view()` returns the default texture view when the selected provider supports texture-backed attachments.
 - Frame command encoders are owned by the backend/provider attachment. Game code records passes through `Graphics.currentFrame().commandEncoder()`.
 - Pass objects are scoped. Once `end()` is called, the pass should not accept more commands.
