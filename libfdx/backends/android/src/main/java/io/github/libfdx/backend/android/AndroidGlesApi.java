@@ -3,6 +3,7 @@ package io.github.libfdx.backend.android;
 import android.opengl.GLES30;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.PrimitiveTopology;
+import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureWrap;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.gl.GLApi;
@@ -391,6 +392,18 @@ final class AndroidGlesApi implements GLApi {
     public void textureWrap2D(TextureWrap wrapS, TextureWrap wrapT) {
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, toNative(wrapS));
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, toNative(wrapT));
+    }
+
+    /**
+     * Runs the texture filter2 d step.
+     *
+     * @param filter the sampled texture filter
+     */
+    @Override
+    public void textureFilter2D(TextureFilter filter) {
+        int nativeFilter = toNative(filter);
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, nativeFilter);
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, nativeFilter);
     }
 
     /**
@@ -867,6 +880,10 @@ final class AndroidGlesApi implements GLApi {
             return GLES30.GL_MIRRORED_REPEAT;
         }
         return GLES30.GL_CLAMP_TO_EDGE;
+    }
+
+    private int toNative(TextureFilter filter) {
+        return filter == TextureFilter.NEAREST ? GLES30.GL_NEAREST : GLES30.GL_LINEAR;
     }
 
     private String toGlesSource(GLShaderType type, String source) {

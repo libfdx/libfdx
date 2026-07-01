@@ -2,6 +2,7 @@ package io.github.libfdx.backend.desktop;
 
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.PrimitiveTopology;
+import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureWrap;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.gl.GLApi;
@@ -379,6 +380,18 @@ final class DesktopGLApi implements GLApi {
     public void textureWrap2D(TextureWrap wrapS, TextureWrap wrapT) {
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, toNative(wrapS));
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, toNative(wrapT));
+    }
+
+    /**
+     * Runs the texture filter2 d step.
+     *
+     * @param filter the sampled texture filter
+     */
+    @Override
+    public void textureFilter2D(TextureFilter filter) {
+        int nativeFilter = toNative(filter);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, nativeFilter);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, nativeFilter);
     }
 
     /**
@@ -888,5 +901,9 @@ final class DesktopGLApi implements GLApi {
             return GL14.GL_MIRRORED_REPEAT;
         }
         return GL12.GL_CLAMP_TO_EDGE;
+    }
+
+    private int toNative(TextureFilter filter) {
+        return filter == TextureFilter.NEAREST ? GL11.GL_NEAREST : GL11.GL_LINEAR;
     }
 }

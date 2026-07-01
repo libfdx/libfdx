@@ -48,10 +48,12 @@ Use this document to decide what a common API type means, what module owns it, a
     1. [Graphics 3D Contracts](#151-graphics-3d-contracts)
 16. [UI Kit](#16-ui-kit)
     1. [UI Kit Contracts](#161-ui-kit-contracts)
-17. [Scenario Validator](#17-scenario-validator)
-    1. [Scenario Validator Contracts](#171-scenario-validator-contracts)
-18. [Initial API Decisions](#18-initial-api-decisions)
-19. [Runtime Core](#19-runtime-core)
+17. [ECS](#17-ecs)
+    1. [ECS Contracts](#171-ecs-contracts)
+18. [Scenario Validator](#18-scenario-validator)
+    1. [Scenario Validator Contracts](#181-scenario-validator-contracts)
+19. [Initial API Decisions](#19-initial-api-decisions)
+20. [Runtime Core](#20-runtime-core)
 
 ## 1. Goals
 
@@ -59,7 +61,7 @@ Use this document to decide what a common API type means, what module owns it, a
 - Keep provider-specific APIs explicit through provider modules and `ProviderHandle.as()`.
 - Avoid common APIs that secretly assume one graphics, audio, input, or platform backend.
 - Use capabilities for optional behavior instead of pretending every provider supports everything.
-- Keep low-level APIs explicit enough that high-level modules such as `g2d`, `g3d`, `ui-kit`, and `scenario_validator` can be built without provider-specific code.
+- Keep low-level APIs explicit enough that high-level modules such as `g2d`, `g3d`, `ecs`, `ui-kit`, and `scenario_validator` can be built without provider-specific code.
 
 ## 2. API Source Of Truth
 
@@ -69,7 +71,7 @@ The type names below are the Java source names unless a section explicitly says 
 
 If source code and this document disagree, treat it as an API design issue to resolve instead of allowing the implementation to silently drift.
 
-- common API types live in foundation, runtime, assets, graphics, g2d, g3d, ui-kit, and scenario_validator modules
+- common API types live in foundation, runtime, assets, graphics, g2d, g3d, ecs, ui-kit, and scenario_validator modules
 - provider-specific types live in extension modules
 - backend launcher/runtime types live in backend modules
 
@@ -2206,7 +2208,7 @@ Defined descriptor types:
 | Type | Role |
 | --- | --- |
 | `BufferDescriptor` | Buffer creation label, size, usage, and dynamic/static update intent. |
-| `TextureDescriptor` | Texture creation label, size, format, usage, and sampler wrap state. |
+| `TextureDescriptor` | Texture creation label, size, format, usage, and sampler filter/wrap state. |
 | `ShaderModuleDescriptor` | WGSL shader source plus provider-ready generated shader output used internally after runtime compilation. Public shader authoring uses WGSL only. |
 | `ShaderBundle` | Optional WGSL source-of-truth container plus profile and reflection metadata. |
 | `ShaderReflection`, `ShaderBinding`, `ShaderAttribute` | Setup-time metadata for shader bindings and vertex inputs declared by a shader owner or produced by shader tooling. |
@@ -2226,6 +2228,7 @@ Defined value/state types:
 | `PrimitiveTopology` | Primitive assembly mode for first render pipelines. |
 | `BufferUsage` | Portable buffer usage. The first implementation defines vertex and index buffers. |
 | `TextureUsage` | Portable texture usage. The current slice defines sampled textures, render-attachment textures, and sampled render-attachment textures. |
+| `TextureFilter` | Portable sampled-texture min/mag filter mode. |
 | `TextureWrap` | Portable sampled-texture coordinate wrap mode. |
 | `VertexLayout`, `VertexStepMode`, `VertexAttribute`, `VertexFormat` | Portable vertex input layout for render pipelines. |
 | `LoadOp`, `StoreOp` | Render pass attachment load/store behavior. |
@@ -2294,8 +2297,10 @@ public final class TextureDescriptor {
     public TextureDescriptor size(int width, int height);
     public TextureDescriptor format(TextureFormat format);
     public TextureDescriptor usage(TextureUsage usage);
+    public TextureDescriptor filter(TextureFilter filter);
     public TextureDescriptor wrap(TextureWrap wrap);
     public TextureDescriptor wrap(TextureWrap wrapS, TextureWrap wrapT);
+    public TextureFilter filter();
     public TextureWrap wrapS();
     public TextureWrap wrapT();
 }
@@ -2500,6 +2505,7 @@ Rules:
 - `VertexFormat.UNORM8X4` is a packed four-component unsigned-byte normalized vertex format for colors and other compact attributes. Providers must map it to normalized attribute input, not four raw floats.
 - `TextureDescriptor.rgba8(label, width, height)` creates an RGBA8 sampled texture descriptor.
 - `TextureDescriptor.rgba8RenderTarget(label, width, height)` creates an RGBA8 texture descriptor that can be rendered into and sampled later, for example by a shadow-map or post-processing pass.
+- Texture filtering defaults to `TextureFilter.LINEAR`. Call `TextureDescriptor.filter(TextureFilter.NEAREST)` for pixel-art or data-like sampled textures that must not be linearly blended.
 - Texture wrap defaults to `TextureWrap.CLAMP_TO_EDGE`. Call `TextureDescriptor.wrap(...)` to request `REPEAT` or `MIRRORED_REPEAT` sampled-texture addressing.
 - `GraphicsFrame.frameBuffer()` exposes the current drawable. `FrameBuffer.readPixelsRgba8()` is an end-of-frame capture operation: after it succeeds, no more commands should be recorded against that frame, and a later `GraphicsAttachment.endFrame()` for the same frame may be a no-op.
 - `GraphicsDevice.writeTexture(texture, data)` uploads the full RGBA byte range from the provided `ByteBuffer`.
@@ -2621,6 +2627,7 @@ Current implemented texture slice:
 - `Texture` exposes width, height, format, usage, provider identity, disposal, and `as()`.
 - `TextureDescriptor.rgba8(label, width, height)` creates sampled RGBA8 textures.
 - `TextureDescriptor.rgba8RenderTarget(label, width, height)` creates RGBA8 textures with both render-attachment and sampled usage for offscreen passes that feed later draw calls.
+- `TextureDescriptor.filter(...)` controls sampled-texture min/mag filtering. The default is `TextureFilter.LINEAR`.
 - `TextureDescriptor.wrap(...)` controls sampled-texture coordinate addressing. The default is `TextureWrap.CLAMP_TO_EDGE`.
 - `GraphicsDevice.writeTexture(texture, data)` uploads full RGBA image data.
 - `RenderPass.setTexture(slot, texture)` binds sampled textures for draw calls.
@@ -3668,9 +3675,72 @@ Rules:
 - Built-in display widgets include progress bars backed by fixed values or `UiFloatState` ranges.
 - `ui-kit` is not the common API for every possible UI solution.
 
-## 17. Scenario Validator
+## 17. ECS
 
-### 17.1. Scenario Validator Contracts
+### 17.1. ECS Contracts
+
+Module:
+
+```text
+:libfdx:extensions:ecs
+```
+
+Package root:
+
+```text
+io.github.libfdx.ecs
+```
+
+Subpackages:
+
+```text
+io.github.libfdx.ecs.command
+io.github.libfdx.ecs.component
+io.github.libfdx.ecs.entity
+io.github.libfdx.ecs.event
+io.github.libfdx.ecs.manager
+io.github.libfdx.ecs.query
+io.github.libfdx.ecs.system
+```
+
+`ecs` is an optional pure Java entity component system. It is framework-owned and user-created; it is not a backend-owned runtime service and must not add an accessor to `Fdx`.
+
+Defined types:
+
+| Type | Role |
+| --- | --- |
+| `io.github.libfdx.ecs.World` | Owns entities, component stores, mappers, matchers, entity lists, events, managers, systems, and deferred commands. |
+| `io.github.libfdx.ecs.component.ComponentMapper<T>` | Stable type-specific component accessor with dense iteration helpers. |
+| `io.github.libfdx.ecs.query.EntityMatcher` | Reusable component-rule matcher for selecting entities by all, one, any, and exclude rules. |
+| `io.github.libfdx.ecs.entity.EntityList` | Reusable list of attached entity handles selected by an `EntityMatcher`. |
+| `io.github.libfdx.ecs.event.Event` | Reusable event container with an integer type and primitive/object payload fields. |
+| `io.github.libfdx.ecs.event.EventListener` | Listener interface for ECS-local queued events. |
+| `io.github.libfdx.ecs.event.EventDispatcher` | World-owned event queue, listener registry, and event pool owner. |
+| `io.github.libfdx.ecs.command.WorldCommands` | Deferred mutation queue for entities, components, managers, systems, and world clear. |
+| `io.github.libfdx.ecs.manager.Manager` | Passive world-owned helper or shared state object. |
+| `io.github.libfdx.ecs.system.System` | World-owned enabled/disabled update object. |
+
+Rules:
+
+- `ecs` must not depend on backends, providers, rendering modules, editor modules, platform launchers, serialization modules, or `Fdx`.
+- A `World` is created by user/framework feature code from the `ecs` dependency.
+- Entity handles are opaque `int` values owned by one `World`; `0` is the no-entity value.
+- Structural mutation is queued through `WorldCommands` and applied by `flushCommands()` or at `World.update(...)` safe points.
+- Components are non-null Java objects keyed by explicit `Class<T>` values. The ECS must not use reflection, annotations, component field scanning, or automatic serialization.
+- `World.add(entity, component)` stores by concrete runtime class; `World.add(entity, type, component)` stores by an explicit key and requires `type.isInstance(component)`.
+- Missing component lookups return `null`; `require(...)` methods fail clearly when the component is absent.
+- Mappers, matchers, entity lists, managers, and systems belong to one world and should be cached during setup or attach phases.
+- Entity lists update when queued structural changes are flushed.
+- Events are queued and flushed explicitly. Event listeners run in registration order; one-shot dispatch listeners run after registered listeners and before the optional processed callback.
+- Managers attach and detach through deferred commands and remain passive between lifecycle callbacks.
+- Systems attach and detach through deferred commands. `World.update(deltaTime)` updates enabled systems in registration order; typed updates update enabled systems assignable to the requested system type.
+- `World.update(deltaTime)` flushes commands, flushes events, updates systems, then flushes commands and events recorded by systems.
+- `World.clear()` detaches systems before managers, clears events, clears components/entities, and leaves reusable storage available for reuse.
+- Hot update code should cache mappers, matchers, entity lists, managers, event listeners, and processed callbacks, and should mutate existing component instances instead of allocating replacements every frame.
+
+## 18. Scenario Validator
+
+### 18.1. Scenario Validator Contracts
 
 Core module:
 
@@ -3745,7 +3815,7 @@ Rules:
 - Visual validation remains explicit. A capture task passing is not enough for visual work unless the expected frame is captured or compared according to the active validation plan.
 - Failure reports name the scenario, operation, action/wait/assertion/capture/custom callback, target selector or probe type, expected value, actual value, elapsed wait time, recent events, and capture/baseline paths when relevant.
 
-## 18. Initial API Decisions
+## 19. Initial API Decisions
 
 These decisions are part of the common API contract:
 
@@ -3757,7 +3827,7 @@ These decisions are part of the common API contract:
 - Include `ShaderLanguage`, `ShaderProfile`, `ShaderTarget`, and `ShaderBundle` from the start. WGSL is the only shader authoring source of truth. GL/WebGL/GLES translate WGSL to GLSL/GLSL ES through Tint, Vulkan translates WGSL to SPIR-V through Tint, Metal translates WGSL to MSL through Tint, and HLSL is a future DirectX target.
 - Keep `TextureView` as a required common graphics type. Advanced view behavior is capability-gated.
 
-## 19. Runtime Core
+## 20. Runtime Core
 
 Module:
 

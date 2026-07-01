@@ -345,7 +345,7 @@ void libfdx_ios_metal_write_buffer(int64_t buffer_handle, const void* data, int3
 }
 
 int64_t libfdx_ios_metal_create_texture(
-        int64_t context_handle, int32_t width, int32_t height, int32_t wrap_s, int32_t wrap_t) {
+        int64_t context_handle, int32_t width, int32_t height, int32_t wrap_s, int32_t wrap_t, int32_t filter) {
     IosMetalContext* context = from_handle<IosMetalContext>(context_handle);
     if (context == nullptr || width <= 0 || height <= 0) {
         return 0;
@@ -362,8 +362,11 @@ int64_t libfdx_ios_metal_create_texture(
         return 0;
     }
     MTLSamplerDescriptor* samplerDescriptor = [[MTLSamplerDescriptor alloc] init];
-    samplerDescriptor.minFilter = MTLSamplerMinMagFilterLinear;
-    samplerDescriptor.magFilter = MTLSamplerMinMagFilterLinear;
+    MTLSamplerMinMagFilter samplerFilter = filter == 0
+            ? MTLSamplerMinMagFilterNearest
+            : MTLSamplerMinMagFilterLinear;
+    samplerDescriptor.minFilter = samplerFilter;
+    samplerDescriptor.magFilter = samplerFilter;
     samplerDescriptor.sAddressMode = address_mode(wrap_s);
     samplerDescriptor.tAddressMode = address_mode(wrap_t);
     id<MTLSamplerState> sampler = [context->device newSamplerStateWithDescriptor:samplerDescriptor];

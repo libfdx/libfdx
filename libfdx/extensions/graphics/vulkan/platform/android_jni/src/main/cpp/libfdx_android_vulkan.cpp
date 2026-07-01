@@ -1678,11 +1678,20 @@ VkSamplerAddressMode toAddressMode(int wrap) {
     return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 }
 
-VkSampler createTextureSampler(Context* context, int wrapS, int wrapT) {
+VkFilter toFilter(int filter) {
+    return filter == 0 ? VK_FILTER_NEAREST : VK_FILTER_LINEAR;
+}
+
+VkSamplerMipmapMode toMipmapFilter(int filter) {
+    return filter == 0 ? VK_SAMPLER_MIPMAP_MODE_NEAREST : VK_SAMPLER_MIPMAP_MODE_LINEAR;
+}
+
+VkSampler createTextureSampler(Context* context, int wrapS, int wrapT, int filter) {
+    VkFilter nativeFilter = toFilter(filter);
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.magFilter = nativeFilter;
+    samplerInfo.minFilter = nativeFilter;
     samplerInfo.addressModeU = toAddressMode(wrapS);
     samplerInfo.addressModeV = toAddressMode(wrapT);
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -1691,7 +1700,7 @@ VkSampler createTextureSampler(Context* context, int wrapS, int wrapT) {
     samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
     samplerInfo.unnormalizedCoordinates = VK_FALSE;
     samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.mipmapMode = toMipmapFilter(filter);
     samplerInfo.mipLodBias = 0.0f;
     samplerInfo.minLod = 0.0f;
     samplerInfo.maxLod = 0.0f;
@@ -1703,6 +1712,7 @@ VkSampler createTextureSampler(Context* context, int wrapS, int wrapT) {
 }
 
 Texture* createTextureResource(Context* context, int width, int height, VkFormat format, int wrapS, int wrapT,
+        int filter,
         bool sampled, bool renderAttachment) {
     if (width <= 0 || height <= 0) {
         throw std::runtime_error("Android Vulkan texture size must be greater than zero");
@@ -1759,7 +1769,7 @@ Texture* createTextureResource(Context* context, int width, int height, VkFormat
 
         texture->imageView = createTextureImageView(context, texture->image, format);
         if (sampled) {
-            texture->sampler = createTextureSampler(context, wrapS, wrapT);
+            texture->sampler = createTextureSampler(context, wrapS, wrapT, filter);
         }
         return texture;
     } catch (...) {
@@ -2243,11 +2253,12 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_writeBuffer(JNIEnv* en
 extern "C" JNIEXPORT jlong JNICALL
 Java_io_github_libfdx_backend_android_AndroidVulkanNative_createTexture(JNIEnv* env, jclass,
         jlong contextHandle, jint width, jint height, jint format, jint wrapS, jint wrapT,
-        jboolean sampled, jboolean renderAttachment) {
+        jint filter, jboolean sampled, jboolean renderAttachment) {
     Context* context = ptr<Context>(contextHandle);
     try {
         return handle(createTextureResource(context, static_cast<int>(width), static_cast<int>(height),
                 static_cast<VkFormat>(format), static_cast<int>(wrapS), static_cast<int>(wrapT),
+                static_cast<int>(filter),
                 sampled == JNI_TRUE, renderAttachment == JNI_TRUE));
     } catch (const std::exception& error) {
         throwFdx(env, error.what());

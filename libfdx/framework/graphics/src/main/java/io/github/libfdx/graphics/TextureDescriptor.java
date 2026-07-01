@@ -13,6 +13,7 @@ public final class TextureDescriptor {
     private int height;
     private TextureFormat format = TextureFormat.RGBA8_UNORM;
     private TextureUsage usage = TextureUsage.SAMPLED;
+    private TextureFilter filter = TextureFilter.LINEAR;
     private TextureWrap wrapS = TextureWrap.CLAMP_TO_EDGE;
     private TextureWrap wrapT = TextureWrap.CLAMP_TO_EDGE;
 
@@ -139,6 +140,26 @@ public final class TextureDescriptor {
      */
     public TextureDescriptor usage(TextureUsage usage) {
         this.usage = usage != null ? usage : TextureUsage.SAMPLED;
+        return this;
+    }
+
+    /**
+     * Returns the sampled texture filter.
+     *
+     * @return the sampled texture filter
+     */
+    public TextureFilter filter() {
+        return filter;
+    }
+
+    /**
+     * Sets the sampled texture filter and returns this texture descriptor.
+     *
+     * @param filter the sampled texture filter
+     * @return this texture descriptor for chaining
+     */
+    public TextureDescriptor filter(TextureFilter filter) {
+        this.filter = filter != null ? filter : TextureFilter.LINEAR;
         return this;
     }
 

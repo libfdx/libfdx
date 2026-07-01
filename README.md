@@ -32,11 +32,13 @@ Hosted web tools and demos:
 - [Project Generator](https://libfdx.github.io/project-generator/)
 - [Tests](https://libfdx.github.io/tests/)
 - [Basic Sample](https://libfdx.github.io/samples/basic/)
+- [ECS Platformer](https://libfdx.github.io/samples/ecs-platformer/)
 
 From the repository root on Windows:
 
 ```powershell
 .\gradlew.bat :samples:basic:platform:desktop:basic_desktop_gl_run
+.\gradlew.bat :samples:ecs-platformer:platform:desktop:libfdx_desktop_jvm_gl_run
 ```
 
 To open the desktop test selector:

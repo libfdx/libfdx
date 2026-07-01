@@ -2,6 +2,7 @@ package io.github.libfdx.backend.iosc;
 
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.PrimitiveTopology;
+import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureWrap;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.gl.GLApi;
@@ -401,6 +402,18 @@ final class IosCGLApi implements GLApi {
     }
 
     /**
+     * Runs the texture filter2 d step.
+     *
+     * @param filter the sampled texture filter
+     */
+    @Override
+    public void textureFilter2D(TextureFilter filter) {
+        int nativeFilter = toNative(filter);
+        IosCOpenGLES.glTexParameteri(IosCOpenGLES.TEXTURE_2D, IosCOpenGLES.TEXTURE_MIN_FILTER, nativeFilter);
+        IosCOpenGLES.glTexParameteri(IosCOpenGLES.TEXTURE_2D, IosCOpenGLES.TEXTURE_MAG_FILTER, nativeFilter);
+    }
+
+    /**
      * Runs the delete texture step.
      *
      * @param texture the texture
@@ -776,6 +789,10 @@ final class IosCGLApi implements GLApi {
             return IosCOpenGLES.MIRRORED_REPEAT;
         }
         return IosCOpenGLES.CLAMP_TO_EDGE;
+    }
+
+    private int toNative(TextureFilter filter) {
+        return filter == TextureFilter.NEAREST ? IosCOpenGLES.NEAREST : IosCOpenGLES.LINEAR;
     }
 
     private String toGlesSource(GLShaderType type, String source) {

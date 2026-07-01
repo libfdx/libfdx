@@ -61,7 +61,7 @@ final class AndroidVulkanNative {
     static native void writeBuffer(long buffer, ByteBuffer data, int size);
 
     static native long createTexture(long context, int width, int height, int format, int wrapS, int wrapT,
-            boolean sampled, boolean renderAttachment);
+            int filter, boolean sampled, boolean renderAttachment);
 
     static native void writeTexture(long texture, ByteBuffer data, int size);
 

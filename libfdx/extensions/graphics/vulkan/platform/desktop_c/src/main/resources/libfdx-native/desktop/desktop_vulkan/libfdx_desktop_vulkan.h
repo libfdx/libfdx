@@ -18,7 +18,7 @@ void fdx_desktop_vulkan_clear(int64_t contextHandle, float red, float green, flo
 int64_t fdx_desktop_vulkan_create_buffer(int64_t contextHandle, int32_t size, int32_t usage);
 void fdx_desktop_vulkan_write_buffer(int64_t bufferHandle, void* data, int32_t size);
 int64_t fdx_desktop_vulkan_create_texture(int64_t contextHandle, int32_t width, int32_t height,
-        int32_t format, int32_t wrapS, int32_t wrapT);
+        int32_t format, int32_t wrapS, int32_t wrapT, int32_t filter);
 void fdx_desktop_vulkan_write_texture(int64_t textureHandle, void* data, int32_t size);
 int64_t fdx_desktop_vulkan_create_shader_module(int64_t contextHandle,
         const int32_t* vertexWords, int32_t vertexWordCount,

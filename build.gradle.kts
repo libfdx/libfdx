@@ -1,4 +1,6 @@
 import io.github.libfdx.build.LibExt
+import org.gradle.api.plugins.BasePluginExtension
+import org.gradle.api.plugins.JavaPluginExtension
 
 plugins {
     id("base")
@@ -21,6 +23,88 @@ allprojects {
     configurations.configureEach {
         // Check for updates every sync
         resolutionStrategy.cacheChangingModulesFor(0, "seconds")
+    }
+}
+
+subprojects {
+    fun configureJava25() {
+        extensions.configure(JavaPluginExtension::class.java) {
+            sourceCompatibility = JavaVersion.toVersion(25)
+            targetCompatibility = JavaVersion.toVersion(25)
+        }
+    }
+
+    fun implementationProject(projectPath: String) {
+        dependencies.add("implementation", rootProject.project(projectPath))
+    }
+
+    fun runtimeOnlyProject(projectPath: String) {
+        dependencies.add("runtimeOnly", rootProject.project(projectPath))
+    }
+
+    fun archiveName(name: String) {
+        extensions.configure(BasePluginExtension::class.java) {
+            archivesName.set(name)
+        }
+    }
+
+    fun ecsPlatformerGroup() {
+        group = "${LibExt.fdxGroup}.samples.ecs.platformer"
+    }
+
+    when (path) {
+        ":samples:ecs-platformer:platform:desktop" -> pluginManager.withPlugin("io.github.libfdx") {
+            ecsPlatformerGroup()
+            configureJava25()
+            archiveName("sample_ecs_platformer_desktop")
+            implementationProject(":samples:ecs-platformer:core")
+            implementationProject(":libfdx:framework:application")
+            implementationProject(":libfdx:framework:display")
+            implementationProject(":libfdx:extensions:graphics:wgpu:core")
+            implementationProject(":libfdx:backends:desktop")
+            runtimeOnlyProject(":libfdx:extensions:graphics:gl:platform:desktop")
+            runtimeOnlyProject(":libfdx:extensions:graphics:vulkan:platform:desktop")
+            runtimeOnlyProject(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm")
+        }
+
+        ":samples:ecs-platformer:platform:web" -> pluginManager.withPlugin("io.github.libfdx") {
+            ecsPlatformerGroup()
+            configureJava25()
+            archiveName("sample_ecs_platformer_web")
+            implementationProject(":samples:ecs-platformer:core")
+            dependencies.add("implementation", libs.teavm.jso)
+            dependencies.add("implementation", libs.teavm.jso.apis)
+            dependencies.add("implementation", libs.teavm.jso.impl)
+            implementationProject(":libfdx:backends:web")
+            implementationProject(":libfdx:extensions:graphics:gl:platform:web")
+            implementationProject(":libfdx:extensions:graphics:wgpu:platform:web")
+        }
+
+        ":samples:ecs-platformer:platform:desktop_c" -> pluginManager.withPlugin("io.github.libfdx") {
+            ecsPlatformerGroup()
+            configureJava25()
+            archiveName("sample_ecs_platformer_desktop_c")
+            implementationProject(":samples:ecs-platformer:core")
+            implementationProject(":libfdx:backends:desktop_c")
+            runtimeOnlyProject(":libfdx:extensions:graphics:gl:platform:desktop_c")
+        }
+
+        ":samples:ecs-platformer:platform:ios_c" -> pluginManager.withPlugin("io.github.libfdx") {
+            ecsPlatformerGroup()
+            configureJava25()
+            archiveName("sample_ecs_platformer_ios_c")
+            implementationProject(":samples:ecs-platformer:core")
+            implementationProject(":libfdx:backends:ios_c")
+        }
+
+        ":samples:ecs-platformer:platform:android" -> pluginManager.withPlugin("com.android.application") {
+            ecsPlatformerGroup()
+            archiveName("sample_ecs_platformer_android")
+            implementationProject(":samples:ecs-platformer:core")
+            implementationProject(":libfdx:backends:android")
+            implementationProject(":libfdx:extensions:graphics:wgpu:platform:android_jni")
+            implementationProject(":libfdx:extensions:graphics:vulkan:platform:android_jni")
+        }
     }
 }
 
@@ -202,6 +286,32 @@ tasks.register<Sync>("stage_pages") {
         pagesPath = "samples/basic/webgpu-wasm",
         indexFile = "webgpu.html"
     )
+    pagesWebapp(
+        projectPath = ":samples:ecs-platformer:platform:web",
+        buildTaskName = "libfdx_web_js_webgl_build",
+        webappPath = "dist/web-js/webapp",
+        pagesPath = "samples/ecs-platformer/webgl-js"
+    )
+    pagesWebapp(
+        projectPath = ":samples:ecs-platformer:platform:web",
+        buildTaskName = "libfdx_web_wasm_webgl_build",
+        webappPath = "dist/web-wasm/webapp",
+        pagesPath = "samples/ecs-platformer/webgl-wasm"
+    )
+    pagesWebapp(
+        projectPath = ":samples:ecs-platformer:platform:web",
+        buildTaskName = "libfdx_web_js_webgpu_build",
+        webappPath = "dist/web-js/webapp",
+        pagesPath = "samples/ecs-platformer/webgpu-js",
+        indexFile = "webgpu.html"
+    )
+    pagesWebapp(
+        projectPath = ":samples:ecs-platformer:platform:web",
+        buildTaskName = "libfdx_web_wasm_webgpu_build",
+        webappPath = "dist/web-wasm/webapp",
+        pagesPath = "samples/ecs-platformer/webgpu-wasm",
+        indexFile = "webgpu.html"
+    )
     doLast {
         val root = pagesStagingDir.get().asFile
         writeSelectorPage(
@@ -227,6 +337,16 @@ tasks.register<Sync>("stage_pages") {
         writeSelectorPage(
             root.resolve("samples/basic/index.html"),
             "Basic Sample",
+            listOf(
+                "WebGL JS" to "webgl-js/",
+                "WebGL Wasm" to "webgl-wasm/",
+                "WebGPU JS" to "webgpu-js/",
+                "WebGPU Wasm" to "webgpu-wasm/"
+            )
+        )
+        writeSelectorPage(
+            root.resolve("samples/ecs-platformer/index.html"),
+            "ECS Platformer",
             listOf(
                 "WebGL JS" to "webgl-js/",
                 "WebGL Wasm" to "webgl-wasm/",

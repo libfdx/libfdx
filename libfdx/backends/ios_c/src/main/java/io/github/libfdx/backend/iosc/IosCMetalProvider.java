@@ -30,6 +30,7 @@ import io.github.libfdx.graphics.ShaderTarget;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
+import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.TextureUsage;
 import io.github.libfdx.graphics.TextureView;
@@ -514,7 +515,8 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
                 throw new FdxException("iOS C Metal currently supports sampled textures only");
             }
             return new IosCMetalTextureHandle(IosCMetal.createTexture(attachment.context, descriptor.width(),
-                    descriptor.height(), toNativeWrap(descriptor.wrapS()), toNativeWrap(descriptor.wrapT())),
+                    descriptor.height(), toNativeWrap(descriptor.wrapS()), toNativeWrap(descriptor.wrapT()),
+                    toNativeFilter(descriptor.filter())),
                     descriptor.width(), descriptor.height(), descriptor.format(), descriptor.usage());
         }
 
@@ -1790,5 +1792,9 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
             return 2;
         }
         return 0;
+    }
+
+    private static int toNativeFilter(TextureFilter filter) {
+        return filter == TextureFilter.NEAREST ? 0 : 1;
     }
 }

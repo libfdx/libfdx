@@ -20,7 +20,8 @@ start a sample.
 - [6. Basic Android Sample](#6-basic-android-sample)
 - [7. Basic iOS C Sample](#7-basic-ios-c-sample)
 - [8. Basic Web Sample](#8-basic-web-sample)
-- [9. WebRTC Multiplayer Sample](#9-webrtc-multiplayer-sample)
+- [9. ECS Platformer Sample](#9-ecs-platformer-sample)
+- [10. WebRTC Multiplayer Sample](#10-webrtc-multiplayer-sample)
 
 ## 1. Requirements
 
@@ -202,7 +203,26 @@ module exposes WebGL and WebGPU JavaScript/Wasm aliases:
 For web launchers, a width or height of `0` or a negative value means the
 canvas fills the browser window.
 
-## 9. WebRTC Multiplayer Sample
+## 9. ECS Platformer Sample
+
+The ECS platformer sample is a code-first fixed-level platformer example that
+uses the optional `:libfdx:extensions:ecs` module for gameplay and the CC0
+Kenney Pixel Platformer pack for visuals.
+Its desktop, web, desktop C, and iOS C platform modules apply the libFDX
+Gradle plugin directly, keep platform build files to plugin target/asset
+configuration, and use the plugin-generated `libfdx_*` task names. The root
+build convention supplies their local sample/backend classpaths. Android
+remains a normal Android application module.
+
+```powershell
+.\gradlew.bat :samples:ecs-platformer:core:test
+.\gradlew.bat :samples:ecs-platformer:platform:desktop:libfdx_desktop_jvm_gl_run
+.\gradlew.bat :samples:ecs-platformer:platform:desktop:libfdx_desktop_jvm_wgpu_run
+.\gradlew.bat :samples:ecs-platformer:platform:desktop:libfdx_desktop_jvm_vulkan_run
+.\gradlew.bat :samples:ecs-platformer:platform:web:libfdx_web_js_webgl_run
+```
+
+## 10. WebRTC Multiplayer Sample
 
 The WebRTC multiplayer sample requires a standalone signaling server process.
 Start the signaling server first:

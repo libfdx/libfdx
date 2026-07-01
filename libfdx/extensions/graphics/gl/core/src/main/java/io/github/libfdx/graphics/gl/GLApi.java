@@ -1,6 +1,7 @@
 package io.github.libfdx.graphics.gl;
 
 import io.github.libfdx.graphics.PrimitiveTopology;
+import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureWrap;
 import io.github.libfdx.graphics.VertexFormat;
 
@@ -276,6 +277,14 @@ public interface GLApi {
      * @param wrapT the vertical wrap mode
      */
     default void textureWrap2D(TextureWrap wrapS, TextureWrap wrapT) {
+    }
+
+    /**
+     * Runs the texture filter2 d step.
+     *
+     * @param filter the sampled texture filter
+     */
+    default void textureFilter2D(TextureFilter filter) {
     }
 
     /**

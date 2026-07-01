@@ -112,6 +112,7 @@ final class GLGraphicsDevice implements GraphicsDevice {
         int texture = gl.genTexture();
         gl.bindTexture2D(texture);
         gl.texImage2D(descriptor.width(), descriptor.height(), null);
+        gl.textureFilter2D(descriptor.filter());
         gl.textureWrap2D(descriptor.wrapS(), descriptor.wrapT());
         gl.bindTexture2D(0);
         return new GLTextureHandle(providerId, gl, texture, descriptor.width(), descriptor.height(),

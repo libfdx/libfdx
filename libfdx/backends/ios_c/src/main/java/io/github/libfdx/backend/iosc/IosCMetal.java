@@ -55,8 +55,8 @@ final class IosCMetal {
         libfdxIosMetalWriteBuffer(buffer, data, byteCount);
     }
 
-    static long createTexture(long context, int width, int height, int wrapS, int wrapT) {
-        return requireHandle(libfdxIosMetalCreateTexture(context, width, height, wrapS, wrapT),
+    static long createTexture(long context, int width, int height, int wrapS, int wrapT, int filter) {
+        return requireHandle(libfdxIosMetalCreateTexture(context, width, height, wrapS, wrapT, filter),
                 "Could not create iOS C Metal texture");
     }
 
@@ -197,7 +197,8 @@ final class IosCMetal {
     private static native void libfdxIosMetalWriteBuffer(long buffer, ByteBuffer data, int byteCount);
 
     @Import(name = "libfdx_ios_metal_create_texture")
-    private static native long libfdxIosMetalCreateTexture(long context, int width, int height, int wrapS, int wrapT);
+    private static native long libfdxIosMetalCreateTexture(long context, int width, int height, int wrapS, int wrapT,
+            int filter);
 
     @Import(name = "libfdx_ios_metal_write_texture")
     private static native void libfdxIosMetalWriteTexture(long texture, ByteBuffer data, int byteCount);

@@ -78,6 +78,7 @@ import io.github.libfdx.graphics.ShaderModule;
 import io.github.libfdx.graphics.ShaderModuleDescriptor;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
+import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.TextureUsage;
 import io.github.libfdx.graphics.TextureWrap;
@@ -248,10 +249,10 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         samplerDescriptor.setAddressModeU(toNative(descriptor.wrapS()));
         samplerDescriptor.setAddressModeV(toNative(descriptor.wrapT()));
         samplerDescriptor.setAddressModeW(WGPUAddressMode.ClampToEdge);
-        samplerDescriptor.setMagFilter(WGPUFilterMode.Linear);
-        samplerDescriptor.setMinFilter(WGPUFilterMode.Linear);
+        samplerDescriptor.setMagFilter(toNative(descriptor.filter()));
+        samplerDescriptor.setMinFilter(toNative(descriptor.filter()));
         samplerDescriptor.setMipmapFilter(mipLevelCount > 1
-                ? WGPUMipmapFilterMode.Linear
+                ? toNativeMipmap(descriptor.filter())
                 : WGPUMipmapFilterMode.Nearest);
         samplerDescriptor.setLodMinClamp(0.0f);
         samplerDescriptor.setLodMaxClamp(mipLevelCount - 1.0f);
@@ -276,6 +277,14 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
             return WGPUAddressMode.MirrorRepeat;
         }
         return WGPUAddressMode.ClampToEdge;
+    }
+
+    private WGPUFilterMode toNative(TextureFilter filter) {
+        return filter == TextureFilter.NEAREST ? WGPUFilterMode.Nearest : WGPUFilterMode.Linear;
+    }
+
+    private WGPUMipmapFilterMode toNativeMipmap(TextureFilter filter) {
+        return filter == TextureFilter.NEAREST ? WGPUMipmapFilterMode.Nearest : WGPUMipmapFilterMode.Linear;
     }
 
     /**

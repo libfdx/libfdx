@@ -32,6 +32,7 @@ import io.github.libfdx.graphics.ShaderTarget;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
+import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.TextureUsage;
 import io.github.libfdx.graphics.TextureView;
@@ -459,6 +460,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             return new AndroidVulkanTextureHandle(AndroidVulkanNative.createTexture(attachment.context,
                     descriptor.width(), descriptor.height(), toNativeTextureFormat(descriptor.format()),
                     toNativeWrap(descriptor.wrapS()), toNativeWrap(descriptor.wrapT()),
+                    toNativeFilter(descriptor.filter()),
                     descriptor.usage().sampled(), descriptor.usage().renderAttachment()),
                     descriptor.width(), descriptor.height(), descriptor.format(), descriptor.usage());
         }
@@ -2004,6 +2006,10 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             return 2;
         }
         return 0;
+    }
+
+    private static int toNativeFilter(TextureFilter filter) {
+        return filter == TextureFilter.NEAREST ? 0 : 1;
     }
 
     private static TextureFormat toCommonFormat(int format) {

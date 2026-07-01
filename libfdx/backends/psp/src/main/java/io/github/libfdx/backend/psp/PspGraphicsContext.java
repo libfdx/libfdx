@@ -22,6 +22,7 @@ import io.github.libfdx.graphics.ShaderModule;
 import io.github.libfdx.graphics.ShaderModuleDescriptor;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
+import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.TextureUsage;
 import io.github.libfdx.graphics.TextureView;
@@ -41,6 +42,7 @@ import static io.github.libfdx.backend.psp.natives.PSPGraphicsApi.GU_CULL_FACE;
 import static io.github.libfdx.backend.psp.natives.PSPGraphicsApi.GU_DEPTH_BUFFER_BIT;
 import static io.github.libfdx.backend.psp.natives.PSPGraphicsApi.GU_DEPTH_TEST;
 import static io.github.libfdx.backend.psp.natives.PSPGraphicsApi.GU_LINES;
+import static io.github.libfdx.backend.psp.natives.PSPGraphicsApi.GU_LINEAR;
 import static io.github.libfdx.backend.psp.natives.PSPGraphicsApi.GU_NEAREST;
 import static io.github.libfdx.backend.psp.natives.PSPGraphicsApi.GU_ONE_MINUS_SRC_ALPHA;
 import static io.github.libfdx.backend.psp.natives.PSPGraphicsApi.GU_PSM_8888;
@@ -354,7 +356,7 @@ public final class PspGraphicsContext implements GraphicsContext {
                 throw new FdxException("PSP mirrored texture wrap is not implemented yet");
             }
             return new PspTexture(descriptor.width(), descriptor.height(), descriptor.format(), descriptor.usage(),
-                    descriptor.wrapS(), descriptor.wrapT());
+                    descriptor.filter(), descriptor.wrapS(), descriptor.wrapT());
         }
 
         /**
@@ -753,7 +755,8 @@ public final class PspGraphicsContext implements GraphicsContext {
             sceGuTexMode(GU_PSM_8888, 0, 0, 0);
             sceGuTexImage(0, texture.width(), texture.height(), texture.width(), texture.data);
             sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
-            sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+            int nativeFilter = texture.filter == TextureFilter.NEAREST ? GU_NEAREST : GU_LINEAR;
+            sceGuTexFilter(nativeFilter, nativeFilter);
             sceGuTexWrap(texture.wrapS == TextureWrap.REPEAT ? GU_REPEAT : GU_CLAMP,
                     texture.wrapT == TextureWrap.REPEAT ? GU_REPEAT : GU_CLAMP);
             sceGuTexScale(1.0f, 1.0f);
@@ -1052,6 +1055,7 @@ public final class PspGraphicsContext implements GraphicsContext {
         private final int height;
         private final TextureFormat format;
         private final TextureUsage usage;
+        private final TextureFilter filter;
         private final TextureWrap wrapS;
         private final TextureWrap wrapT;
         private final int byteCount;
@@ -1059,12 +1063,13 @@ public final class PspGraphicsContext implements GraphicsContext {
         private final ByteBuffer upload;
         private boolean disposed;
 
-        PspTexture(int width, int height, TextureFormat format, TextureUsage usage, TextureWrap wrapS,
+        PspTexture(int width, int height, TextureFormat format, TextureUsage usage, TextureFilter filter, TextureWrap wrapS,
                 TextureWrap wrapT) {
             this.width = width;
             this.height = height;
             this.format = format;
             this.usage = usage;
+            this.filter = filter != null ? filter : TextureFilter.LINEAR;
             this.wrapS = wrapS != null ? wrapS : TextureWrap.CLAMP_TO_EDGE;
             this.wrapT = wrapT != null ? wrapT : TextureWrap.CLAMP_TO_EDGE;
             byteCount = width * height * 4;

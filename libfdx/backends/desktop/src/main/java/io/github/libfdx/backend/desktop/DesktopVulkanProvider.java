@@ -30,6 +30,7 @@ import io.github.libfdx.graphics.ShaderTarget;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
+import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.TextureUsage;
 import io.github.libfdx.graphics.TextureView;
@@ -2451,7 +2452,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
 
                 imageView = createTextureImageView(image, descriptor.format());
                 if (descriptor.usage().sampled()) {
-                    sampler = createTextureSampler(descriptor.wrapS(), descriptor.wrapT());
+                    sampler = createTextureSampler(descriptor.wrapS(), descriptor.wrapT(), descriptor.filter());
                     descriptorSet = allocateTextureDescriptorSet();
                 }
                 VulkanTextureHandle handle = new VulkanTextureHandle(context.deviceHandle(), image, memory, imageView,
@@ -2616,12 +2617,13 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
-        private long createTextureSampler(TextureWrap wrapS, TextureWrap wrapT) {
+        private long createTextureSampler(TextureWrap wrapS, TextureWrap wrapT, TextureFilter filter) {
             try (MemoryStack stack = stackPush()) {
+                int nativeFilter = toNativeFilter(filter);
                 VkSamplerCreateInfo samplerInfo = VkSamplerCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO)
-                        .magFilter(VK_FILTER_LINEAR)
-                        .minFilter(VK_FILTER_LINEAR)
+                        .magFilter(nativeFilter)
+                        .minFilter(nativeFilter)
                         .addressModeU(toNativeAddressMode(wrapS))
                         .addressModeV(toNativeAddressMode(wrapT))
                         .addressModeW(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE)
@@ -2630,7 +2632,9 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                         .borderColor(VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK)
                         .unnormalizedCoordinates(false)
                         .compareEnable(false)
-                        .mipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR)
+                        .mipmapMode(filter == TextureFilter.NEAREST
+                                ? VK_SAMPLER_MIPMAP_MODE_NEAREST
+                                : VK_SAMPLER_MIPMAP_MODE_LINEAR)
                         .mipLodBias(0.0f)
                         .minLod(0.0f)
                         .maxLod(0.0f);
@@ -2649,6 +2653,10 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
             }
             return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        }
+
+        private int toNativeFilter(TextureFilter filter) {
+            return filter == TextureFilter.NEAREST ? VK_FILTER_NEAREST : VK_FILTER_LINEAR;
         }
 
         private long allocateTextureDescriptorSet() {

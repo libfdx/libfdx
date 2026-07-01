@@ -26,6 +26,7 @@ final class IosCOpenGLES {
     static final int UNSIGNED_SHORT = 0x1403;
     static final int FLOAT = 0x1406;
     static final int RGBA = 0x1908;
+    static final int NEAREST = 0x2600;
     static final int LINEAR = 0x2601;
     static final int TEXTURE_MAG_FILTER = 0x2800;
     static final int TEXTURE_MIN_FILTER = 0x2801;

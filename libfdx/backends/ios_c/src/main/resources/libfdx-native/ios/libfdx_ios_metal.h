@@ -18,7 +18,7 @@ void libfdx_ios_metal_clear(int64_t context, float red, float green, float blue,
 int64_t libfdx_ios_metal_create_buffer(int64_t context, int32_t size, int32_t usage);
 void libfdx_ios_metal_write_buffer(int64_t buffer, const void* data, int32_t byte_count);
 int64_t libfdx_ios_metal_create_texture(
-        int64_t context, int32_t width, int32_t height, int32_t wrap_s, int32_t wrap_t);
+        int64_t context, int32_t width, int32_t height, int32_t wrap_s, int32_t wrap_t, int32_t filter);
 void libfdx_ios_metal_write_texture(int64_t texture, const void* data, int32_t byte_count);
 int64_t libfdx_ios_metal_create_shader_module(
         int64_t context, int32_t source_length, const int32_t* source_data);

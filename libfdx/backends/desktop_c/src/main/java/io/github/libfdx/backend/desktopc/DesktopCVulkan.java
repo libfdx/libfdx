@@ -78,8 +78,8 @@ final class DesktopCVulkan {
         fdxDesktopVulkanWriteBuffer(buffer, data, byteCount);
     }
 
-    static long createTexture(long context, int width, int height, int format, int wrapS, int wrapT) {
-        return requireHandle(fdxDesktopVulkanCreateTexture(context, width, height, format, wrapS, wrapT),
+    static long createTexture(long context, int width, int height, int format, int wrapS, int wrapT, int filter) {
+        return requireHandle(fdxDesktopVulkanCreateTexture(context, width, height, format, wrapS, wrapT, filter),
                 "Could not create desktop C Vulkan texture");
     }
 
@@ -238,7 +238,7 @@ final class DesktopCVulkan {
 
     @Import(name = "fdx_desktop_vulkan_create_texture")
     private static native long fdxDesktopVulkanCreateTexture(long context, int width, int height, int format,
-            int wrapS, int wrapT);
+            int wrapS, int wrapT, int filter);
 
     @Import(name = "fdx_desktop_vulkan_write_texture")
     private static native void fdxDesktopVulkanWriteTexture(long texture, ByteBuffer data, int byteCount);

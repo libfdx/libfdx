@@ -1928,11 +1928,20 @@ VkSamplerAddressMode toAddressMode(int wrap) {
     return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 }
 
-VkSampler createTextureSampler(Context* context, int wrapS, int wrapT) {
+uint32_t toFilter(int filter) {
+    return filter == 0 ? VK_FILTER_NEAREST : VK_FILTER_LINEAR;
+}
+
+uint32_t toMipmapFilter(int filter) {
+    return filter == 0 ? VK_SAMPLER_MIPMAP_MODE_NEAREST : VK_SAMPLER_MIPMAP_MODE_LINEAR;
+}
+
+VkSampler createTextureSampler(Context* context, int wrapS, int wrapT, int filter) {
+    uint32_t nativeFilter = toFilter(filter);
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.magFilter = nativeFilter;
+    samplerInfo.minFilter = nativeFilter;
     samplerInfo.addressModeU = toAddressMode(wrapS);
     samplerInfo.addressModeV = toAddressMode(wrapT);
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -1941,7 +1950,7 @@ VkSampler createTextureSampler(Context* context, int wrapS, int wrapT) {
     samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
     samplerInfo.unnormalizedCoordinates = VK_FALSE;
     samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.mipmapMode = toMipmapFilter(filter);
     samplerInfo.mipLodBias = 0.0f;
     samplerInfo.minLod = 0.0f;
     samplerInfo.maxLod = 0.0f;
@@ -1952,7 +1961,8 @@ VkSampler createTextureSampler(Context* context, int wrapS, int wrapT) {
     return sampler;
 }
 
-Texture* createTextureResource(Context* context, int width, int height, VkFormat format, int wrapS, int wrapT) {
+Texture* createTextureResource(Context* context, int width, int height, VkFormat format, int wrapS, int wrapT,
+        int filter) {
     if (width <= 0 || height <= 0) {
         throw std::runtime_error("desktop C Vulkan texture size must be greater than zero");
     }
@@ -1996,7 +2006,7 @@ Texture* createTextureResource(Context* context, int width, int height, VkFormat
                 "Could not bind desktop C Vulkan texture memory");
 
         texture->imageView = createTextureImageView(context, texture->image, format);
-        texture->sampler = createTextureSampler(context, wrapS, wrapT);
+        texture->sampler = createTextureSampler(context, wrapS, wrapT, filter);
         return texture;
     } catch (...) {
         if (texture->sampler != VK_NULL_HANDLE) {
@@ -2454,11 +2464,12 @@ extern "C" void fdx_desktop_vulkan_write_buffer(int64_t bufferHandle, void* data
 }
 
 extern "C" int64_t fdx_desktop_vulkan_create_texture(int64_t contextHandle, int32_t width, int32_t height,
-        int32_t format, int32_t wrapS, int32_t wrapT) {
+        int32_t format, int32_t wrapS, int32_t wrapT, int32_t filter) {
     Context* context = ptr<Context>(contextHandle);
     try {
         return handle(createTextureResource(context, static_cast<int>(width), static_cast<int>(height),
-                static_cast<VkFormat>(format), static_cast<int>(wrapS), static_cast<int>(wrapT)));
+                static_cast<VkFormat>(format), static_cast<int>(wrapS), static_cast<int>(wrapT),
+                static_cast<int>(filter)));
     } catch (const std::exception& error) {
         logNativeError("Could not create desktop C Vulkan texture", error);
         return 0;

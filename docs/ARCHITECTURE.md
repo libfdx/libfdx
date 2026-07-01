@@ -104,6 +104,7 @@ repo-root/
       ui-kit/
 
     extensions/
+      ecs/
       scenario_validator/
         core/
         ui-kit/
@@ -250,6 +251,7 @@ framework/g2d -> framework/graphics, framework helpers, framework/assets/* when 
 framework/g3d -> framework/graphics, framework/camera, framework helpers, framework/assets/* when asset integration is needed
 
 framework/ui-kit -> framework/display, framework/files, framework/input, framework/assets/loaders, framework/graphics, framework/g2d
+extensions/ecs -> no lower libFDX module
 extensions/scenario_validator/core -> framework/display, framework/input, framework/graphics when visual capture integration is needed
 extensions/scenario_validator/ui-kit -> extensions/scenario_validator/core, framework/ui-kit
 
@@ -290,7 +292,7 @@ General rules:
 - Runtime fdx native artifacts use the framework core name, not feature-specific names. Web emits `fdx.js` and `fdx.wasm`; native shared-library platforms should emit the platform convention for `fdx`, such as `fdx.dll` on Windows and `libfdx.so` on Android/Linux. Platforms that do not need shader translation, such as PSP, must not package the Tint compiler capability.
 - `framework/application` owns application lifecycle and the base `ApplicationConfig`. Backend-specific startup classes such as `DesktopApplicationConfig` should expose direct typed setters instead of requiring generic config keys in launcher code.
 - Backends should implement APIs instead of being depended on by portable framework APIs.
-- Opt-in feature objects such as `AssetManager`, UI roots, and physics worlds should be created by user/framework feature code from explicit dependencies. Backends should not be forced to depend on those feature modules just because examples need them.
+- Opt-in feature objects such as `AssetManager`, ECS worlds, UI roots, and physics worlds should be created by user/framework feature code from explicit dependencies. Backends should not be forced to depend on those feature modules just because examples need them.
 - Input extensions should build on `framework/input`, not leak through normal game code.
 - Audio extensions should build on `framework/audio`, not leak through normal game code.
 - Audio extensions that register loaders for provider-backed audio handles may also depend on `framework/assets/manager`.
@@ -300,7 +302,9 @@ General rules:
 - 2D rendering, fonts, particles, and tile maps should stay in `framework/g2d`.
 - 3D rendering, models, animation, materials, and lighting should stay in `framework/g3d`.
 - Built-in UI modules should build on the graphics/runtime modules they need and stay optional. A project can use `ui-kit`, another UI solution, or no UI.
-- Extension modules are optional capability add-ons. They include provider/platform integrations and other opt-in capabilities that extend libFDX, such as `extensions/scenario_validator`.
+- Extension modules are optional capability add-ons. They include provider/platform integrations and other opt-in capabilities that extend libFDX, such as `extensions/ecs` and `extensions/scenario_validator`.
+- ECS is an optional pure Java extension. It owns runtime entity handles, component storage, mappers, matchers, entity lists, event dispatch, managers, systems, and world commands. It must not depend on backends, providers, editor modules, rendering modules, or `Fdx`.
+- Engine and editor modules that need ECS should depend on `io.github.libfdx:ecs`; `framework/fdx/core` and typed `Fdx` must not expose ECS root accessors.
 - Scenario validator modules should stay optional and should not be required by normal runtime execution or rendering. A project can use `extensions/scenario_validator/core` for generic runtime flows and add domain adapters such as `extensions/scenario_validator/ui-kit` only when needed.
 - Platform-backed libraries belong in `extensions/`, not directly under `framework/audio`, `framework/graphics`, `framework/input`, `framework/ui-kit`, or a root `physics/` folder.
 - Physics engine extensions should not depend on UI.
@@ -396,6 +400,7 @@ extensions/graphics/vulkan/platform/web
 extensions/graphics/vulkan/platform/android_jni
 extensions/graphics/vulkan/platform/android_native
 extensions/graphics/vulkan/platform/ios_native
+extensions/ecs
 extensions/scenario_validator/core
 extensions/scenario_validator/ui-kit
 ```
@@ -404,7 +409,7 @@ Normal game code should depend on API modules and high-level feature modules. Pr
 
 Use these Gradle dependency rules:
 
-- Use `implementation` for common APIs and feature modules that source code imports directly, such as `input`, `audio`, `graphics`, `g2d`, `g3d`, and `ui_kit`.
+- Use `implementation` for common APIs and feature modules that source code imports directly, such as `input`, `audio`, `graphics`, `g2d`, `g3d`, `ecs`, and `ui_kit`.
 - Use `implementation` for extension cores that expose user-facing APIs.
 - Use `implementation` in launcher/platform modules for selectable graphics stacks that the launcher intentionally enables, such as `gl_desktop`, `wgpu_core`, and `wgpu_desktop_jni`.
 - Use `runtimeOnly` for provider variant modules that only contribute runtime bindings or native libraries and are not directly selected by launcher source code, such as `miniaudio_desktop_jni` and other dependency-only variants.
@@ -419,7 +424,7 @@ Graphics provider runtime modules should use a provider root with `core` directl
 
 Network transport provider modules should build on `framework/net`. Provider-specific shared types live in `extensions/net/<provider>/core`, concrete runtime/binding variants live under `extensions/net/<provider>/platform/<platform_variant>`, and optional provider tools or services may live beside `core` when they are not platform bindings. WebRTC follows this shape so `WebRtcClientConfig`, `WebRtcServerConfig`, `WebRtcPeerConfig`, signaling contracts, and bridge interfaces stay in the WebRTC core module; the customizable signaling server lives in `extensions/net/webrtc/signaling_server`; desktop, web, Android, and future iOS bindings remain platform-specific. Normal game code should use `Network`, `NetTransports`, `NetClient`, `NetServer`, `NetPeerGroup`, `NetConnection`, and channel IDs rather than WebRTC data-channel classes.
 
-Extension artifacts should not repeat the `extensions` category. Graphics provider artifacts also should not repeat the `graphics` category. For example, `extensions/graphics/wgpu/core` publishes as `wgpu_core`, `extensions/graphics/wgpu/platform/desktop_jni` publishes as `wgpu_desktop_jni`, `extensions/graphics/gl/core` publishes as `gl_core`, and `extensions/graphics/gl/platform/desktop` publishes as `gl_desktop`. WebRTC network artifacts publish as `webrtc_core`, `webrtc_signaling_server`, `webrtc_desktop_jni`, `webrtc_web`, and `webrtc_android_jni`. Scenario validator extension artifacts publish as `scenario_validator` and `scenario_validator_ui_kit`.
+Extension artifacts should not repeat the `extensions` category. Graphics provider artifacts also should not repeat the `graphics` category. For example, `extensions/ecs` publishes as `ecs`, `extensions/graphics/wgpu/core` publishes as `wgpu_core`, `extensions/graphics/wgpu/platform/desktop_jni` publishes as `wgpu_desktop_jni`, `extensions/graphics/gl/core` publishes as `gl_core`, and `extensions/graphics/gl/platform/desktop` publishes as `gl_desktop`. WebRTC network artifacts publish as `webrtc_core`, `webrtc_signaling_server`, `webrtc_desktop_jni`, `webrtc_web`, and `webrtc_android_jni`. Scenario validator extension artifacts publish as `scenario_validator` and `scenario_validator_ui_kit`.
 
 External bindings should not be hidden behind fake shared APIs when the underlying libraries have different concepts. A project should choose the binding module it actually uses.
 
@@ -856,7 +861,7 @@ Common type summary for `framework/graphics`:
 | `RenderPass` | Render pass encoder. |
 | `BufferDescriptor`, `TextureDescriptor`, `RenderPipelineDescriptor` | Portable creation descriptors. |
 | `VertexLayout`, `VertexStepMode`, `VertexAttribute`, `VertexFormat` | Portable vertex input layout types. |
-| `TextureFormat`, `TextureUsage`, `TextureWrap`, `BufferUsage` | Portable enum/value types. |
+| `TextureFormat`, `TextureUsage`, `TextureFilter`, `TextureWrap`, `BufferUsage` | Portable enum/value types. |
 | `BlendState`, `DepthStencilState`, `RasterState` | Portable render state descriptors. |
 
 Common type summary for `framework/camera`:
@@ -1157,7 +1162,13 @@ UI modules contain built-in libfdx UI solutions. `ui-kit` is the default retaine
 | --- | --- | --- |
 | `:libfdx:framework:ui-kit` | `io.github.libfdx:ui_kit` | Default libfdx UI toolkit: Compose-inspired declarative authoring over a retained runtime, widgets, layout, animation, themes, ninepatch styling, hit detection, input focus, and 2D rendering integration. Users should depend on one `ui_kit` artifact for this UI solution. The folder repeats `ui` for clarity inside the repository, but the artifact must stay `ui_kit`, not `ui_ui_kit`. |
 
-### 9.15. Scenario Validator Modules
+### 9.15. Optional Extension Modules
+
+The ECS module is an optional pure Java entity component system. It is framework-owned, user-created, and independent from backend/provider setup. Engines, editors, samples, and user projects that want the framework ECS depend on `io.github.libfdx:ecs`; projects that do not want ECS omit the artifact.
+
+| Gradle path | Tentative coordinate | Purpose |
+| --- | --- | --- |
+| `:libfdx:extensions:ecs` | `io.github.libfdx:ecs` | Optional entity component system: root `World` plus `command`, `component`, `entity`, `event`, `manager`, `query`, and `system` subpackages for integer entity handles, component stores and mappers, matchers, entity lists, queued events, deferred world commands, managers, and systems. It is not an engine module and is not exposed through `Fdx`. |
 
 Scenario validator modules are optional extension modules that contain reusable scenario validation engines and domain adapters. `extensions/scenario_validator/core` is not UI-only and not game-only. It can validate complete runtime flows, UI flows, input sequences, captures, events, and project probes. UI Kit validation is provided by an adapter module. See [SCENARIO_VALIDATOR.md](SCENARIO_VALIDATOR.md) for the detailed scenario validator contract.
 
@@ -1207,7 +1218,7 @@ Additional backend implementations should be added as new flat variant folders o
 
 | Gradle path | Tentative coordinate | Purpose |
 | --- | --- | --- |
-| `libfdx/tools/gradle-plugin` included build | `io.github.libfdx:libfdx-gradle-plugin` | Gradle plugin for libfdx platform targets. It is intentionally an included build under `libfdx/tools`, not `buildSrc`, so this repository and external projects can consume the same plugin with `pluginManagement { includeBuild("<libfdx>/libfdx/tools/gradle-plugin") }`. The public plugin ID is `io.github.libfdx`, and external builds should configure it with one `libfdx { ... }` block. The target blocks are `desktopJvm`, `js`, `wasm`, `desktopC`, `psp`, and `iosC`. Inside this repository, plugin DSL usage is isolated to the dedicated `:samples:basic:platform:plugin` and `:tests:platform:plugin` modules. Runtime launcher modules stay focused on source sets, dependencies, and direct JVM/Android run tasks where no generated plugin target is required. The plugin must not add backend `implementation` or `api` dependencies to user projects; platform launcher modules declare their own backend artifacts. |
+| `libfdx/tools/gradle-plugin` included build | `io.github.libfdx:libfdx-gradle-plugin` | Gradle plugin for libfdx platform targets. It is intentionally an included build under `libfdx/tools`, not `buildSrc`, so this repository and external projects can consume the same plugin with `pluginManagement { includeBuild("<libfdx>/libfdx/tools/gradle-plugin") }`. The public plugin ID is `io.github.libfdx`, and external builds should configure it with one `libfdx { ... }` block. The target blocks are `desktopJvm`, `js`, `wasm`, `desktopC`, `psp`, and `iosC`. Inside this repository, dedicated plugin coverage modules such as `:samples:basic:platform:plugin` and `:tests:platform:plugin` validate combined plugin usage, while plugin-first samples may apply the plugin directly in their platform modules. The plugin must not add backend `implementation` or `api` dependencies to user projects; platform launcher modules declare their own backend artifacts. |
 | `:libfdx:tools:font` | `io.github.libfdx:font_tools` | Build-time font tools. The current tool generates AngelCode BMFont-style `.fnt` metadata and PNG atlases from TTF files for platforms that should ship prebuilt bitmap fonts, such as PSP. It is a general libfdx tooling module, not a TeaVM backend module. |
 | `:libfdx:tools:project-generator:core` | `io.github.libfdx:project_generator_core` | Project generator model, validation, template rendering, and in-memory generated project tree. It must not depend on desktop, web, UIKit, or filesystem APIs. |
 | `:libfdx:tools:project-generator:ui` | `io.github.libfdx:project_generator_ui` | Shared UIKit project generator UI. It depends on project-generator core and delegates persistence/download behavior to a platform export target. |
@@ -1390,6 +1401,7 @@ dependencies {
     implementation("io.github.libfdx:g2d:$libfdxVersion")
     implementation("io.github.libfdx:g3d:$libfdxVersion")
 
+    implementation("io.github.libfdx:ecs:$libfdxVersion")
     implementation("io.github.libfdx:ui_kit:$libfdxVersion")
     implementation("io.github.libfdx:scenario_validator:$libfdxVersion")
     implementation("io.github.libfdx:scenario_validator_ui_kit:$libfdxVersion")
@@ -1427,9 +1439,21 @@ Sample modules are source examples, not artifacts that normal users should depen
 :samples:basic:platform:android
 :samples:basic:platform:ios_c
 :samples:basic:platform:plugin
+:samples:ecs-platformer:core
+:samples:ecs-platformer:platform:desktop
+:samples:ecs-platformer:platform:desktop_c
+:samples:ecs-platformer:platform:web
+:samples:ecs-platformer:platform:android
+:samples:ecs-platformer:platform:ios_c
 ```
 
 Future sample families should reuse the same `:samples:<name>:core` and `:samples:<name>:platform:<platform>` shape when added.
+`samples:ecs-platformer` keeps that full shape, but its desktop, web, desktop C,
+and iOS C platform modules apply `io.github.libfdx` directly and keep their
+build files to plugin target/asset DSL plus launcher ownership. The root build
+convention wires their local sample/backend classpaths so those platform build
+files do not carry dependency blocks. Android remains a normal Android
+application module because it owns manifest, resource, and activity wiring.
 
 ### 10.2. Minimal Headless Application
 
@@ -1557,7 +1581,7 @@ dependencies {
 
 ### 10.8. UI Kit Application
 
-`ui_kit` remains opt-in. A user who does not want it does not depend on it. `scenario_validator` is also opt-in and is used only by projects that want reusable scenario validation. UI Kit validation uses the optional `scenario_validator_ui_kit` adapter.
+`ui_kit` remains opt-in. A user who does not want it does not depend on it. `ecs` is also opt-in and is used only by projects that want libFDX's entity component system. `scenario_validator` is opt-in and is used only by projects that want reusable scenario validation. UI Kit validation uses the optional `scenario_validator_ui_kit` adapter.
 
 ```kotlin
 dependencies {
@@ -1575,6 +1599,7 @@ dependencies {
     implementation("io.github.libfdx:graphics:$libfdxVersion")
     implementation("io.github.libfdx:g2d:$libfdxVersion")
 
+    implementation("io.github.libfdx:ecs:$libfdxVersion")
     implementation("io.github.libfdx:ui_kit:$libfdxVersion")
     implementation("io.github.libfdx:scenario_validator:$libfdxVersion")
     implementation("io.github.libfdx:scenario_validator_ui_kit:$libfdxVersion")
@@ -1626,7 +1651,7 @@ dependencies {
 
 ### 10.11. Local Repository Sample Dependencies
 
-Tests and samples inside this repository should use explicit `if (LibExt.usePublishedLibfdx)` branches for libFDX dependencies. By default the checked-in TOML sets the flag false, so clean source checkouts and CI use local project dependencies and the local Gradle plugin build. Settings still includes the local `:libfdx:*` modules so source projects remain available in the checkout; the Maven-vs-local choice belongs to each consumer dependency block. Builder-backed web tasks must not build local runtime fdx web native resources for Maven-backed consumers, but may attach those generated resources when local `:libfdx:*` project dependencies are reached directly or transitively. Developers can set `development.usePublishedLibfdx=true` in ignored root `local.properties` to resolve the Gradle plugin from Maven and use published coordinates from `LibExt.fdxGroup` and `LibExt.publishedLibfdxVersion`; the plugin included build must remain only the plugin project and must not remap the root source modules. Published desktop JVM artifacts must not encode only the publish host's LWJGL native classifier; they declare all supported LWJGL native artifacts as non-runtime-scope dependencies so LWJGL's loader can select the current runtime platform.
+Tests and samples inside this repository generally use explicit `if (LibExt.usePublishedLibfdx)` branches for libFDX dependencies. By default the checked-in TOML sets the flag false, so clean source checkouts and CI use local project dependencies and the local Gradle plugin build. Settings still includes the local `:libfdx:*` modules so source projects remain available in the checkout; the Maven-vs-local choice belongs to each consumer dependency block unless a repository-only example intentionally opts out of published-artifact validation. ECS Platformer is such an example: its platform modules are plugin-first, example-only modules, so the root build convention wires their local sample/backend classpaths and their platform build files stay limited to plugin target and asset configuration. Builder-backed web tasks must not build local runtime fdx web native resources for Maven-backed consumers, but may attach those generated resources when local `:libfdx:*` project dependencies are reached directly or transitively. Developers can set `development.usePublishedLibfdx=true` in ignored root `local.properties` to resolve the Gradle plugin from Maven and use published coordinates from `LibExt.fdxGroup` and `LibExt.publishedLibfdxVersion`; the plugin included build must remain only the plugin project and must not remap the root source modules. Published desktop JVM artifacts must not encode only the publish host's LWJGL native classifier; they declare all supported LWJGL native artifacts as non-runtime-scope dependencies so LWJGL's loader can select the current runtime platform.
 
 Sample `core` modules should depend on public framework APIs and feature modules:
 
@@ -1947,13 +1972,13 @@ Example provider stack selection:
 ./gradlew -Dlibfdx.test.name=ui -Dlibfdx.test.frames=19 -Dlibfdx.test.validate=true -Dlibfdx.test.driveInput=true :tests:platform:desktop:test_desktop_gl_run
 ```
 
-Desktop JVM basic sample runtime tasks start with the sample name and end with `_run`, such as `basic_desktop_gl_run`, `basic_desktop_wgpu_run`, and `basic_desktop_vulkan_run`. Runtime sample modules should keep those tasks as direct `JavaExec` declarations for each graphics API. Packaged desktop JVM `_build` tasks belong to the dedicated plugin-use modules, which validate the plugin `desktopJvm { ... }` target with `libfdx_desktop_jvm_*` tasks under the `libfdx` task group. Desktop JVM test runtime app tasks start with `test_desktop_` and keep direct `_run` tasks such as `test_desktop_gl_run`, `test_desktop_wgpu_run`, and `test_desktop_vulkan_run`; plugin-use modules own the matching packaged `_build` tasks. Finite desktop test validation uses the same direct `_run` tasks with `-Dlibfdx.test.*` properties instead of extra runtime Gradle tasks. Binding implementation details such as FFM or JNI are dependency wiring inside the platform module and should not appear in desktop JVM sample/test task names. Each desktop interactive provider task should expose the same selector API options: `gl`, `wgpu`, and `vulkan`.
+Desktop JVM sample runtime tasks start with the sample name and end with `_run`, such as `basic_desktop_gl_run`, `basic_desktop_wgpu_run`, and `basic_desktop_vulkan_run`, when the runtime module owns direct `JavaExec` declarations for each graphics API. Plugin-first samples such as ECS Platformer apply `io.github.libfdx` directly in the platform module and use the generated `libfdx_desktop_jvm_*` plugin tasks without extra sample aliases. Packaged desktop JVM `_build` tasks belong to modules that configure the plugin `desktopJvm { ... }` target with `libfdx_desktop_jvm_*` tasks under the `libfdx` task group. Desktop JVM test runtime app tasks start with `test_desktop_` and keep direct `_run` tasks such as `test_desktop_gl_run`, `test_desktop_wgpu_run`, and `test_desktop_vulkan_run`; plugin-use modules own the matching packaged `_build` tasks. Finite desktop test validation uses the same direct `_run` tasks with `-Dlibfdx.test.*` properties instead of extra runtime Gradle tasks. Binding implementation details such as FFM or JNI are dependency wiring inside the platform module or a repository-only sample convention and should not appear in desktop JVM sample/test task names. Each desktop interactive provider task should expose the same selector API options: `gl`, `wgpu`, and `vulkan`.
 
-Desktop C runtime sample and test modules keep Gradle minimal and do not apply the libFDX Gradle plugin or define local native build helper classes. Runtime modules may expose thin app-facing tasks such as `basic_desktop_c_opengl_generate_debug`, `basic_desktop_c_opengl_build_debug`, `test_desktop_c_opengl_generate_debug`, `test_desktop_c_opengl_build_debug`, `test_desktop_c_vulkan_generate_debug`, and `test_desktop_c_vulkan_build_debug` so contributors can run the C-backed desktop samples and tests from the platform modules. The single plugin-use modules own the actual plugin DSL generate/build/run implementation and expose plugin coverage tasks such as `libfdx_desktop_c_opengl_generate_debug`, `libfdx_desktop_c_opengl_build_debug`, `libfdx_desktop_c_vulkan_generate_debug`, and `libfdx_desktop_c_vulkan_build_debug`.
+Desktop C runtime sample and test modules keep app-facing tasks such as `basic_desktop_c_opengl_generate_debug`, `test_desktop_c_opengl_generate_debug`, `test_desktop_c_opengl_build_debug`, `test_desktop_c_vulkan_generate_debug`, and `test_desktop_c_vulkan_build_debug` so contributors can run the C-backed desktop samples and tests from the platform modules. Traditional runtime modules may keep Gradle minimal and delegate generated targets to a dedicated plugin-use module. Plugin-first samples, such as ECS Platformer, apply `io.github.libfdx` directly in the platform module and use the same module's `libfdx_desktop_c_*` tasks. Dedicated plugin-use modules still expose plugin coverage tasks such as `libfdx_desktop_c_opengl_generate_debug`, `libfdx_desktop_c_opengl_build_debug`, `libfdx_desktop_c_vulkan_generate_debug`, and `libfdx_desktop_c_vulkan_build_debug`.
 
-iOS C runtime sample modules keep Gradle minimal and do not apply the libFDX Gradle plugin. Runtime modules may expose thin generation aliases such as `basic_ios_c_gles_generate` and `basic_ios_c_metal_generate`; the plugin-use module owns the actual `iosC { ... }` targets and emits the TeaVM C output plus generated Xcode project through tasks such as `libfdx_ios_c_gles_generate` and `libfdx_ios_c_metal_generate`. The `gles` target emits a GLKit/OpenGLES project. The `metal` target emits a native Metal/MetalKit project and links only system Apple frameworks plus the generated libFDX native bridge. The generated project is opened and built on macOS with Xcode for simulator/device validation; repository generation tasks do not invoke Xcode.
+iOS C runtime sample modules may expose generation aliases such as `basic_ios_c_gles_generate` and `basic_ios_c_metal_generate`. Traditional runtime modules may delegate the actual `iosC { ... }` targets to a plugin-use module; plugin-first samples apply `io.github.libfdx` directly in the iOS C platform module and use the same module's `libfdx_ios_c_*` tasks. The `gles` target emits a GLKit/OpenGLES project. The `metal` target emits a native Metal/MetalKit project and links only system Apple frameworks plus the generated libFDX native bridge. The generated project is opened and built on macOS with Xcode for simulator/device validation; repository generation tasks do not invoke Xcode.
 
-Web runtime sample and test modules keep Gradle minimal and do not apply the libFDX Gradle plugin. They may expose thin app-facing aliases such as `basic_webgl_js_run`, `basic_webgpu_wasm_run`, `test_webgl_js_run`, and `test_webgpu_wasm_run`; the single plugin-use modules own the generated web build/server implementation.
+Web runtime sample and test modules expose app-facing aliases such as `basic_webgl_js_run`, `test_webgl_js_run`, and `test_webgpu_wasm_run`. Traditional runtime modules may delegate generated web build/server implementation to a plugin-use module; plugin-first samples apply `io.github.libfdx` directly in the web platform module and use the same module's `libfdx_web_*` tasks.
 
 PSP platform test tasks live in `:tests:platform:psp` as the shared selector entrypoints `test_psp_generate`, `test_psp_build`, and `test_psp_ppsspp_capture`. The PSP module does not apply the libFDX Gradle plugin; those tasks are thin runtime entrypoints for the single plugin-use module's `test` PSP target. Build tasks execute the generated PSP build script and require a PSPDEV/psp-cmake toolchain on `PATH` or through `PSPDEV`. Because the Gradle plugin has one TeaVM C task, the plugin-use module selects the PSP plugin target only for requested PSP target tasks and otherwise defaults to desktop-c plugin tasks. On Windows, `PSPDEV` may be set to a Windows path; the generated `build.bat` converts it to a WSL path before invoking `build.sh`. PPSSPP capture tasks build the EBOOT, launch PPSSPP in windowed mode, wait `libfdx.psp.ppssppCaptureDelaySeconds`, and write a capture under `build/reports/ppsspp`. The emulator executable is resolved from `libfdx.psp.ppssppExecutable`, `PPSSPP_EXECUTABLE`, `PPSSPP_HOME`, `PATH`, standard Windows install locations, or the generated local `build/tools/ppsspp` directory. If no executable is found and `libfdx.psp.ppssppAutoDownload` is true, the task downloads the portable ZIP from `libfdx.psp.ppssppDownloadUrl` and extracts it into `build/tools/ppsspp`.
 
@@ -2023,6 +2048,7 @@ Asset, graphics, and UI packages:
 | `:libfdx:framework:g2d` | `io.github.libfdx.graphics.g2d` | Complete 2D toolkit: sprites, sprite batches, texture regions, atlases, bitmap fonts, vector-rasterized font atlases, text layout, tile maps, particles, and 2D render helpers. Shared camera state lives in `io.github.libfdx.graphics.camera.Camera`. |
 | `:libfdx:framework:g3d` | `io.github.libfdx.graphics.g3d` | Complete 3D toolkit: `Batch3D`, `ModelBatch`, `ModelBuilder`, meshes, models, materials, PBR/default shaders, skinned PBR GPU path, custom shader hooks, lights, environments, sky environment lighting, directional and cascaded shadow maps, animation, render queues, render paths, frame target helpers, glTF loading, and 3D render helpers. Shared camera state lives in `io.github.libfdx.graphics.camera.Camera`; input-backed controllers live in `framework/camera`. |
 | `:libfdx:framework:ui-kit` | `io.github.libfdx.ui` | Built-in UI toolkit: Compose-inspired declarative authoring over a retained runtime, widgets, layout, animation, themes, ninepatch styling, layers, focus, navigation, and input routing. |
+| `:libfdx:extensions:ecs` | `io.github.libfdx.ecs`, `io.github.libfdx.ecs.*` | Optional ECS: root `World` plus subpackages for integer entity handles, component mappers, entity matchers and lists, queued events, world commands, managers, and systems. |
 | `:libfdx:extensions:scenario_validator:core` | `io.github.libfdx.validation.scenario` | Scenario validation engine: reusable catalogs, scenarios, runtime actions, assertions, waits, step pacing, events, probes, reports, and visual validation hooks. |
 | `:libfdx:extensions:scenario_validator:ui-kit` | `io.github.libfdx.validation.scenario.ui.kit` | UI Kit adapter for scenario validation: UI targets, UI actions, UI assertions, UI waits, UI events, UI captures, and validation ID integration. |
 
@@ -2060,6 +2086,7 @@ Class placement examples:
 | `ApplicationConfig` | `:libfdx:framework:application` | `io.github.libfdx.application` |
 | `FileHandle` | `:libfdx:framework:files` | `io.github.libfdx.files` |
 | `Texture` | `:libfdx:framework:graphics` | `io.github.libfdx.graphics` |
+| `TextureFilter` | `:libfdx:framework:graphics` | `io.github.libfdx.graphics` |
 | `FrameBuffer` | `:libfdx:framework:graphics` | `io.github.libfdx.graphics` |
 | `MultiRenderTarget` | `:libfdx:framework:graphics` | `io.github.libfdx.graphics` |
 | `Camera`, `CameraProjection` | `:libfdx:framework:camera` | `io.github.libfdx.graphics.camera` |
@@ -2158,6 +2185,7 @@ io.github.libfdx:wgpu_core
 io.github.libfdx:vulkan_core
 io.github.libfdx:vulkan_desktop
 io.github.libfdx:ui_kit
+io.github.libfdx:ecs
 io.github.libfdx:scenario_validator
 io.github.libfdx:scenario_validator_ui_kit
 io.github.libfdx:backend_headless

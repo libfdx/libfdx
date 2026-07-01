@@ -2,6 +2,7 @@ package io.github.libfdx.backend.desktopc;
 
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.PrimitiveTopology;
+import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureWrap;
 import io.github.libfdx.graphics.gl.GLApi;
 import io.github.libfdx.graphics.gl.GLShaderType;
@@ -391,6 +392,20 @@ final class DesktopCGLApi implements GLApi {
     }
 
     /**
+     * Runs the texture filter2 d step.
+     *
+     * @param filter the sampled texture filter
+     */
+    @Override
+    public void textureFilter2D(TextureFilter filter) {
+        int nativeFilter = toNative(filter);
+        DesktopCOpenGL.glTexParameteri(DesktopCOpenGL.TEXTURE_2D, DesktopCOpenGL.TEXTURE_MIN_FILTER,
+                nativeFilter);
+        DesktopCOpenGL.glTexParameteri(DesktopCOpenGL.TEXTURE_2D, DesktopCOpenGL.TEXTURE_MAG_FILTER,
+                nativeFilter);
+    }
+
+    /**
      * Runs the delete texture step.
      *
      * @param texture the texture
@@ -704,5 +719,9 @@ final class DesktopCGLApi implements GLApi {
             return DesktopCOpenGL.MIRRORED_REPEAT;
         }
         return DesktopCOpenGL.CLAMP_TO_EDGE;
+    }
+
+    private int toNative(TextureFilter filter) {
+        return filter == TextureFilter.NEAREST ? DesktopCOpenGL.NEAREST : DesktopCOpenGL.LINEAR;
     }
 }
