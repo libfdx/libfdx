@@ -23,6 +23,7 @@ dependencies {
     api(project(":libfdx:framework:display"))
     api(project(":libfdx:framework:files"))
     api(project(":libfdx:framework:graphics"))
+    api(project(":libfdx:framework:ui-kit"))
 
     runtimeOnly(project(":libfdx:framework:fdx:platform:web"))
 

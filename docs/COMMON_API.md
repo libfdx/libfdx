@@ -686,6 +686,45 @@ Rules:
 - Backend modules expose concrete backend classes or factories that platform launchers compile against.
 - Concrete backends may expose typed config classes, such as `DesktopApplicationConfig`, with direct setters for values that launcher code is expected to configure.
 
+Web backend preload screen:
+
+```java
+public interface WebPreloadApplicationListener {
+    static WebPreloadApplicationListener none();
+    default void create(WebPreloadContext context);
+    default void resize(WebPreloadContext context, int width, int height);
+    void render(WebPreloadContext context);
+    default void dispose(WebPreloadContext context);
+}
+
+public final class WebPreloadContext {
+    Fdx fdx();
+    Display display();
+    GraphicsContext graphics();
+    UiRoot ui();
+    WebPreloadProgress progress();
+    float deltaTime();
+}
+
+public final class WebPreloadProgress {
+    int loadedFiles();
+    int totalFiles();
+    double loadedBytes();
+    double totalBytes();
+    float progress();
+    boolean isComplete();
+    boolean isFailed();
+    String errorMessage();
+}
+```
+
+Rules:
+
+- `WebApplicationConfig.preloadApplicationListener(...)` customizes the web preload screen. Passing `null` uses the default `WebDefaultPreloadApplicationListener`, and `WebPreloadApplicationListener.none()` explicitly disables drawing and the startup preload delay.
+- The default web preload screen is rendered with `ui-kit`, shows the original libFDX logo from the built-in `fdx_logo_dark.png` asset and a branded progress bar, uses generated web asset metadata for progress, and remains active for about two seconds even when browser cache makes preload complete immediately.
+- The web backend creates a private preload `UiRoot` before `ApplicationListener.create(...)` and disposes it before game code starts. This does not add a `ui()` accessor to `Fdx` and does not make game UI roots backend-owned.
+- `WebPreloadProgress` reports generated web asset downloads, not user-created `AssetManager` progress.
+
 ### 6.5. ApplicationConfig Contract
 
 `ApplicationConfig` is launcher-side startup configuration. It is not a context service and should be read by the selected backend before the application starts. The base type stores only provider selection values shared across backends; concrete backends should expose typed config classes for their own startup options.
@@ -808,7 +847,7 @@ Rules:
 - `FileHandle` should represent a path plus location, not only a Java `File`.
 - Not every location is writable on every platform.
 - Web backends may not support blocking file APIs for every storage location.
-- Browser internal/classpath assets declared through Gradle `libfdx.assets` or standalone `backend_web` `WebBuilder` assets are copied into generated webapp assets, preloaded by the generated page, and exposed through `fdx.files().internal(...)`.
+- Browser internal/classpath assets declared through Gradle `libfdx.assets` or standalone `backend_web` `WebBuilder` assets are copied into generated webapp assets, preloaded by the web backend before `ApplicationListener.create(...)`, and exposed through `fdx.files().internal(...)`.
 - PSP internal/classpath assets declared through Gradle `libfdx.assets` or standalone `backend_psp` `PspBuilder.asset(...)` are copied into the generated PSP release layout and exposed through read-only `fdx.files().internal(...)` handles.
 - iOS C internal/classpath assets declared through Gradle `libfdx.assets` are copied into the generated Xcode project asset bundle and exposed through read-only `fdx.files().internal(...)` handles.
 - Asset loading should be designed so web implementations can be async.

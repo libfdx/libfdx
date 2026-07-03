@@ -34,7 +34,7 @@ The model is a Compose-inspired declarative API over a retained runtime. User co
 - First-class ninepatch support for scalable game UI panels and buttons.
 - First-class animation support for hover, press, focus, visibility, screen transitions, layout changes, and custom animated values.
 - Theme/skin loading is part of the UI kit, and programmatic styling is the baseline authoring path.
-- Explicit user-created root. `Fdx` must not grow a `ui()` accessor for `ui-kit`.
+- Explicit user-created root for normal application UI. `Fdx` must not grow a `ui()` accessor for `ui-kit`. The web backend may create a private preload `UiRoot` during startup and dispose it before game code starts.
 
 ## 3. Mental Model
 
@@ -119,9 +119,15 @@ ui.window("Inventory", inventoryWindowState, window -> { ... });
 Custom widgets are supported without subclassing a large actor hierarchy:
 
 ```java
+float health = 0.75f;
+UiColor healthColor = UiColor.rgba8888(0x55d27fff);
+TextureRegion iconRegion = ...;
 ui.custom("health-bar", Ui.modifier().height(24), ctx -> {
     ctx.measure((constraints) -> constraints.size(constraints.maxWidth(), 24));
-    ctx.draw((draw, bounds) -> draw.rect(bounds, healthColor));
+    ctx.draw((draw, bounds) -> {
+        draw.rect(bounds.x(), bounds.y(), bounds.width() * health, bounds.height(), healthColor);
+        draw.image(iconRegion, bounds.right() - 24, bounds.y(), 24, 24, UiColor.WHITE);
+    });
 });
 ```
 
@@ -436,7 +442,7 @@ ui.tooltip(Ui.tooltip("profile.name").delayMillis(2000), tooltip -> {
 
 Rendering is backend-neutral and uses libfdx rendering helpers:
 
-- Use `framework/g2d` for batched rectangles, images, ninepatches, and text.
+- Use `framework/g2d` for batched rectangles, images, ninepatches, text, and custom draw image hooks.
 - Use `framework/graphics` only where lower-level render target or clipping support is required.
 - Do not depend on GL, Vulkan, WGPU, desktop, Android, or web provider classes.
 - Keep render state changes predictable and batched where possible.
@@ -520,7 +526,7 @@ Rules:
 - Keep `ui-kit` as one user-facing module. Do not split it into scene graph, layout, and widget artifacts.
 - `ui-kit` may depend on `framework/fdx/core`, display/application runtime APIs, `framework/graphics`, `framework/g2d`, and asset modules needed for fonts, skins, and ninepatches.
 - `ui-kit` must not depend on backend modules or provider-specific graphics modules.
-- `ui-kit` is not exposed from `Fdx`; users create `UiToolkit`/`UiRoot` explicitly.
+- `ui-kit` is not exposed from `Fdx`; users create `UiToolkit`/`UiRoot` explicitly for normal application UI. The web backend preload screen is a backend-owned startup root and must not survive into the application listener lifecycle.
 
 ## 13. Feature Coverage Checklist
 

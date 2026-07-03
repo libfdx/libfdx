@@ -29,6 +29,8 @@ import io.github.libfdx.input.Key;
 import io.github.libfdx.input.MouseButton;
 import io.github.libfdx.runtime.core.RuntimeCore;
 import io.github.libfdx.storage.DefaultStorage;
+import io.github.libfdx.ui.UiRoot;
+import io.github.libfdx.ui.UiToolkit;
 import java.util.ArrayList;
 import java.util.List;
 import org.teavm.jso.JSBody;
@@ -52,6 +54,7 @@ import org.teavm.runtime.Fiber;
 public final class WebApplicationBackend implements ApplicationBackend, Application, AnimationFrameCallback {
     public static final ProviderId ID = ProviderId.of("web");
     private static final List<WebApplicationBackend> ACTIVE_BACKENDS = new ArrayList<WebApplicationBackend>();
+    private static final long MINIMUM_PRELOAD_DISPLAY_MILLIS = 2000L;
 
     private final SystemLogger logger = new SystemLogger();
     private final Fiber.FiberRunner frameRunner = new Fiber.FiberRunner() {
@@ -68,13 +71,18 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
     private GraphicsAttachment graphics;
     private DefaultInput input;
     private WebTextInputController textInputController;
+    private WebPreloadApplicationListener preloadApplicationListener;
+    private WebPreloadContext preloadContext;
     private final List<Registration> inputRegistrations = new ArrayList<Registration>();
     private ApplicationLifecycle lifecycle = ApplicationLifecycle.DISPOSED;
     private boolean running;
     private boolean disposed = true;
     private boolean listenerCreated;
+    private boolean preloadListenerCreated;
     private boolean activeRetained;
     private long lastFrameMillis;
+    private long preloadStartedMillis;
+    private int preloadRenderedFrames;
     private float deltaTime;
     private long frameId;
     private double frameTimestamp;
@@ -101,8 +109,8 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             throw new FdxException("ApplicationListener cannot be null");
         }
         retainActiveBackend();
+        disposed = false;
         try {
-            WebAssetPreloader.installAndPreload();
             WebApplicationConfig actualConfig = toWebConfig(config);
             GraphicsAttachmentProvider graphicsProvider = actualConfig.graphics();
             if (graphicsProvider == null) {
@@ -134,17 +142,25 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             fdx = new DefaultFdx(this, new DefaultDisplays(display), new DefaultGraphics(graphics), input,
                     new WebFileSystem(), new DefaultStorage(new WebStorageBackend()), logger);
             RuntimeCore.registerProvider(new WebRuntimeCoreProvider());
+            preloadApplicationListener = actualConfig.preloadApplicationListener() != null
+                    ? actualConfig.preloadApplicationListener()
+                    : new WebDefaultPreloadApplicationListener();
+            WebAssetPreloader.installAndBeginPreload();
 
-            disposed = false;
             running = true;
             lifecycle = ApplicationLifecycle.CREATED;
+            lastFrameMillis = System.currentTimeMillis();
 
             if (isGraphicsReady()) {
-                createListener();
+                createPreloadListener();
             }
             Window.requestAnimationFrame(this);
         } catch (RuntimeException | Error error) {
-            releaseActiveBackend();
+            try {
+                dispose();
+            } catch (Throwable disposeError) {
+                logger.error("Web application dispose after start failure failed", disposeError);
+            }
             throw error;
         }
     }
@@ -344,7 +360,20 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                     graphics.processEvents();
                 }
                 if (isGraphicsReady()) {
-                    createListener();
+                    if (WebAssetPreloader.isComplete()) {
+                        if (WebAssetPreloader.isFailed()) {
+                            throw new FdxException("Web asset preload failed: " + WebAssetPreloader.errorMessage());
+                        }
+                        createPreloadListener();
+                        if (shouldKeepPreloadVisible()) {
+                            stepPreload();
+                        } else {
+                            createListener();
+                        }
+                    } else {
+                        createPreloadListener();
+                        stepPreload();
+                    }
                 }
             }
             if (listenerCreated) {
@@ -385,10 +414,7 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             graphics.processEvents();
         }
 
-        long now = System.currentTimeMillis();
-        deltaTime = (now - lastFrameMillis) / 1000.0f;
-        lastFrameMillis = now;
-        frameId++;
+        updateFrameTime();
 
         if (graphics == null || graphics.beginFrame()) {
             try {
@@ -400,6 +426,49 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                 }
             }
         }
+    }
+
+    private void stepPreload() {
+        if (!preloadListenerCreated || preloadApplicationListener == null || preloadContext == null) {
+            return;
+        }
+        boolean resized = refreshDisplaySize();
+        if (resized && graphics != null) {
+            graphics.resize(display.framebufferWidth(), display.framebufferHeight());
+            preloadContext.resize(display.width(), display.height());
+            preloadApplicationListener.resize(preloadContext, display.width(), display.height());
+        }
+
+        updateFrameTime();
+
+        if (graphics == null || graphics.beginFrame()) {
+            try {
+                preloadContext.update(deltaTime);
+                preloadApplicationListener.render(preloadContext);
+                preloadRenderedFrames++;
+            } finally {
+                if (graphics != null) {
+                    graphics.endFrame();
+                }
+            }
+        }
+    }
+
+    private boolean shouldKeepPreloadVisible() {
+        if (!preloadListenerCreated || preloadApplicationListener == WebNoopPreloadApplicationListener.INSTANCE) {
+            return false;
+        }
+        if (preloadRenderedFrames == 0) {
+            return true;
+        }
+        return System.currentTimeMillis() - preloadStartedMillis < MINIMUM_PRELOAD_DISPLAY_MILLIS;
+    }
+
+    private void updateFrameTime() {
+        long now = System.currentTimeMillis();
+        deltaTime = lastFrameMillis > 0L ? (now - lastFrameMillis) / 1000.0f : 0.0f;
+        lastFrameMillis = now;
+        frameId++;
     }
 
     private boolean refreshDisplaySize() {
@@ -470,11 +539,51 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         if (listenerCreated || listener == null) {
             return;
         }
+        disposePreloadListener();
         listener.create(fdx);
         listenerCreated = true;
         listener.resize(display.width(), display.height());
         lifecycle = ApplicationLifecycle.RUNNING;
         lastFrameMillis = System.currentTimeMillis();
+    }
+
+    private void createPreloadListener() {
+        if (preloadListenerCreated || preloadApplicationListener == null || fdx == null || display == null
+                || graphics == null) {
+            return;
+        }
+        UiRoot root = new UiToolkit(fdx.files()).root(display, graphics).input(input);
+        preloadContext = new WebPreloadContext(fdx, display, graphics, root);
+        preloadContext.update(0.0f);
+        preloadApplicationListener.create(preloadContext);
+        preloadContext.resize(display.width(), display.height());
+        preloadApplicationListener.resize(preloadContext, display.width(), display.height());
+        preloadListenerCreated = true;
+        preloadStartedMillis = System.currentTimeMillis();
+        preloadRenderedFrames = 0;
+    }
+
+    private void disposePreloadListener() {
+        if (!preloadListenerCreated && preloadContext == null) {
+            preloadApplicationListener = null;
+            return;
+        }
+        WebPreloadContext context = preloadContext;
+        WebPreloadApplicationListener listener = preloadApplicationListener;
+        try {
+            if (listener != null && context != null) {
+                listener.dispose(context);
+            }
+        } finally {
+            if (context != null) {
+                context.dispose();
+            }
+            preloadListenerCreated = false;
+            preloadContext = null;
+            preloadApplicationListener = null;
+            preloadStartedMillis = 0L;
+            preloadRenderedFrames = 0;
+        }
     }
 
     /**
@@ -493,6 +602,7 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             }
         } finally {
             listenerCreated = false;
+            disposePreloadListener();
             if (graphics != null) {
                 graphics.dispose();
                 graphics = null;

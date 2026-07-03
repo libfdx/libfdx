@@ -38,8 +38,11 @@ import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.work.DisableCachingByDefault
 import java.io.File
+import java.lang.reflect.InvocationTargetException
 import java.net.InetSocketAddress
 import java.net.URI
+import java.net.URL
+import java.net.URLClassLoader
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -127,9 +130,15 @@ abstract class LibfdxWebAppTask : DefaultTask() {
 
     @TaskAction
     fun writeWebApp() {
+        val webappDirectory = webappDir.get().asFile.toPath()
+        val assetPaths = assets.files.map { it.toPath() }
+        val runtimeClasspathPaths = runtimeClasspath.files.map { it.toPath() }
+        if(writeWebAppWithRuntimeClasspathWriter(webappDirectory, assetPaths, runtimeClasspathPaths)) {
+            return
+        }
         WebAppWriter.write(
             WebApp.builder()
-                .webappDirectory(webappDir.get().asFile.toPath())
+                .webappDirectory(webappDirectory)
                 .title(title.get())
                 .width(width.get())
                 .height(height.get())
@@ -138,10 +147,99 @@ abstract class LibfdxWebAppTask : DefaultTask() {
                 .mainClassArgs(mainClassArgs.get())
                 .targetFileName(targetFileName.get())
                 .wasm(wasm.get())
-                .assets(assets.files.map { it.toPath() })
-                .runtimeClasspath(runtimeClasspath.files.map { it.toPath() })
+                .assets(assetPaths)
+                .runtimeClasspath(runtimeClasspathPaths)
                 .build()
         )
+    }
+
+    private fun writeWebAppWithRuntimeClasspathWriter(
+        webappDirectory: Path,
+        assetPaths: List<Path>,
+        runtimeClasspathPaths: List<Path>
+    ): Boolean {
+        val urls = runtimeClasspathPaths
+            .filter { Files.exists(it) }
+            .map { it.toUri().toURL() }
+            .toTypedArray()
+        if(urls.isEmpty()) {
+            return false
+        }
+        val loader = BackendWebClassLoader(urls, WebAppWriter::class.java.classLoader)
+        try {
+            val appClass = try {
+                loader.loadClass(WEB_APP_CLASS_NAME)
+            }
+            catch(_: ClassNotFoundException) {
+                return false
+            }
+            val writerClass = loader.loadClass(WEB_APP_WRITER_CLASS_NAME)
+            val builder = appClass.getMethod("builder").invoke(null)
+            invokeBuilder(builder, "webappDirectory", Path::class.java, webappDirectory)
+            invokeBuilder(builder, "title", String::class.java, title.get())
+            invokeBuilder(builder, "width", Integer.TYPE, width.get())
+            invokeBuilder(builder, "height", Integer.TYPE, height.get())
+            invokeBuilder(builder, "canvasId", String::class.java, canvasId.get())
+            invokeBuilder(builder, "entryPointName", String::class.java, entryPointName.get())
+            invokeBuilder(builder, "mainClassArgs", String::class.java, mainClassArgs.get())
+            invokeBuilder(builder, "targetFileName", String::class.java, targetFileName.get())
+            invokeBuilder(builder, "wasm", java.lang.Boolean.TYPE, wasm.get())
+            invokeBuilder(builder, "assets", Collection::class.java, assetPaths)
+            invokeBuilder(builder, "runtimeClasspath", Collection::class.java, runtimeClasspathPaths)
+            val app = builder.javaClass.getMethod("build").invoke(builder)
+            writerClass.getMethod("write", appClass).invoke(null, app)
+            return true
+        }
+        catch(error: InvocationTargetException) {
+            val cause = error.targetException
+            when(cause) {
+                is RuntimeException -> throw cause
+                is Error -> throw cause
+                else -> throw GradleException("libFDX web app generation failed", cause)
+            }
+        }
+        finally {
+            loader.close()
+        }
+    }
+
+    private fun invokeBuilder(builder: Any, name: String, parameterType: Class<*>, value: Any) {
+        builder.javaClass.getMethod(name, parameterType).invoke(builder, value)
+    }
+
+    private companion object {
+        const val WEB_APP_CLASS_NAME = "io.github.libfdx.backend.web.WebApp"
+        const val WEB_APP_WRITER_CLASS_NAME = "io.github.libfdx.backend.web.WebAppWriter"
+    }
+}
+
+private class BackendWebClassLoader(urls: Array<URL>, parent: ClassLoader) : URLClassLoader(urls, parent) {
+    override fun loadClass(name: String, resolve: Boolean): Class<*> {
+        synchronized(getClassLoadingLock(name)) {
+            if(name.startsWith(WEB_BACKEND_PACKAGE)) {
+                val loaded = findLoadedClass(name)
+                if(loaded != null) {
+                    if(resolve) {
+                        resolveClass(loaded)
+                    }
+                    return loaded
+                }
+                try {
+                    val found = findClass(name)
+                    if(resolve) {
+                        resolveClass(found)
+                    }
+                    return found
+                }
+                catch(_: ClassNotFoundException) {
+                }
+            }
+            return super.loadClass(name, resolve)
+        }
+    }
+
+    private companion object {
+        const val WEB_BACKEND_PACKAGE = "io.github.libfdx.backend.web."
     }
 }
 

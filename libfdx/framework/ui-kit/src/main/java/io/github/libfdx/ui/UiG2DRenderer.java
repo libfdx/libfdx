@@ -50,6 +50,7 @@ public final class UiG2DRenderer implements UiRenderer {
     private final ShapeRenderer2D shapes;
     private final RenderPassDescriptor renderPassDescriptor = new RenderPassDescriptor().label("ui g2d pass");
     private final List<CustomTextDraw> customTextDraws = new ArrayList<CustomTextDraw>();
+    private final List<CustomImageDraw> customImageDraws = new ArrayList<CustomImageDraw>();
     private final List<UiNode> overlayNodes = new ArrayList<UiNode>();
     private Batch2D batch;
     private UiRect currentClip;
@@ -77,6 +78,7 @@ public final class UiG2DRenderer implements UiRenderer {
             return;
         }
         customTextDraws.clear();
+        customImageDraws.clear();
         overlayNodes.clear();
         prepareText(root, node);
         GraphicsFrame frame = graphics.currentFrame();
@@ -95,6 +97,7 @@ public final class UiG2DRenderer implements UiRenderer {
         } finally {
             pass.end();
             customTextDraws.clear();
+            customImageDraws.clear();
             overlayNodes.clear();
         }
     }
@@ -202,6 +205,7 @@ public final class UiG2DRenderer implements UiRenderer {
         drawBackgroundImage(root, node, alpha);
         drawImage(root, node, alpha);
         if (node.type() == UiNodeType.CUSTOM) {
+            renderCustomImages(root, node);
             renderCustomText(root, node);
         }
         if (node.text() != null || isTextInput(node)) {
@@ -507,11 +511,47 @@ public final class UiG2DRenderer implements UiRenderer {
             }
 
             @Override
+            public void rect(float x, float y, float width, float height, UiColor color) {
+                drawRect(root, x, y, width, height, multiplyAlpha(color, inheritedAlpha));
+            }
+
+            @Override
+            public void image(TextureRegion region, UiRect bounds, UiColor color) {
+                if (bounds != null) {
+                    queueCustomImage(node, region, bounds.x(), bounds.y(), bounds.width(), bounds.height(),
+                            multiplyAlpha(color, inheritedAlpha));
+                }
+            }
+
+            @Override
+            public void image(TextureRegion region, float x, float y, float width, float height, UiColor color) {
+                queueCustomImage(node, region, x, y, width, height, multiplyAlpha(color, inheritedAlpha));
+            }
+
+            @Override
             public void text(String text, UiRect bounds, UiTextStyle style) {
                 UiTextStyle actualStyle = style != null ? style : UiTextStyle.text();
                 customTextDraws.add(new CustomTextDraw(node, text, bounds, actualStyle, inheritedAlpha));
             }
         }, node.bounds());
+    }
+
+    private void queueCustomImage(UiNode node, TextureRegion region, float x, float y, float width, float height,
+            UiColor color) {
+        if (region == null || width <= 0.0f || height <= 0.0f || color == null || color.alpha() <= 0.0f) {
+            return;
+        }
+        customImageDraws.add(new CustomImageDraw(node, region, x, y, width, height, color));
+    }
+
+    private void renderCustomImages(UiRoot root, UiNode node) {
+        for (int i = 0; i < customImageDraws.size(); i++) {
+            CustomImageDraw draw = customImageDraws.get(i);
+            if (draw.node != node) {
+                continue;
+            }
+            drawRegion(root, draw.region, draw.x, draw.y, draw.width, draw.height, draw.color);
+        }
     }
 
     private void renderCustomText(UiRoot root, UiNode node) {
@@ -1406,6 +1446,32 @@ public final class UiG2DRenderer implements UiRenderer {
         return disposed;
     }
 
+
+    /**
+     * Represents a custom image draw.
+     *
+     * @author xpenatan
+     */
+    private static final class CustomImageDraw {
+        final UiNode node;
+        final TextureRegion region;
+        final float x;
+        final float y;
+        final float width;
+        final float height;
+        final UiColor color;
+
+        CustomImageDraw(UiNode node, TextureRegion region, float x, float y, float width, float height,
+                UiColor color) {
+            this.node = node;
+            this.region = region;
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            this.color = color;
+        }
+    }
 
     /**
      * Represents a custom text draw.

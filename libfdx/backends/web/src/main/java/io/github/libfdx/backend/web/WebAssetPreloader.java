@@ -1,5 +1,6 @@
 package io.github.libfdx.backend.web;
 
+import io.github.libfdx.core.FdxException;
 import org.teavm.jso.JSBody;
 import org.teavm.jso.core.JSPromise;
 import org.teavm.jso.core.JSUndefined;
@@ -20,8 +21,20 @@ public final class WebAssetPreloader {
      * Runs the install and preload step.
      */
     public static void installAndPreload() {
+        installAndBeginPreload().await();
+        if (isFailed()) {
+            throw new FdxException("Web asset preload failed: " + errorMessage());
+        }
+    }
+
+    /**
+     * Runs the install and begin preload step.
+     *
+     * @return the preload promise
+     */
+    public static JSPromise<JSUndefined> installAndBeginPreload() {
         install();
-        preloadAssets().await();
+        return beginPreloadAssets();
     }
 
     /**
@@ -39,8 +52,72 @@ public final class WebAssetPreloader {
                 addAsset(asset.getPath(), asset.getSize());
             }
         }
+        addAsset(WebAssets.DEFAULT_PRELOAD_LOGO_PATH, WebAssets.DEFAULT_PRELOAD_LOGO_SIZE);
         finishInstall();
         installed = true;
+    }
+
+    /**
+     * Returns whether asset preloading completed.
+     *
+     * @return true if complete
+     */
+    public static boolean isComplete() {
+        return preloadComplete();
+    }
+
+    /**
+     * Returns whether asset preloading failed.
+     *
+     * @return true if failed
+     */
+    public static boolean isFailed() {
+        return preloadFailed();
+    }
+
+    /**
+     * Returns the preload error message.
+     *
+     * @return the error message
+     */
+    public static String errorMessage() {
+        return preloadErrorMessage();
+    }
+
+    /**
+     * Returns the loaded file count.
+     *
+     * @return the loaded file count
+     */
+    public static int loadedFiles() {
+        return preloadLoadedFiles();
+    }
+
+    /**
+     * Returns the total file count.
+     *
+     * @return the total file count
+     */
+    public static int totalFiles() {
+        return preloadTotalFiles();
+    }
+
+    /**
+     * Returns the loaded byte count.
+     *
+     * @return the loaded byte count
+     */
+    public static double loadedBytes() {
+        return preloadLoadedBytes();
+    }
+
+    /**
+     * Returns the total byte count.
+     *
+     * @return the total byte count
+     */
+    public static double totalBytes() {
+        return preloadTotalBytes();
     }
 
     @JSBody(params = {}, script =
@@ -49,6 +126,17 @@ public final class WebAssetPreloader {
             "root.libfdxAssetManifest = Object.create(null);\n" +
             "root.libfdxAssets = root.libfdxAssets || Object.create(null);\n" +
             "root.libfdxImageData = root.libfdxImageData || Object.create(null);\n" +
+            "root.libfdxPreloadPromise = null;\n" +
+            "root.libfdxPreloadState = {\n" +
+            "  active: false,\n" +
+            "  complete: false,\n" +
+            "  failed: false,\n" +
+            "  errorMessage: '',\n" +
+            "  loadedFiles: 0,\n" +
+            "  totalFiles: 0,\n" +
+            "  loadedBytes: 0,\n" +
+            "  totalBytes: 0\n" +
+            "};\n" +
             "function normalize(path) {\n" +
             "  path = (path || '').replace(/\\\\/g, '/');\n" +
             "  while (path.indexOf('./') === 0) path = path.substring(2);\n" +
@@ -78,6 +166,17 @@ public final class WebAssetPreloader {
             "    root.libfdxImageData['assets/' + normalize(path)] = root.libfdxImageData[normalize(path)];\n" +
             "  });\n" +
             "}\n" +
+            "function markLoaded(path, buffer) {\n" +
+            "  var state = root.libfdxPreloadState;\n" +
+            "  var normalized = normalize(path);\n" +
+            "  var entry = root.libfdxAssetManifest && root.libfdxAssetManifest[normalized];\n" +
+            "  var byteLength = entry && typeof entry.size === 'number' ? entry.size : ((buffer && (buffer.byteLength || buffer.length)) || 0);\n" +
+            "  state.loadedFiles = Math.min(state.totalFiles, state.loadedFiles + 1);\n" +
+            "  state.loadedBytes += Math.max(0, byteLength);\n" +
+            "  if (state.totalBytes > 0) {\n" +
+            "    state.loadedBytes = Math.min(state.totalBytes, state.loadedBytes);\n" +
+            "  }\n" +
+            "}\n" +
             "function loadImage(buffer) {\n" +
             "  var blob = new Blob([buffer]);\n" +
             "  if (root.createImageBitmap) {\n" +
@@ -100,7 +199,17 @@ public final class WebAssetPreloader {
             "root.__libfdxAssetNormalize = normalize;\n" +
             "root.libfdxPreloadAssets = function(assetPaths) {\n" +
             "  assetPaths = assetPaths || root.libfdxAssetPaths || [];\n" +
-            "  if (!assetPaths.length) return Promise.resolve();\n" +
+            "  var state = root.libfdxPreloadState;\n" +
+            "  state.active = true;\n" +
+            "  state.complete = false;\n" +
+            "  state.failed = false;\n" +
+            "  state.errorMessage = '';\n" +
+            "  state.loadedFiles = 0;\n" +
+            "  state.loadedBytes = 0;\n" +
+            "  if (!assetPaths.length) {\n" +
+            "    state.complete = true;\n" +
+            "    return Promise.resolve();\n" +
+            "  }\n" +
             "  var assets = root.libfdxAssets;\n" +
             "  return Promise.all(assetPaths.map(function(path) {\n" +
             "    var normalized = normalize(path);\n" +
@@ -111,10 +220,19 @@ public final class WebAssetPreloader {
             "      assets[normalized] = buffer;\n" +
             "      assets['assets/' + normalized] = buffer;\n" +
             "      if (isImageAsset(normalized)) {\n" +
-            "        return decodeImageAsset(normalized, buffer);\n" +
+            "        return decodeImageAsset(normalized, buffer).then(function() {\n" +
+            "          markLoaded(normalized, buffer);\n" +
+            "        });\n" +
             "      }\n" +
+            "      markLoaded(normalized, buffer);\n" +
             "    });\n" +
-            "  }));\n" +
+            "  })).then(function() {\n" +
+            "    state.loadedFiles = state.totalFiles;\n" +
+            "    if (state.totalBytes > 0) {\n" +
+            "      state.loadedBytes = state.totalBytes;\n" +
+            "    }\n" +
+            "    state.complete = true;\n" +
+            "  });\n" +
             "};")
     private static native void beginInstall();
 
@@ -128,12 +246,16 @@ public final class WebAssetPreloader {
             "  return value;\n" +
             "};\n" +
             "var normalized = normalize(path);\n" +
+            "root.libfdxAssetManifest = root.libfdxAssetManifest || Object.create(null);\n" +
+            "if (root.libfdxAssetManifest[normalized] || root.libfdxAssetManifest['assets/' + normalized]) return;\n" +
             "root.libfdxAssetPaths = root.libfdxAssetPaths || [];\n" +
             "root.libfdxAssetPaths.push(normalized);\n" +
-            "root.libfdxAssetManifest = root.libfdxAssetManifest || Object.create(null);\n" +
             "var entry = { size: size };\n" +
             "root.libfdxAssetManifest[normalized] = entry;\n" +
-            "root.libfdxAssetManifest['assets/' + normalized] = entry;")
+            "root.libfdxAssetManifest['assets/' + normalized] = entry;\n" +
+            "root.libfdxPreloadState = root.libfdxPreloadState || { active: false, complete: false, failed: false, errorMessage: '', loadedFiles: 0, totalFiles: 0, loadedBytes: 0, totalBytes: 0 };\n" +
+            "root.libfdxPreloadState.totalFiles += 1;\n" +
+            "root.libfdxPreloadState.totalBytes += Math.max(0, size || 0);")
     private static native void addAsset(String path, double size);
 
     @JSBody(params = {}, script =
@@ -143,7 +265,58 @@ public final class WebAssetPreloader {
 
     @JSBody(params = {}, script =
             "var root = typeof window !== 'undefined' ? window : globalThis;\n" +
-            "var preload = root.libfdxPreloadAssets || function() { return Promise.resolve(); };\n" +
-            "return preload(root.libfdxAssetPaths || []).then(function() { return undefined; });")
-    private static native JSPromise<JSUndefined> preloadAssets();
+            "var state = root.libfdxPreloadState || (root.libfdxPreloadState = { active: false, complete: false, failed: false, errorMessage: '', loadedFiles: 0, totalFiles: 0, loadedBytes: 0, totalBytes: 0 });\n" +
+            "if (root.libfdxPreloadPromise && !state.failed) {\n" +
+            "  return root.libfdxPreloadPromise.then(function() { return undefined; });\n" +
+            "}\n" +
+            "var preload = root.libfdxPreloadAssets || function() { state.complete = true; return Promise.resolve(); };\n" +
+            "root.libfdxPreloadPromise = preload(root.libfdxAssetPaths || []).catch(function(error) {\n" +
+            "  state.failed = true;\n" +
+            "  state.complete = true;\n" +
+            "  state.errorMessage = error && error.message ? error.message : String(error || 'Unknown preload error');\n" +
+            "}).then(function() { return undefined; });\n" +
+            "return root.libfdxPreloadPromise;")
+    private static native JSPromise<JSUndefined> beginPreloadAssets();
+
+    @JSBody(params = {}, script =
+            "var root = typeof window !== 'undefined' ? window : globalThis;\n" +
+            "var state = root.libfdxPreloadState;\n" +
+            "return !!state && state.complete === true;")
+    private static native boolean preloadComplete();
+
+    @JSBody(params = {}, script =
+            "var root = typeof window !== 'undefined' ? window : globalThis;\n" +
+            "var state = root.libfdxPreloadState;\n" +
+            "return !!state && state.failed === true;")
+    private static native boolean preloadFailed();
+
+    @JSBody(params = {}, script =
+            "var root = typeof window !== 'undefined' ? window : globalThis;\n" +
+            "var state = root.libfdxPreloadState;\n" +
+            "return state && state.errorMessage ? state.errorMessage : '';")
+    private static native String preloadErrorMessage();
+
+    @JSBody(params = {}, script =
+            "var root = typeof window !== 'undefined' ? window : globalThis;\n" +
+            "var state = root.libfdxPreloadState;\n" +
+            "return state && typeof state.loadedFiles === 'number' ? state.loadedFiles : 0;")
+    private static native int preloadLoadedFiles();
+
+    @JSBody(params = {}, script =
+            "var root = typeof window !== 'undefined' ? window : globalThis;\n" +
+            "var state = root.libfdxPreloadState;\n" +
+            "return state && typeof state.totalFiles === 'number' ? state.totalFiles : 0;")
+    private static native int preloadTotalFiles();
+
+    @JSBody(params = {}, script =
+            "var root = typeof window !== 'undefined' ? window : globalThis;\n" +
+            "var state = root.libfdxPreloadState;\n" +
+            "return state && typeof state.loadedBytes === 'number' ? state.loadedBytes : 0;")
+    private static native double preloadLoadedBytes();
+
+    @JSBody(params = {}, script =
+            "var root = typeof window !== 'undefined' ? window : globalThis;\n" +
+            "var state = root.libfdxPreloadState;\n" +
+            "return state && typeof state.totalBytes === 'number' ? state.totalBytes : 0;")
+    private static native double preloadTotalBytes();
 }

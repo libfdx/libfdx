@@ -12,6 +12,7 @@ import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 public final class WebApplicationConfig extends ApplicationConfig {
     private DisplayConfig displayConfig = new DisplayConfig().size(640, 480);
     private GraphicsAttachmentProvider graphics;
+    private WebPreloadApplicationListener preloadApplicationListener;
     private String canvasId = "libfdx-canvas";
 
     /**
@@ -52,6 +53,26 @@ public final class WebApplicationConfig extends ApplicationConfig {
     public WebApplicationConfig graphics(GraphicsAttachmentProvider graphics) {
         this.graphics = graphics;
         graphicsProvider(graphics != null ? graphics.providerId() : null);
+        return this;
+    }
+
+    /**
+     * Returns the web preload application listener.
+     *
+     * @return the preload application listener, or null for the default listener
+     */
+    public WebPreloadApplicationListener preloadApplicationListener() {
+        return preloadApplicationListener;
+    }
+
+    /**
+     * Sets the web preload application listener and returns this web application config.
+     *
+     * @param preloadApplicationListener the preload application listener, or null for the default listener
+     * @return this web application config for chaining
+     */
+    public WebApplicationConfig preloadApplicationListener(WebPreloadApplicationListener preloadApplicationListener) {
+        this.preloadApplicationListener = preloadApplicationListener;
         return this;
     }
 

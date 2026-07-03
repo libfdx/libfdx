@@ -1,6 +1,7 @@
 package io.github.libfdx.backend.web;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,6 +21,9 @@ import java.util.stream.Stream;
  * @author xpenatan
  */
 public final class WebAssets {
+    public static final String DEFAULT_PRELOAD_LOGO_PATH = "fdx_logo_dark.png";
+    public static final int DEFAULT_PRELOAD_LOGO_SIZE = 13459;
+
     private WebAssets() {
     }
 
@@ -35,6 +39,7 @@ public final class WebAssets {
         for (Path root : assetRoots) {
             collect(root, assets);
         }
+        addDefaultPreloadLogo(assets);
         ArrayList<WebAsset> sorted = new ArrayList<>(assets.values());
         sorted.sort(Comparator.comparing(WebAsset::getPath));
         return List.copyOf(sorted);
@@ -56,15 +61,16 @@ public final class WebAssets {
         Path outputRoot = assetsDirectory.toAbsolutePath().normalize();
         for (WebAsset asset : assets) {
             Path source = asset.getSource();
-            if (source == null) {
-                continue;
-            }
             Path output = outputRoot.resolve(asset.getPath()).normalize();
             if (!output.startsWith(outputRoot)) {
                 throw new IOException("Refusing to copy asset outside web assets directory: " + source);
             }
             Files.createDirectories(output.getParent());
-            Files.copy(source, output, StandardCopyOption.REPLACE_EXISTING);
+            if (source != null) {
+                Files.copy(source, output, StandardCopyOption.REPLACE_EXISTING);
+            } else {
+                copyDefaultPreloadLogo(output);
+            }
         }
         return assets;
     }
@@ -92,6 +98,30 @@ public final class WebAssets {
             }
         } else if (Files.isRegularFile(normalizedRoot)) {
             addAsset(normalizedRoot.getFileName().toString(), normalizedRoot, assets);
+        }
+    }
+
+    private static void addDefaultPreloadLogo(Map<String, WebAsset> assets) {
+        if (assets.containsKey(DEFAULT_PRELOAD_LOGO_PATH)) {
+            return;
+        }
+        try (InputStream input = WebAssets.class.getClassLoader().getResourceAsStream(DEFAULT_PRELOAD_LOGO_PATH)) {
+            if (input == null) {
+                return;
+            }
+            assets.put(DEFAULT_PRELOAD_LOGO_PATH,
+                    new WebAsset(DEFAULT_PRELOAD_LOGO_PATH, input.readAllBytes().length, null));
+        } catch (IOException error) {
+            throw new UncheckedIOException("Could not read default web preload logo", error);
+        }
+    }
+
+    private static void copyDefaultPreloadLogo(Path output) throws IOException {
+        try (InputStream input = WebAssets.class.getClassLoader().getResourceAsStream(DEFAULT_PRELOAD_LOGO_PATH)) {
+            if (input == null) {
+                throw new IOException("Default web preload logo resource was not found: " + DEFAULT_PRELOAD_LOGO_PATH);
+            }
+            Files.copy(input, output, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
