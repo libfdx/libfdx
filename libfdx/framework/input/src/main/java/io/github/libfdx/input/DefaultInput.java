@@ -22,6 +22,8 @@ public final class DefaultInput implements Input {
     private final Set<MouseButton> buttons = EnumSet.noneOf(MouseButton.class);
     private int pointerX;
     private int pointerY;
+    private int pointerScreenX;
+    private int pointerScreenY;
     private int activeTouches;
 
     /**
@@ -168,6 +170,26 @@ public final class DefaultInput implements Input {
     }
 
     /**
+     * Returns the pointer x position in screen coordinates.
+     *
+     * @return the screen x position
+     */
+    @Override
+    public int pointerScreenX() {
+        return pointerScreenX;
+    }
+
+    /**
+     * Returns the pointer y position in screen coordinates.
+     *
+     * @return the screen y position
+     */
+    @Override
+    public int pointerScreenY() {
+        return pointerScreenY;
+    }
+
+    /**
      * Returns the cursor.
      *
      * @return the cursor
@@ -228,8 +250,24 @@ public final class DefaultInput implements Input {
      * @return true if dispatch pointer down succeeds or is active; false otherwise
      */
     public boolean dispatchPointerDown(MouseButton button, int x, int y) {
+        return dispatchPointerDown(button, x, y, x, y);
+    }
+
+    /**
+     * Dispatches a pointer-down event with both window and screen coordinates.
+     *
+     * @param button the button
+     * @param x the window x coordinate
+     * @param y the window y coordinate
+     * @param screenX the screen x coordinate
+     * @param screenY the screen y coordinate
+     * @return true when handled
+     */
+    public boolean dispatchPointerDown(MouseButton button, int x, int y, int screenX, int screenY) {
         pointerX = x;
         pointerY = y;
+        pointerScreenX = screenX;
+        pointerScreenY = screenY;
         PointerEvent event = PointerEvent.button(System.nanoTime(), button, x, y);
         buttons.add(event.button());
         boolean handled = false;
@@ -248,8 +286,24 @@ public final class DefaultInput implements Input {
      * @return true if dispatch pointer up succeeds or is active; false otherwise
      */
     public boolean dispatchPointerUp(MouseButton button, int x, int y) {
+        return dispatchPointerUp(button, x, y, x, y);
+    }
+
+    /**
+     * Dispatches a pointer-up event with both window and screen coordinates.
+     *
+     * @param button the button
+     * @param x the window x coordinate
+     * @param y the window y coordinate
+     * @param screenX the screen x coordinate
+     * @param screenY the screen y coordinate
+     * @return true when handled
+     */
+    public boolean dispatchPointerUp(MouseButton button, int x, int y, int screenX, int screenY) {
         pointerX = x;
         pointerY = y;
+        pointerScreenX = screenX;
+        pointerScreenY = screenY;
         PointerEvent event = PointerEvent.button(System.nanoTime(), button, x, y);
         buttons.remove(event.button());
         boolean handled = false;
@@ -267,8 +321,23 @@ public final class DefaultInput implements Input {
      * @return true if dispatch pointer moved succeeds or is active; false otherwise
      */
     public boolean dispatchPointerMoved(int x, int y) {
+        return dispatchPointerMoved(x, y, x, y);
+    }
+
+    /**
+     * Dispatches a pointer-move event with both window and screen coordinates.
+     *
+     * @param x the window x coordinate
+     * @param y the window y coordinate
+     * @param screenX the screen x coordinate
+     * @param screenY the screen y coordinate
+     * @return true when handled
+     */
+    public boolean dispatchPointerMoved(int x, int y, int screenX, int screenY) {
         pointerX = x;
         pointerY = y;
+        pointerScreenX = screenX;
+        pointerScreenY = screenY;
         PointerEvent event = PointerEvent.pointer(System.nanoTime(), x, y);
         boolean handled = false;
         for (int i = 0; i < processors.size(); i++) {
@@ -287,8 +356,25 @@ public final class DefaultInput implements Input {
      * @return true if dispatch scrolled succeeds or is active; false otherwise
      */
     public boolean dispatchScrolled(int x, int y, float scrollX, float scrollY) {
+        return dispatchScrolled(x, y, x, y, scrollX, scrollY);
+    }
+
+    /**
+     * Dispatches a scroll event with both window and screen coordinates.
+     *
+     * @param x the window x coordinate
+     * @param y the window y coordinate
+     * @param screenX the screen x coordinate
+     * @param screenY the screen y coordinate
+     * @param scrollX the horizontal scroll amount
+     * @param scrollY the vertical scroll amount
+     * @return true when handled
+     */
+    public boolean dispatchScrolled(int x, int y, int screenX, int screenY, float scrollX, float scrollY) {
         pointerX = x;
         pointerY = y;
+        pointerScreenX = screenX;
+        pointerScreenY = screenY;
         PointerEvent event = PointerEvent.scroll(System.nanoTime(), x, y, scrollX, scrollY);
         boolean handled = false;
         for (int i = 0; i < processors.size(); i++) {

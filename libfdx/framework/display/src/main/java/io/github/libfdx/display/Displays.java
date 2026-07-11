@@ -27,4 +27,16 @@ public interface Displays {
      * @return the created value
      */
     Display create(DisplayConfig config);
+
+    /**
+     * Destroys a display created by this service.
+     *
+     * @param display the display
+     */
+    default void destroy(Display display) {
+        if (display == null || display == main()) {
+            return;
+        }
+        display.requestClose();
+    }
 }

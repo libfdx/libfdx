@@ -49,7 +49,7 @@ public final class DefaultGraphics implements Graphics {
      * @return the created value
      */
     @Override
-    public GraphicsContext create(GraphicsConfig config) {
+    public GraphicsAttachment create(GraphicsConfig config) {
         throw new FdxException("This backend does not support creating additional graphics contexts");
     }
 }

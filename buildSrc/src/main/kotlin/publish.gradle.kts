@@ -33,10 +33,10 @@ val libfdxBaseVersion = LibExt.fdxVersion
 val requestedTaskNames = gradle.startParameter.taskNames.map { it.substringAfterLast(":") }.toSet()
 fun requested(vararg names: String): Boolean = names.any { it in requestedTaskNames }
 
-val snapshotRequested = requested("prepareSnapshotDeploy", "publishSnapshot", "uploadSnapshotDeploy") ||
+val snapshotRequested = requested("prepareSnapshotDeploy", "publishSnapshot", "uploadSnapshotDeploy", "publishToMavenLocal") ||
     (plugins.hasPlugin("java-gradle-plugin") && requested("publish"))
 val deployPreparationRequested = requested("prepareSnapshotDeploy", "prepareReleaseDeploy")
-val libfdxVersion = if(snapshotRequested) "$libfdxBaseVersion-SNAPSHOT" else libfdxBaseVersion
+val libfdxVersion = if(snapshotRequested) LibExt.publishedLibfdxVersion else libfdxBaseVersion
 
 if(libfdxBaseVersion.endsWith("-SNAPSHOT")) {
     throw GradleException("The libFDX base version must not include -SNAPSHOT. Use the upcoming release version only.")

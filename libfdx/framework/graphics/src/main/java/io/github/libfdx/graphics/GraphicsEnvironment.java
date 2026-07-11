@@ -21,4 +21,13 @@ public interface GraphicsEnvironment {
      * @return the native window
      */
     NativeWindow nativeWindow();
+
+    /**
+     * Returns a graphics context whose device resources may be shared with the new attachment.
+     *
+     * @return the shared context, or null when the attachment is independent
+     */
+    default GraphicsContext sharedContext() {
+        return null;
+    }
 }

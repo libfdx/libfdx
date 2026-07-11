@@ -9,6 +9,34 @@ import io.github.libfdx.core.ProviderHandle;
  */
 public interface Display extends ProviderHandle {
     /**
+     * Returns the display x position in screen coordinates.
+     *
+     * @return the x position
+     */
+    default int x() {
+        return 0;
+    }
+
+    /**
+     * Returns the display y position in screen coordinates.
+     *
+     * @return the y position
+     */
+    default int y() {
+        return 0;
+    }
+
+    /**
+     * Sets the display position in screen coordinates.
+     *
+     * @param x the x position
+     * @param y the y position
+     */
+    default void position(int x, int y) {
+        throw new UnsupportedOperationException("This display does not support changing position");
+    }
+
+    /**
      * Returns the title.
      *
      * @return the title
@@ -35,6 +63,16 @@ public interface Display extends ProviderHandle {
      * @return the height
      */
     int height();
+
+    /**
+     * Sets the logical display size.
+     *
+     * @param width the width
+     * @param height the height
+     */
+    default void size(int width, int height) {
+        throw new UnsupportedOperationException("This display does not support changing size");
+    }
 
     /**
      * Returns the framebuffer width.
@@ -75,6 +113,116 @@ public interface Display extends ProviderHandle {
      */
     default float contentScale() {
         return Math.max(1.0f, (contentScaleX() + contentScaleY()) * 0.5f);
+    }
+
+    /**
+     * Returns the monitor x position in screen coordinates.
+     *
+     * @return the monitor x position
+     */
+    default int monitorX() {
+        return x();
+    }
+
+    /**
+     * Returns the monitor y position in screen coordinates.
+     *
+     * @return the monitor y position
+     */
+    default int monitorY() {
+        return y();
+    }
+
+    /**
+     * Returns the monitor width.
+     *
+     * @return the monitor width
+     */
+    default int monitorWidth() {
+        return width();
+    }
+
+    /**
+     * Returns the monitor height.
+     *
+     * @return the monitor height
+     */
+    default int monitorHeight() {
+        return height();
+    }
+
+    /**
+     * Returns the monitor work-area x position.
+     *
+     * @return the work-area x position
+     */
+    default int workAreaX() {
+        return monitorX();
+    }
+
+    /**
+     * Returns the monitor work-area y position.
+     *
+     * @return the work-area y position
+     */
+    default int workAreaY() {
+        return monitorY();
+    }
+
+    /**
+     * Returns the monitor work-area width.
+     *
+     * @return the work-area width
+     */
+    default int workAreaWidth() {
+        return monitorWidth();
+    }
+
+    /**
+     * Returns the monitor work-area height.
+     *
+     * @return the work-area height
+     */
+    default int workAreaHeight() {
+        return monitorHeight();
+    }
+
+    /**
+     * Makes the display visible.
+     */
+    default void show() {
+    }
+
+    /**
+     * Requests input focus for the display.
+     */
+    default void focus() {
+    }
+
+    /**
+     * Returns whether the display has input focus.
+     *
+     * @return true when focused
+     */
+    default boolean focused() {
+        return true;
+    }
+
+    /**
+     * Returns whether the display is minimized.
+     *
+     * @return true when minimized
+     */
+    default boolean minimized() {
+        return false;
+    }
+
+    /**
+     * Sets the display opacity.
+     *
+     * @param opacity the opacity in the range 0 to 1
+     */
+    default void opacity(float opacity) {
     }
 
     private static float inferredContentScale(int framebufferSize, int logicalSize) {

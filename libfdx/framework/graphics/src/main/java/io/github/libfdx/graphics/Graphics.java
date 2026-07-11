@@ -26,5 +26,22 @@ public interface Graphics {
      * @param config the configuration
      * @return the created value
      */
-    GraphicsContext create(GraphicsConfig config);
+    GraphicsAttachment create(GraphicsConfig config);
+
+    /**
+     * Destroys a graphics attachment created by this service.
+     *
+     * @param context the graphics context
+     */
+    default void destroy(GraphicsContext context) {
+        if (context == null || context == main()) {
+            return;
+        }
+        if (context instanceof GraphicsAttachment) {
+            GraphicsAttachment attachment = (GraphicsAttachment) context;
+            if (!attachment.isDisposed()) {
+                attachment.dispose();
+            }
+        }
+    }
 }

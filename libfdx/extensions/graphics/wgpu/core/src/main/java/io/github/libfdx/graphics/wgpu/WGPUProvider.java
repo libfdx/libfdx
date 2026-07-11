@@ -8,6 +8,7 @@ import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.GraphicsAttachment;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentRequirements;
+import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.GraphicsEnvironment;
 import io.github.libfdx.graphics.NativeWindow;
 import io.github.libfdx.graphics.NativeWindowPlatform;
@@ -54,11 +55,16 @@ public final class WGPUProvider implements GraphicsAttachmentProvider {
             throw new FdxException("GraphicsEnvironment cannot be null");
         }
         NativeWindow nativeWindow = environment.nativeWindow();
-        WGPUContext context = createContext(
-                nativeWindow,
-                configuration,
-                environment.display().framebufferWidth(),
-                environment.display().framebufferHeight());
+        GraphicsContext sharedGraphics = environment.sharedContext();
+        WGPUContext sharedContext = null;
+        if (sharedGraphics != null) {
+            if (!ID.equals(sharedGraphics.providerId())) {
+                throw new FdxException("Cannot share a non-WGPU graphics context with WGPU");
+            }
+            sharedContext = sharedGraphics.as();
+        }
+        WGPUContext context = createContext(nativeWindow, configuration,
+                environment.display().framebufferWidth(), environment.display().framebufferHeight(), sharedContext);
         return new WGPUGraphicsAttachment(context);
     }
 
@@ -72,22 +78,33 @@ public final class WGPUProvider implements GraphicsAttachmentProvider {
      * @return the created value
      */
     public WGPUContext createContext(NativeWindow nativeWindow, WGPUConfiguration configuration, int width, int height) {
+        return createContext(nativeWindow, configuration, width, height, null);
+    }
+
+    private WGPUContext createContext(NativeWindow nativeWindow, WGPUConfiguration configuration, int width, int height,
+            WGPUContext sharedContext) {
         if (nativeWindow == null) {
             throw new FdxException("WGPU requires a native window from the backend");
         }
         WGPUConfiguration actualConfiguration = configuration != null ? configuration : new WGPUConfiguration();
         loadNativeBackend(actualConfiguration);
 
-        WGPUInstance instance = WGPU.setupInstance();
+        WGPUInstance instance = sharedContext != null ? sharedContext.nativeInstance() : WGPU.setupInstance();
         if (instance == null || !instance.isValid()) {
             throw new FdxException("Could not create a valid WGPU instance");
         }
 
         WGPUNativeSurface.SurfaceHandle surface = WGPUNativeSurface.create(instance, nativeWindow);
         boolean surfaceCopySrc = nativeWindow.platform() != NativeWindowPlatform.ANDROID;
-        WGPUContext context = new WGPUContext(actualConfiguration, instance, surface.surface(), surface.owner(),
-                surfaceCopySrc);
-        context.initializeBlocking();
+        WGPUContext context = sharedContext != null
+                ? new WGPUContext(actualConfiguration, instance, surface.surface(), surface.owner(), surfaceCopySrc,
+                        sharedContext)
+                : new WGPUContext(actualConfiguration, instance, surface.surface(), surface.owner(), surfaceCopySrc);
+        if (sharedContext != null) {
+            context.initializeShared();
+        } else {
+            context.initializeBlocking();
+        }
         context.resize(width, height);
         return context;
     }

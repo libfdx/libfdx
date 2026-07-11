@@ -11,16 +11,18 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.Logger;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.core.SystemLogger;
-import io.github.libfdx.display.DefaultDisplays;
 import io.github.libfdx.display.Display;
 import io.github.libfdx.display.DisplayConfig;
+import io.github.libfdx.display.Displays;
 import io.github.libfdx.files.DefaultFileSystem;
 import io.github.libfdx.files.FileSystem;
-import io.github.libfdx.graphics.DefaultGraphics;
+import io.github.libfdx.graphics.Graphics;
 import io.github.libfdx.graphics.GraphicsAttachment;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentRequirements;
 import io.github.libfdx.graphics.GraphicsClientApi;
+import io.github.libfdx.graphics.GraphicsConfig;
+import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.GraphicsContextProfile;
 import io.github.libfdx.graphics.GraphicsEnvironment;
 import io.github.libfdx.graphics.NativeWindow;
@@ -47,6 +49,10 @@ import org.lwjgl.glfw.GLFWWindowSizeCallback;
 
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.lwjgl.glfw.GLFWNativeWayland.glfwGetWaylandDisplay;
 import static org.lwjgl.glfw.GLFWNativeWayland.glfwGetWaylandWindow;
@@ -76,7 +82,13 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
     private GLFWScrollCallback scrollCallback;
     private DesktopDisplay display;
     private GraphicsAttachment graphics;
+    private GraphicsAttachmentProvider graphicsProvider;
+    private GraphicsAttachmentRequirements graphicsRequirements;
     private DefaultInput input;
+    private final Map<DesktopDisplay, SecondaryWindowCallbacks> secondaryWindows =
+            new LinkedHashMap<DesktopDisplay, SecondaryWindowCallbacks>();
+    private final Map<GraphicsAttachment, DesktopDisplay> secondaryGraphics =
+            new IdentityHashMap<GraphicsAttachment, DesktopDisplay>();
     private boolean running;
     private boolean disposed = true;
     private boolean listenerCreated;
@@ -114,6 +126,8 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             throw new FdxException("Configured graphics provider ID does not match attached GraphicsAttachmentProvider");
         }
         GraphicsAttachmentRequirements graphicsRequirements = graphicsProvider.requirements();
+        this.graphicsProvider = graphicsProvider;
+        this.graphicsRequirements = graphicsRequirements;
 
         initializeGlfw();
         RuntimeCore.registerProvider(new DesktopRuntimeCoreProvider());
@@ -130,7 +144,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         if (graphicsRequirements.clientApi() == GraphicsClientApi.OPENGL) {
             GLFW.glfwSwapInterval(displayConfig.vSync() ? 1 : 0);
         }
-        fdx = new DefaultFdx(this, new DefaultDisplays(display), new DefaultGraphics(graphics), input, files, logger);
+        fdx = new DefaultFdx(this, new DesktopDisplays(), new DesktopGraphics(), input, files, logger);
 
         disposed = false;
         running = true;
@@ -176,7 +190,10 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         GLFW.glfwWindowHint(GLFW.GLFW_RESIZABLE, config.resizable() ? GLFW.GLFW_TRUE : GLFW.GLFW_FALSE);
         GLFW.glfwWindowHint(GLFW.GLFW_MAXIMIZED, config.maximized() ? GLFW.GLFW_TRUE : GLFW.GLFW_FALSE);
 
-        long windowHandle = GLFW.glfwCreateWindow(config.width(), config.height(), config.title(), 0L, 0L);
+        long sharedWindow = graphicsRequirements.clientApi() == GraphicsClientApi.OPENGL && display != null
+                ? display.windowHandle()
+                : 0L;
+        long windowHandle = GLFW.glfwCreateWindow(config.width(), config.height(), config.title(), 0L, sharedWindow);
         if (windowHandle == 0L) {
             throw new FdxException("Could not create GLFW window");
         }
@@ -184,6 +201,85 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             centerWindow(windowHandle, config.width(), config.height());
         }
         return windowHandle;
+    }
+
+    private DesktopDisplay createSecondaryDisplay(DisplayConfig config) {
+        if (!running || disposed) {
+            throw new FdxException("Cannot create a display when the desktop backend is not running");
+        }
+        DisplayConfig actualConfig = config != null ? config : new DisplayConfig();
+        long windowHandle = createWindow(actualConfig, graphicsRequirements);
+        DesktopDisplay secondaryDisplay = new DesktopDisplay(windowHandle, actualConfig.title());
+        secondaryDisplay.refreshSizes();
+        SecondaryWindowCallbacks callbacks = new SecondaryWindowCallbacks(secondaryDisplay);
+        callbacks.install();
+        secondaryWindows.put(secondaryDisplay, callbacks);
+        if (actualConfig.visible()) {
+            secondaryDisplay.show();
+        }
+        return secondaryDisplay;
+    }
+
+    private void destroySecondaryDisplay(Display candidate) {
+        if (!(candidate instanceof DesktopDisplay) || candidate == display) {
+            return;
+        }
+        DesktopDisplay secondaryDisplay = (DesktopDisplay) candidate;
+        GraphicsAttachment attachedGraphics = null;
+        for (Map.Entry<GraphicsAttachment, DesktopDisplay> entry : secondaryGraphics.entrySet()) {
+            if (entry.getValue() == secondaryDisplay) {
+                attachedGraphics = entry.getKey();
+                break;
+            }
+        }
+        if (attachedGraphics != null) {
+            destroySecondaryGraphics(attachedGraphics);
+        }
+        SecondaryWindowCallbacks callbacks = secondaryWindows.remove(secondaryDisplay);
+        if (callbacks != null) {
+            callbacks.dispose();
+        }
+        GLFW.glfwDestroyWindow(secondaryDisplay.windowHandle());
+    }
+
+    private GraphicsAttachment createSecondaryGraphics(GraphicsConfig config) {
+        if (config == null || config.display() == null) {
+            throw new FdxException("A secondary graphics attachment requires a display");
+        }
+        if (!(config.display() instanceof DesktopDisplay) || config.display() == display) {
+            throw new FdxException("The graphics display was not created by this desktop backend");
+        }
+        GraphicsAttachmentProvider provider = config.provider();
+        if (!graphicsProvider.providerId().equals(provider.providerId())) {
+            throw new FdxException("Secondary graphics must use the application's graphics provider");
+        }
+        GraphicsAttachmentRequirements requirements = provider.requirements();
+        if (requirements.clientApi() != graphicsRequirements.clientApi()) {
+            throw new FdxException("Secondary graphics requirements do not match the application window configuration");
+        }
+        DesktopDisplay secondaryDisplay = (DesktopDisplay) config.display();
+        if (!secondaryWindows.containsKey(secondaryDisplay)) {
+            throw new FdxException("The secondary display has already been destroyed");
+        }
+        GraphicsAttachment attachment = provider.create(new DesktopGraphicsEnvironment(secondaryDisplay,
+                createNativeWindow(secondaryDisplay.windowHandle()), graphics));
+        secondaryGraphics.put(attachment, secondaryDisplay);
+        secondaryDisplay.graphics = attachment;
+        return attachment;
+    }
+
+    private void destroySecondaryGraphics(GraphicsContext context) {
+        if (!(context instanceof GraphicsAttachment) || context == graphics) {
+            return;
+        }
+        GraphicsAttachment attachment = (GraphicsAttachment) context;
+        DesktopDisplay owner = secondaryGraphics.remove(attachment);
+        if (!attachment.isDisposed()) {
+            attachment.dispose();
+        }
+        if (owner != null && owner.graphics == attachment) {
+            owner.graphics = null;
+        }
     }
 
     private void applyGraphicsWindowHints(GraphicsAttachmentRequirements graphicsRequirements) {
@@ -284,7 +380,9 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         cursorPosCallback = new GLFWCursorPosCallback() {
             @Override
             public void invoke(long window, double xpos, double ypos) {
-                input.dispatchPointerMoved((int) Math.round(xpos), (int) Math.round(ypos));
+                int x = (int) Math.round(xpos);
+                int y = (int) Math.round(ypos);
+                input.dispatchPointerMoved(x, y, display.x() + x, display.y() + y);
             }
         };
         mouseButtonCallback = new GLFWMouseButtonCallback() {
@@ -293,11 +391,15 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
                 double[] x = new double[1];
                 double[] y = new double[1];
                 GLFW.glfwGetCursorPos(window, x, y);
+                int pointerX = (int) Math.round(x[0]);
+                int pointerY = (int) Math.round(y[0]);
+                int screenX = display.x() + pointerX;
+                int screenY = display.y() + pointerY;
                 MouseButton mapped = mapMouseButton(button);
                 if (action == GLFW.GLFW_PRESS) {
-                    input.dispatchPointerDown(mapped, (int) Math.round(x[0]), (int) Math.round(y[0]));
+                    input.dispatchPointerDown(mapped, pointerX, pointerY, screenX, screenY);
                 } else if (action == GLFW.GLFW_RELEASE) {
-                    input.dispatchPointerUp(mapped, (int) Math.round(x[0]), (int) Math.round(y[0]));
+                    input.dispatchPointerUp(mapped, pointerX, pointerY, screenX, screenY);
                 }
             }
         };
@@ -307,8 +409,10 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
                 double[] x = new double[1];
                 double[] y = new double[1];
                 GLFW.glfwGetCursorPos(window, x, y);
-                input.dispatchScrolled((int) Math.round(x[0]), (int) Math.round(y[0]), (float) xoffset,
-                        (float) -yoffset);
+                int pointerX = (int) Math.round(x[0]);
+                int pointerY = (int) Math.round(y[0]);
+                input.dispatchScrolled(pointerX, pointerY, display.x() + pointerX, display.y() + pointerY,
+                        (float) xoffset, (float) -yoffset);
             }
         };
         GLFW.glfwSetFramebufferSizeCallback(display.windowHandle(), framebufferSizeCallback);
@@ -381,6 +485,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             }
         } finally {
             listenerCreated = false;
+            destroySecondaryResources();
             if (graphics != null) {
                 graphics.dispose();
                 graphics = null;
@@ -440,6 +545,17 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             running = false;
             disposed = true;
             fdx = null;
+            graphicsProvider = null;
+            graphicsRequirements = null;
+        }
+    }
+
+    private void destroySecondaryResources() {
+        for (GraphicsAttachment attachment : new ArrayList<GraphicsAttachment>(secondaryGraphics.keySet())) {
+            destroySecondaryGraphics(attachment);
+        }
+        for (DesktopDisplay secondaryDisplay : new ArrayList<DesktopDisplay>(secondaryWindows.keySet())) {
+            destroySecondaryDisplay(secondaryDisplay);
         }
     }
 
@@ -599,6 +715,183 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         }
     }
 
+    private final class DesktopDisplays implements Displays {
+        @Override
+        public Display main() {
+            return display;
+        }
+
+        @Override
+        public boolean supportsMultiple() {
+            return true;
+        }
+
+        @Override
+        public Display create(DisplayConfig config) {
+            return createSecondaryDisplay(config);
+        }
+
+        @Override
+        public void destroy(Display display) {
+            destroySecondaryDisplay(display);
+        }
+    }
+
+    private final class DesktopGraphics implements Graphics {
+        @Override
+        public GraphicsContext main() {
+            return graphics;
+        }
+
+        @Override
+        public boolean supportsMultiple() {
+            return true;
+        }
+
+        @Override
+        public GraphicsAttachment create(GraphicsConfig config) {
+            return createSecondaryGraphics(config);
+        }
+
+        @Override
+        public void destroy(GraphicsContext context) {
+            destroySecondaryGraphics(context);
+        }
+    }
+
+    private final class SecondaryWindowCallbacks {
+        private final DesktopDisplay secondaryDisplay;
+        private GLFWFramebufferSizeCallback framebufferSize;
+        private GLFWWindowSizeCallback windowSize;
+        private GLFWWindowCloseCallback close;
+        private GLFWKeyCallback key;
+        private GLFWCharCallback character;
+        private GLFWCursorPosCallback cursorPos;
+        private GLFWMouseButtonCallback mouseButton;
+        private GLFWScrollCallback scroll;
+
+        SecondaryWindowCallbacks(DesktopDisplay secondaryDisplay) {
+            this.secondaryDisplay = secondaryDisplay;
+        }
+
+        void install() {
+            framebufferSize = new GLFWFramebufferSizeCallback() {
+                @Override
+                public void invoke(long window, int width, int height) {
+                    refreshAfterResize();
+                }
+            };
+            windowSize = new GLFWWindowSizeCallback() {
+                @Override
+                public void invoke(long window, int width, int height) {
+                    refreshAfterResize();
+                }
+            };
+            close = new GLFWWindowCloseCallback() {
+                @Override
+                public void invoke(long window) {
+                }
+            };
+            key = new GLFWKeyCallback() {
+                @Override
+                public void invoke(long window, int keyCode, int scancode, int action, int mods) {
+                    Key mapped = mapKey(keyCode);
+                    if (action == GLFW.GLFW_PRESS || action == GLFW.GLFW_REPEAT) {
+                        input.dispatchKeyDown(mapped);
+                    } else if (action == GLFW.GLFW_RELEASE) {
+                        input.dispatchKeyUp(mapped);
+                    }
+                }
+            };
+            character = new GLFWCharCallback() {
+                @Override
+                public void invoke(long window, int codepoint) {
+                    input.dispatchTextInput(new String(Character.toChars(codepoint)));
+                }
+            };
+            cursorPos = new GLFWCursorPosCallback() {
+                @Override
+                public void invoke(long window, double xpos, double ypos) {
+                    int x = (int) Math.round(xpos);
+                    int y = (int) Math.round(ypos);
+                    input.dispatchPointerMoved(x, y, secondaryDisplay.x() + x, secondaryDisplay.y() + y);
+                }
+            };
+            mouseButton = new GLFWMouseButtonCallback() {
+                @Override
+                public void invoke(long window, int button, int action, int mods) {
+                    double[] x = new double[1];
+                    double[] y = new double[1];
+                    GLFW.glfwGetCursorPos(window, x, y);
+                    int pointerX = (int) Math.round(x[0]);
+                    int pointerY = (int) Math.round(y[0]);
+                    int screenX = secondaryDisplay.x() + pointerX;
+                    int screenY = secondaryDisplay.y() + pointerY;
+                    MouseButton mapped = mapMouseButton(button);
+                    if (action == GLFW.GLFW_PRESS) {
+                        input.dispatchPointerDown(mapped, pointerX, pointerY, screenX, screenY);
+                    } else if (action == GLFW.GLFW_RELEASE) {
+                        input.dispatchPointerUp(mapped, pointerX, pointerY, screenX, screenY);
+                    }
+                }
+            };
+            scroll = new GLFWScrollCallback() {
+                @Override
+                public void invoke(long window, double xoffset, double yoffset) {
+                    double[] x = new double[1];
+                    double[] y = new double[1];
+                    GLFW.glfwGetCursorPos(window, x, y);
+                    int pointerX = (int) Math.round(x[0]);
+                    int pointerY = (int) Math.round(y[0]);
+                    input.dispatchScrolled(pointerX, pointerY, secondaryDisplay.x() + pointerX,
+                            secondaryDisplay.y() + pointerY, (float) xoffset, (float) -yoffset);
+                }
+            };
+
+            long handle = secondaryDisplay.windowHandle();
+            GLFW.glfwSetFramebufferSizeCallback(handle, framebufferSize);
+            GLFW.glfwSetWindowSizeCallback(handle, windowSize);
+            GLFW.glfwSetWindowCloseCallback(handle, close);
+            GLFW.glfwSetKeyCallback(handle, key);
+            GLFW.glfwSetCharCallback(handle, character);
+            GLFW.glfwSetCursorPosCallback(handle, cursorPos);
+            GLFW.glfwSetMouseButtonCallback(handle, mouseButton);
+            GLFW.glfwSetScrollCallback(handle, scroll);
+        }
+
+        private void refreshAfterResize() {
+            int oldFramebufferWidth = secondaryDisplay.framebufferWidth();
+            int oldFramebufferHeight = secondaryDisplay.framebufferHeight();
+            secondaryDisplay.refreshSizes();
+            if (secondaryDisplay.graphics != null
+                    && (oldFramebufferWidth != secondaryDisplay.framebufferWidth()
+                    || oldFramebufferHeight != secondaryDisplay.framebufferHeight())) {
+                secondaryDisplay.graphics.resize(secondaryDisplay.framebufferWidth(),
+                        secondaryDisplay.framebufferHeight());
+            }
+        }
+
+        void dispose() {
+            long handle = secondaryDisplay.windowHandle();
+            GLFW.glfwSetFramebufferSizeCallback(handle, null);
+            GLFW.glfwSetWindowSizeCallback(handle, null);
+            GLFW.glfwSetWindowCloseCallback(handle, null);
+            GLFW.glfwSetKeyCallback(handle, null);
+            GLFW.glfwSetCharCallback(handle, null);
+            GLFW.glfwSetCursorPosCallback(handle, null);
+            GLFW.glfwSetMouseButtonCallback(handle, null);
+            GLFW.glfwSetScrollCallback(handle, null);
+            if (framebufferSize != null) framebufferSize.free();
+            if (windowSize != null) windowSize.free();
+            if (close != null) close.free();
+            if (key != null) key.free();
+            if (character != null) character.free();
+            if (cursorPos != null) cursorPos.free();
+            if (mouseButton != null) mouseButton.free();
+            if (scroll != null) scroll.free();
+        }
+    }
+
     /**
      * Represents a frame sync.
      *
@@ -629,10 +922,16 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
     private static final class DesktopGraphicsEnvironment implements GraphicsEnvironment {
         private final Display display;
         private final NativeWindow nativeWindow;
+        private final GraphicsContext sharedContext;
 
         DesktopGraphicsEnvironment(Display display, NativeWindow nativeWindow) {
+            this(display, nativeWindow, null);
+        }
+
+        DesktopGraphicsEnvironment(Display display, NativeWindow nativeWindow, GraphicsContext sharedContext) {
             this.display = display;
             this.nativeWindow = nativeWindow;
+            this.sharedContext = sharedContext;
         }
 
         /**
@@ -654,6 +953,11 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         public NativeWindow nativeWindow() {
             return nativeWindow;
         }
+
+        @Override
+        public GraphicsContext sharedContext() {
+            return sharedContext;
+        }
     }
 
     /**
@@ -663,13 +967,26 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
      */
     private static final class DesktopDisplay implements Display {
         private final long windowHandle;
+        private GraphicsAttachment graphics;
         private String title;
+        private int x;
+        private int y;
         private int width;
         private int height;
         private int framebufferWidth;
         private int framebufferHeight;
+        private int monitorX;
+        private int monitorY;
+        private int monitorWidth;
+        private int monitorHeight;
+        private int workAreaX;
+        private int workAreaY;
+        private int workAreaWidth;
+        private int workAreaHeight;
         private final IntBuffer widthBuffer = BufferUtils.createIntBuffer(1);
         private final IntBuffer heightBuffer = BufferUtils.createIntBuffer(1);
+        private final IntBuffer xBuffer = BufferUtils.createIntBuffer(1);
+        private final IntBuffer yBuffer = BufferUtils.createIntBuffer(1);
         private final FloatBuffer scaleXBuffer = BufferUtils.createFloatBuffer(1);
         private final FloatBuffer scaleYBuffer = BufferUtils.createFloatBuffer(1);
         private float contentScaleX = 1.0f;
@@ -685,6 +1002,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         }
 
         void refreshSizes() {
+            refreshPosition();
             widthBuffer.clear();
             heightBuffer.clear();
             GLFW.glfwGetWindowSize(windowHandle, widthBuffer, heightBuffer);
@@ -702,6 +1020,65 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             GLFW.glfwGetWindowContentScale(windowHandle, scaleXBuffer, scaleYBuffer);
             contentScaleX = validScale(scaleXBuffer.get(0));
             contentScaleY = validScale(scaleYBuffer.get(0));
+        }
+
+        private void refreshPosition() {
+            xBuffer.clear();
+            yBuffer.clear();
+            GLFW.glfwGetWindowPos(windowHandle, xBuffer, yBuffer);
+            x = xBuffer.get(0);
+            y = yBuffer.get(0);
+        }
+
+        private void refreshMonitor() {
+            long monitor = GLFW.glfwGetPrimaryMonitor();
+            if (monitor == 0L) {
+                monitorX = x();
+                monitorY = y();
+                monitorWidth = width();
+                monitorHeight = height();
+                workAreaX = monitorX;
+                workAreaY = monitorY;
+                workAreaWidth = monitorWidth;
+                workAreaHeight = monitorHeight;
+                return;
+            }
+            xBuffer.clear();
+            yBuffer.clear();
+            GLFW.glfwGetMonitorPos(monitor, xBuffer, yBuffer);
+            monitorX = xBuffer.get(0);
+            monitorY = yBuffer.get(0);
+            org.lwjgl.glfw.GLFWVidMode mode = GLFW.glfwGetVideoMode(monitor);
+            monitorWidth = mode != null ? mode.width() : width();
+            monitorHeight = mode != null ? mode.height() : height();
+            xBuffer.clear();
+            yBuffer.clear();
+            widthBuffer.clear();
+            heightBuffer.clear();
+            GLFW.glfwGetMonitorWorkarea(monitor, xBuffer, yBuffer, widthBuffer, heightBuffer);
+            workAreaX = xBuffer.get(0);
+            workAreaY = yBuffer.get(0);
+            workAreaWidth = widthBuffer.get(0);
+            workAreaHeight = heightBuffer.get(0);
+        }
+
+        @Override
+        public int x() {
+            refreshPosition();
+            return x;
+        }
+
+        @Override
+        public int y() {
+            refreshPosition();
+            return y;
+        }
+
+        @Override
+        public void position(int x, int y) {
+            GLFW.glfwSetWindowPos(windowHandle, x, y);
+            this.x = x;
+            this.y = y;
         }
 
         /**
@@ -745,6 +1122,12 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             return height;
         }
 
+        @Override
+        public void size(int width, int height) {
+            GLFW.glfwSetWindowSize(windowHandle, Math.max(1, width), Math.max(1, height));
+            refreshSizes();
+        }
+
         /**
          * Returns the framebuffer width.
          *
@@ -783,6 +1166,79 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         @Override
         public float contentScaleY() {
             return contentScaleY;
+        }
+
+        @Override
+        public int monitorX() {
+            refreshMonitor();
+            return monitorX;
+        }
+
+        @Override
+        public int monitorY() {
+            refreshMonitor();
+            return monitorY;
+        }
+
+        @Override
+        public int monitorWidth() {
+            refreshMonitor();
+            return monitorWidth;
+        }
+
+        @Override
+        public int monitorHeight() {
+            refreshMonitor();
+            return monitorHeight;
+        }
+
+        @Override
+        public int workAreaX() {
+            refreshMonitor();
+            return workAreaX;
+        }
+
+        @Override
+        public int workAreaY() {
+            refreshMonitor();
+            return workAreaY;
+        }
+
+        @Override
+        public int workAreaWidth() {
+            refreshMonitor();
+            return workAreaWidth;
+        }
+
+        @Override
+        public int workAreaHeight() {
+            refreshMonitor();
+            return workAreaHeight;
+        }
+
+        @Override
+        public void show() {
+            GLFW.glfwShowWindow(windowHandle);
+        }
+
+        @Override
+        public void focus() {
+            GLFW.glfwFocusWindow(windowHandle);
+        }
+
+        @Override
+        public boolean focused() {
+            return GLFW.glfwGetWindowAttrib(windowHandle, GLFW.GLFW_FOCUSED) == GLFW.GLFW_TRUE;
+        }
+
+        @Override
+        public boolean minimized() {
+            return GLFW.glfwGetWindowAttrib(windowHandle, GLFW.GLFW_ICONIFIED) == GLFW.GLFW_TRUE;
+        }
+
+        @Override
+        public void opacity(float opacity) {
+            GLFW.glfwSetWindowOpacity(windowHandle, Math.max(0.0f, Math.min(1.0f, opacity)));
         }
 
         /**

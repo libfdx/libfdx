@@ -1,6 +1,6 @@
 [release]
 fdxGroup = "io.github.libfdx"
-fdxVersion = "0.0.1"
+fdxVersion = "0.0.2"
 
 [development]
 usePublishedLibfdx = false

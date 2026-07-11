@@ -80,6 +80,24 @@ public interface Input extends FdxService, ProviderHandle {
     int pointerY();
 
     /**
+     * Returns the pointer x position in screen coordinates.
+     *
+     * @return the screen x position
+     */
+    default int pointerScreenX() {
+        return pointerX();
+    }
+
+    /**
+     * Returns the pointer y position in screen coordinates.
+     *
+     * @return the screen y position
+     */
+    default int pointerScreenY() {
+        return pointerY();
+    }
+
+    /**
      * Returns the cursor.
      *
      * @return the cursor

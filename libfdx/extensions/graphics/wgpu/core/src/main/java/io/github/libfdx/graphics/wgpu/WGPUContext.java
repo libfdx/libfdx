@@ -85,6 +85,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     private final WGPUSurface surface;
     private final Object surfaceOwner;
     private final boolean surfaceCopySrc;
+    private final boolean ownsDevice;
     private WGPUAdapter adapter;
     private WGPUDevice device;
     private WGPUQueue queue;
@@ -154,6 +155,11 @@ public final class WGPUContext implements GraphicsContext, Disposable {
      */
     WGPUContext(WGPUConfiguration configuration, WGPUInstance instance, WGPUSurface surface,
             Object surfaceOwner, boolean surfaceCopySrc) {
+        this(configuration, instance, surface, surfaceOwner, surfaceCopySrc, null);
+    }
+
+    WGPUContext(WGPUConfiguration configuration, WGPUInstance instance, WGPUSurface surface,
+            Object surfaceOwner, boolean surfaceCopySrc, WGPUContext sharedContext) {
         if (configuration == null) {
             throw new FdxException("WGPUConfiguration cannot be null");
         }
@@ -168,6 +174,16 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         this.surface = surface;
         this.surfaceOwner = surfaceOwner;
         this.surfaceCopySrc = surfaceCopySrc;
+        ownsDevice = sharedContext == null;
+        if (sharedContext != null) {
+            if (sharedContext.disposed || !sharedContext.ready) {
+                throw new FdxException("The shared WGPU context is not ready");
+            }
+            adapter = sharedContext.adapter;
+            device = sharedContext.device;
+            queue = sharedContext.queue;
+            graphicsDevice = sharedContext.graphicsDevice;
+        }
     }
 
     /**
@@ -185,6 +201,17 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     public void initializeAsync() {
         startInitialization();
         finishInitializationIfReady();
+    }
+
+    void initializeShared() {
+        if (ownsDevice) {
+            throw new FdxException("This WGPU context does not share a device");
+        }
+        if (ready) {
+            return;
+        }
+        initializationStarted = true;
+        finishInitialization();
     }
 
     private void startInitialization() {
@@ -235,7 +262,9 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         if (usesOffscreenFrame()) {
             offscreenColorRenderTextureView = new WGPUTextureView();
         }
-        graphicsDevice = new WGPUGraphicsDevice(this);
+        if (graphicsDevice == null) {
+            graphicsDevice = new WGPUGraphicsDevice(this);
+        }
         commandEncoder = new WGPUCommandEncoderHandle(this);
         colorAttachment = new WGPUTextureViewHandle(activeColorAttachmentView(),
                 WGPUTextureFormats.toCommon(surfaceFormat));
@@ -1035,6 +1064,10 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         return queue;
     }
 
+    WGPUInstance nativeInstance() {
+        return instance;
+    }
+
     /**
      * Returns the native surface format.
      *
@@ -1120,15 +1153,17 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             surface.release();
             surface.dispose();
         }
-        if (queue != null) {
-            queue.release();
-        }
-        if (device != null) {
-            device.destroy();
-            device.dispose();
-        }
-        if (instance != null) {
-            instance.release();
+        if (ownsDevice) {
+            if (queue != null) {
+                queue.release();
+            }
+            if (device != null) {
+                device.destroy();
+                device.dispose();
+            }
+            if (instance != null) {
+                instance.release();
+            }
         }
     }
 
