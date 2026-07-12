@@ -23,6 +23,13 @@ dependencies {
     api(project(":libfdx:framework:graphics"))
     compileOnlyApi(libs.jwebgpu.core)
     compileOnly(libs.jwebgpu.jni)
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.jwebgpu.core)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 java {
     withSourcesJar()

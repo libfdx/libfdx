@@ -11,6 +11,7 @@ import java.util.List;
  */
 public final class Skeleton {
     private final ArrayList<Bone> bones;
+    private final List<Bone> readOnlyBones;
 
     /**
      * Creates a skeleton.
@@ -19,6 +20,7 @@ public final class Skeleton {
      */
     public Skeleton(List<Bone> bones) {
         this.bones = bones != null ? new ArrayList<Bone>(bones) : new ArrayList<Bone>();
+        readOnlyBones = Collections.unmodifiableList(this.bones);
     }
 
     /**
@@ -27,6 +29,6 @@ public final class Skeleton {
      * @return the bones
      */
     public List<Bone> bones() {
-        return Collections.unmodifiableList(bones);
+        return readOnlyBones;
     }
 }

@@ -107,6 +107,14 @@ final class IosCMetal {
         libfdxIosMetalSetIndexBuffer(context, buffer);
     }
 
+    static void setScissor(long context, int x, int y, int width, int height) {
+        libfdxIosMetalSetScissor(context, x, y, width, height);
+    }
+
+    static void setViewport(long context, int x, int y, int width, int height) {
+        libfdxIosMetalSetViewport(context, x, y, width, height);
+    }
+
     static void setTexture(long context, int textureSlot, int samplerSlot, long texture) {
         libfdxIosMetalSetTexture(context, textureSlot, samplerSlot, texture);
     }
@@ -225,6 +233,12 @@ final class IosCMetal {
 
     @Import(name = "libfdx_ios_metal_set_index_buffer")
     private static native void libfdxIosMetalSetIndexBuffer(long context, long buffer);
+
+    @Import(name = "libfdx_ios_metal_set_scissor")
+    private static native void libfdxIosMetalSetScissor(long context, int x, int y, int width, int height);
+
+    @Import(name = "libfdx_ios_metal_set_viewport")
+    private static native void libfdxIosMetalSetViewport(long context, int x, int y, int width, int height);
 
     @Import(name = "libfdx_ios_metal_set_texture")
     private static native void libfdxIosMetalSetTexture(long context, int textureSlot, int samplerSlot, long texture);

@@ -12,14 +12,17 @@ import io.github.libfdx.graphics.BufferUsage;
 final class GLBufferHandle implements Buffer {
     private final ProviderId providerId;
     private final GLApi gl;
+    private final GLResourceDomain resourceDomain;
     private final int buffer;
     private final int size;
     private final BufferUsage usage;
     private boolean disposed;
 
-    GLBufferHandle(ProviderId providerId, GLApi gl, int buffer, int size, BufferUsage usage) {
+    GLBufferHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain, int buffer, int size,
+            BufferUsage usage) {
         this.providerId = providerId;
         this.gl = gl;
+        this.resourceDomain = resourceDomain;
         this.buffer = buffer;
         this.size = size;
         this.usage = usage != null ? usage : BufferUsage.VERTEX;
@@ -27,6 +30,10 @@ final class GLBufferHandle implements Buffer {
 
     int buffer() {
         return buffer;
+    }
+
+    GLResourceDomain resourceDomain() {
+        return resourceDomain;
     }
 
     /**
@@ -80,7 +87,9 @@ final class GLBufferHandle implements Buffer {
             return;
         }
         disposed = true;
-        gl.deleteBuffer(buffer);
+        if (resourceDomain.makeAnyContextCurrent()) {
+            gl.deleteBuffer(buffer);
+        }
     }
 
     /**

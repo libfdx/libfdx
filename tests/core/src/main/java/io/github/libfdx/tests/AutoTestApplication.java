@@ -57,8 +57,10 @@ public final class AutoTestApplication extends ApplicationAdapter {
     private TestFpsLogger fpsLogger;
     private UiRoot overlay;
     private TestSelector.TestDescriptor[] tests;
+    private boolean[] failedByTest;
     private ApplicationListener currentTest;
     private int currentIndex = -1;
+    private int completedTests;
     private float testTimerSeconds;
     private float loadWaitSeconds;
     private float testDurationSeconds;
@@ -68,10 +70,12 @@ public final class AutoTestApplication extends ApplicationAdapter {
     private int stableFrameCount;
     private boolean currentTestLoaded;
     private boolean currentTestFailed;
+    private boolean currentTestInProgress;
     private boolean pendingSwitch;
     private boolean completed;
     private boolean summaryPrinted;
     private long renderedFrames;
+    private Throwable firstFailure;
     private final List<String> failures = new ArrayList<String>();
 
     /**
@@ -105,6 +109,7 @@ public final class AutoTestApplication extends ApplicationAdapter {
         graphics = fdx.graphics().main();
         fpsLogger = TestFpsLogger.create(fdx.logger(), "AutoTestApplication");
         tests = TestSelector.descriptors();
+        failedByTest = new boolean[tests.length];
         testDurationSeconds = floatProperty("libfdx.test.autoDurationSeconds", DEFAULT_TEST_DURATION_SECONDS);
         stableFramesRequired = intProperty("libfdx.test.autoStableFrames", DEFAULT_STABLE_FRAMES_REQUIRED);
         spikeThresholdSeconds = floatProperty("libfdx.test.autoSpikeSeconds", DEFAULT_SPIKE_THRESHOLD_SECONDS);
@@ -156,9 +161,9 @@ public final class AutoTestApplication extends ApplicationAdapter {
             return;
         }
         if (pendingSwitch) {
-            disposeCurrentTest();
-            nextTest();
             pendingSwitch = false;
+            finishCurrentTest();
+            nextTest();
             if (completed) {
                 renderOverlayOnly(deltaSeconds);
                 renderedFrames++;
@@ -167,6 +172,7 @@ public final class AutoTestApplication extends ApplicationAdapter {
             }
         }
 
+        boolean renderFailed = false;
         if (currentTest != null) {
             try {
                 currentTest.render();
@@ -175,9 +181,16 @@ public final class AutoTestApplication extends ApplicationAdapter {
                 recordFailure(currentName(), "render", error);
                 currentTestLoaded = true;
                 pendingSwitch = true;
+                renderFailed = true;
             }
         } else if (graphics != null) {
             graphics.clear(0.02f, 0.025f, 0.032f, 1.0f);
+        }
+
+        if (renderFailed) {
+            renderedFrames++;
+            fpsLogger.reset();
+            return;
         }
 
         if (currentTestLoaded) {
@@ -201,7 +214,13 @@ public final class AutoTestApplication extends ApplicationAdapter {
     @Override
     public void onFrameEnd() {
         if (currentTest != null) {
-            currentTest.onFrameEnd();
+            try {
+                currentTest.onFrameEnd();
+            } catch (Throwable error) {
+                recordFailure(currentName(), "frame-end", error);
+                currentTestLoaded = true;
+                pendingSwitch = true;
+            }
         }
     }
 
@@ -243,9 +262,14 @@ public final class AutoTestApplication extends ApplicationAdapter {
             overlay.dispose();
             overlay = null;
         }
+        if (!completed) {
+            rememberFailure(new FdxException("Auto test runner stopped after completing " + completedTests
+                    + " of " + tests.length + " tests"));
+        }
         printSummary();
-        if (failOnComplete && failures.size() > 0) {
-            throw new FdxException("Auto test runner failed " + failures.size() + " of " + tests.length + " tests");
+        if (failOnComplete && (!completed || failures.size() > 0)) {
+            throw new FdxException("Auto test runner completed " + completedTests + " of " + tests.length
+                    + " tests with " + failures.size() + " failed tests", firstFailure);
         }
     }
 
@@ -267,6 +291,7 @@ public final class AutoTestApplication extends ApplicationAdapter {
 
         TestSelector.TestDescriptor descriptor = tests[currentIndex];
         currentTestFailed = false;
+        currentTestInProgress = true;
         currentTestLoaded = false;
         stableFrameCount = 0;
         loadWaitSeconds = 0.0f;
@@ -331,13 +356,25 @@ public final class AutoTestApplication extends ApplicationAdapter {
         currentTest = null;
     }
 
+    private void finishCurrentTest() {
+        disposeCurrentTest();
+        if (currentTestInProgress) {
+            completedTests++;
+            currentTestInProgress = false;
+        }
+    }
+
     private void recordFailure(String testName, String phase, Throwable error) {
         String failure = testName + " [" + phase + "]: " + error.getClass().getSimpleName()
                 + " - " + error.getMessage();
         System.err.println("[error] " + failure);
         error.printStackTrace();
+        rememberFailure(error);
         if (!currentTestFailed) {
             failures.add(failure);
+            if (failedByTest != null && currentIndex >= 0 && currentIndex < failedByTest.length) {
+                failedByTest[currentIndex] = true;
+            }
             currentTestFailed = true;
         }
         if (overlay != null) {
@@ -350,11 +387,41 @@ public final class AutoTestApplication extends ApplicationAdapter {
             return;
         }
         summaryPrinted = true;
-        int failed = failures.size();
-        int passed = tests.length - failed;
-        System.out.println("[info] Auto test runner complete: " + passed + " / " + tests.length + " passed.");
+        int failed = completedFailureCount();
+        int passed = completedTests - failed;
+        if (completed) {
+            System.out.println("[info] Auto test runner complete: " + passed + " / " + tests.length + " passed.");
+        } else {
+            System.out.println("[error] Auto test runner stopped: " + completedTests + " / " + tests.length
+                    + " completed, " + passed + " passed, " + failures.size() + " failures observed.");
+        }
         for (int i = 0; i < failures.size(); i++) {
             System.out.println("[error] Auto test failure: " + failures.get(i));
+        }
+    }
+
+    private int completedFailureCount() {
+        int failed = 0;
+        if (failedByTest == null) {
+            return failed;
+        }
+        int limit = Math.min(completedTests, failedByTest.length);
+        for (int i = 0; i < limit; i++) {
+            if (failedByTest[i]) {
+                failed++;
+            }
+        }
+        return failed;
+    }
+
+    private void rememberFailure(Throwable error) {
+        if (error == null) {
+            return;
+        }
+        if (firstFailure == null) {
+            firstFailure = error;
+        } else if (firstFailure != error) {
+            firstFailure.addSuppressed(error);
         }
     }
 
@@ -377,7 +444,8 @@ public final class AutoTestApplication extends ApplicationAdapter {
 
     private String primaryStatus() {
         if (completed) {
-            return "Auto complete: " + (tests.length - failures.size()) + " / " + tests.length + " passed";
+            return "Auto complete: " + (completedTests - completedFailureCount()) + " / " + tests.length
+                    + " passed";
         }
         if (tests == null || currentIndex < 0 || currentIndex >= tests.length) {
             return "Auto starting";

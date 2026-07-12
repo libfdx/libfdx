@@ -22,6 +22,7 @@ public final class Environment3D {
     private CascadedShadowMap3D cascadedShadowMap;
     private SkyEnvironment3D skyEnvironment;
     private final ArrayList<Light> lights = new ArrayList<Light>();
+    private final List<Light> readOnlyLights = Collections.unmodifiableList(lights);
 
     /**
      * Sets the ambient color and returns this environment3 d.
@@ -199,7 +200,7 @@ public final class Environment3D {
      * @return the lights
      */
     public List<Light> lights() {
-        return Collections.unmodifiableList(lights);
+        return readOnlyLights;
     }
 
     /**

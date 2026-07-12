@@ -22,7 +22,8 @@ public final class ScenarioValidationConfig {
 
     private ScenarioValidationConfig(String selection, ScenarioValidationMode mode, long timeoutMillis,
             boolean eventsEnabled, ScenarioCapturePolicy capturePolicy, float stepDelaySeconds) {
-        this.selection = selection != null && selection.length() > 0 ? selection : "all";
+        String normalizedSelection = selection != null ? selection.trim() : "";
+        this.selection = normalizedSelection.length() > 0 ? normalizedSelection : "all";
         this.mode = mode != null ? mode : ScenarioValidationMode.MIXED;
         this.timeoutMillis = Math.max(0L, timeoutMillis);
         this.eventsEnabled = eventsEnabled;

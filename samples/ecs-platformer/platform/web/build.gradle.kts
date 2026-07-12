@@ -34,11 +34,5 @@ libfdx {
             buildDescription.set("Builds the ECS platformer WebGL Wasm web application.")
             runDescription.set("Builds and serves the ECS platformer WebGL Wasm web application.")
         }
-
-        target("webgpu") {
-            defaultPath.set("/?graphics=webgpu")
-            buildDescription.set("Builds the ECS platformer WebGPU Wasm web application.")
-            runDescription.set("Builds and serves the ECS platformer WebGPU Wasm web application.")
-        }
     }
 }

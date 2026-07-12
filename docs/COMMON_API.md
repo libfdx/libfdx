@@ -28,8 +28,7 @@ Use this document to decide what a common API type means, what module owns it, a
     1. [Input And Gamepad Contracts](#81-input-and-gamepad-contracts)
 9. [Display](#9-display)
     1. [Display Contract](#91-display-contract)
-10. [Audio](#10-audio)
-    1. [Audio Contracts](#101-audio-contracts)
+10. [Audio Status](#10-audio-status)
 11. [Net](#11-net)
     1. [Network Contracts](#111-network-contracts)
 12. [Assets](#12-assets)
@@ -40,8 +39,8 @@ Use this document to decide what a common API type means, what module owns it, a
     3. [Generic Provider Flow](#133-generic-provider-flow)
     4. [Provider Mapping Examples](#134-provider-mapping-examples)
     5. [Texture And TextureView](#135-texture-and-textureview)
-    6. [Graphics Surface Boundary](#136-graphics-surface-boundary)
-    7. [Graphics Capabilities](#137-graphics-capabilities)
+    6. [Graphics Presentation Boundary](#136-graphics-presentation-boundary)
+    7. [Graphics Capability Status](#137-graphics-capability-status)
 14. [Graphics 2D](#14-graphics-2d)
     1. [Graphics 2D Contracts](#141-graphics-2d-contracts)
 15. [Graphics 3D](#15-graphics-3d)
@@ -59,7 +58,7 @@ Use this document to decide what a common API type means, what module owns it, a
 
 - Keep game code written against portable common APIs.
 - Keep provider-specific APIs explicit through provider modules and `ProviderHandle.as()`.
-- Avoid common APIs that secretly assume one graphics, audio, input, or platform backend.
+- Avoid common APIs that secretly assume one graphics provider, input implementation, or platform backend.
 - Use capabilities for optional behavior instead of pretending every provider supports everything.
 - Keep low-level APIs explicit enough that high-level modules such as `g2d`, `g3d`, `ecs`, `ui-kit`, and `scenario_validator` can be built without provider-specific code.
 
@@ -91,6 +90,7 @@ Rules:
 
 - Provider-neutral common APIs should target Java 25 source compatibility unless a section explicitly opts out.
 - Java 25 language features and JDK APIs may appear in common API signatures only when they are provider-neutral.
+- Android application/backend/provider modules compile to Java 17 bytecode for the supported AGP/lint/device toolchain. This platform boundary does not change the provider-neutral common API contract.
 - Provider/backend-specific details, such as FFM-based bindings, must stay behind provider/backend modules.
 - `as()` is an advanced provider-specific access path.
 - `as()` has no `Class<T>` parameter. The caller selects `T` through assignment or target typing.
@@ -111,34 +111,26 @@ Display
 FileWatch
 Gamepads
 Gamepad
-AudioDevice
-PlaybackHandle
-AudioSource
-Sound
-Music
-AudioBuffer
+Storage
+StorageBackend
 Network
 WebSocket
-Graphics
 GraphicsContext
 GraphicsAttachment
 GraphicsDevice
-Surface
-SurfaceTexture
+GraphicsFrame
+FrameBuffer
 Texture
 TextureView
 Buffer
-Sampler
 ShaderModule
-BindGroupLayout
-BindGroup
-PipelineLayout
 RenderPipeline
-ComputePipeline
 CommandEncoder
-CommandBuffer
 RenderPass
-ComputePass
+NetClient
+NetServer
+NetPeerGroup
+NetConnection
 ```
 
 ## 4. Naming Rules
@@ -149,7 +141,6 @@ Use `Graphics` for the graphics manager and `GraphicsContext` for provider-backe
 Graphics
 GraphicsContext
 GraphicsDevice
-GraphicsCapabilities
 ```
 
 Use short resource names when the type is already inside `io.github.libfdx.graphics`:
@@ -158,13 +149,15 @@ Use short resource names when the type is already inside `io.github.libfdx.graph
 Texture
 TextureView
 Buffer
-Sampler
 ShaderModule
 RenderPipeline
-CommandBuffer
+CommandEncoder
+RenderPass
 ```
 
-Use `GraphicsDevice` and `GraphicsQueue` for public service names instead of GPU-prefixed alternatives.
+Use `GraphicsDevice` for the public resource-creation entry point. There is no
+current public `GraphicsQueue`; submission remains owned by the backend/provider
+attachment and its frame lifecycle.
 
 All public `ui-kit` classes must use the `Ui` prefix:
 
@@ -249,7 +242,7 @@ Defined types:
 | `FdxService` | Internal marker available for backend/provider wiring code when a backend keeps an implementation registry. It is not part of the user-facing runtime access model. |
 | `FdxException` | Base framework exception. |
 | `Logger` | Logging API independent from a concrete logging implementation. |
-| `ProviderId` | Stable logical provider identity, such as `wgpu`, `vulkan`, or `miniaudio`. |
+| `ProviderId` | Stable logical provider identity, such as the current `wgpu`, `vulkan`, `gl`, or `webrtc` IDs. |
 | `ProviderHandle` | Escape hatch contract for provider-backed common handles. |
 | `FdxFuture<T>` | Framework async result type for portable async operations across desktop, web, Android, iOS, and C-backed targets. |
 | `Consumer<T>` and `Consumer<Throwable>` callbacks | Callback contracts used by `FdxFuture<T>`. |
@@ -329,13 +322,13 @@ Rules:
 - Callbacks registered before completion run once when the future completes. Callbacks registered after completion still run once for the already completed result.
 - Callback order is registration order for callbacks of the same future and same completion path.
 - Framework async APIs should dispatch callbacks on the application/main event loop when a running `Application` owns the operation. APIs used outside a running application must document their dispatch policy.
-- Callback exceptions should be reported through `Logger` or the provider's error reporting path. They must not change the completed future result or prevent later callbacks from running.
+- Callback exceptions must not change the completed future result or prevent later callbacks from running. `FdxFuture` dispatches every callback already queued for that completion path, then propagates the first callback failure to the completion or late-registration caller with later failures suppressed. Provider-owned completion code must report that propagated failure through `Logger` or its provider error path.
 - The initial `FdxFuture<T>` contract has no cancellation API. Cancellation can be added later through a separate type or explicit operation-specific method.
 - `FdxService` is reserved for private backend/provider wiring when an implementation keeps an internal registry. It is not a signal that user code should resolve a type generically.
 - Provider and backend factory contracts should not implement `FdxService`.
 - `Logger` is returned by `Fdx.logger()` so applications and framework modules can share the same logging API.
 - `ProviderId` equality is value-based. Two `ProviderId` instances with the same `value()` must compare equal and have the same hash code.
-- Provider ID values should be stable lowercase identifiers such as `wgpu`, `vulkan`, `miniaudio`, or `desktop_gamepads`.
+- Provider ID values should be stable lowercase identifiers such as the current `wgpu`, `vulkan`, `gl`, `webrtc`, or `default_gamepads` values.
 
 ### 5.2. Foundation Math Types
 
@@ -584,10 +577,9 @@ public interface Fdx {
     Application app();
     Displays displays();
     Graphics graphics();
+    Input input();
     FileSystem files();
     Storage storage();
-    Input input();
-    AudioDevice audio();
     Network network();
     Logger logger();
 }
@@ -610,9 +602,11 @@ Rules:
 - `Fdx` contains only backend-owned runtime systems and root managers.
 - `Fdx` must not expose a generic class-based lookup API.
 - `Fdx` must not expose normal user-created feature objects such as `AssetManager`, `Batch2D`/`SpriteBatch`, UI roots, physics worlds, or scene objects.
-- `Fdx.files()` returns the backend-owned file system when one exists, or `null` on a backend that does not expose files.
-- `Fdx.storage()` returns the backend-owned persistent storage service when one exists, or `null` on a backend that does not expose persistence.
-- `Fdx.input()`, `Fdx.audio()`, and `Fdx.network()` return `null` when the backend has no implementation for that system.
+- Current backends supply non-null application, display, graphics, input, file,
+  storage, and logger roots.
+- `Fdx.network()` is the one explicitly nullable root accessor and returns
+  `null` when the active backend does not provide networking.
+- There is no `Fdx.audio()` accessor because audio is not implemented.
 - If a backend keeps an internal mutable registry for wiring, that registry is private backend implementation detail, not the public programming model.
 
 ### 6.3. Application Service Contract
@@ -1117,8 +1111,9 @@ AndroidApplicationConfig config = new AndroidApplicationConfig()
 - Cursor lock, vibration, haptics, and advanced controller features must be capability-gated.
 - Input events should be usable by both game code and `ui-kit`.
 - `Input.as()` is the advanced access path for backend-specific input services.
-- `Input.cursor()` returns `null` when the platform has no cursor concept.
-- `Input.gamepads()` returns `null` when no gamepad provider is available.
+- `Input.cursor()` and `Input.gamepads()` return non-null service objects. A
+  platform without a cursor exposes unsupported cursor capabilities, and a
+  platform with no connected controllers exposes an empty gamepad list.
 - Cursor capture or shape changes should fail clearly when `InputCapabilities.supportsCursor()` is false or the requested cursor operation is unsupported.
 - `Gamepads.find(int index)` returns `null` when no connected gamepad exists for that index.
 - `Gamepads` is returned from `Input.gamepads()` and should not be registered as a separate `FdxService`.
@@ -1144,10 +1139,6 @@ Defined types:
 | `Display` | Runtime presentation area abstraction. |
 | `Displays` | Backend-owned display/window/canvas manager returned by `Fdx.displays()`. |
 | `DisplayConfig` | Startup display configuration. |
-| `DisplayMode` | Resolution, refresh rate, and fullscreen mode metadata. |
-| `Monitor` | Physical or logical monitor/display metadata when available. |
-| `Orientation` | Orientation value for mobile and rotation-aware platforms. |
-| `DisplayCapabilities` | Supported display operations. |
 
 ### 9.1. Display Contract
 
@@ -1160,29 +1151,42 @@ public interface Displays {
     Display main();
     boolean supportsMultiple();
     Display create(DisplayConfig config);
+    void destroy(Display display);
 }
 
 public interface Display extends ProviderHandle {
+    int x();
+    int y();
+    void position(int x, int y);
+
+    String title();
+    void title(String title);
     int width();
     int height();
+    void size(int width, int height);
     int framebufferWidth();
     int framebufferHeight();
     float contentScaleX();
     float contentScaleY();
     float contentScale();
 
-    String title();
-    void title(String title);
+    int monitorX();
+    int monitorY();
+    int monitorWidth();
+    int monitorHeight();
+    int workAreaX();
+    int workAreaY();
+    int workAreaWidth();
+    int workAreaHeight();
+
+    void show();
+    void focus();
+    boolean focused();
+    boolean minimized();
+    void opacity(float opacity);
+
     boolean closeRequested();
     void requestClose();
-}
-
-public interface DisplayCapabilities {
-    boolean supportsTitle();
-    boolean supportsFullscreen();
-    boolean supportsResizable();
-    boolean supportsDisplayModeChange();
-    boolean supportsOrientation();
 }
 ```
 
@@ -1190,24 +1194,24 @@ Example:
 
 ```java
 Display display = fdx.displays().main();
-
-if (display != null) {
-    display.title("libfdx Game");
-}
+display.title("libfdx Game");
 ```
 
 Rules:
 
-- `Display` represents the platform presentation area: desktop window, browser canvas, Android view, iOS view, or headless placeholder.
-- `Displays.main()` returns the backend-created main display, or `null` on headless backends.
+- `Display` represents the platform presentation area: desktop window, browser canvas, Android view, iOS view, or PSP screen.
+- `Displays.main()` returns the non-null backend-created main display.
 - `Displays.create(DisplayConfig)` creates another display only when the backend and platform support it. Desktop backends may support this; mobile and web backends may return unsupported capability or fail clearly.
+- `Displays.destroy(Display)` ignores `null` and the main display; by default it requests close on an additional display.
 - `DisplayConfig.size(...)` is a requested startup size where the platform can honor it. Mobile backends should report the actual platform view/surface size and render to that size instead of stretching a fixed-size framebuffer to fill the device display.
 - `DisplayConfig.maximized(...)` is a requested startup window state for windowed desktop-style platforms. If a backend cannot honor maximized startup, it should still report the actual display size after creation or resize.
 - `Display.contentScaleX()`, `contentScaleY()`, and `contentScale()` expose the platform content scale for DPI/high-density presentation. Desktop backends should use platform window content scale, web backends should use browser device pixel ratio, mobile backends should use platform display density, and generic implementations may fall back to framebuffer-size-to-logical-size ratio.
 - `Display` belongs to runtime and must not depend on `framework/graphics`.
-- `Surface` belongs to `framework/graphics` and represents the connection between a `GraphicsContext` and a `Display`.
 - `Display` implements `ProviderHandle` so provider/backend-specific display handles are available through `as()`.
-- Fullscreen, icons, cursor capture, DPI, monitor metadata, and orientation should be added only through capability-aware APIs.
+- There are no current `DisplayMode`, `Monitor`, `Orientation`, or
+  `DisplayCapabilities` public types. Additional display operations should be
+  added only with implemented cross-backend behavior or clear unsupported
+  defaults.
 - `DisplayConfig` is owned by `framework/display`. Concrete backend config classes may wrap or compose it through direct methods so launchers do not need generic config keys.
 
 Boundary:
@@ -1216,154 +1220,23 @@ Boundary:
 framework/display Display
   -> no dependency on framework/graphics
 
-framework/graphics Surface
-  -> may use a Display to create/configure a render target
+framework/graphics GraphicsConfig / GraphicsAttachment
+  -> may associate a provider attachment with a Display
 ```
 
-## 10. Audio
+## 10. Audio Status
 
-Module:
+Audio is not implemented in the current repository. There is no
+`:libfdx:framework:audio` project, `io.github.libfdx.audio` package, audio Maven
+artifact, provider module, backend-owned audio service, `Fdx.audio()` accessor,
+or audio asset loader.
 
-```text
-:libfdx:framework:audio
-```
-
-Package:
-
-```text
-io.github.libfdx.audio
-```
-
-Defined types:
-
-| Type | Role |
-| --- | --- |
-| `AudioDevice` | Main provider-backed audio service used by game code. |
-| `AudioProvider` | Provider factory/SPI. |
-| `AudioCapabilities` | Provider capabilities and limits. |
-| `AudioFormat` | Channels, sample rate, and sample format. |
-| `AudioBuffer` | Raw decoded PCM audio data or provider-backed buffer. |
-| `Sound` | Short reusable sound effect asset/handle. |
-| `Music` | Streaming or long-form audio asset/handle. |
-| `PlaybackHandle` | Active playback control returned by play operations. |
-| `AudioSource` | Advanced persistent playback source/channel. |
-| `AudioConfig` | Startup audio configuration. |
-| `AudioPlayOptions` | Volume, pan, pitch, looping, and priority options for playback. |
-| `PlaybackState` | Playing, paused, stopped, completed, or failed state. |
-
-Role separation:
-
-- `Sound` is the normal high-level type for short sound effects.
-- `Music` is the normal high-level type for streamed or long-form playback.
-- `AudioBuffer` is lower-level decoded audio data.
-- `PlaybackHandle` controls one active playback instance.
-- `AudioSource` is the advanced persistent source/channel type for users who need to configure a reusable playback source before starting playback.
-
-### 10.1. Audio Contracts
-
-`AudioDevice` is the common service used by game code. Providers such as miniaudio or WebAudio implement it behind the same API.
-
-Defined shape:
-
-```java
-public interface AudioDevice extends FdxService, ProviderHandle, Disposable {
-    AudioCapabilities capabilities();
-
-    PlaybackHandle play(Sound sound);
-    PlaybackHandle play(Sound sound, AudioPlayOptions options);
-    PlaybackHandle play(Music music);
-    PlaybackHandle play(Music music, AudioPlayOptions options);
-
-    AudioSource createSource();
-    void pauseAll();
-    void resumeAll();
-    void stopAll();
-}
-
-public interface AudioProvider {
-    ProviderId providerId();
-    AudioDevice createDevice(AudioConfig config);
-}
-
-public interface AudioCapabilities {
-    boolean supportsSound();
-    boolean supportsMusic();
-    boolean supportsStreaming();
-    boolean supportsPan();
-    boolean supportsPitch();
-    boolean supportsLooping();
-}
-
-public interface AudioBuffer extends ProviderHandle, Disposable {
-    AudioFormat format();
-    int frameCount();
-}
-
-public interface Sound extends ProviderHandle, Disposable {
-    AudioFormat format();
-    float duration();
-}
-
-public interface Music extends ProviderHandle, Disposable {
-    AudioFormat format();
-    float duration();
-    boolean isStreaming();
-}
-
-public interface PlaybackHandle extends ProviderHandle, Disposable {
-    PlaybackState state();
-    void pause();
-    void resume();
-    void stop();
-    void volume(float volume);
-    void pan(float pan);
-    void pitch(float pitch);
-    void looping(boolean looping);
-}
-
-public interface AudioSource extends ProviderHandle, Disposable {
-    void setSound(Sound sound);
-    void setMusic(Music music);
-    PlaybackHandle play(AudioPlayOptions options);
-    void stop();
-}
-
-public final class AudioPlayOptions {
-    public static AudioPlayOptions defaults();
-    public static AudioPlayOptions volume(float volume);
-
-    public float volume();
-    public float pan();
-    public float pitch();
-    public boolean looping();
-}
-```
-
-Example:
-
-```java
-AudioDevice audio = fdx.audio();
-Sound click = assets.get("click.wav", Sound.class);
-PlaybackHandle playback = audio.play(click, AudioPlayOptions.volume(0.5f));
-```
-
-Rules:
-
-- Audio provider selection is a startup decision for portable applications.
-- Basic game code should use `AudioDevice`, `Sound`, `Music`, and `PlaybackHandle`.
-- Provider-specific device handles and native details should be available only through provider-specific types or `as()`.
-- Spatial audio, capture/microphone, device hotplug, and advanced mixing should be capability-gated or added as separate modules later.
-- `AudioProvider` is a provider factory/SPI used by backend setup and should not be registered as a normal `FdxService`.
-- `AudioConfig` is owned by `framework/audio`. Concrete backend or audio-provider config classes should expose direct methods for audio startup values instead of using a generic config map.
-
-Basic usage:
-
-```java
-AudioDevice audio = fdx.audio();
-Sound click = assets.get("click.wav", Sound.class);
-PlaybackHandle playback = audio.play(click);
-playback.volume(0.5f);
-```
+Names such as `AudioDevice`, `AudioProvider`, `Sound`, `Music`,
+`PlaybackHandle`, miniaudio, and WebAudio are design possibilities only, not
+current libFDX API. They must not appear in current dependency snippets or
+compilable examples. Before an audio API is documented here, implementation
+must establish module ownership, backend lifecycle, provider boundaries,
+resource disposal, loaders, tests, and synchronized architecture documentation.
 
 ## 11. Net
 
@@ -1441,36 +1314,49 @@ public interface HttpClient {
     FdxFuture<HttpResponse> send(HttpRequest request);
 }
 
-public interface HttpRequest {
-    static HttpRequest get(String url);
-    static HttpRequest post(String url, HttpBody body);
+public final class HttpRequest {
+    public static HttpRequest get(String url);
+    public static HttpRequest post(String url, HttpBody body);
+    public static HttpRequest.Builder builder(HttpMethod method, String url);
 
-    HttpMethod method();
-    String url();
-    HttpHeaders headers();
-    HttpBody body();
+    public HttpMethod method();
+    public String url();
+    public HttpHeaders headers();
+    public HttpBody body();
 }
 
-public interface HttpResponse {
-    HttpStatus status();
-    HttpHeaders headers();
-    HttpBody body();
+public final class HttpResponse {
+    public HttpResponse(HttpStatus status, HttpHeaders headers, HttpBody body);
+    public HttpStatus status();
+    public HttpHeaders headers();
+    public HttpBody body();
 }
 
-public interface HttpStatus {
-    int code();
-    String reason();
-    boolean isSuccess();
+public final class HttpStatus {
+    public HttpStatus(int code, String reason);
+    public int code();
+    public String reason();
+    public boolean isSuccess();
 }
 
-public interface HttpHeaders {
-    String first(String name);
-    List<String> all(String name);
+public final class HttpHeaders {
+    public HttpHeaders();
+    public HttpHeaders(int capacity);
+    public HttpHeaders add(String name, String value);
+    public HttpHeaders set(String name, String value);
+    public HttpHeaders remove(String name);
+    public String first(String name);
+    public int size();
+    public String nameAt(int index);
+    public String valueAt(int index);
 }
 
-public interface HttpBody {
-    byte[] bytes();
-    String text(Charset charset);
+public final class HttpBody {
+    public static HttpBody bytes(byte[] bytes);
+    public static HttpBody text(String text, Charset charset);
+    public byte[] bytes();
+    public String text(Charset charset);
+    public int length();
 }
 
 public interface WebSocketClient {
@@ -1664,7 +1550,7 @@ WebRTC provider-defined types:
 | `transport.WebRtcNetClient`, `transport.WebRtcNetServer`, `transport.WebRtcNetPeerGroup`, `transport.WebRtcNetConnection` | WebRTC-backed implementations of the provider-neutral net endpoint contracts. |
 | `signaling.WebRtcSignalingClient`, `signaling.WebRtcSignalingListener`, `signaling.WebRtcSignalingMessage`, `signaling.WebRtcSignalingMessageType`, `signaling.WebRtcSignalingCodec` | JSON signaling contracts for `welcome`, `peer_joined`, `peer_left`, `offer`, `answer`, `ice`, `connect_request`, `error`, `ping`, and `pong`. |
 | `signaling.WebRtcRoomPolicy` | Room join policy hook used by signaling servers. |
-| `platform.WebRtcPeerConnectionProvider`, `platform.WebRtcPeerConnection`, `platform.WebRtcDataChannel`, `platform.WebRtcIceCandidate`, `platform.WebRtcSessionDescription`, `platform.WebRtcPlatformFactory` | Provider-neutral bridge interfaces implemented by desktop, web, Android, and future platform binding modules. `WebRtcPlatformFactory` is disposable because it owns native/provider peer-connection resources. |
+| `platform.WebRtcPeerConnectionProvider`, `platform.WebRtcPeerConnection`, `platform.WebRtcDataChannel`, `platform.WebRtcIceCandidate`, `platform.WebRtcSessionDescription`, `platform.WebRtcPlatformFactory` | Provider-neutral bridge interfaces implemented by desktop, web, Android, and future platform binding modules. `WebRtcPlatformFactory` is disposable because it owns native/provider peer-connection resources. Disposing it closes outstanding peer connections before releasing provider state; creating another peer afterward fails. Asynchronous provider failures, including failure to apply a remote answer, are delivered through `WebRtcPeerConnectionListener.error(...)`. |
 
 The WebRTC signaling server lives under `:libfdx:extensions:net:webrtc:signaling_server` in package `io.github.libfdx.net.webrtc.signaling.server`. It uses Java-WebSocket for peer discovery and SDP/ICE relay only; game data travels through WebRTC data channels. It is a standalone infrastructure process, not a sample client feature and not a gameplay/TCP server. `WebRtcSignalingServerConfig` controls bind host, port, auth hook, room policy, join policy, message policy, peer ID generation, processing config, maximum peers per room, idle timeout, and logging. The repository run task is `:libfdx:extensions:net:webrtc:signaling_server:webrtc_signaling_server_run`; clients connect through endpoint configs such as `WebRtcClientConfig.signalingUrl(...)` and `WebRtcServerConfig.signalingUrl(...)`. V1 supports external STUN/TURN configuration through endpoint configs and does not embed a TURN server.
 
@@ -1784,12 +1670,10 @@ Rules:
 - `AssetManager` is user-created or framework-feature code, not a backend-owned service returned by `Fdx`.
 - `AssetLoadContext` exposes file and asset-dependency loading support, not the root `Fdx` object.
 - `ImageData` is asset/source data. `Texture` is a GPU resource owned by `framework/graphics`.
-- Future audio source data should stay provider-neutral. `Sound` and `Music` are provider-backed audio handles owned by `framework/audio` and the selected audio provider.
-- `framework/assets/loaders` may provide provider-neutral loaders such as image, JSON, properties, atlas metadata, font metadata, shader-source, and audio-source data. JSON loading produces the `JsonValue` tree owned by `framework/json`.
-- `framework/assets/loaders` must not create provider-backed `Texture`, `Sound`, or `Music` objects directly.
+- `framework/assets/loaders` currently provides provider-neutral image and JSON loaders. JSON loading produces the `JsonValue` tree owned by `framework/json`.
+- `framework/assets/loaders` must not create provider-backed `Texture` objects directly.
 - Graphics-aware loaders for `Texture`, `TextureRegion`, bitmap fonts, atlases, models, or other GPU-backed assets should live in a high-level module or explicit bridge that already depends on both `framework/assets/manager` and the relevant graphics module.
-- Audio-aware loaders for `Sound` and `Music` should live in the selected audio provider module or an explicit audio asset bridge that depends on both `framework/assets/manager` and `framework/audio`.
-- Examples that load `Texture`, `Sound`, or `Music` through `AssetManager` assume the corresponding optional loader has been registered during startup.
+- Examples that load `Texture`, `TextureRegion`, or `BitmapFont` through `AssetManager` assume the corresponding optional g2d loader has been registered during startup.
 - Asset loading should support async implementations.
 - `AssetManager.update()` runs completion work that must happen on the application/update thread, such as GPU texture creation after image decode.
 - `AssetManager.finishLoading()` repeatedly calls `update()` until currently requested assets are no longer queued or loading.
@@ -1834,7 +1718,7 @@ Defined root, context, and setup types:
 | `FrameBuffer` | Current frame drawable and readback view. |
 | `ImmediateModeRenderer` | Provider-neutral immediate-style renderer for simple 2D and 3D diagnostic lines. |
 
-`Fdx.graphics()` returns the graphics manager, not "the one active graphics API". Simple apps use `fdx.graphics().main()`. Advanced desktop apps can ask the manager to create another context, then attach that context to a display/surface when the backend supports it. Provider-specific frame plumbing such as surface acquisition, native command encoder creation, submission, and presentation is owned by the backend/provider attachment. Common game code should use `GraphicsContext`, not `WGPUContext`, Vulkan objects, or backend-native window handles.
+`Fdx.graphics()` returns the graphics manager, not "the one active graphics API". Simple apps use `fdx.graphics().main()`. Advanced desktop apps can ask the manager to create another `GraphicsAttachment` associated with a `Display` when the backend supports it. Provider-specific presentation acquisition, native command encoder creation, submission, and presentation are owned by the backend/provider attachment. Common game code should use `GraphicsContext`, not `WGPUContext`, Vulkan objects, or backend-native window handles.
 
 Initial shape:
 
@@ -1842,7 +1726,8 @@ Initial shape:
 public interface Graphics {
     GraphicsContext main();
     boolean supportsMultiple();
-    GraphicsContext create(GraphicsConfig config);
+    GraphicsAttachment create(GraphicsConfig config);
+    void destroy(GraphicsContext context);
 }
 
 public final class GraphicsConfig {
@@ -1963,8 +1848,9 @@ public final class GraphicsAttachmentRequirements {
 Rules:
 
 - `Graphics` is returned by `Fdx.graphics()` and acts as a manager/factory for graphics contexts.
-- `Graphics.main()` returns the backend-created main graphics context, or `null` on a headless backend without graphics.
+- `Graphics.main()` returns the non-null backend-created main graphics context.
 - `Graphics.create(GraphicsConfig)` is an advanced capability. Desktop backends may support additional contexts/providers; mobile and web backends may reject it clearly.
+- `Graphics.destroy(GraphicsContext)` ignores `null` and the main context; an additional `GraphicsAttachment` is disposed when it is still live.
 - `GraphicsConfig.display(...)` binds an additional on-window context to the display it should render into. There is no hidden current display.
 - `GraphicsContext.as()` is the advanced provider-specific escape hatch.
 - `GraphicsContext.device()` returns a common device interface backed by the selected provider.
@@ -1977,12 +1863,12 @@ Rules:
 - Backends that receive a `GraphicsAttachmentReadiness` attachment must wait for `isReady()` before calling `ApplicationListener.create(...)`.
 - Backend/provider code owns frame begin/end and presentation. Normal game code should not call provider-specific frame lifecycle methods such as wgpu surface acquisition directly.
 - Backends create `NativeWindow` values from their own platform technology and pass them through `GraphicsEnvironment`.
-- Graphics providers consume `GraphicsEnvironment` and must not depend on concrete backend modules just to create a surface.
+- Graphics providers consume `GraphicsEnvironment` and must not depend on concrete backend modules just to create a presentation attachment.
 - `GraphicsAttachmentProvider` is launcher/backend setup SPI, not a context service.
 - `NativeWindow` is not a portable gameplay API. It may contain platform native handles or platform objects, such as an Android `Surface`, and should stay inside backend/provider setup code.
 - Provider-specific graphics configuration should be stored on the provider setup object itself, not looked up through `GraphicsEnvironment`.
 - `FrameBuffer` is the provider-neutral current drawable view. GL implementations may use the default framebuffer, Vulkan implementations may use the current swapchain image, and WGPU implementations may use the acquired surface texture.
-- Multi-render targets should be exposed as an ordered color attachment list with one optional depth/stencil attachment. The public API should not expose provider-specific subpass, layout transition, or framebuffer handle details.
+- The current low-level API exposes one color attachment per render pass plus an optional depth attachment in `RenderPassDescriptor`; it does not expose a public multi-render-target list. Provider-specific subpass, layout-transition, or framebuffer handles remain outside the common API.
 - Camera state belongs to `framework/camera`; `framework/graphics` must stay independent from camera input/controller concerns.
 
 ### 13.3.1. Graphics Camera
@@ -2517,6 +2403,11 @@ public interface RenderPass extends ProviderHandle {
     void setTexture(int slot, Texture texture);
     void setScissor(int x, int y, int width, int height);
     void setViewport(int x, int y, int width, int height);
+    void setUniform1i(String name, int value);
+    void setUniform1f(String name, float value);
+    void setUniform3f(String name, float x, float y, float z);
+    void setUniform4f(String name, float x, float y, float z, float w);
+    void setUniformMatrix4(String name, float[] values);
     void draw(int vertexCount, int instanceCount, int firstVertex, int firstInstance);
     void drawIndexed(int indexCount, int instanceCount, int firstIndex, int baseVertex, int firstInstance);
     void end();
@@ -2527,6 +2418,10 @@ Rules:
 
 - Descriptor objects carry creation parameters; resource interfaces expose stable identity, metadata, lifecycle, and provider access.
 - Resource metadata methods should return the values the resource was created with.
+- `Buffer`, `Texture`, `ShaderModule`, and `RenderPipeline` are provider-backed disposable resources. Each belongs to the provider resource domain (for example, a native device or GL share group) of the `GraphicsDevice` that created it.
+- Resource compatibility is based on that resource-domain identity. Equality of `providerId()` alone does not make resources compatible. Contexts that the backend explicitly creates on the same native device or share group may use the same resources; independently created contexts may not.
+- Device writes, resource-dependent descriptor creation, command encoding, and pass bindings must reject disposed or incompatible resources before invoking the provider or native API.
+- On recorded-command providers, rewriting or disposing a resource after commands have referenced its current native allocation must not change or invalidate the work already recorded. Providers must retain the referenced allocation until every recording that uses it has been submitted or abandoned.
 - `ShaderModuleDescriptor` public authoring is WGSL-only. Providers that need GLSL, SPIR-V, or MSL receive descriptors generated from WGSL through the `framework/fdx/core` shader compiler capability during shader-module creation.
 - `ShaderBundle` remains an optional setup-time wrapper for tools and users that want to group WGSL, profile metadata, and reflection metadata. Normal built-in renderers pass WGSL `ShaderModuleDescriptor` values directly and let the selected provider compile when translation is required.
 - Runtime WGSL-to-GLSL/SPIR-V/MSL translation is an explicit provider feature backed by `framework/fdx/core`. It happens at shader-module creation/setup time, not in a render loop. If the active runtime does not provide the compiler capability for a provider that needs translation, shader creation must fail clearly.
@@ -2557,6 +2452,7 @@ Rules:
 - Frame command encoders are owned by the backend/provider attachment. Game code records passes through `Graphics.currentFrame().commandEncoder()`.
 - Pass objects are scoped. Once `end()` is called, the pass should not accept more commands.
 - `ShaderModule` and `RenderPipeline` are application-owned disposable resources.
+- A `TextureView` returned by an application-owned `Texture` is owned by that texture and becomes invalid when the texture is disposed.
 - `TextureView`, `FrameBuffer`, `GraphicsFrame`, and `CommandEncoder` returned from `currentFrame()` are frame-owned handles. Application code must not store them across frames.
 
 ### 13.3. Generic Provider Flow
@@ -2623,17 +2519,21 @@ Display toolsDisplay = fdx.displays().create(new DisplayConfig()
     .title("Vulkan Tools")
     .size(900, 600));
 
-GraphicsContext vulkan = fdx.graphics().create(
-    GraphicsConfig.provider(new DesktopVulkanProvider())
+GraphicsContext wgpu = fdx.graphics().create(
+    GraphicsConfig.provider(new WGPUProvider())
         .display(toolsDisplay));
 
-if (vulkan.providerId().equals(DesktopVulkanProvider.ID)) {
-    VulkanContext nativeVulkan = vulkan.as();
-    // Use provider-specific Vulkan APIs here.
+if (wgpu.providerId().equals(WGPUProvider.ID)) {
+    WGPUContext nativeWgpu = wgpu.as();
+    // Use provider-specific WGPU APIs here.
 }
 ```
 
-This does not imply automatic resource sharing. Textures, buffers, command encoders, and render pipelines belong to the `GraphicsContext` that created them unless a future explicit interop API says otherwise.
+`WGPUContext` is a real public provider type from `wgpu_core`. The desktop
+Vulkan implementation does not currently expose a public `VulkanContext` type,
+so documentation must not invent one for `as()`.
+
+This does not imply automatic resource sharing. Application-owned resources may cross only between contexts that the backend explicitly created in the same provider resource domain, such as one native device or GL share group. Independent contexts remain incompatible even when their `providerId()` values match. Frame-owned command encoders, frame buffers, and attachment views always remain local to the frame and context that produced them.
 
 ### 13.4. Provider Mapping Examples
 
@@ -2641,19 +2541,14 @@ These mappings explain why the common interfaces are generic. They are not a com
 
 | Common type | WebGPU/wgpu provider | Vulkan provider | Metal-style provider | Legacy GL-style provider |
 | --- | --- | --- | --- | --- |
-| `Graphics` / `GraphicsContext` | Manager owns context creation; context owns wgpu instance/runtime and surface state. | Manager owns context creation; context owns instance, extension loading, and surface state. | Manager owns context creation; context owns Metal runtime/device discovery and layer/view integration. | Manager owns context creation; context owns display/profile state. |
-| `GraphicsAdapter` | Wraps the selected wgpu adapter. | Wraps the selected physical device and queue family choices. | Wraps the selected Metal device. | Represents selected driver/profile/display configuration. |
+| `Graphics` / `GraphicsContext` | Manager owns context creation; context owns wgpu runtime and presentation state. | Manager owns context creation; context owns instance/device and swapchain state. | Manager owns context creation; context owns Metal device and layer/view integration. | Manager owns context creation; context owns display/profile state. |
 | `GraphicsDevice` | Wraps wgpu device. | Wraps logical device. | Wraps Metal device plus common API state. | Wraps current graphics context plus common API state. |
-| `GraphicsQueue` | Wraps wgpu queue. | Wraps graphics/compute/present queue handle. | Wraps command queue. | Serializes and flushes recorded command work against the current context. |
-| `Surface` | Wraps wgpu surface. | Wraps platform surface plus swapchain ownership. | Wraps layer/drawable source. | Wraps window/canvas drawable or default framebuffer target. |
-| `SurfaceTexture` | Wraps acquired surface texture. | Wraps acquired swapchain image plus view. | Wraps current drawable texture. | Wraps current backbuffer or default framebuffer as a frame object. |
+| `GraphicsFrame` / `FrameBuffer` | Represents the acquired drawable and readback boundary. | Represents the current swapchain image and readback boundary. | Represents the current drawable and readback boundary. | Represents the current default/offscreen framebuffer and readback boundary. |
 | `Texture` | Wraps wgpu texture. | Wraps image plus allocation ownership. | Wraps texture. | Wraps texture object/storage. |
 | `TextureView` | Wraps native texture view. | Wraps image view. | Wraps texture view or view descriptor. | Uses native texture view if available, otherwise a lightweight view descriptor. |
-| `Sampler` | Wraps sampler. | Wraps sampler. | Wraps sampler state. | Wraps or caches sampler state. |
 | `ShaderModule` | Wraps shader module. | Wraps shader module or translated shader. | Wraps library/function metadata. | Wraps compiled shader/program inputs. |
-| `BindGroupLayout` / `BindGroup` | Maps directly to bind group layout and bind group. | Maps to descriptor set layout and descriptor set. | Maps to argument buffer or binding metadata. | Maps to generated binding table applied before draw. |
 | `RenderPipeline` | Wraps render pipeline. | Wraps graphics pipeline. | Wraps render pipeline state. | Wraps shader program plus fixed-function state cache. |
-| `CommandEncoder` / `CommandBuffer` | Maps directly to command encoder and command buffer. | Maps to command buffer recording. | Maps to command buffer/encoder recording. | Records common commands and replays them against the current context on submit. |
+| `CommandEncoder` / `RenderPass` | Records render passes into provider command state. | Records commands into the current native command buffer/pass. | Records commands through Metal encoders. | Applies commands to the current GL context while preserving the common pass lifecycle. |
 
 The common API should be designed around the semantic job each type performs, not around whether every native provider has the same object name.
 
@@ -2691,32 +2586,44 @@ Rules:
 
 - `Texture` must not expose native API handles directly.
 - `TextureView` must not contain provider-specific native methods.
-- Provider-specific view details belong in types such as `WGPUTexture` or `VkTexture` through `as()`.
+- Provider-specific view details are reached through `as()` only when the
+  provider module exposes a real documented target type. The common API does
+  not promise nonexistent `WGPUTexture` or `VkTexture` classes.
 - If a provider cannot support a requested view descriptor, it should fail with a clear capability/configuration error.
 
-### 13.6. Graphics Surface Boundary
+### 13.6. Graphics Presentation Boundary
 
-`Display` and `Surface` are separate:
+`Display` and `GraphicsAttachment` have separate ownership:
 
 ```text
 framework/display Display
-framework/graphics Surface
+framework/graphics GraphicsAttachment
 ```
 
-`Display` is the platform presentation area. `Surface` is the graphics API object used for rendering/presentation.
+`Display` is the platform presentation area. `GraphicsAttachment` is the
+provider-backed lifecycle object that renders and presents against a
+backend-created `GraphicsEnvironment`/`NativeWindow`. There is no public common
+`Surface` or `SurfaceTexture` type.
 
 Rules:
 
 - `framework/display` must not depend on `framework/graphics`.
-- `framework/graphics` may depend on `framework/display` for surface creation or presentation handles.
-- Headless backends may not expose a display-backed surface.
-- Offscreen rendering should not require a `Display`.
+- `framework/graphics` may depend on `framework/display` to associate an
+  additional attachment with a display through `GraphicsConfig`.
+- Provider setup receives native presentation values only through
+  `GraphicsEnvironment` and `NativeWindow`.
+- Offscreen texture rendering uses render-target textures inside an existing
+  graphics context and does not require another display.
 
-### 13.7. Graphics Capabilities
+### 13.7. Graphics Capability Status
 
-The common graphics API should not pretend every provider supports every operation.
+There is no current public `GraphicsCapabilities` type. Implemented optional
+behavior is expressed through focused methods such as
+`Graphics.supportsMultiple()`, default methods that fail clearly when an
+operation is unsupported, provider attachment requirements, and descriptor
+validation.
 
-Capability examples:
+Possible future capability areas include:
 
 ```text
 texture view reinterpretation
@@ -2731,7 +2638,10 @@ maximum texture dimensions
 maximum bind groups
 ```
 
-Provider implementations should validate descriptors against capabilities at creation time.
+These names are not current API. Provider implementations must still validate
+current descriptors and fail clearly when the selected backend cannot perform
+the requested operation. A future capabilities object requires a real source
+type plus parity tests before it is added to this contract.
 
 ## 14. Graphics 2D
 
@@ -2783,6 +2693,8 @@ public interface Batch2D extends Disposable {
     void draw(Texture texture, float x, float y, float width, float height);
     void draw(Texture texture, float x, float y, float width, float height,
         float originX, float originY, float rotationDegrees);
+    void draw(Texture texture, int sourceX, int sourceY, int sourceWidth, int sourceHeight,
+        float x, float y, float width, float height);
     void draw(TextureRegion region, float x, float y, float width, float height);
     void draw(TextureRegion region, float x, float y, float width, float height,
         float originX, float originY, float rotationDegrees);
@@ -2802,6 +2714,8 @@ public final class SpriteBatch implements Batch2D {
     public void draw(Texture texture, float x, float y, float width, float height);
     public void draw(Texture texture, float x, float y, float width, float height,
         float originX, float originY, float rotationDegrees);
+    public void draw(Texture texture, int sourceX, int sourceY, int sourceWidth, int sourceHeight,
+        float x, float y, float width, float height);
     public void draw(TextureRegion region, float x, float y, float width, float height);
     public void draw(TextureRegion region, float x, float y, float width, float height,
         float originX, float originY, float rotationDegrees);
@@ -2983,7 +2897,7 @@ Rules:
 - `g2d` should use `framework/graphics`, not provider-specific graphics types.
 - `g2d` should hide `TextureView` from simple sprite users when possible.
 - `ShapeRenderer2D` is the first g2d implementation. It streams CPU-generated vertices into common `Buffer` objects and currently uses normalized -1..1 coordinates.
-- `Batch2D` is the common textured g2d batch contract. `SpriteBatch` is the first implementation. It streams quad vertices into common `Buffer` objects, binds common `Texture` handles, and currently uses normalized -1..1 coordinates. Rotation is expressed in degrees around the supplied local origin. `viewport(width, height)` supplies the framebuffer size used to keep rotated sprites pixel-proportional while coordinates are still normalized. The array-based `draw(TextureRegion, float[], float[], ...)` overload submits repeated same-region sprites in one logical batch and may use instanced/static GPU buffers internally.
+- `Batch2D` is the common textured g2d batch contract. `SpriteBatch` is the first implementation. It streams quad vertices into common `Buffer` objects, binds common `Texture` handles, and currently uses normalized -1..1 coordinates. Rotation is expressed in degrees around the supplied local origin. `viewport(width, height)` supplies the framebuffer size used to keep rotated sprites pixel-proportional while coordinates are still normalized. The source-rectangle overload interprets `sourceX`, `sourceY`, `sourceWidth`, and `sourceHeight` as texture texels and computes the corresponding UV range without requiring a temporary `TextureRegion`. The array-based `draw(TextureRegion, float[], float[], ...)` overload submits repeated same-region sprites in one logical batch and may use instanced/static GPU buffers internally.
 - `SpriteOutlineRenderer2D` is a provider-neutral effect renderer for `TextureRegion` sprites. It owns a WGSL shader module, streams reusable quad vertex data into common `Buffer` objects, binds common `Texture` handles, and currently uses normalized -1..1 coordinates. `outlineWidth(float)` is measured in source texture texels. Neighbor samples are clamped to the source region UV bounds to avoid sampling adjacent atlas regions.
 - `FogOfWarRenderer2D` is a provider-neutral overlay renderer. It owns a WGSL shader module, streams reusable quad vertex data into common `Buffer` objects, and currently uses normalized -1..1 coordinates. `light(x, y, radius, softness)` adds circular reveal areas in the same coordinate space as the drawn fog rectangle. At most `FogOfWarRenderer2D.MAX_LIGHTS` reveal circles are submitted per draw call.
 - `ParticleEmitter2D` is provider-neutral particle simulation data plus a `Batch2D` draw helper. It owns fixed-capacity primitive arrays, does not allocate per particle, updates with explicit `deltaSeconds`, and renders through a caller-owned, already-begun `Batch2D`. Rendering resets the batch color to white after submitting active particles.
@@ -3838,6 +3752,17 @@ Defined types:
 | `UiScenarioAssertions` | UI Kit adapter assertions for visibility, text, value, bounds, focus, popup/modal state, and capture comparisons. |
 | `UiScenarioWaits` | UI Kit adapter waits for UI existence, visibility, text, value, and disappearance. |
 
+Current host execution shape:
+
+```java
+public final class ScenarioHost {
+    public ScenarioResult run(Scenario scenario);
+    public ScenarioResult run(Scenario scenario, ScenarioValidationConfig config);
+    public ScenarioReport run(ScenarioCatalog catalog, String selection);
+    public ScenarioReport run(ScenarioCatalog catalog, ScenarioValidationConfig config);
+}
+```
+
 Rules:
 
 - `scenario_validator` is not UI-only and not game-only.
@@ -3850,7 +3775,23 @@ Rules:
 - UI Kit validation IDs are stable developer-facing test/debug identifiers, not user-facing text.
 - UI Kit validation IDs must not affect layout, rendering, input, focus, accessibility, or normal runtime behavior.
 - Waits must always have a timeout. They advance through frames and accumulated validation time, not sleeps or render-thread busy loops.
+- `ScenarioValidationConfig.timeoutMillis()` supplies the default only when a
+  wait has no explicit frame or millisecond timeout; an explicit wait timeout
+  remains authoritative.
 - Event waits consume scenario-local validation events. Engine-emitted events are allowed only when they do not introduce normal per-frame allocation.
+- Disabling `ScenarioValidationConfig.eventsEnabled()` suppresses recent event
+  history in results/failure output; it does not disable event emission,
+  event-based waits, or event assertions.
+- Behavior mode executes every selected scenario, including behavior steps on
+  scenarios that also declare a visual baseline, but does not enforce baseline
+  matching.
+- Visual mode executes only selected scenarios that require a visual baseline
+  and enforces their captures. Mixed mode executes every selected scenario and
+  enforces baselines for scenarios that require them.
+- Capture policy `ALL` adds an automatic scenario capture, `FAILED` captures a
+  failing scenario, `NONE` suppresses scenario-listed captures, and
+  `SCENARIO_LISTED` captures only explicit scenario capture steps. A visual or
+  mixed run that requires a baseline still fails if no capture is produced.
 - Visual validation remains explicit. A capture task passing is not enough for visual work unless the expected frame is captured or compared according to the active validation plan.
 - Failure reports name the scenario, operation, action/wait/assertion/capture/custom callback, target selector or probe type, expected value, actual value, elapsed wait time, recent events, and capture/baseline paths when relevant.
 
@@ -3861,7 +3802,6 @@ These decisions are part of the common API contract:
 - Use `FdxFuture<T>` for portable async APIs.
 - Use `framework/fdx/core` as the shared framework runtime service layer. Its first default service is FreeType font rasterization for `.ttf`/`.otf` assets. Backends provide the platform implementation; higher-level APIs consume it and keep rendering cached atlas data every frame.
 - Use `HttpClient` as the HTTP entry point type.
-- Keep `AudioSource` as the advanced persistent playback source/channel type. Basic playback should still use `Sound`, `Music`, and `PlaybackHandle`.
 - Use descriptor names ending in `Descriptor` for graphics creation inputs, such as `TextureDescriptor`, `BufferDescriptor`, and `RenderPipelineDescriptor`.
 - Include `ShaderLanguage`, `ShaderProfile`, `ShaderTarget`, and `ShaderBundle` from the start. WGSL is the only shader authoring source of truth. GL/WebGL/GLES translate WGSL to GLSL/GLSL ES through Tint, Vulkan translates WGSL to SPIR-V through Tint, Metal translates WGSL to MSL through Tint, and HLSL is a future DirectX target.
 - Keep `TextureView` as a required common graphics type. Advanced view behavior is capability-gated.

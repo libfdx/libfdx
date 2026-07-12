@@ -1,5 +1,7 @@
 package io.github.libfdx.samples.ecs.platformer.web;
 
+import io.github.libfdx.graphics.gl.web.WebGLProvider;
+
 /**
  * Launches the ECS platformer Wasm web entry point.
  *
@@ -15,6 +17,6 @@ public final class EcsPlatformerWebWasmLauncher {
      * @param args the args
      */
     public static void main(String[] args) {
-        EcsPlatformerWebLauncherSupport.start("Wasm", args);
+        EcsPlatformerWebLauncherSupport.start("Wasm", false, new WebGLProvider());
     }
 }

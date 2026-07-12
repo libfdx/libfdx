@@ -19,6 +19,10 @@ final class WGPUGraphicsAttachment implements GraphicsAttachment, GraphicsAttach
         this.context = context;
     }
 
+    WGPUContext context() {
+        return context;
+    }
+
     /**
      * Handles a size change.
      *

@@ -536,7 +536,8 @@ final class IosCGLApi implements GLApi {
     @Override
     public void enableAlphaBlending() {
         IosCOpenGLES.glEnable(IosCOpenGLES.BLEND);
-        IosCOpenGLES.glBlendFunc(IosCOpenGLES.SRC_ALPHA, IosCOpenGLES.ONE_MINUS_SRC_ALPHA);
+        IosCOpenGLES.glBlendFuncSeparate(IosCOpenGLES.SRC_ALPHA, IosCOpenGLES.ONE_MINUS_SRC_ALPHA,
+                IosCOpenGLES.ONE, IosCOpenGLES.ONE_MINUS_SRC_ALPHA);
     }
 
     /**

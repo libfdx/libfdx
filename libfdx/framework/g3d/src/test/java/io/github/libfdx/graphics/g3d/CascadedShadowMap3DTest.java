@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
+import com.sun.management.ThreadMXBean;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
@@ -25,6 +26,7 @@ import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Matrix4;
 import org.junit.jupiter.api.Test;
 
+import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -32,9 +34,57 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class CascadedShadowMap3DTest {
     private static final float EPSILON = 0.0001f;
+
+    @Test
+    void cpuProjectionAllocatesNoPerDrawObjectsAfterWarmup() {
+        FakeGraphicsContext graphics = new FakeGraphicsContext(ProviderId.of("cpu-test"));
+        Renderable3D renderable = renderable(graphics);
+        Camera camera = new Camera()
+                .projection(CameraProjection.PERSPECTIVE)
+                .viewport(64.0f, 64.0f)
+                .nearFar(0.1f, 48.0f)
+                .position(0.0f, 0.0f, 3.0f)
+                .direction(0.0f, 0.0f, -1.0f);
+        Environment3D environment = new Environment3D()
+                .add(new DirectionalLight().direction(-0.5f, -1.0f, -0.25f));
+        FakeRenderPass pass = new FakeRenderPass();
+        RenderContext3D context = new RenderContext3D(graphics, camera, environment, null, pass);
+        PbrShaderProvider provider = new PbrShaderProvider(graphics, new PbrShaderConfig());
+        Shader3D shader = provider.shader(renderable, context);
+
+        for (int i = 0; i < 2_000; i++) {
+            shader.begin(context);
+            shader.render(renderable);
+            shader.end();
+        }
+
+        java.lang.management.ThreadMXBean platformBean = ManagementFactory.getThreadMXBean();
+        assumeTrue(platformBean instanceof ThreadMXBean);
+        ThreadMXBean bean = (ThreadMXBean)platformBean;
+        assumeTrue(bean.isThreadAllocatedMemorySupported());
+        if (!bean.isThreadAllocatedMemoryEnabled()) {
+            bean.setThreadAllocatedMemoryEnabled(true);
+        }
+        long threadId = Thread.currentThread().threadId();
+        long before = bean.getThreadAllocatedBytes(threadId);
+        int initialDrawCalls = pass.drawCalls;
+        for (int i = 0; i < 2_000; i++) {
+            shader.begin(context);
+            shader.render(renderable);
+            shader.end();
+        }
+        long allocated = bean.getThreadAllocatedBytes(threadId) - before;
+
+        assertEquals(initialDrawCalls + 2_000, pass.drawCalls);
+        assertTrue(allocated <= 1_024L, "Expected no post-warm-up CPU projection churn, allocated " + allocated
+                + " bytes");
+        provider.dispose();
+        renderable.meshPart().mesh().dispose();
+    }
 
     @Test
     void updateComputesUniformPerspectiveSplitsAndBounds() {

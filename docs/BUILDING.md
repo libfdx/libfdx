@@ -34,7 +34,9 @@ start a sample.
 - Emscripten SDK for web native artifacts; activate it with `emsdk_env` or set
   `EMSDK` so repository tasks can find the SDK checkout
 
-Modules target Java 25 source and bytecode compatibility.
+Common/JVM/web/native modules target Java 25 source and bytecode compatibility.
+Android application and library modules use Java 17 source/target compatibility;
+AGP performs the Android compilation, lint, desugaring, and DEX boundary.
 
 ## 2. Local Build Workflow
 
@@ -68,7 +70,8 @@ Use ignored root `local.properties` overrides when checking published artifacts:
 
 ```properties
 development.usePublishedLibfdx=true
-development.publishedLibfdxVersion=-SNAPSHOT
+development.publishedLibfdxVersion=0.0.2-SNAPSHOT
+development.pluginBootstrapLibfdxVersion=0.0.1-SNAPSHOT
 ```
 
 With `development.usePublishedLibfdx=true`, the dedicated plugin-use modules
@@ -81,6 +84,16 @@ the Maven-vs-local choice is made in each consumer dependency block.
 Builder-backed web tasks use local generated runtime fdx web resources only
 when that consumer uses local `:libfdx:*` project dependencies. Delete the local
 override keys to use the `libfdx.toml` defaults again.
+
+The isolated included Gradle-plugin build uses
+`development.pluginBootstrapLibfdxVersion` for its compile-time dependency set.
+That bootstrap coordinate must identify an already published, compatible libFDX
+set and does not control the version being produced. The checked-in bootstrap
+is `0.0.1-SNAPSHOT`, while repository consumer validation targets
+`0.0.2-SNAPSHOT`; keeping them separate lets the plugin compile before the next
+artifact set has been published. Snapshot publication always derives
+`<release.fdxVersion>-SNAPSHOT`; consumer checks use
+`development.publishedLibfdxVersion`.
 
 To switch modes for one checkout, edit `local.properties` before running the
 launcher or validation task. Gradle `-P` overrides are not supported for libFDX
@@ -191,14 +204,17 @@ that links system Apple frameworks and the generated libFDX native bridge.
 ## 8. Basic Web Sample
 
 The basic web launchers live in `:samples:basic:platform:web`. The runtime web
-module exposes WebGL and WebGPU JavaScript/Wasm aliases:
+module exposes WebGL JavaScript/Wasm and WebGPU JavaScript aliases:
 
 ```powershell
 .\gradlew.bat :samples:basic:platform:web:basic_webgl_js_run
 .\gradlew.bat :samples:basic:platform:web:basic_webgl_wasm_run
 .\gradlew.bat :samples:basic:platform:web:basic_webgpu_js_run
-.\gradlew.bat :samples:basic:platform:web:basic_webgpu_wasm_run
 ```
+
+TeaVM WasmGC cannot currently compile the substituted JS-native jWebGPU
+binding path. For WebGPU use `basic_webgpu_js_run`; for Wasm use
+`basic_webgl_wasm_run`.
 
 For web launchers, a width or height of `0` or a negative value means the
 canvas fills the browser window.

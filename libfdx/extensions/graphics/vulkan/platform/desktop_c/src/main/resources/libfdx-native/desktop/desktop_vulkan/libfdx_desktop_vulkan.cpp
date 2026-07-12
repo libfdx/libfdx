@@ -2,6 +2,7 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#include <windows.h>
 #endif
 
 #if defined(LIBFDX_USE_SYSTEM_VULKAN_SDK)
@@ -22,15 +23,41 @@
 #include <string>
 #include <vector>
 
-#ifdef _WIN32
-#include <windows.h>
-#else
+#ifndef _WIN32
 #include <dlfcn.h>
 #endif
 
-#define LOGI(...) std::fprintf(stderr, "[libfdx-vulkan] " __VA_ARGS__), std::fprintf(stderr, "\n")
-#define LOGW(...) std::fprintf(stderr, "[libfdx-vulkan] warn: " __VA_ARGS__), std::fprintf(stderr, "\n")
-#define LOGE(...) std::fprintf(stderr, "[libfdx-vulkan] error: " __VA_ARGS__), std::fprintf(stderr, "\n")
+static bool verboseLoggingEnabled() {
+    static const bool enabled = [] {
+#ifdef _WIN32
+        char buffer[8] = {};
+        DWORD length = GetEnvironmentVariableA("LIBFDX_VULKAN_VERBOSE", buffer, sizeof(buffer));
+        if (length == 0 || length >= sizeof(buffer)) {
+            return false;
+        }
+        const char* value = buffer;
+#else
+        const char* value = std::getenv("LIBFDX_VULKAN_VERBOSE");
+        if (value == nullptr) {
+            return false;
+        }
+#endif
+        return std::strcmp(value, "1") == 0
+                || std::strcmp(value, "true") == 0
+                || std::strcmp(value, "yes") == 0
+                || std::strcmp(value, "on") == 0;
+    }();
+    return enabled;
+}
+
+#define LOG_LINE(prefix, ...) do { \
+    std::fprintf(stderr, prefix __VA_ARGS__); \
+    std::fputc('\n', stderr); \
+    std::fflush(stderr); \
+} while (0)
+#define LOGI(...) do { if (verboseLoggingEnabled()) { LOG_LINE("[libfdx-vulkan] ", __VA_ARGS__); } } while (0)
+#define LOGW(...) LOG_LINE("[libfdx-vulkan] warn: ", __VA_ARGS__)
+#define LOGE(...) LOG_LINE("[libfdx-vulkan] error: ", __VA_ARGS__)
 
 #ifndef LIBFDX_VULKAN_FUNCTIONS
 #define LIBFDX_VULKAN_FUNCTIONS(_) \
@@ -414,6 +441,26 @@ struct TransientBuffer {
     VkDeviceMemory memory = VK_NULL_HANDLE;
 };
 
+struct RetiredBuffer {
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    void* mapped = nullptr;
+};
+
+struct RetiredTexture {
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImageView imageView = VK_NULL_HANDLE;
+    VkSampler sampler = VK_NULL_HANDLE;
+};
+
+struct RetiredPipeline {
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout textureDescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout uniformDescriptorSetLayout = VK_NULL_HANDLE;
+};
+
 struct FrameSync {
     VkSemaphore imageAvailable = VK_NULL_HANDLE;
     VkSemaphore renderFinished = VK_NULL_HANDLE;
@@ -421,6 +468,9 @@ struct FrameSync {
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     std::vector<TransientBuffer> transientBuffers;
+    std::vector<RetiredBuffer> retiredBuffers;
+    std::vector<RetiredTexture> retiredTextures;
+    std::vector<RetiredPipeline> retiredPipelines;
 };
 
 struct Context;
@@ -461,6 +511,9 @@ struct Texture {
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
     uint32_t width = 1;
     uint32_t height = 1;
+    int wrapS = 0;
+    int wrapT = 0;
+    int filter = 0;
 };
 
 struct DepthAttachment {
@@ -524,6 +577,7 @@ constexpr uint64_t READBACK_FENCE_TIMEOUT_NS = 250000000ULL;
 constexpr uint64_t SINGLE_COMMAND_TIMEOUT_NS = 250000000ULL;
 
 uint32_t findMemoryType(Context* context, uint32_t typeFilter, VkMemoryPropertyFlags properties);
+void destroyRetiredResources(Context* context, FrameSync& frame);
 
 void check(VkResult result, const char* message) {
     if (result != VK_SUCCESS) {
@@ -928,18 +982,37 @@ VkRenderPass createRenderPass(Context* context, VkAttachmentLoadOp colorLoadOp,
     subpass.pColorAttachments = &colorAttachmentRef;
     subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
-    VkSubpassDependency dependency{};
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+    VkSubpassDependency dependencies[2]{};
+    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[0].dstSubpass = 0;
+    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+            | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+            | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
             | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-            | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT
+            | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
             | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
+            | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
             | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT
             | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    dependencies[1].srcSubpass = 0;
+    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+            | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+            | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+            | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+            | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT
+            | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
+            | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+            | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+            | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
     VkRenderPassCreateInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -947,8 +1020,8 @@ VkRenderPass createRenderPass(Context* context, VkAttachmentLoadOp colorLoadOp,
     renderPassInfo.pAttachments = attachments;
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = 1;
-    renderPassInfo.pDependencies = &dependency;
+    renderPassInfo.dependencyCount = 2;
+    renderPassInfo.pDependencies = dependencies;
 
     VkRenderPass renderPass = VK_NULL_HANDLE;
     check(vkCreateRenderPass(context->device, &renderPassInfo, nullptr, &renderPass),
@@ -1202,6 +1275,9 @@ void recoverFailedFrame(Context* context, const char* operation) {
                 operation, error.what());
         return;
     }
+    for (FrameSync& frame : context->frames) {
+        destroyRetiredResources(context, frame);
+    }
     if (!context->frames.empty()) {
         FrameSync& frame = context->frames[context->frameIndex % context->frames.size()];
         VkResult resetResult = vkResetCommandBuffer(frame.commandBuffer, 0);
@@ -1389,6 +1465,51 @@ void destroyTransientBuffers(Context* context, FrameSync& frame) {
     frame.transientBuffers.clear();
 }
 
+void destroyRetiredResources(Context* context, FrameSync& frame) {
+    for (RetiredBuffer& allocation : frame.retiredBuffers) {
+        if (allocation.mapped != nullptr && allocation.memory != VK_NULL_HANDLE) {
+            vkUnmapMemory(context->device, allocation.memory);
+        }
+        if (allocation.buffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(context->device, allocation.buffer, nullptr);
+        }
+        if (allocation.memory != VK_NULL_HANDLE) {
+            vkFreeMemory(context->device, allocation.memory, nullptr);
+        }
+    }
+    frame.retiredBuffers.clear();
+    for (RetiredTexture& allocation : frame.retiredTextures) {
+        if (allocation.sampler != VK_NULL_HANDLE) {
+            vkDestroySampler(context->device, allocation.sampler, nullptr);
+        }
+        if (allocation.imageView != VK_NULL_HANDLE) {
+            vkDestroyImageView(context->device, allocation.imageView, nullptr);
+        }
+        if (allocation.image != VK_NULL_HANDLE) {
+            vkDestroyImage(context->device, allocation.image, nullptr);
+        }
+        if (allocation.memory != VK_NULL_HANDLE) {
+            vkFreeMemory(context->device, allocation.memory, nullptr);
+        }
+    }
+    frame.retiredTextures.clear();
+    for (RetiredPipeline& allocation : frame.retiredPipelines) {
+        if (allocation.pipeline != VK_NULL_HANDLE) {
+            vkDestroyPipeline(context->device, allocation.pipeline, nullptr);
+        }
+        if (allocation.layout != VK_NULL_HANDLE) {
+            vkDestroyPipelineLayout(context->device, allocation.layout, nullptr);
+        }
+        if (allocation.uniformDescriptorSetLayout != VK_NULL_HANDLE) {
+            vkDestroyDescriptorSetLayout(context->device, allocation.uniformDescriptorSetLayout, nullptr);
+        }
+        if (allocation.textureDescriptorSetLayout != VK_NULL_HANDLE) {
+            vkDestroyDescriptorSetLayout(context->device, allocation.textureDescriptorSetLayout, nullptr);
+        }
+    }
+    frame.retiredPipelines.clear();
+}
+
 void createCommandResources(Context* context, int framesInFlight) {
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -1436,6 +1557,7 @@ void destroyContext(Context* context) {
         destroySwapchainResources(context);
         for (FrameSync& frame : context->frames) {
             destroyTransientBuffers(context, frame);
+            destroyRetiredResources(context, frame);
             if (frame.descriptorPool != VK_NULL_HANDLE) {
                 vkDestroyDescriptorPool(context->device, frame.descriptorPool, nullptr);
             }
@@ -1794,6 +1916,37 @@ Buffer* createBuffer(Context* context, int size, int usage) {
     }
 }
 
+void replaceBufferForRecordedWrite(Buffer* buffer) {
+    Context* context = buffer->context;
+    Buffer* replacement = createBuffer(context, static_cast<int>(buffer->size), buffer->usage);
+    RetiredBuffer previous{};
+    previous.buffer = buffer->buffer;
+    previous.memory = buffer->memory;
+    previous.mapped = buffer->mapped;
+    try {
+        currentFrame(context).retiredBuffers.push_back(previous);
+    } catch (...) {
+        if (replacement->mapped != nullptr && replacement->memory != VK_NULL_HANDLE) {
+            vkUnmapMemory(context->device, replacement->memory);
+        }
+        if (replacement->buffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(context->device, replacement->buffer, nullptr);
+        }
+        if (replacement->memory != VK_NULL_HANDLE) {
+            vkFreeMemory(context->device, replacement->memory, nullptr);
+        }
+        delete replacement;
+        throw;
+    }
+    buffer->buffer = replacement->buffer;
+    buffer->memory = replacement->memory;
+    buffer->mapped = replacement->mapped;
+    replacement->buffer = VK_NULL_HANDLE;
+    replacement->memory = VK_NULL_HANDLE;
+    replacement->mapped = nullptr;
+    delete replacement;
+}
+
 TransientBuffer createHostVisibleBuffer(Context* context, VkDeviceSize size, VkBufferUsageFlags usage,
         const char* label) {
     TransientBuffer allocation{};
@@ -1975,6 +2128,9 @@ Texture* createTextureResource(Context* context, int width, int height, VkFormat
     texture->width = static_cast<uint32_t>(width);
     texture->height = static_cast<uint32_t>(height);
     texture->format = format;
+    texture->wrapS = wrapS;
+    texture->wrapT = wrapT;
+    texture->filter = filter;
 
     try {
         VkImageCreateInfo imageInfo{};
@@ -2024,6 +2180,45 @@ Texture* createTextureResource(Context* context, int width, int height, VkFormat
         delete texture;
         throw;
     }
+}
+
+void replaceTextureForRecordedWrite(Texture* texture) {
+    Context* context = texture->context;
+    Texture* replacement = createTextureResource(context, static_cast<int>(texture->width),
+            static_cast<int>(texture->height), texture->format, texture->wrapS, texture->wrapT, texture->filter);
+    RetiredTexture previous{};
+    previous.image = texture->image;
+    previous.memory = texture->memory;
+    previous.imageView = texture->imageView;
+    previous.sampler = texture->sampler;
+    try {
+        currentFrame(context).retiredTextures.push_back(previous);
+    } catch (...) {
+        if (replacement->sampler != VK_NULL_HANDLE) {
+            vkDestroySampler(context->device, replacement->sampler, nullptr);
+        }
+        if (replacement->imageView != VK_NULL_HANDLE) {
+            vkDestroyImageView(context->device, replacement->imageView, nullptr);
+        }
+        if (replacement->image != VK_NULL_HANDLE) {
+            vkDestroyImage(context->device, replacement->image, nullptr);
+        }
+        if (replacement->memory != VK_NULL_HANDLE) {
+            vkFreeMemory(context->device, replacement->memory, nullptr);
+        }
+        delete replacement;
+        throw;
+    }
+    texture->image = replacement->image;
+    texture->memory = replacement->memory;
+    texture->imageView = replacement->imageView;
+    texture->sampler = replacement->sampler;
+    texture->layout = replacement->layout;
+    replacement->image = VK_NULL_HANDLE;
+    replacement->memory = VK_NULL_HANDLE;
+    replacement->imageView = VK_NULL_HANDLE;
+    replacement->sampler = VK_NULL_HANDLE;
+    delete replacement;
 }
 
 void transitionTextureLayout(VkCommandBuffer commandBuffer, Texture* texture,
@@ -2094,6 +2289,9 @@ void writeTextureData(Texture* texture, const void* source, int size) {
     if (size != byteCount) {
         throw std::runtime_error("desktop C Vulkan texture upload expects "
                 + std::to_string(byteCount) + " RGBA bytes");
+    }
+    if (context->frameStarted) {
+        replaceTextureForRecordedWrite(texture);
     }
 
     TransientBuffer staging = createHostVisibleBuffer(context, static_cast<VkDeviceSize>(byteCount),
@@ -2314,6 +2512,7 @@ extern "C" int32_t fdx_desktop_vulkan_begin_frame(int64_t contextHandle) {
             return 0;
         }
         destroyTransientBuffers(context, frame);
+        destroyRetiredResources(context, frame);
         if (frame.descriptorPool != VK_NULL_HANDLE) {
             check(vkResetDescriptorPool(context->device, frame.descriptorPool, 0),
                     "Could not reset desktop C Vulkan frame descriptor pool");
@@ -2456,6 +2655,12 @@ extern "C" void fdx_desktop_vulkan_write_buffer(int64_t bufferHandle, void* data
         }
         if (buffer->mapped == nullptr) {
             throw std::runtime_error("desktop C Vulkan buffer is not mapped");
+        }
+        if (buffer->context->frameStarted) {
+            replaceBufferForRecordedWrite(buffer);
+        } else {
+            ensureNoActiveFramesOrThrow(buffer->context, FRAME_FENCE_TIMEOUT_NS,
+                    "desktop C Vulkan buffer write");
         }
         std::memcpy(buffer->mapped, data, static_cast<size_t>(size));
     } catch (const std::exception& error) {
@@ -2830,6 +3035,29 @@ extern "C" void fdx_desktop_vulkan_set_scissor(int64_t contextHandle, int32_t x,
     }
 }
 
+extern "C" void fdx_desktop_vulkan_set_viewport(int64_t contextHandle, int32_t x, int32_t y,
+        int32_t width, int32_t height) {
+    Context* context = ptr<Context>(contextHandle);
+    try {
+        if (!context->renderPassStarted) {
+            throw std::runtime_error("Cannot set desktop C Vulkan viewport outside a render pass");
+        }
+        if (width <= 0 || height <= 0) {
+            throw std::runtime_error("desktop C Vulkan viewport size must be greater than zero");
+        }
+        VkViewport viewport{};
+        viewport.x = static_cast<float>(x);
+        viewport.y = static_cast<float>(y + height);
+        viewport.width = static_cast<float>(width);
+        viewport.height = -static_cast<float>(height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(currentFrame(context).commandBuffer, 0, 1, &viewport);
+    } catch (const std::exception& error) {
+        logNativeError("Could not set desktop C Vulkan viewport", error);
+    }
+}
+
 extern "C" void fdx_desktop_vulkan_bind_textures(int64_t contextHandle, int64_t pipelineHandle,
         const int64_t* textureHandles, int32_t count) {
     Context* context = ptr<Context>(contextHandle);
@@ -2939,20 +3167,29 @@ extern "C" void fdx_desktop_vulkan_destroy_render_pipeline(int64_t pipelineHandl
         return;
     }
     if (pipeline->context != nullptr && pipeline->context->device != VK_NULL_HANDLE) {
-        waitDeviceIdleBeforeDestroy(pipeline->context, "render pipeline");
-        if (pipeline->pipeline != VK_NULL_HANDLE) {
-            vkDestroyPipeline(pipeline->context->device, pipeline->pipeline, nullptr);
-        }
-        if (pipeline->layout != VK_NULL_HANDLE) {
-            vkDestroyPipelineLayout(pipeline->context->device, pipeline->layout, nullptr);
-        }
-        if (pipeline->uniformDescriptorSetLayout != VK_NULL_HANDLE) {
-            vkDestroyDescriptorSetLayout(pipeline->context->device,
-                    pipeline->uniformDescriptorSetLayout, nullptr);
-        }
-        if (pipeline->textureDescriptorSetLayout != VK_NULL_HANDLE) {
-            vkDestroyDescriptorSetLayout(pipeline->context->device,
-                    pipeline->textureDescriptorSetLayout, nullptr);
+        if (pipeline->context->frameStarted) {
+            RetiredPipeline retired{};
+            retired.pipeline = pipeline->pipeline;
+            retired.layout = pipeline->layout;
+            retired.uniformDescriptorSetLayout = pipeline->uniformDescriptorSetLayout;
+            retired.textureDescriptorSetLayout = pipeline->textureDescriptorSetLayout;
+            currentFrame(pipeline->context).retiredPipelines.push_back(retired);
+        } else {
+            waitDeviceIdleBeforeDestroy(pipeline->context, "render pipeline");
+            if (pipeline->pipeline != VK_NULL_HANDLE) {
+                vkDestroyPipeline(pipeline->context->device, pipeline->pipeline, nullptr);
+            }
+            if (pipeline->layout != VK_NULL_HANDLE) {
+                vkDestroyPipelineLayout(pipeline->context->device, pipeline->layout, nullptr);
+            }
+            if (pipeline->uniformDescriptorSetLayout != VK_NULL_HANDLE) {
+                vkDestroyDescriptorSetLayout(pipeline->context->device,
+                        pipeline->uniformDescriptorSetLayout, nullptr);
+            }
+            if (pipeline->textureDescriptorSetLayout != VK_NULL_HANDLE) {
+                vkDestroyDescriptorSetLayout(pipeline->context->device,
+                        pipeline->textureDescriptorSetLayout, nullptr);
+            }
         }
     }
     delete pipeline;
@@ -2964,16 +3201,23 @@ extern "C" void fdx_desktop_vulkan_destroy_buffer(int64_t bufferHandle) {
         return;
     }
     if (buffer->context != nullptr && buffer->context->device != VK_NULL_HANDLE) {
-        waitDeviceIdleBeforeDestroy(buffer->context, "buffer");
-        if (buffer->mapped != nullptr && buffer->memory != VK_NULL_HANDLE) {
-            vkUnmapMemory(buffer->context->device, buffer->memory);
-            buffer->mapped = nullptr;
-        }
-        if (buffer->buffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(buffer->context->device, buffer->buffer, nullptr);
-        }
-        if (buffer->memory != VK_NULL_HANDLE) {
-            vkFreeMemory(buffer->context->device, buffer->memory, nullptr);
+        if (buffer->context->frameStarted) {
+            RetiredBuffer retired{};
+            retired.buffer = buffer->buffer;
+            retired.memory = buffer->memory;
+            retired.mapped = buffer->mapped;
+            currentFrame(buffer->context).retiredBuffers.push_back(retired);
+        } else {
+            waitDeviceIdleBeforeDestroy(buffer->context, "buffer");
+            if (buffer->mapped != nullptr && buffer->memory != VK_NULL_HANDLE) {
+                vkUnmapMemory(buffer->context->device, buffer->memory);
+            }
+            if (buffer->buffer != VK_NULL_HANDLE) {
+                vkDestroyBuffer(buffer->context->device, buffer->buffer, nullptr);
+            }
+            if (buffer->memory != VK_NULL_HANDLE) {
+                vkFreeMemory(buffer->context->device, buffer->memory, nullptr);
+            }
         }
     }
     delete buffer;
@@ -2985,18 +3229,27 @@ extern "C" void fdx_desktop_vulkan_destroy_texture(int64_t textureHandle) {
         return;
     }
     if (texture->context != nullptr && texture->context->device != VK_NULL_HANDLE) {
-        waitDeviceIdleBeforeDestroy(texture->context, "texture");
-        if (texture->sampler != VK_NULL_HANDLE) {
-            vkDestroySampler(texture->context->device, texture->sampler, nullptr);
-        }
-        if (texture->imageView != VK_NULL_HANDLE) {
-            vkDestroyImageView(texture->context->device, texture->imageView, nullptr);
-        }
-        if (texture->image != VK_NULL_HANDLE) {
-            vkDestroyImage(texture->context->device, texture->image, nullptr);
-        }
-        if (texture->memory != VK_NULL_HANDLE) {
-            vkFreeMemory(texture->context->device, texture->memory, nullptr);
+        if (texture->context->frameStarted) {
+            RetiredTexture retired{};
+            retired.image = texture->image;
+            retired.memory = texture->memory;
+            retired.imageView = texture->imageView;
+            retired.sampler = texture->sampler;
+            currentFrame(texture->context).retiredTextures.push_back(retired);
+        } else {
+            waitDeviceIdleBeforeDestroy(texture->context, "texture");
+            if (texture->sampler != VK_NULL_HANDLE) {
+                vkDestroySampler(texture->context->device, texture->sampler, nullptr);
+            }
+            if (texture->imageView != VK_NULL_HANDLE) {
+                vkDestroyImageView(texture->context->device, texture->imageView, nullptr);
+            }
+            if (texture->image != VK_NULL_HANDLE) {
+                vkDestroyImage(texture->context->device, texture->image, nullptr);
+            }
+            if (texture->memory != VK_NULL_HANDLE) {
+                vkFreeMemory(texture->context->device, texture->memory, nullptr);
+            }
         }
     }
     delete texture;

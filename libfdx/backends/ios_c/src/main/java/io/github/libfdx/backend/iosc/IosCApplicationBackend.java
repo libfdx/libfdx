@@ -43,6 +43,16 @@ public final class IosCApplicationBackend implements ApplicationBackend, Applica
     private static int statusStage;
 
     private final Logger logger = new IosCLogger();
+    private final Fiber.FiberRunner renderFiberRunner = new Fiber.FiberRunner() {
+        @Override
+        public void run() {
+            try {
+                onRender();
+            } catch (Throwable error) {
+                handleCallbackFailure(error);
+            }
+        }
+    };
     private IosCApplicationConfig config;
     private ApplicationListener listener;
     private Fdx fdx;
@@ -174,12 +184,7 @@ public final class IosCApplicationBackend implements ApplicationBackend, Applica
     public static void render() {
         IosCApplicationBackend app = current;
         if (app != null && statusCode >= 0) {
-            runOnTeaVMFiber(new Fiber.FiberRunner() {
-                @Override
-                public void run() {
-                    app.onRender();
-                }
-            });
+            Fiber.start(app.renderFiberRunner, true);
         }
     }
 
@@ -282,18 +287,24 @@ public final class IosCApplicationBackend implements ApplicationBackend, Applica
                 try {
                     runner.run();
                 } catch (Throwable error) {
-                    int stage = statusStage == 0 ? 1 : statusStage;
-                    statusCode = -(stage * 100 + exceptionCode(error));
                     IosCApplicationBackend app = current;
                     if (app != null) {
-                        app.paused = true;
-                        app.logger.error("iOS C callback failed", error);
+                        app.handleCallbackFailure(error);
                     } else {
+                        int stage = statusStage == 0 ? 1 : statusStage;
+                        statusCode = -(stage * 100 + exceptionCode(error));
                         iosLog(error.toString());
                     }
                 }
             }
         }, true);
+    }
+
+    private void handleCallbackFailure(Throwable error) {
+        int stage = statusStage == 0 ? 1 : statusStage;
+        statusCode = -(stage * 100 + exceptionCode(error));
+        paused = true;
+        logger.error("iOS C callback failed", error);
     }
 
     private static int exceptionCode(Throwable error) {

@@ -1,6 +1,7 @@
 package io.github.libfdx.net.webrtc.android;
 
 import android.content.Context;
+import io.github.libfdx.core.FdxException;
 import io.github.libfdx.net.webrtc.config.WebRtcEndpointSettings;
 import io.github.libfdx.net.webrtc.platform.WebRtcIceCandidate;
 import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnection;
@@ -25,6 +26,8 @@ public final class AndroidWebRtcPeerConnectionProvider implements WebRtcPeerConn
     private static boolean initialized;
 
     private final PeerConnectionFactory factory;
+    private final ArrayList<AndroidWebRtcPeerConnection> connections =
+            new ArrayList<AndroidWebRtcPeerConnection>();
     private boolean closed;
 
     AndroidWebRtcPeerConnectionProvider(Context context) {
@@ -38,8 +41,11 @@ public final class AndroidWebRtcPeerConnectionProvider implements WebRtcPeerConn
     }
 
     @Override
-    public WebRtcPeerConnection createPeerConnection(WebRtcEndpointSettings settings,
+    public synchronized WebRtcPeerConnection createPeerConnection(WebRtcEndpointSettings settings,
             final WebRtcPeerConnectionListener listener) {
+        if (closed) {
+            throw new FdxException("Android WebRTC peer connection provider is disposed");
+        }
         PeerConnection.RTCConfiguration configuration = configuration(settings);
         PeerConnection peerConnection = factory.createPeerConnection(configuration, new PeerConnection.Observer() {
             @Override
@@ -94,19 +100,41 @@ public final class AndroidWebRtcPeerConnectionProvider implements WebRtcPeerConn
                 listener.stateChanged(map(newState));
             }
         });
-        return new AndroidWebRtcPeerConnection(peerConnection);
+        if (peerConnection == null) {
+            throw new FdxException("Android WebRTC peer connection creation failed");
+        }
+        AndroidWebRtcPeerConnection connection = new AndroidWebRtcPeerConnection(peerConnection, listener, this);
+        connections.add(connection);
+        return connection;
     }
 
     @Override
-    public boolean isSupported() {
+    public synchronized boolean isSupported() {
         return !closed;
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         if (!closed) {
             closed = true;
-            factory.dispose();
+            Throwable failure = null;
+            while (!connections.isEmpty()) {
+                AndroidWebRtcPeerConnection connection = connections.get(connections.size() - 1);
+                try {
+                    connection.close();
+                }
+                catch (Throwable throwable) {
+                    failure = firstFailure(failure, throwable);
+                    connections.remove(connection);
+                }
+            }
+            try {
+                factory.dispose();
+            }
+            catch (Throwable throwable) {
+                failure = firstFailure(failure, throwable);
+            }
+            rethrow(failure);
         }
     }
 
@@ -116,8 +144,35 @@ public final class AndroidWebRtcPeerConnectionProvider implements WebRtcPeerConn
     }
 
     @Override
-    public boolean isDisposed() {
+    public synchronized boolean isDisposed() {
         return closed;
+    }
+
+    synchronized void connectionClosed(AndroidWebRtcPeerConnection connection) {
+        connections.remove(connection);
+    }
+
+    private static Throwable firstFailure(Throwable first, Throwable next) {
+        if (first == null) {
+            return next;
+        }
+        if (first != next) {
+            first.addSuppressed(next);
+        }
+        return first;
+    }
+
+    private static void rethrow(Throwable failure) {
+        if (failure == null) {
+            return;
+        }
+        if (failure instanceof RuntimeException) {
+            throw (RuntimeException) failure;
+        }
+        if (failure instanceof Error) {
+            throw (Error) failure;
+        }
+        throw new FdxException("Android WebRTC peer connection provider disposal failed", failure);
     }
 
     private static PeerConnection.RTCConfiguration configuration(WebRtcEndpointSettings settings) {

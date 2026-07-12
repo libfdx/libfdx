@@ -48,6 +48,7 @@ final class IosCOpenGLES {
     static final int INFO_LOG_LENGTH = 0x8B84;
     static final int TEXTURE_2D = 0x0DE1;
     static final int BLEND = 0x0BE2;
+    static final int ONE = 1;
     static final int SRC_ALPHA = 0x0302;
     static final int ONE_MINUS_SRC_ALPHA = 0x0303;
 
@@ -251,8 +252,9 @@ final class IosCOpenGLES {
     @Import(name = "glDepthFunc")
     static native void glDepthFunc(int func);
 
-    @Import(name = "glBlendFunc")
-    static native void glBlendFunc(int source, int destination);
+    @Import(name = "glBlendFuncSeparate")
+    static native void glBlendFuncSeparate(int sourceRgb, int destinationRgb,
+            int sourceAlpha, int destinationAlpha);
 
     @Import(name = "glEnableVertexAttribArray")
     static native void glEnableVertexAttribArray(int index);

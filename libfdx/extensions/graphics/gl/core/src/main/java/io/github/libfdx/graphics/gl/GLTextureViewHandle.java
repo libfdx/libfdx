@@ -1,9 +1,7 @@
 package io.github.libfdx.graphics.gl;
 
-import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.TextureFormat;
-import io.github.libfdx.graphics.TextureUsage;
 import io.github.libfdx.graphics.TextureView;
 
 /**
@@ -13,71 +11,50 @@ import io.github.libfdx.graphics.TextureView;
  */
 final class GLTextureViewHandle implements TextureView {
     private final ProviderId providerId;
+    private final GLResourceDomain resourceDomain;
     private final TextureFormat format;
-    private final int texture;
-    private final int width;
-    private final int height;
-    private final boolean renderAttachment;
-    private int framebuffer;
-    private int depthRenderbuffer;
+    private final GLTextureHandle textureHandle;
+    private final Object frameOwner;
 
-    GLTextureViewHandle(ProviderId providerId, TextureFormat format) {
-        this(providerId, format, 0, 0, 0, TextureUsage.SAMPLED);
+    GLTextureViewHandle(ProviderId providerId, GLResourceDomain resourceDomain, TextureFormat format,
+            Object frameOwner) {
+        this.providerId = providerId;
+        this.resourceDomain = resourceDomain;
+        this.format = format;
+        this.textureHandle = null;
+        this.frameOwner = frameOwner;
     }
 
-    GLTextureViewHandle(ProviderId providerId, TextureFormat format, int texture, int width, int height,
-            TextureUsage usage) {
-        this.providerId = providerId;
-        this.format = format;
-        this.texture = texture;
-        this.width = width;
-        this.height = height;
-        renderAttachment = usage != null && usage.renderAttachment();
+    GLTextureViewHandle(GLTextureHandle textureHandle) {
+        this.providerId = textureHandle.providerId();
+        this.resourceDomain = textureHandle.resourceDomain();
+        this.format = textureHandle.format();
+        this.textureHandle = textureHandle;
+        this.frameOwner = null;
     }
 
     boolean textureBacked() {
-        return texture != 0;
+        return textureHandle != null;
     }
 
     int width() {
-        return width;
+        return textureHandle != null ? textureHandle.width() : 0;
     }
 
     int height() {
-        return height;
+        return textureHandle != null ? textureHandle.height() : 0;
     }
 
-    int framebuffer(GLApi gl) {
-        if (!textureBacked() || !renderAttachment) {
-            throw new FdxException("Texture view is not a GL render attachment");
-        }
-        if (framebuffer != 0) {
-            return framebuffer;
-        }
-        framebuffer = gl.genFramebuffer();
-        depthRenderbuffer = gl.genRenderbuffer();
-        gl.bindFramebuffer(framebuffer);
-        gl.framebufferTexture2D(texture);
-        gl.bindRenderbuffer(depthRenderbuffer);
-        gl.renderbufferStorageDepth(width, height);
-        gl.framebufferRenderbufferDepth(depthRenderbuffer);
-        gl.bindRenderbuffer(0);
-        if (!gl.framebufferComplete()) {
-            throw new FdxException("Could not create complete GL framebuffer for texture view");
-        }
-        gl.bindFramebuffer(0);
-        return framebuffer;
+    GLResourceDomain resourceDomain() {
+        return resourceDomain;
     }
 
-    void dispose(GLApi gl) {
-        if (depthRenderbuffer != 0) {
-            gl.deleteRenderbuffer(depthRenderbuffer);
-            depthRenderbuffer = 0;
-        }
-        if (framebuffer != 0) {
-            gl.deleteFramebuffer(framebuffer);
-            framebuffer = 0;
-        }
+    GLTextureHandle textureHandle() {
+        return textureHandle;
+    }
+
+    Object frameOwner() {
+        return frameOwner;
     }
 
     /**

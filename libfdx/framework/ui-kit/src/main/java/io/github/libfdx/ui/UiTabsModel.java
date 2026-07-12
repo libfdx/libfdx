@@ -6,18 +6,23 @@ package io.github.libfdx.ui;
  * @author xpenatan
  */
 final class UiTabsModel {
-    private final UiIntState activeIndex;
-    private final String[] labels;
+    private static final String[] EMPTY_LABELS = new String[0];
+
+    private UiIntState activeIndex;
+    private String[] labels = EMPTY_LABELS;
 
     UiTabsModel(UiIntState activeIndex, String[] labels) {
+        update(activeIndex, labels);
+    }
+
+    void update(UiIntState activeIndex, String[] labels) {
         this.activeIndex = activeIndex;
-        if (labels == null) {
-            this.labels = new String[0];
-        } else {
-            this.labels = new String[labels.length];
-            for (int i = 0; i < labels.length; i++) {
-                this.labels[i] = labels[i] != null ? labels[i] : "";
-            }
+        int length = labels != null ? labels.length : 0;
+        if (this.labels.length != length) {
+            this.labels = new String[length];
+        }
+        for (int i = 0; i < length; i++) {
+            this.labels[i] = labels[i] != null ? labels[i] : "";
         }
     }
 

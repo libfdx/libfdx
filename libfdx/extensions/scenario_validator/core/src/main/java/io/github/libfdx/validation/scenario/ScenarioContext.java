@@ -10,10 +10,12 @@ import java.util.Objects;
 public final class ScenarioContext {
     private final ScenarioHost host;
     private final Scenario scenario;
+    private final ScenarioValidationConfig validationConfig;
 
-    ScenarioContext(ScenarioHost host, Scenario scenario) {
+    ScenarioContext(ScenarioHost host, Scenario scenario, ScenarioValidationConfig validationConfig) {
         this.host = host;
         this.scenario = scenario;
+        this.validationConfig = validationConfig != null ? validationConfig : ScenarioValidationConfig.defaults();
     }
 
     /**
@@ -32,6 +34,10 @@ public final class ScenarioContext {
      */
     public Scenario scenario() {
         return scenario;
+    }
+
+    ScenarioValidationConfig validationConfig() {
+        return validationConfig;
     }
 
     /**

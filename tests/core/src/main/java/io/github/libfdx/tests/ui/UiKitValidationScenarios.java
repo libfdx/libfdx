@@ -2,7 +2,10 @@ package io.github.libfdx.tests.ui;
 
 import io.github.libfdx.validation.scenario.Scenario;
 import io.github.libfdx.validation.scenario.ScenarioCatalog;
+import io.github.libfdx.validation.scenario.ScenarioCapturePolicy;
+import io.github.libfdx.validation.scenario.ScenarioValidationMode;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Represents an ui kit validation scenarios.
@@ -33,10 +36,12 @@ final class UiKitValidationScenarios {
     static final class Plan {
         private final ScenarioCatalog catalog;
         private final Entry[] entries;
+        private final boolean fullPlan;
 
-        private Plan(ScenarioCatalog catalog, Entry[] entries) {
+        private Plan(ScenarioCatalog catalog, Entry[] entries, boolean fullPlan) {
             this.catalog = catalog;
             this.entries = entries;
+            this.fullPlan = fullPlan;
         }
 
         ScenarioCatalog catalog() {
@@ -45,6 +50,38 @@ final class UiKitValidationScenarios {
 
         Entry[] entries() {
             return entries;
+        }
+
+        boolean fullPlan() {
+            return fullPlan;
+        }
+
+        Plan select(String selection, ScenarioValidationMode mode) {
+            if (entries.length == 0) {
+                return this;
+            }
+            List<Scenario> selectedScenarios = catalog.select(selection);
+            ScenarioValidationMode effectiveMode = mode != null ? mode : ScenarioValidationMode.MIXED;
+            ScenarioCatalog selectedCatalog = ScenarioCatalog.create();
+            ArrayList<Entry> selectedEntries = new ArrayList<Entry>();
+            for (int i = 0; i < entries.length; i++) {
+                Entry entry = entries[i];
+                if (!selectedScenarios.contains(entry.scenario())) {
+                    continue;
+                }
+                if (effectiveMode == ScenarioValidationMode.VISUAL && !entry.validateVisual()) {
+                    continue;
+                }
+                selectedCatalog.add(entry.scenario());
+                selectedEntries.add(new Entry(entry.scenario(), selectedEntries.size(),
+                        entry.captureImage(), entry.validateVisual()));
+            }
+            if (selectedEntries.isEmpty()) {
+                throw new IllegalArgumentException("No UIKit validation scenarios match selection '"
+                        + selection + "' in " + effectiveMode + " mode.");
+            }
+            return new Plan(selectedCatalog, selectedEntries.toArray(new Entry[0]),
+                    selectedEntries.size() == entries.length);
         }
     }
 
@@ -85,6 +122,22 @@ final class UiKitValidationScenarios {
         boolean validateVisual() {
             return validateVisual;
         }
+
+        boolean captureOnSuccess(ScenarioCapturePolicy policy) {
+            ScenarioCapturePolicy effectivePolicy = policy != null
+                    ? policy
+                    : ScenarioCapturePolicy.SCENARIO_LISTED;
+            return effectivePolicy == ScenarioCapturePolicy.ALL
+                    || (effectivePolicy == ScenarioCapturePolicy.SCENARIO_LISTED && captureImage);
+        }
+
+        boolean captureOnFailure(ScenarioCapturePolicy policy) {
+            return policy == ScenarioCapturePolicy.ALL || policy == ScenarioCapturePolicy.FAILED;
+        }
+
+        boolean validateVisual(ScenarioValidationMode mode) {
+            return validateVisual && mode != ScenarioValidationMode.BEHAVIOR;
+        }
     }
 
     /**
@@ -110,7 +163,7 @@ final class UiKitValidationScenarios {
         }
 
         Plan build() {
-            return new Plan(catalog, entries.toArray(new Entry[0]));
+            return new Plan(catalog, entries.toArray(new Entry[0]), active);
         }
     }
 

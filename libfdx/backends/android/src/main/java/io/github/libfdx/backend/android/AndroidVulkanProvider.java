@@ -11,6 +11,7 @@ import io.github.libfdx.graphics.FrameBuffer;
 import io.github.libfdx.graphics.GraphicsAttachment;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentRequirements;
+import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.GraphicsEnvironment;
 import io.github.libfdx.graphics.GraphicsFrame;
@@ -92,6 +93,13 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         NativeWindow nativeWindow = environment.nativeWindow();
         if (nativeWindow == null || !(nativeWindow.objectHandle() instanceof Surface)) {
             throw new FdxException("Android Vulkan requires an Android Surface");
+        }
+        GraphicsContext sharedContext = environment.sharedContext();
+        if (sharedContext != null) {
+            if (!ID.equals(sharedContext.providerId())) {
+                throw new FdxException("Cannot share a non-Vulkan graphics context with Android Vulkan");
+            }
+            throw new FdxException("Android Vulkan does not currently support shared graphics contexts");
         }
         String supportFailure = AndroidVulkanNative.instanceProbeFailure();
         if (supportFailure != null) {
@@ -213,6 +221,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public void resize(int framebufferWidth, int framebufferHeight) {
+            ensureNotDisposed("resize");
             int nextWidth = Math.max(1, framebufferWidth);
             int nextHeight = Math.max(1, framebufferHeight);
             AndroidVulkanNative.resize(context, nextWidth, nextHeight);
@@ -247,6 +256,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (frameStarted) {
                 throw new FdxException("Android Vulkan frame is already started");
             }
+            commandEncoder.beginFrame();
             frameStarted = AndroidVulkanNative.beginFrame(context);
             if (frameStarted) {
                 applyPendingResizeDimensions();
@@ -262,6 +272,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (!frameStarted) {
                 return;
             }
+            commandEncoder.ensurePassesEnded();
             try {
                 AndroidVulkanNative.endFrame(context);
                 applyPendingResizeDimensions();
@@ -277,6 +288,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public GraphicsDevice device() {
+            ensureNotDisposed("access the graphics device");
             return device;
         }
 
@@ -287,6 +299,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public TextureFormat surfaceFormat() {
+            ensureNotDisposed("access the surface format");
             return surfaceFormat;
         }
 
@@ -297,9 +310,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public GraphicsFrame currentFrame() {
-            if (!frameStarted) {
-                throw new FdxException("No Android Vulkan frame is active");
-            }
+            ensureFrameStarted("access the current frame");
             return currentFrame;
         }
 
@@ -313,16 +324,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public void clear(float red, float green, float blue, float alpha) {
-            if (!frameStarted) {
-                throw new FdxException("Cannot clear before beginFrame()");
-            }
+            ensureFrameStarted("clear");
             AndroidVulkanNative.clear(context, red, green, blue, alpha);
         }
 
         ByteBuffer readPixelsRgba8() {
-            if (!frameStarted) {
-                throw new FdxException("Cannot read pixels before beginFrame()");
-            }
+            ensureFrameStarted("read pixels");
             int byteCount = width * height * 4;
             ByteBuffer pixels = ByteBuffer.allocateDirect(byteCount).order(ByteOrder.nativeOrder());
             try {
@@ -367,7 +374,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                 return;
             }
             disposed = true;
-            AndroidVulkanNative.destroy(context);
+            try {
+                AndroidVulkanNative.destroy(context);
+            } finally {
+                frameStarted = false;
+            }
         }
 
         /**
@@ -387,6 +398,19 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             width = pendingResizeWidth;
             height = pendingResizeHeight;
             pendingResize = false;
+        }
+
+        private void ensureNotDisposed(String operation) {
+            if (disposed) {
+                throw new FdxException("Cannot " + operation + " after the Android Vulkan context is disposed");
+            }
+        }
+
+        private void ensureFrameStarted(String operation) {
+            ensureNotDisposed(operation);
+            if (!frameStarted) {
+                throw new FdxException("Cannot " + operation + " outside an active Android Vulkan frame");
+            }
         }
     }
 
@@ -410,10 +434,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public Buffer createBuffer(BufferDescriptor descriptor) {
+            attachment.ensureNotDisposed("create a buffer");
             if (descriptor == null) {
                 throw new FdxException("BufferDescriptor cannot be null");
             }
-            return new AndroidVulkanBufferHandle(AndroidVulkanNative.createBuffer(attachment.context,
+            return new AndroidVulkanBufferHandle(attachment, AndroidVulkanNative.createBuffer(attachment.context,
                     descriptor.size(), toNativeBufferUsage(descriptor.usage())), descriptor.size(), descriptor.usage());
         }
 
@@ -425,13 +450,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public void writeBuffer(Buffer buffer, ByteBuffer data) {
-            if (buffer == null) {
-                throw new FdxException("Buffer cannot be null");
-            }
+            attachment.ensureNotDisposed("write a buffer");
             if (data == null) {
                 throw new FdxException("Buffer data cannot be null");
             }
-            AndroidVulkanBufferHandle vulkanBuffer = buffer.as();
+            AndroidVulkanBufferHandle vulkanBuffer = AndroidVulkanResources.requireBuffer(buffer, attachment,
+                    "Buffer");
             if (data.remaining() > vulkanBuffer.size()) {
                 throw new FdxException("Buffer data is larger than the destination buffer");
             }
@@ -447,6 +471,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public Texture createTexture(TextureDescriptor descriptor) {
+            attachment.ensureNotDisposed("create a texture");
             if (descriptor == null) {
                 throw new FdxException("TextureDescriptor cannot be null");
             }
@@ -457,7 +482,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (!descriptor.usage().sampled() && !descriptor.usage().renderAttachment()) {
                 throw new FdxException("Android Vulkan texture usage must allow sampling or render attachment binding");
             }
-            return new AndroidVulkanTextureHandle(AndroidVulkanNative.createTexture(attachment.context,
+            return new AndroidVulkanTextureHandle(attachment, AndroidVulkanNative.createTexture(attachment.context,
                     descriptor.width(), descriptor.height(), toNativeTextureFormat(descriptor.format()),
                     toNativeWrap(descriptor.wrapS()), toNativeWrap(descriptor.wrapT()),
                     toNativeFilter(descriptor.filter()),
@@ -473,13 +498,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public void writeTexture(Texture texture, ByteBuffer data) {
-            if (texture == null) {
-                throw new FdxException("Texture cannot be null");
-            }
+            attachment.ensureNotDisposed("write a texture");
             if (data == null) {
                 throw new FdxException("Texture data cannot be null");
             }
-            AndroidVulkanTextureHandle vulkanTexture = texture.as();
+            AndroidVulkanTextureHandle vulkanTexture = AndroidVulkanResources.requireTexture(texture, attachment,
+                    "Texture");
             int byteCount = vulkanTexture.width() * vulkanTexture.height() * 4;
             if (data.remaining() != byteCount) {
                 throw new FdxException("Android Vulkan texture upload expects " + byteCount + " RGBA bytes");
@@ -496,6 +520,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public ShaderModule createShaderModule(ShaderModuleDescriptor descriptor) {
+            attachment.ensureNotDisposed("create a shader module");
             if (descriptor == null) {
                 throw new FdxException("ShaderModuleDescriptor cannot be null");
             }
@@ -504,8 +529,9 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (!descriptor.hasSource(ShaderLanguage.SPIRV)) {
                 throw new FdxException("Android Vulkan requires SPIR-V shader modules");
             }
-            return new AndroidVulkanShaderModuleHandle(AndroidVulkanNative.createShaderModule(attachment.context,
-                    descriptor.spirvVertexWords(), descriptor.spirvFragmentWords()));
+            return new AndroidVulkanShaderModuleHandle(attachment,
+                    AndroidVulkanNative.createShaderModule(attachment.context,
+                            descriptor.spirvVertexWords(), descriptor.spirvFragmentWords()));
         }
 
         /**
@@ -516,13 +542,16 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public RenderPipeline createRenderPipeline(RenderPipelineDescriptor descriptor) {
+            attachment.ensureNotDisposed("create a render pipeline");
             if (descriptor == null) {
                 throw new FdxException("RenderPipelineDescriptor cannot be null");
             }
-            AndroidVulkanShaderModuleHandle shaderModule = descriptor.shaderModule().as();
+            AndroidVulkanShaderModuleHandle shaderModule = AndroidVulkanResources.requireShaderModule(
+                    descriptor.shaderModule(), attachment, "Shader module");
             boolean pbrUniformsEnabled = usesPbrUniformBlock(descriptor);
             VertexLayout[] vertexLayouts = descriptor.vertexLayouts();
-            return new AndroidVulkanRenderPipelineHandle(AndroidVulkanNative.createRenderPipeline(attachment.context,
+            return new AndroidVulkanRenderPipelineHandle(attachment,
+                    AndroidVulkanNative.createRenderPipeline(attachment.context,
                     shaderModule.handle(), toNativeTextureFormat(descriptor.colorFormat()),
                     toNativeTopology(descriptor.primitiveTopology()), vertexStrides(vertexLayouts),
                     vertexStepModes(vertexLayouts), attributeBindings(vertexLayouts), attributeLocations(vertexLayouts),
@@ -570,6 +599,99 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         return false;
     }
 
+    private static final class AndroidVulkanResources {
+        private AndroidVulkanResources() {
+        }
+
+        static AndroidVulkanBufferHandle requireBuffer(Buffer value, AndroidVulkanGraphicsAttachment attachment,
+                String name) {
+            if (value == null) {
+                throw new FdxException(name + " cannot be null");
+            }
+            if (!(value instanceof AndroidVulkanBufferHandle handle)) {
+                throw new FdxException(name + " belongs to another graphics provider");
+            }
+            requireOwner(handle.attachment, attachment, name);
+            if (handle.isDisposed()) {
+                throw new FdxException(name + " has been disposed");
+            }
+            return handle;
+        }
+
+        static AndroidVulkanTextureHandle requireTexture(Texture value, AndroidVulkanGraphicsAttachment attachment,
+                String name) {
+            if (value == null) {
+                throw new FdxException(name + " cannot be null");
+            }
+            if (!(value instanceof AndroidVulkanTextureHandle handle)) {
+                throw new FdxException(name + " belongs to another graphics provider");
+            }
+            requireOwner(handle.attachment, attachment, name);
+            if (handle.isDisposed()) {
+                throw new FdxException(name + " has been disposed");
+            }
+            return handle;
+        }
+
+        static AndroidVulkanShaderModuleHandle requireShaderModule(ShaderModule value,
+                AndroidVulkanGraphicsAttachment attachment, String name) {
+            if (value == null) {
+                throw new FdxException(name + " cannot be null");
+            }
+            if (!(value instanceof AndroidVulkanShaderModuleHandle handle)) {
+                throw new FdxException(name + " belongs to another graphics provider");
+            }
+            requireOwner(handle.attachment, attachment, name);
+            if (handle.isDisposed()) {
+                throw new FdxException(name + " has been disposed");
+            }
+            return handle;
+        }
+
+        static AndroidVulkanRenderPipelineHandle requirePipeline(RenderPipeline value,
+                AndroidVulkanGraphicsAttachment attachment, String name) {
+            if (value == null) {
+                throw new FdxException(name + " cannot be null");
+            }
+            if (!(value instanceof AndroidVulkanRenderPipelineHandle handle)) {
+                throw new FdxException(name + " belongs to another graphics provider");
+            }
+            requireOwner(handle.attachment, attachment, name);
+            if (handle.isDisposed()) {
+                throw new FdxException(name + " has been disposed");
+            }
+            return handle;
+        }
+
+        static AndroidVulkanTextureViewHandle requireTextureView(TextureView value,
+                AndroidVulkanGraphicsAttachment attachment, String name) {
+            if (value == null) {
+                throw new FdxException(name + " cannot be null");
+            }
+            if (!(value instanceof AndroidVulkanTextureViewHandle handle)) {
+                throw new FdxException(name + " belongs to another graphics provider");
+            }
+            if (handle.texture != null) {
+                AndroidVulkanTextureHandle texture = requireTexture(handle.texture, attachment, name + " texture");
+                if (!texture.usage().renderAttachment()) {
+                    throw new FdxException(name + " texture was not created for render attachment usage");
+                }
+            } else {
+                requireOwner(handle.attachment, attachment, name);
+                attachment.ensureFrameStarted("use " + name.toLowerCase());
+            }
+            return handle;
+        }
+
+        private static void requireOwner(AndroidVulkanGraphicsAttachment actual,
+                AndroidVulkanGraphicsAttachment expected, String name) {
+            if (actual != expected) {
+                throw new FdxException(name + " belongs to another Android Vulkan context");
+            }
+            expected.ensureNotDisposed("use " + name.toLowerCase());
+        }
+    }
+
     /**
      * Represents an android vulkan command encoder.
      *
@@ -577,6 +699,8 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
      */
     private static final class AndroidVulkanCommandEncoder implements CommandEncoder {
         private final AndroidVulkanGraphicsAttachment attachment;
+        private AndroidVulkanRenderPass[] renderPasses = new AndroidVulkanRenderPass[4];
+        private int renderPassCount;
 
         AndroidVulkanCommandEncoder(AndroidVulkanGraphicsAttachment attachment) {
             this.attachment = attachment;
@@ -593,14 +717,54 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (descriptor == null) {
                 throw new FdxException("RenderPassDescriptor cannot be null");
             }
-            AndroidVulkanTextureViewHandle colorAttachment = descriptor.colorAttachment().as();
+            attachment.ensureFrameStarted("begin a render pass");
+            ensurePreviousPassEnded();
+            AndroidVulkanTextureViewHandle colorAttachment = AndroidVulkanResources.requireTextureView(
+                    descriptor.colorAttachment(), attachment, "Color attachment");
             LoadOp loadOp = descriptor.colorLoadOp();
             StoreOp storeOp = descriptor.colorStoreOp();
             AndroidVulkanNative.beginRenderPass(attachment.context, colorAttachment.textureHandle(),
                     toNativeTextureFormat(colorAttachment.format()), colorAttachment.width(), colorAttachment.height(),
                     loadOp.isClear(), loadOp.red(), loadOp.green(), loadOp.blue(), loadOp.alpha(),
                     storeOp.isStore(), descriptor.depthClearEnabled(), descriptor.depthClearValue());
-            return new AndroidVulkanRenderPass(attachment, colorAttachment.height());
+            AndroidVulkanRenderPass renderPass = nextRenderPass();
+            renderPass.begin(colorAttachment, colorAttachment.height());
+            renderPassCount++;
+            return renderPass;
+        }
+
+        void beginFrame() {
+            ensurePassesEnded();
+            renderPassCount = 0;
+        }
+
+        void ensurePassesEnded() {
+            for (int i = 0; i < renderPassCount; i++) {
+                if (!renderPasses[i].isEnded()) {
+                    throw new FdxException("Android Vulkan render pass must be ended before ending the frame");
+                }
+            }
+        }
+
+        private void ensurePreviousPassEnded() {
+            if (renderPassCount > 0 && !renderPasses[renderPassCount - 1].isEnded()) {
+                throw new FdxException(
+                        "Previous Android Vulkan render pass must be ended before beginning another pass");
+            }
+        }
+
+        private AndroidVulkanRenderPass nextRenderPass() {
+            if (renderPassCount == renderPasses.length) {
+                AndroidVulkanRenderPass[] grown = new AndroidVulkanRenderPass[renderPasses.length * 2];
+                System.arraycopy(renderPasses, 0, grown, 0, renderPasses.length);
+                renderPasses = grown;
+            }
+            AndroidVulkanRenderPass renderPass = renderPasses[renderPassCount];
+            if (renderPass == null) {
+                renderPass = new AndroidVulkanRenderPass(attachment);
+                renderPasses[renderPassCount] = renderPass;
+            }
+            return renderPass;
         }
 
         /**
@@ -676,22 +840,47 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         private static final int BONE_MATRICES_OFFSET = SKINNING_PARAMS_OFFSET + 4;
 
         private final AndroidVulkanGraphicsAttachment attachment;
-        private final int renderTargetHeight;
+        private AndroidVulkanTextureViewHandle colorAttachment;
+        private int renderTargetHeight;
         private final ByteBuffer uniformBytes = ByteBuffer.allocateDirect(PBR_UNIFORM_BYTE_COUNT)
                 .order(ByteOrder.nativeOrder());
         private final FloatBuffer uniformFloats = uniformBytes.asFloatBuffer();
         private AndroidVulkanRenderPipelineHandle pipeline;
         private AndroidVulkanBufferHandle indexBuffer;
+        private AndroidVulkanBufferHandle[] vertexBuffers = new AndroidVulkanBufferHandle[0];
         private AndroidVulkanTextureHandle[] textures = new AndroidVulkanTextureHandle[0];
         private long[] textureHandles = new long[0];
-        private boolean uniformDataDirty = true;
+        private boolean uniformDataDirty;
         private boolean hasUniformData;
-        private boolean ended;
+        private boolean ended = true;
 
-        AndroidVulkanRenderPass(AndroidVulkanGraphicsAttachment attachment, int renderTargetHeight) {
+        AndroidVulkanRenderPass(AndroidVulkanGraphicsAttachment attachment) {
             this.attachment = attachment;
+        }
+
+        void begin(AndroidVulkanTextureViewHandle colorAttachment, int renderTargetHeight) {
+            if (!ended) {
+                throw new FdxException("Cannot reuse an active Android Vulkan render pass");
+            }
+            this.colorAttachment = colorAttachment;
             this.renderTargetHeight = renderTargetHeight;
+            pipeline = null;
+            indexBuffer = null;
+            for (int i = 0; i < vertexBuffers.length; i++) {
+                vertexBuffers[i] = null;
+            }
+            for (int i = 0; i < textures.length; i++) {
+                textures[i] = null;
+                textureHandles[i] = 0L;
+            }
+            uniformDataDirty = false;
+            hasUniformData = false;
             resetUniformData();
+            ended = false;
+        }
+
+        boolean isEnded() {
+            return ended;
         }
 
         /**
@@ -702,7 +891,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         @Override
         public void setPipeline(RenderPipeline pipeline) {
             ensureOpen();
-            this.pipeline = pipeline.as();
+            this.pipeline = AndroidVulkanResources.requirePipeline(pipeline, attachment, "Render pipeline");
             prepareTextureSlots(this.pipeline.sampledTextureCount());
             uniformDataDirty = true;
             AndroidVulkanNative.setPipeline(attachment.context, this.pipeline.handle());
@@ -730,13 +919,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (slot < 0) {
                 throw new FdxException("Vertex buffer slot cannot be negative");
             }
-            if (buffer == null) {
-                throw new FdxException("Vertex buffer cannot be null");
-            }
-            AndroidVulkanBufferHandle vulkanBuffer = buffer.as();
+            AndroidVulkanBufferHandle vulkanBuffer = AndroidVulkanResources.requireBuffer(buffer, attachment,
+                    "Vertex buffer");
             if (vulkanBuffer.usage() != BufferUsage.VERTEX) {
                 throw new FdxException("RenderPass.setVertexBuffer requires a vertex buffer");
             }
+            rememberVertexBuffer(slot, vulkanBuffer);
             AndroidVulkanNative.setVertexBuffer(attachment.context, slot, vulkanBuffer.handle());
         }
 
@@ -748,10 +936,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         @Override
         public void setIndexBuffer(Buffer buffer) {
             ensureOpen();
-            if (buffer == null) {
-                throw new FdxException("Index buffer cannot be null");
-            }
-            indexBuffer = buffer.as();
+            indexBuffer = AndroidVulkanResources.requireBuffer(buffer, attachment, "Index buffer");
             if (indexBuffer.usage() != BufferUsage.INDEX) {
                 throw new FdxException("RenderPass.setIndexBuffer requires an index buffer");
             }
@@ -770,13 +955,15 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (pipeline == null) {
                 throw new FdxException("Render pipeline must be set before binding a texture");
             }
-            if (texture == null) {
-                throw new FdxException("Texture cannot be null");
-            }
             if (slot < 0 || slot >= pipeline.sampledTextureCount()) {
                 throw new FdxException("Texture slot is not declared by the active Android Vulkan pipeline: " + slot);
             }
-            textures[slot] = texture.as();
+            AndroidVulkanTextureHandle vulkanTexture = AndroidVulkanResources.requireTexture(texture, attachment,
+                    "Texture");
+            if (!vulkanTexture.usage().sampled()) {
+                throw new FdxException("RenderPass.setTexture requires a sampled texture");
+            }
+            textures[slot] = vulkanTexture;
         }
 
         /**
@@ -797,6 +984,23 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         }
 
         /**
+         * Sets the viewport.
+         *
+         * @param x the lower-left x coordinate
+         * @param y the lower-left y coordinate
+         * @param width the width in pixels
+         * @param height the height in pixels
+         */
+        @Override
+        public void setViewport(int x, int y, int width, int height) {
+            ensureOpen();
+            if (width <= 0 || height <= 0) {
+                throw new FdxException("Viewport size must be greater than zero");
+            }
+            AndroidVulkanNative.setViewport(attachment.context, x, y, width, height);
+        }
+
+        /**
          * Sets the uniform1i.
          *
          * @param name the name
@@ -804,6 +1008,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public void setUniform1i(String name, int value) {
+            ensureOpen();
             if ("u_hasBaseColorTexture".equals(name)) {
                 setUniformFloat(TEXTURE_FLAGS_OFFSET, value);
             }
@@ -829,6 +1034,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public void setUniform1f(String name, float value) {
+            ensureOpen();
             if ("u_lightIntensity".equals(name)) {
                 setUniformFloat(LIGHT_COLOR_INTENSITY_OFFSET + 3, value);
             }
@@ -850,6 +1056,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public void setUniform3f(String name, float x, float y, float z) {
+            ensureOpen();
             if ("u_cameraPosition".equals(name)) {
                 setUniform4f(CAMERA_POSITION_OFFSET, x, y, z, 1.0f);
             }
@@ -898,6 +1105,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public void setUniform4f(String name, float x, float y, float z, float w) {
+            ensureOpen();
             if ("u_cameraPosition".equals(name)) {
                 setUniform4f(CAMERA_POSITION_OFFSET, x, y, z, w);
             }
@@ -1040,6 +1248,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (pipeline == null) {
                 throw new FdxException("Render pipeline must be set before draw");
             }
+            validateBoundResources(false);
             bindTextures();
             bindUniforms();
             AndroidVulkanNative.draw(attachment.context, vertexCount, instanceCount, firstVertex, firstInstance);
@@ -1063,6 +1272,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (indexBuffer == null) {
                 throw new FdxException("Index buffer must be set before drawIndexed");
             }
+            validateBoundResources(true);
             bindTextures();
             bindUniforms();
             AndroidVulkanNative.drawIndexed(attachment.context, indexCount, instanceCount, firstIndex,
@@ -1077,13 +1287,39 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (ended) {
                 return;
             }
+            attachment.ensureFrameStarted("end a render pass");
             ended = true;
             AndroidVulkanNative.endRenderPass(attachment.context);
+            pipeline = null;
+            indexBuffer = null;
+            colorAttachment = null;
+            for (int i = 0; i < vertexBuffers.length; i++) {
+                vertexBuffers[i] = null;
+            }
+            for (int i = 0; i < textures.length; i++) {
+                textures[i] = null;
+                textureHandles[i] = 0L;
+            }
         }
 
         private void ensureOpen() {
+            attachment.ensureFrameStarted("use a render pass");
             if (ended) {
                 throw new FdxException("Render pass has already ended");
+            }
+            AndroidVulkanResources.requireTextureView(colorAttachment, attachment, "Color attachment");
+        }
+
+        private void validateBoundResources(boolean indexed) {
+            AndroidVulkanResources.requirePipeline(pipeline, attachment, "Render pipeline");
+            for (int i = 0; i < vertexBuffers.length; i++) {
+                if (vertexBuffers[i] != null) {
+                    AndroidVulkanResources.requireBuffer(vertexBuffers[i], attachment,
+                            "Vertex buffer at slot " + i);
+                }
+            }
+            if (indexed) {
+                AndroidVulkanResources.requireBuffer(indexBuffer, attachment, "Index buffer");
             }
         }
 
@@ -1097,24 +1333,31 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                     throw new FdxException("Texture slot " + i
                             + " must be set before drawing with Android Vulkan pipeline");
                 }
-                textureHandles[i] = textures[i].handle();
+                textureHandles[i] = AndroidVulkanResources.requireTexture(textures[i], attachment,
+                        "Texture at slot " + i).handle();
             }
             AndroidVulkanNative.bindTextures(attachment.context, pipeline.handle(), textureHandles, sampledTextureCount);
         }
 
         private void prepareTextureSlots(int sampledTextureCount) {
-            if (sampledTextureCount == 0) {
-                return;
-            }
-            if (textures.length != sampledTextureCount) {
+            if (textures.length < sampledTextureCount) {
                 textures = new AndroidVulkanTextureHandle[sampledTextureCount];
                 textureHandles = new long[sampledTextureCount];
-                return;
             }
             for (int i = 0; i < textures.length; i++) {
                 textures[i] = null;
                 textureHandles[i] = 0L;
             }
+        }
+
+        private void rememberVertexBuffer(int slot, AndroidVulkanBufferHandle buffer) {
+            if (slot >= vertexBuffers.length) {
+                int nextLength = Math.max(slot + 1, Math.max(1, vertexBuffers.length * 2));
+                AndroidVulkanBufferHandle[] grown = new AndroidVulkanBufferHandle[nextLength];
+                System.arraycopy(vertexBuffers, 0, grown, 0, vertexBuffers.length);
+                vertexBuffers = grown;
+            }
+            vertexBuffers[slot] = buffer;
         }
 
         private void bindUniforms() {
@@ -1253,12 +1496,15 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
      * @author xpenatan
      */
     private static final class AndroidVulkanBufferHandle implements Buffer {
+        private final AndroidVulkanGraphicsAttachment attachment;
         private final long handle;
         private final int size;
         private final BufferUsage usage;
         private boolean disposed;
 
-        AndroidVulkanBufferHandle(long handle, int size, BufferUsage usage) {
+        AndroidVulkanBufferHandle(AndroidVulkanGraphicsAttachment attachment, long handle, int size,
+                BufferUsage usage) {
+            this.attachment = attachment;
             this.handle = handle;
             this.size = size;
             this.usage = usage != null ? usage : BufferUsage.VERTEX;
@@ -1318,8 +1564,10 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (disposed) {
                 return;
             }
+            if (!attachment.isDisposed()) {
+                AndroidVulkanNative.destroyBuffer(handle);
+            }
             disposed = true;
-            AndroidVulkanNative.destroyBuffer(handle);
         }
 
         /**
@@ -1339,6 +1587,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
      * @author xpenatan
      */
     private static final class AndroidVulkanTextureHandle implements Texture {
+        private final AndroidVulkanGraphicsAttachment attachment;
         private final long handle;
         private final AndroidVulkanTextureViewHandle view;
         private final int width;
@@ -1347,7 +1596,9 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         private final TextureUsage usage;
         private boolean disposed;
 
-        AndroidVulkanTextureHandle(long handle, int width, int height, TextureFormat format, TextureUsage usage) {
+        AndroidVulkanTextureHandle(AndroidVulkanGraphicsAttachment attachment, long handle, int width, int height,
+                TextureFormat format, TextureUsage usage) {
+            this.attachment = attachment;
             this.handle = handle;
             this.view = new AndroidVulkanTextureViewHandle(this);
             this.width = width;
@@ -1440,8 +1691,10 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (disposed) {
                 return;
             }
+            if (!attachment.isDisposed()) {
+                AndroidVulkanNative.destroyTexture(handle);
+            }
             disposed = true;
-            AndroidVulkanNative.destroyTexture(handle);
         }
 
         /**
@@ -1704,10 +1957,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
      * @author xpenatan
      */
     private static final class AndroidVulkanShaderModuleHandle implements ShaderModule {
+        private final AndroidVulkanGraphicsAttachment attachment;
         private final long handle;
         private boolean disposed;
 
-        AndroidVulkanShaderModuleHandle(long handle) {
+        AndroidVulkanShaderModuleHandle(AndroidVulkanGraphicsAttachment attachment, long handle) {
+            this.attachment = attachment;
             this.handle = handle;
         }
 
@@ -1755,8 +2010,10 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (disposed) {
                 return;
             }
+            if (!attachment.isDisposed()) {
+                AndroidVulkanNative.destroyShaderModule(handle);
+            }
             disposed = true;
-            AndroidVulkanNative.destroyShaderModule(handle);
         }
 
         /**
@@ -1776,6 +2033,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
      * @author xpenatan
      */
     private static final class AndroidVulkanRenderPipelineHandle implements RenderPipeline {
+        private final AndroidVulkanGraphicsAttachment attachment;
         private final long handle;
         private final PrimitiveTopology primitiveTopology;
         private final int sampledTextureCount;
@@ -1783,8 +2041,10 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         private final int uniformDescriptorSetIndex;
         private boolean disposed;
 
-        AndroidVulkanRenderPipelineHandle(long handle, PrimitiveTopology primitiveTopology, int sampledTextureCount,
-                boolean uniformBufferEnabled, int uniformDescriptorSetIndex) {
+        AndroidVulkanRenderPipelineHandle(AndroidVulkanGraphicsAttachment attachment, long handle,
+                PrimitiveTopology primitiveTopology, int sampledTextureCount, boolean uniformBufferEnabled,
+                int uniformDescriptorSetIndex) {
+            this.attachment = attachment;
             this.handle = handle;
             this.primitiveTopology = primitiveTopology;
             this.sampledTextureCount = sampledTextureCount;
@@ -1842,8 +2102,10 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (disposed) {
                 return;
             }
+            if (!attachment.isDisposed()) {
+                AndroidVulkanNative.destroyRenderPipeline(handle);
+            }
             disposed = true;
-            AndroidVulkanNative.destroyRenderPipeline(handle);
         }
 
         /**

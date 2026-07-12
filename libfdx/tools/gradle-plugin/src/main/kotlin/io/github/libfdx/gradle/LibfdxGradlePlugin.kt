@@ -5,6 +5,7 @@ import io.github.libfdx.backend.web.WebAsset
 import io.github.libfdx.backend.web.WebAssets
 import org.gradle.api.Action
 import org.gradle.api.file.DuplicatesStrategy
+import org.gradle.api.file.FileCollection
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -27,6 +28,11 @@ import org.teavm.gradle.api.OptimizationLevel
 import org.teavm.gradle.api.TeaVMExtension
 import org.teavm.gradle.api.TeaVMCConfiguration
 import org.teavm.gradle.tasks.GenerateCTask
+
+internal fun prioritizedDesktopJvmClasspath(
+    targetRuntimeClasspath: FileCollection,
+    applicationRuntimeClasspath: FileCollection
+): FileCollection = targetRuntimeClasspath + applicationRuntimeClasspath
 
 class LibfdxGradlePlugin : Plugin<Project> {
     override fun apply(project: Project) {
@@ -642,7 +648,10 @@ class LibfdxGradlePlugin : Plugin<Project> {
         configuredTargets.forEach { target ->
             val taskBaseName = target?.let { targetTaskBase("libfdx_desktop_jvm", it.name) }
                 ?: "libfdx_desktop_jvm"
-            val releaseClasspath = applicationRuntimeClasspath + (target?.runtimeClasspath ?: project.files())
+            val releaseClasspath = prioritizedDesktopJvmClasspath(
+                target?.runtimeClasspath ?: project.files(),
+                applicationRuntimeClasspath
+            )
             val launchProperties = desktopJvm.launchProperties.get() + (target?.launchProperties?.get() ?: emptyMap())
             val displayName = target?.displayName?.get() ?: "libfdx desktop JVM"
             val launchDefaults = project.layout.buildDirectory.file(
@@ -673,6 +682,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
                 )?.get() ?: "Builds the $displayName desktop JVM release jar."
                 dependsOn("classes", releaseClasspath)
                 writeLaunchDefaults?.let { dependsOn(it) }
+                inputs.property("libfdxDesktopJvmClasspathPriority", "target-first")
                 archiveFileName.set("$taskBaseName.jar")
                 destinationDirectory.set(desktopJvm.outputDir)
                 duplicatesStrategy = DuplicatesStrategy.EXCLUDE
@@ -803,7 +813,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
             buildType.set("Debug")
             openConsole.set(extension.desktopC.openConsole)
             runArgs.set(project.providers.gradleProperty("libfdx.desktopC.runArgs").map { value ->
-                value.split(Regex("\\s+")).filter { it.isNotBlank() }
+                parseCommandLineArguments(value)
             }.orElse(emptyList()))
         }
         project.tasks.register<LibfdxDesktopCRunTask>(
@@ -817,7 +827,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
             buildType.set("Release")
             openConsole.set(extension.desktopC.openConsole)
             runArgs.set(project.providers.gradleProperty("libfdx.desktopC.runArgs").map { value ->
-                value.split(Regex("\\s+")).filter { it.isNotBlank() }
+                parseCommandLineArguments(value)
             }.orElse(emptyList()))
         }
     }

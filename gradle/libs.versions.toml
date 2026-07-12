@@ -1,5 +1,5 @@
 [versions]
-android-gradle-plugin = "8.12.0"
+android-gradle-plugin = "9.2.1"
 jwebgpu = "0.2.3"
 jmultiplatform = "0.1.3"
 junit-jupiter = "5.13.4"

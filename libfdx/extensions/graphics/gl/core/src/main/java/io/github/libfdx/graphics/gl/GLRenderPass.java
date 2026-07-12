@@ -67,28 +67,44 @@ final class GLRenderPass implements RenderPass {
 
     private final ProviderId providerId;
     private final GLApi gl;
+    private final GLResourceDomain resourceDomain;
+    private GLTextureHandle renderTarget;
     private GLRenderPipelineHandle pipeline;
     private GLBufferHandle[] vertexBuffers = new GLBufferHandle[2];
+    private GLTextureHandle[] textures = new GLTextureHandle[0];
     private GLBufferHandle indexBuffer;
     private ByteBuffer pbrUniformBytes;
     private FloatBuffer pbrUniformFloats;
-    private final boolean restoreDefaultFramebuffer;
-    private final int restoreWidth;
-    private final int restoreHeight;
+    private boolean restoreDefaultFramebuffer;
+    private int restoreWidth;
+    private int restoreHeight;
     private boolean pbrUniformDataDirty;
-    private boolean ended;
+    private boolean ended = true;
 
-    GLRenderPass(ProviderId providerId, GLApi gl) {
-        this(providerId, gl, false, 0, 0);
-    }
-
-    GLRenderPass(ProviderId providerId, GLApi gl, boolean restoreDefaultFramebuffer, int restoreWidth,
-            int restoreHeight) {
+    GLRenderPass(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain) {
         this.providerId = providerId;
         this.gl = gl;
+        this.resourceDomain = resourceDomain;
+    }
+
+    void begin(GLTextureHandle renderTarget, boolean restoreDefaultFramebuffer, int restoreWidth, int restoreHeight) {
+        if (!ended) {
+            throw new FdxException("Cannot reuse an active GL render pass");
+        }
+        this.renderTarget = renderTarget;
         this.restoreDefaultFramebuffer = restoreDefaultFramebuffer;
         this.restoreWidth = restoreWidth;
         this.restoreHeight = restoreHeight;
+        pipeline = null;
+        Arrays.fill(vertexBuffers, null);
+        Arrays.fill(textures, null);
+        indexBuffer = null;
+        pbrUniformDataDirty = false;
+        ended = false;
+    }
+
+    boolean isEnded() {
+        return ended;
     }
 
     /**
@@ -99,7 +115,8 @@ final class GLRenderPass implements RenderPass {
     @Override
     public void setPipeline(RenderPipeline pipeline) {
         ensureOpen();
-        this.pipeline = pipeline.as();
+        this.pipeline = GLResources.requirePipeline(pipeline, resourceDomain, "Render pipeline");
+        ensureTextureSlots(this.pipeline.sampledTextureCount());
         gl.useProgram(this.pipeline.program());
         gl.enableDepthTest(this.pipeline.depthTestEnabled());
         gl.depthMask(this.pipeline.depthWriteEnabled());
@@ -139,10 +156,7 @@ final class GLRenderPass implements RenderPass {
         if (slot < 0) {
             throw new FdxException("Vertex buffer slot cannot be negative");
         }
-        if (buffer == null) {
-            throw new FdxException("Vertex buffer cannot be null");
-        }
-        GLBufferHandle vertexBuffer = buffer.as();
+        GLBufferHandle vertexBuffer = GLResources.requireBuffer(buffer, resourceDomain, "Vertex buffer");
         if (vertexBuffer.usage() != BufferUsage.VERTEX) {
             throw new FdxException("RenderPass.setVertexBuffer requires a vertex buffer");
         }
@@ -160,13 +174,11 @@ final class GLRenderPass implements RenderPass {
     @Override
     public void setIndexBuffer(Buffer buffer) {
         ensureOpen();
-        if (buffer == null) {
-            throw new FdxException("Index buffer cannot be null");
-        }
-        indexBuffer = buffer.as();
-        if (indexBuffer.usage() != BufferUsage.INDEX) {
+        GLBufferHandle nextIndexBuffer = GLResources.requireBuffer(buffer, resourceDomain, "Index buffer");
+        if (nextIndexBuffer.usage() != BufferUsage.INDEX) {
             throw new FdxException("RenderPass.setIndexBuffer requires an index buffer");
         }
+        indexBuffer = nextIndexBuffer;
         gl.bindElementArrayBuffer(indexBuffer.buffer());
     }
 
@@ -179,18 +191,20 @@ final class GLRenderPass implements RenderPass {
     @Override
     public void setTexture(int slot, Texture texture) {
         ensureOpen();
-        if (texture == null) {
-            throw new FdxException("Texture cannot be null");
+        if (pipeline == null || pipeline.sampledTextureCount() <= 0) {
+            throw new FdxException("Current GL pipeline does not accept textures");
         }
-        GLTextureHandle glTexture = texture.as();
+        if (slot < 0 || slot >= pipeline.sampledTextureCount()) {
+            throw new FdxException("GL texture slot is outside the current pipeline texture range");
+        }
+        GLTextureHandle glTexture = GLResources.requireTexture(texture, resourceDomain, "Texture");
         if (!glTexture.usage().sampled()) {
             throw new FdxException("Texture was not created with sampled usage");
         }
         gl.activeTexture(slot);
         gl.bindTexture2D(glTexture.texture());
-        if (pipeline != null) {
-            setTextureUniform(slot);
-        }
+        textures[slot] = glTexture;
+        setTextureUniform(slot);
     }
 
     /**
@@ -325,6 +339,7 @@ final class GLRenderPass implements RenderPass {
         if (pipeline == null) {
             throw new FdxException("Render pipeline must be set before draw");
         }
+        validateBoundResources(false);
         if (firstInstance != 0) {
             throw new FdxException("GL draw currently supports firstInstance=0 only");
         }
@@ -354,6 +369,7 @@ final class GLRenderPass implements RenderPass {
         if (indexBuffer == null) {
             throw new FdxException("Index buffer must be set before drawIndexed");
         }
+        validateBoundResources(true);
         if (firstInstance != 0) {
             throw new FdxException("GL drawIndexed currently supports firstInstance=0 only");
         }
@@ -385,6 +401,11 @@ final class GLRenderPass implements RenderPass {
         if (restoreDefaultFramebuffer) {
             gl.bindFramebuffer(0);
         }
+        pipeline = null;
+        Arrays.fill(vertexBuffers, null);
+        Arrays.fill(textures, null);
+        indexBuffer = null;
+        renderTarget = null;
     }
 
     private void applyPbrUniformBuffer() {
@@ -680,8 +701,7 @@ final class GLRenderPass implements RenderPass {
         if (pipeline == null) {
             return;
         }
-        VertexLayout[] layouts = pipeline.vertexLayouts();
-        for (int slot = 0; slot < layouts.length; slot++) {
+        for (int slot = 0; slot < pipeline.vertexLayoutCount(); slot++) {
             applyVertexLayout(slot);
         }
     }
@@ -690,11 +710,10 @@ final class GLRenderPass implements RenderPass {
         if (pipeline == null || slot >= vertexBuffers.length || vertexBuffers[slot] == null) {
             return;
         }
-        VertexLayout[] layouts = pipeline.vertexLayouts();
-        if (slot >= layouts.length) {
+        if (slot >= pipeline.vertexLayoutCount()) {
             return;
         }
-        VertexLayout layout = layouts[slot];
+        VertexLayout layout = pipeline.vertexLayout(slot);
         gl.bindArrayBuffer(vertexBuffers[slot].buffer());
         VertexAttribute[] attributes = layout.attributes();
         int divisor = layout.stepMode() == VertexStepMode.INSTANCE ? 1 : 0;
@@ -717,9 +736,44 @@ final class GLRenderPass implements RenderPass {
         vertexBuffers = Arrays.copyOf(vertexBuffers, next);
     }
 
+    private void ensureTextureSlots(int textureCount) {
+        if (textures.length != textureCount) {
+            textures = new GLTextureHandle[textureCount];
+            return;
+        }
+        Arrays.fill(textures, null);
+    }
+
     private void ensureOpen() {
         if (ended) {
             throw new FdxException("Render pass has already ended");
+        }
+        if (renderTarget != null && renderTarget.isDisposed()) {
+            throw new FdxException("Render target texture has been disposed");
+        }
+    }
+
+    private void validateBoundResources(boolean indexed) {
+        GLResources.requireUsable(pipeline, resourceDomain, "Render pipeline");
+        for (int slot = 0; slot < pipeline.vertexLayoutCount(); slot++) {
+            if (slot >= vertexBuffers.length || vertexBuffers[slot] == null) {
+                throw new FdxException("Vertex buffer slot " + slot + " must be set before draw");
+            }
+            if (vertexBuffers[slot].isDisposed()) {
+                throw new FdxException("Vertex buffer slot " + slot + " has been disposed");
+            }
+        }
+        if (indexed) {
+            GLResources.requireUsable(indexBuffer, resourceDomain, "Index buffer");
+        }
+        for (int slot = 0; slot < pipeline.sampledTextureCount(); slot++) {
+            GLTextureHandle texture = textures[slot];
+            if (texture == null) {
+                throw new FdxException("GL texture slot " + slot + " has not been set");
+            }
+            if (texture.isDisposed()) {
+                throw new FdxException("GL texture slot " + slot + " has been disposed");
+            }
         }
     }
 
@@ -728,6 +782,7 @@ final class GLRenderPass implements RenderPass {
         if (pipeline == null) {
             throw new FdxException("Render pipeline must be set before uniforms");
         }
+        GLResources.requireUsable(pipeline, resourceDomain, "Render pipeline");
         if (name == null || name.length() == 0) {
             throw new FdxException("Uniform name cannot be empty");
         }

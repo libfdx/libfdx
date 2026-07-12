@@ -6,29 +6,35 @@ import com.github.xpenatan.webgpu.WGPURenderPipeline;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.RenderPipeline;
 
+import java.util.ArrayList;
+
 /**
  * Represents a WGPU render pipeline handle.
  *
  * @author xpenatan
  */
-final class WGPURenderPipelineHandle implements RenderPipeline {
+final class WGPURenderPipelineHandle extends WGPURecordedResource implements RenderPipeline {
     private final WGPURenderPipeline nativePipeline;
     private final WGPUPipelineLayout nativeLayout;
     private final WGPUBindGroupLayout textureBindGroupLayout;
     private final WGPUBindGroupLayout uniformBindGroupLayout;
     private final int sampledTextureCount;
     private final int uniformBindGroupIndex;
-    private boolean disposed;
+    private final int vertexBufferCount;
+    private ArrayList<WGPUTextureBindGroupResource> textureBindGroups;
 
-    WGPURenderPipelineHandle(WGPURenderPipeline nativePipeline, WGPUPipelineLayout nativeLayout,
+    WGPURenderPipelineHandle(WGPUResourceDomain resourceDomain, WGPURenderPipeline nativePipeline,
+            WGPUPipelineLayout nativeLayout,
             WGPUBindGroupLayout textureBindGroupLayout, WGPUBindGroupLayout uniformBindGroupLayout,
-            int sampledTextureCount, int uniformBindGroupIndex) {
+            int sampledTextureCount, int uniformBindGroupIndex, int vertexBufferCount) {
+        super(resourceDomain);
         this.nativePipeline = nativePipeline;
         this.nativeLayout = nativeLayout;
         this.textureBindGroupLayout = textureBindGroupLayout;
         this.uniformBindGroupLayout = uniformBindGroupLayout;
         this.sampledTextureCount = sampledTextureCount;
         this.uniformBindGroupIndex = uniformBindGroupIndex;
+        this.vertexBufferCount = vertexBufferCount;
     }
 
     WGPURenderPipeline nativePipeline() {
@@ -49,6 +55,34 @@ final class WGPURenderPipelineHandle implements RenderPipeline {
 
     int uniformBindGroupIndex() {
         return uniformBindGroupIndex;
+    }
+
+    int vertexBufferCount() {
+        return vertexBufferCount;
+    }
+
+    void addTextureBindGroup(WGPUTextureBindGroupResource bindGroup) {
+        if (bindGroup == null) {
+            return;
+        }
+        if (textureBindGroups == null) {
+            textureBindGroups = new ArrayList<WGPUTextureBindGroupResource>();
+        }
+        if (!textureBindGroups.contains(bindGroup)) {
+            textureBindGroups.add(bindGroup);
+        }
+    }
+
+    void removeTextureBindGroup(WGPUTextureBindGroupResource bindGroup) {
+        if (textureBindGroups == null) {
+            return;
+        }
+        for (int i = 0; i < textureBindGroups.size(); i++) {
+            if (textureBindGroups.get(i) == bindGroup) {
+                textureBindGroups.remove(i);
+                return;
+            }
+        }
     }
 
     /**
@@ -78,22 +112,7 @@ final class WGPURenderPipelineHandle implements RenderPipeline {
      */
     @Override
     public void dispose() {
-        if (disposed) {
-            return;
-        }
-        disposed = true;
-        nativePipeline.release();
-        nativePipeline.dispose();
-        nativeLayout.release();
-        nativeLayout.dispose();
-        if (textureBindGroupLayout != null && textureBindGroupLayout.isValid()) {
-            textureBindGroupLayout.release();
-            textureBindGroupLayout.dispose();
-        }
-        if (uniformBindGroupLayout != null && uniformBindGroupLayout.isValid()) {
-            uniformBindGroupLayout.release();
-            uniformBindGroupLayout.dispose();
-        }
+        retire();
     }
 
     /**
@@ -103,6 +122,54 @@ final class WGPURenderPipelineHandle implements RenderPipeline {
      */
     @Override
     public boolean isDisposed() {
-        return disposed;
+        return isRetired();
+    }
+
+    @Override
+    protected void onRetired() {
+        while (textureBindGroups != null && !textureBindGroups.isEmpty()) {
+            textureBindGroups.get(textureBindGroups.size() - 1).invalidate();
+        }
+    }
+
+    @Override
+    protected void releaseNative() {
+        WGPUCleanup cleanup = new WGPUCleanup();
+        if (uniformBindGroupLayout != null) {
+            cleanup.run(() -> resourceDomain().releaseUniformBindGroups(uniformBindGroupLayout));
+        }
+        if (nativePipeline != null) {
+            cleanup.run(() -> {
+                if (nativePipeline.isValid()) {
+                    nativePipeline.release();
+                }
+            });
+            cleanup.run(nativePipeline::dispose);
+        }
+        if (nativeLayout != null) {
+            cleanup.run(() -> {
+                if (nativeLayout.isValid()) {
+                    nativeLayout.release();
+                }
+            });
+            cleanup.run(nativeLayout::dispose);
+        }
+        if (textureBindGroupLayout != null) {
+            cleanup.run(() -> {
+                if (textureBindGroupLayout.isValid()) {
+                    textureBindGroupLayout.release();
+                }
+            });
+            cleanup.run(textureBindGroupLayout::dispose);
+        }
+        if (uniformBindGroupLayout != null) {
+            cleanup.run(() -> {
+                if (uniformBindGroupLayout.isValid()) {
+                    uniformBindGroupLayout.release();
+                }
+            });
+            cleanup.run(uniformBindGroupLayout::dispose);
+        }
+        cleanup.throwIfFailed();
     }
 }

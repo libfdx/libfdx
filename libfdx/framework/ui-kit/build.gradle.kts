@@ -26,6 +26,12 @@ dependencies {
     api(project(":libfdx:framework:assets:loaders"))
     api(project(":libfdx:framework:graphics"))
     api(project(":libfdx:framework:g2d"))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+tasks.named<Test>("test") {
+    useJUnitPlatform()
 }
 java {
     withSourcesJar()

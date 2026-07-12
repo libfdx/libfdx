@@ -5,6 +5,7 @@ import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.GraphicsAttachment;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentRequirements;
+import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.GraphicsEnvironment;
 import io.github.libfdx.graphics.NativeWindow;
 import io.github.libfdx.graphics.TextureFormat;
@@ -12,6 +13,7 @@ import io.github.libfdx.graphics.gl.GLConfiguration;
 import io.github.libfdx.graphics.gl.GLGraphicsAttachment;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GL;
+import org.lwjgl.opengl.GLCapabilities;
 
 /**
  * Provides desktop open GL services.
@@ -60,11 +62,22 @@ public final class DesktopOpenGLProvider implements GraphicsAttachmentProvider {
             throw new FdxException("Desktop OpenGL requires a backend window handle");
         }
         long windowHandle = nativeWindow.backendHandle();
+        GLGraphicsAttachment sharedAttachment = null;
+        GraphicsContext sharedContext = environment.sharedContext();
+        if (sharedContext != null) {
+            if (!ID.equals(sharedContext.providerId())) {
+                throw new FdxException("Cannot share a non-OpenGL graphics context with desktop OpenGL");
+            }
+            if (!(sharedContext instanceof GLGraphicsAttachment)) {
+                throw new FdxException("Desktop OpenGL shared context has an incompatible implementation");
+            }
+            sharedAttachment = (GLGraphicsAttachment) sharedContext;
+        }
         GLFW.glfwMakeContextCurrent(windowHandle);
-        GL.createCapabilities();
-        return new GLGraphicsAttachment(ID, new DesktopGLApi(), new DesktopGLSurface(windowHandle),
+        GLCapabilities capabilities = GL.createCapabilities();
+        return new GLGraphicsAttachment(ID, new DesktopGLApi(), new DesktopGLSurface(windowHandle, capabilities),
                 environment.display().framebufferWidth(), environment.display().framebufferHeight(),
-                TextureFormat.RGBA8_UNORM);
+                TextureFormat.RGBA8_UNORM, sharedAttachment);
     }
 
     /**

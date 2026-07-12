@@ -640,7 +640,8 @@ final class AndroidGlesApi implements GLApi {
     @Override
     public void enableAlphaBlending() {
         GLES30.glEnable(GLES30.GL_BLEND);
-        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA);
+        GLES30.glBlendFuncSeparate(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA,
+                GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA);
     }
 
     /**

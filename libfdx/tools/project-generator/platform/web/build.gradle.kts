@@ -89,14 +89,6 @@ tasks.register("project_generator_webgpu_js_build") {
     group = "application"
     description = "Builds the libfdx project generator WebGPU JavaScript web application."
     dependsOn("project_generator_webgl_js_build")
-    configureWebGpuPage("dist/web-js/webapp", "libfdx Project Generator - WebGPU JS")
-}
-
-tasks.register("project_generator_webgpu_wasm_build") {
-    group = "application"
-    description = "Builds the libfdx project generator WebGPU Wasm web application."
-    dependsOn("project_generator_webgl_wasm_build")
-    configureWebGpuPage("dist/web-wasm/webapp", "libfdx Project Generator - WebGPU Wasm")
 }
 
 registerWebRun("project_generator_webgl_js_run",
@@ -109,11 +101,7 @@ registerWebRun("project_generator_webgl_wasm_run",
 
 registerWebRun("project_generator_webgpu_js_run",
         "Builds and serves the libfdx project generator WebGPU JavaScript web application.",
-        "project_generator_webgpu_js_build", jsWebappDir, "/webgpu.html")
-
-registerWebRun("project_generator_webgpu_wasm_run",
-        "Builds and serves the libfdx project generator WebGPU Wasm web application.",
-        "project_generator_webgpu_wasm_build", wasmWebappDir, "/webgpu.html")
+        "project_generator_webgpu_js_build", jsWebappDir, "/?graphics=webgpu")
 
 fun runWebBuilder(classpath: FileCollection, target: String, mainClassName: String, title: String, outputDir: File,
         optimization: String, assets: List<File> = emptyList()) {
@@ -227,36 +215,6 @@ fun webContentType(name: String): String {
         name.endsWith(".jpg") || name.endsWith(".jpeg") -> "image/jpeg"
         else -> "application/octet-stream"
     }
-}
-
-fun Task.configureWebGpuPage(webappPath: String, title: String) {
-    val webappDir = layout.buildDirectory.dir(webappPath)
-    val indexFile = webappDir.map { it.file("index.html") }
-    val outputFile = webappDir.map { it.file("webgpu.html") }
-    inputs.file(indexFile)
-    outputs.file(outputFile)
-    doLast {
-        writeWebGpuPage(indexFile.get().asFile, outputFile.get().asFile, title)
-    }
-}
-
-fun writeWebGpuPage(indexFile: File, outputFile: File, title: String) {
-    val source = indexFile.readText()
-    val withTitle = source.replace(Regex("<title>.*</title>"), "<title>$title</title>")
-    val rewritten = when {
-        withTitle.contains("main();") -> withTitle.replace(
-            "main();",
-            "main([\"--graphics=webgpu\"]);"
-        )
-        withTitle.contains("teavm.exports.main([]);") -> withTitle.replace(
-            "teavm.exports.main([]);",
-            "teavm.exports.main([\"--graphics=webgpu\"]);"
-        )
-        else -> throw org.gradle.api.GradleException(
-            "Could not create WebGPU launch page from ${indexFile.absolutePath}"
-        )
-    }
-    outputFile.writeText(rewritten)
 }
 
 tasks.register<JavaExec>("test_archive_project") {

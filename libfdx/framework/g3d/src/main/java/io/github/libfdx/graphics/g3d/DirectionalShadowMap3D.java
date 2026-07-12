@@ -28,10 +28,11 @@ import io.github.libfdx.graphics.VertexAttribute;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
 import io.github.libfdx.math.Matrix4;
+
+import java.util.List;
 import io.github.libfdx.math.Vector3;
 
-import java.util.HashMap;
-import java.util.Iterator;
+import java.util.IdentityHashMap;
 import java.util.Map;
 
 /**
@@ -40,6 +41,7 @@ import java.util.Map;
  * @author xpenatan
  */
 public final class DirectionalShadowMap3D implements Disposable {
+    private static final int PRIMITIVE_TOPOLOGY_COUNT = PrimitiveTopology.values().length;
     private final GraphicsContext graphics;
     private final Texture texture;
     private final DefaultRenderTarget3D target;
@@ -164,9 +166,19 @@ public final class DirectionalShadowMap3D implements Disposable {
         }
         RenderPass pass = beginPass(light);
         batch.begin(pass, camera);
-        for (ModelInstance instance : instances) {
-            if (instance != null) {
-                batch.render(instance);
+        if (instances instanceof List<?>) {
+            List<?> values = (List<?>) instances;
+            for (int i = 0; i < values.size(); i++) {
+                ModelInstance instance = (ModelInstance) values.get(i);
+                if (instance != null) {
+                    batch.render(instance);
+                }
+            }
+        } else {
+            for (ModelInstance instance : instances) {
+                if (instance != null) {
+                    batch.render(instance);
+                }
             }
         }
         batch.end();
@@ -363,8 +375,10 @@ public final class DirectionalShadowMap3D implements Disposable {
         });
         private final GraphicsContext graphics;
         private final ShaderModule shaderModule;
-        private final Map<ShadowPipelineKey, RenderPipeline> pipelines =
-                new HashMap<ShadowPipelineKey, RenderPipeline>();
+        private final Map<VertexLayout, RenderPipeline[]> pipelines =
+                new IdentityHashMap<VertexLayout, RenderPipeline[]>();
+        private final float[] modelMatrix = new float[Matrix4.VALUE_COUNT];
+        private final float[] viewProjectionMatrix = new float[Matrix4.VALUE_COUNT];
         private RenderContext3D context;
         private boolean disposed;
 
@@ -379,10 +393,13 @@ public final class DirectionalShadowMap3D implements Disposable {
             if (renderable == null || renderable.meshPart() == null) {
                 return false;
             }
-            VertexAttribute[] attributes = renderable.meshPart().mesh().vertexLayout().attributes();
-            return attributes.length > 0
-                    && attributes[0].location() == 0
-                    && attributes[0].format() == VertexFormat.FLOAT32X3;
+            VertexLayout layout = renderable.meshPart().mesh().vertexLayout();
+            if (layout.attributeCount() == 0) {
+                return false;
+            }
+            VertexAttribute position = layout.attribute(0);
+            return position.location() == 0
+                    && position.format() == VertexFormat.FLOAT32X3;
         }
 
         @Override
@@ -403,8 +420,10 @@ public final class DirectionalShadowMap3D implements Disposable {
             RenderPass pass = context.pass();
             pass.setPipeline(pipeline(mesh.vertexLayout(), meshPart.primitiveTopology()));
             pass.setVertexBuffer(mesh.vertexBuffer());
-            pass.setUniformMatrix4("u_model", renderable.worldTransform().values());
-            pass.setUniformMatrix4("u_viewProjection", context.camera().combined().values());
+            renderable.worldTransform().copyValues(modelMatrix, 0);
+            context.camera().combined().copyValues(viewProjectionMatrix, 0);
+            pass.setUniformMatrix4("u_model", modelMatrix);
+            pass.setUniformMatrix4("u_viewProjection", viewProjectionMatrix);
             int indexCount = meshPart.indexCount() > 0 ? meshPart.indexCount() : mesh.indexCount();
             if (indexCount > 0) {
                 pass.setIndexBuffer(mesh.indexBuffer());
@@ -421,18 +440,24 @@ public final class DirectionalShadowMap3D implements Disposable {
         }
 
         private RenderPipeline pipeline(VertexLayout vertexLayout, PrimitiveTopology topology) {
-            ShadowPipelineKey key = new ShadowPipelineKey(vertexLayout, topology);
-            RenderPipeline pipeline = pipelines.get(key);
+            PrimitiveTopology actualTopology = topology != null ? topology : PrimitiveTopology.TRIANGLE_LIST;
+            RenderPipeline[] variants = pipelines.get(vertexLayout);
+            if (variants == null) {
+                variants = new RenderPipeline[PRIMITIVE_TOPOLOGY_COUNT];
+                pipelines.put(vertexLayout, variants);
+            }
+            int slot = actualTopology.ordinal();
+            RenderPipeline pipeline = variants[slot];
             if (pipeline == null) {
                 pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
                         .shader(shaderModule, TextureFormat.RGBA8_UNORM)
                         .label("directional shadow depth")
                         .shaderReflection(REFLECTION)
-                        .primitiveTopology(topology)
+                        .primitiveTopology(actualTopology)
                         .depthTestEnabled(true)
                         .depthWriteEnabled(true)
                         .vertexLayout(vertexLayout));
-                pipelines.put(key, pipeline);
+                variants[slot] = pipeline;
             }
             return pipeline;
         }
@@ -443,8 +468,12 @@ public final class DirectionalShadowMap3D implements Disposable {
                 return;
             }
             disposed = true;
-            for (Iterator<RenderPipeline> iterator = pipelines.values().iterator(); iterator.hasNext();) {
-                iterator.next().dispose();
+            for (RenderPipeline[] variants : pipelines.values()) {
+                for (int i = 0; i < variants.length; i++) {
+                    if (variants[i] != null) {
+                        variants[i].dispose();
+                    }
+                }
             }
             pipelines.clear();
             shaderModule.dispose();
@@ -456,32 +485,4 @@ public final class DirectionalShadowMap3D implements Disposable {
         }
     }
 
-    private static final class ShadowPipelineKey {
-        private final VertexLayout vertexLayout;
-        private final PrimitiveTopology topology;
-
-        ShadowPipelineKey(VertexLayout vertexLayout, PrimitiveTopology topology) {
-            this.vertexLayout = vertexLayout;
-            this.topology = topology != null ? topology : PrimitiveTopology.TRIANGLE_LIST;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            if (this == other) {
-                return true;
-            }
-            if (!(other instanceof ShadowPipelineKey)) {
-                return false;
-            }
-            ShadowPipelineKey key = (ShadowPipelineKey)other;
-            return vertexLayout == key.vertexLayout && topology == key.topology;
-        }
-
-        @Override
-        public int hashCode() {
-            int result = vertexLayout != null ? System.identityHashCode(vertexLayout) : 0;
-            result = 31 * result + topology.hashCode();
-            return result;
-        }
-    }
 }

@@ -23,16 +23,18 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.toVersion(25)
-        targetCompatibility = JavaVersion.toVersion(25)
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     sourceSets {
         getByName("main") {
-            assets.srcDir(rootProject.file("tests/assets"))
+            assets.directories.add(rootProject.file("tests/assets").absolutePath)
         }
     }
 }
+
+val adbExecutable = androidComponents.sdkComponents.adb
 
 dependencies {
     implementation(project(":tests:core"))
@@ -56,7 +58,7 @@ tasks.register<Exec>("test_android_gles_run") {
     description = "Installs and launches the Android GLES graphics test app."
     dependsOn("installDebug")
     doFirst {
-        commandLine(mutableListOf(android.adbExecutable.absolutePath, "shell", "am", "start", "-n",
+        commandLine(mutableListOf(adbExecutable.get().asFile.absolutePath, "shell", "am", "start", "-n",
                 "io.github.libfdx.tests.android/io.github.libfdx.tests.android.AndroidGlesTestActivity").apply {
             System.getProperties().stringPropertyNames()
                     .filter { it.startsWith("libfdx.test.") || it.startsWith("libfdx.validation.") }
@@ -76,7 +78,7 @@ tasks.register<Exec>("test_android_wgpu_jni_run") {
     description = "Installs and launches the Android WGPU JNI graphics test app."
     dependsOn("installDebug")
     doFirst {
-        commandLine(mutableListOf(android.adbExecutable.absolutePath, "shell", "am", "start", "-n",
+        commandLine(mutableListOf(adbExecutable.get().asFile.absolutePath, "shell", "am", "start", "-n",
                 "io.github.libfdx.tests.android/io.github.libfdx.tests.android.AndroidWgpuTestActivity").apply {
             System.getProperties().stringPropertyNames()
                     .filter { it.startsWith("libfdx.test.") || it.startsWith("libfdx.validation.") }
@@ -96,7 +98,7 @@ tasks.register<Exec>("test_android_vulkan_run") {
     description = "Installs and launches the Android Vulkan graphics test app."
     dependsOn("installDebug")
     doFirst {
-        commandLine(mutableListOf(android.adbExecutable.absolutePath, "shell", "am", "start", "-n",
+        commandLine(mutableListOf(adbExecutable.get().asFile.absolutePath, "shell", "am", "start", "-n",
                 "io.github.libfdx.tests.android/io.github.libfdx.tests.android.AndroidVulkanTestActivity").apply {
             System.getProperties().stringPropertyNames()
                     .filter { it.startsWith("libfdx.test.") || it.startsWith("libfdx.validation.") }

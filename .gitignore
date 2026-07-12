@@ -54,6 +54,7 @@ libgdx-*.zip.MD5
 **/jni/build
 ProguardMapping.txt
 local.properties
+/storage/
 **/webapp/**/*.js
 **/webapp/**/*.wasm
 *.ini

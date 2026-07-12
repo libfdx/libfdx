@@ -45,8 +45,7 @@ public final class ScenarioWaits {
      */
     public static ConfigurableWait event(String event) {
         return new ConfigurableWait("event(" + event + ")",
-                (context, startMillis, startFrame) -> context.events().contains(event))
-                .timeoutMillis(1000L);
+                (context, startMillis, startFrame) -> context.events().contains(event));
     }
 
     /**
@@ -58,8 +57,7 @@ public final class ScenarioWaits {
     public static ConfigurableWait captureReady(String name) {
         return new ConfigurableWait("captureReady(" + name + ")",
                 (context, startMillis, startFrame) -> context.hasCapture(name)
-                        || context.events().contains("capture.ready:" + name))
-                .timeoutMillis(1000L);
+                        || context.events().contains("capture.ready:" + name));
     }
 
     /**
@@ -90,8 +88,7 @@ public final class ScenarioWaits {
         if (predicate == null) {
             throw new IllegalArgumentException("Wait predicate cannot be null.");
         }
-        return new ConfigurableWait("until", (context, startMillis, startFrame) -> predicate.test(context))
-                .timeoutMillis(1000L);
+        return new ConfigurableWait("until", (context, startMillis, startFrame) -> predicate.test(context));
     }
 
     /**
@@ -105,8 +102,7 @@ public final class ScenarioWaits {
         if (predicate == null) {
             throw new IllegalArgumentException("Wait predicate cannot be null.");
         }
-        return new ConfigurableWait(name, (context, startMillis, startFrame) -> predicate.test(context))
-                .timeoutMillis(1000L);
+        return new ConfigurableWait(name, (context, startMillis, startFrame) -> predicate.test(context));
     }
 
     /**

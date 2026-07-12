@@ -1,5 +1,6 @@
 import io.github.libfdx.build.LibExt
 import org.gradle.api.publish.tasks.GenerateModuleMetadata
+import org.gradle.api.tasks.testing.Test
 
 plugins {
     id("maven-publish")
@@ -30,8 +31,24 @@ apply(from = "../../../buildSrc/src/main/kotlin/publish.gradle.kts")
 dependencies {
     implementation(libs.teavm.gradle.plugin)
     libfdxGradlePluginDependencyArtifacts.forEach { artifact ->
-        implementation("${LibExt.fdxGroup}:$artifact:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:$artifact:${LibExt.pluginBootstrapLibfdxVersion}")
     }
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+// Project generation must use the writer from this checkout. The included plugin build
+// deliberately compiles against previously published bootstrap artifacts, which would
+// otherwise make local desktop-C generator fixes invisible until after publication.
+sourceSets {
+    main {
+        java.srcDir("../../backends/desktop_c/src/main/java")
+        java.include("io/github/libfdx/backend/desktopc/NativeProjectWriter.java")
+    }
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
 }
 
 tasks.withType<GenerateModuleMetadata>().configureEach {

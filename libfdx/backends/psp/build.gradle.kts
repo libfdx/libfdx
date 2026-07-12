@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.testing.Test
+
 plugins {
     id("maven-publish")
     id("java-library")
@@ -24,6 +26,13 @@ dependencies {
     compileOnly("org.teavm:teavm-core:${libs.versions.teavm.get()}")
 
     runtimeOnly(project(":libfdx:framework:fdx:platform:shared"))
+
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
 }
 java {
     withSourcesJar()

@@ -46,6 +46,9 @@ public final class UiAnimationSpec {
      * @return this UI animation spec for chaining
      */
     public UiAnimationSpec durationMillis(int durationMillis) {
+        if (this.durationMillis == Math.max(0, durationMillis)) {
+            return this;
+        }
         return new UiAnimationSpec(durationMillis, delayMillis, repeat, repeatReverse, easing, fade, slideX, slideY);
     }
 
@@ -56,6 +59,9 @@ public final class UiAnimationSpec {
      * @return this UI animation spec for chaining
      */
     public UiAnimationSpec delayMillis(int delayMillis) {
+        if (this.delayMillis == Math.max(0, delayMillis)) {
+            return this;
+        }
         return new UiAnimationSpec(durationMillis, delayMillis, repeat, repeatReverse, easing, fade, slideX, slideY);
     }
 
@@ -66,6 +72,10 @@ public final class UiAnimationSpec {
      * @return this UI animation spec for chaining
      */
     public UiAnimationSpec easing(UiEasing easing) {
+        UiEasing value = easing != null ? easing : UiEasing.linear();
+        if (this.easing == value) {
+            return this;
+        }
         return new UiAnimationSpec(durationMillis, delayMillis, repeat, repeatReverse, easing, fade, slideX, slideY);
     }
 
@@ -75,6 +85,9 @@ public final class UiAnimationSpec {
      * @return this UI animation spec for chaining
      */
     public UiAnimationSpec repeat() {
+        if (repeat && !repeatReverse) {
+            return this;
+        }
         return new UiAnimationSpec(durationMillis, delayMillis, true, false, easing, fade, slideX, slideY);
     }
 
@@ -84,6 +97,9 @@ public final class UiAnimationSpec {
      * @return this UI animation spec for chaining
      */
     public UiAnimationSpec repeatReverse() {
+        if (repeat && repeatReverse) {
+            return this;
+        }
         return new UiAnimationSpec(durationMillis, delayMillis, true, true, easing, fade, slideX, slideY);
     }
 
@@ -93,6 +109,9 @@ public final class UiAnimationSpec {
      * @return this UI animation spec for chaining
      */
     public UiAnimationSpec fade() {
+        if (fade) {
+            return this;
+        }
         return new UiAnimationSpec(durationMillis, delayMillis, repeat, repeatReverse, easing, true, slideX, slideY);
     }
 
@@ -103,6 +122,9 @@ public final class UiAnimationSpec {
      * @return this UI animation spec for chaining
      */
     public UiAnimationSpec slideX(float slideX) {
+        if (Float.compare(this.slideX, slideX) == 0) {
+            return this;
+        }
         return new UiAnimationSpec(durationMillis, delayMillis, repeat, repeatReverse, easing, fade, slideX, slideY);
     }
 
@@ -113,6 +135,9 @@ public final class UiAnimationSpec {
      * @return this UI animation spec for chaining
      */
     public UiAnimationSpec slideY(float slideY) {
+        if (Float.compare(this.slideY, slideY) == 0) {
+            return this;
+        }
         return new UiAnimationSpec(durationMillis, delayMillis, repeat, repeatReverse, easing, fade, slideX, slideY);
     }
 

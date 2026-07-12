@@ -76,15 +76,21 @@ public final class ReadbackTest extends ApplicationAdapter {
         shapes.filledRect(-1.0f, -1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f);
         shapes.end();
 
-        if (!validated) {
-            validateReadback();
-            validated = true;
-        }
-
         renderedFrames++;
         fpsLogger.frame(deltaSeconds, renderedFrames);
         if (exitAfterFrames > 0L && renderedFrames >= exitAfterFrames) {
             application.requestExit();
+        }
+    }
+
+    /**
+     * Validates the rendered frame after every renderer has finished recording commands.
+     */
+    @Override
+    public void onFrameEnd() {
+        if (!validated) {
+            validateReadback();
+            validated = true;
         }
     }
 
@@ -122,10 +128,10 @@ public final class ReadbackTest extends ApplicationAdapter {
             }
 
             int x = width / 2;
-            int bottomY = height / 4;
-            int topY = height - 1 - height / 4;
-            assertPixel(pixels, width, x, bottomY, 255, 0, 255, "bottom raw readback row");
-            assertPixel(pixels, width, x, topY, 0, 255, 0, "top raw readback row");
+            int lowerSampleY = lowerHalfSampleY(height);
+            int upperSampleY = height - 1 - lowerSampleY;
+            assertPixel(pixels, width, x, lowerSampleY, 255, 0, 255, "lower raw readback sample");
+            assertPixel(pixels, width, x, upperSampleY, 0, 255, 0, "upper raw readback sample");
 
             String capturePath = capturePath();
             if (isAndroidFiles()) {
@@ -175,10 +181,12 @@ public final class ReadbackTest extends ApplicationAdapter {
             }
         }
 
-        int topOffset = header.length + x * 3;
-        int bottomOffset = header.length + (height - 1) * width * 3 + x * 3;
-        assertRgb(file, topOffset, 0, 255, 0, "top PPM row");
-        assertRgb(file, bottomOffset, 255, 0, 255, "bottom PPM row");
+        int upperSampleRow = lowerHalfSampleY(height);
+        int lowerSampleRow = height - 1 - upperSampleRow;
+        int upperOffset = header.length + upperSampleRow * width * 3 + x * 3;
+        int lowerOffset = header.length + lowerSampleRow * width * 3 + x * 3;
+        assertRgb(file, upperOffset, 0, 255, 0, "upper PPM sample");
+        assertRgb(file, lowerOffset, 255, 0, 255, "lower PPM sample");
     }
 
     private byte[] readFile(String path) throws Exception {
@@ -241,5 +249,12 @@ public final class ReadbackTest extends ApplicationAdapter {
     private int framebufferHeight() {
         int height = display.framebufferHeight() > 0 ? display.framebufferHeight() : display.height();
         return height > 0 ? height : 480;
+    }
+
+    private int lowerHalfSampleY(int height) {
+        if (height <= 1) {
+            return 0;
+        }
+        return Math.min(height / 2 - 1, height * 3 / 8);
     }
 }

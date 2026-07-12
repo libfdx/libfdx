@@ -1,5 +1,7 @@
 package io.github.libfdx.samples.multiplayer.webrtc.web;
 
+import io.github.libfdx.graphics.gl.web.WebGLProvider;
+
 /**
  * Launches the WebRTC multiplayer 2D web Wasm entry point.
  *
@@ -15,6 +17,6 @@ public final class MultiplayerWebRtcWebWasmLauncher {
      * @param args the args
      */
     public static void main(String[] args) {
-        MultiplayerWebRtcWebLauncherSupport.start("Wasm", args);
+        MultiplayerWebRtcWebLauncherSupport.start("Wasm", false, new WebGLProvider());
     }
 }

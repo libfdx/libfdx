@@ -22,6 +22,13 @@ dependencies {
     api(project(":libfdx:framework:fdx:core"))
     api(project(":libfdx:framework:display"))
     api(project(":libfdx:framework:input"))
+
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+tasks.named<Test>("test") {
+    useJUnitPlatform()
 }
 java {
     withSourcesJar()

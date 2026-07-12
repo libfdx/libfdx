@@ -5,6 +5,7 @@ import io.github.libfdx.net.webrtc.platform.WebRtcDataChannel;
 import io.github.libfdx.net.webrtc.platform.WebRtcDataChannelListener;
 import io.github.libfdx.net.webrtc.platform.WebRtcIceCandidate;
 import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnection;
+import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnectionListener;
 import io.github.libfdx.net.webrtc.platform.WebRtcSessionDescription;
 import io.github.libfdx.net.webrtc.platform.WebRtcSessionDescriptionCallback;
 import org.teavm.jso.JSBody;
@@ -16,10 +17,15 @@ import org.teavm.jso.JSBody;
  */
 public final class WebWebRtcPeerConnection implements WebRtcPeerConnection {
     private final int handle;
+    private final WebRtcPeerConnectionListener listener;
+    private final WebWebRtcPeerConnectionProvider owner;
     private boolean closed;
 
-    WebWebRtcPeerConnection(int handle) {
+    WebWebRtcPeerConnection(int handle, WebRtcPeerConnectionListener listener,
+            WebWebRtcPeerConnectionProvider owner) {
         this.handle = handle;
+        this.listener = listener;
+        this.owner = owner;
     }
 
     @Override
@@ -64,12 +70,23 @@ public final class WebWebRtcPeerConnection implements WebRtcPeerConnection {
 
     @Override
     public void setRemoteAnswer(WebRtcSessionDescription answer) {
-        setRemoteAnswer0(handle, answer.sdp());
+        setRemoteAnswer0(handle, answer.sdp(), new WebWebRtcCallbacks.ErrorCallback() {
+            @Override
+            public void call(String value) {
+                listener.error(new RuntimeException(value));
+            }
+        });
     }
 
     @Override
     public void addIceCandidate(WebRtcIceCandidate candidate) {
-        addIceCandidate0(handle, candidate.candidate(), candidate.sdpMid(), candidate.sdpMLineIndex());
+        addIceCandidate0(handle, candidate.candidate(), candidate.sdpMid(), candidate.sdpMLineIndex(),
+                new WebWebRtcCallbacks.ErrorCallback() {
+                    @Override
+                    public void call(String value) {
+                        listener.error(new RuntimeException(value));
+                    }
+                });
     }
 
     @Override
@@ -91,7 +108,12 @@ public final class WebWebRtcPeerConnection implements WebRtcPeerConnection {
     public void close() {
         if (!closed) {
             closed = true;
-            close0(handle);
+            try {
+                close0(handle);
+            }
+            finally {
+                owner.connectionClosed(this);
+            }
         }
     }
 
@@ -134,13 +156,16 @@ public final class WebWebRtcPeerConnection implements WebRtcPeerConnection {
     private static native void handleOffer0(int peer, String sdp, WebWebRtcCallbacks.StringCallback success,
             WebWebRtcCallbacks.ErrorCallback error);
 
-    @JSBody(params = {"peer", "sdp"}, script =
-            "window.__libfdxWebRtc.peers[peer].setRemoteDescription({ type: 'answer', sdp: sdp });")
-    private static native void setRemoteAnswer0(int peer, String sdp);
+    @JSBody(params = {"peer", "sdp", "error"}, script =
+            "window.__libfdxWebRtc.peers[peer].setRemoteDescription({ type: 'answer', sdp: sdp })"
+                    + ".catch(function(reason) { error(reason && reason.message ? reason.message : String(reason)); });")
+    private static native void setRemoteAnswer0(int peer, String sdp, WebWebRtcCallbacks.ErrorCallback error);
 
-    @JSBody(params = {"peer", "candidate", "sdpMid", "sdpMLineIndex"}, script =
-            "window.__libfdxWebRtc.peers[peer].addIceCandidate({ candidate: candidate, sdpMid: sdpMid || null, sdpMLineIndex: sdpMLineIndex });")
-    private static native void addIceCandidate0(int peer, String candidate, String sdpMid, int sdpMLineIndex);
+    @JSBody(params = {"peer", "candidate", "sdpMid", "sdpMLineIndex", "error"}, script =
+            "window.__libfdxWebRtc.peers[peer].addIceCandidate({ candidate: candidate, sdpMid: sdpMid || null, sdpMLineIndex: sdpMLineIndex })"
+                    + ".catch(function(reason) { error(reason && reason.message ? reason.message : String(reason)); });")
+    private static native void addIceCandidate0(int peer, String candidate, String sdpMid, int sdpMLineIndex,
+            WebWebRtcCallbacks.ErrorCallback error);
 
     @JSBody(params = {"peer"}, script = "window.__libfdxWebRtc.peers[peer].close(); window.__libfdxWebRtc.peers[peer] = null;")
     private static native void close0(int peer);

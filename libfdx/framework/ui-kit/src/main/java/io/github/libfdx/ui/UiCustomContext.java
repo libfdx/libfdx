@@ -34,4 +34,9 @@ public final class UiCustomContext {
     UiDrawFunction drawFunction() {
         return drawFunction;
     }
+
+    void reset() {
+        measureFunction = null;
+        drawFunction = null;
+    }
 }

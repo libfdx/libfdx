@@ -1,8 +1,9 @@
 package io.github.libfdx.ui;
 
 import io.github.libfdx.graphics.g2d.TextureRegion;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Represents an ui scope.
@@ -10,15 +11,65 @@ import java.util.List;
  * @author xpenatan
  */
 public final class UiScope {
+    private static final UiModifier DEFAULT_INTERACTIVE_MODIFIER = UiModifier.none().focusable(true);
+    private static final UiModifier DEFAULT_ITEM_MODIFIER = UiModifier.none().animateItemPlacement();
+    private static final UiModifier DEFAULT_VIRTUAL_LIST_MODIFIER = UiModifier.none().fillWidth();
+    private static final UiAnimationSpec TOOLTIP_ANIMATION = Ui.animation().durationMillis(160).fade();
+    private static final int NODE_KEY_TEXT_AREA_SCROLL = 2;
     private final UiRoot root;
-    private final UiNode parent;
-    private final String path;
+    private UiNode parent;
+    private String path;
     private int childIndex;
+    private String[] identityPaths = new String[8];
+    private UiNodeType[] identityTypes = new UiNodeType[8];
+    private String[] identityKeys = new String[8];
+    private int[] identityChildIndices = new int[8];
+    private String[] identities = new String[8];
+    private int identityCount;
+    private String[] scopedKeyBases = new String[8];
+    private String[] scopedKeySeparators = new String[8];
+    private String[] scopedKeyNames = new String[8];
+    private String[] scopedKeys = new String[8];
+    private int scopedKeyCount;
+    private Object[] itemKeySources = new Object[8];
+    private int[] itemKeyFallbackIndices = new int[8];
+    private boolean[] itemKeyExplicit = new boolean[8];
+    private String[] itemKeys = new String[8];
+    private int itemKeyCount;
+    private UiModifier[] animatedModifiers = new UiModifier[8];
+    private UiModifier[] interactiveModifierSources = new UiModifier[8];
+    private UiModifier[] interactiveModifiers = new UiModifier[8];
+    private int interactiveModifierCount;
+    private UiModifier[] contentSizeModifierSources = new UiModifier[8];
+    private UiAnimationSpec[] contentSizeModifierAnimations = new UiAnimationSpec[8];
+    private UiModifier[] contentSizeModifiers = new UiModifier[8];
+    private int contentSizeModifierCount;
 
-    UiScope(UiRoot root, UiNode parent, String path) {
+    UiScope(UiRoot root) {
         this.root = root;
+    }
+
+    UiScope reset(UiNode parent, String path) {
         this.parent = parent;
         this.path = path;
+        childIndex = 0;
+        identityCount = 0;
+        scopedKeyCount = 0;
+        itemKeyCount = 0;
+        interactiveModifierCount = 0;
+        contentSizeModifierCount = 0;
+        return this;
+    }
+
+    void clear() {
+        parent = null;
+        path = null;
+        childIndex = 0;
+        identityCount = 0;
+        scopedKeyCount = 0;
+        itemKeyCount = 0;
+        interactiveModifierCount = 0;
+        contentSizeModifierCount = 0;
     }
 
     /**
@@ -323,10 +374,16 @@ public final class UiScope {
      */
     public UiNode slider(UiModifier modifier, UiFloatState state, float minimum, float maximum) {
         UiNode node = addNode(UiNodeType.SLIDER, null, interactive(modifier));
-        UiRange range = new UiRange(minimum, maximum);
+        UiSliderModel model = node.descriptor() instanceof UiSliderModel
+                ? (UiSliderModel) node.descriptor()
+                : null;
+        if (model == null || !model.matches(state, minimum, maximum)) {
+            model = new UiSliderModel(new UiRange(minimum, maximum), state);
+        }
+        UiRange range = model.range();
         float value = state != null ? state.get() : minimum;
         node.floatValue(range.clamp(value));
-        node.descriptor(new UiSliderModel(range, state));
+        node.descriptor(model);
         return node;
     }
 
@@ -373,9 +430,8 @@ public final class UiScope {
      * @return the progress bar
      */
     public UiNode progressBar(UiModifier modifier, UiFloatState state, float minimum, float maximum) {
-        UiRange range = new UiRange(minimum, maximum);
         float value = state != null ? state.get() : minimum;
-        return progressBar(modifier, value, range, state);
+        return progressBar(modifier, value, minimum, maximum, state);
     }
 
     /**
@@ -388,13 +444,20 @@ public final class UiScope {
      * @return the progress bar
      */
     public UiNode progressBar(UiModifier modifier, float value, float minimum, float maximum) {
-        return progressBar(modifier, value, new UiRange(minimum, maximum), null);
+        return progressBar(modifier, value, minimum, maximum, null);
     }
 
-    private UiNode progressBar(UiModifier modifier, float value, UiRange range, UiFloatState state) {
+    private UiNode progressBar(UiModifier modifier, float value, float minimum, float maximum, UiFloatState state) {
         UiNode node = addNode(UiNodeType.PROGRESS_BAR, null, modifier);
+        UiProgressBarModel model = node.descriptor() instanceof UiProgressBarModel
+                ? (UiProgressBarModel) node.descriptor()
+                : null;
+        if (model == null || !model.matches(state, minimum, maximum)) {
+            model = new UiProgressBarModel(new UiRange(minimum, maximum), state);
+        }
+        UiRange range = model.range();
         node.floatValue(range.clamp(value));
-        node.descriptor(new UiProgressBarModel(range, state));
+        node.descriptor(model);
         return node;
     }
 
@@ -419,7 +482,10 @@ public final class UiScope {
      */
     public UiNode tabs(UiModifier modifier, UiIntState activeIndex, String... labels) {
         UiNode node = addNode(UiNodeType.TABS, null, interactive(modifier));
-        UiTabsModel model = new UiTabsModel(activeIndex, labels);
+        UiTabsModel model = node.descriptor() instanceof UiTabsModel
+                ? (UiTabsModel) node.descriptor()
+                : new UiTabsModel(activeIndex, labels);
+        model.update(activeIndex, labels);
         int active = model.clamp(activeIndex != null ? activeIndex.get() : node.intValue());
         if (active >= 0 && activeIndex != null && activeIndex.get() != active) {
             activeIndex.set(active);
@@ -532,7 +598,7 @@ public final class UiScope {
         model.multiline(true);
         model.inputFilter(UiTextInputFilter.STRING);
         model.textAreaOptions(options);
-        UiScrollState scrollState = root.scrollState(node.identity() + ":text-area");
+        UiScrollState scrollState = root.scrollState(node.derivedKey(NODE_KEY_TEXT_AREA_SCROLL, ":text-area"));
         model.scrollState(scrollState);
         node.scrollState(scrollState);
         node.descriptor(model);
@@ -634,17 +700,13 @@ public final class UiScope {
     public UiNode animatedVisibility(boolean visible, UiAnimationSpec animation, UiContent content) {
         UiAnimationSpec spec = animation != null ? animation : UiAnimationSpec.defaultSpec();
         String identity = nextIdentity(UiNodeType.ANIMATED_VISIBILITY, null);
-        UiFloatAnimatable progress = root.floatAnimatable(identity + ":visibility", visible ? 1.0f : 0.0f);
+        UiFloatAnimatable progress = root.floatAnimatable(
+                scopedKey(identity, ":visibility", ""), visible ? 1.0f : 0.0f);
         progress.animateTo(visible ? 1.0f : 0.0f, spec);
         float value = progress.get();
-        UiModifier modifier = UiModifier.none();
-        if (spec.isFade()) {
-            modifier = modifier.alpha(value);
-        }
-        if (spec.slideX() != 0.0f || spec.slideY() != 0.0f) {
-            float remaining = 1.0f - value;
-            modifier = modifier.offset(spec.slideX() * remaining, spec.slideY() * remaining);
-        }
+        float remaining = 1.0f - value;
+        UiModifier modifier = animatedModifier(spec.isFade() ? value : 1.0f,
+                spec.slideX() * remaining, spec.slideY() * remaining);
         UiNode node = addNode(identity, UiNodeType.ANIMATED_VISIBILITY, null, modifier);
         node.visible(visible || progress.isRunning() || value > 0.001f);
         node.animationSpec(spec);
@@ -685,7 +747,8 @@ public final class UiScope {
      */
     public UiNode animateContentSize(UiModifier modifier, UiAnimationSpec animation, UiContent content) {
         UiModifier value = modifier != null ? modifier : UiModifier.none();
-        return container(UiNodeType.COLUMN, null, value.animateContentSize(animation), content);
+        UiAnimationSpec spec = animation != null ? animation : UiAnimationSpec.defaultSpec();
+        return container(UiNodeType.COLUMN, null, contentSizeModifier(value, spec), content);
     }
 
     /**
@@ -712,7 +775,13 @@ public final class UiScope {
     public UiNode window(String title, UiModifier modifier, UiWindowState state, UiContent content) {
         UiNode node = addNode(UiNodeType.WINDOW, title, interactive(modifier));
         node.text(title);
-        node.descriptor(new UiWindowModel(state));
+        UiWindowModel model = node.descriptor() instanceof UiWindowModel
+                ? (UiWindowModel) node.descriptor()
+                : null;
+        if (model == null || !model.matches(state)) {
+            model = new UiWindowModel(state);
+        }
+        node.descriptor(model);
         build(node, content);
         return node;
     }
@@ -755,10 +824,10 @@ public final class UiScope {
     public UiNode tooltip(UiTooltip tooltip, UiContent content) {
         String identity = nextIdentity(UiNodeType.TOOLTIP, tooltip != null ? tooltip.text() : null);
         boolean active = root.tooltipActive(tooltip);
-        UiFloatAnimatable alpha = root.floatAnimatable(identity + ":alpha", active ? 1.0f : 0.0f);
-        alpha.animateTo(active ? 1.0f : 0.0f, Ui.animation().durationMillis(160).fade());
+        UiFloatAnimatable alpha = root.floatAnimatable(scopedKey(identity, ":alpha", ""), active ? 1.0f : 0.0f);
+        alpha.animateTo(active ? 1.0f : 0.0f, TOOLTIP_ANIMATION);
         UiNode node = addNode(identity, UiNodeType.TOOLTIP, tooltip != null ? tooltip.text() : null,
-                UiModifier.none().alpha(alpha.get()));
+                animatedModifier(alpha.get(), 0.0f, 0.0f));
         node.descriptor(tooltip);
         node.visible(active || alpha.isRunning() || alpha.get() > 0.001f);
         if (node.visible()) {
@@ -779,13 +848,13 @@ public final class UiScope {
         if (items == null || content == null) {
             return;
         }
-        int index = 0;
-        for (T item : items) {
-            String itemKey = key != null ? String.valueOf(key.key(item)) : String.valueOf(index);
-            UiNode node = addNode(UiNodeType.ITEM, itemKey, UiModifier.none().animateItemPlacement());
+        List<T> values = root.materialize(items);
+        for (int index = 0; index < values.size(); index++) {
+            T item = values.get(index);
+            String itemKey = itemKey(key != null ? key.key(item) : null, index, key != null);
+            UiNode node = addNode(UiNodeType.ITEM, itemKey, DEFAULT_ITEM_MODIFIER);
             node.value(item);
-            content.build(new UiScope(root, node, node.identity()), item);
-            index++;
+            content.build(root.obtainScope(node, node.identity()), item);
         }
     }
 
@@ -803,26 +872,23 @@ public final class UiScope {
     public <T> UiNode virtualList(Iterable<T> items, UiListState state, int visibleCount, UiKey<T> key,
             UiItemContent<T> content) {
         UiListState listState = state != null ? state : listState(null);
-        UiNode node = addNode(UiNodeType.SCROLL, "virtual-list", UiModifier.none().fillWidth());
+        UiNode node = addNode(UiNodeType.SCROLL, "virtual-list", DEFAULT_VIRTUAL_LIST_MODIFIER);
         node.listState(listState);
         if (items == null || content == null) {
             return node;
         }
-        List<T> values = new ArrayList<T>();
-        for (T item : items) {
-            values.add(item);
-        }
+        List<T> values = root.materialize(items);
         int first = Math.max(0, Math.min(listState.firstVisibleIndex(), values.size()));
         int count = Math.max(0, visibleCount);
         int last = Math.min(values.size(), first + count);
-        UiScope childScope = new UiScope(root, node, node.identity());
+        UiScope childScope = root.obtainScope(node, node.identity());
         for (int index = first; index < last; index++) {
             T item = values.get(index);
-            String itemKey = key != null ? String.valueOf(key.key(item)) : String.valueOf(index);
+            String itemKey = childScope.itemKey(key != null ? key.key(item) : null, index, key != null);
             UiNode itemNode = childScope.addNode(UiNodeType.ITEM, itemKey,
-                    UiModifier.none().animateItemPlacement());
+                    DEFAULT_ITEM_MODIFIER);
             itemNode.value(item);
-            content.build(new UiScope(root, itemNode, itemNode.identity()), item);
+            content.build(root.obtainScope(itemNode, itemNode.identity()), item);
         }
         return node;
     }
@@ -838,9 +904,16 @@ public final class UiScope {
     public UiNode custom(String type, UiModifier modifier, UiCustomContent content) {
         UiNode node = addNode(UiNodeType.CUSTOM, type, modifier);
         if (content != null) {
-            UiCustomContext context = new UiCustomContext();
+            UiCustomContext context = node.customContext();
+            if (context == null) {
+                context = new UiCustomContext();
+            } else {
+                context.reset();
+            }
             content.build(context);
             node.customContext(context);
+        } else {
+            node.customContext(null);
         }
         return node;
     }
@@ -854,7 +927,7 @@ public final class UiScope {
      * @return the animatable
      */
     public <T> UiAnimatable<T> animatable(String key, T value) {
-        return root.animatable(path + ":animatable:" + key, value);
+        return root.animatable(scopedKey(path, ":animatable:", String.valueOf(key)), value);
     }
 
     /**
@@ -865,7 +938,7 @@ public final class UiScope {
      * @return the float animatable
      */
     public UiFloatAnimatable floatAnimatable(String key, float value) {
-        return root.floatAnimatable(path + ":float-animatable:" + key, value);
+        return root.floatAnimatable(scopedKey(path, ":float-animatable:", String.valueOf(key)), value);
     }
 
     /**
@@ -875,7 +948,7 @@ public final class UiScope {
      * @return the scroll state
      */
     public UiScrollState scrollState(String key) {
-        return root.scrollState(path + ":scroll:" + key);
+        return root.scrollState(scopedKey(path, ":scroll:", String.valueOf(key)));
     }
 
     /**
@@ -885,7 +958,7 @@ public final class UiScope {
      * @return the list state
      */
     public UiListState listState(String key) {
-        return root.listState(path + ":list:" + key);
+        return root.listState(scopedKey(path, ":list:", String.valueOf(key)));
     }
 
     private UiNode container(UiNodeType type, String key, UiModifier modifier, UiContent content) {
@@ -907,21 +980,139 @@ public final class UiScope {
 
     private void build(UiNode node, UiContent content) {
         if (content != null) {
-            content.build(new UiScope(root, node, node.identity()));
+            content.build(root.obtainScope(node, node.identity()));
         }
     }
 
     private String nextIdentity(UiNodeType type, String key) {
-        if (key != null) {
-            return path + "/" + type.name() + ":key:" + key;
+        int index = identityCount++;
+        if (index >= identities.length) {
+            int capacity = identities.length * 2;
+            identityPaths = Arrays.copyOf(identityPaths, capacity);
+            identityTypes = Arrays.copyOf(identityTypes, capacity);
+            identityKeys = Arrays.copyOf(identityKeys, capacity);
+            identityChildIndices = Arrays.copyOf(identityChildIndices, capacity);
+            identities = Arrays.copyOf(identities, capacity);
+            animatedModifiers = Arrays.copyOf(animatedModifiers, capacity);
         }
-        String identity = path + "/" + childIndex + ":" + type.name();
-        childIndex++;
+        int unkeyedIndex = key == null ? childIndex++ : -1;
+        String identity = identities[index];
+        if (identity != null
+                && Objects.equals(identityPaths[index], path)
+                && identityTypes[index] == type
+                && Objects.equals(identityKeys[index], key)
+                && identityChildIndices[index] == unkeyedIndex) {
+            return identity;
+        }
+        identity = key != null
+                ? path + "/" + type.name() + ":key:" + key
+                : path + "/" + unkeyedIndex + ":" + type.name();
+        identityPaths[index] = path;
+        identityTypes[index] = type;
+        identityKeys[index] = key;
+        identityChildIndices[index] = unkeyedIndex;
+        identities[index] = identity;
         return identity;
+    }
+
+    private String scopedKey(String base, String separator, String name) {
+        int index = scopedKeyCount++;
+        if (index >= scopedKeys.length) {
+            int capacity = scopedKeys.length * 2;
+            scopedKeyBases = Arrays.copyOf(scopedKeyBases, capacity);
+            scopedKeySeparators = Arrays.copyOf(scopedKeySeparators, capacity);
+            scopedKeyNames = Arrays.copyOf(scopedKeyNames, capacity);
+            scopedKeys = Arrays.copyOf(scopedKeys, capacity);
+        }
+        String cached = scopedKeys[index];
+        if (cached != null
+                && Objects.equals(scopedKeyBases[index], base)
+                && Objects.equals(scopedKeySeparators[index], separator)
+                && Objects.equals(scopedKeyNames[index], name)) {
+            return cached;
+        }
+        scopedKeyBases[index] = base;
+        scopedKeySeparators[index] = separator;
+        scopedKeyNames[index] = name;
+        scopedKeys[index] = base + separator + name;
+        return scopedKeys[index];
+    }
+
+    private String itemKey(Object source, int fallbackIndex, boolean explicit) {
+        int index = itemKeyCount++;
+        if (index >= itemKeys.length) {
+            int capacity = itemKeys.length * 2;
+            itemKeySources = Arrays.copyOf(itemKeySources, capacity);
+            itemKeyFallbackIndices = Arrays.copyOf(itemKeyFallbackIndices, capacity);
+            itemKeyExplicit = Arrays.copyOf(itemKeyExplicit, capacity);
+            itemKeys = Arrays.copyOf(itemKeys, capacity);
+        }
+        String cached = itemKeys[index];
+        if (cached != null
+                && itemKeyExplicit[index] == explicit
+                && (explicit ? Objects.equals(itemKeySources[index], source)
+                        : itemKeyFallbackIndices[index] == fallbackIndex)) {
+            return cached;
+        }
+        itemKeySources[index] = source;
+        itemKeyFallbackIndices[index] = fallbackIndex;
+        itemKeyExplicit[index] = explicit;
+        itemKeys[index] = explicit ? String.valueOf(source) : String.valueOf(fallbackIndex);
+        return itemKeys[index];
+    }
+
+    private UiModifier animatedModifier(float alpha, float offsetX, float offsetY) {
+        int index = Math.max(0, identityCount - 1);
+        UiModifier cached = animatedModifiers[index];
+        if (cached != null
+                && Float.compare(cached.alpha(), alpha) == 0
+                && Float.compare(cached.offsetX(), offsetX) == 0
+                && Float.compare(cached.offsetY(), offsetY) == 0) {
+            return cached;
+        }
+        UiModifier modifier = UiModifier.none().alpha(alpha).offset(offsetX, offsetY);
+        animatedModifiers[index] = modifier;
+        return modifier;
+    }
+
+    private UiModifier contentSizeModifier(UiModifier source, UiAnimationSpec animation) {
+        int index = contentSizeModifierCount++;
+        if (index >= contentSizeModifiers.length) {
+            int capacity = contentSizeModifiers.length * 2;
+            contentSizeModifierSources = Arrays.copyOf(contentSizeModifierSources, capacity);
+            contentSizeModifierAnimations = Arrays.copyOf(contentSizeModifierAnimations, capacity);
+            contentSizeModifiers = Arrays.copyOf(contentSizeModifiers, capacity);
+        }
+        if (contentSizeModifiers[index] != null
+                && contentSizeModifierSources[index] == source
+                && contentSizeModifierAnimations[index] == animation) {
+            return contentSizeModifiers[index];
+        }
+        contentSizeModifierSources[index] = source;
+        contentSizeModifierAnimations[index] = animation;
+        contentSizeModifiers[index] = source.animateContentSize(animation);
+        return contentSizeModifiers[index];
     }
 
     private UiModifier interactive(UiModifier modifier) {
         UiModifier value = modifier != null ? modifier : UiModifier.none();
-        return value.focusable(true);
+        if (value == UiModifier.none()) {
+            return DEFAULT_INTERACTIVE_MODIFIER;
+        }
+        if (value.focusable()) {
+            return value;
+        }
+        int index = interactiveModifierCount++;
+        if (index >= interactiveModifiers.length) {
+            int capacity = interactiveModifiers.length * 2;
+            interactiveModifierSources = Arrays.copyOf(interactiveModifierSources, capacity);
+            interactiveModifiers = Arrays.copyOf(interactiveModifiers, capacity);
+        }
+        if (interactiveModifierSources[index] == value && interactiveModifiers[index] != null) {
+            return interactiveModifiers[index];
+        }
+        interactiveModifierSources[index] = value;
+        interactiveModifiers[index] = value.focusable(true);
+        return interactiveModifiers[index];
     }
 }

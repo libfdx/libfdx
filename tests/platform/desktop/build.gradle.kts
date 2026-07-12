@@ -1,6 +1,7 @@
 import io.github.libfdx.build.LibExt
 
 import org.gradle.api.attributes.java.TargetJvmVersion
+import org.gradle.api.tasks.Delete
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 
 plugins {
@@ -32,6 +33,14 @@ val wgpuRuntimeClasspath by configurations.creating {
     }
 }
 
+val runtimeFdxClasspath by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    attributes {
+        attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 25)
+    }
+}
+
 base {
     archivesName.set("tests_desktop")
 }
@@ -45,6 +54,7 @@ dependencies {
         glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.publishedLibfdxVersion}")
         vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.publishedLibfdxVersion}")
         wgpuRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.publishedLibfdxVersion}")
+        runtimeFdxClasspath("${LibExt.fdxGroup}:fdx_desktop:${LibExt.publishedLibfdxVersion}")
     } else {
         implementation(project(":libfdx:backends:desktop"))
         implementation(project(":libfdx:extensions:graphics:wgpu:core"))
@@ -52,17 +62,12 @@ dependencies {
         glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
         vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
         wgpuRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
+        runtimeFdxClasspath(project(":libfdx:framework:fdx:platform:desktop"))
     }
 }
 
 val testRuntimeClasspath = sourceSets["main"].runtimeClasspath +
         glRuntimeClasspath + wgpuRuntimeClasspath + vulkanRuntimeClasspath
-
-val desktopBackendResources = if (LibExt.usePublishedLibfdx) {
-    files()
-} else {
-    files(project(":libfdx:backends:desktop").layout.buildDirectory.dir("resources/main"))
-}
 
 tasks.register<JavaExec>("test_desktop_gl_run") {
     group = "application"
@@ -94,12 +99,32 @@ tasks.register<JavaExec>("test_desktop_vulkan_run") {
 tasks.register<JavaExec>("test_math_acceleration_desktop") {
     group = "application_test"
     description = "Validates desktop runtime fdx SIMD math acceleration against scalar math."
-    if (!LibExt.usePublishedLibfdx) {
-        dependsOn(":libfdx:backends:desktop:processResources")
-    }
-    classpath = sourceSets["main"].output + sourceSets["main"].compileClasspath + desktopBackendResources
+    classpath = sourceSets["main"].output + sourceSets["main"].compileClasspath + runtimeFdxClasspath
     mainClass.set("io.github.libfdx.backend.desktop.DesktopMathAccelerationCheck")
     systemProperty("libfdx.math.requireNative", "true")
+}
+
+val cleanTestRuntimeStorage = tasks.register<Delete>("clean_test_runtime_storage") {
+    group = "verification"
+    description = "Removes the default persistent store created by StorageRuntimeTest."
+    onlyIf {
+        gradle.startParameter.systemPropertiesArgs["libfdx.test.storageName"].isNullOrBlank()
+    }
+    delete(rootProject.layout.projectDirectory.file("storage/runtime-storage-test.json"))
+    doLast {
+        val storageDirectory = rootProject.layout.projectDirectory.dir("storage").asFile
+        if (storageDirectory.isDirectory && storageDirectory.list().isNullOrEmpty()) {
+            storageDirectory.delete()
+        }
+    }
+}
+
+tasks.matching {
+    it.name == "test_desktop_gl_run" ||
+            it.name == "test_desktop_wgpu_run" ||
+            it.name == "test_desktop_vulkan_run"
+}.configureEach {
+    finalizedBy(cleanTestRuntimeStorage)
 }
 
 tasks.withType<JavaExec>().configureEach {

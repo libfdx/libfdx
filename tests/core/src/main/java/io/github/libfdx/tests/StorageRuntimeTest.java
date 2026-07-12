@@ -70,8 +70,7 @@ public final class StorageRuntimeTest extends ApplicationAdapter {
     @Override
     public void render() {
         renderedFrames++;
-        if ((exitAfterFrames > 0L && renderedFrames >= exitAfterFrames)
-                || (exitAfterFrames <= 0L && renderedFrames >= 2L)) {
+        if (exitAfterFrames > 0L && renderedFrames >= exitAfterFrames) {
             app.requestExit();
         }
     }

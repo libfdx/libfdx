@@ -202,6 +202,12 @@ final class TileMapTest {
         }
 
         @Override
+        public void draw(Texture texture, int sourceX, int sourceY, int sourceWidth, int sourceHeight,
+                float x, float y, float width, float height) {
+            draw(new TextureRegion(texture, sourceX, sourceY, sourceWidth, sourceHeight), x, y, width, height);
+        }
+
+        @Override
         public void draw(TextureRegion region, float x, float y, float width, float height) {
             regions[drawCount] = region;
             this.x[drawCount] = x;

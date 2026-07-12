@@ -61,7 +61,13 @@ public final class WGPUProvider implements GraphicsAttachmentProvider {
             if (!ID.equals(sharedGraphics.providerId())) {
                 throw new FdxException("Cannot share a non-WGPU graphics context with WGPU");
             }
-            sharedContext = sharedGraphics.as();
+            if (sharedGraphics instanceof WGPUGraphicsAttachment) {
+                sharedContext = ((WGPUGraphicsAttachment) sharedGraphics).context();
+            } else if (sharedGraphics instanceof WGPUContext) {
+                sharedContext = (WGPUContext) sharedGraphics;
+            } else {
+                throw new FdxException("Shared WGPU context has an incompatible implementation");
+            }
         }
         WGPUContext context = createContext(nativeWindow, configuration,
                 environment.display().framebufferWidth(), environment.display().framebufferHeight(), sharedContext);
@@ -85,6 +91,9 @@ public final class WGPUProvider implements GraphicsAttachmentProvider {
             WGPUContext sharedContext) {
         if (nativeWindow == null) {
             throw new FdxException("WGPU requires a native window from the backend");
+        }
+        if (sharedContext != null && !sharedContext.isReady()) {
+            throw new FdxException("The shared WGPU context is not ready");
         }
         WGPUConfiguration actualConfiguration = configuration != null ? configuration : new WGPUConfiguration();
         loadNativeBackend(actualConfiguration);

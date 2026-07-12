@@ -68,17 +68,20 @@ public final class DesktopTestLauncher {
                 .foregroundFps(foregroundFps)
                 .graphics(graphicsProvider(graphics, vSync));
 
-        ApplicationListener test = applicationListener(testName, graphics);
+        ApplicationListener test = applicationListener(testName, graphics, vSync);
         new DesktopApplicationBackend().start(config, test);
     }
 
-    private static ApplicationListener applicationListener(String testName, String graphics) {
+    private static ApplicationListener applicationListener(String testName, String graphics, boolean vSync) {
         if (isSelector(testName)) {
             return new TestChooserApplication(graphicsOptions(graphics), graphics,
                     new DesktopProcessLaunchHandler(), false);
         }
         if (TestSelector.AUTO_TEST_NAME.equalsIgnoreCase(testName)) {
             return new AutoTestApplication();
+        }
+        if (DesktopSharedContextTest.NAME.equalsIgnoreCase(testName)) {
+            return new DesktopSharedContextTest(graphicsProvider(graphics, vSync), exitAfterFrames());
         }
         return TestSelector.create(testName, exitAfterFrames());
     }
@@ -199,12 +202,18 @@ public final class DesktopTestLauncher {
         if (isSelector(testName)) {
             return "900";
         }
+        if (DesktopSharedContextTest.NAME.equalsIgnoreCase(testName)) {
+            return "640";
+        }
         return String.valueOf(TestSelector.defaultWidth(testName));
     }
 
     private static String defaultHeight(String testName) {
         if (isSelector(testName)) {
             return "740";
+        }
+        if (DesktopSharedContextTest.NAME.equalsIgnoreCase(testName)) {
+            return "480";
         }
         return String.valueOf(TestSelector.defaultHeight(testName));
     }

@@ -58,11 +58,13 @@ import io.github.libfdx.tests.TestFpsLogger;
 import io.github.libfdx.validation.scenario.Scenario;
 import io.github.libfdx.validation.scenario.ScenarioActions;
 import io.github.libfdx.validation.scenario.ScenarioCapture;
+import io.github.libfdx.validation.scenario.ScenarioCapturePolicy;
 import io.github.libfdx.validation.scenario.ScenarioContext;
 import io.github.libfdx.validation.scenario.ScenarioHost;
 import io.github.libfdx.validation.scenario.ScenarioInputDriver;
 import io.github.libfdx.validation.scenario.ScenarioResult;
 import io.github.libfdx.validation.scenario.ScenarioValidationConfig;
+import io.github.libfdx.validation.scenario.ScenarioValidationMode;
 import io.github.libfdx.validation.scenario.ui.kit.UiScenarioActions;
 import io.github.libfdx.validation.scenario.ui.kit.UiScenarioAssertions;
 import io.github.libfdx.validation.scenario.ui.kit.UiScenarioTargets;
@@ -104,8 +106,8 @@ public final class UiKitTest extends ApplicationAdapter {
     private static final float DRAWING_TEXT_SIZE = 22.0f;
     private static final float DRAWING_TEXT_MINIMUM = 12.0f;
     private static final float DRAWING_TEXT_MAXIMUM = 52.0f;
-    private static final int DEFAULT_VALIDATION_FRAMES = 180;
     private static final float VALIDATION_SETTLE_SECONDS = 0.25f;
+    private static final float VALIDATION_NAV_SPACER_HEIGHT = 864.0f;
     private static final long VALIDATION_WAIT_FRAME_MILLIS = 100L;
     private static final int VISUAL_CHANNEL_TOLERANCE = 8;
     private static final float VISUAL_MISMATCH_RATIO = 0.01f;
@@ -244,6 +246,7 @@ public final class UiKitTest extends ApplicationAdapter {
     private boolean visualValidateRequireBaselines;
     private boolean validationActive;
     private boolean validationEnabled;
+    private boolean validationFullPlan;
     private boolean desktopImageCaptureEnabled;
     private TestFpsLogger fpsLogger;
     private float uiPerfLogSeconds;
@@ -256,6 +259,7 @@ public final class UiKitTest extends ApplicationAdapter {
     private float validationElapsedSeconds;
     private float nextValidationScenarioSeconds;
     private RuntimeException renderFailure;
+    private RuntimeException pendingValidationFailure;
     private long renderedFrames;
     private ScenarioHost scenarioHost;
     private UiKitValidationScenarios.Entry[] validationScenarios;
@@ -325,9 +329,10 @@ public final class UiKitTest extends ApplicationAdapter {
             captureOutputRequested = false;
             captureEveryFrames = 0;
         }
-        visualValidate = validationEnabled && visualValidate;
-        validationActive = validationEnabled && driveAutomation;
         validationConfig = ScenarioValidationConfig.fromSystemProperties();
+        visualValidate = validationEnabled && visualValidate
+                && validationConfig.mode() != ScenarioValidationMode.BEHAVIOR;
+        validationActive = validationEnabled && driveAutomation;
 
         assets = new DefaultAssetManager(fdx.files());
         G2DAssetLoaders.register(assets, graphics);
@@ -438,13 +443,22 @@ public final class UiKitTest extends ApplicationAdapter {
                 })
                 .registerProbe(UiRoot.class, root);
         UiKitValidationScenarios.Plan scenarioPlan = buildValidationScenarios();
+        if (validationActive) {
+            scenarioPlan = scenarioPlan.select(validationConfig.selection(), validationConfig.mode());
+        }
         validationScenarios = scenarioPlan.entries();
+        validationFullPlan = scenarioPlan.fullPlan();
         applyValidationFrameBudget();
         created = true;
         logger.info("UiKitTest created. Validation mode="
                 + (validationActive ? "AUTOMATION" : "IDLE")
                 + ", frames=" + exitAfterFrames
                 + ", driveInput=" + driveAutomation
+                + ", selection=" + validationConfig.selection()
+                + ", scenarioMode=" + validationConfig.mode()
+                + ", capturePolicy=" + validationConfig.capturePolicy()
+                + ", events=" + validationConfig.eventsEnabled()
+                + ", timeoutMs=" + validationConfig.timeoutMillis()
                 + ", stepDelaySeconds=" + validationConfig.stepDelaySeconds()
                 + ", visualValidate=" + visualValidate
                 + ", capture=" + captureTemplate);
@@ -513,6 +527,11 @@ public final class UiKitTest extends ApplicationAdapter {
                 recordUiPerf(deltaSeconds, updateEnd - updateStart, renderEnd - renderStart, renderEnd - updateStart);
             }
             captureValidationPostRender();
+            if (pendingValidationFailure != null) {
+                RuntimeException failure = pendingValidationFailure;
+                pendingValidationFailure = null;
+                throw failure;
+            }
         } catch (RuntimeException error) {
             renderFailure = error;
             throw error;
@@ -565,78 +584,78 @@ public final class UiKitTest extends ApplicationAdapter {
                         + validationScenarios.length + ", executed=" + nextValidationScenario
                         + ", frames=" + renderedFrames);
             }
-            if (clickCount.get() <= 0) {
+            if (validationFullPlan && clickCount.get() <= 0) {
                 throw new FdxException("UiKitTest button callback was not invoked by input dispatch");
             }
-            if (!checked.get()) {
+            if (validationFullPlan && !checked.get()) {
                 throw new FdxException("UiKitTest checkbox callback was not invoked by input dispatch");
             }
-            if (!checkboxAlignmentChecked) {
+            if (validationFullPlan && !checkboxAlignmentChecked) {
                 throw new FdxException("UiKitTest did not check checkbox label alignment");
             }
-            if (!popupPassthroughChecked) {
+            if (validationFullPlan && !popupPassthroughChecked) {
                 throw new FdxException("UiKitTest did not check non-blocking popup input pass-through");
             }
-            if (!popupBlockingChecked) {
+            if (validationFullPlan && !popupBlockingChecked) {
                 throw new FdxException("UiKitTest did not check blocking popup input capture");
             }
-            if (!name.get().endsWith("!")) {
+            if (validationFullPlan && !name.get().endsWith("!")) {
                 throw new FdxException("UiKitTest text input dispatch did not update the text field");
             }
-            if (!"427".equals(intInput.get())) {
+            if (validationFullPlan && !"427".equals(intInput.get())) {
                 throw new FdxException("UiKitTest integer text field accepted non-integer input: " + intInput.get());
             }
-            if (!"0.755".equals(floatInput.get())) {
+            if (validationFullPlan && !"0.755".equals(floatInput.get())) {
                 throw new FdxException("UiKitTest float text field accepted non-float input: " + floatInput.get());
             }
-            if (volume.get() < 0.95f) {
+            if (validationFullPlan && volume.get() < 0.95f) {
                 throw new FdxException("UiKitTest slider drag did not keep updating after leaving widget bounds");
             }
-            if (scaleGlobally.get() && Math.abs(uiScale.get() - initialUiScale) < 0.01f) {
+            if (validationFullPlan && scaleGlobally.get() && Math.abs(uiScale.get() - initialUiScale) < 0.01f) {
                 throw new FdxException("UiKitTest text size setting did not change the global UI scale");
             }
-            if (!textScaleReleaseCommitChecked) {
+            if (validationFullPlan && !textScaleReleaseCommitChecked) {
                 throw new FdxException("UiKitTest did not verify touch text-size scaling commits on release");
             }
-            if (!progressBarChecked) {
+            if (validationFullPlan && !progressBarChecked) {
                 throw new FdxException("UiKitTest did not validate progress bar nodes");
             }
-            if (!tabsChecked) {
+            if (validationFullPlan && !tabsChecked) {
                 throw new FdxException("UiKitTest did not validate tab switching");
             }
-            if (!textInputSessionChecked) {
+            if (validationFullPlan && !textInputSessionChecked) {
                 throw new FdxException("UiKitTest did not validate text input session requests");
             }
-            if (!textSelectionChecked) {
+            if (validationFullPlan && !textSelectionChecked) {
                 throw new FdxException("UiKitTest did not validate text selection and copy/paste");
             }
-            if (!textAreaChecked) {
+            if (validationFullPlan && !textAreaChecked) {
                 throw new FdxException("UiKitTest did not validate text area input, scroll, and auto-grow bounds");
             }
-            if (!textInputTouchDragChecked) {
+            if (validationFullPlan && !textInputTouchDragChecked) {
                 throw new FdxException("UiKitTest did not validate text input touch drag scrolling");
             }
-            if (!scrollBodyDragChecked) {
+            if (validationFullPlan && !scrollBodyDragChecked) {
                 throw new FdxException("UiKitTest did not validate scroll view body drag scrolling");
             }
-            if (!scrollChildDragChecked) {
+            if (validationFullPlan && !scrollChildDragChecked) {
                 throw new FdxException("UiKitTest did not validate scroll view child drag scrolling");
             }
-            if (!windowMoveChecked) {
+            if (validationFullPlan && !windowMoveChecked) {
                 throw new FdxException("UiKitTest movable window did not move after title-bar drag");
             }
-            if (!windowResizeChecked) {
+            if (validationFullPlan && !windowResizeChecked) {
                 throw new FdxException("UiKitTest resizable window did not resize from the corner handle");
             }
-            if (statsWindow.zOrder() <= toolsWindow.zOrder()) {
+            if (validationFullPlan && statsWindow.zOrder() <= toolsWindow.zOrder()) {
                 throw new FdxException("UiKitTest resizable window did not render above the overlapped tools window");
             }
-            if (!edgeMoveChecked) {
+            if (validationFullPlan && !edgeMoveChecked) {
                 throw new FdxException("UiKitTest did not run the edge-bounded window move check after "
                         + renderedFrames + " rendered frames; tools=" + toolsWindow.x() + "," + toolsWindow.y()
                         + " " + toolsWindow.width() + "x" + toolsWindow.height());
             }
-            if (!edgeResizeChecked) {
+            if (validationFullPlan && !edgeResizeChecked) {
                 throw new FdxException("UiKitTest did not run the edge-bounded window resize check after "
                         + renderedFrames + " rendered frames; stats=" + statsWindow.x() + "," + statsWindow.y()
                         + " " + statsWindow.width() + "x" + statsWindow.height());
@@ -735,9 +754,7 @@ public final class UiKitTest extends ApplicationAdapter {
                     scroll.button(label, modifier, () -> activeSection.set(section));
                 }
                 if (validationActive) {
-                    for (int i = 1; i <= 48; i++) {
-                        scroll.text("validation spacer " + i, Ui.modifier().style("small"));
-                    }
+                    scroll.spacer(Ui.modifier().height(VALIDATION_NAV_SPACER_HEIGHT));
                 }
             });
         });
@@ -1455,12 +1472,13 @@ public final class UiKitTest extends ApplicationAdapter {
                         .custom("show-checkboxes", context -> showValidationSection(SECTION_CHECKBOXES)));
         builder.entry(2L, true, true,
                 Scenario.named("section-checkboxes")
+                        .custom("show-checkboxes", context -> showValidationSection(SECTION_CHECKBOXES))
                         .action(UiScenarioActions.click(UiKitValidationScenarios.CHECKBOX_SECTION_OPTION))
                         .expect(UiScenarioAssertions.checked(UiKitValidationScenarios.CHECKBOX_SECTION_OPTION, true))
-                        .custom("check-checkbox-label-alignment", context -> checkCheckboxLabelAlignment())
-                        .custom("show-sliders", context -> showValidationSection(SECTION_SLIDERS)));
+                        .custom("check-checkbox-label-alignment", context -> checkCheckboxLabelAlignment()));
         builder.entry(3L, true, true,
                 Scenario.named("slider-volume")
+                        .custom("show-sliders", context -> showValidationSection(SECTION_SLIDERS))
                         .custom("drag-volume-slider", context -> {
                             settleValidationLayout();
                             dragVolumeSlider();
@@ -1488,7 +1506,6 @@ public final class UiKitTest extends ApplicationAdapter {
                         .custom("slider-text", context -> {
                             showValidationSection(SECTION_TEXT_FIELDS);
                             validateTextSelectionAndCopyPaste();
-                            activeSection.set(SECTION_SLIDERS);
                         }));
         builder.entry(7L, true, true,
                 Scenario.named("text-area-edit")
@@ -1514,7 +1531,6 @@ public final class UiKitTest extends ApplicationAdapter {
                             showValidationSection(SECTION_LISTS);
                             input.dispatchScrolled(root.displayX(20.0f), root.displayY(20.0f), 0.0f, 1.0f);
                             inventoryList.scrollToItem(2, 0.0f);
-                            activeSection.set(SECTION_WINDOWS);
                         }));
         builder.entry(10L, true, true,
                 Scenario.named("scroll-body-drag")
@@ -1540,7 +1556,7 @@ public final class UiKitTest extends ApplicationAdapter {
                         .custom("window-edge-tests", context -> {
                             settleValidationLayout();
                             dragWindowPastEdge(find(root.rootNode(), UiNodeType.WINDOW, "Tools Window"));
-                            dragWindow(find(root.rootNode(), UiNodeType.WINDOW, "Tools Window"), -400.0f, -17.0f);
+                            moveWindowToLayoutOrigin(find(root.rootNode(), UiNodeType.WINDOW, "Tools Window"));
                             validateWindowResize(find(root.rootNode(), UiNodeType.WINDOW, "Resizable Stats"),
                                     86.0f, 58.0f);
                             resizeWindowPastEdge(find(root.rootNode(), UiNodeType.WINDOW, "Resizable Stats"));
@@ -2238,15 +2254,12 @@ public final class UiKitTest extends ApplicationAdapter {
         if (minimumFrames <= 0L) {
             return;
         }
-        long baselineFrames = Math.max(exitAfterFrames, minimumFrames);
-        long effectiveFrames = minimumFrames;
+        long effectiveFrames = exitAfterFrames > 0L ? Math.max(exitAfterFrames, minimumFrames) : minimumFrames;
         if (exitAfterFrames <= 0L) {
-            effectiveFrames = Math.max(DEFAULT_VALIDATION_FRAMES, minimumFrames);
             logger.info("UiKitTest forced validation frame limit to " + effectiveFrames);
-        } else if (baselineFrames != exitAfterFrames) {
-            logger.info("UiKitTest increased validation frame limit from " + exitAfterFrames + " to " + baselineFrames
+        } else if (effectiveFrames != exitAfterFrames) {
+            logger.info("UiKitTest increased validation frame limit from " + exitAfterFrames + " to " + effectiveFrames
                     + " to execute the full validation plan.");
-            effectiveFrames = baselineFrames;
         }
         exitAfterFrames = effectiveFrames;
     }
@@ -2255,13 +2268,11 @@ public final class UiKitTest extends ApplicationAdapter {
         if (validationScenarios.length == 0) {
             return 0L;
         }
-        long lastPlanFrame = 0L;
+        long executionFrame = -1L;
         for (UiKitValidationScenarios.Entry scenario : validationScenarios) {
-            if (scenario.frame() > lastPlanFrame) {
-                lastPlanFrame = scenario.frame();
-            }
+            executionFrame = Math.max(scenario.frame(), executionFrame + 1L);
         }
-        return lastPlanFrame + (desktopImageCaptureEnabled ? 1L : 2L);
+        return executionFrame + (desktopImageCaptureEnabled ? 1L : 2L);
     }
 
     private void settleValidationLayout() {
@@ -2276,25 +2287,33 @@ public final class UiKitTest extends ApplicationAdapter {
         if (validationFrame < 0L) {
             return;
         }
-        while (nextValidationScenario < validationScenarios.length
-                && validationScenarios[nextValidationScenario].frame() <= validationFrame) {
-            if (validationConfig.stepDelaySeconds() > 0.0f && nextValidationScenario > 0
-                    && validationElapsedSeconds + 0.0001f < nextValidationScenarioSeconds) {
-                return;
+        if (nextValidationScenario >= validationScenarios.length
+                || validationScenarios[nextValidationScenario].frame() > validationFrame) {
+            return;
+        }
+        if (validationConfig.stepDelaySeconds() > 0.0f && nextValidationScenario > 0
+                && validationElapsedSeconds + 0.0001f < nextValidationScenarioSeconds) {
+            return;
+        }
+        UiKitValidationScenarios.Entry scenario = validationScenarios[nextValidationScenario++];
+        ScenarioResult result = scenarioHost.run(scenario.scenario(), validationConfig);
+        if (!result.passed()) {
+            if (scenario.captureOnFailure(validationConfig.capturePolicy())) {
+                queueValidationCapture(scenario.name(), true, false);
             }
-            UiKitValidationScenarios.Entry scenario = validationScenarios[nextValidationScenario++];
-            ScenarioResult result = scenarioHost.run(scenario.scenario());
-            if (!result.passed()) {
-                throw new FdxException("UiKitTest scenario failed: " + scenario.name()
-                        + ", operation=" + result.operationName()
-                        + ", message=" + result.message()
-                        + ", events=" + result.recentEvents());
-            }
-            queueValidationCapture(scenario.name(), scenario.captureImage(), scenario.validateVisual());
-            if (validationConfig.stepDelaySeconds() > 0.0f) {
-                nextValidationScenarioSeconds = validationElapsedSeconds + validationConfig.stepDelaySeconds();
-                return;
-            }
+            String eventSummary = validationConfig.eventsEnabled()
+                    ? ", events=" + result.recentEvents()
+                    : "";
+            pendingValidationFailure = new FdxException("UiKitTest scenario failed: " + scenario.name()
+                    + ", operation=" + result.operationName()
+                    + ", message=" + result.message()
+                    + eventSummary);
+            return;
+        }
+        queueValidationCapture(scenario.name(), scenario.captureOnSuccess(validationConfig.capturePolicy()),
+                visualValidate && scenario.validateVisual(validationConfig.mode()));
+        if (validationConfig.stepDelaySeconds() > 0.0f) {
+            nextValidationScenarioSeconds = validationElapsedSeconds + validationConfig.stepDelaySeconds();
         }
     }
 
@@ -2398,7 +2417,10 @@ public final class UiKitTest extends ApplicationAdapter {
     }
 
     private void captureCurrentValidationFrame(String scenario) {
-        queueValidationCapture(scenario, true, false);
+        boolean captureListed = validationConfig == null
+                || validationConfig.capturePolicy() == ScenarioCapturePolicy.ALL
+                || validationConfig.capturePolicy() == ScenarioCapturePolicy.SCENARIO_LISTED;
+        queueValidationCapture(scenario, captureListed, false);
     }
 
     private void validateVisualMatch(String scenario, long frame, CapturedFrame current) {
@@ -2925,6 +2947,18 @@ public final class UiKitTest extends ApplicationAdapter {
         }
     }
 
+    private void moveWindowToLayoutOrigin(UiNode window) {
+        if (window == null) {
+            throw new FdxException("UiKitTest could not find the movable window for the resize setup");
+        }
+        UiRect area = root.rootNode().bounds();
+        dragWindow(window, area.x() - toolsWindow.x(), area.y() - toolsWindow.y());
+        if (Math.abs(toolsWindow.x() - area.x()) > 0.5f || Math.abs(toolsWindow.y() - area.y()) > 0.5f) {
+            throw new FdxException("UiKitTest could not move the front window away from the resize target: actual="
+                    + toolsWindow.x() + "," + toolsWindow.y() + ", expected=" + area.x() + "," + area.y());
+        }
+    }
+
     private void resizeWindowPastEdge(UiNode window) {
         if (window == null) {
             throw new FdxException("UiKitTest could not find the resizable window for the edge resize check");
@@ -3062,10 +3096,24 @@ public final class UiKitTest extends ApplicationAdapter {
         if (node == null) {
             return null;
         }
-        if (node.text() != null) {
-            return node.text();
+        String text = node.text();
+        if (hasVisibleText(text)) {
+            return text;
         }
-        return node.modifier().semanticLabel();
+        String semanticLabel = node.modifier().semanticLabel();
+        return semanticLabel != null && semanticLabel.length() > 0 ? semanticLabel : text;
+    }
+
+    private boolean hasVisibleText(String text) {
+        if (text == null) {
+            return false;
+        }
+        for (int i = 0; i < text.length(); i++) {
+            if (!Character.isWhitespace(text.charAt(i))) {
+                return true;
+            }
+        }
+        return false;
     }
 
 }

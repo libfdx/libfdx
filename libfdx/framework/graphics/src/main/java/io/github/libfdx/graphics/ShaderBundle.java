@@ -13,12 +13,14 @@ public final class ShaderBundle {
     private final ShaderProfile profile;
     private final String wgslSource;
     private final ShaderReflection reflection;
+    private final GeneratedTarget[] generatedTargets;
 
     private ShaderBundle(Builder builder) {
         label = builder.label;
         profile = builder.profile;
         wgslSource = builder.wgslSource;
         reflection = builder.reflection != null ? builder.reflection : ShaderReflection.empty();
+        generatedTargets = builder.generatedTargets.clone();
     }
 
     /**
@@ -97,6 +99,10 @@ public final class ShaderBundle {
         if (target == null) {
             throw new FdxException("Shader target cannot be null");
         }
+        GeneratedTarget generatedTarget = generatedTargets[target.ordinal()];
+        if (generatedTarget != null) {
+            return generatedTarget.descriptor(label, wgslSource);
+        }
         return ShaderModuleDescriptor.wgsl(label, wgslSource);
     }
 
@@ -135,6 +141,7 @@ public final class ShaderBundle {
         private ShaderProfile profile = ShaderProfile.PORTABLE_WEBGPU;
         private String wgslSource;
         private ShaderReflection reflection = ShaderReflection.empty();
+        private final GeneratedTarget[] generatedTargets = new GeneratedTarget[ShaderTarget.values().length];
 
         private Builder(String label) {
             if (label == null || label.trim().isEmpty()) {
@@ -177,6 +184,52 @@ public final class ShaderBundle {
         }
 
         /**
+         * Adds generated GLSL output for a GL-family target.
+         *
+         * @param target the OpenGL, GLES, or WebGL target
+         * @param vertexSource the generated vertex shader source
+         * @param fragmentSource the generated fragment shader source
+         * @return this builder for chaining
+         */
+        public Builder generatedGlsl(ShaderTarget target, String vertexSource, String fragmentSource) {
+            if (target != ShaderTarget.OPENGL_GLSL
+                    && target != ShaderTarget.GLES_GLSL_ES
+                    && target != ShaderTarget.WEBGL_GLSL_ES) {
+                throw new FdxException("Generated GLSL requires an OpenGL, GLES, or WebGL shader target");
+            }
+            generatedTargets[target.ordinal()] = GeneratedTarget.glsl(
+                    requireSource(vertexSource, "GLSL vertex shader source"),
+                    requireSource(fragmentSource, "GLSL fragment shader source"));
+            return this;
+        }
+
+        /**
+         * Adds generated SPIR-V output for Vulkan.
+         *
+         * @param vertexWords the generated vertex shader words
+         * @param fragmentWords the generated fragment shader words
+         * @return this builder for chaining
+         */
+        public Builder generatedSpirv(int[] vertexWords, int[] fragmentWords) {
+            generatedTargets[ShaderTarget.VULKAN_SPIRV.ordinal()] = GeneratedTarget.spirv(
+                    requireWords(vertexWords, "SPIR-V vertex shader words"),
+                    requireWords(fragmentWords, "SPIR-V fragment shader words"));
+            return this;
+        }
+
+        /**
+         * Adds generated MSL output for Metal.
+         *
+         * @param source the generated MSL source
+         * @return this builder for chaining
+         */
+        public Builder generatedMsl(String source) {
+            generatedTargets[ShaderTarget.METAL_MSL.ordinal()] = GeneratedTarget.msl(
+                    requireSource(source, "MSL shader source"));
+            return this;
+        }
+
+        /**
          * Returns the build.
          *
          * @return the created value
@@ -192,6 +245,56 @@ public final class ShaderBundle {
                 throw new FdxException(name + " cannot be empty");
             }
             return source;
+        }
+
+        private static int[] requireWords(int[] words, String name) {
+            if (words == null || words.length == 0) {
+                throw new FdxException(name + " cannot be empty");
+            }
+            return words;
+        }
+    }
+
+    private static final class GeneratedTarget {
+        private final ShaderLanguage language;
+        private final String vertexSource;
+        private final String fragmentSource;
+        private final int[] vertexWords;
+        private final int[] fragmentWords;
+
+        private GeneratedTarget(ShaderLanguage language, String vertexSource, String fragmentSource,
+                int[] vertexWords, int[] fragmentWords) {
+            this.language = language;
+            this.vertexSource = vertexSource;
+            this.fragmentSource = fragmentSource;
+            this.vertexWords = vertexWords != null ? vertexWords.clone() : null;
+            this.fragmentWords = fragmentWords != null ? fragmentWords.clone() : null;
+        }
+
+        private static GeneratedTarget glsl(String vertexSource, String fragmentSource) {
+            return new GeneratedTarget(ShaderLanguage.GLSL, vertexSource, fragmentSource, null, null);
+        }
+
+        private static GeneratedTarget spirv(int[] vertexWords, int[] fragmentWords) {
+            return new GeneratedTarget(ShaderLanguage.SPIRV, null, null, vertexWords, fragmentWords);
+        }
+
+        private static GeneratedTarget msl(String source) {
+            return new GeneratedTarget(ShaderLanguage.MSL, source, null, null, null);
+        }
+
+        private ShaderModuleDescriptor descriptor(String label, String wgslSource) {
+            ShaderModuleDescriptor descriptor;
+            if (language == ShaderLanguage.GLSL) {
+                descriptor = ShaderModuleDescriptor.generatedGlsl(label, vertexSource, fragmentSource);
+            } else if (language == ShaderLanguage.SPIRV) {
+                descriptor = ShaderModuleDescriptor.generatedSpirv(label, vertexWords, fragmentWords);
+            } else if (language == ShaderLanguage.MSL) {
+                descriptor = ShaderModuleDescriptor.generatedMsl(label, vertexSource);
+            } else {
+                throw new FdxException("Unsupported generated shader language: " + language);
+            }
+            return descriptor.wgsl(wgslSource);
         }
     }
 }

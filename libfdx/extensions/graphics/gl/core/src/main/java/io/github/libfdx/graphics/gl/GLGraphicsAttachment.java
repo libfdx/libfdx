@@ -15,6 +15,7 @@ import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.TextureView;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 /**
  * Represents a GL graphics attachment.
@@ -22,9 +23,12 @@ import java.nio.ByteBuffer;
  * @author xpenatan
  */
 public final class GLGraphicsAttachment implements GraphicsAttachment {
+    private static final ThreadLocal<GLGraphicsAttachment> CURRENT_ATTACHMENT = new ThreadLocal<>();
+
     private final ProviderId providerId;
     private final GLApi gl;
     private final GLSurface surface;
+    private final GLResourceDomain resourceDomain;
     private final GLGraphicsDevice device;
     private final GLCommandEncoder commandEncoder = new GLCommandEncoder();
     private final GLTextureViewHandle colorAttachment;
@@ -32,6 +36,9 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
     private final GLGraphicsFrame currentFrame = new GLGraphicsFrame();
     private final int vertexArray;
     private final TextureFormat surfaceFormat;
+    private GLTextureHandle[] renderTargetTextures = new GLTextureHandle[8];
+    private int[] renderTargetFramebuffers = new int[8];
+    private int[] renderTargetDepthBuffers = new int[8];
     private int width;
     private int height;
     private boolean frameStarted;
@@ -49,6 +56,22 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
      */
     public GLGraphicsAttachment(ProviderId providerId, GLApi gl, GLSurface surface, int width, int height,
             TextureFormat surfaceFormat) {
+        this(providerId, gl, surface, width, height, surfaceFormat, null);
+    }
+
+    /**
+     * Creates a GL graphics attachment in an existing attachment's native share group.
+     *
+     * @param providerId the provider ID
+     * @param gl the GL API
+     * @param surface the surface
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @param surfaceFormat the surface format
+     * @param sharedAttachment an explicitly shared attachment, or null for an independent resource domain
+     */
+    public GLGraphicsAttachment(ProviderId providerId, GLApi gl, GLSurface surface, int width, int height,
+            TextureFormat surfaceFormat, GLGraphicsAttachment sharedAttachment) {
         if (providerId == null) {
             throw new FdxException("GL provider ID cannot be null");
         }
@@ -58,14 +81,27 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         if (surface == null) {
             throw new FdxException("GL surface cannot be null");
         }
+        if (sharedAttachment != null) {
+            if (sharedAttachment.isDisposed()) {
+                throw new FdxException("Cannot share a disposed GL graphics attachment");
+            }
+            if (!providerId.equals(sharedAttachment.providerId())) {
+                throw new FdxException("Cannot share GL attachments from different providers");
+            }
+        }
         this.providerId = providerId;
         this.gl = gl;
         this.surface = surface;
+        this.resourceDomain = sharedAttachment != null
+                ? sharedAttachment.resourceDomain
+                : new GLResourceDomain(providerId);
         this.width = width;
         this.height = height;
         this.surfaceFormat = surfaceFormat != null ? surfaceFormat : TextureFormat.RGBA8_UNORM;
-        device = new GLGraphicsDevice(providerId, gl);
-        colorAttachment = new GLTextureViewHandle(providerId, this.surfaceFormat);
+        resourceDomain.add(this);
+        makeCurrent();
+        device = new GLGraphicsDevice(providerId, gl, resourceDomain, this);
+        colorAttachment = new GLTextureViewHandle(providerId, resourceDomain, this.surfaceFormat, this);
         vertexArray = gl.genVertexArray();
     }
 
@@ -101,6 +137,8 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         if (frameStarted) {
             throw new FdxException("GL frame is already started");
         }
+        makeCurrent();
+        commandEncoder.beginFrame();
         gl.bindVertexArray(vertexArray);
         gl.viewport(0, 0, width, height);
         frameStarted = true;
@@ -115,6 +153,8 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         if (!frameStarted) {
             return;
         }
+        makeCurrent();
+        commandEncoder.ensurePassesEnded();
         frameStarted = false;
         surface.swapBuffers();
     }
@@ -165,6 +205,7 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         if (!frameStarted) {
             throw new FdxException("Cannot clear before beginFrame()");
         }
+        makeCurrent();
         gl.clearColor(red, green, blue, alpha);
         gl.clearColorBuffer();
     }
@@ -208,9 +249,15 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         if (disposed) {
             return;
         }
-        disposed = true;
+        makeCurrent();
+        disposeRenderTargets();
         gl.deleteVertexArray(vertexArray);
-        surface.releaseCurrent();
+        resourceDomain.remove(this);
+        disposed = true;
+        if (CURRENT_ATTACHMENT.get() == this) {
+            surface.releaseCurrent();
+            CURRENT_ATTACHMENT.remove();
+        }
         if (surface instanceof Disposable) {
             ((Disposable) surface).dispose();
         }
@@ -226,12 +273,100 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         return disposed;
     }
 
+    void makeCurrent() {
+        if (disposed) {
+            throw new FdxException("GL graphics attachment has been disposed");
+        }
+        if (CURRENT_ATTACHMENT.get() != this) {
+            surface.makeCurrent();
+            CURRENT_ATTACHMENT.set(this);
+        }
+        cleanupDisposedRenderTargets();
+    }
+
+    GLResourceDomain resourceDomain() {
+        return resourceDomain;
+    }
+
+    private int framebuffer(GLTextureHandle texture) {
+        cleanupDisposedRenderTargets();
+        int freeSlot = -1;
+        for (int i = 0; i < renderTargetTextures.length; i++) {
+            if (renderTargetTextures[i] == texture) {
+                return renderTargetFramebuffers[i];
+            }
+            if (freeSlot < 0 && renderTargetTextures[i] == null) {
+                freeSlot = i;
+            }
+        }
+        if (freeSlot < 0) {
+            freeSlot = renderTargetTextures.length;
+            int nextLength = renderTargetTextures.length * 2;
+            renderTargetTextures = Arrays.copyOf(renderTargetTextures, nextLength);
+            renderTargetFramebuffers = Arrays.copyOf(renderTargetFramebuffers, nextLength);
+            renderTargetDepthBuffers = Arrays.copyOf(renderTargetDepthBuffers, nextLength);
+        }
+
+        int framebuffer = gl.genFramebuffer();
+        int depthBuffer = gl.genRenderbuffer();
+        gl.bindFramebuffer(framebuffer);
+        gl.framebufferTexture2D(texture.texture());
+        gl.bindRenderbuffer(depthBuffer);
+        gl.renderbufferStorageDepth(texture.width(), texture.height());
+        gl.framebufferRenderbufferDepth(depthBuffer);
+        gl.bindRenderbuffer(0);
+        if (!gl.framebufferComplete()) {
+            gl.bindFramebuffer(0);
+            gl.deleteRenderbuffer(depthBuffer);
+            gl.deleteFramebuffer(framebuffer);
+            throw new FdxException("Could not create complete GL framebuffer for texture view");
+        }
+        renderTargetTextures[freeSlot] = texture;
+        renderTargetFramebuffers[freeSlot] = framebuffer;
+        renderTargetDepthBuffers[freeSlot] = depthBuffer;
+        return framebuffer;
+    }
+
+    private void cleanupDisposedRenderTargets() {
+        for (int i = 0; i < renderTargetTextures.length; i++) {
+            GLTextureHandle texture = renderTargetTextures[i];
+            if (texture != null && texture.isDisposed()) {
+                disposeRenderTarget(i);
+            }
+        }
+    }
+
+    private void disposeRenderTargets() {
+        for (int i = 0; i < renderTargetTextures.length; i++) {
+            if (renderTargetTextures[i] != null) {
+                disposeRenderTarget(i);
+            }
+        }
+    }
+
+    private void disposeRenderTarget(int index) {
+        int depthBuffer = renderTargetDepthBuffers[index];
+        if (depthBuffer != 0) {
+            gl.deleteRenderbuffer(depthBuffer);
+        }
+        int framebuffer = renderTargetFramebuffers[index];
+        if (framebuffer != 0) {
+            gl.deleteFramebuffer(framebuffer);
+        }
+        renderTargetTextures[index] = null;
+        renderTargetFramebuffers[index] = 0;
+        renderTargetDepthBuffers[index] = 0;
+    }
+
     /**
      * Represents a GL command encoder.
      *
      * @author xpenatan
      */
     private final class GLCommandEncoder implements CommandEncoder {
+        private GLRenderPass[] renderPasses = new GLRenderPass[4];
+        private int renderPassCount;
+
         /**
          * Begins render pass.
          *
@@ -246,10 +381,18 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
             if (!frameStarted) {
                 throw new FdxException("Cannot begin render pass outside a frame");
             }
-            GLTextureViewHandle attachment = descriptor.colorAttachment().as();
+            ensurePreviousPassEnded();
+            GLTextureViewHandle attachment = GLResources.requireTextureView(descriptor.colorAttachment(),
+                    resourceDomain, GLGraphicsAttachment.this, "Color attachment");
             boolean textureBacked = attachment.textureBacked();
             if (textureBacked) {
-                gl.bindFramebuffer(attachment.framebuffer(gl));
+                if (!attachment.textureHandle().usage().renderAttachment()) {
+                    throw new FdxException("Color attachment texture was not created for render attachment usage");
+                }
+            }
+            makeCurrent();
+            if (textureBacked) {
+                gl.bindFramebuffer(framebuffer(attachment.textureHandle()));
                 gl.viewport(0, 0, attachment.width(), attachment.height());
             } else {
                 gl.bindFramebuffer(0);
@@ -269,7 +412,41 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
                     gl.clearDepthBuffer();
                 }
             }
-            return new GLRenderPass(providerId, gl, textureBacked, width, height);
+            GLRenderPass renderPass = nextRenderPass();
+            renderPass.begin(textureBacked ? attachment.textureHandle() : null, textureBacked, width, height);
+            renderPassCount++;
+            return renderPass;
+        }
+
+        void beginFrame() {
+            ensurePassesEnded();
+            renderPassCount = 0;
+        }
+
+        void ensurePassesEnded() {
+            for (int i = 0; i < renderPassCount; i++) {
+                if (!renderPasses[i].isEnded()) {
+                    throw new FdxException("GL render pass must be ended before ending the frame");
+                }
+            }
+        }
+
+        private void ensurePreviousPassEnded() {
+            if (renderPassCount > 0 && !renderPasses[renderPassCount - 1].isEnded()) {
+                throw new FdxException("Previous GL render pass must be ended before beginning another pass");
+            }
+        }
+
+        private GLRenderPass nextRenderPass() {
+            if (renderPassCount == renderPasses.length) {
+                renderPasses = Arrays.copyOf(renderPasses, renderPasses.length * 2);
+            }
+            GLRenderPass renderPass = renderPasses[renderPassCount];
+            if (renderPass == null) {
+                renderPass = new GLRenderPass(providerId, gl, resourceDomain);
+                renderPasses[renderPassCount] = renderPass;
+            }
+            return renderPass;
         }
 
         /**
@@ -430,6 +607,7 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
             if (!frameStarted) {
                 throw new FdxException("Cannot read pixels before beginFrame()");
             }
+            makeCurrent();
             ByteBuffer pixels = gl.readPixelsRgba8(width, height);
             endFrame();
             pixels.position(0);

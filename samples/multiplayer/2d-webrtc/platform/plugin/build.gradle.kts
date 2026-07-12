@@ -1,5 +1,7 @@
 import io.github.libfdx.build.LibExt
 
+import org.gradle.api.attributes.java.TargetJvmVersion
+
 plugins {
     id("java")
     id("io.github.libfdx")
@@ -12,6 +14,24 @@ java {
 
 group = "${LibExt.fdxGroup}.samples.multiplayer"
 
+val glRuntimeClasspath by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+val vulkanRuntimeClasspath by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+val wgpuRuntimeClasspath by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    attributes {
+        attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 25)
+    }
+}
+
 base {
     archivesName.set("sample_multiplayer_2d_webrtc_plugin")
 }
@@ -21,13 +41,13 @@ dependencies {
     implementation(project(":samples:multiplayer:2d-webrtc:platform:web"))
 
     if (LibExt.usePublishedLibfdx) {
-        runtimeOnly("${LibExt.fdxGroup}:gl_desktop:${LibExt.publishedLibfdxVersion}")
-        runtimeOnly("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.publishedLibfdxVersion}")
-        runtimeOnly("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.publishedLibfdxVersion}")
+        glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.publishedLibfdxVersion}")
+        vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.publishedLibfdxVersion}")
+        wgpuRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.publishedLibfdxVersion}")
     } else {
-        runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop"))
-        runtimeOnly(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
-        runtimeOnly(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
+        glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
+        vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
+        wgpuRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
     }
 }
 
@@ -44,16 +64,19 @@ libfdx {
         forwardSystemProperty("libfdx.validation.scenario")
         target("gl") {
             displayName.set("GL")
+            runtimeClasspath(glRuntimeClasspath)
             systemProperty("libfdx.sample.graphics", "gl")
             systemProperty("libfdx.sample.graphicsLabel", "GL")
         }
         target("wgpu") {
             displayName.set("WGPU")
+            runtimeClasspath(wgpuRuntimeClasspath)
             systemProperty("libfdx.sample.graphics", "wgpu")
             systemProperty("libfdx.sample.graphicsLabel", "WGPU")
         }
         target("vulkan") {
             displayName.set("Vulkan")
+            runtimeClasspath(vulkanRuntimeClasspath)
             systemProperty("libfdx.sample.graphics", "vulkan")
             systemProperty("libfdx.sample.graphicsLabel", "Vulkan")
         }
@@ -81,9 +104,6 @@ libfdx {
 
         target("webgl") {
             defaultPath.set("/?graphics=webgl")
-        }
-        target("webgpu") {
-            defaultPath.set("/?graphics=webgpu")
         }
     }
 }

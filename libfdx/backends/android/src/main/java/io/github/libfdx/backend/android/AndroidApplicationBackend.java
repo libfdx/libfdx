@@ -847,7 +847,8 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
             activity.setTitle(this.title);
         }
 
-        void size(int width, int height) {
+        @Override
+        public void size(int width, int height) {
             size(width, height, width, height);
         }
 

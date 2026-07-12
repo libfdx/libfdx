@@ -183,8 +183,10 @@ public final class PspApplicationBackend implements ApplicationBackend, Applicat
             inputController.poll();
             PSPGraphicsApi.beginFrame(PSPGraphicsApi.GU_FALSE);
             try {
+                graphics.beginFrame();
                 listener.render();
                 listener.onFrameEnd();
+                graphics.endFrame();
             } catch (Throwable error) {
                 logger.error("PSP application frame failed", error);
                 throw error instanceof RuntimeException

@@ -77,6 +77,22 @@ public interface Batch2D extends Disposable {
             float originX, float originY, float rotationDegrees);
 
     /**
+     * Draws a source rectangle from a texture.
+     *
+     * @param texture the texture
+     * @param sourceX the source x coordinate in texels
+     * @param sourceY the source y coordinate in texels
+     * @param sourceWidth the source width in texels
+     * @param sourceHeight the source height in texels
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
+    void draw(Texture texture, int sourceX, int sourceY, int sourceWidth, int sourceHeight,
+            float x, float y, float width, float height);
+
+    /**
      * Draws the current content.
      *
      * @param region the region

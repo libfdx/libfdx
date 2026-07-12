@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/libfdx/libfdx/actions/workflows/workflow_snapshot.yml/badge.svg)](https://github.com/libfdx/libfdx/actions/workflows/workflow_snapshot.yml)
 [![Maven Central Version](https://img.shields.io/maven-central/v/io.github.libfdx/fdx)](https://central.sonatype.com/artifact/io.github.libfdx/fdx)
-[![Snapshot](https://img.shields.io/badge/snapshot-0.0.1--SNAPSHOT-red)](https://central.sonatype.com/service/rest/repository/browse/maven-snapshots/io/github/libfdx/fdx/)
+[![Snapshot](https://img.shields.io/badge/snapshot-0.0.2--SNAPSHOT-red)](https://central.sonatype.com/service/rest/repository/browse/maven-snapshots/io/github/libfdx/fdx/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 libFDX is a modular Java game framework focused on provider-neutral application,
@@ -23,7 +23,9 @@ project docs.
 - Android SDK plus a connected device or emulator for Android launchers
 - Platform toolchains only when building native platform artifacts
 
-Modules target Java 25 source and bytecode compatibility.
+Common/JVM/web/native modules target Java 25 source and bytecode compatibility.
+Android application and library modules target Java 17 bytecode for AGP, lint,
+and device compatibility while consuming the same common APIs.
 
 ## Quick Start
 

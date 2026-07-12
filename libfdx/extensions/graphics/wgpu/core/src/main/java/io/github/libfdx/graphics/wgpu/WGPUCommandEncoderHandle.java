@@ -23,6 +23,8 @@ import io.github.libfdx.graphics.RenderPassDescriptor;
  */
 final class WGPUCommandEncoderHandle implements CommandEncoder {
     private final WGPUContext context;
+    private WGPURenderPass[] renderPasses = new WGPURenderPass[4];
+    private int renderPassCount;
 
     WGPUCommandEncoderHandle(WGPUContext context) {
         this.context = context;
@@ -42,7 +44,16 @@ final class WGPUCommandEncoderHandle implements CommandEncoder {
         if (!context.isFrameStarted()) {
             throw new FdxException("Cannot begin render pass outside a frame");
         }
-        WGPUTextureViewHandle attachment = descriptor.colorAttachment().as();
+        ensurePreviousPassEnded();
+        WGPUTextureViewHandle attachment = WGPUResources.requireTextureView(descriptor.colorAttachment(), context,
+                "Color attachment");
+        WGPUTextureHandle renderTarget = attachment.textureHandle();
+        if (renderTarget != null) {
+            if (!renderTarget.usage().renderAttachment()) {
+                throw new FdxException("Color attachment texture was not created for render attachment usage");
+            }
+            context.markRecordedResource(renderTarget.allocation());
+        }
         int attachmentHeight = attachment.height();
         int renderTargetHeight = attachmentHeight > 0 ? attachmentHeight : context.height();
 
@@ -82,9 +93,58 @@ final class WGPUCommandEncoderHandle implements CommandEncoder {
             passDescriptor.setDepthStencilAttachment(depthAttachment);
         }
 
-        WGPURenderPassEncoder passEncoder = new WGPURenderPassEncoder();
-        context.frameEncoder().beginRenderPass(passDescriptor, passEncoder);
-        return new WGPURenderPass(context, passEncoder, renderTargetHeight);
+        WGPURenderPass renderPass = nextRenderPass();
+        context.frameEncoder().beginRenderPass(passDescriptor, renderPass.nativePass());
+        renderPass.begin(renderTargetHeight, renderTarget);
+        renderPassCount++;
+        return renderPass;
+    }
+
+    void beginFrame() {
+        ensurePassesEnded();
+        renderPassCount = 0;
+    }
+
+    void ensureNoOpenPass() {
+        ensurePreviousPassEnded();
+    }
+
+    void ensurePassesEnded() {
+        for (int i = 0; i < renderPassCount; i++) {
+            if (!renderPasses[i].isEnded()) {
+                throw new FdxException("WGPU render pass must be ended before ending the frame");
+            }
+        }
+    }
+
+    void dispose() {
+        for (int i = 0; i < renderPasses.length; i++) {
+            if (renderPasses[i] != null) {
+                renderPasses[i].dispose();
+                renderPasses[i] = null;
+            }
+        }
+        renderPassCount = 0;
+    }
+
+    private void ensurePreviousPassEnded() {
+        if (renderPassCount > 0 && !renderPasses[renderPassCount - 1].isEnded()) {
+            throw new FdxException("Previous WGPU render pass must be ended before beginning another pass");
+        }
+    }
+
+    private WGPURenderPass nextRenderPass() {
+        if (renderPassCount == renderPasses.length) {
+            WGPURenderPass[] grown = new WGPURenderPass[renderPasses.length * 2];
+            System.arraycopy(renderPasses, 0, grown, 0, renderPasses.length);
+            renderPasses = grown;
+        }
+        WGPURenderPass renderPass = renderPasses[renderPassCount];
+        if (renderPass == null) {
+            renderPass = new WGPURenderPass(context);
+            renderPasses[renderPassCount] = renderPass;
+        }
+        return renderPass;
     }
 
     /**

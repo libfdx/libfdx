@@ -18,6 +18,9 @@ object LibExt {
     val publishedLibfdxVersion: String
         get() = config().publishedLibfdxVersion
 
+    val pluginBootstrapLibfdxVersion: String
+        get() = config().pluginBootstrapLibfdxVersion
+
     val rootDirectory: File
         get() = config().rootDirectory
 
@@ -50,15 +53,22 @@ object LibExt {
             localProperties,
             "publishedLibfdxVersion"
         )
+        val pluginBootstrapLibfdxVersionValue = readDevelopmentValue(
+            file,
+            localProperties,
+            "pluginBootstrapLibfdxVersion"
+        )
+        val fdxVersion = readRequiredTomlValue(file, "release", "fdxVersion")
         return Config(
             rootDirectory = rootDirectory,
             fdxGroup = readRequiredTomlValue(file, "release", "fdxGroup"),
-            fdxVersion = readRequiredTomlValue(file, "release", "fdxVersion"),
+            fdxVersion = fdxVersion,
             usePublishedLibfdx = parseBooleanValue(
                 usePublishedLibfdxValue.source,
                 usePublishedLibfdxValue.value
             ),
-            publishedLibfdxVersion = publishedLibfdxVersionValue.value
+            publishedLibfdxVersion = publishedLibfdxVersionValue.value,
+            pluginBootstrapLibfdxVersion = pluginBootstrapLibfdxVersionValue.value
         )
     }
 
@@ -145,7 +155,8 @@ object LibExt {
         val fdxGroup: String,
         val fdxVersion: String,
         val usePublishedLibfdx: Boolean,
-        val publishedLibfdxVersion: String
+        val publishedLibfdxVersion: String,
+        val pluginBootstrapLibfdxVersion: String
     )
 
     private data class ConfigValue(

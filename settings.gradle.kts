@@ -7,8 +7,8 @@ pluginManagement {
         }
     }
 
-    fun tomlDevelopmentValue(key: String): String? {
-        var inDevelopmentSection = false
+    fun tomlValue(section: String, key: String): String? {
+        var inTargetSection = false
         tomlFile.useLines { lines ->
             for (rawLine in lines) {
                 val line = rawLine.substringBefore("#").trim()
@@ -16,11 +16,11 @@ pluginManagement {
                     continue
                 }
                 if (line.startsWith("[") && line.endsWith("]")) {
-                    inDevelopmentSection = line == "[development]"
+                    inTargetSection = line == "[$section]"
                     continue
                 }
                 val separator = line.indexOf('=')
-                if (!inDevelopmentSection || separator < 0 || line.substring(0, separator).trim() != key) {
+                if (!inTargetSection || separator < 0 || line.substring(0, separator).trim() != key) {
                     continue
                 }
                 val value = line.substring(separator + 1).trim()
@@ -32,7 +32,7 @@ pluginManagement {
 
     fun developmentValue(key: String): String {
         return localProperties.getProperty("development.$key")?.trim()?.takeIf { it.isNotEmpty() }
-            ?: tomlDevelopmentValue(key)
+            ?: tomlValue("development", key)
             ?: throw IllegalStateException("Missing development.$key in local.properties or libfdx.toml.")
     }
 

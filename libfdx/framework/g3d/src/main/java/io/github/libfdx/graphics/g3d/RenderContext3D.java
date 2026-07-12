@@ -12,10 +12,10 @@ import io.github.libfdx.graphics.RenderPass;
  */
 public final class RenderContext3D {
     private final GraphicsContext graphics;
-    private final Camera camera;
-    private final Environment3D environment;
-    private final RenderTarget3D target;
-    private final RenderPass pass;
+    private Camera camera;
+    private Environment3D environment;
+    private RenderTarget3D target;
+    private RenderPass pass;
 
     /**
      * Creates a render context3 d.
@@ -33,6 +33,17 @@ public final class RenderContext3D {
         this.environment = environment;
         this.target = target;
         this.pass = pass;
+    }
+
+    void reset(Camera camera, Environment3D environment, RenderTarget3D target, RenderPass pass) {
+        this.camera = camera;
+        this.environment = environment;
+        this.target = target;
+        this.pass = pass;
+    }
+
+    void clear() {
+        reset(null, null, null, null);
     }
 
     /**

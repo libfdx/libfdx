@@ -167,60 +167,85 @@ public final class Scenario {
         return Collections.unmodifiableList(names);
     }
 
-    ScenarioResult run(ScenarioHost host) {
-        ScenarioContext context = new ScenarioContext(host, this);
+    ScenarioResult run(ScenarioHost host, ScenarioValidationConfig config) {
+        ScenarioValidationConfig effectiveConfig = config != null ? config : ScenarioValidationConfig.defaults();
+        ScenarioContext context = new ScenarioContext(host, this, effectiveConfig);
         Object setupInstance = null;
         try {
             if (setup != null) {
                 setupInstance = setup.create();
             }
         } catch (RuntimeException ex) {
-            return failed(host, "setup", -1, ex);
+            return failed(host, context, "setup", -1, ex);
         }
         try {
             if (content != null) {
                 content.build(setupInstance);
             }
         } catch (RuntimeException ex) {
-            return failed(host, "content", -1, ex);
+            return failed(host, context, "content", -1, ex);
         }
         for (int i = 0; i < steps.size(); i++) {
             Step step = steps.get(i);
             try {
                 step.run(context);
             } catch (RuntimeException ex) {
-                return failed(host, step.name(), i, ex);
+                return failed(host, context, step.name(), i, ex);
             }
         }
-        if (visualBaselineRequired) {
+        if (effectiveConfig.capturePolicy() == ScenarioCapturePolicy.ALL) {
+            try {
+                host.requestAutomaticCapture(name, context);
+            } catch (RuntimeException ex) {
+                return failed(host, context, "capturePolicy(ALL)", steps.size(), ex, false);
+            }
+        }
+        if (visualBaselineRequired && effectiveConfig.mode() != ScenarioValidationMode.BEHAVIOR) {
             List<ScenarioCapture> captures = host.captures();
             if (captures.isEmpty()) {
-                return ScenarioResult.failed(name, "visualBaselineRequired", steps.size(),
-                        "Scenario requires a visual baseline but produced no capture.",
-                        host.frame(), host.elapsedMillis(), operationNames(), host.events().recent(),
-                        captures, true);
+                return failed(host, context, "visualBaselineRequired", steps.size(),
+                        new ScenarioFailure("Scenario requires a visual baseline but produced no capture."));
             }
             for (int i = 0; i < captures.size(); i++) {
                 ScenarioCapture capture = captures.get(i);
                 if (!Boolean.TRUE.equals(capture.baselineMatched())) {
-                    return ScenarioResult.failed(name, "visualBaselineRequired", steps.size(),
-                            "Scenario capture did not match a required baseline: " + capture.name()
+                    return failed(host, context, "visualBaselineRequired", steps.size(),
+                            new ScenarioFailure("Scenario capture did not match a required baseline: " + capture.name()
                                     + ", path=" + capture.path()
                                     + ", baseline=" + capture.baselinePath()
-                                    + ", message=" + capture.comparisonMessage(),
-                            host.frame(), host.elapsedMillis(), operationNames(), host.events().recent(),
-                            captures, true);
+                                    + ", message=" + capture.comparisonMessage()));
                 }
             }
         }
         return ScenarioResult.passed(name, host.frame(), host.elapsedMillis(), operationNames(),
-                host.events().recent(), host.captures(), visualBaselineRequired);
+                recentEvents(host, effectiveConfig), host.captures(), visualBaselineRequired);
     }
 
-    private ScenarioResult failed(ScenarioHost host, String operationName, int operationIndex, RuntimeException ex) {
+    private ScenarioResult failed(ScenarioHost host, ScenarioContext context, String operationName, int operationIndex,
+            RuntimeException ex) {
+        return failed(host, context, operationName, operationIndex, ex, true);
+    }
+
+    private ScenarioResult failed(ScenarioHost host, ScenarioContext context, String operationName, int operationIndex,
+            RuntimeException ex, boolean captureFailure) {
         String message = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getName();
+        ScenarioCapturePolicy policy = context.validationConfig().capturePolicy();
+        if (captureFailure && (policy == ScenarioCapturePolicy.ALL || policy == ScenarioCapturePolicy.FAILED)) {
+            try {
+                host.requestAutomaticCapture(name, context);
+            } catch (RuntimeException captureError) {
+                String captureMessage = captureError.getMessage() != null
+                        ? captureError.getMessage()
+                        : captureError.getClass().getName();
+                message += "; failure capture failed: " + captureMessage;
+            }
+        }
         return ScenarioResult.failed(name, operationName, operationIndex, message, host.frame(), host.elapsedMillis(),
-                operationNames(), host.events().recent(), host.captures(), visualBaselineRequired);
+                operationNames(), recentEvents(host, context.validationConfig()), host.captures(), visualBaselineRequired);
+    }
+
+    private List<String> recentEvents(ScenarioHost host, ScenarioValidationConfig config) {
+        return config.eventsEnabled() ? host.events().recent() : Collections.<String>emptyList();
     }
 
     /**
@@ -350,13 +375,19 @@ public final class Scenario {
                     return;
                 }
             }
+            String eventSummary = context.validationConfig().eventsEnabled()
+                    ? ", recentEvents=" + context.events().recent()
+                    : "";
             context.fail("Wait timed out: " + wait.name() + ", lastObserved=" + wait.lastObservedValue()
-                    + ", recentEvents=" + context.events().recent());
+                    + eventSummary);
         }
 
         private boolean canAdvance(ScenarioContext context, long startMillis, int startFrame) {
             int timeoutFrames = wait.timeoutFrames();
             long timeoutMillis = wait.timeoutMillis();
+            if (timeoutFrames <= 0 && timeoutMillis <= 0L) {
+                timeoutMillis = context.validationConfig().timeoutMillis();
+            }
             if (timeoutFrames <= 0 && timeoutMillis <= 0L) {
                 return false;
             }

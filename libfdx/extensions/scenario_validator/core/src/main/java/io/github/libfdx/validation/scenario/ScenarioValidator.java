@@ -102,6 +102,6 @@ public final class ScenarioValidator {
      * @return the run
      */
     public ScenarioReport run() {
-        return host.run(catalog, config.selection());
+        return host.run(catalog, config);
     }
 }

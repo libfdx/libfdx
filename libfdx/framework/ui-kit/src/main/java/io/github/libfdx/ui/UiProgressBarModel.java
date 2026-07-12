@@ -21,4 +21,10 @@ final class UiProgressBarModel {
     UiFloatState state() {
         return state;
     }
+
+    boolean matches(UiFloatState state, float minimum, float maximum) {
+        return this.state == state
+                && Float.compare(range.minimum(), minimum) == 0
+                && Float.compare(range.maximum(), Math.max(minimum, maximum)) == 0;
+    }
 }

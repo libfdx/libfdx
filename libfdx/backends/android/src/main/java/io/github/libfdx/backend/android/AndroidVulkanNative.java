@@ -84,6 +84,8 @@ final class AndroidVulkanNative {
 
     static native void setScissor(long context, int x, int y, int width, int height);
 
+    static native void setViewport(long context, int x, int y, int width, int height);
+
     static native void bindTextures(long context, long pipeline, long[] textures, int count);
 
     static native void bindUniforms(long context, long pipeline, ByteBuffer data, int size);

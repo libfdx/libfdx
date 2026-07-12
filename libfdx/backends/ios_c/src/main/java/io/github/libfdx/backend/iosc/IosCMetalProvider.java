@@ -10,6 +10,7 @@ import io.github.libfdx.graphics.FrameBuffer;
 import io.github.libfdx.graphics.GraphicsAttachment;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentRequirements;
+import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.GraphicsEnvironment;
 import io.github.libfdx.graphics.GraphicsFrame;
@@ -103,6 +104,13 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
         if (environment == null || environment.display() == null) {
             throw new FdxException("iOS C Metal requires a display environment");
         }
+        GraphicsContext sharedContext = environment.sharedContext();
+        if (sharedContext != null) {
+            if (!ID.equals(sharedContext.providerId())) {
+                throw new FdxException("Cannot share a non-Metal graphics context with iOS C Metal");
+            }
+            throw new FdxException("iOS C Metal does not currently support shared graphics contexts");
+        }
         return new IosCMetalGraphicsAttachment(environment.display().framebufferWidth(),
                 environment.display().framebufferHeight());
     }
@@ -118,6 +126,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
         private final IosCMetalFrame frame;
         private int width;
         private int height;
+        private boolean frameStarted;
         private boolean disposed;
 
         IosCMetalGraphicsAttachment(int width, int height) {
@@ -157,7 +166,12 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
         @Override
         public boolean beginFrame() {
             ensureNotDisposed();
-            return IosCMetal.beginFrame(context);
+            if (frameStarted) {
+                throw new FdxException("iOS C Metal frame is already started");
+            }
+            frame.beginFrame();
+            frameStarted = IosCMetal.beginFrame(context);
+            return frameStarted;
         }
 
         /**
@@ -165,8 +179,13 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public void endFrame() {
-            if (!disposed) {
-                IosCMetal.endFrame(context);
+            if (!disposed && frameStarted) {
+                frame.ensurePassesEnded();
+                try {
+                    IosCMetal.endFrame(context);
+                } finally {
+                    frameStarted = false;
+                }
             }
         }
 
@@ -177,6 +196,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public GraphicsDevice device() {
+            ensureNotDisposed();
             return device;
         }
 
@@ -187,6 +207,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public TextureFormat surfaceFormat() {
+            ensureNotDisposed();
             return TextureFormat.BGRA8_UNORM;
         }
 
@@ -197,7 +218,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public GraphicsFrame currentFrame() {
-            ensureNotDisposed();
+            ensureFrameStarted("access the current frame");
             return frame;
         }
 
@@ -211,7 +232,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public void clear(float red, float green, float blue, float alpha) {
-            ensureNotDisposed();
+            ensureFrameStarted("clear");
             IosCMetal.clear(context, red, green, blue, alpha);
         }
 
@@ -246,7 +267,11 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
                 return;
             }
             disposed = true;
-            IosCMetal.destroy(context);
+            try {
+                IosCMetal.destroy(context);
+            } finally {
+                frameStarted = false;
+            }
         }
 
         /**
@@ -264,6 +289,13 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
                 throw new FdxException("iOS C Metal graphics attachment has been disposed");
             }
         }
+
+        private void ensureFrameStarted(String operation) {
+            ensureNotDisposed();
+            if (!frameStarted) {
+                throw new FdxException("Cannot " + operation + " outside an active iOS C Metal frame");
+            }
+        }
     }
 
     /**
@@ -275,12 +307,21 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
         private final IosCMetalGraphicsAttachment attachment;
         private final IosCMetalCommandEncoder commandEncoder;
         private final IosCMetalFrameBuffer frameBuffer;
-        private final IosCMetalTextureView colorAttachment = new IosCMetalTextureView(TextureFormat.BGRA8_UNORM);
+        private final IosCMetalTextureView colorAttachment;
 
         IosCMetalFrame(IosCMetalGraphicsAttachment attachment) {
             this.attachment = attachment;
+            colorAttachment = new IosCMetalTextureView(attachment, TextureFormat.BGRA8_UNORM);
             commandEncoder = new IosCMetalCommandEncoder(attachment);
             frameBuffer = new IosCMetalFrameBuffer(attachment, colorAttachment);
+        }
+
+        void beginFrame() {
+            commandEncoder.beginFrame();
+        }
+
+        void ensurePassesEnded() {
+            commandEncoder.ensurePassesEnded();
         }
 
         /**
@@ -417,9 +458,14 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public ByteBuffer readPixelsRgba8() {
+            attachment.ensureFrameStarted("read pixels");
             int byteCount = width() * height() * 4;
             ByteBuffer pixels = ByteBuffer.allocateDirect(byteCount).order(ByteOrder.nativeOrder());
-            IosCMetal.readPixelsRgba8(attachment.context, pixels, byteCount);
+            try {
+                IosCMetal.readPixelsRgba8(attachment.context, pixels, byteCount);
+            } finally {
+                attachment.frameStarted = false;
+            }
             pixels.position(0);
             pixels.limit(byteCount);
             return pixels;
@@ -468,10 +514,12 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public Buffer createBuffer(BufferDescriptor descriptor) {
+            attachment.ensureNotDisposed();
             if (descriptor == null) {
                 throw new FdxException("BufferDescriptor cannot be null");
             }
-            return new IosCMetalBufferHandle(IosCMetal.createBuffer(attachment.context, descriptor.size(),
+            return new IosCMetalBufferHandle(attachment,
+                    IosCMetal.createBuffer(attachment.context, descriptor.size(),
                     toNativeBufferUsage(descriptor.usage())), descriptor.size(), descriptor.usage());
         }
 
@@ -483,13 +531,11 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public void writeBuffer(Buffer buffer, ByteBuffer data) {
-            if (buffer == null) {
-                throw new FdxException("Buffer cannot be null");
-            }
+            attachment.ensureNotDisposed();
             if (data == null) {
                 throw new FdxException("Buffer data cannot be null");
             }
-            IosCMetalBufferHandle metalBuffer = buffer.as();
+            IosCMetalBufferHandle metalBuffer = IosCMetalResources.requireBuffer(buffer, attachment, "Buffer");
             if (data.remaining() > metalBuffer.size()) {
                 throw new FdxException("Buffer data is larger than the destination buffer");
             }
@@ -505,6 +551,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public Texture createTexture(TextureDescriptor descriptor) {
+            attachment.ensureNotDisposed();
             if (descriptor == null) {
                 throw new FdxException("TextureDescriptor cannot be null");
             }
@@ -514,7 +561,8 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
             if (descriptor.usage() != TextureUsage.SAMPLED) {
                 throw new FdxException("iOS C Metal currently supports sampled textures only");
             }
-            return new IosCMetalTextureHandle(IosCMetal.createTexture(attachment.context, descriptor.width(),
+            return new IosCMetalTextureHandle(attachment,
+                    IosCMetal.createTexture(attachment.context, descriptor.width(),
                     descriptor.height(), toNativeWrap(descriptor.wrapS()), toNativeWrap(descriptor.wrapT()),
                     toNativeFilter(descriptor.filter())),
                     descriptor.width(), descriptor.height(), descriptor.format(), descriptor.usage());
@@ -528,13 +576,11 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public void writeTexture(Texture texture, ByteBuffer data) {
-            if (texture == null) {
-                throw new FdxException("Texture cannot be null");
-            }
+            attachment.ensureNotDisposed();
             if (data == null) {
                 throw new FdxException("Texture data cannot be null");
             }
-            IosCMetalTextureHandle metalTexture = texture.as();
+            IosCMetalTextureHandle metalTexture = IosCMetalResources.requireTexture(texture, attachment, "Texture");
             int byteCount = metalTexture.width() * metalTexture.height() * 4;
             if (data.remaining() != byteCount) {
                 throw new FdxException("iOS C Metal texture upload expects " + byteCount + " RGBA bytes");
@@ -551,6 +597,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public ShaderModule createShaderModule(ShaderModuleDescriptor descriptor) {
+            attachment.ensureNotDisposed();
             if (descriptor == null) {
                 throw new FdxException("ShaderModuleDescriptor cannot be null");
             }
@@ -558,8 +605,8 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
             if (!descriptor.hasSource(ShaderLanguage.MSL)) {
                 throw new FdxException("iOS C Metal requires MSL shader modules");
             }
-            return new IosCMetalShaderModuleHandle(IosCMetal.createShaderModule(attachment.context,
-                    descriptor.mslSource()));
+            return new IosCMetalShaderModuleHandle(attachment,
+                    IosCMetal.createShaderModule(attachment.context, descriptor.mslSource()));
         }
 
         /**
@@ -570,16 +617,19 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public RenderPipeline createRenderPipeline(RenderPipelineDescriptor descriptor) {
+            attachment.ensureNotDisposed();
             if (descriptor == null) {
                 throw new FdxException("RenderPipelineDescriptor cannot be null");
             }
             if (descriptor.colorFormat() != attachment.surfaceFormat()) {
                 throw new FdxException("iOS C Metal render pipeline color format must match the surface format");
             }
-            IosCMetalShaderModuleHandle shaderModule = descriptor.shaderModule().as();
+            IosCMetalShaderModuleHandle shaderModule = IosCMetalResources.requireShaderModule(
+                    descriptor.shaderModule(), attachment, "Shader module");
             boolean pbrUniformsEnabled = usesPbrUniformBlock(descriptor);
             VertexLayout[] vertexLayouts = descriptor.vertexLayouts();
-            return new IosCMetalRenderPipelineHandle(IosCMetal.createRenderPipeline(attachment.context,
+            return new IosCMetalRenderPipelineHandle(attachment,
+                    IosCMetal.createRenderPipeline(attachment.context,
                     shaderModule.handle(), toNativeTopology(descriptor.primitiveTopology()),
                     vertexStrides(vertexLayouts), vertexStepModes(vertexLayouts), attributeBindings(vertexLayouts),
                     attributeLocations(vertexLayouts), attributeFormats(vertexLayouts),
@@ -626,6 +676,92 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
         return false;
     }
 
+    private static final class IosCMetalResources {
+        private IosCMetalResources() {
+        }
+
+        static IosCMetalBufferHandle requireBuffer(Buffer value, IosCMetalGraphicsAttachment attachment,
+                String name) {
+            if (value == null) {
+                throw new FdxException(name + " cannot be null");
+            }
+            if (!(value instanceof IosCMetalBufferHandle handle)) {
+                throw new FdxException(name + " belongs to another graphics provider");
+            }
+            requireOwner(handle.attachment, attachment, name);
+            if (handle.isDisposed()) {
+                throw new FdxException(name + " has been disposed");
+            }
+            return handle;
+        }
+
+        static IosCMetalTextureHandle requireTexture(Texture value, IosCMetalGraphicsAttachment attachment,
+                String name) {
+            if (value == null) {
+                throw new FdxException(name + " cannot be null");
+            }
+            if (!(value instanceof IosCMetalTextureHandle handle)) {
+                throw new FdxException(name + " belongs to another graphics provider");
+            }
+            requireOwner(handle.attachment, attachment, name);
+            if (handle.isDisposed()) {
+                throw new FdxException(name + " has been disposed");
+            }
+            return handle;
+        }
+
+        static IosCMetalShaderModuleHandle requireShaderModule(ShaderModule value,
+                IosCMetalGraphicsAttachment attachment, String name) {
+            if (value == null) {
+                throw new FdxException(name + " cannot be null");
+            }
+            if (!(value instanceof IosCMetalShaderModuleHandle handle)) {
+                throw new FdxException(name + " belongs to another graphics provider");
+            }
+            requireOwner(handle.attachment, attachment, name);
+            if (handle.isDisposed()) {
+                throw new FdxException(name + " has been disposed");
+            }
+            return handle;
+        }
+
+        static IosCMetalRenderPipelineHandle requirePipeline(RenderPipeline value,
+                IosCMetalGraphicsAttachment attachment, String name) {
+            if (value == null) {
+                throw new FdxException(name + " cannot be null");
+            }
+            if (!(value instanceof IosCMetalRenderPipelineHandle handle)) {
+                throw new FdxException(name + " belongs to another graphics provider");
+            }
+            requireOwner(handle.attachment, attachment, name);
+            if (handle.isDisposed()) {
+                throw new FdxException(name + " has been disposed");
+            }
+            return handle;
+        }
+
+        static IosCMetalTextureView requireTextureView(TextureView value,
+                IosCMetalGraphicsAttachment attachment, String name) {
+            if (value == null) {
+                throw new FdxException(name + " cannot be null");
+            }
+            if (!(value instanceof IosCMetalTextureView handle)) {
+                throw new FdxException(name + " belongs to another graphics provider");
+            }
+            requireOwner(handle.attachment, attachment, name);
+            attachment.ensureFrameStarted("use " + name.toLowerCase());
+            return handle;
+        }
+
+        private static void requireOwner(IosCMetalGraphicsAttachment actual,
+                IosCMetalGraphicsAttachment expected, String name) {
+            if (actual != expected) {
+                throw new FdxException(name + " belongs to another iOS C Metal context");
+            }
+            expected.ensureNotDisposed();
+        }
+    }
+
     /**
      * Represents an iOS C Metal command encoder.
      *
@@ -633,6 +769,8 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
      */
     private static final class IosCMetalCommandEncoder implements CommandEncoder {
         private final IosCMetalGraphicsAttachment attachment;
+        private IosCMetalRenderPass[] renderPasses = new IosCMetalRenderPass[4];
+        private int renderPassCount;
 
         IosCMetalCommandEncoder(IosCMetalGraphicsAttachment attachment) {
             this.attachment = attachment;
@@ -649,12 +787,52 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
             if (descriptor == null) {
                 throw new FdxException("RenderPassDescriptor cannot be null");
             }
+            attachment.ensureFrameStarted("begin a render pass");
+            ensurePreviousPassEnded();
+            IosCMetalResources.requireTextureView(descriptor.colorAttachment(), attachment, "Color attachment");
             LoadOp loadOp = descriptor.colorLoadOp();
             StoreOp storeOp = descriptor.colorStoreOp();
             IosCMetal.beginRenderPass(attachment.context, loadOp.isClear(), loadOp.red(), loadOp.green(),
                     loadOp.blue(), loadOp.alpha(), storeOp.isStore(), descriptor.depthEnabled(),
                     descriptor.depthClearEnabled(), descriptor.depthClearValue());
-            return new IosCMetalRenderPass(attachment);
+            IosCMetalRenderPass renderPass = nextRenderPass();
+            renderPass.begin();
+            renderPassCount++;
+            return renderPass;
+        }
+
+        void beginFrame() {
+            ensurePassesEnded();
+            renderPassCount = 0;
+        }
+
+        void ensurePassesEnded() {
+            for (int i = 0; i < renderPassCount; i++) {
+                if (!renderPasses[i].isEnded()) {
+                    throw new FdxException("iOS C Metal render pass must be ended before ending the frame");
+                }
+            }
+        }
+
+        private void ensurePreviousPassEnded() {
+            if (renderPassCount > 0 && !renderPasses[renderPassCount - 1].isEnded()) {
+                throw new FdxException(
+                        "Previous iOS C Metal render pass must be ended before beginning another pass");
+            }
+        }
+
+        private IosCMetalRenderPass nextRenderPass() {
+            if (renderPassCount == renderPasses.length) {
+                IosCMetalRenderPass[] grown = new IosCMetalRenderPass[renderPasses.length * 2];
+                System.arraycopy(renderPasses, 0, grown, 0, renderPasses.length);
+                renderPasses = grown;
+            }
+            IosCMetalRenderPass renderPass = renderPasses[renderPassCount];
+            if (renderPass == null) {
+                renderPass = new IosCMetalRenderPass(attachment);
+                renderPasses[renderPassCount] = renderPass;
+            }
+            return renderPass;
         }
 
         /**
@@ -735,13 +913,36 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
         private final FloatBuffer uniformFloats = uniformBytes.asFloatBuffer();
         private IosCMetalRenderPipelineHandle pipeline;
         private IosCMetalBufferHandle indexBuffer;
-        private boolean uniformDataDirty = true;
+        private IosCMetalBufferHandle[] vertexBuffers = new IosCMetalBufferHandle[0];
+        private IosCMetalTextureHandle[] textures = new IosCMetalTextureHandle[0];
+        private boolean uniformDataDirty;
         private boolean hasUniformData;
-        private boolean ended;
+        private boolean ended = true;
 
         IosCMetalRenderPass(IosCMetalGraphicsAttachment attachment) {
             this.attachment = attachment;
+        }
+
+        void begin() {
+            if (!ended) {
+                throw new FdxException("Cannot reuse an active iOS C Metal render pass");
+            }
+            pipeline = null;
+            indexBuffer = null;
+            for (int i = 0; i < vertexBuffers.length; i++) {
+                vertexBuffers[i] = null;
+            }
+            for (int i = 0; i < textures.length; i++) {
+                textures[i] = null;
+            }
+            uniformDataDirty = false;
+            hasUniformData = false;
             resetUniformData();
+            ended = false;
+        }
+
+        boolean isEnded() {
+            return ended;
         }
 
         /**
@@ -752,7 +953,8 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
         @Override
         public void setPipeline(RenderPipeline pipeline) {
             ensureOpen();
-            this.pipeline = pipeline.as();
+            this.pipeline = IosCMetalResources.requirePipeline(pipeline, attachment, "Render pipeline");
+            prepareTextureSlots(this.pipeline.sampledTextureCount());
             uniformDataDirty = true;
             IosCMetal.setPipeline(attachment.context, this.pipeline.handle());
         }
@@ -776,13 +978,15 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
         @Override
         public void setVertexBuffer(int slot, Buffer buffer) {
             ensureOpen();
-            if (buffer == null) {
-                throw new FdxException("Vertex buffer cannot be null");
+            if (slot < 0) {
+                throw new FdxException("Vertex buffer slot cannot be negative");
             }
-            IosCMetalBufferHandle metalBuffer = buffer.as();
+            IosCMetalBufferHandle metalBuffer = IosCMetalResources.requireBuffer(buffer, attachment,
+                    "Vertex buffer");
             if (metalBuffer.usage() != BufferUsage.VERTEX) {
                 throw new FdxException("RenderPass.setVertexBuffer requires a vertex buffer");
             }
+            rememberVertexBuffer(slot, metalBuffer);
             IosCMetal.setVertexBuffer(attachment.context, slot, metalBuffer.handle());
         }
 
@@ -794,14 +998,45 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
         @Override
         public void setIndexBuffer(Buffer buffer) {
             ensureOpen();
-            if (buffer == null) {
-                throw new FdxException("Index buffer cannot be null");
-            }
-            indexBuffer = buffer.as();
+            indexBuffer = IosCMetalResources.requireBuffer(buffer, attachment, "Index buffer");
             if (indexBuffer.usage() != BufferUsage.INDEX) {
                 throw new FdxException("RenderPass.setIndexBuffer requires an index buffer");
             }
             IosCMetal.setIndexBuffer(attachment.context, indexBuffer.handle());
+        }
+
+        /**
+         * Sets the scissor rectangle.
+         *
+         * @param x the lower-left x coordinate in framebuffer pixels
+         * @param y the lower-left y coordinate in framebuffer pixels
+         * @param width the width in pixels
+         * @param height the height in pixels
+         */
+        @Override
+        public void setScissor(int x, int y, int width, int height) {
+            ensureOpen();
+            if (width <= 0 || height <= 0) {
+                throw new FdxException("Scissor size must be greater than zero");
+            }
+            IosCMetal.setScissor(attachment.context, x, attachment.height - y - height, width, height);
+        }
+
+        /**
+         * Sets the viewport.
+         *
+         * @param x the lower-left x coordinate in framebuffer pixels
+         * @param y the lower-left y coordinate in framebuffer pixels
+         * @param width the width in pixels
+         * @param height the height in pixels
+         */
+        @Override
+        public void setViewport(int x, int y, int width, int height) {
+            ensureOpen();
+            if (width <= 0 || height <= 0) {
+                throw new FdxException("Viewport size must be greater than zero");
+            }
+            IosCMetal.setViewport(attachment.context, x, attachment.height - y - height, width, height);
         }
 
         /**
@@ -816,13 +1051,11 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
             if (pipeline == null) {
                 throw new FdxException("Render pipeline must be set before binding a texture");
             }
-            if (texture == null) {
-                throw new FdxException("Texture cannot be null");
-            }
             if (slot < 0 || slot >= pipeline.sampledTextureCount()) {
                 throw new FdxException("Texture slot is not declared by the active iOS C Metal pipeline: " + slot);
             }
-            IosCMetalTextureHandle metalTexture = texture.as();
+            IosCMetalTextureHandle metalTexture = IosCMetalResources.requireTexture(texture, attachment, "Texture");
+            textures[slot] = metalTexture;
             IosCMetal.setTexture(attachment.context, pipeline.textureBinding(slot), pipeline.samplerBinding(slot),
                     metalTexture.handle());
         }
@@ -835,6 +1068,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public void setUniform1i(String name, int value) {
+            ensureOpen();
             if ("u_hasBaseColorTexture".equals(name)) {
                 setUniformFloat(TEXTURE_FLAGS_OFFSET, value);
             }
@@ -860,6 +1094,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public void setUniform1f(String name, float value) {
+            ensureOpen();
             if ("u_lightIntensity".equals(name)) {
                 setUniformFloat(LIGHT_COLOR_INTENSITY_OFFSET + 3, value);
             }
@@ -881,6 +1116,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public void setUniform3f(String name, float x, float y, float z) {
+            ensureOpen();
             if ("u_cameraPosition".equals(name)) {
                 setUniform4f(CAMERA_POSITION_OFFSET, x, y, z, 1.0f);
             }
@@ -929,6 +1165,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public void setUniform4f(String name, float x, float y, float z, float w) {
+            ensureOpen();
             if ("u_cameraPosition".equals(name)) {
                 setUniform4f(CAMERA_POSITION_OFFSET, x, y, z, w);
             }
@@ -1067,7 +1304,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public void draw(int vertexCount, int instanceCount, int firstVertex, int firstInstance) {
-            ensureReadyToDraw();
+            ensureReadyToDraw(false);
             bindUniforms();
             IosCMetal.draw(attachment.context, vertexCount, instanceCount, firstVertex, firstInstance);
         }
@@ -1083,7 +1320,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
          */
         @Override
         public void drawIndexed(int indexCount, int instanceCount, int firstIndex, int baseVertex, int firstInstance) {
-            ensureReadyToDraw();
+            ensureReadyToDraw(true);
             if (indexBuffer == null) {
                 throw new FdxException("Index buffer must be set before indexed draws");
             }
@@ -1099,8 +1336,17 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
             if (ended) {
                 return;
             }
+            attachment.ensureFrameStarted("end a render pass");
             IosCMetal.endRenderPass(attachment.context);
             ended = true;
+            pipeline = null;
+            indexBuffer = null;
+            for (int i = 0; i < vertexBuffers.length; i++) {
+                vertexBuffers[i] = null;
+            }
+            for (int i = 0; i < textures.length; i++) {
+                textures[i] = null;
+            }
         }
 
         /**
@@ -1125,11 +1371,46 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
             return (T) this;
         }
 
-        private void ensureReadyToDraw() {
+        private void ensureReadyToDraw(boolean indexed) {
             ensureOpen();
             if (pipeline == null) {
                 throw new FdxException("Render pipeline must be set before draw");
             }
+            IosCMetalResources.requirePipeline(pipeline, attachment, "Render pipeline");
+            for (int i = 0; i < vertexBuffers.length; i++) {
+                if (vertexBuffers[i] != null) {
+                    IosCMetalResources.requireBuffer(vertexBuffers[i], attachment, "Vertex buffer at slot " + i);
+                }
+            }
+            if (indexed) {
+                IosCMetalResources.requireBuffer(indexBuffer, attachment, "Index buffer");
+            }
+            for (int i = 0; i < pipeline.sampledTextureCount(); i++) {
+                if (textures[i] == null) {
+                    throw new FdxException("Texture slot " + i
+                            + " must be set before drawing with the iOS C Metal pipeline");
+                }
+                IosCMetalResources.requireTexture(textures[i], attachment, "Texture at slot " + i);
+            }
+        }
+
+        private void prepareTextureSlots(int sampledTextureCount) {
+            if (textures.length < sampledTextureCount) {
+                textures = new IosCMetalTextureHandle[sampledTextureCount];
+            }
+            for (int i = 0; i < textures.length; i++) {
+                textures[i] = null;
+            }
+        }
+
+        private void rememberVertexBuffer(int slot, IosCMetalBufferHandle buffer) {
+            if (slot >= vertexBuffers.length) {
+                int nextLength = Math.max(slot + 1, Math.max(1, vertexBuffers.length * 2));
+                IosCMetalBufferHandle[] grown = new IosCMetalBufferHandle[nextLength];
+                System.arraycopy(vertexBuffers, 0, grown, 0, vertexBuffers.length);
+                vertexBuffers = grown;
+            }
+            vertexBuffers[slot] = buffer;
         }
 
         private void bindUniforms() {
@@ -1241,6 +1522,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
         }
 
         private void ensureOpen() {
+            attachment.ensureFrameStarted("use a render pass");
             if (ended) {
                 throw new FdxException("Render pass has already ended");
             }
@@ -1248,12 +1530,14 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
     }
 
     private static final class IosCMetalBufferHandle implements Buffer {
+        private final IosCMetalGraphicsAttachment attachment;
         private final long handle;
         private final int size;
         private final BufferUsage usage;
         private boolean disposed;
 
-        IosCMetalBufferHandle(long handle, int size, BufferUsage usage) {
+        IosCMetalBufferHandle(IosCMetalGraphicsAttachment attachment, long handle, int size, BufferUsage usage) {
+            this.attachment = attachment;
             this.handle = handle;
             this.size = size;
             this.usage = usage != null ? usage : BufferUsage.VERTEX;
@@ -1313,8 +1597,10 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
             if (disposed) {
                 return;
             }
+            if (!attachment.isDisposed()) {
+                IosCMetal.destroyBuffer(handle);
+            }
             disposed = true;
-            IosCMetal.destroyBuffer(handle);
         }
 
         /**
@@ -1329,6 +1615,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
     }
 
     private static final class IosCMetalTextureHandle implements Texture {
+        private final IosCMetalGraphicsAttachment attachment;
         private final long handle;
         private final int width;
         private final int height;
@@ -1336,7 +1623,9 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
         private final TextureUsage usage;
         private boolean disposed;
 
-        IosCMetalTextureHandle(long handle, int width, int height, TextureFormat format, TextureUsage usage) {
+        IosCMetalTextureHandle(IosCMetalGraphicsAttachment attachment, long handle, int width, int height,
+                TextureFormat format, TextureUsage usage) {
+            this.attachment = attachment;
             this.handle = handle;
             this.width = width;
             this.height = height;
@@ -1418,8 +1707,10 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
             if (disposed) {
                 return;
             }
+            if (!attachment.isDisposed()) {
+                IosCMetal.destroyTexture(handle);
+            }
             disposed = true;
-            IosCMetal.destroyTexture(handle);
         }
 
         /**
@@ -1434,9 +1725,11 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
     }
 
     private static final class IosCMetalTextureView implements TextureView {
+        private final IosCMetalGraphicsAttachment attachment;
         private final TextureFormat format;
 
-        IosCMetalTextureView(TextureFormat format) {
+        IosCMetalTextureView(IosCMetalGraphicsAttachment attachment, TextureFormat format) {
+            this.attachment = attachment;
             this.format = format != null ? format : TextureFormat.BGRA8_UNORM;
         }
 
@@ -1474,10 +1767,12 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
     }
 
     private static final class IosCMetalShaderModuleHandle implements ShaderModule {
+        private final IosCMetalGraphicsAttachment attachment;
         private final long handle;
         private boolean disposed;
 
-        IosCMetalShaderModuleHandle(long handle) {
+        IosCMetalShaderModuleHandle(IosCMetalGraphicsAttachment attachment, long handle) {
+            this.attachment = attachment;
             this.handle = handle;
         }
 
@@ -1525,8 +1820,10 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
             if (disposed) {
                 return;
             }
+            if (!attachment.isDisposed()) {
+                IosCMetal.destroyShaderModule(handle);
+            }
             disposed = true;
-            IosCMetal.destroyShaderModule(handle);
         }
 
         /**
@@ -1541,6 +1838,7 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
     }
 
     private static final class IosCMetalRenderPipelineHandle implements RenderPipeline {
+        private final IosCMetalGraphicsAttachment attachment;
         private final long handle;
         private final PrimitiveTopology primitiveTopology;
         private final int sampledTextureCount;
@@ -1549,8 +1847,10 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
         private final int[] samplerBindings;
         private boolean disposed;
 
-        IosCMetalRenderPipelineHandle(long handle, PrimitiveTopology primitiveTopology, int sampledTextureCount,
-                boolean pbrUniformsEnabled, int[] textureBindings, int[] samplerBindings) {
+        IosCMetalRenderPipelineHandle(IosCMetalGraphicsAttachment attachment, long handle,
+                PrimitiveTopology primitiveTopology, int sampledTextureCount, boolean pbrUniformsEnabled,
+                int[] textureBindings, int[] samplerBindings) {
+            this.attachment = attachment;
             this.handle = handle;
             this.primitiveTopology = primitiveTopology != null ? primitiveTopology : PrimitiveTopology.TRIANGLE_LIST;
             this.sampledTextureCount = sampledTextureCount;
@@ -1611,8 +1911,10 @@ public final class IosCMetalProvider implements GraphicsAttachmentProvider, Grap
             if (disposed) {
                 return;
             }
+            if (!attachment.isDisposed()) {
+                IosCMetal.destroyRenderPipeline(handle);
+            }
             disposed = true;
-            IosCMetal.destroyRenderPipeline(handle);
         }
 
         /**

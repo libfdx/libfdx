@@ -36,7 +36,7 @@ public final class DesktopProjectExportSmokeTest {
                 .packageName("com.example.smoke")
                 .applicationClassName("SmokeApplication")
                 .desktopLauncherClassName("SmokeDesktopLauncher")
-                .libfdxVersion("-SNAPSHOT")
+                .libfdxVersion("0.0.2-SNAPSHOT")
                 .build());
         GeneratedProject project = generation.project();
         DesktopProjectExportTarget target = new DesktopProjectExportTarget(destination.toString());

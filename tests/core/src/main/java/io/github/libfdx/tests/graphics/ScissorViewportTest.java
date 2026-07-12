@@ -33,6 +33,8 @@ public final class ScissorViewportTest extends GraphicsParityTest {
     private static final int SCISSOR_REFERENCE_Y = 100;
     private static final int SCISSOR_WIDTH = 300;
     private static final int SCISSOR_HEIGHT = 200;
+    private static final int VIEWPORT_MARGIN_X = 40;
+    private static final int VIEWPORT_MARGIN_Y = 30;
     private static final int FLOATS_PER_VERTEX = 8;
     private static final int BYTES_PER_VERTEX = FLOATS_PER_VERTEX * 4;
     private static final int VERTEX_COUNT = 6;
@@ -136,6 +138,10 @@ public final class ScissorViewportTest extends GraphicsParityTest {
         pass.setPipeline(pipeline);
         pass.setTexture(0, background);
         pass.setVertexBuffer(backgroundBuffer);
+        int viewportX = Math.min(VIEWPORT_MARGIN_X, Math.max(0, width / 8));
+        int viewportY = Math.min(VIEWPORT_MARGIN_Y, Math.max(0, height / 8));
+        pass.setViewport(viewportX, viewportY, Math.max(1, width - viewportX * 2),
+                Math.max(1, height - viewportY * 2));
         pass.setScissor(scissorX, scissorY, scissorWidth, scissorHeight);
         pass.draw(VERTEX_COUNT, 1, 0, 0);
         pass.end();

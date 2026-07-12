@@ -15,7 +15,8 @@ final class GLRenderPipelineHandle implements RenderPipeline {
 
     private final ProviderId providerId;
     private final GLApi gl;
-    private final int program;
+    private final GLResourceDomain resourceDomain;
+    private final GLShaderModuleHandle shaderModule;
     private final PrimitiveTopology primitiveTopology;
     private final VertexLayout[] vertexLayouts;
     private final int sampledTextureCount;
@@ -24,22 +25,29 @@ final class GLRenderPipelineHandle implements RenderPipeline {
     private final int pbrUniformBuffer;
     private boolean disposed;
 
-    GLRenderPipelineHandle(ProviderId providerId, GLApi gl, int program, PrimitiveTopology primitiveTopology,
+    GLRenderPipelineHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain,
+            GLShaderModuleHandle shaderModule, PrimitiveTopology primitiveTopology,
             VertexLayout[] vertexLayouts, int sampledTextureCount, boolean depthTestEnabled,
             boolean depthWriteEnabled, int pbrUniformBuffer) {
         this.providerId = providerId;
         this.gl = gl;
-        this.program = program;
+        this.resourceDomain = resourceDomain;
+        this.shaderModule = shaderModule;
         this.primitiveTopology = primitiveTopology != null ? primitiveTopology : PrimitiveTopology.TRIANGLE_LIST;
         this.vertexLayouts = vertexLayouts != null ? vertexLayouts.clone() : new VertexLayout[0];
         this.sampledTextureCount = sampledTextureCount;
         this.depthTestEnabled = depthTestEnabled;
         this.depthWriteEnabled = depthWriteEnabled;
         this.pbrUniformBuffer = pbrUniformBuffer;
+        shaderModule.retainForPipeline();
     }
 
     int program() {
-        return program;
+        return shaderModule.program();
+    }
+
+    GLResourceDomain resourceDomain() {
+        return resourceDomain;
     }
 
     PrimitiveTopology primitiveTopology() {
@@ -52,6 +60,14 @@ final class GLRenderPipelineHandle implements RenderPipeline {
 
     VertexLayout[] vertexLayouts() {
         return vertexLayouts.clone();
+    }
+
+    int vertexLayoutCount() {
+        return vertexLayouts.length;
+    }
+
+    VertexLayout vertexLayout(int index) {
+        return vertexLayouts[index];
     }
 
     int sampledTextureCount() {
@@ -105,9 +121,12 @@ final class GLRenderPipelineHandle implements RenderPipeline {
             return;
         }
         if (pbrUniformBuffer != 0) {
-            gl.deleteBuffer(pbrUniformBuffer);
+            if (resourceDomain.makeAnyContextCurrent()) {
+                gl.deleteBuffer(pbrUniformBuffer);
+            }
         }
         disposed = true;
+        shaderModule.releaseFromPipeline();
     }
 
     /**

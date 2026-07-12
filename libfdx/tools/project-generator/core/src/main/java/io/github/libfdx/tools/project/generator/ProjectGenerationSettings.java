@@ -10,7 +10,7 @@ public final class ProjectGenerationSettings {
     public static final String DEFAULT_PACKAGE_NAME = "com.example.game";
     public static final String DEFAULT_APPLICATION_CLASS_NAME = "GameApplication";
     public static final String DEFAULT_DESKTOP_LAUNCHER_CLASS_NAME = "DesktopLauncher";
-    public static final String DEFAULT_LIBFDX_VERSION = "-SNAPSHOT";
+    public static final String DEFAULT_LIBFDX_VERSION = "0.0.2-SNAPSHOT";
 
     private final String projectName;
     private final String packageName;

@@ -7,12 +7,14 @@ plugins {
 
 val androidCompileSdkVersion = providers.gradleProperty("androidCompileSdk").get().toInt()
 val androidMinSdkVersion = providers.gradleProperty("androidMinSdk").get().toInt()
+val androidNdkVersion = providers.gradleProperty("androidNdkVersion").get()
 
 group = "${LibExt.fdxGroup}.vulkan"
 
 android {
     namespace = "io.github.libfdx.graphics.vulkan.android"
     compileSdk = androidCompileSdkVersion
+    ndkVersion = androidNdkVersion
 
     defaultConfig {
         minSdk = androidMinSdkVersion
@@ -27,13 +29,13 @@ android {
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
-            buildStagingDirectory = layout.buildDirectory.dir("cxx").get().asFile
+            buildStagingDirectory = layout.projectDirectory.dir(".cxx").asFile
         }
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.toVersion(25)
-        targetCompatibility = JavaVersion.toVersion(25)
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     publishing {
@@ -62,7 +64,7 @@ val androidJavadocJar = tasks.register("androidJavadocJar", org.gradle.api.tasks
 
 tasks.register("androidSourcesJar", org.gradle.api.tasks.bundling.Jar::class) {
     archiveClassifier.set("sources")
-    from(android.sourceSets.getByName("main").java.srcDirs)
+    from(layout.projectDirectory.dir("src/main/java"))
 }
 
 publishing {

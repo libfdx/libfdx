@@ -263,27 +263,37 @@ public final class PspProjectWriter {
         Files.writeString(script, """
                 @echo off
                 setlocal EnableDelayedExpansion
+                set "EXIT_CODE=0"
                 cd /d "%~dp0"
 
                 where wsl >nul 2>nul
                 if errorlevel 1 (
                     echo ERROR: WSL was not found. Install WSL with a PSPDEV/psp-cmake toolchain, or run build.sh on a POSIX shell with PSPDEV configured.
-                    exit /b 1
+                    set "EXIT_CODE=1"
+                    goto :finish
                 )
 
                 for /f "tokens=*" %%i in ('wsl wslpath -u "%CD%"') do set "WSLPATH=%%i"
+                if not defined WSLPATH (
+                    echo ERROR: WSL is installed but unavailable, or could not convert the PSP build path.
+                    set "EXIT_CODE=1"
+                    goto :finish
+                )
                 if defined PSPDEV (
                     for /f "tokens=*" %%i in ('wsl wslpath -u "%PSPDEV%"') do set "WSL_PSPDEV=%%i"
                     if not defined WSL_PSPDEV (
                         echo ERROR: Could not convert Windows PSPDEV path for WSL: !PSPDEV!
-                        exit /b 1
+                        set "EXIT_CODE=1"
+                        goto :finish
                     )
                     wsl bash -lc "cd '!WSLPATH!' && PSPDEV='!WSL_PSPDEV!' bash build.sh"
                 ) else (
                     wsl bash -lc "cd '!WSLPATH!' && bash build.sh"
                 )
-                if errorlevel 1 exit /b 1
-                endlocal
+                if errorlevel 1 set "EXIT_CODE=1"
+
+                :finish
+                endlocal & exit /b %EXIT_CODE%
                 """, StandardCharsets.UTF_8);
         return script.toAbsolutePath().normalize();
     }

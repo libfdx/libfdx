@@ -1,19 +1,16 @@
 package io.github.libfdx.graphics.wgpu;
 
-import com.github.xpenatan.webgpu.WGPUBindGroup;
-import com.github.xpenatan.webgpu.WGPUBindGroupDescriptor;
-import com.github.xpenatan.webgpu.WGPUBindGroupEntry;
-import com.github.xpenatan.webgpu.WGPUBindGroupLayout;
-import com.github.xpenatan.webgpu.WGPUChainedStruct;
 import com.github.xpenatan.webgpu.WGPUSampler;
 import com.github.xpenatan.webgpu.WGPUTexture;
 import com.github.xpenatan.webgpu.WGPUTextureView;
-import com.github.xpenatan.webgpu.WGPUVectorBindGroupEntry;
+import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Texture;
+import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.TextureUsage;
 import io.github.libfdx.graphics.TextureView;
+import io.github.libfdx.graphics.TextureWrap;
 
 /**
  * Represents a WGPU texture handle.
@@ -21,77 +18,87 @@ import io.github.libfdx.graphics.TextureView;
  * @author xpenatan
  */
 final class WGPUTextureHandle implements Texture {
-    private final WGPUTexture nativeTexture;
-    private final WGPUTextureView nativeView;
-    private final WGPUSampler nativeSampler;
+    private final WGPUResourceDomain resourceDomain;
+    private WGPUTextureAllocation allocation;
     private final WGPUTextureViewHandle view;
+    private final String label;
     private final int width;
     private final int height;
     private final int mipLevelCount;
     private final TextureFormat format;
     private final TextureUsage usage;
-    private WGPUBindGroupLayout cachedBindGroupLayout;
-    private WGPUBindGroup cachedBindGroup;
+    private final TextureFilter filter;
+    private final TextureWrap wrapS;
+    private final TextureWrap wrapT;
     private boolean disposed;
 
-    WGPUTextureHandle(WGPUTexture nativeTexture, WGPUTextureView nativeView, WGPUSampler nativeSampler,
-            int width, int height, int mipLevelCount, TextureFormat format, TextureUsage usage) {
-        this.nativeTexture = nativeTexture;
-        this.nativeView = nativeView;
-        this.nativeSampler = nativeSampler;
+    WGPUTextureHandle(WGPUResourceDomain resourceDomain, WGPUTextureAllocation allocation, String label, int width,
+            int height, int mipLevelCount, TextureFormat format, TextureUsage usage, TextureFilter filter,
+            TextureWrap wrapS, TextureWrap wrapT) {
+        if (resourceDomain == null || allocation == null || allocation.resourceDomain() != resourceDomain) {
+            throw new FdxException("WGPU texture allocation is incompatible with its resource domain");
+        }
+        this.resourceDomain = resourceDomain;
+        this.allocation = allocation;
+        this.label = label != null ? label : "";
         this.width = width;
         this.height = height;
         this.mipLevelCount = Math.max(1, mipLevelCount);
         this.format = format != null ? format : TextureFormat.RGBA8_UNORM;
         this.usage = usage != null ? usage : TextureUsage.SAMPLED;
-        view = new WGPUTextureViewHandle(nativeView, this.format, width, height);
+        this.filter = filter != null ? filter : TextureFilter.LINEAR;
+        this.wrapS = wrapS != null ? wrapS : TextureWrap.CLAMP_TO_EDGE;
+        this.wrapT = wrapT != null ? wrapT : TextureWrap.CLAMP_TO_EDGE;
+        view = new WGPUTextureViewHandle(this);
     }
 
     WGPUTexture nativeTexture() {
-        return nativeTexture;
+        return allocation.nativeTexture();
     }
 
     WGPUTextureView nativeView() {
-        return nativeView;
+        return allocation.nativeView();
     }
 
     WGPUSampler nativeSampler() {
-        return nativeSampler;
+        return allocation.nativeSampler();
+    }
+
+    WGPUTextureAllocation allocation() {
+        return allocation;
+    }
+
+    WGPUResourceDomain resourceDomain() {
+        return resourceDomain;
+    }
+
+    void replaceAllocation(WGPUTextureAllocation replacement) {
+        if (replacement == null || replacement.resourceDomain() != resourceDomain) {
+            throw new FdxException("Replacement WGPU texture allocation is incompatible");
+        }
+        WGPUTextureAllocation previous = allocation;
+        allocation = replacement;
+        previous.retire();
+    }
+
+    String label() {
+        return label;
     }
 
     int mipLevelCount() {
         return mipLevelCount;
     }
 
-    WGPUBindGroup bindGroup(WGPUContext context, WGPUBindGroupLayout layout) {
-        if (cachedBindGroup != null && cachedBindGroupLayout == layout && cachedBindGroup.isValid()) {
-            return cachedBindGroup;
-        }
-        releaseCachedBindGroup();
+    TextureFilter filter() {
+        return filter;
+    }
 
-        WGPUVectorBindGroupEntry entries = WGPUVectorBindGroupEntry.obtain();
-        WGPUBindGroupEntry textureEntry = WGPUBindGroupEntry.obtain();
-        textureEntry.setNextInChain(WGPUChainedStruct.NULL);
-        textureEntry.setBinding(0);
-        textureEntry.setTextureView(nativeView);
-        entries.push_back(textureEntry);
+    TextureWrap wrapS() {
+        return wrapS;
+    }
 
-        WGPUBindGroupEntry samplerEntry = WGPUBindGroupEntry.obtain();
-        samplerEntry.setNextInChain(WGPUChainedStruct.NULL);
-        samplerEntry.setBinding(1);
-        samplerEntry.setSampler(nativeSampler);
-        entries.push_back(samplerEntry);
-
-        WGPUBindGroupDescriptor descriptor = WGPUBindGroupDescriptor.obtain();
-        descriptor.setNextInChain(WGPUChainedStruct.NULL);
-        descriptor.setLabel("libfdx texture bind group");
-        descriptor.setLayout(layout);
-        descriptor.setEntries(entries);
-
-        cachedBindGroup = new WGPUBindGroup();
-        context.nativeDevice().createBindGroup(descriptor, cachedBindGroup);
-        cachedBindGroupLayout = layout;
-        return cachedBindGroup;
+    TextureWrap wrapT() {
+        return wrapT;
     }
 
     /**
@@ -175,14 +182,7 @@ final class WGPUTextureHandle implements Texture {
             return;
         }
         disposed = true;
-        releaseCachedBindGroup();
-        nativeSampler.release();
-        nativeSampler.dispose();
-        nativeView.release();
-        nativeView.dispose();
-        nativeTexture.destroy();
-        nativeTexture.release();
-        nativeTexture.dispose();
+        allocation.retire();
     }
 
     /**
@@ -193,14 +193,5 @@ final class WGPUTextureHandle implements Texture {
     @Override
     public boolean isDisposed() {
         return disposed;
-    }
-
-    private void releaseCachedBindGroup() {
-        if (cachedBindGroup != null) {
-            cachedBindGroup.release();
-            cachedBindGroup.dispose();
-            cachedBindGroup = null;
-            cachedBindGroupLayout = null;
-        }
     }
 }

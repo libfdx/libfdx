@@ -1,15 +1,7 @@
 package io.github.libfdx.graphics.wgpu;
 
-import com.github.xpenatan.webgpu.WGPUBindGroupDescriptor;
-import com.github.xpenatan.webgpu.WGPUBindGroupEntry;
-import com.github.xpenatan.webgpu.WGPUBindGroup;
-import com.github.xpenatan.webgpu.WGPUBuffer;
-import com.github.xpenatan.webgpu.WGPUBufferDescriptor;
-import com.github.xpenatan.webgpu.WGPUBufferUsage;
-import com.github.xpenatan.webgpu.WGPUChainedStruct;
 import com.github.xpenatan.webgpu.WGPURenderPassEncoder;
 import com.github.xpenatan.webgpu.WGPUIndexFormat;
-import com.github.xpenatan.webgpu.WGPUVectorBindGroupEntry;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Buffer;
@@ -73,27 +65,60 @@ final class WGPURenderPass implements RenderPass {
     private static final int BONE_MATRICES_OFFSET = SKINNING_PARAMS_OFFSET + 4;
 
     private final WGPUContext context;
-    private final WGPURenderPassEncoder nativePass;
-    private final int renderTargetHeight;
+    private final WGPURenderPassEncoder nativePass = new WGPURenderPassEncoder();
+    private int renderTargetHeight;
+    private WGPUTextureHandle renderTarget;
     private final ByteBuffer uniformBytes = ByteBuffer.allocateDirect(PBR_UNIFORM_BYTE_COUNT)
             .order(ByteOrder.nativeOrder());
     private final FloatBuffer uniformFloats = uniformBytes.asFloatBuffer();
     private WGPURenderPipelineHandle pipeline;
+    private WGPUBufferHandle[] vertexBuffers = new WGPUBufferHandle[2];
+    private WGPUBufferHandle indexBuffer;
     private WGPUTextureHandle[] textures = new WGPUTextureHandle[0];
-    private WGPUBindGroup activeTextureBindGroup;
-    private WGPUBuffer uniformBuffer;
-    private WGPUBindGroup uniformBindGroup;
+    private WGPUTextureAllocation[] textureAllocations = new WGPUTextureAllocation[0];
+    private WGPUTextureBindGroupResource activeTextureBindGroup;
+    private int uniformAllocationIndex = -1;
     private boolean textureBindGroupDirty;
-    private boolean uniformDataDirty = true;
-    private boolean uniformBufferUsedByRecordedCommand;
+    private boolean uniformDataDirty;
     private boolean hasUniformData;
-    private boolean ended;
+    private boolean ended = true;
 
-    WGPURenderPass(WGPUContext context, WGPURenderPassEncoder nativePass, int renderTargetHeight) {
+    WGPURenderPass(WGPUContext context) {
         this.context = context;
-        this.nativePass = nativePass;
+    }
+
+    WGPURenderPassEncoder nativePass() {
+        return nativePass;
+    }
+
+    void begin(int renderTargetHeight, WGPUTextureHandle renderTarget) {
         this.renderTargetHeight = renderTargetHeight;
+        this.renderTarget = renderTarget;
+        pipeline = null;
+        Arrays.fill(vertexBuffers, null);
+        indexBuffer = null;
+        Arrays.fill(textures, null);
+        Arrays.fill(textureAllocations, null);
+        activeTextureBindGroup = null;
+        uniformAllocationIndex = -1;
+        textureBindGroupDirty = false;
+        uniformDataDirty = false;
+        hasUniformData = false;
         resetUniformData();
+        ended = false;
+    }
+
+    boolean isEnded() {
+        return ended;
+    }
+
+    void dispose() {
+        WGPUCleanup cleanup = new WGPUCleanup();
+        if (!ended) {
+            cleanup.run(this::end);
+        }
+        cleanup.run(nativePass::dispose);
+        cleanup.throwIfFailed();
     }
 
     /**
@@ -104,10 +129,13 @@ final class WGPURenderPass implements RenderPass {
     @Override
     public void setPipeline(RenderPipeline pipeline) {
         ensureOpen();
-        this.pipeline = pipeline.as();
+        WGPURenderPipelineHandle nextPipeline = WGPUResources.requirePipeline(pipeline, context.resourceDomain(),
+                "Render pipeline");
+        context.markRecordedResource(nextPipeline);
+        this.pipeline = nextPipeline;
         ensureTextureSlots(this.pipeline.sampledTextureCount());
         releaseActiveTextureBindGroup();
-        releaseUniformBindGroup();
+        uniformAllocationIndex = -1;
         textureBindGroupDirty = this.pipeline.sampledTextureCount() > 0;
         nativePass.setPipeline(this.pipeline.nativePipeline());
     }
@@ -131,15 +159,17 @@ final class WGPURenderPass implements RenderPass {
     @Override
     public void setVertexBuffer(int slot, Buffer buffer) {
         ensureOpen();
-        if (buffer == null) {
-            throw new FdxException("Vertex buffer cannot be null");
+        if (slot < 0) {
+            throw new FdxException("Vertex buffer slot cannot be negative");
         }
-        WGPUBufferHandle wgpuBuffer = buffer.as();
+        WGPUBufferHandle wgpuBuffer = WGPUResources.requireBuffer(buffer, context.resourceDomain(), "Vertex buffer");
         if (wgpuBuffer.usage() != BufferUsage.VERTEX) {
             throw new FdxException("RenderPass.setVertexBuffer requires a vertex buffer");
         }
+        ensureVertexBufferSlot(slot);
+        vertexBuffers[slot] = wgpuBuffer;
+        context.markRecordedResource(wgpuBuffer.allocation());
         nativePass.setVertexBuffer(slot, wgpuBuffer.nativeBuffer(), 0, wgpuBuffer.size());
-        context.markBufferUsedByRecordedCommand(wgpuBuffer);
     }
 
     /**
@@ -150,15 +180,13 @@ final class WGPURenderPass implements RenderPass {
     @Override
     public void setIndexBuffer(Buffer buffer) {
         ensureOpen();
-        if (buffer == null) {
-            throw new FdxException("Index buffer cannot be null");
-        }
-        WGPUBufferHandle wgpuBuffer = buffer.as();
+        WGPUBufferHandle wgpuBuffer = WGPUResources.requireBuffer(buffer, context.resourceDomain(), "Index buffer");
         if (wgpuBuffer.usage() != BufferUsage.INDEX) {
             throw new FdxException("RenderPass.setIndexBuffer requires an index buffer");
         }
+        indexBuffer = wgpuBuffer;
+        context.markRecordedResource(wgpuBuffer.allocation());
         nativePass.setIndexBuffer(wgpuBuffer.nativeBuffer(), WGPUIndexFormat.Uint16, 0, wgpuBuffer.size());
-        context.markBufferUsedByRecordedCommand(wgpuBuffer);
     }
 
     /**
@@ -176,10 +204,7 @@ final class WGPURenderPass implements RenderPass {
         if (slot < 0 || slot >= pipeline.sampledTextureCount()) {
             throw new FdxException("WGPU texture slot is outside the current pipeline texture range");
         }
-        if (texture == null) {
-            throw new FdxException("Texture cannot be null");
-        }
-        WGPUTextureHandle wgpuTexture = texture.as();
+        WGPUTextureHandle wgpuTexture = WGPUResources.requireTexture(texture, context.resourceDomain(), "Texture");
         if (!wgpuTexture.usage().sampled()) {
             throw new FdxException("Texture was not created with sampled usage");
         }
@@ -231,6 +256,7 @@ final class WGPURenderPass implements RenderPass {
      */
     @Override
     public void setUniform1i(String name, int value) {
+        ensureOpen();
         if ("u_hasBaseColorTexture".equals(name)) {
             setUniformFloat(TEXTURE_FLAGS_OFFSET, value);
         }
@@ -256,6 +282,7 @@ final class WGPURenderPass implements RenderPass {
      */
     @Override
     public void setUniform1f(String name, float value) {
+        ensureOpen();
         if ("u_lightIntensity".equals(name)) {
             setUniformFloat(LIGHT_COLOR_INTENSITY_OFFSET + 3, value);
         }
@@ -277,6 +304,7 @@ final class WGPURenderPass implements RenderPass {
      */
     @Override
     public void setUniform3f(String name, float x, float y, float z) {
+        ensureOpen();
         if ("u_cameraPosition".equals(name)) {
             setUniform4f(CAMERA_POSITION_OFFSET, x, y, z, 1.0f);
         }
@@ -324,6 +352,7 @@ final class WGPURenderPass implements RenderPass {
      */
     @Override
     public void setUniform4f(String name, float x, float y, float z, float w) {
+        ensureOpen();
         if ("u_cameraPosition".equals(name)) {
             setUniform4f(CAMERA_POSITION_OFFSET, x, y, z, w);
         }
@@ -463,6 +492,7 @@ final class WGPURenderPass implements RenderPass {
     @Override
     public void draw(int vertexCount, int instanceCount, int firstVertex, int firstInstance) {
         ensureOpen();
+        validateBoundResources(false);
         applyBindGroups();
         nativePass.draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
@@ -479,6 +509,7 @@ final class WGPURenderPass implements RenderPass {
     @Override
     public void drawIndexed(int indexCount, int instanceCount, int firstIndex, int baseVertex, int firstInstance) {
         ensureOpen();
+        validateBoundResources(true);
         applyBindGroups();
         nativePass.drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
     }
@@ -493,10 +524,14 @@ final class WGPURenderPass implements RenderPass {
         }
         ended = true;
         releaseActiveTextureBindGroup();
-        releaseUniformBindGroup();
-        releaseUniformBuffer();
         nativePass.end();
         nativePass.release();
+        pipeline = null;
+        Arrays.fill(vertexBuffers, null);
+        indexBuffer = null;
+        Arrays.fill(textures, null);
+        Arrays.fill(textureAllocations, null);
+        renderTarget = null;
     }
 
     private void applyBindGroups() {
@@ -513,112 +548,35 @@ final class WGPURenderPass implements RenderPass {
             return;
         }
         for (int i = 0; i < textureCount; i++) {
-            if (textures[i] == null) {
+            WGPUTextureHandle texture = textures[i];
+            if (texture == null) {
                 throw new FdxException("WGPU texture slot " + i + " has not been set");
             }
+            if (texture.isDisposed()) {
+                throw new FdxException("WGPU texture slot " + i + " has been disposed");
+            }
+            WGPUTextureAllocation allocation = texture.allocation();
+            if (textureAllocations[i] != allocation) {
+                textureBindGroupDirty = true;
+            }
+            textureAllocations[i] = allocation;
+            context.markRecordedResource(allocation);
         }
         if (activeTextureBindGroup == null || textureBindGroupDirty) {
             releaseActiveTextureBindGroup();
-            activeTextureBindGroup = createTextureBindGroup(textureCount);
+            activeTextureBindGroup = context.textureBindGroup(pipeline, textureAllocations, textureCount);
             textureBindGroupDirty = false;
         }
-        nativePass.setBindGroup(0, activeTextureBindGroup);
-    }
-
-    private WGPUBindGroup createTextureBindGroup(int textureCount) {
-        WGPUVectorBindGroupEntry entries = WGPUVectorBindGroupEntry.obtain();
-        for (int slot = 0; slot < textureCount; slot++) {
-            WGPUTextureHandle texture = textures[slot];
-
-            WGPUBindGroupEntry textureEntry = WGPUBindGroupEntry.obtain();
-            textureEntry.setNextInChain(WGPUChainedStruct.NULL);
-            textureEntry.setBinding(slot * 2);
-            textureEntry.setTextureView(texture.nativeView());
-            entries.push_back(textureEntry);
-
-            WGPUBindGroupEntry samplerEntry = WGPUBindGroupEntry.obtain();
-            samplerEntry.setNextInChain(WGPUChainedStruct.NULL);
-            samplerEntry.setBinding(slot * 2 + 1);
-            samplerEntry.setSampler(texture.nativeSampler());
-            entries.push_back(samplerEntry);
-        }
-
-        WGPUBindGroupDescriptor descriptor = WGPUBindGroupDescriptor.obtain();
-        descriptor.setNextInChain(WGPUChainedStruct.NULL);
-        descriptor.setLabel("libfdx texture bind group");
-        descriptor.setLayout(pipeline.textureBindGroupLayout());
-        descriptor.setEntries(entries);
-        WGPUBindGroup bindGroup = new WGPUBindGroup();
-        context.nativeDevice().createBindGroup(descriptor, bindGroup);
-        return bindGroup;
+        nativePass.setBindGroup(0, activeTextureBindGroup.bindGroup());
     }
 
     private void applyUniformBindGroup() {
         if (!hasUniformData || pipeline.uniformBindGroupLayout() == null) {
             return;
         }
-        if (uniformDataDirty) {
-            ensureWritableUniformBuffer();
-            uniformBytes.position(0);
-            uniformBytes.limit(PBR_UNIFORM_BYTE_COUNT);
-            context.nativeQueue().writeBuffer(uniformBuffer, 0, uniformBytes, PBR_UNIFORM_BYTE_COUNT);
-            uniformDataDirty = false;
-        }
-        else {
-            ensureUniformBuffer();
-        }
-        if (uniformBindGroup == null) {
-            uniformBindGroup = createUniformBindGroup();
-        }
-        nativePass.setBindGroup(pipeline.uniformBindGroupIndex(), uniformBindGroup);
-        uniformBufferUsedByRecordedCommand = true;
-    }
-
-    private void ensureUniformBuffer() {
-        if (uniformBuffer != null && uniformBuffer.isValid()) {
-            return;
-        }
-        WGPUBufferDescriptor descriptor = WGPUBufferDescriptor.obtain();
-        descriptor.setNextInChain(WGPUChainedStruct.NULL);
-        descriptor.setLabel("libfdx pbr uniforms");
-        descriptor.setSize(PBR_UNIFORM_BYTE_COUNT);
-        descriptor.setUsage(WGPUBufferUsage.CopyDst.or(WGPUBufferUsage.Uniform));
-        descriptor.setMappedAtCreation(false);
-        uniformBuffer = new WGPUBuffer();
-        context.nativeDevice().createBuffer(descriptor, uniformBuffer);
-        uniformBuffer.native_setAddress(uniformBuffer.native_getAddressLong());
-        uniformBufferUsedByRecordedCommand = false;
-    }
-
-    private void ensureWritableUniformBuffer() {
-        ensureUniformBuffer();
-        if (!uniformBufferUsedByRecordedCommand) {
-            return;
-        }
-        releaseUniformBindGroup();
-        context.destroyAfterSubmit(uniformBuffer);
-        uniformBuffer = null;
-        ensureUniformBuffer();
-    }
-
-    private WGPUBindGroup createUniformBindGroup() {
-        WGPUVectorBindGroupEntry entries = WGPUVectorBindGroupEntry.obtain();
-        WGPUBindGroupEntry uniformEntry = WGPUBindGroupEntry.obtain();
-        uniformEntry.setNextInChain(WGPUChainedStruct.NULL);
-        uniformEntry.setBinding(0);
-        uniformEntry.setBuffer(uniformBuffer);
-        uniformEntry.setOffset(0);
-        uniformEntry.setSize(PBR_UNIFORM_BYTE_COUNT);
-        entries.push_back(uniformEntry);
-
-        WGPUBindGroupDescriptor descriptor = WGPUBindGroupDescriptor.obtain();
-        descriptor.setNextInChain(WGPUChainedStruct.NULL);
-        descriptor.setLabel("libfdx pbr uniform bind group");
-        descriptor.setLayout(pipeline.uniformBindGroupLayout());
-        descriptor.setEntries(entries);
-        WGPUBindGroup bindGroup = new WGPUBindGroup();
-        context.nativeDevice().createBindGroup(descriptor, bindGroup);
-        return bindGroup;
+        uniformAllocationIndex = context.bindUniforms(nativePass, pipeline, uniformBytes,
+                uniformDataDirty || uniformAllocationIndex < 0 ? -1 : uniformAllocationIndex);
+        uniformDataDirty = false;
     }
 
     private void setUniformMatrix(int offset, float[] values) {
@@ -717,40 +675,63 @@ final class WGPURenderPass implements RenderPass {
     private void ensureTextureSlots(int textureCount) {
         if (textureCount <= 0) {
             Arrays.fill(textures, null);
+            Arrays.fill(textureAllocations, null);
             return;
         }
         if (textures.length != textureCount) {
             textures = new WGPUTextureHandle[textureCount];
+            textureAllocations = new WGPUTextureAllocation[textureCount];
             return;
         }
         Arrays.fill(textures, null);
+        Arrays.fill(textureAllocations, null);
+    }
+
+    private void ensureVertexBufferSlot(int slot) {
+        if (slot < vertexBuffers.length) {
+            return;
+        }
+        int next = vertexBuffers.length;
+        while (next <= slot) {
+            next *= 2;
+        }
+        vertexBuffers = Arrays.copyOf(vertexBuffers, next);
+    }
+
+    private void validateBoundResources(boolean indexed) {
+        if (pipeline == null) {
+            throw new FdxException("Render pipeline must be set before draw");
+        }
+        WGPUResources.requireUsable(pipeline, context.resourceDomain(), "Render pipeline");
+        for (int slot = 0; slot < pipeline.vertexBufferCount(); slot++) {
+            if (slot >= vertexBuffers.length || vertexBuffers[slot] == null) {
+                throw new FdxException("Vertex buffer slot " + slot + " must be set before draw");
+            }
+            if (vertexBuffers[slot].isDisposed()) {
+                throw new FdxException("Vertex buffer slot " + slot + " has been disposed");
+            }
+        }
+        if (indexed) {
+            if (indexBuffer == null) {
+                throw new FdxException("Index buffer must be set before drawIndexed");
+            }
+            WGPUResources.requireUsable(indexBuffer, context.resourceDomain(), "Index buffer");
+        }
     }
 
     private void releaseActiveTextureBindGroup() {
-        if (activeTextureBindGroup != null) {
-            context.releaseAfterSubmit(activeTextureBindGroup);
-            activeTextureBindGroup = null;
-        }
-    }
-
-    private void releaseUniformBindGroup() {
-        if (uniformBindGroup != null) {
-            context.releaseAfterSubmit(uniformBindGroup);
-            uniformBindGroup = null;
-        }
-    }
-
-    private void releaseUniformBuffer() {
-        if (uniformBuffer != null) {
-            context.destroyAfterSubmit(uniformBuffer);
-            uniformBuffer = null;
-        }
-        uniformBufferUsedByRecordedCommand = false;
+        activeTextureBindGroup = null;
     }
 
     private void ensureOpen() {
         if (ended) {
             throw new FdxException("Render pass has already ended");
+        }
+        if (!context.isFrameStarted()) {
+            throw new FdxException("Cannot use a render pass outside its active frame");
+        }
+        if (renderTarget != null && renderTarget.isDisposed()) {
+            throw new FdxException("Render target texture has been disposed");
         }
     }
 

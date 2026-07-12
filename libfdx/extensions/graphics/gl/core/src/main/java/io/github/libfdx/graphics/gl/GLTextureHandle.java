@@ -14,6 +14,7 @@ import io.github.libfdx.graphics.TextureView;
 final class GLTextureHandle implements Texture {
     private final ProviderId providerId;
     private final GLApi gl;
+    private final GLResourceDomain resourceDomain;
     private final int texture;
     private final int width;
     private final int height;
@@ -22,20 +23,25 @@ final class GLTextureHandle implements Texture {
     private final GLTextureViewHandle view;
     private boolean disposed;
 
-    GLTextureHandle(ProviderId providerId, GLApi gl, int texture, int width, int height,
+    GLTextureHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain, int texture, int width, int height,
             TextureFormat format, TextureUsage usage) {
         this.providerId = providerId;
         this.gl = gl;
+        this.resourceDomain = resourceDomain;
         this.texture = texture;
         this.width = width;
         this.height = height;
         this.format = format != null ? format : TextureFormat.RGBA8_UNORM;
         this.usage = usage != null ? usage : TextureUsage.SAMPLED;
-        view = new GLTextureViewHandle(providerId, this.format, texture, width, height, this.usage);
+        view = new GLTextureViewHandle(this);
     }
 
     int texture() {
         return texture;
+    }
+
+    GLResourceDomain resourceDomain() {
+        return resourceDomain;
     }
 
     /**
@@ -119,8 +125,9 @@ final class GLTextureHandle implements Texture {
             return;
         }
         disposed = true;
-        view.dispose(gl);
-        gl.deleteTexture(texture);
+        if (resourceDomain.makeAnyContextCurrent()) {
+            gl.deleteTexture(texture);
+        }
     }
 
     /**

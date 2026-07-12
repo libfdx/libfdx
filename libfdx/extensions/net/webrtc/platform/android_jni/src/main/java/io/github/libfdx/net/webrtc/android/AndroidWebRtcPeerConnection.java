@@ -1,10 +1,12 @@
 package io.github.libfdx.net.webrtc.android;
 
+import io.github.libfdx.core.FdxException;
 import io.github.libfdx.net.transport.NetDelivery;
 import io.github.libfdx.net.webrtc.platform.WebRtcDataChannel;
 import io.github.libfdx.net.webrtc.platform.WebRtcDataChannelListener;
 import io.github.libfdx.net.webrtc.platform.WebRtcIceCandidate;
 import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnection;
+import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnectionListener;
 import io.github.libfdx.net.webrtc.platform.WebRtcSessionDescription;
 import io.github.libfdx.net.webrtc.platform.WebRtcSessionDescriptionCallback;
 import org.webrtc.DataChannel;
@@ -21,10 +23,15 @@ import org.webrtc.SessionDescription;
  */
 public final class AndroidWebRtcPeerConnection implements WebRtcPeerConnection {
     private final PeerConnection peerConnection;
+    private final WebRtcPeerConnectionListener listener;
+    private final AndroidWebRtcPeerConnectionProvider owner;
     private boolean closed;
 
-    AndroidWebRtcPeerConnection(PeerConnection peerConnection) {
+    AndroidWebRtcPeerConnection(PeerConnection peerConnection, WebRtcPeerConnectionListener listener,
+            AndroidWebRtcPeerConnectionProvider owner) {
         this.peerConnection = peerConnection;
+        this.listener = listener;
+        this.owner = owner;
     }
 
     @Override
@@ -71,7 +78,25 @@ public final class AndroidWebRtcPeerConnection implements WebRtcPeerConnection {
 
     @Override
     public void setRemoteAnswer(WebRtcSessionDescription answer) {
-        peerConnection.setRemoteDescription(new NoopObserver(), toNative(answer));
+        peerConnection.setRemoteDescription(new SdpObserver() {
+            @Override
+            public void onCreateSuccess(SessionDescription description) {
+            }
+
+            @Override
+            public void onSetSuccess() {
+            }
+
+            @Override
+            public void onCreateFailure(String error) {
+                listener.error(new RuntimeException(error));
+            }
+
+            @Override
+            public void onSetFailure(String error) {
+                listener.error(new RuntimeException(error));
+            }
+        }, toNative(answer));
     }
 
     @Override
@@ -90,8 +115,36 @@ public final class AndroidWebRtcPeerConnection implements WebRtcPeerConnection {
     public void close() {
         if (!closed) {
             closed = true;
-            peerConnection.close();
-            peerConnection.dispose();
+            Throwable failure = null;
+            try {
+                peerConnection.close();
+            }
+            catch (Throwable throwable) {
+                failure = throwable;
+            }
+            try {
+                peerConnection.dispose();
+            }
+            catch (Throwable throwable) {
+                if (failure == null) {
+                    failure = throwable;
+                }
+                else if (failure != throwable) {
+                    failure.addSuppressed(throwable);
+                }
+            }
+            finally {
+                owner.connectionClosed(this);
+            }
+            if (failure instanceof RuntimeException) {
+                throw (RuntimeException) failure;
+            }
+            if (failure instanceof Error) {
+                throw (Error) failure;
+            }
+            if (failure != null) {
+                throw new FdxException("Android WebRTC peer connection disposal failed", failure);
+            }
         }
     }
 
@@ -175,21 +228,4 @@ public final class AndroidWebRtcPeerConnection implements WebRtcPeerConnection {
         }
     }
 
-    private static final class NoopObserver implements SdpObserver {
-        @Override
-        public void onCreateSuccess(SessionDescription description) {
-        }
-
-        @Override
-        public void onSetSuccess() {
-        }
-
-        @Override
-        public void onCreateFailure(String error) {
-        }
-
-        @Override
-        public void onSetFailure(String error) {
-        }
-    }
 }

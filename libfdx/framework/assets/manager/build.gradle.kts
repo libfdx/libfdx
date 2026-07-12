@@ -21,6 +21,12 @@ base {
 dependencies {
     api(project(":libfdx:framework:fdx:core"))
     api(project(":libfdx:framework:files"))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+tasks.named<Test>("test") {
+    useJUnitPlatform()
 }
 java {
     withSourcesJar()

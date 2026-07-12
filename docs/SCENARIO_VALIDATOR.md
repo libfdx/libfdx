@@ -244,6 +244,20 @@ domain adapter operations, and lambdas. They must not require a project-specific
 driver interface or adapter implementation before a developer can write a
 scenario.
 
+Current execution overloads are:
+
+```java
+ScenarioResult run(Scenario scenario)
+ScenarioResult run(Scenario scenario, ScenarioValidationConfig config)
+ScenarioReport run(ScenarioCatalog catalog, String selection)
+ScenarioReport run(ScenarioCatalog catalog, ScenarioValidationConfig config)
+```
+
+The overloads without a config use `ScenarioValidationConfig.defaults()`.
+Passing `null` as the config also uses those defaults. A catalog run selects
+from `config.selection()`; visual mode additionally filters out scenarios that
+do not require a visual baseline.
+
 ## 8. Actions
 
 Built-in runtime actions cover common interaction behavior.
@@ -475,6 +489,27 @@ These properties select validator behavior:
 | `libfdx.validation.events` | Enable event history in failure output. |
 | `libfdx.validation.capture` | Capture all, failed, none, or scenario-listed captures. |
 | `libfdx.validation.stepDelaySeconds` | Minimum elapsed seconds between scenario steps. `0` keeps the validator on the fast path. |
+
+Configuration semantics:
+
+- selection is trimmed; an empty selection means `all`, and the `all` keyword
+  is case-insensitive;
+- `behavior` executes every selected scenario but suppresses visual-baseline
+  enforcement, even when a scenario declares `visualBaselineRequired()`;
+- `visual` executes only selected baseline-required scenarios and enforces
+  their capture comparison;
+- `mixed` executes every selected scenario and enforces baselines where
+  required;
+- `all` capture policy adds an automatic capture for a successful scenario and
+  also captures failures;
+- `failed` captures only failures, `none` suppresses explicit scenario capture
+  steps, and `scenario-listed` permits only explicit scenario capture steps;
+- a visual/mixed scenario that requires a baseline fails when it produces no
+  capture, regardless of capture policy;
+- `timeoutMs` is a default only for waits without an explicit frame or
+  millisecond timeout;
+- `events=false` omits recent event history from results and failure output but
+  does not disable event emission, event waits, or event assertions.
 
 libfdx test hosts may forward existing `libfdx.test.*` properties to these
 properties for compatibility, but the public scenario validator property root is

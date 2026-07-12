@@ -1,5 +1,21 @@
 import io.github.libfdx.build.LibExt
 import org.gradle.api.GradleException
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.TaskAction
+
+abstract class PrepareRuntimeFdxAndroidNativeTask : DefaultTask() {
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun prepare() {
+        if (!outputDirectory.get().asFile.isDirectory) {
+            throw GradleException("Runtime fdx Android JNI output was not generated")
+        }
+    }
+}
 
 plugins {
     id("maven-publish")
@@ -22,15 +38,9 @@ android {
         minSdk = androidMinSdkVersion
     }
 
-    sourceSets {
-        getByName("main") {
-            jniLibs.srcDir(runtimeFdxAndroidJniLibs)
-        }
-    }
-
     compileOptions {
-        sourceCompatibility = JavaVersion.toVersion(25)
-        targetCompatibility = JavaVersion.toVersion(25)
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     publishing {
@@ -46,10 +56,18 @@ base {
     archivesName.set(moduleName)
 }
 
-val prepareRuntimeFdxAndroidNative = tasks.register("prepare_runtime_fdx_android_native") {
+val prepareRuntimeFdxAndroidNative = tasks.register<PrepareRuntimeFdxAndroidNativeTask>("prepare_runtime_fdx_android_native") {
     group = "libfdx native"
     description = "Builds runtime fdx Android JNI libraries through fdx-build before packaging."
     dependsOn(":libfdx:framework:fdx:fdx-build:build_runtime_fdx_android_native")
+    outputDirectory.set(runtimeFdxAndroidJniLibs)
+}
+
+androidComponents.onVariants { variant ->
+    variant.sources.jniLibs?.addGeneratedSourceDirectory(
+        prepareRuntimeFdxAndroidNative,
+        PrepareRuntimeFdxAndroidNativeTask::outputDirectory
+    )
 }
 
 tasks.register("assemble_runtime_fdx_android_release_prebuilt") {
@@ -85,7 +103,7 @@ val androidJavadocJar = tasks.register("androidJavadocJar", org.gradle.api.tasks
 
 tasks.register("androidSourcesJar", org.gradle.api.tasks.bundling.Jar::class) {
     archiveClassifier.set("sources")
-    from(android.sourceSets.getByName("main").java.srcDirs)
+    from(layout.projectDirectory.dir("src/main/java"))
 }
 
 publishing {

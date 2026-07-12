@@ -1,7 +1,7 @@
 package io.github.libfdx.ui;
 
-import java.util.LinkedHashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Represents an ui observable state.
@@ -9,7 +9,7 @@ import java.util.Set;
  * @author xpenatan
  */
 abstract class UiObservableState {
-    private final Set<UiStateListener> listeners = new LinkedHashSet<UiStateListener>();
+    private final List<UiStateListener> listeners = new ArrayList<UiStateListener>();
     private Object[] notifySnapshot = new Object[0];
 
     final void observeRead() {
@@ -20,7 +20,9 @@ abstract class UiObservableState {
     }
 
     final void addListener(UiStateListener listener) {
-        listeners.add(listener);
+        if (listener != null && !listeners.contains(listener)) {
+            listeners.add(listener);
+        }
     }
 
     final void removeListener(UiStateListener listener) {
@@ -32,9 +34,8 @@ abstract class UiObservableState {
         if (notifySnapshot.length < listenerCount) {
             notifySnapshot = new Object[listenerCount];
         }
-        int index = 0;
-        for (UiStateListener listener : listeners) {
-            notifySnapshot[index++] = listener;
+        for (int i = 0; i < listenerCount; i++) {
+            notifySnapshot[i] = listeners.get(i);
         }
         for (int i = 0; i < listenerCount; i++) {
             ((UiStateListener) notifySnapshot[i]).stateChanged(this);

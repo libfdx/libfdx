@@ -4,4 +4,5 @@ fdxVersion = "0.0.2"
 
 [development]
 usePublishedLibfdx = false
-publishedLibfdxVersion = "-SNAPSHOT"
+publishedLibfdxVersion = "0.0.2-SNAPSHOT"
+pluginBootstrapLibfdxVersion = "0.0.1-SNAPSHOT"

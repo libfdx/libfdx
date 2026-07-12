@@ -21,9 +21,10 @@ import io.github.libfdx.graphics.ShaderReflection;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
+import io.github.libfdx.math.Matrix4;
 
-import java.util.HashMap;
-import java.util.Iterator;
+import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -32,6 +33,7 @@ import java.util.Map;
  * @author xpenatan
  */
 public final class OutlineRenderer3D implements Disposable {
+    private static final int PRIMITIVE_TOPOLOGY_COUNT = PrimitiveTopology.values().length;
     private static final String SOURCE = """
             struct VertexInput {
                 @location(0) position : vec3f,
@@ -113,9 +115,12 @@ public final class OutlineRenderer3D implements Disposable {
     private final GraphicsContext graphics;
     private final DefaultRenderQueue3D queue = new DefaultRenderQueue3D();
     private final ShaderModule shader;
-    private final Map<PipelineKey, RenderPipeline> pipelines = new HashMap<PipelineKey, RenderPipeline>();
+    private final Map<VertexLayout, RenderPipeline[]> pipelines =
+            new IdentityHashMap<VertexLayout, RenderPipeline[]>();
     private final RenderPassDescriptor renderPassDescriptor =
             new RenderPassDescriptor().label("outline renderer 3d pass");
+    private final float[] modelMatrix = new float[Matrix4.VALUE_COUNT];
+    private final float[] viewProjectionMatrix = new float[Matrix4.VALUE_COUNT];
     private RenderPass pass;
     private Camera camera;
     private boolean ownsPass;
@@ -259,6 +264,16 @@ public final class OutlineRenderer3D implements Disposable {
         if (instances == null) {
             throw new FdxException("ModelInstance iterable cannot be null");
         }
+        if (instances instanceof List<?>) {
+            List<?> values = (List<?>) instances;
+            for (int i = 0; i < values.size(); i++) {
+                ModelInstance instance = (ModelInstance) values.get(i);
+                if (instance != null) {
+                    render(instance);
+                }
+            }
+            return;
+        }
         for (ModelInstance instance : instances) {
             if (instance != null) {
                 render(instance);
@@ -317,8 +332,10 @@ public final class OutlineRenderer3D implements Disposable {
         }
         pass.setPipeline(pipeline(mesh.vertexLayout(), meshPart.primitiveTopology()));
         pass.setVertexBuffer(mesh.vertexBuffer());
-        pass.setUniformMatrix4("u_model", renderable.worldTransform().values());
-        pass.setUniformMatrix4("u_viewProjection", camera.combined().values());
+        renderable.worldTransform().copyValues(modelMatrix, 0);
+        camera.combined().copyValues(viewProjectionMatrix, 0);
+        pass.setUniformMatrix4("u_model", modelMatrix);
+        pass.setUniformMatrix4("u_viewProjection", viewProjectionMatrix);
         pass.setUniform4f("u_ambientColor", red, green, blue, alpha);
         pass.setUniform4f("u_fogParams", outlineWidth, 0.0f, 0.0f, 0.0f);
         int indexCount = meshPart.indexCount() > 0 ? meshPart.indexCount() : mesh.indexCount();
@@ -332,10 +349,15 @@ public final class OutlineRenderer3D implements Disposable {
     }
 
     private RenderPipeline pipeline(VertexLayout vertexLayout, PrimitiveTopology topology) {
-        PipelineKey key = new PipelineKey(vertexLayout, topology);
-        RenderPipeline pipeline = pipelines.get(key);
+        PrimitiveTopology actualTopology = topology != null ? topology : PrimitiveTopology.TRIANGLE_LIST;
+        RenderPipeline[] variants = pipelines.get(vertexLayout);
+        if (variants == null) {
+            variants = new RenderPipeline[PRIMITIVE_TOPOLOGY_COUNT];
+            pipelines.put(vertexLayout, variants);
+        }
+        int slot = actualTopology.ordinal();
+        RenderPipeline pipeline = variants[slot];
         if (pipeline == null) {
-            PrimitiveTopology actualTopology = topology != null ? topology : PrimitiveTopology.TRIANGLE_LIST;
             pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
                     .shader(shader, graphics.surfaceFormat())
                     .label("outline renderer 3d")
@@ -344,7 +366,7 @@ public final class OutlineRenderer3D implements Disposable {
                     .depthTestEnabled(false)
                     .depthWriteEnabled(false)
                     .vertexLayout(vertexLayout));
-            pipelines.put(key, pipeline);
+            variants[slot] = pipeline;
         }
         return pipeline;
     }
@@ -377,8 +399,12 @@ public final class OutlineRenderer3D implements Disposable {
             return;
         }
         disposed = true;
-        for (Iterator<RenderPipeline> iterator = pipelines.values().iterator(); iterator.hasNext();) {
-            iterator.next().dispose();
+        for (RenderPipeline[] variants : pipelines.values()) {
+            for (int i = 0; i < variants.length; i++) {
+                if (variants[i] != null) {
+                    variants[i].dispose();
+                }
+            }
         }
         pipelines.clear();
         shader.dispose();
@@ -394,32 +420,4 @@ public final class OutlineRenderer3D implements Disposable {
         return disposed;
     }
 
-    private static final class PipelineKey {
-        private final VertexLayout vertexLayout;
-        private final PrimitiveTopology topology;
-
-        PipelineKey(VertexLayout vertexLayout, PrimitiveTopology topology) {
-            this.vertexLayout = vertexLayout;
-            this.topology = topology != null ? topology : PrimitiveTopology.TRIANGLE_LIST;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            if (this == other) {
-                return true;
-            }
-            if (!(other instanceof PipelineKey)) {
-                return false;
-            }
-            PipelineKey key = (PipelineKey)other;
-            return vertexLayout == key.vertexLayout && topology == key.topology;
-        }
-
-        @Override
-        public int hashCode() {
-            int result = vertexLayout != null ? System.identityHashCode(vertexLayout) : 0;
-            result = 31 * result + topology.hashCode();
-            return result;
-        }
-    }
 }

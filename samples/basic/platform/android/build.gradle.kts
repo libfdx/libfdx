@@ -23,16 +23,18 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.toVersion(25)
-        targetCompatibility = JavaVersion.toVersion(25)
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     sourceSets {
         getByName("main") {
-            assets.srcDir(rootProject.file("tests/assets"))
+            assets.directories.add(rootProject.file("tests/assets").absolutePath)
         }
     }
 }
+
+val adbExecutable = androidComponents.sdkComponents.adb
 
 dependencies {
     implementation(project(":samples:basic:core"))
@@ -55,30 +57,38 @@ tasks.register<Exec>("basic_android_gles_run") {
     group = "application"
     description = "Installs and launches the Android GLES basic sample."
     dependsOn("installDebug")
-    commandLine(android.adbExecutable.absolutePath, "shell", "am", "start", "-n",
-            "io.github.libfdx.samples.basic.android/io.github.libfdx.samples.basic.android.BasicAndroidGlesActivity")
+    doFirst {
+        commandLine(adbExecutable.get().asFile.absolutePath, "shell", "am", "start", "-n",
+                "io.github.libfdx.samples.basic.android/io.github.libfdx.samples.basic.android.BasicAndroidGlesActivity")
+    }
 }
 
 tasks.register<Exec>("basic_android_wgpu_jni_run") {
     group = "application"
     description = "Installs and launches the Android WGPU JNI basic sample."
     dependsOn("installDebug")
-    commandLine(android.adbExecutable.absolutePath, "shell", "am", "start", "-n",
-            "io.github.libfdx.samples.basic.android/io.github.libfdx.samples.basic.android.BasicAndroidWgpuActivity")
+    doFirst {
+        commandLine(adbExecutable.get().asFile.absolutePath, "shell", "am", "start", "-n",
+                "io.github.libfdx.samples.basic.android/io.github.libfdx.samples.basic.android.BasicAndroidWgpuActivity")
+    }
 }
 
 tasks.register<Exec>("basic_android_vulkan_run") {
     group = "application"
     description = "Installs and launches the Android Vulkan basic sample."
     dependsOn("installDebug")
-    commandLine(android.adbExecutable.absolutePath, "shell", "am", "start", "-n",
-            "io.github.libfdx.samples.basic.android/io.github.libfdx.samples.basic.android.BasicAndroidVulkanActivity")
+    doFirst {
+        commandLine(adbExecutable.get().asFile.absolutePath, "shell", "am", "start", "-n",
+                "io.github.libfdx.samples.basic.android/io.github.libfdx.samples.basic.android.BasicAndroidVulkanActivity")
+    }
 }
 
 tasks.register<Exec>("basic_android_vulkan_fallback_run") {
     group = "application"
     description = "Installs and launches the Android Vulkan fallback basic sample."
     dependsOn("installDebug")
-    commandLine(android.adbExecutable.absolutePath, "shell", "am", "start", "-n",
-            "io.github.libfdx.samples.basic.android/io.github.libfdx.samples.basic.android.BasicAndroidVulkanFallbackActivity")
+    doFirst {
+        commandLine(adbExecutable.get().asFile.absolutePath, "shell", "am", "start", "-n",
+                "io.github.libfdx.samples.basic.android/io.github.libfdx.samples.basic.android.BasicAndroidVulkanFallbackActivity")
+    }
 }

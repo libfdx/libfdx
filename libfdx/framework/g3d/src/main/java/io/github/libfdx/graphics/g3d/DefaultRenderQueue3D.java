@@ -14,6 +14,8 @@ import java.util.List;
  */
 public final class DefaultRenderQueue3D implements RenderQueue3D {
     private final ArrayList<Renderable3D> renderables = new ArrayList<Renderable3D>();
+    private final List<Renderable3D> readOnlyRenderables = Collections.unmodifiableList(renderables);
+    private Renderable3D[] sortScratch = new Renderable3D[0];
     private final Comparator<Renderable3D> stateComparator = new Comparator<Renderable3D>() {
         @Override
         public int compare(Renderable3D left, Renderable3D right) {
@@ -77,7 +79,64 @@ public final class DefaultRenderQueue3D implements RenderQueue3D {
      */
     @Override
     public void sort(Camera camera) {
-        Collections.sort(renderables, stateComparator);
+        int size = renderables.size();
+        if (size < 2) {
+            return;
+        }
+        ensureSortScratch(size);
+        int width = 1;
+        while (width < size) {
+            for (int left = 0; left < size; left += width * 2) {
+                int middle = Math.min(left + width, size);
+                int right = Math.min(left + width * 2, size);
+                merge(left, middle, right);
+            }
+            for (int i = 0; i < size; i++) {
+                renderables.set(i, sortScratch[i]);
+            }
+            if (width > size / 2) {
+                break;
+            }
+            width *= 2;
+        }
+        for (int i = 0; i < size; i++) {
+            sortScratch[i] = null;
+        }
+    }
+
+    private void ensureSortScratch(int size) {
+        if (sortScratch.length >= size) {
+            return;
+        }
+        int capacity = Math.max(8, sortScratch.length);
+        while (capacity < size) {
+            capacity *= 2;
+        }
+        sortScratch = new Renderable3D[capacity];
+    }
+
+    private void merge(int left, int middle, int right) {
+        int leftIndex = left;
+        int rightIndex = middle;
+        int output = left;
+        while (leftIndex < middle && rightIndex < right) {
+            Renderable3D leftValue = renderables.get(leftIndex);
+            Renderable3D rightValue = renderables.get(rightIndex);
+            if (stateComparator.compare(leftValue, rightValue) <= 0) {
+                sortScratch[output++] = leftValue;
+                leftIndex++;
+            }
+            else {
+                sortScratch[output++] = rightValue;
+                rightIndex++;
+            }
+        }
+        while (leftIndex < middle) {
+            sortScratch[output++] = renderables.get(leftIndex++);
+        }
+        while (rightIndex < right) {
+            sortScratch[output++] = renderables.get(rightIndex++);
+        }
     }
 
     /**
@@ -87,6 +146,6 @@ public final class DefaultRenderQueue3D implements RenderQueue3D {
      */
     @Override
     public List<Renderable3D> renderables() {
-        return Collections.unmodifiableList(renderables);
+        return readOnlyRenderables;
     }
 }

@@ -11,6 +11,9 @@ import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.StoreOp;
+import io.github.libfdx.graphics.TextureView;
+
+import java.util.List;
 
 /**
  * Represents a model batch.
@@ -20,10 +23,17 @@ import io.github.libfdx.graphics.StoreOp;
 public final class ModelBatch implements Batch3D {
     private final GraphicsContext graphics;
     private final DefaultRenderQueue3D queue = new DefaultRenderQueue3D();
+    private final Environment3D defaultEnvironment = new Environment3D();
+    private final RenderPassDescriptor framePassDescriptor = new RenderPassDescriptor()
+            .label("model batch pass")
+            .depthClear(1.0f);
+    private final RenderPassDescriptor targetPassDescriptor = new RenderPassDescriptor()
+            .label("model batch target pass")
+            .depthClear(1.0f);
+    private final RenderContext3D context;
     private final boolean ownsDefaultShaderProvider;
-    private Environment3D environment = new Environment3D();
+    private Environment3D environment = defaultEnvironment;
     private ShaderProvider3D shaderProvider;
-    private RenderContext3D context;
     private RenderPass pass;
     private boolean ownsPass;
     private boolean drawing;
@@ -48,6 +58,7 @@ public final class ModelBatch implements Batch3D {
         if (graphics == null) {
             throw new FdxException("GraphicsContext cannot be null");
         }
+        context = new RenderContext3D(graphics, null, null, null, null);
         if (config == null) {
             throw new FdxException("ModelBatchConfig cannot be null");
         }
@@ -85,12 +96,13 @@ public final class ModelBatch implements Batch3D {
         ensureNotDisposed();
         ensureCamera(camera);
         GraphicsFrame frame = graphics.currentFrame();
-        pass = frame.commandEncoder().beginRenderPass(RenderPassDescriptor
-                .color(frame.colorAttachment(), loadOp != null ? loadOp : LoadOp.load(), StoreOp.store())
-                .depthClear(1.0f)
-                .label("model batch pass"));
+        framePassDescriptor
+                .colorAttachment(frame.colorAttachment())
+                .colorLoadOp(loadOp != null ? loadOp : LoadOp.load())
+                .colorStoreOp(StoreOp.store());
+        pass = frame.commandEncoder().beginRenderPass(framePassDescriptor);
         ownsPass = true;
-        context = new RenderContext3D(graphics, camera, environment, null, pass);
+        context.reset(camera, environment, null, pass);
         drawing = true;
     }
 
@@ -109,7 +121,7 @@ public final class ModelBatch implements Batch3D {
         }
         this.pass = pass;
         ownsPass = false;
-        context = new RenderContext3D(graphics, camera, environment, null, pass);
+        context.reset(camera, environment, null, pass);
         drawing = true;
     }
 
@@ -126,13 +138,24 @@ public final class ModelBatch implements Batch3D {
         if (target == null) {
             throw new FdxException("RenderTarget3D cannot be null");
         }
+        if (target.colorAttachmentCount() != 1) {
+            throw new FdxException("ModelBatch currently supports exactly one RenderTarget3D color attachment");
+        }
+        if (target.depthAttachment() != null) {
+            throw new FdxException("ModelBatch does not yet support an explicit RenderTarget3D depth attachment");
+        }
+        TextureView colorAttachment = target.colorAttachment(0);
+        if (colorAttachment == null) {
+            throw new FdxException("RenderTarget3D color attachment cannot be null");
+        }
         GraphicsFrame frame = graphics.currentFrame();
-        pass = frame.commandEncoder().beginRenderPass(RenderPassDescriptor
-                .color(target.colorAttachment(0), LoadOp.load(), StoreOp.store())
-                .depthClear(1.0f)
-                .label("model batch target pass"));
+        targetPassDescriptor
+                .colorAttachment(colorAttachment)
+                .colorLoadOp(LoadOp.load())
+                .colorStoreOp(StoreOp.store());
+        pass = frame.commandEncoder().beginRenderPass(targetPassDescriptor);
         ownsPass = true;
-        context = new RenderContext3D(graphics, camera, environment, target, pass);
+        context.reset(camera, environment, target, pass);
         drawing = true;
     }
 
@@ -144,7 +167,7 @@ public final class ModelBatch implements Batch3D {
      */
     @Override
     public ModelBatch environment(Environment3D environment) {
-        this.environment = environment != null ? environment : new Environment3D();
+        this.environment = environment != null ? environment : defaultEnvironment;
         return this;
     }
 
@@ -202,6 +225,13 @@ public final class ModelBatch implements Batch3D {
         if (instances == null) {
             throw new FdxException("ModelInstance iterable cannot be null");
         }
+        if (instances instanceof List<?>) {
+            List<?> values = (List<?>) instances;
+            for (int i = 0; i < values.size(); i++) {
+                render((ModelInstance) values.get(i));
+            }
+            return;
+        }
         for (ModelInstance instance : instances) {
             render(instance);
         }
@@ -245,7 +275,7 @@ public final class ModelBatch implements Batch3D {
         ensureDrawing();
         flush();
         drawing = false;
-        context = null;
+        context.clear();
         if (ownsPass) {
             pass.end();
         }
@@ -261,7 +291,7 @@ public final class ModelBatch implements Batch3D {
 
     private void ensureDrawing() {
         ensureNotDisposed();
-        if (!drawing || pass == null || context == null) {
+        if (!drawing || pass == null || context.pass() == null) {
             throw new FdxException("ModelBatch.begin() must be called before rendering");
         }
     }

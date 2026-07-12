@@ -1,6 +1,7 @@
 package io.github.libfdx.graphics.wgpu;
 
 import com.github.xpenatan.webgpu.WGPUBuffer;
+import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferUsage;
@@ -11,43 +12,48 @@ import io.github.libfdx.graphics.BufferUsage;
  * @author xpenatan
  */
 final class WGPUBufferHandle implements Buffer {
-    private WGPUBuffer nativeBuffer;
+    private final WGPUResourceDomain resourceDomain;
+    private WGPUBufferAllocation allocation;
     private final String label;
     private final int size;
     private final BufferUsage usage;
-    private boolean usedByRecordedCommand;
     private boolean disposed;
 
-    WGPUBufferHandle(WGPUBuffer nativeBuffer, String label, int size, BufferUsage usage) {
-        this.nativeBuffer = nativeBuffer;
+    WGPUBufferHandle(WGPUResourceDomain resourceDomain, WGPUBufferAllocation allocation, String label, int size,
+            BufferUsage usage) {
+        if (resourceDomain == null || allocation == null || allocation.resourceDomain() != resourceDomain) {
+            throw new FdxException("WGPU buffer allocation is incompatible with its resource domain");
+        }
+        this.resourceDomain = resourceDomain;
+        this.allocation = allocation;
         this.label = label;
         this.size = size;
         this.usage = usage != null ? usage : BufferUsage.VERTEX;
     }
 
     WGPUBuffer nativeBuffer() {
-        return nativeBuffer;
+        return allocation.nativeBuffer();
     }
 
-    void nativeBuffer(WGPUBuffer nativeBuffer) {
-        this.nativeBuffer = nativeBuffer;
-        usedByRecordedCommand = false;
+    WGPUBufferAllocation allocation() {
+        return allocation;
+    }
+
+    WGPUResourceDomain resourceDomain() {
+        return resourceDomain;
+    }
+
+    void replaceAllocation(WGPUBufferAllocation replacement) {
+        if (replacement == null || replacement.resourceDomain() != resourceDomain) {
+            throw new FdxException("Replacement WGPU buffer allocation is incompatible");
+        }
+        WGPUBufferAllocation previous = allocation;
+        allocation = replacement;
+        previous.retire();
     }
 
     String label() {
         return label;
-    }
-
-    void markUsedByRecordedCommand() {
-        usedByRecordedCommand = true;
-    }
-
-    void resetUsedByRecordedCommand() {
-        usedByRecordedCommand = false;
-    }
-
-    boolean usedByRecordedCommand() {
-        return usedByRecordedCommand;
     }
 
     /**
@@ -101,9 +107,7 @@ final class WGPUBufferHandle implements Buffer {
             return;
         }
         disposed = true;
-        nativeBuffer.destroy();
-        nativeBuffer.release();
-        nativeBuffer.dispose();
+        allocation.retire();
     }
 
     /**

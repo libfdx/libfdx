@@ -20,6 +20,7 @@ import io.github.libfdx.tests.graphics.Particles2DTest;
 import io.github.libfdx.tests.graphics.Particles3DTest;
 import io.github.libfdx.tests.graphics.PointLight3DTest;
 import io.github.libfdx.tests.graphics.ReadbackTest;
+import io.github.libfdx.tests.graphics.RecordedResourceRewriteTest;
 import io.github.libfdx.tests.graphics.RenderTargetChainTest;
 import io.github.libfdx.tests.graphics.ScissorViewportTest;
 import io.github.libfdx.tests.graphics.ShadowMap3DTest;
@@ -163,6 +164,7 @@ public final class TestSelector {
     private static final String INSTANCING_BASIC = "instancing-basic";
     private static final String SCISSOR_VIEWPORT = "scissor-viewport";
     private static final String RENDER_TARGET_CHAIN = "render-target-chain";
+    private static final String RECORDED_RESOURCE_REWRITE = "recorded-resource-rewrite";
     private static final String DYNAMIC_TEXTURE = "dynamic-texture";
     private static final String DEPTH_PRESERVE = "depth-preserve";
     private static final String SPRITE_BATCH_STRESS = "sprite-batch-stress";
@@ -357,6 +359,13 @@ public final class TestSelector {
                     return new RenderTargetChainTest(exitAfterFrames);
                 }
             }),
+            descriptor(RECORDED_RESOURCE_REWRITE, "Recorded resource rewrite", "Graphics", 640, 480,
+                    new TestFactory() {
+                        @Override
+                        public ApplicationListener create(long exitAfterFrames) {
+                            return new RecordedResourceRewriteTest(exitAfterFrames);
+                        }
+                    }),
             descriptor(DYNAMIC_TEXTURE, "Dynamic texture", "Graphics", 640, 480, new TestFactory() {
                 @Override
                 public ApplicationListener create(long exitAfterFrames) {

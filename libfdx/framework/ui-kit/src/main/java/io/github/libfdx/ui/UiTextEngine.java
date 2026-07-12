@@ -9,6 +9,8 @@ import io.github.libfdx.graphics.g2d.BitmapFontLayout;
 import io.github.libfdx.graphics.g2d.FreeTypeFontOptions;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Represents an ui text engine.
@@ -16,7 +18,9 @@ import java.util.Map;
  * @author xpenatan
  */
 final class UiTextEngine implements Disposable {
+    private static final Logger LOGGER = Logger.getLogger(UiTextEngine.class.getName());
     private static final int LAYOUT_CACHE_LIMIT = 512;
+    private static final UiFont DEFAULT_FONT = UiFont.family("Dialog", 16.0f);
     private static final float MIN_RASTER_SCALE = 1.0f;
     private static final float MAX_RASTER_SCALE = 4.0f;
     private static final float RASTER_SCALE_STEP = 0.25f;
@@ -40,7 +44,7 @@ final class UiTextEngine implements Disposable {
 
     BitmapFont resolve(UiFont font, float displayScale) {
         if (font == null) {
-            font = UiFont.family("Dialog", 16.0f);
+            font = DEFAULT_FONT;
         }
         if (font.kind() == UiFontKind.BITMAP) {
             return font.bitmapFont();
@@ -123,15 +127,18 @@ final class UiTextEngine implements Disposable {
                 return BitmapFontFiles.loadFreeType(graphics, files, font.path(), options);
             }
             if (font.kind() == UiFontKind.FAMILY && graphics != null) {
-                FreeTypeFontOptions options = freeTypeOptions(font, rasterScale).family(font.family());
-                if (font.characters() != null) {
-                    options = options.characters(font.characters());
-                }
-                return BitmapFontFiles.generateFreeType(graphics, options);
+                LOGGER.log(Level.FINE, "UI font family ''{0}'' is unavailable; using the configured or built-in "
+                        + "fallback", font.family());
+                return null;
             }
-        } catch (Throwable ignored) {
+        } catch (RuntimeException | LinkageError error) {
+            LOGGER.log(Level.WARNING, "Unable to load UI font " + font.kind() + " '" + fontSource(font) + "'", error);
         }
         return null;
+    }
+
+    private String fontSource(UiFont font) {
+        return font.kind() == UiFontKind.FAMILY ? font.family() : font.path();
     }
 
     private boolean supportsFreeType() {

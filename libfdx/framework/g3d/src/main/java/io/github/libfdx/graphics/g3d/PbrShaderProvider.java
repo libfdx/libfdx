@@ -30,9 +30,7 @@ import io.github.libfdx.graphics.VertexLayout;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
+import java.util.IdentityHashMap;
 import java.util.Map;
 
 /**
@@ -41,6 +39,8 @@ import java.util.Map;
  * @author xpenatan
  */
 public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
+    private static final int PRIMITIVE_TOPOLOGY_COUNT = PrimitiveTopology.values().length;
+    private static final float[] IDENTITY_MATRIX_VALUES = Matrix4.IDENTITY.values();
     private static final int MAX_POINT_LIGHTS = 4;
     private static final int MAX_SHADOW_CASCADES = 4;
     private static final int SHADOW_TEXTURE_SLOT_OFFSET = 5;
@@ -699,8 +699,22 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         private static final float MIN_VISIBLE_CLIP_W = 0.000001f;
         private final GraphicsContext graphics;
         private final ShaderModule shaderModule;
-        private final Map<PipelineKey, RenderPipeline> pipelines = new HashMap<PipelineKey, RenderPipeline>();
+        private final Map<VertexLayout, RenderPipeline[]> pipelines =
+                new IdentityHashMap<VertexLayout, RenderPipeline[]>();
         private ScratchBuffer[] scratchBuffers = new ScratchBuffer[4];
+        private WorldVertex[] worldVertexPool = new WorldVertex[64];
+        private ColorVertex[] colorVertexPool = new ColorVertex[64];
+        private ProjectedVertex[] projectedVertexPool = new ProjectedVertex[64];
+        private ProjectedTriangle[] projectedTriangles = new ProjectedTriangle[16];
+        private ProjectedTriangle[] projectedTriangleSortScratch = new ProjectedTriangle[16];
+        private float[] projectedVertexValues = new float[0];
+        private final float[] worldMatrixValues = new float[Matrix4.VALUE_COUNT];
+        private final float[] viewProjectionMatrixValues = new float[Matrix4.VALUE_COUNT];
+        private final ProjectedMesh projectedMesh = new ProjectedMesh();
+        private ByteBuffer projectedUpload;
+        private int worldVertexCursor;
+        private int colorVertexCursor;
+        private int projectedVertexCursor;
         private int scratchCursor;
         private RenderContext3D context;
         private boolean disposed;
@@ -764,8 +778,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 if (projectedMesh.vertexCount == 0) {
                     return;
                 }
-                vertexBuffer = scratchBuffer(projectedMesh.vertices.length * 4);
-                graphics.device().writeBuffer(vertexBuffer, floats(projectedMesh.vertices));
+                int projectedByteCount = projectedMesh.floatCount * 4;
+                vertexBuffer = scratchBuffer(projectedByteCount);
+                graphics.device().writeBuffer(vertexBuffer,
+                        projectedUpload(projectedMesh.vertices, projectedMesh.floatCount));
                 vertexLayout = Mesh.POSITION_COLOR_LAYOUT;
                 vertexCount = projectedMesh.vertexCount;
                 firstVertex = 0;
@@ -791,30 +807,37 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         }
 
         private RenderPipeline pipeline(VertexLayout vertexLayout, PrimitiveTopology topology) {
-            PipelineKey key = new PipelineKey(vertexLayout, topology);
-            RenderPipeline pipeline = pipelines.get(key);
+            PrimitiveTopology actualTopology = topology != null ? topology : PrimitiveTopology.TRIANGLE_LIST;
+            RenderPipeline[] variants = pipelines.get(vertexLayout);
+            if (variants == null) {
+                variants = new RenderPipeline[PRIMITIVE_TOPOLOGY_COUNT];
+                pipelines.put(vertexLayout, variants);
+            }
+            int slot = actualTopology.ordinal();
+            RenderPipeline pipeline = variants[slot];
             if (pipeline == null) {
                 pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
                         .shader(shaderModule, graphics.surfaceFormat())
                         .label("model batch position color")
-                        .primitiveTopology(topology)
+                        .primitiveTopology(actualTopology)
                         .depthTestEnabled(true)
                         .depthWriteEnabled(true)
                         .vertexLayout(vertexLayout));
-                pipelines.put(key, pipeline);
+                variants[slot] = pipeline;
             }
             return pipeline;
         }
 
         private boolean isPositionColorLayout(VertexLayout layout) {
-            VertexAttribute[] attributes = layout.attributes();
-            if (attributes.length < 2) {
+            if (layout.attributeCount() < 2) {
                 return false;
             }
-            return attributes[0].location() == 0
-                    && attributes[0].format() == VertexFormat.FLOAT32X3
-                    && attributes[1].location() == 1
-                    && attributes[1].format() == VertexFormat.FLOAT32X4;
+            VertexAttribute position = layout.attribute(0);
+            VertexAttribute color = layout.attribute(1);
+            return position.location() == 0
+                    && position.format() == VertexFormat.FLOAT32X3
+                    && color.location() == 1
+                    && color.format() == VertexFormat.FLOAT32X4;
         }
 
         /**
@@ -832,9 +855,12 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     scratchBuffers[i] = null;
                 }
             }
-            Iterator<RenderPipeline> iterator = pipelines.values().iterator();
-            while (iterator.hasNext()) {
-                iterator.next().dispose();
+            for (RenderPipeline[] variants : pipelines.values()) {
+                for (int i = 0; i < variants.length; i++) {
+                    if (variants[i] != null) {
+                        variants[i].dispose();
+                    }
+                }
             }
             pipelines.clear();
             shaderModule.dispose();
@@ -869,6 +895,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
 
         private ProjectedMesh project(Mesh mesh, MeshPart meshPart, Matrix4 worldTransform, Material material,
                 RenderContext3D context) {
+            resetProjectionPools();
             float[] sourcePositions = mesh.sourcePositions();
             float[] sourceColors = mesh.sourceBakedColors() != null ? mesh.sourceBakedColors() : mesh.sourceColors();
             float[] sourceNormals = mesh.sourceNormals();
@@ -882,12 +909,15 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             if (firstVertex < 0 || firstVertex + vertexCount > availableVertices || vertexCount % 3 != 0) {
                 throw new FdxException("Position/color 3D mesh parts must address complete triangles");
             }
-            ProjectedTriangle[] triangles = new ProjectedTriangle[vertexCount / 3];
-            float[] world = worldTransform.values();
-            float[] viewProjection = camera.combined().values();
+            int maximumTriangleCount = vertexCount / 3;
+            ensureProjectedTriangleCapacity(maximumTriangleCount);
+            worldTransform.copyValues(worldMatrixValues, 0);
+            camera.combined().copyValues(viewProjectionMatrixValues, 0);
+            float[] world = worldMatrixValues;
+            float[] viewProjection = viewProjectionMatrixValues;
             float minClipW = Math.max(camera.near(), MIN_VISIBLE_CLIP_W);
             int triangleCount = 0;
-            for (int i = 0; i < triangles.length; i++) {
+            for (int i = 0; i < maximumTriangleCount; i++) {
                 int vertex = firstVertex + i * 3;
                 WorldVertex w0 = worldVertex(sourcePositions, vertex, world);
                 WorldVertex w1 = worldVertex(sourcePositions, vertex + 1, world);
@@ -901,12 +931,13 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     ProjectedVertex p2 = projectVertex(w2, sourceColors, sourceNormals, sourcePbr, sourceEmissive,
                             vertex + 2, faceNormal, world, viewProjection, context);
                     if (projectedTriangleVisible(p0, p1, p2, minClipW)) {
-                        triangles[triangleCount++] = new ProjectedTriangle(p0, p1, p2);
+                        projectedTriangles[triangleCount] = projectedTriangle(triangleCount, p0, p1, p2);
+                        triangleCount++;
                     }
                 }
             }
             if (triangleCount == 0) {
-                for (int i = 0; i < triangles.length; i++) {
+                for (int i = 0; i < maximumTriangleCount; i++) {
                     int vertex = firstVertex + i * 3;
                     WorldVertex w0 = worldVertex(sourcePositions, vertex, world);
                     WorldVertex w1 = worldVertex(sourcePositions, vertex + 1, world);
@@ -919,25 +950,21 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     ProjectedVertex p2 = projectVertex(w2, sourceColors, sourceNormals, sourcePbr, sourceEmissive,
                             vertex + 2, faceNormal, world, viewProjection, context);
                     if (projectedTriangleVisible(p0, p1, p2, minClipW)) {
-                        triangles[triangleCount++] = new ProjectedTriangle(p0, p1, p2);
+                        projectedTriangles[triangleCount] = projectedTriangle(triangleCount, p0, p1, p2);
+                        triangleCount++;
                     }
                 }
             }
-            triangles = Arrays.copyOf(triangles, triangleCount);
-            Arrays.sort(triangles, new Comparator<ProjectedTriangle>() {
-                @Override
-                public int compare(ProjectedTriangle left, ProjectedTriangle right) {
-                    return Float.compare(right.depth, left.depth);
-                }
-            });
-            float[] vertices = new float[triangleCount * 3 * Mesh.POSITION_COLOR_FLOATS_PER_VERTEX];
+            sortProjectedTriangles(triangleCount);
+            int floatCount = triangleCount * 3 * Mesh.POSITION_COLOR_FLOATS_PER_VERTEX;
+            ensureProjectedVertexValueCapacity(floatCount);
             int out = 0;
-            for (int i = 0; i < triangles.length; i++) {
-                out = appendProjectedVertex(vertices, out, triangles[i].v0);
-                out = appendProjectedVertex(vertices, out, triangles[i].v1);
-                out = appendProjectedVertex(vertices, out, triangles[i].v2);
+            for (int i = 0; i < triangleCount; i++) {
+                out = appendProjectedVertex(projectedVertexValues, out, projectedTriangles[i].v0);
+                out = appendProjectedVertex(projectedVertexValues, out, projectedTriangles[i].v1);
+                out = appendProjectedVertex(projectedVertexValues, out, projectedTriangles[i].v2);
             }
-            return new ProjectedMesh(vertices, triangleCount * 3);
+            return projectedMesh.set(projectedVertexValues, floatCount, triangleCount * 3);
         }
 
         private WorldVertex worldVertex(float[] positions, int vertex, float[] matrix) {
@@ -945,7 +972,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             float x = positions[positionOffset];
             float y = positions[positionOffset + 1];
             float z = positions[positionOffset + 2];
-            return new WorldVertex(
+            return obtainWorldVertex(
                     matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12],
                     matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13],
                     matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14]);
@@ -989,7 +1016,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             int colorOffset = vertex * 4;
             ColorVertex shaded = shade(worldVertex, colors, normals, pbr, emissive, vertex, colorOffset, faceNormal,
                     worldMatrix, context);
-            return new ProjectedVertex(clipX * invW, clipY * invW, clipZ * invW,
+            return obtainProjectedVertex(clipX * invW, clipY * invW, clipZ * invW,
                     clipW, shaded.red, shaded.green, shaded.blue, shaded.alpha);
         }
 
@@ -1015,7 +1042,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             float blue = colors[colorOffset + 2];
             float alpha = colors[colorOffset + 3];
             if (normals == null) {
-                return new ColorVertex(red, green, blue, alpha);
+                return obtainColorVertex(red, green, blue, alpha);
             }
 
             WorldVertex normal = worldNormal(normals, vertex, worldMatrix);
@@ -1150,7 +1177,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 emissiveBlue = emissive[emissiveOffset + 2];
             }
 
-            return applyFog(new ColorVertex(
+            return applyFog(obtainColorVertex(
                     linearToSrgb(outRed + emissiveRed),
                     linearToSrgb(outGreen + emissiveGreen),
                     linearToSrgb(outBlue + emissiveBlue),
@@ -1167,7 +1194,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 return color;
             }
             Color fog = environment.fogColor();
-            return new ColorVertex(
+            return obtainColorVertex(
                     color.red + (fog.red() - color.red) * factor,
                     color.green + (fog.green() - color.green) * factor,
                     color.blue + (fog.blue() - color.blue) * factor,
@@ -1179,7 +1206,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 float intensity) {
             float ndl = Math.max(0.0f, dot(normal, lightDirection));
             if (ndl <= 0.0f || intensity <= 0.0f) {
-                return new ColorVertex(0.0f, 0.0f, 0.0f, 0.0f);
+                return obtainColorVertex(0.0f, 0.0f, 0.0f, 0.0f);
             }
             WorldVertex halfVector = normalize(view.x + lightDirection.x, view.y + lightDirection.y,
                     view.z + lightDirection.z);
@@ -1197,7 +1224,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             float radianceRed = lightColor.red() * intensity;
             float radianceGreen = lightColor.green() * intensity;
             float radianceBlue = lightColor.blue() * intensity;
-            return new ColorVertex(
+            return obtainColorVertex(
                     (kdRed * red / PI + baseSpecular * fRed) * radianceRed * ndl,
                     (kdGreen * green / PI + baseSpecular * fGreen) * radianceGreen * ndl,
                     (kdBlue * blue / PI + baseSpecular * fBlue) * radianceBlue * ndl,
@@ -1208,7 +1235,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 WorldVertex view, float red, float green, float blue, float metallic, float roughness, float ao) {
             SkyEnvironment3D sky = environment.skyEnvironment();
             if (sky == null) {
-                return new ColorVertex(0.0f, 0.0f, 0.0f, 0.0f);
+                return obtainColorVertex(0.0f, 0.0f, 0.0f, 0.0f);
             }
             float ndv = Math.max(dot(normal, view), 0.0f);
             float fRed = fresnelSchlick(ndv, 0.04f + (red - 0.04f) * metallic);
@@ -1244,7 +1271,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             Color sun = sky.sunColor();
             float diffuseIntensity = sky.diffuseIntensity();
             float specularIntensity = sky.specularIntensity();
-            return new ColorVertex(
+            return obtainColorVertex(
                     (kdRed * irradiance.red * diffuseIntensity * red
                             + (prefilteredRed * envBrdfRed + sun.red() * sunSpec) * specularIntensity) * ao,
                     (kdGreen * irradiance.green * diffuseIntensity * green
@@ -1272,7 +1299,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             red += (horizon.red() - red) * haze;
             green += (horizon.green() - green) * haze;
             blue += (horizon.blue() - blue) * haze;
-            return new ColorVertex(red, green, blue, 0.0f);
+            return obtainColorVertex(red, green, blue, 0.0f);
         }
 
         private float fogFactor(Environment3D environment, WorldVertex worldVertex, Vector3 cameraPosition) {
@@ -1340,10 +1367,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         private WorldVertex normalize(float x, float y, float z) {
             float len = (float)Math.sqrt(x * x + y * y + z * z);
             if (len == 0.0f) {
-                return new WorldVertex(0.0f, 0.0f, 0.0f);
+                return obtainWorldVertex(0.0f, 0.0f, 0.0f);
             }
             float invLen = 1.0f / len;
-            return new WorldVertex(x * invLen, y * invLen, z * invLen);
+            return obtainWorldVertex(x * invLen, y * invLen, z * invLen);
         }
 
         private float clamp(float value, float min, float max) {
@@ -1361,12 +1388,144 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             return out;
         }
 
-        private ByteBuffer floats(float[] values) {
-            ByteBuffer buffer = ByteBuffer.allocateDirect(values.length * 4).order(ByteOrder.nativeOrder());
-            buffer.asFloatBuffer().put(values);
-            buffer.limit(values.length * 4);
-            buffer.position(0);
-            return buffer;
+        private void resetProjectionPools() {
+            worldVertexCursor = 0;
+            colorVertexCursor = 0;
+            projectedVertexCursor = 0;
+        }
+
+        private WorldVertex obtainWorldVertex(float x, float y, float z) {
+            if (worldVertexCursor >= worldVertexPool.length) {
+                worldVertexPool = Arrays.copyOf(worldVertexPool, worldVertexPool.length * 2);
+            }
+            WorldVertex vertex = worldVertexPool[worldVertexCursor];
+            if (vertex == null) {
+                vertex = new WorldVertex();
+                worldVertexPool[worldVertexCursor] = vertex;
+            }
+            worldVertexCursor++;
+            return vertex.set(x, y, z);
+        }
+
+        private ColorVertex obtainColorVertex(float red, float green, float blue, float alpha) {
+            if (colorVertexCursor >= colorVertexPool.length) {
+                colorVertexPool = Arrays.copyOf(colorVertexPool, colorVertexPool.length * 2);
+            }
+            ColorVertex vertex = colorVertexPool[colorVertexCursor];
+            if (vertex == null) {
+                vertex = new ColorVertex();
+                colorVertexPool[colorVertexCursor] = vertex;
+            }
+            colorVertexCursor++;
+            return vertex.set(red, green, blue, alpha);
+        }
+
+        private ProjectedVertex obtainProjectedVertex(float x, float y, float z, float clipW,
+                float red, float green, float blue, float alpha) {
+            if (projectedVertexCursor >= projectedVertexPool.length) {
+                projectedVertexPool = Arrays.copyOf(projectedVertexPool, projectedVertexPool.length * 2);
+            }
+            ProjectedVertex vertex = projectedVertexPool[projectedVertexCursor];
+            if (vertex == null) {
+                vertex = new ProjectedVertex();
+                projectedVertexPool[projectedVertexCursor] = vertex;
+            }
+            projectedVertexCursor++;
+            return vertex.set(x, y, z, clipW, red, green, blue, alpha);
+        }
+
+        private ProjectedTriangle projectedTriangle(int index, ProjectedVertex v0, ProjectedVertex v1,
+                ProjectedVertex v2) {
+            ProjectedTriangle triangle = projectedTriangles[index];
+            if (triangle == null) {
+                triangle = new ProjectedTriangle();
+            }
+            return triangle.set(v0, v1, v2);
+        }
+
+        private void ensureProjectedTriangleCapacity(int count) {
+            if (projectedTriangles.length >= count) {
+                return;
+            }
+            int capacity = projectedTriangles.length;
+            while (capacity < count) {
+                capacity *= 2;
+            }
+            projectedTriangles = Arrays.copyOf(projectedTriangles, capacity);
+            projectedTriangleSortScratch = Arrays.copyOf(projectedTriangleSortScratch, capacity);
+        }
+
+        private void sortProjectedTriangles(int count) {
+            int width = 1;
+            while (width < count) {
+                for (int left = 0; left < count; left += width * 2) {
+                    int middle = Math.min(left + width, count);
+                    int right = Math.min(left + width * 2, count);
+                    mergeProjectedTriangles(left, middle, right);
+                }
+                for (int i = 0; i < count; i++) {
+                    projectedTriangles[i] = projectedTriangleSortScratch[i];
+                }
+                if (width > count / 2) {
+                    break;
+                }
+                width *= 2;
+            }
+            for (int i = 0; i < count; i++) {
+                projectedTriangleSortScratch[i] = null;
+            }
+        }
+
+        private void mergeProjectedTriangles(int left, int middle, int right) {
+            int leftIndex = left;
+            int rightIndex = middle;
+            int output = left;
+            while (leftIndex < middle && rightIndex < right) {
+                ProjectedTriangle leftValue = projectedTriangles[leftIndex];
+                ProjectedTriangle rightValue = projectedTriangles[rightIndex];
+                if (Float.compare(rightValue.depth, leftValue.depth) <= 0) {
+                    projectedTriangleSortScratch[output++] = leftValue;
+                    leftIndex++;
+                }
+                else {
+                    projectedTriangleSortScratch[output++] = rightValue;
+                    rightIndex++;
+                }
+            }
+            while (leftIndex < middle) {
+                projectedTriangleSortScratch[output++] = projectedTriangles[leftIndex++];
+            }
+            while (rightIndex < right) {
+                projectedTriangleSortScratch[output++] = projectedTriangles[rightIndex++];
+            }
+        }
+
+        private void ensureProjectedVertexValueCapacity(int count) {
+            if (projectedVertexValues.length >= count) {
+                return;
+            }
+            int capacity = Math.max(256, projectedVertexValues.length);
+            while (capacity < count) {
+                capacity *= 2;
+            }
+            projectedVertexValues = Arrays.copyOf(projectedVertexValues, capacity);
+        }
+
+        private ByteBuffer projectedUpload(float[] values, int floatCount) {
+            int byteCount = floatCount * 4;
+            if (projectedUpload == null || projectedUpload.capacity() < byteCount) {
+                int capacity = projectedUpload != null ? projectedUpload.capacity() : 1024;
+                while (capacity < byteCount) {
+                    capacity *= 2;
+                }
+                projectedUpload = ByteBuffer.allocateDirect(capacity).order(ByteOrder.nativeOrder());
+            }
+            projectedUpload.clear();
+            for (int i = 0; i < floatCount; i++) {
+                projectedUpload.putFloat(values[i]);
+            }
+            projectedUpload.flip();
+            return projectedUpload;
         }
 
         /**
@@ -1390,14 +1549,15 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
          * @author xpenatan
          */
         private static final class WorldVertex {
-            private final float x;
-            private final float y;
-            private final float z;
+            private float x;
+            private float y;
+            private float z;
 
-            WorldVertex(float x, float y, float z) {
+            WorldVertex set(float x, float y, float z) {
                 this.x = x;
                 this.y = y;
                 this.z = z;
+                return this;
             }
 
             float lengthSquared() {
@@ -1411,16 +1571,17 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
          * @author xpenatan
          */
         private static final class ColorVertex {
-            private final float red;
-            private final float green;
-            private final float blue;
-            private final float alpha;
+            private float red;
+            private float green;
+            private float blue;
+            private float alpha;
 
-            ColorVertex(float red, float green, float blue, float alpha) {
+            ColorVertex set(float red, float green, float blue, float alpha) {
                 this.red = red;
                 this.green = green;
                 this.blue = blue;
                 this.alpha = alpha;
+                return this;
             }
         }
 
@@ -1430,12 +1591,15 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
          * @author xpenatan
          */
         private static final class ProjectedMesh {
-            private final float[] vertices;
-            private final int vertexCount;
+            private float[] vertices;
+            private int floatCount;
+            private int vertexCount;
 
-            ProjectedMesh(float[] vertices, int vertexCount) {
+            ProjectedMesh set(float[] vertices, int floatCount, int vertexCount) {
                 this.vertices = vertices;
+                this.floatCount = floatCount;
                 this.vertexCount = vertexCount;
+                return this;
             }
         }
 
@@ -1445,16 +1609,17 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
          * @author xpenatan
          */
         private static final class ProjectedTriangle {
-            private final ProjectedVertex v0;
-            private final ProjectedVertex v1;
-            private final ProjectedVertex v2;
-            private final float depth;
+            private ProjectedVertex v0;
+            private ProjectedVertex v1;
+            private ProjectedVertex v2;
+            private float depth;
 
-            ProjectedTriangle(ProjectedVertex v0, ProjectedVertex v1, ProjectedVertex v2) {
+            ProjectedTriangle set(ProjectedVertex v0, ProjectedVertex v1, ProjectedVertex v2) {
                 this.v0 = v0;
                 this.v1 = v1;
                 this.v2 = v2;
                 depth = (v0.z + v1.z + v2.z) / 3.0f;
+                return this;
             }
         }
 
@@ -1464,16 +1629,16 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
          * @author xpenatan
          */
         private static final class ProjectedVertex {
-            private final float x;
-            private final float y;
-            private final float z;
-            private final float clipW;
-            private final float red;
-            private final float green;
-            private final float blue;
-            private final float alpha;
+            private float x;
+            private float y;
+            private float z;
+            private float clipW;
+            private float red;
+            private float green;
+            private float blue;
+            private float alpha;
 
-            ProjectedVertex(float x, float y, float z, float clipW, float red, float green, float blue,
+            ProjectedVertex set(float x, float y, float z, float clipW, float red, float green, float blue,
                     float alpha) {
                 this.x = x;
                 this.y = y;
@@ -1483,6 +1648,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 this.green = green;
                 this.blue = blue;
                 this.alpha = alpha;
+                return this;
             }
         }
     }
@@ -1498,7 +1664,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         private final GraphicsContext graphics;
         private final ShaderModule shaderModule;
         private final ShaderModule skinnedShaderModule;
-        private final Map<PipelineKey, RenderPipeline> pipelines = new HashMap<PipelineKey, RenderPipeline>();
+        private final Map<VertexLayout, RenderPipeline[]> pipelines =
+                new IdentityHashMap<VertexLayout, RenderPipeline[]>();
         private final Texture whiteTexture;
         private final Texture blackTexture;
         private final Texture normalTexture;
@@ -1506,6 +1673,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         private final int maxBones;
         private final float[] boneValues = new float[MAX_SHADER_BONES * Matrix4.VALUE_COUNT];
         private final float[] boneMatrix = new float[Matrix4.VALUE_COUNT];
+        private final float[] modelMatrix = new float[Matrix4.VALUE_COUNT];
+        private final float[] viewProjectionMatrix = new float[Matrix4.VALUE_COUNT];
+        private final float[] shadowMatrix = new float[Matrix4.VALUE_COUNT];
         private RenderContext3D context;
         private boolean disposed;
 
@@ -1565,8 +1735,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             RenderPass pass = context.pass();
             pass.setPipeline(pipeline(mesh.vertexLayout(), meshPart.primitiveTopology()));
             pass.setVertexBuffer(mesh.vertexBuffer());
-            pass.setUniformMatrix4("u_model", renderable.worldTransform().values());
-            pass.setUniformMatrix4("u_viewProjection", context.camera().combined().values());
+            renderable.worldTransform().copyValues(modelMatrix, 0);
+            context.camera().combined().copyValues(viewProjectionMatrix, 0);
+            pass.setUniformMatrix4("u_model", modelMatrix);
+            pass.setUniformMatrix4("u_viewProjection", viewProjectionMatrix);
             Vector3 cameraPosition = context.camera().position();
             pass.setUniform3f("u_cameraPosition", cameraPosition.x(), cameraPosition.y(), cameraPosition.z());
             Vector3 cameraDirection = context.camera().direction();
@@ -1593,20 +1765,26 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         }
 
         private RenderPipeline pipeline(VertexLayout vertexLayout, PrimitiveTopology topology) {
-            PipelineKey key = new PipelineKey(vertexLayout, topology);
-            RenderPipeline pipeline = pipelines.get(key);
+            PrimitiveTopology actualTopology = topology != null ? topology : PrimitiveTopology.TRIANGLE_LIST;
+            RenderPipeline[] variants = pipelines.get(vertexLayout);
+            if (variants == null) {
+                variants = new RenderPipeline[PRIMITIVE_TOPOLOGY_COUNT];
+                pipelines.put(vertexLayout, variants);
+            }
+            int slot = actualTopology.ordinal();
+            RenderPipeline pipeline = variants[slot];
             if (pipeline == null) {
                 ShaderReflection reflection = reflection(vertexLayout);
                 pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
                         .shader(shaderModule(vertexLayout), graphics.surfaceFormat())
                         .label(pipelineLabel(vertexLayout))
                         .shaderReflection(reflection)
-                        .primitiveTopology(topology)
+                        .primitiveTopology(actualTopology)
                         .sampledTextureCount(sampledTextureCount(reflection))
                         .depthTestEnabled(true)
                         .depthWriteEnabled(true)
                         .vertexLayout(vertexLayout));
-                pipelines.put(key, pipeline);
+                variants[slot] = pipeline;
             }
             return pipeline;
         }
@@ -1816,7 +1994,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             DirectionalShadowMap3D shadowMap = activeDirectionalShadowMap(environment);
             if (shadowMap == null) {
                 for (int i = 0; i < MAX_SHADOW_CASCADES; i++) {
-                    pass.setUniformMatrix4(SHADOW_VIEW_PROJECTION_UNIFORMS[i], Matrix4.IDENTITY.values());
+                    pass.setUniformMatrix4(SHADOW_VIEW_PROJECTION_UNIFORMS[i], IDENTITY_MATRIX_VALUES);
                 }
                 pass.setUniform4f("u_shadowParams", 0.0f, 0.0f, 0.0f, shadowYSign());
                 pass.setUniform4f("u_shadowCascadeSplits", 0.0f, 0.0f, 0.0f, 0.0f);
@@ -1827,9 +2005,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 pass.setUniform4f("u_shadowCameraParams", 0.0f, 0.0f, 0.0f, 1.0f);
                 return;
             }
-            pass.setUniformMatrix4(SHADOW_VIEW_PROJECTION_UNIFORMS[0], shadowMap.lightViewProjection().values());
+            shadowMap.lightViewProjection().copyValues(shadowMatrix, 0);
+            pass.setUniformMatrix4(SHADOW_VIEW_PROJECTION_UNIFORMS[0], shadowMatrix);
             for (int i = 1; i < MAX_SHADOW_CASCADES; i++) {
-                pass.setUniformMatrix4(SHADOW_VIEW_PROJECTION_UNIFORMS[i], Matrix4.IDENTITY.values());
+                pass.setUniformMatrix4(SHADOW_VIEW_PROJECTION_UNIFORMS[i], IDENTITY_MATRIX_VALUES);
             }
             pass.setUniform4f("u_shadowParams", 1.0f, shadowMap.bias(), shadowMap.strength(), shadowYSign());
             pass.setUniform4f("u_shadowCascadeSplits", 0.0f, 0.0f, 0.0f, 0.0f);
@@ -1850,7 +2029,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             for (int i = 0; i < MAX_SHADOW_CASCADES; i++) {
                 if (i < cascadeCount) {
                     DirectionalShadowMap3D cascade = cascaded.cascade(i);
-                    pass.setUniformMatrix4(SHADOW_VIEW_PROJECTION_UNIFORMS[i], cascade.lightViewProjection().values());
+                    cascade.lightViewProjection().copyValues(shadowMatrix, 0);
+                    pass.setUniformMatrix4(SHADOW_VIEW_PROJECTION_UNIFORMS[i], shadowMatrix);
                     float cascadeBias = cascaded.cascadeBias(i);
                     if (i == 0) {
                         bias0 = cascadeBias;
@@ -1869,7 +2049,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     }
                 }
                 else {
-                    pass.setUniformMatrix4(SHADOW_VIEW_PROJECTION_UNIFORMS[i], Matrix4.IDENTITY.values());
+                    pass.setUniformMatrix4(SHADOW_VIEW_PROJECTION_UNIFORMS[i], IDENTITY_MATRIX_VALUES);
                 }
             }
             pass.setUniform4f("u_shadowParams", cascadeCount, bias0, strength, shadowYSign());
@@ -1994,8 +2174,12 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 return;
             }
             disposed = true;
-            for (Iterator<RenderPipeline> iterator = pipelines.values().iterator(); iterator.hasNext();) {
-                iterator.next().dispose();
+            for (RenderPipeline[] variants : pipelines.values()) {
+                for (int i = 0; i < variants.length; i++) {
+                    if (variants[i] != null) {
+                        variants[i].dispose();
+                    }
+                }
             }
             pipelines.clear();
             whiteTexture.dispose();
@@ -2021,49 +2205,6 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 names[i] = "u_bone" + i;
             }
             return names;
-        }
-    }
-
-    /**
-     * Represents a pipeline key.
-     *
-     * @author xpenatan
-     */
-    private static final class PipelineKey {
-        private final VertexLayout vertexLayout;
-        private final PrimitiveTopology topology;
-
-        PipelineKey(VertexLayout vertexLayout, PrimitiveTopology topology) {
-            this.vertexLayout = vertexLayout;
-            this.topology = topology != null ? topology : PrimitiveTopology.TRIANGLE_LIST;
-        }
-
-        /**
-         * Compares this instance with another object for equality.
-         *
-         * @param other the other
-         * @return true if equals succeeds or is active; false otherwise
-         */
-        @Override
-        public boolean equals(Object other) {
-            if (this == other) {
-                return true;
-            }
-            if (!(other instanceof PipelineKey)) {
-                return false;
-            }
-            PipelineKey key = (PipelineKey)other;
-            return vertexLayout == key.vertexLayout && topology == key.topology;
-        }
-
-        /**
-         * Returns the hash code for this instance.
-         *
-         * @return the hash code
-         */
-        @Override
-        public int hashCode() {
-            return System.identityHashCode(vertexLayout) * 31 + topology.hashCode();
         }
     }
 

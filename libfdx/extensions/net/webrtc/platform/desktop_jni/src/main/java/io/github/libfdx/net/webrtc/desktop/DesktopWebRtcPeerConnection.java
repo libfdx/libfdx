@@ -14,6 +14,7 @@ import io.github.libfdx.net.webrtc.platform.WebRtcDataChannel;
 import io.github.libfdx.net.webrtc.platform.WebRtcDataChannelListener;
 import io.github.libfdx.net.webrtc.platform.WebRtcIceCandidate;
 import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnection;
+import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnectionListener;
 import io.github.libfdx.net.webrtc.platform.WebRtcSessionDescription;
 import io.github.libfdx.net.webrtc.platform.WebRtcSessionDescriptionCallback;
 
@@ -24,10 +25,15 @@ import io.github.libfdx.net.webrtc.platform.WebRtcSessionDescriptionCallback;
  */
 public final class DesktopWebRtcPeerConnection implements WebRtcPeerConnection {
     private final RTCPeerConnection peerConnection;
+    private final WebRtcPeerConnectionListener listener;
+    private final DesktopWebRtcPeerConnectionProvider owner;
     private boolean closed;
 
-    DesktopWebRtcPeerConnection(RTCPeerConnection peerConnection) {
+    DesktopWebRtcPeerConnection(RTCPeerConnection peerConnection, WebRtcPeerConnectionListener listener,
+            DesktopWebRtcPeerConnectionProvider owner) {
         this.peerConnection = peerConnection;
+        this.listener = listener;
+        this.owner = owner;
     }
 
     @Override
@@ -82,6 +88,7 @@ public final class DesktopWebRtcPeerConnection implements WebRtcPeerConnection {
 
             @Override
             public void onFailure(String error) {
+                listener.error(new RuntimeException(error));
             }
         });
     }
@@ -102,7 +109,12 @@ public final class DesktopWebRtcPeerConnection implements WebRtcPeerConnection {
     public void close() {
         if (!closed) {
             closed = true;
-            peerConnection.close();
+            try {
+                peerConnection.close();
+            }
+            finally {
+                owner.connectionClosed(this);
+            }
         }
     }
 

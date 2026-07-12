@@ -105,14 +105,33 @@ For finite validation, pass the test properties directly to the provider run
 task:
 
 ```powershell
-.\gradlew.bat "-Dlibfdx.test.name=ui" "-Dlibfdx.test.frames=19" "-Dlibfdx.test.validate=true" "-Dlibfdx.test.driveInput=true" :tests:platform:desktop:test_desktop_gl_run
-.\gradlew.bat "-Dlibfdx.test.name=ui" "-Dlibfdx.test.frames=19" "-Dlibfdx.test.validate=true" "-Dlibfdx.test.driveInput=true" "-Dlibfdx.test.visualValidate=true" :tests:platform:desktop:test_desktop_gl_run
+.\gradlew.bat "-Dlibfdx.test.name=ui" "-Dlibfdx.test.frames=30" "-Dlibfdx.test.validate=true" "-Dlibfdx.test.driveInput=true" :tests:platform:desktop:test_desktop_gl_run
+.\gradlew.bat "-Dlibfdx.test.name=ui" "-Dlibfdx.test.frames=30" "-Dlibfdx.test.validate=true" "-Dlibfdx.test.driveInput=true" "-Dlibfdx.test.visualValidate=true" :tests:platform:desktop:test_desktop_gl_run
 ```
 
 The first command enables scripted checks and keeps the run deterministic and
 finite. The second additionally enables visual checks. For a baseline-enforced
 run, add `-Dlibfdx.test.visualRequireBaselines=true` and the matching baseline
 path properties.
+
+Use the desktop-only `shared-context` selection to validate the backend's real
+same-provider resource domain. It creates buffer, shader, and pipeline resources
+on the main device, renders them through a secondary context, and captures the
+secondary framebuffer. The same selection works with the existing GL, WGPU, and
+Vulkan run tasks.
+
+```powershell
+.\gradlew.bat "-Dlibfdx.test.name=shared-context" "-Dlibfdx.test.frames=3" "-Dlibfdx.test.capture=build/reports/libfdx/shared-context/gl.ppm" "-Dlibfdx.test.visible=false" :tests:platform:desktop:test_desktop_gl_run
+```
+
+Use `recorded-resource-rewrite` to validate copy-on-write lifetime on recorded
+graphics APIs. The expected frame contains a red rectangle on the left and a
+blue rectangle on the right; both are drawn from the same logical buffer and
+texture with writes between the two recorded passes.
+
+```powershell
+.\gradlew.bat "-Dlibfdx.test.name=recorded-resource-rewrite" "-Dlibfdx.test.frames=3" "-Dlibfdx.test.capture=build/reports/libfdx/recorded-resource-rewrite/wgpu.ppm" "-Dlibfdx.test.visible=false" :tests:platform:desktop:test_desktop_wgpu_run
+```
 
 Use this PowerShell-safe form for system properties:
 
@@ -247,9 +266,21 @@ same activity and show a `Back` overlay to return to the list.
 .\gradlew.bat :tests:platform:android:test_android_vulkan_run
 ```
 
-Android test launchers forward `-Dlibfdx.test.*` properties as activity extras,
-including `libfdx.test.name`, `libfdx.test.mode=auto`, `libfdx.test.width`,
-`libfdx.test.height`, and UIKit options such as `libfdx.test.uiScale`.
+Android test launchers forward both `-Dlibfdx.test.*` and
+`-Dlibfdx.validation.*` properties as activity extras, including test name,
+frame count, viewport size, validation selection/mode/capture/events/timeout,
+and UIKit options such as `libfdx.test.uiScale`.
+
+Example finite UIKit behavior run:
+
+```powershell
+.\gradlew.bat "-Dlibfdx.test.name=ui" "-Dlibfdx.test.frames=30" "-Dlibfdx.test.validate=true" "-Dlibfdx.test.driveInput=true" "-Dlibfdx.validation.scenario=all" "-Dlibfdx.validation.mode=behavior" "-Dlibfdx.validation.capture=none" "-Dlibfdx.validation.stepDelaySeconds=0" :tests:platform:android:test_android_gles_run
+```
+
+The run task installs and launches the activity; runtime validation must also
+check device logs for the final `UiKitTest rendered 30 frames` message and
+crash signatures. Visual Android work additionally requires an actual device
+or emulator screenshot and manual inspection.
 
 ## 7. Web Tests
 
@@ -326,8 +357,11 @@ assets into `webapp/assets`:
 .\gradlew.bat :tests:platform:web:test_webgl_js_run
 .\gradlew.bat :tests:platform:web:test_webgl_wasm_run
 .\gradlew.bat :tests:platform:web:test_webgpu_js_run
-.\gradlew.bat :tests:platform:web:test_webgpu_wasm_run
 ```
+
+WebGPU validation uses the JavaScript target. TeaVM WasmGC cannot currently
+compile the substituted JS-native jWebGPU binding path, so Wasm validation uses
+WebGL and no WebGPU-Wasm test task is exposed.
 
 ## 8. Benchmarks
 

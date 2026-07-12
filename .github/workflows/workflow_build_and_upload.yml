@@ -208,6 +208,45 @@ jobs:
             libfdx/extensions/net/webrtc/platform/android_jni/build/outputs/aar/*.aar
           if-no-files-found: error
 
+  validate:
+    name: Run Gradle Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Install desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: 6.0.0
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android native toolchain
+        shell: bash
+        run: |
+          set +o pipefail
+          yes | sdkmanager --licenses
+          set -o pipefail
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.0.12077973" "cmake;3.22.1"
+
+      - name: Run checks
+        run: |
+          chmod +x ./gradlew
+          ./gradlew check --continue --warning-mode all --console=plain
+
   publish:
     name: Build and Upload
     runs-on: ubuntu-latest
@@ -218,6 +257,7 @@ jobs:
       - build_macos_arm64
       - build_web
       - build_android
+      - validate
     steps:
       - name: Checkout code
         uses: actions/checkout@v6

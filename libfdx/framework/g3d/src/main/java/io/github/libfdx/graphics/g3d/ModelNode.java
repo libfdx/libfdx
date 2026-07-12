@@ -16,6 +16,8 @@ public final class ModelNode {
     private Matrix4 localTransform = Matrix4.IDENTITY;
     private final ArrayList<ModelNodePart> parts = new ArrayList<ModelNodePart>();
     private final ArrayList<ModelNode> children = new ArrayList<ModelNode>();
+    private final List<ModelNodePart> readOnlyParts = Collections.unmodifiableList(parts);
+    private final List<ModelNode> readOnlyChildren = Collections.unmodifiableList(children);
 
     /**
      * Creates a model node.
@@ -87,7 +89,7 @@ public final class ModelNode {
      * @return the parts
      */
     public List<ModelNodePart> parts() {
-        return Collections.unmodifiableList(parts);
+        return readOnlyParts;
     }
 
     /**
@@ -96,6 +98,6 @@ public final class ModelNode {
      * @return the children
      */
     public List<ModelNode> children() {
-        return Collections.unmodifiableList(children);
+        return readOnlyChildren;
     }
 }

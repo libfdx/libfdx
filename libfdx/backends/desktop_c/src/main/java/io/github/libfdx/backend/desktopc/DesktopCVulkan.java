@@ -136,6 +136,10 @@ final class DesktopCVulkan {
         fdxDesktopVulkanSetScissor(context, x, y, width, height);
     }
 
+    static void setViewport(long context, int x, int y, int width, int height) {
+        fdxDesktopVulkanSetViewport(context, x, y, width, height);
+    }
+
     static void bindTextures(long context, long pipeline, long[] textures, int count) {
         fdxDesktopVulkanBindTextures(context, pipeline, Address.ofData(textures), count);
     }
@@ -269,6 +273,9 @@ final class DesktopCVulkan {
 
     @Import(name = "fdx_desktop_vulkan_set_scissor")
     private static native void fdxDesktopVulkanSetScissor(long context, int x, int y, int width, int height);
+
+    @Import(name = "fdx_desktop_vulkan_set_viewport")
+    private static native void fdxDesktopVulkanSetViewport(long context, int x, int y, int width, int height);
 
     @Import(name = "fdx_desktop_vulkan_bind_textures")
     private static native void fdxDesktopVulkanBindTextures(long context, long pipeline, Address textures, int count);

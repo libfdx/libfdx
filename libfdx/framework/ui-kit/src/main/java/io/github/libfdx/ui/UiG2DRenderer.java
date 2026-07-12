@@ -6,6 +6,7 @@ import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.StoreOp;
+import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.g2d.Batch2D;
 import io.github.libfdx.graphics.g2d.BitmapFont;
 import io.github.libfdx.graphics.g2d.BitmapFontGlyph;
@@ -45,6 +46,15 @@ public final class UiG2DRenderer implements UiRenderer {
             UiDrawable.color(UiColor.rgba8888(0x121820ff));
     private static final UiDrawable TABS_BACKGROUND =
             UiDrawable.color(UiColor.rgba8888(0x101820ff));
+    private static final UiColor DEBUG_INVALID = UiColor.rgba8888(0xff3b30ff);
+    private static final UiColor DEBUG_FOCUSED = UiColor.rgba8888(0x7bd88fff);
+    private static final UiColor DEBUG_HOVERED = UiColor.rgba8888(0xffffffff);
+    private static final UiColor DEBUG_WINDOW = UiColor.rgba8888(0xffd166cc);
+    private static final UiColor DEBUG_CONTROL = UiColor.rgba8888(0x4cc9f0cc);
+    private static final UiColor DEBUG_OVERLAY = UiColor.rgba8888(0xf72585cc);
+    private static final UiColor DEBUG_DEFAULT = UiColor.rgba8888(0xa9b6c599);
+    private static final UiColor DEBUG_WINDOW_TITLE = UiColor.rgba8888(0xffd166ee);
+    private static final UiColor DEBUG_WINDOW_RESIZE = UiColor.rgba8888(0xff4fd8ff);
 
     private final GraphicsContext graphics;
     private final ShapeRenderer2D shapes;
@@ -52,6 +62,9 @@ public final class UiG2DRenderer implements UiRenderer {
     private final List<CustomTextDraw> customTextDraws = new ArrayList<CustomTextDraw>();
     private final List<CustomImageDraw> customImageDraws = new ArrayList<CustomImageDraw>();
     private final List<UiNode> overlayNodes = new ArrayList<UiNode>();
+    private final CustomDrawContext customDrawContext = new CustomDrawContext();
+    private int customTextDrawCount;
+    private int customImageDrawCount;
     private Batch2D batch;
     private UiRect currentClip;
     private boolean disposed;
@@ -77,8 +90,7 @@ public final class UiG2DRenderer implements UiRenderer {
         if (disposed || root == null || node == null || shapes == null) {
             return;
         }
-        customTextDraws.clear();
-        customImageDraws.clear();
+        resetCustomDraws();
         overlayNodes.clear();
         prepareText(root, node);
         GraphicsFrame frame = graphics.currentFrame();
@@ -96,8 +108,7 @@ public final class UiG2DRenderer implements UiRenderer {
             }
         } finally {
             pass.end();
-            customTextDraws.clear();
-            customImageDraws.clear();
+            resetCustomDraws();
             overlayNodes.clear();
         }
     }
@@ -146,8 +157,9 @@ public final class UiG2DRenderer implements UiRenderer {
                 }
             }
         }
-        for (UiNode child : root.renderChildren(node)) {
-            prepareText(root, child);
+        List<UiNode> children = root.renderChildren(node);
+        for (int i = 0; i < children.size(); i++) {
+            prepareText(root, children.get(i));
         }
     }
 
@@ -182,7 +194,9 @@ public final class UiG2DRenderer implements UiRenderer {
         } else if (node.type() == UiNodeType.TABS && !hasBitmapFont(root, node)) {
             drawTabsFallbackText(root, node, alpha);
         }
-        for (UiNode child : root.renderChildren(node)) {
+        List<UiNode> children = root.renderChildren(node);
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
             if (root.isOverlayNode(child)) {
                 overlayNodes.add(child);
             } else {
@@ -213,7 +227,9 @@ public final class UiG2DRenderer implements UiRenderer {
         } else if (node.type() == UiNodeType.TABS) {
             drawTabsBitmapText(root, node, alpha);
         }
-        for (UiNode child : root.renderChildren(node)) {
+        List<UiNode> children = root.renderChildren(node);
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
             if (!root.isOverlayNode(child)) {
                 renderImages(root, child, alpha, currentClip);
             }
@@ -222,16 +238,21 @@ public final class UiG2DRenderer implements UiRenderer {
     }
 
     private void drawBackground(UiRoot root, UiNode node, float alpha) {
+        if (node.type() == UiNodeType.MODAL && node.descriptor() instanceof UiModal) {
+            UiColor scrim = ((UiModal) node.descriptor()).scrimColor();
+            if (scrim != null) {
+                drawRect(root, node.bounds(), scrim.red(), scrim.green(), scrim.blue(), scrim.alpha() * alpha);
+            }
+            return;
+        }
         UiStyle style = root.styleFor(node);
         UiDrawable background = style != null ? stateStyle(node, style).background() : defaultBackground(node);
-        if (node.type() == UiNodeType.MODAL && node.descriptor() instanceof UiModal) {
-            background = UiDrawable.color(((UiModal) node.descriptor()).scrimColor());
-        }
         if (background == null || background.type() == UiDrawableType.NONE) {
             return;
         }
         if (background.type() == UiDrawableType.COLOR && background.color() != null) {
-            drawRect(root, node.bounds(), multiplyAlpha(background.color(), alpha));
+            UiColor color = background.color();
+            drawRect(root, node.bounds(), color.red(), color.green(), color.blue(), color.alpha() * alpha);
         } else if (background.type() == UiDrawableType.NINE_PATCH && background.ninePatch() != null
                 && background.ninePatch().region() == null) {
             drawRect(root, node.bounds(), 0.12f, 0.14f, 0.18f, alpha);
@@ -278,7 +299,9 @@ public final class UiG2DRenderer implements UiRenderer {
                 && hasBitmapFont(root, node)) {
             return true;
         }
-        for (UiNode child : root.renderChildren(node)) {
+        List<UiNode> children = root.renderChildren(node);
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
             if (!root.isOverlayNode(child) && needsBatch(root, child)) {
                 return true;
             }
@@ -299,12 +322,17 @@ public final class UiG2DRenderer implements UiRenderer {
     }
 
     private UiRect checkboxBox(UiRoot root, UiNode node) {
-        UiRect content = node.bounds().inset(root.effectivePadding(node));
-        float boxSize = Math.max(0.0f, Math.min(content.width(), content.height()));
+        UiRect bounds = node.bounds();
+        UiInsets padding = root.effectivePadding(node);
+        float contentX = bounds.x() + padding.left();
+        float contentY = bounds.y() + padding.top();
+        float contentWidth = Math.max(0.0f, bounds.width() - padding.horizontal());
+        float contentHeight = Math.max(0.0f, bounds.height() - padding.vertical());
+        float boxSize = Math.max(0.0f, Math.min(contentWidth, contentHeight));
         float x = node.checkboxLabel()
-                ? content.x()
-                : content.x() + Math.max(0.0f, content.width() - boxSize) * 0.5f;
-        return new UiRect(x, content.y() + Math.max(0.0f, content.height() - boxSize) * 0.5f,
+                ? contentX
+                : contentX + Math.max(0.0f, contentWidth - boxSize) * 0.5f;
+        return node.rendererRect(0, x, contentY + Math.max(0.0f, contentHeight - boxSize) * 0.5f,
                 boxSize, boxSize);
     }
 
@@ -454,8 +482,8 @@ public final class UiG2DRenderer implements UiRenderer {
             String text = nodeText(node);
             int safeStart = Math.max(0, Math.min(start, text.length()));
             int safeEnd = Math.max(safeStart, Math.min(end, text.length()));
-            float x = bounds.x() + textWidth(root, text.substring(0, safeStart), style);
-            float width = textWidth(root, text.substring(safeStart, safeEnd), style);
+            float x = bounds.x() + textWidth(root, text, 0, safeStart, style);
+            float width = textWidth(root, text, safeStart, safeEnd, style);
             float height = Math.min(bounds.height(), Math.max(12.0f, textLineHeight(root, style)));
             float y = bounds.y() + Math.max(0.0f, (bounds.height() - height) * 0.5f);
             drawRect(root, x, y, width, height, 0.25f, 0.50f, 0.90f, alpha * 0.65f);
@@ -473,11 +501,10 @@ public final class UiG2DRenderer implements UiRenderer {
                 int rangeStart = Math.max(start, lineStart);
                 int rangeEnd = Math.min(end, i);
                 if (rangeEnd > rangeStart || (start <= i && end > i && rangeStart == i)) {
-                    String line = text.substring(lineStart, i);
-                    int from = Math.max(0, rangeStart - lineStart);
-                    int to = Math.max(from, Math.min(line.length(), rangeEnd - lineStart));
-                    float x = bounds.x() + textWidth(root, line.substring(0, from), style);
-                    float width = Math.max(3.0f, textWidth(root, line.substring(from, to), style));
+                    int from = Math.max(lineStart, rangeStart);
+                    int to = Math.max(from, Math.min(i, rangeEnd));
+                    float x = bounds.x() + textWidth(root, text, lineStart, from, style);
+                    float width = Math.max(3.0f, textWidth(root, text, from, to, style));
                     float y = bounds.y() + lineIndex * lineHeight - scrollY;
                     drawRect(root, x, y, width, lineHeight, 0.25f, 0.50f, 0.90f, alpha * 0.65f);
                 }
@@ -503,59 +530,40 @@ public final class UiG2DRenderer implements UiRenderer {
         if (custom == null || custom.drawFunction() == null) {
             return;
         }
-        final float inheritedAlpha = alpha;
-        custom.drawFunction().draw(new UiDrawContext() {
-            @Override
-            public void rect(UiRect bounds, UiColor color) {
-                drawRect(root, bounds, multiplyAlpha(color, inheritedAlpha));
-            }
-
-            @Override
-            public void rect(float x, float y, float width, float height, UiColor color) {
-                drawRect(root, x, y, width, height, multiplyAlpha(color, inheritedAlpha));
-            }
-
-            @Override
-            public void image(TextureRegion region, UiRect bounds, UiColor color) {
-                if (bounds != null) {
-                    queueCustomImage(node, region, bounds.x(), bounds.y(), bounds.width(), bounds.height(),
-                            multiplyAlpha(color, inheritedAlpha));
-                }
-            }
-
-            @Override
-            public void image(TextureRegion region, float x, float y, float width, float height, UiColor color) {
-                queueCustomImage(node, region, x, y, width, height, multiplyAlpha(color, inheritedAlpha));
-            }
-
-            @Override
-            public void text(String text, UiRect bounds, UiTextStyle style) {
-                UiTextStyle actualStyle = style != null ? style : UiTextStyle.text();
-                customTextDraws.add(new CustomTextDraw(node, text, bounds, actualStyle, inheritedAlpha));
-            }
-        }, node.bounds());
+        custom.drawFunction().draw(customDrawContext.configure(root, node, alpha), node.bounds());
     }
 
     private void queueCustomImage(UiNode node, TextureRegion region, float x, float y, float width, float height,
-            UiColor color) {
+            UiColor color, float inheritedAlpha) {
         if (region == null || width <= 0.0f || height <= 0.0f || color == null || color.alpha() <= 0.0f) {
             return;
         }
-        customImageDraws.add(new CustomImageDraw(node, region, x, y, width, height, color));
+        CustomImageDraw draw;
+        if (customImageDrawCount == customImageDraws.size()) {
+            draw = new CustomImageDraw();
+            customImageDraws.add(draw);
+        }
+        else {
+            draw = customImageDraws.get(customImageDrawCount);
+        }
+        customImageDrawCount++;
+        draw.set(node, region, x, y, width, height, color.red(), color.green(), color.blue(),
+                color.alpha() * inheritedAlpha);
     }
 
     private void renderCustomImages(UiRoot root, UiNode node) {
-        for (int i = 0; i < customImageDraws.size(); i++) {
+        for (int i = 0; i < customImageDrawCount; i++) {
             CustomImageDraw draw = customImageDraws.get(i);
             if (draw.node != node) {
                 continue;
             }
-            drawRegion(root, draw.region, draw.x, draw.y, draw.width, draw.height, draw.color);
+            drawRegion(root, draw.region, draw.x, draw.y, draw.width, draw.height,
+                    draw.red, draw.green, draw.blue, draw.alpha);
         }
     }
 
     private void renderCustomText(UiRoot root, UiNode node) {
-        for (int i = 0; i < customTextDraws.size(); i++) {
+        for (int i = 0; i < customTextDrawCount; i++) {
             CustomTextDraw draw = customTextDraws.get(i);
             if (draw.node != node) {
                 continue;
@@ -573,7 +581,7 @@ public final class UiG2DRenderer implements UiRenderer {
             Object descriptor = node.descriptor();
             if (descriptor instanceof UiTextFieldModel) {
                 UiTextFieldModel model = (UiTextFieldModel) descriptor;
-                text = model.password() ? mask(model.value()) : model.value();
+                text = model.password() ? node.maskedText(model.value()) : model.value();
             } else {
                 text = String.valueOf(node.value());
             }
@@ -588,18 +596,19 @@ public final class UiG2DRenderer implements UiRenderer {
 
     private UiRect nodeTextBounds(UiRoot root, UiNode node) {
         UiInsets padding = root.effectivePadding(node);
+        UiRect bounds = node.bounds();
         if (node.type() == UiNodeType.CHECKBOX) {
-            UiRect bounds = node.bounds();
             UiRect box = checkboxBox(root, node);
             float textX = box.right() + 8.0f;
-            return new UiRect(textX, bounds.y(), Math.max(0.0f, bounds.right() - textX), bounds.height());
+            return node.rendererRect(1, textX, bounds.y(), Math.max(0.0f, bounds.right() - textX), bounds.height());
         }
-        UiRect bounds = node.bounds().inset(padding);
         if (node.type() == UiNodeType.WINDOW) {
             UiRect title = root.windowTitleBar(node);
-            return new UiRect(title.x() + 12.0f, title.y(), Math.max(0.0f, title.width() - 24.0f), title.height());
+            return node.rendererRect(1, title.x() + 12.0f, title.y(),
+                    Math.max(0.0f, title.width() - 24.0f), title.height());
         }
-        return bounds;
+        return node.rendererRect(1, bounds.x() + padding.left(), bounds.y() + padding.top(),
+                bounds.width() - padding.horizontal(), bounds.height() - padding.vertical());
     }
 
     private boolean hasBitmapFont(UiRoot root, UiNode node) {
@@ -648,7 +657,7 @@ public final class UiG2DRenderer implements UiRenderer {
             float x = tab.x() + Math.max(0.0f, (tab.width() - labelWidth) * 0.5f);
             float y = tab.y() + Math.max(0.0f, (tab.height() - lineHeight) * 0.5f);
             float labelAlpha = i == active ? localAlpha : localAlpha * 0.72f;
-            drawBitmapLine(root, font, label, x, y, style.size(), multiplyAlpha(style.color(), labelAlpha));
+            drawBitmapLine(root, font, label, x, y, style.size(), style.color(), labelAlpha);
         }
     }
 
@@ -741,7 +750,8 @@ public final class UiG2DRenderer implements UiRenderer {
         if (batch == null || node.image() == null) {
             return;
         }
-        drawRegion(root, node.image(), node.bounds(), UiColor.rgba(1.0f, 1.0f, 1.0f, alpha));
+        drawRegion(root, node.image(), node.bounds().x(), node.bounds().y(), node.bounds().width(),
+                node.bounds().height(), 1.0f, 1.0f, 1.0f, alpha);
     }
 
     private void drawBackgroundImage(UiRoot root, UiNode node, float alpha) {
@@ -751,7 +761,8 @@ public final class UiG2DRenderer implements UiRenderer {
             return;
         }
         if (background.type() == UiDrawableType.TEXTURE && background.region() != null) {
-            drawRegion(root, background.region(), node.bounds(), UiColor.rgba(1.0f, 1.0f, 1.0f, alpha));
+            drawRegion(root, background.region(), node.bounds().x(), node.bounds().y(), node.bounds().width(),
+                    node.bounds().height(), 1.0f, 1.0f, 1.0f, alpha);
         } else if (background.type() == UiDrawableType.NINE_PATCH && background.ninePatch() != null
                 && background.ninePatch().region() != null) {
             drawNinePatch(root, background.ninePatch(), node.bounds(), alpha);
@@ -797,9 +808,8 @@ public final class UiG2DRenderer implements UiRenderer {
         if (width <= 0 || height <= 0 || boundsWidth <= 0.0f || boundsHeight <= 0.0f) {
             return;
         }
-        drawRegion(root, new TextureRegion(source.texture(), x, y, width, height), boundsX, boundsY, boundsWidth,
-                boundsHeight,
-                UiColor.rgba(1.0f, 1.0f, 1.0f, alpha));
+        drawRegion(root, source.texture(), x, y, width, height, boundsX, boundsY, boundsWidth, boundsHeight,
+                1.0f, 1.0f, 1.0f, alpha);
     }
 
     private void drawRegion(UiRoot root, TextureRegion region, UiRect bounds) {
@@ -822,6 +832,26 @@ public final class UiG2DRenderer implements UiRenderer {
         if (finalColor.alpha() <= 0.0f) {
             return;
         }
+        drawRegion(root, region, x, y, width, height, finalColor.red(), finalColor.green(), finalColor.blue(),
+                finalColor.alpha());
+    }
+
+    private void drawRegion(UiRoot root, TextureRegion region, float x, float y, float width, float height,
+            float red, float green, float blue, float alpha) {
+        if (region == null) {
+            return;
+        }
+        drawRegion(root, region.texture(), region.x(), region.y(), region.width(), region.height(),
+                x, y, width, height, red, green, blue, alpha);
+    }
+
+    private void drawRegion(UiRoot root, Texture texture, int sourceX, int sourceY, int sourceWidth,
+            int sourceHeight, float x, float y, float width, float height,
+            float red, float green, float blue, float alpha) {
+        if (texture == null || sourceWidth <= 0 || sourceHeight <= 0
+                || width <= 0.0f || height <= 0.0f || alpha <= 0.0f) {
+            return;
+        }
         float clippedX = x;
         float clippedY = y;
         float clippedRight = x + width;
@@ -835,10 +865,27 @@ public final class UiG2DRenderer implements UiRenderer {
                 return;
             }
         }
-        TextureRegion clippedRegion = clippedTextureRegion(region, x, y, width, height,
-                clippedX, clippedY, clippedRight - clippedX, clippedBottom - clippedY);
-        batch.color(finalColor.red(), finalColor.green(), finalColor.blue(), finalColor.alpha());
-        batch.draw(clippedRegion, ndcX(root, clippedX), ndcY(root, clippedY, clippedBottom - clippedY),
+        int clippedSourceX = sourceX;
+        int clippedSourceY = sourceY;
+        int clippedSourceRight = sourceX + sourceWidth;
+        int clippedSourceBottom = sourceY + sourceHeight;
+        float clippedWidth = clippedRight - clippedX;
+        float clippedHeight = clippedBottom - clippedY;
+        if (clippedX != x || clippedY != y || clippedWidth != width || clippedHeight != height) {
+            float left = Math.max(0.0f, clippedX - x);
+            float top = Math.max(0.0f, clippedY - y);
+            float right = Math.max(0.0f, x + width - clippedRight);
+            float bottom = Math.max(0.0f, y + height - clippedBottom);
+            clippedSourceX += Math.round(left / width * sourceWidth);
+            clippedSourceY += Math.round(top / height * sourceHeight);
+            clippedSourceRight -= Math.round(right / width * sourceWidth);
+            clippedSourceBottom -= Math.round(bottom / height * sourceHeight);
+        }
+        batch.color(red, green, blue, alpha);
+        batch.draw(texture, clippedSourceX, clippedSourceY,
+                Math.max(1, clippedSourceRight - clippedSourceX),
+                Math.max(1, clippedSourceBottom - clippedSourceY),
+                ndcX(root, clippedX), ndcY(root, clippedY, clippedHeight),
                 ndcWidth(root, clippedRight - clippedX), ndcHeight(root, clippedBottom - clippedY));
     }
 
@@ -892,16 +939,12 @@ public final class UiG2DRenderer implements UiRenderer {
         UiRect clip = inheritedClip;
         if (node.type() == UiNodeType.SCROLL || node.type() == UiNodeType.TEXT_FIELD
                 || node.type() == UiNodeType.TEXT_AREA || node.type() == UiNodeType.TABS) {
-            clip = intersect(clip, node.bounds());
+            clip = intersect(node, clip, node.bounds());
         }
         return clip;
     }
 
-    private UiRect clipped(UiRect rect) {
-        return intersect(currentClip, rect);
-    }
-
-    private UiRect intersect(UiRect clip, UiRect rect) {
+    private UiRect intersect(UiNode node, UiRect clip, UiRect rect) {
         if (rect == null || rect.width() <= 0.0f || rect.height() <= 0.0f) {
             return null;
         }
@@ -915,30 +958,7 @@ public final class UiG2DRenderer implements UiRenderer {
         if (right <= x || bottom <= y) {
             return null;
         }
-        return new UiRect(x, y, right - x, bottom - y);
-    }
-
-    private TextureRegion clippedTextureRegion(TextureRegion region, float originalX, float originalY,
-            float originalWidth, float originalHeight, float clippedX, float clippedY, float clippedWidth,
-            float clippedHeight) {
-        if (region == null || originalWidth <= 0.0f || originalHeight <= 0.0f) {
-            return region;
-        }
-        if (clippedX == originalX && clippedY == originalY && clippedWidth == originalWidth
-                && clippedHeight == originalHeight) {
-            return region;
-        }
-        float left = Math.max(0.0f, clippedX - originalX);
-        float top = Math.max(0.0f, clippedY - originalY);
-        float right = Math.max(0.0f, originalX + originalWidth - clippedX - clippedWidth);
-        float bottom = Math.max(0.0f, originalY + originalHeight - clippedY - clippedHeight);
-        int sourceX = region.x() + Math.round(left / originalWidth * region.width());
-        int sourceY = region.y() + Math.round(top / originalHeight * region.height());
-        int sourceRight = region.x() + region.width() - Math.round(right / originalWidth * region.width());
-        int sourceBottom = region.y() + region.height() - Math.round(bottom / originalHeight * region.height());
-        int width = Math.max(1, sourceRight - sourceX);
-        int height = Math.max(1, sourceBottom - sourceY);
-        return new TextureRegion(region.texture(), sourceX, sourceY, width, height);
+        return node.rendererRect(2, x, y, right - x, bottom - y);
     }
 
     private void renderDebugLines(UiRoot root, UiNode node) {
@@ -947,11 +967,12 @@ public final class UiG2DRenderer implements UiRenderer {
         }
         drawOutline(root, node.bounds(), debugColor(node));
         if (node.type() == UiNodeType.WINDOW) {
-            drawOutline(root, root.windowTitleBar(node), UiColor.rgba8888(0xffd166ee));
-            drawOutline(root, root.windowResizeHandle(node), UiColor.rgba8888(0xff4fd8ff));
+            drawOutline(root, root.windowTitleBar(node), DEBUG_WINDOW_TITLE);
+            drawOutline(root, root.windowResizeHandle(node), DEBUG_WINDOW_RESIZE);
         }
-        for (UiNode child : root.renderChildren(node)) {
-            renderDebugLines(root, child);
+        List<UiNode> children = root.renderChildren(node);
+        for (int i = 0; i < children.size(); i++) {
+            renderDebugLines(root, children.get(i));
         }
     }
 
@@ -959,12 +980,6 @@ public final class UiG2DRenderer implements UiRenderer {
         if (rect == null || rect.width() <= 0.0f || rect.height() <= 0.0f || color == null || color.alpha() <= 0.0f) {
             return;
         }
-        UiRect visible = visibleOutlineRect(root, rect);
-        shapes.rect(ndcX(root, visible), ndcY(root, visible), ndcWidth(root, visible), ndcHeight(root, visible),
-                color.red(), color.green(), color.blue(), color.alpha());
-    }
-
-    private UiRect visibleOutlineRect(UiRoot root, UiRect rect) {
         float scale = root.effectiveUiScale();
         float pixel = 1.0f / Math.max(0.25f, scale);
         float maxRight = root.renderWidth() / Math.max(0.25f, scale);
@@ -986,37 +1001,39 @@ public final class UiG2DRenderer implements UiRenderer {
         if (bottom >= maxBottom - edgeTolerance) {
             bottom -= pixel;
         }
-        return new UiRect(x, y, right - x, bottom - y);
+        float width = Math.max(0.0f, right - x);
+        float height = Math.max(0.0f, bottom - y);
+        shapes.rect(ndcX(root, x), ndcY(root, y, height), ndcWidth(root, width), ndcHeight(root, height),
+                color.red(), color.green(), color.blue(), color.alpha());
     }
 
     private UiColor debugColor(UiNode node) {
         if (node.invalid()) {
-            return UiColor.rgba8888(0xff3b30ff);
+            return DEBUG_INVALID;
         }
         if (node.focused()) {
-            return UiColor.rgba8888(0x7bd88fff);
+            return DEBUG_FOCUSED;
         }
         if (node.hovered()) {
-            return UiColor.rgba8888(0xffffffff);
+            return DEBUG_HOVERED;
         }
         if (node.type() == UiNodeType.WINDOW) {
-            return UiColor.rgba8888(0xffd166cc);
+            return DEBUG_WINDOW;
         }
         if (node.type() == UiNodeType.BUTTON || node.type() == UiNodeType.CHECKBOX
                 || node.type() == UiNodeType.SLIDER || node.type() == UiNodeType.PROGRESS_BAR
                 || node.type() == UiNodeType.TABS || node.type() == UiNodeType.TEXT_FIELD
                 || node.type() == UiNodeType.TEXT_AREA) {
-            return UiColor.rgba8888(0x4cc9f0cc);
+            return DEBUG_CONTROL;
         }
         if (node.type() == UiNodeType.MODAL || node.type() == UiNodeType.POPUP || node.type() == UiNodeType.TOOLTIP) {
-            return UiColor.rgba8888(0xf72585cc);
+            return DEBUG_OVERLAY;
         }
-        return UiColor.rgba8888(0xa9b6c599);
+        return DEBUG_DEFAULT;
     }
 
     private void drawTextAreaBitmapText(UiRoot root, BitmapFont font, String text, UiRect bounds, UiTextStyle style,
             float alpha, float scrollY) {
-        UiColor finalColor = multiplyAlpha(style.color(), alpha);
         float y = bounds.y() - scrollY;
         int start = 0;
         int lineIndex = 0;
@@ -1024,7 +1041,7 @@ public final class UiG2DRenderer implements UiRenderer {
         for (int i = 0; i <= value.length(); i++) {
             if (i == value.length() || value.charAt(i) == '\n') {
                 drawBitmapLine(root, font, value, start, i, bounds.x(),
-                        y + lineIndex * style.lineHeight(), style.size(), finalColor);
+                        y + lineIndex * style.lineHeight(), style.size(), style.color(), alpha);
                 start = i + 1;
                 lineIndex++;
             }
@@ -1038,41 +1055,43 @@ public final class UiG2DRenderer implements UiRenderer {
         if (layout == null) {
             return;
         }
-        UiColor finalColor = multiplyAlpha(style.color(), alpha);
         float y = bounds.y() + Math.max(0.0f, (bounds.height() - layout.height()) * 0.5f);
         if (style.shadowColor().alpha() > 0.0f && style.shadowOffset() != 0.0f) {
             drawBitmapTextLines(root, font, layout, bounds.x() + style.shadowOffset(),
-                    y + style.shadowOffset(), style, multiplyAlpha(style.shadowColor(), alpha), bounds.width());
+                    y + style.shadowOffset(), style, style.shadowColor(), alpha, bounds.width());
         }
         if (style.outlineColor().alpha() > 0.0f && style.outlineWidth() > 0.0f) {
             float outline = style.outlineWidth();
-            UiColor outlineColor = multiplyAlpha(style.outlineColor(), alpha);
-            drawBitmapTextLines(root, font, layout, bounds.x() - outline, y, style, outlineColor, bounds.width());
-            drawBitmapTextLines(root, font, layout, bounds.x() + outline, y, style, outlineColor, bounds.width());
-            drawBitmapTextLines(root, font, layout, bounds.x(), y - outline, style, outlineColor, bounds.width());
-            drawBitmapTextLines(root, font, layout, bounds.x(), y + outline, style, outlineColor, bounds.width());
+            drawBitmapTextLines(root, font, layout, bounds.x() - outline, y, style,
+                    style.outlineColor(), alpha, bounds.width());
+            drawBitmapTextLines(root, font, layout, bounds.x() + outline, y, style,
+                    style.outlineColor(), alpha, bounds.width());
+            drawBitmapTextLines(root, font, layout, bounds.x(), y - outline, style,
+                    style.outlineColor(), alpha, bounds.width());
+            drawBitmapTextLines(root, font, layout, bounds.x(), y + outline, style,
+                    style.outlineColor(), alpha, bounds.width());
         }
-        drawBitmapTextLines(root, font, layout, bounds.x(), y, style, finalColor, bounds.width());
+        drawBitmapTextLines(root, font, layout, bounds.x(), y, style, style.color(), alpha, bounds.width());
     }
 
     private void drawBitmapTextLines(UiRoot root, BitmapFont font, BitmapFontLayout layout, float x, float y,
-            UiTextStyle style, UiColor color, float availableWidth) {
+            UiTextStyle style, UiColor color, float alpha, float availableWidth) {
         List<String> lines = layout.lines();
         for (int lineIndex = 0; lineIndex < lines.size(); lineIndex++) {
             String line = lines.get(lineIndex);
             float lineX = alignedLineX(x, layout.lineWidth(lineIndex), style.align(), availableWidth);
-            drawBitmapLine(root, font, line, lineX, y + lineIndex * layout.lineHeight(), style.size(), color);
+            drawBitmapLine(root, font, line, lineX, y + lineIndex * layout.lineHeight(), style.size(), color, alpha);
         }
     }
 
     private void drawBitmapLine(UiRoot root, BitmapFont font, String text, float x, float y, float size,
-            UiColor color) {
-        drawBitmapLine(root, font, text, 0, text != null ? text.length() : 0, x, y, size, color);
+            UiColor color, float alpha) {
+        drawBitmapLine(root, font, text, 0, text != null ? text.length() : 0, x, y, size, color, alpha);
     }
 
     private void drawBitmapLine(UiRoot root, BitmapFont font, String text, int start, int end, float x, float y,
-            float size, UiColor color) {
-        if (text == null) {
+            float size, UiColor color, float alpha) {
+        if (text == null || color == null || color.alpha() <= 0.0f || alpha <= 0.0f) {
             return;
         }
         int safeStart = Math.max(0, Math.min(start, text.length()));
@@ -1097,7 +1116,8 @@ public final class UiG2DRenderer implements UiRenderer {
             float glyphY = snapToDisplayPixel(y + glyph.yOffset() * scale, displayScale);
             float glyphWidth = snapSizeToDisplayPixel(region.width() * scale, displayScale);
             float glyphHeight = snapSizeToDisplayPixel(region.height() * scale, displayScale);
-            drawRegion(root, region, glyphX, glyphY, glyphWidth, glyphHeight, color);
+            drawRegion(root, region, glyphX, glyphY, glyphWidth, glyphHeight,
+                    color.red(), color.green(), color.blue(), color.alpha() * alpha);
             cursor += glyph.xAdvance() * scale;
             previous = codePoint;
         }
@@ -1344,41 +1364,43 @@ public final class UiG2DRenderer implements UiRenderer {
     }
 
     private float textWidth(UiRoot root, String text, UiTextStyle style) {
+        return textWidth(root, text, 0, text != null ? text.length() : 0, style);
+    }
+
+    private float textWidth(UiRoot root, String text, int start, int end, UiTextStyle style) {
         UiTextStyle actual = style != null ? style : UiTextStyle.text();
+        int safeStart = text != null ? Math.max(0, Math.min(start, text.length())) : 0;
+        int safeEnd = text != null ? Math.max(safeStart, Math.min(end, text.length())) : 0;
         BitmapFont font = root.textFont(actual);
         if (font != null) {
-            return font.width(text, actual.size());
+            float scale = font.scale(actual.size());
+            float width = 0.0f;
+            int previous = -1;
+            for (int i = safeStart; i < safeEnd; i++) {
+                int codePoint = text.charAt(i);
+                BitmapFontGlyph glyph = font.glyph(codePoint);
+                if (glyph == null) {
+                    width += actual.size() * 0.5f;
+                    previous = -1;
+                    continue;
+                }
+                if (previous >= 0) {
+                    width += font.kerning(previous, codePoint) * scale;
+                }
+                width += glyph.xAdvance() * scale;
+                previous = codePoint;
+            }
+            return width;
         }
-        return (text != null ? text.length() : 0) * 8.0f;
+        return (safeEnd - safeStart) * 8.0f;
     }
 
     private boolean isTextInput(UiNode node) {
         return node != null && (node.type() == UiNodeType.TEXT_FIELD || node.type() == UiNodeType.TEXT_AREA);
     }
 
-    private String mask(String value) {
-        StringBuilder builder = new StringBuilder();
-        for (int i = 0; i < value.length(); i++) {
-            builder.append('*');
-        }
-        return builder.toString();
-    }
-
     private float combinedAlpha(float parentAlpha, float localAlpha) {
         return Math.max(0.0f, Math.min(1.0f, parentAlpha * localAlpha));
-    }
-
-    private UiColor multiplyAlpha(UiColor color, float alpha) {
-        if (color == null) {
-            return UiColor.TRANSPARENT;
-        }
-        if (alpha >= 0.999f) {
-            return color;
-        }
-        if (alpha <= 0.0f || color.alpha() <= 0.0f) {
-            return UiColor.TRANSPARENT;
-        }
-        return UiColor.rgba(color.red(), color.green(), color.blue(), color.alpha() * alpha);
     }
 
     private float ndcX(UiRoot root, UiRect rect) {
@@ -1428,6 +1450,9 @@ public final class UiG2DRenderer implements UiRenderer {
             return;
         }
         disposed = true;
+        resetCustomDraws();
+        customTextDraws.clear();
+        customImageDraws.clear();
         if (shapes != null) {
             shapes.dispose();
         }
@@ -1453,23 +1478,34 @@ public final class UiG2DRenderer implements UiRenderer {
      * @author xpenatan
      */
     private static final class CustomImageDraw {
-        final UiNode node;
-        final TextureRegion region;
-        final float x;
-        final float y;
-        final float width;
-        final float height;
-        final UiColor color;
+        UiNode node;
+        TextureRegion region;
+        float x;
+        float y;
+        float width;
+        float height;
+        float red;
+        float green;
+        float blue;
+        float alpha;
 
-        CustomImageDraw(UiNode node, TextureRegion region, float x, float y, float width, float height,
-                UiColor color) {
+        void set(UiNode node, TextureRegion region, float x, float y, float width, float height,
+                float red, float green, float blue, float alpha) {
             this.node = node;
             this.region = region;
             this.x = x;
             this.y = y;
             this.width = width;
             this.height = height;
-            this.color = color;
+            this.red = red;
+            this.green = green;
+            this.blue = blue;
+            this.alpha = alpha;
+        }
+
+        void clear() {
+            node = null;
+            region = null;
         }
     }
 
@@ -1479,18 +1515,95 @@ public final class UiG2DRenderer implements UiRenderer {
      * @author xpenatan
      */
     private static final class CustomTextDraw {
-        final UiNode node;
-        final String text;
-        final UiRect bounds;
-        final UiTextStyle style;
-        final float alpha;
+        UiNode node;
+        String text;
+        UiRect bounds;
+        UiTextStyle style;
+        float alpha;
 
-        CustomTextDraw(UiNode node, String text, UiRect bounds, UiTextStyle style, float alpha) {
+        void set(UiNode node, String text, UiRect bounds, UiTextStyle style, float alpha) {
             this.node = node;
             this.text = text;
             this.bounds = bounds;
             this.style = style;
             this.alpha = alpha;
+        }
+
+        void clear() {
+            node = null;
+            text = null;
+            bounds = null;
+            style = null;
+        }
+    }
+
+    private void queueCustomText(UiNode node, String text, UiRect bounds, UiTextStyle style, float alpha) {
+        CustomTextDraw draw;
+        if (customTextDrawCount == customTextDraws.size()) {
+            draw = new CustomTextDraw();
+            customTextDraws.add(draw);
+        }
+        else {
+            draw = customTextDraws.get(customTextDrawCount);
+        }
+        customTextDrawCount++;
+        draw.set(node, text, bounds, style, alpha);
+    }
+
+    private void resetCustomDraws() {
+        for (int i = 0; i < customTextDrawCount; i++) {
+            customTextDraws.get(i).clear();
+        }
+        for (int i = 0; i < customImageDrawCount; i++) {
+            customImageDraws.get(i).clear();
+        }
+        customTextDrawCount = 0;
+        customImageDrawCount = 0;
+    }
+
+    private final class CustomDrawContext implements UiDrawContext {
+        private UiRoot root;
+        private UiNode node;
+        private float alpha;
+
+        CustomDrawContext configure(UiRoot root, UiNode node, float alpha) {
+            this.root = root;
+            this.node = node;
+            this.alpha = alpha;
+            return this;
+        }
+
+        @Override
+        public void rect(UiRect bounds, UiColor color) {
+            if (color != null) {
+                drawRect(root, bounds, color.red(), color.green(), color.blue(), color.alpha() * alpha);
+            }
+        }
+
+        @Override
+        public void rect(float x, float y, float width, float height, UiColor color) {
+            if (color != null) {
+                drawRect(root, x, y, width, height,
+                        color.red(), color.green(), color.blue(), color.alpha() * alpha);
+            }
+        }
+
+        @Override
+        public void image(TextureRegion region, UiRect bounds, UiColor color) {
+            if (bounds != null) {
+                queueCustomImage(node, region, bounds.x(), bounds.y(), bounds.width(), bounds.height(), color, alpha);
+            }
+        }
+
+        @Override
+        public void image(TextureRegion region, float x, float y, float width, float height, UiColor color) {
+            queueCustomImage(node, region, x, y, width, height, color, alpha);
+        }
+
+        @Override
+        public void text(String text, UiRect bounds, UiTextStyle style) {
+            UiTextStyle actualStyle = style != null ? style : UiTextStyle.text();
+            queueCustomText(node, text, bounds, actualStyle, alpha);
         }
     }
 }

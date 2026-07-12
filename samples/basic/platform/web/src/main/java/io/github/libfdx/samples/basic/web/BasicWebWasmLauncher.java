@@ -1,5 +1,7 @@
 package io.github.libfdx.samples.basic.web;
 
+import io.github.libfdx.graphics.gl.web.WebGLProvider;
+
 /**
  * Launches the basic web wasm entry point.
  *
@@ -15,6 +17,6 @@ public final class BasicWebWasmLauncher {
      * @param args the args
      */
     public static void main(String[] args) {
-        BasicWebLauncherSupport.start("Wasm", args);
+        BasicWebLauncherSupport.start("Wasm", false, new WebGLProvider());
     }
 }

@@ -66,15 +66,3 @@ tasks.register("basic_webgl_wasm_run") {
     description = "Builds and serves the basic WebGL Wasm web application."
     dependsOn(":samples:basic:platform:plugin:libfdx_web_wasm_webgl_run")
 }
-
-tasks.register("basic_webgpu_wasm_build") {
-    group = "application"
-    description = "Builds the basic WebGPU Wasm web application."
-    dependsOn(":samples:basic:platform:plugin:libfdx_web_wasm_webgpu_build")
-}
-
-tasks.register("basic_webgpu_wasm_run") {
-    group = "application"
-    description = "Builds and serves the basic WebGPU Wasm web application."
-    dependsOn(":samples:basic:platform:plugin:libfdx_web_wasm_webgpu_run")
-}

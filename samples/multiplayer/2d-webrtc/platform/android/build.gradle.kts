@@ -23,10 +23,12 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.toVersion(25)
-        targetCompatibility = JavaVersion.toVersion(25)
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
+
+val adbExecutable = androidComponents.sdkComponents.adb
 
 dependencies {
     implementation(project(":samples:multiplayer:2d-webrtc:core"))
@@ -49,7 +51,7 @@ base {
 
 fun androidStartCommand(activity: String): List<String> {
     val command = mutableListOf(
-            android.adbExecutable.absolutePath,
+            adbExecutable.get().asFile.absolutePath,
             "shell",
             "am",
             "start",
@@ -84,14 +86,18 @@ tasks.register<Exec>("multiplayer_2d_webrtc_android_wgpu_jni_run") {
     group = "application"
     description = "Installs and launches the Android WGPU JNI WebRTC multiplayer 2D sample."
     dependsOn("installDebug")
-    commandLine(androidStartCommand(
-            "io.github.libfdx.samples.multiplayer.webrtc.android.MultiplayerWebRtcAndroidWgpuActivity"))
+    doFirst {
+        commandLine(androidStartCommand(
+                "io.github.libfdx.samples.multiplayer.webrtc.android.MultiplayerWebRtcAndroidWgpuActivity"))
+    }
 }
 
 tasks.register<Exec>("multiplayer_2d_webrtc_android_vulkan_run") {
     group = "application"
     description = "Installs and launches the Android Vulkan WebRTC multiplayer 2D sample."
     dependsOn("installDebug")
-    commandLine(androidStartCommand(
-            "io.github.libfdx.samples.multiplayer.webrtc.android.MultiplayerWebRtcAndroidVulkanActivity"))
+    doFirst {
+        commandLine(androidStartCommand(
+                "io.github.libfdx.samples.multiplayer.webrtc.android.MultiplayerWebRtcAndroidVulkanActivity"))
+    }
 }

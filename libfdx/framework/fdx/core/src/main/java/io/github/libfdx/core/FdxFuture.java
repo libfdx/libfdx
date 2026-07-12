@@ -15,6 +15,7 @@ public final class FdxFuture<T> {
     private final List<Consumer<T>> successCallbacks = new ArrayList<Consumer<T>>();
     private final List<Consumer<Throwable>> failureCallbacks = new ArrayList<Consumer<Throwable>>();
     private boolean done;
+    private boolean dispatchingCallbacks;
     private T value;
     private Throwable error;
 
@@ -93,6 +94,10 @@ public final class FdxFuture<T> {
                 return this;
             }
             if (error == null) {
+                if (dispatchingCallbacks) {
+                    successCallbacks.add(callback);
+                    return this;
+                }
                 callbackValue = value;
                 callNow = true;
             }
@@ -121,6 +126,10 @@ public final class FdxFuture<T> {
                 return this;
             }
             if (error != null) {
+                if (dispatchingCallbacks) {
+                    failureCallbacks.add(callback);
+                    return this;
+                }
                 callbackError = error;
                 callNow = true;
             }
@@ -189,13 +198,24 @@ public final class FdxFuture<T> {
             }
             this.value = value;
             done = true;
-            callbacks = new ArrayList<Consumer<T>>(successCallbacks);
-            successCallbacks.clear();
+            dispatchingCallbacks = true;
+            callbacks = takeSuccessCallbacks();
             failureCallbacks.clear();
         }
-        for (int i = 0; i < callbacks.size(); i++) {
-            callbacks.get(i).accept(value);
+        Throwable callbackFailure = null;
+        try {
+            while (callbacks != null) {
+                callbackFailure = invokeCallbacks(callbacks, value, callbackFailure);
+                synchronized (this) {
+                    callbacks = takeSuccessCallbacks();
+                }
+            }
+        } finally {
+            synchronized (this) {
+                dispatchingCallbacks = false;
+            }
         }
+        rethrowCallbackFailure(callbackFailure);
     }
 
     /**
@@ -212,12 +232,71 @@ public final class FdxFuture<T> {
             }
             this.error = actualError;
             done = true;
-            callbacks = new ArrayList<Consumer<Throwable>>(failureCallbacks);
+            dispatchingCallbacks = true;
+            callbacks = takeFailureCallbacks();
             successCallbacks.clear();
-            failureCallbacks.clear();
         }
+        Throwable callbackFailure = null;
+        try {
+            while (callbacks != null) {
+                callbackFailure = invokeCallbacks(callbacks, actualError, callbackFailure);
+                synchronized (this) {
+                    callbacks = takeFailureCallbacks();
+                }
+            }
+        } finally {
+            synchronized (this) {
+                dispatchingCallbacks = false;
+            }
+        }
+        rethrowCallbackFailure(callbackFailure);
+    }
+
+    private List<Consumer<T>> takeSuccessCallbacks() {
+        if (successCallbacks.isEmpty()) {
+            return null;
+        }
+        List<Consumer<T>> callbacks = new ArrayList<Consumer<T>>(successCallbacks);
+        successCallbacks.clear();
+        return callbacks;
+    }
+
+    private List<Consumer<Throwable>> takeFailureCallbacks() {
+        if (failureCallbacks.isEmpty()) {
+            return null;
+        }
+        List<Consumer<Throwable>> callbacks = new ArrayList<Consumer<Throwable>>(failureCallbacks);
+        failureCallbacks.clear();
+        return callbacks;
+    }
+
+    private static <V> Throwable invokeCallbacks(List<Consumer<V>> callbacks, V callbackValue,
+            Throwable firstFailure) {
+        Throwable failure = firstFailure;
         for (int i = 0; i < callbacks.size(); i++) {
-            callbacks.get(i).accept(actualError);
+            try {
+                callbacks.get(i).accept(callbackValue);
+            } catch (Throwable callbackFailure) {
+                if (failure == null) {
+                    failure = callbackFailure;
+                } else if (failure != callbackFailure) {
+                    failure.addSuppressed(callbackFailure);
+                }
+            }
         }
+        return failure;
+    }
+
+    private static void rethrowCallbackFailure(Throwable failure) {
+        if (failure == null) {
+            return;
+        }
+        if (failure instanceof RuntimeException) {
+            throw (RuntimeException) failure;
+        }
+        if (failure instanceof Error) {
+            throw (Error) failure;
+        }
+        throw new FdxException("Future callback failed", failure);
     }
 }

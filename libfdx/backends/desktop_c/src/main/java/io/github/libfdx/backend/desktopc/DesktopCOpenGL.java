@@ -20,6 +20,7 @@ final class DesktopCOpenGL {
     static final int TRIANGLES = 0x0004;
     static final int TRIANGLE_STRIP = 0x0005;
     static final int DEPTH_TEST = 0x0B71;
+    static final int SCISSOR_TEST = 0x0C11;
     static final int LEQUAL = 0x0203;
     static final int UNSIGNED_BYTE = 0x1401;
     static final int UNSIGNED_SHORT = 0x1403;
@@ -47,9 +48,18 @@ final class DesktopCOpenGL {
     static final int INFO_LOG_LENGTH = 0x8B84;
     static final int TEXTURE_2D = 0x0DE1;
     static final int BLEND = 0x0BE2;
+    static final int ONE = 1;
     static final int SRC_ALPHA = 0x0302;
     static final int ONE_MINUS_SRC_ALPHA = 0x0303;
     static final int RGBA8 = 0x8058;
+    static final int BACK = 0x0405;
+    static final int PACK_ALIGNMENT = 0x0D05;
+    static final int DEPTH_COMPONENT24 = 0x81A6;
+    static final int FRAMEBUFFER = 0x8D40;
+    static final int RENDERBUFFER = 0x8D41;
+    static final int COLOR_ATTACHMENT0 = 0x8CE0;
+    static final int DEPTH_ATTACHMENT = 0x8D00;
+    static final int FRAMEBUFFER_COMPLETE = 0x8CD5;
 
     private DesktopCOpenGL() {
     }
@@ -74,6 +84,28 @@ final class DesktopCOpenGL {
     static void deleteTexture(int texture) {
         int[] values = new int[] { texture };
         glDeleteTextures(1, Address.ofData(values));
+    }
+
+    static int genFramebuffer() {
+        int[] values = new int[1];
+        glGenFramebuffers(1, Address.ofData(values));
+        return values[0];
+    }
+
+    static void deleteFramebuffer(int framebuffer) {
+        int[] values = new int[] { framebuffer };
+        glDeleteFramebuffers(1, Address.ofData(values));
+    }
+
+    static int genRenderbuffer() {
+        int[] values = new int[1];
+        glGenRenderbuffers(1, Address.ofData(values));
+        return values[0];
+    }
+
+    static void deleteRenderbuffer(int renderbuffer) {
+        int[] values = new int[] { renderbuffer };
+        glDeleteRenderbuffers(1, Address.ofData(values));
     }
 
     static int genVertexArray() {
@@ -215,6 +247,37 @@ final class DesktopCOpenGL {
     @Import(name = "glDeleteTextures")
     private static native void glDeleteTextures(int count, Address values);
 
+    @Import(name = "glGenFramebuffers")
+    private static native void glGenFramebuffers(int count, Address values);
+
+    @Import(name = "glBindFramebuffer")
+    static native void glBindFramebuffer(int target, int framebuffer);
+
+    @Import(name = "glFramebufferTexture2D")
+    static native void glFramebufferTexture2D(int target, int attachment, int textureTarget, int texture, int level);
+
+    @Import(name = "glCheckFramebufferStatus")
+    static native int glCheckFramebufferStatus(int target);
+
+    @Import(name = "glDeleteFramebuffers")
+    private static native void glDeleteFramebuffers(int count, Address values);
+
+    @Import(name = "glGenRenderbuffers")
+    private static native void glGenRenderbuffers(int count, Address values);
+
+    @Import(name = "glBindRenderbuffer")
+    static native void glBindRenderbuffer(int target, int renderbuffer);
+
+    @Import(name = "glRenderbufferStorage")
+    static native void glRenderbufferStorage(int target, int internalFormat, int width, int height);
+
+    @Import(name = "glFramebufferRenderbuffer")
+    static native void glFramebufferRenderbuffer(int target, int attachment, int renderbufferTarget,
+            int renderbuffer);
+
+    @Import(name = "glDeleteRenderbuffers")
+    private static native void glDeleteRenderbuffers(int count, Address values);
+
     @Import(name = "glActiveTexture")
     static native void glActiveTexture(int texture);
 
@@ -254,20 +317,25 @@ final class DesktopCOpenGL {
     @Import(name = "glDepthFunc")
     static native void glDepthFunc(int func);
 
-    @Import(name = "glBlendFunc")
-    static native void glBlendFunc(int source, int destination);
+    @Import(name = "glBlendFuncSeparate")
+    static native void glBlendFuncSeparate(int sourceRgb, int destinationRgb,
+            int sourceAlpha, int destinationAlpha);
 
     @Import(name = "glEnableVertexAttribArray")
     static native void glEnableVertexAttribArray(int index);
 
     @Import(name = "glVertexAttribPointer")
-    static native void glVertexAttribPointer(int index, int size, int type, boolean normalized, int stride, int offset);
+    static native void glVertexAttribPointer(int index, int size, int type, boolean normalized, int stride,
+            Address offset);
 
     @Import(name = "glVertexAttribDivisor")
     static native void glVertexAttribDivisor(int index, int divisor);
 
     @Import(name = "glViewport")
     static native void glViewport(int x, int y, int width, int height);
+
+    @Import(name = "glScissor")
+    static native void glScissor(int x, int y, int width, int height);
 
     @Import(name = "glClearColor")
     static native void glClearColor(float red, float green, float blue, float alpha);
@@ -278,6 +346,15 @@ final class DesktopCOpenGL {
     @Import(name = "glClear")
     static native void glClear(int mask);
 
+    @Import(name = "glPixelStorei")
+    static native void glPixelStorei(int name, int value);
+
+    @Import(name = "glReadBuffer")
+    static native void glReadBuffer(int source);
+
+    @Import(name = "glReadPixels")
+    static native void glReadPixels(int x, int y, int width, int height, int format, int type, ByteBuffer pixels);
+
     @Import(name = "glDrawArrays")
     static native void glDrawArrays(int mode, int first, int count);
 
@@ -287,6 +364,13 @@ final class DesktopCOpenGL {
     @Import(name = "glDrawElements")
     static native void glDrawElements(int mode, int count, int type, Address indices);
 
+    @Import(name = "glDrawElementsBaseVertex")
+    static native void glDrawElementsBaseVertex(int mode, int count, int type, Address indices, int baseVertex);
+
     @Import(name = "glDrawElementsInstanced")
     static native void glDrawElementsInstanced(int mode, int count, int type, Address indices, int instanceCount);
+
+    @Import(name = "glDrawElementsInstancedBaseVertex")
+    static native void glDrawElementsInstancedBaseVertex(int mode, int count, int type, Address indices,
+            int instanceCount, int baseVertex);
 }

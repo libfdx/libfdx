@@ -13,6 +13,16 @@ val moduleName = "fdx"
 base {
     archivesName.set(moduleName)
 }
+
+dependencies {
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+tasks.named<Test>("test") {
+    useJUnitPlatform()
+}
+
 java {
     withSourcesJar()
     withJavadocJar()

@@ -278,9 +278,10 @@ Build or serve the web generator UI with:
 .\gradlew.bat :libfdx:tools:project-generator:platform:web:project_generator_webgpu_js_run
 ```
 
-The web module also exposes `project_generator_webgl_wasm_build`,
-`project_generator_webgl_wasm_run`, `project_generator_webgpu_wasm_build`, and
-`project_generator_webgpu_wasm_run` for the Wasm target.
+The web module also exposes `project_generator_webgl_wasm_build` and
+`project_generator_webgl_wasm_run` for the Wasm target. WebGPU uses the
+JavaScript tasks above because TeaVM WasmGC cannot currently compile the
+substituted JS-native jWebGPU binding path.
 
 The core generator must stay independent from filesystem APIs. Desktop export
 writes generated files to a selected directory. Web export downloads an archive

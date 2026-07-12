@@ -12,17 +12,36 @@ import io.github.libfdx.graphics.ShaderModule;
 final class GLShaderModuleHandle implements ShaderModule {
     private final ProviderId providerId;
     private final GLApi gl;
+    private final GLResourceDomain resourceDomain;
     private final int program;
+    private int pipelineReferences;
     private boolean disposed;
 
-    GLShaderModuleHandle(ProviderId providerId, GLApi gl, int program) {
+    GLShaderModuleHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain, int program) {
         this.providerId = providerId;
         this.gl = gl;
+        this.resourceDomain = resourceDomain;
         this.program = program;
     }
 
     int program() {
         return program;
+    }
+
+    GLResourceDomain resourceDomain() {
+        return resourceDomain;
+    }
+
+    void retainForPipeline() {
+        GLResources.requireUsable(this, resourceDomain, "Shader module");
+        pipelineReferences++;
+    }
+
+    void releaseFromPipeline() {
+        if (pipelineReferences > 0) {
+            pipelineReferences--;
+        }
+        deleteProgramWhenUnused();
     }
 
     /**
@@ -66,7 +85,7 @@ final class GLShaderModuleHandle implements ShaderModule {
             return;
         }
         disposed = true;
-        gl.deleteProgram(program);
+        deleteProgramWhenUnused();
     }
 
     /**
@@ -77,5 +96,11 @@ final class GLShaderModuleHandle implements ShaderModule {
     @Override
     public boolean isDisposed() {
         return disposed;
+    }
+
+    private void deleteProgramWhenUnused() {
+        if (disposed && pipelineReferences == 0 && resourceDomain.makeAnyContextCurrent()) {
+            gl.deleteProgram(program);
+        }
     }
 }

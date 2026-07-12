@@ -19,8 +19,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.toVersion(25)
-        targetCompatibility = JavaVersion.toVersion(25)
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     publishing {
@@ -48,7 +48,7 @@ val androidJavadocJar = tasks.register("androidJavadocJar", org.gradle.api.tasks
 
 tasks.register("androidSourcesJar", org.gradle.api.tasks.bundling.Jar::class) {
     archiveClassifier.set("sources")
-    from(android.sourceSets.getByName("main").java.srcDirs)
+    from(layout.projectDirectory.dir("src/main/java"))
 }
 
 publishing {

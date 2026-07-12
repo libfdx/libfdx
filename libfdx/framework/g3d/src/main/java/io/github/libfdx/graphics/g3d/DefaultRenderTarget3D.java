@@ -42,6 +42,12 @@ public final class DefaultRenderTarget3D implements RenderTarget3D {
         if (colorAttachments == null || colorAttachments.length == 0 || colorAttachments[0] == null) {
             throw new FdxException("RenderTarget3D requires at least one color attachment");
         }
+        if (colorAttachments.length != 1) {
+            throw new FdxException("DefaultRenderTarget3D currently supports exactly one color attachment");
+        }
+        if (depthAttachment != null) {
+            throw new FdxException("DefaultRenderTarget3D does not yet support an explicit depth attachment");
+        }
         this.width = width;
         this.height = height;
         this.colorAttachments = colorAttachments.clone();

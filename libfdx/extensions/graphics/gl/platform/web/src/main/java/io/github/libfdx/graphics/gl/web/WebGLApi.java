@@ -59,6 +59,7 @@ final class WebGLApi implements GLApi {
     private static final int UNSIGNED_SHORT = 0x1403;
     private static final int TEXTURE0 = 0x84C0;
     private static final int BLEND = 0x0BE2;
+    private static final int ONE = 1;
     private static final int SRC_ALPHA = 0x0302;
     private static final int ONE_MINUS_SRC_ALPHA = 0x0303;
     private static final int FLOAT = 0x1406;
@@ -755,7 +756,7 @@ final class WebGLApi implements GLApi {
     @Override
     public void enableAlphaBlending() {
         gl.enable(BLEND);
-        gl.blendFunc(SRC_ALPHA, ONE_MINUS_SRC_ALPHA);
+        blendFuncSeparate(gl, SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ONE, ONE_MINUS_SRC_ALPHA);
     }
 
     /**
@@ -1113,6 +1114,11 @@ final class WebGLApi implements GLApi {
 
     @JSBody(params = { "gl", "framebuffer" }, script = "gl.deleteFramebuffer(framebuffer);")
     private static native void deleteFramebuffer(WebGLRenderingContext gl, JSObject framebuffer);
+
+    @JSBody(params = { "gl", "sourceRgb", "destinationRgb", "sourceAlpha", "destinationAlpha" }, script =
+            "gl.blendFuncSeparate(sourceRgb, destinationRgb, sourceAlpha, destinationAlpha);")
+    private static native void blendFuncSeparate(WebGLRenderingContext gl, int sourceRgb, int destinationRgb,
+            int sourceAlpha, int destinationAlpha);
 
     @JSBody(params = { "gl" }, script = "return gl.createRenderbuffer();")
     private static native JSObject createRenderbuffer(WebGLRenderingContext gl);

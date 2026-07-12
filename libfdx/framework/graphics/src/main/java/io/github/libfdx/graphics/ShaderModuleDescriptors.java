@@ -72,6 +72,9 @@ public final class ShaderModuleDescriptors {
     private static ShaderModuleDescriptor compileGlsl(ShaderModuleDescriptor descriptor, ShaderTarget target,
             String providerName, boolean glslEs) {
         String source = requireWgsl(descriptor, target, providerName, glslEs ? "GLSL ES" : "GLSL");
+        if (descriptor.hasSource(ShaderLanguage.GLSL)) {
+            return descriptor;
+        }
         RuntimeShaderCompiler compiler = requireCompiler(descriptor, target, providerName, glslEs ? "GLSL ES" :
                 "GLSL");
         String vertex = compileText(compiler, descriptor, source, target, RuntimeShaderCompileStage.VERTEX,
@@ -92,6 +95,9 @@ public final class ShaderModuleDescriptors {
     private static ShaderModuleDescriptor compileSpirv(ShaderModuleDescriptor descriptor, ShaderTarget target,
             String providerName) {
         String source = requireWgsl(descriptor, target, providerName, "SPIR-V");
+        if (descriptor.hasSource(ShaderLanguage.SPIRV)) {
+            return descriptor;
+        }
         RuntimeShaderCompiler compiler = requireCompiler(descriptor, target, providerName, "SPIR-V");
         int[] vertex = compileSpirvWords(compiler, descriptor, source, target, RuntimeShaderCompileStage.VERTEX,
                 descriptor.vertexEntryPoint());
@@ -104,6 +110,9 @@ public final class ShaderModuleDescriptors {
     private static ShaderModuleDescriptor compileMsl(ShaderModuleDescriptor descriptor, ShaderTarget target,
             String providerName) {
         String source = requireWgsl(descriptor, target, providerName, "MSL");
+        if (descriptor.hasSource(ShaderLanguage.MSL)) {
+            return descriptor;
+        }
         RuntimeShaderCompiler compiler = requireCompiler(descriptor, target, providerName, "MSL");
         String vertex = compileText(compiler, descriptor, source, target, RuntimeShaderCompileStage.VERTEX,
                 descriptor.vertexEntryPoint());

@@ -8,6 +8,7 @@ import dev.onvoid.webrtc.RTCIceServer;
 import dev.onvoid.webrtc.RTCIceTransportPolicy;
 import dev.onvoid.webrtc.RTCPeerConnection;
 import dev.onvoid.webrtc.RTCPeerConnectionState;
+import io.github.libfdx.core.FdxException;
 import io.github.libfdx.net.webrtc.config.WebRtcEndpointSettings;
 import io.github.libfdx.net.webrtc.platform.WebRtcIceCandidate;
 import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnection;
@@ -25,11 +26,16 @@ import java.util.Collections;
  */
 public final class DesktopWebRtcPeerConnectionProvider implements WebRtcPeerConnectionProvider {
     private final PeerConnectionFactory factory = new PeerConnectionFactory();
+    private final ArrayList<DesktopWebRtcPeerConnection> connections =
+            new ArrayList<DesktopWebRtcPeerConnection>();
     private boolean closed;
 
     @Override
-    public WebRtcPeerConnection createPeerConnection(WebRtcEndpointSettings settings,
+    public synchronized WebRtcPeerConnection createPeerConnection(WebRtcEndpointSettings settings,
             final WebRtcPeerConnectionListener listener) {
+        if (closed) {
+            throw new FdxException("Desktop WebRTC peer connection provider is disposed");
+        }
         RTCConfiguration configuration = configuration(settings);
         RTCPeerConnection peerConnection = factory.createPeerConnection(configuration, new PeerConnectionObserver() {
             @Override
@@ -48,19 +54,41 @@ public final class DesktopWebRtcPeerConnectionProvider implements WebRtcPeerConn
                 listener.stateChanged(map(state));
             }
         });
-        return new DesktopWebRtcPeerConnection(peerConnection);
+        if (peerConnection == null) {
+            throw new FdxException("Desktop WebRTC peer connection creation failed");
+        }
+        DesktopWebRtcPeerConnection connection = new DesktopWebRtcPeerConnection(peerConnection, listener, this);
+        connections.add(connection);
+        return connection;
     }
 
     @Override
-    public boolean isSupported() {
+    public synchronized boolean isSupported() {
         return !closed;
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         if (!closed) {
             closed = true;
-            factory.dispose();
+            Throwable failure = null;
+            while (!connections.isEmpty()) {
+                DesktopWebRtcPeerConnection connection = connections.get(connections.size() - 1);
+                try {
+                    connection.close();
+                }
+                catch (Throwable throwable) {
+                    failure = firstFailure(failure, throwable);
+                    connections.remove(connection);
+                }
+            }
+            try {
+                factory.dispose();
+            }
+            catch (Throwable throwable) {
+                failure = firstFailure(failure, throwable);
+            }
+            rethrow(failure);
         }
     }
 
@@ -70,8 +98,35 @@ public final class DesktopWebRtcPeerConnectionProvider implements WebRtcPeerConn
     }
 
     @Override
-    public boolean isDisposed() {
+    public synchronized boolean isDisposed() {
         return closed;
+    }
+
+    synchronized void connectionClosed(DesktopWebRtcPeerConnection connection) {
+        connections.remove(connection);
+    }
+
+    private static Throwable firstFailure(Throwable first, Throwable next) {
+        if (first == null) {
+            return next;
+        }
+        if (first != next) {
+            first.addSuppressed(next);
+        }
+        return first;
+    }
+
+    private static void rethrow(Throwable failure) {
+        if (failure == null) {
+            return;
+        }
+        if (failure instanceof RuntimeException) {
+            throw (RuntimeException) failure;
+        }
+        if (failure instanceof Error) {
+            throw (Error) failure;
+        }
+        throw new FdxException("Desktop WebRTC peer connection provider disposal failed", failure);
     }
 
     private static RTCConfiguration configuration(WebRtcEndpointSettings settings) {

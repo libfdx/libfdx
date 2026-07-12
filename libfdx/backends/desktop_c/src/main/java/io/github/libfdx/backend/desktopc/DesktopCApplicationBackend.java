@@ -117,6 +117,7 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
         }
 
         String phase = "create";
+        Throwable applicationFailure = null;
         try {
             listener.create(fdx);
             listenerCreated = true;
@@ -127,11 +128,28 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
             loop(listener, displayConfig);
         } catch (Throwable error) {
             logger.error("Desktop C application failed during " + phase, error);
-            throw error instanceof RuntimeException
-                    ? (RuntimeException) error
-                    : new FdxException("Desktop C application failed during " + phase, error);
-        } finally {
-            shutdown(listener);
+            applicationFailure = error;
+        }
+
+        Throwable shutdownFailure = shutdown(listener);
+        if (applicationFailure != null) {
+            if (shutdownFailure != null && shutdownFailure != applicationFailure) {
+                applicationFailure.addSuppressed(shutdownFailure);
+            }
+            if (applicationFailure instanceof Error) {
+                throw (Error) applicationFailure;
+            }
+            throw applicationFailure instanceof RuntimeException
+                    ? (RuntimeException) applicationFailure
+                    : new FdxException("Desktop C application failed during " + phase, applicationFailure);
+        }
+        if (shutdownFailure != null) {
+            if (shutdownFailure instanceof Error) {
+                throw (Error) shutdownFailure;
+            }
+            throw shutdownFailure instanceof RuntimeException
+                    ? (RuntimeException) shutdownFailure
+                    : new FdxException("Desktop C application failed during shutdown", shutdownFailure);
         }
     }
 
@@ -271,36 +289,75 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
         DesktopCGLFW.waitEventsTimeout(sleepMillis / 1000.0);
     }
 
-    private void shutdown(ApplicationListener listener) {
+    private Throwable shutdown(ApplicationListener listener) {
         if (disposed) {
-            return;
+            return null;
         }
+        Throwable failure = null;
         lifecycle = ApplicationLifecycle.PAUSED;
         if (listenerCreated) {
-            listener.pause();
+            try {
+                listener.pause();
+            } catch (Throwable error) {
+                failure = recordShutdownFailure(failure, "listener pause", error);
+            }
         }
         lifecycle = ApplicationLifecycle.DISPOSED;
-        try {
-            if (listenerCreated) {
+        if (listenerCreated) {
+            try {
                 listener.dispose();
+            } catch (Throwable error) {
+                failure = recordShutdownFailure(failure, "listener dispose", error);
             }
-        } finally {
-            listenerCreated = false;
-            if (graphics != null) {
-                graphics.dispose();
-                graphics = null;
-            }
-            if (display != null) {
-                DesktopCGLFW.destroyWindow(display.windowHandle());
-                display = null;
-            }
-            input = null;
-            DesktopCGLFW.terminate();
-            RuntimeCore.registerProvider(null);
-            running = false;
-            disposed = true;
-            fdx = null;
         }
+        listenerCreated = false;
+
+        GraphicsAttachment closingGraphics = graphics;
+        graphics = null;
+        if (closingGraphics != null) {
+            try {
+                closingGraphics.dispose();
+            } catch (Throwable error) {
+                failure = recordShutdownFailure(failure, "graphics dispose", error);
+            }
+        }
+
+        DesktopCDisplay closingDisplay = display;
+        display = null;
+        if (closingDisplay != null) {
+            try {
+                DesktopCGLFW.destroyWindow(closingDisplay.windowHandle());
+            } catch (Throwable error) {
+                failure = recordShutdownFailure(failure, "window destroy", error);
+            }
+        }
+
+        input = null;
+        try {
+            DesktopCGLFW.terminate();
+        } catch (Throwable error) {
+            failure = recordShutdownFailure(failure, "GLFW terminate", error);
+        }
+        try {
+            RuntimeCore.registerProvider(null);
+        } catch (Throwable error) {
+            failure = recordShutdownFailure(failure, "runtime provider reset", error);
+        }
+        running = false;
+        disposed = true;
+        fdx = null;
+        return failure;
+    }
+
+    private Throwable recordShutdownFailure(Throwable firstFailure, String phase, Throwable error) {
+        logger.error("Desktop C application failed during shutdown " + phase, error);
+        if (firstFailure == null) {
+            return error;
+        }
+        if (firstFailure != error) {
+            firstFailure.addSuppressed(error);
+        }
+        return firstFailure;
     }
 
     /**

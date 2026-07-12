@@ -439,7 +439,10 @@ open class LibfdxDesktopCExtension @Inject constructor(
     val relativePathInOutputDir: Property<String> = objects.property(String::class.java).convention("c/src")
     val optimization: Property<OptimizationLevel> = objects.property(OptimizationLevel::class.java)
         .convention(OptimizationLevel.AGGRESSIVE)
-    val debugInformation: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val debugInformation: Property<Boolean> = objects.property(Boolean::class.java)
+        .convention(project.providers.gradleProperty("libfdx.desktopC.debugInformation")
+            .map { value -> strictBooleanProperty("libfdx.desktopC.debugInformation", value) }
+            .orElse(false))
     val fastGlobalAnalysis: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
     val outOfProcess: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
     val processMemory: Property<Int> = objects.property(Int::class.javaObjectType).convention(512)
@@ -447,11 +450,11 @@ open class LibfdxDesktopCExtension @Inject constructor(
     val buildType: Property<String> = objects.property(String::class.java).convention("Debug")
     val showConsole: Property<Boolean> = objects.property(Boolean::class.java)
         .convention(project.providers.gradleProperty("libfdx.desktopC.showConsole")
-            .map { value -> value.toBooleanStrictOrNull() ?: value.toBoolean() }
+            .map { value -> strictBooleanProperty("libfdx.desktopC.showConsole", value) }
             .orElse(true))
     val openConsole: Property<Boolean> = objects.property(Boolean::class.java)
         .convention(project.providers.gradleProperty("libfdx.desktopC.openConsole")
-            .map { value -> value.toBooleanStrictOrNull() ?: value.toBoolean() }
+            .map { value -> strictBooleanProperty("libfdx.desktopC.openConsole", value) }
             .orElse(true))
     val releasePath: DirectoryProperty = objects.directoryProperty()
         .convention(outputDir.map { it.dir("c/release") })
@@ -474,6 +477,11 @@ open class LibfdxDesktopCExtension @Inject constructor(
             relativePathInOutputDir.map { relativePath -> output.dir(relativePath) }
         }
     }
+}
+
+private fun strictBooleanProperty(name: String, value: String): Boolean {
+    return value.toBooleanStrictOrNull()
+        ?: throw IllegalArgumentException("$name must be true or false, got '$value'")
 }
 
 open class LibfdxDesktopCTargetExtension @Inject constructor(

@@ -2,6 +2,8 @@ package io.github.libfdx.backend.desktop;
 
 import io.github.libfdx.graphics.gl.GLSurface;
 import org.lwjgl.glfw.GLFW;
+import org.lwjgl.opengl.GL;
+import org.lwjgl.opengl.GLCapabilities;
 
 /**
  * Represents a desktop GL surface.
@@ -10,9 +12,11 @@ import org.lwjgl.glfw.GLFW;
  */
 final class DesktopGLSurface implements GLSurface {
     private final long windowHandle;
+    private final GLCapabilities capabilities;
 
-    DesktopGLSurface(long windowHandle) {
+    DesktopGLSurface(long windowHandle, GLCapabilities capabilities) {
         this.windowHandle = windowHandle;
+        this.capabilities = capabilities;
     }
 
     /**
@@ -21,6 +25,7 @@ final class DesktopGLSurface implements GLSurface {
     @Override
     public void makeCurrent() {
         GLFW.glfwMakeContextCurrent(windowHandle);
+        GL.setCapabilities(capabilities);
     }
 
     /**
@@ -37,5 +42,6 @@ final class DesktopGLSurface implements GLSurface {
     @Override
     public void releaseCurrent() {
         GLFW.glfwMakeContextCurrent(0L);
+        GL.setCapabilities(null);
     }
 }

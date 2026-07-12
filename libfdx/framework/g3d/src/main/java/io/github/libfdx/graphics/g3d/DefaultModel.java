@@ -20,6 +20,10 @@ public final class DefaultModel implements Model {
     private final ArrayList<AnimationClip> animations;
     private final ArrayList<Skin> skins;
     private final ArrayList<Mesh> meshes;
+    private final List<ModelNode> readOnlyNodes;
+    private final List<Material> readOnlyMaterials;
+    private final List<AnimationClip> readOnlyAnimations;
+    private final List<Skin> readOnlySkins;
     private boolean disposed;
 
     /**
@@ -51,6 +55,10 @@ public final class DefaultModel implements Model {
         this.animations = copy(animations);
         this.skins = copy(skins);
         this.meshes = copy(meshes);
+        readOnlyNodes = Collections.unmodifiableList(this.nodes);
+        readOnlyMaterials = Collections.unmodifiableList(this.materials);
+        readOnlyAnimations = Collections.unmodifiableList(this.animations);
+        readOnlySkins = Collections.unmodifiableList(this.skins);
     }
 
     /**
@@ -84,7 +92,7 @@ public final class DefaultModel implements Model {
      */
     @Override
     public List<ModelNode> nodes() {
-        return Collections.unmodifiableList(nodes);
+        return readOnlyNodes;
     }
 
     /**
@@ -94,7 +102,7 @@ public final class DefaultModel implements Model {
      */
     @Override
     public List<Material> materials() {
-        return Collections.unmodifiableList(materials);
+        return readOnlyMaterials;
     }
 
     /**
@@ -104,7 +112,7 @@ public final class DefaultModel implements Model {
      */
     @Override
     public List<AnimationClip> animations() {
-        return Collections.unmodifiableList(animations);
+        return readOnlyAnimations;
     }
 
     /**
@@ -114,7 +122,7 @@ public final class DefaultModel implements Model {
      */
     @Override
     public List<Skin> skins() {
-        return Collections.unmodifiableList(skins);
+        return readOnlySkins;
     }
 
     /**

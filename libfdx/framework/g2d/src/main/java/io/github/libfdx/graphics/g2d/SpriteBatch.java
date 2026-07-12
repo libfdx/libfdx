@@ -475,7 +475,7 @@ public final class SpriteBatch implements Batch2D {
      */
     @Override
     public void draw(Texture texture, float x, float y, float width, float height) {
-        draw(new TextureRegion(texture), x, y, width, height);
+        draw(texture, x, y, width, height, 0.0f, 0.0f, 0.0f);
     }
 
     /**
@@ -493,7 +493,37 @@ public final class SpriteBatch implements Batch2D {
     @Override
     public void draw(Texture texture, float x, float y, float width, float height,
             float originX, float originY, float rotationDegrees) {
-        draw(new TextureRegion(texture), x, y, width, height, originX, originY, rotationDegrees);
+        ensureTexture(texture);
+        ensureDrawing();
+        draw(texture, 0.0f, 0.0f, 1.0f, 1.0f, x, y, width, height, originX, originY, rotationDegrees);
+    }
+
+    /**
+     * Draws a source rectangle from a texture.
+     *
+     * @param texture the texture
+     * @param sourceX the source x coordinate in texels
+     * @param sourceY the source y coordinate in texels
+     * @param sourceWidth the source width in texels
+     * @param sourceHeight the source height in texels
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
+    @Override
+    public void draw(Texture texture, int sourceX, int sourceY, int sourceWidth, int sourceHeight,
+            float x, float y, float width, float height) {
+        ensureTexture(texture);
+        ensureDrawing();
+        if (sourceWidth <= 0 || sourceHeight <= 0) {
+            throw new FdxException("Texture source size must be greater than zero");
+        }
+        float inverseWidth = 1.0f / texture.width();
+        float inverseHeight = 1.0f / texture.height();
+        draw(texture, sourceX * inverseWidth, sourceY * inverseHeight,
+                (sourceX + sourceWidth) * inverseWidth, (sourceY + sourceHeight) * inverseHeight,
+                x, y, width, height, 0.0f, 0.0f, 0.0f);
     }
 
     /**
@@ -529,20 +559,22 @@ public final class SpriteBatch implements Batch2D {
         if (region == null) {
             throw new FdxException("TextureRegion cannot be null");
         }
-        if (currentTexture != null && currentTexture != region.texture()) {
+        draw(region.texture(), region.u(), region.v(), region.u2(), region.v2(), x, y, width, height,
+                originX, originY, rotationDegrees);
+    }
+
+    private void draw(Texture texture, float u, float v, float u2, float v2,
+            float x, float y, float width, float height, float originX, float originY, float rotationDegrees) {
+        if (currentTexture != null && currentTexture != texture) {
             flush();
         }
-        currentTexture = region.texture();
+        currentTexture = texture;
         float worldOriginX = x + originX;
         float worldOriginY = y + originY;
         float scaleX = viewportWidth > 0 ? viewportWidth * 0.5f : 1.0f;
         float scaleY = viewportHeight > 0 ? viewportHeight * 0.5f : 1.0f;
         updateTransformCache(width, height, originX, originY, rotationDegrees, scaleX, scaleY);
 
-        float u = region.u();
-        float v = region.v();
-        float u2 = region.u2();
-        float v2 = region.v2();
         float x1 = cachedX1 + worldOriginX;
         float y1 = cachedY1 + worldOriginY;
         float x2 = cachedX2 + worldOriginX;
@@ -566,6 +598,15 @@ public final class SpriteBatch implements Batch2D {
         }
 
         appendQuad(x1, y1, x2, y2, x3, y3, x4, y4, u, v, u2, v2);
+    }
+
+    private void ensureTexture(Texture texture) {
+        if (texture == null) {
+            throw new FdxException("Texture cannot be null");
+        }
+        if (texture.width() <= 0 || texture.height() <= 0) {
+            throw new FdxException("Texture size must be greater than zero");
+        }
     }
 
     /**

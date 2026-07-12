@@ -4,6 +4,7 @@ import io.github.libfdx.core.Disposable;
 import io.github.libfdx.graphics.g2d.BitmapFontLayout;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -15,6 +16,11 @@ import java.util.List;
 public final class UiNode implements Disposable {
     private final List<UiNode> children = new ArrayList<UiNode>();
     private final List<UiNode> readOnlyChildren = Collections.unmodifiableList(children);
+    private final ArrayList<UiNode> orderedChildren = new ArrayList<UiNode>();
+    private final List<UiNode> readOnlyOrderedChildren = Collections.unmodifiableList(orderedChildren);
+    private final ArrayList<UiNode> reverseOrderedChildren = new ArrayList<UiNode>();
+    private final List<UiNode> readOnlyReverseOrderedChildren = Collections.unmodifiableList(reverseOrderedChildren);
+    private long childOrderRevision = Long.MIN_VALUE;
     private UiNodeType type;
     private String identity;
     private String key;
@@ -39,6 +45,16 @@ public final class UiNode implements Disposable {
     private boolean checkboxLabel;
     private boolean invalid;
     private UiRect bounds = UiRect.ZERO;
+    private UiRect[] cachedRects;
+    private UiSize[] cachedSizes;
+    private String[] derivedKeySuffixes;
+    private String[] derivedKeys;
+    private UiLayoutConstraints[] cachedLayoutConstraints;
+    private int nextLayoutConstraint;
+    private UiInsets cachedEffectivePadding;
+    private long compositionPass = Long.MIN_VALUE;
+    private String maskedTextSource;
+    private String maskedText;
     private boolean disposed;
     private int preferredSizePass = -1;
     private float preferredSizeAvailableWidth;
@@ -71,8 +87,6 @@ public final class UiNode implements Disposable {
         this.action = null;
         this.image = null;
         this.animationSpec = null;
-        this.customContext = null;
-        this.descriptor = null;
         this.visible = true;
         this.hovered = false;
         this.pressed = false;
@@ -80,13 +94,189 @@ public final class UiNode implements Disposable {
         this.checkboxLabel = false;
         this.invalid = false;
         this.children.clear();
+        this.orderedChildren.clear();
+        this.reverseOrderedChildren.clear();
+        this.childOrderRevision = Long.MIN_VALUE;
     }
 
     void addChild(UiNode child) {
         if (child != null) {
             child.parent = this;
             children.add(child);
+            childOrderRevision = Long.MIN_VALUE;
         }
+    }
+
+    void usedInComposition(long pass) {
+        compositionPass = pass;
+    }
+
+    boolean wasUsedInComposition(long pass) {
+        return compositionPass == pass;
+    }
+
+    UiRect rendererRect(int slot, float x, float y, float width, float height) {
+        if (slot < 0) {
+            throw new IllegalArgumentException("UI node rectangle cache slot cannot be negative");
+        }
+        if (cachedRects == null) {
+            cachedRects = new UiRect[Math.max(16, slot + 1)];
+        } else if (slot >= cachedRects.length) {
+            int next = cachedRects.length;
+            while (next <= slot) {
+                next *= 2;
+            }
+            cachedRects = Arrays.copyOf(cachedRects, next);
+        }
+        UiRect cached = cachedRects[slot];
+        float clampedWidth = Math.max(0.0f, width);
+        float clampedHeight = Math.max(0.0f, height);
+        if (cached != null
+                && Float.compare(cached.x(), x) == 0
+                && Float.compare(cached.y(), y) == 0
+                && Float.compare(cached.width(), clampedWidth) == 0
+                && Float.compare(cached.height(), clampedHeight) == 0) {
+            return cached;
+        }
+        UiRect value = new UiRect(x, y, clampedWidth, clampedHeight);
+        cachedRects[slot] = value;
+        return value;
+    }
+
+    UiSize layoutSize(int slot, float width, float height) {
+        if (slot < 0) {
+            throw new IllegalArgumentException("UI node size cache slot cannot be negative");
+        }
+        if (cachedSizes == null) {
+            cachedSizes = new UiSize[Math.max(8, slot + 1)];
+        } else if (slot >= cachedSizes.length) {
+            int next = cachedSizes.length;
+            while (next <= slot) {
+                next *= 2;
+            }
+            cachedSizes = Arrays.copyOf(cachedSizes, next);
+        }
+        float clampedWidth = Math.max(0.0f, width);
+        float clampedHeight = Math.max(0.0f, height);
+        UiSize cached = cachedSizes[slot];
+        if (cached != null
+                && Float.compare(cached.width(), clampedWidth) == 0
+                && Float.compare(cached.height(), clampedHeight) == 0) {
+            return cached;
+        }
+        UiSize value = new UiSize(clampedWidth, clampedHeight);
+        cachedSizes[slot] = value;
+        return value;
+    }
+
+    String derivedKey(int slot, String suffix) {
+        if (slot < 0) {
+            throw new IllegalArgumentException("UI node derived-key cache slot cannot be negative");
+        }
+        if (derivedKeys == null) {
+            derivedKeySuffixes = new String[Math.max(4, slot + 1)];
+            derivedKeys = new String[Math.max(4, slot + 1)];
+        } else if (slot >= derivedKeys.length) {
+            int next = derivedKeys.length;
+            while (next <= slot) {
+                next *= 2;
+            }
+            derivedKeySuffixes = Arrays.copyOf(derivedKeySuffixes, next);
+            derivedKeys = Arrays.copyOf(derivedKeys, next);
+        }
+        String actualSuffix = suffix != null ? suffix : "";
+        if (derivedKeys[slot] != null && sameText(derivedKeySuffixes[slot], actualSuffix)) {
+            return derivedKeys[slot];
+        }
+        derivedKeySuffixes[slot] = actualSuffix;
+        derivedKeys[slot] = identity + actualSuffix;
+        return derivedKeys[slot];
+    }
+
+    UiLayoutConstraints layoutConstraints(float minWidth, float minHeight, float maxWidth, float maxHeight) {
+        float actualMinWidth = Math.max(0.0f, minWidth);
+        float actualMinHeight = Math.max(0.0f, minHeight);
+        float actualMaxWidth = Math.max(actualMinWidth, maxWidth);
+        float actualMaxHeight = Math.max(actualMinHeight, maxHeight);
+        if (cachedLayoutConstraints == null) {
+            cachedLayoutConstraints = new UiLayoutConstraints[4];
+        }
+        for (int i = 0; i < cachedLayoutConstraints.length; i++) {
+            UiLayoutConstraints cached = cachedLayoutConstraints[i];
+            if (cached != null
+                    && Float.compare(cached.minWidth(), actualMinWidth) == 0
+                    && Float.compare(cached.minHeight(), actualMinHeight) == 0
+                    && Float.compare(cached.maxWidth(), actualMaxWidth) == 0
+                    && Float.compare(cached.maxHeight(), actualMaxHeight) == 0) {
+                return cached;
+            }
+        }
+        int index = nextLayoutConstraint;
+        for (int i = 0; i < cachedLayoutConstraints.length; i++) {
+            if (cachedLayoutConstraints[i] == null) {
+                index = i;
+                break;
+            }
+        }
+        UiLayoutConstraints value = new UiLayoutConstraints(
+                actualMinWidth, actualMinHeight, actualMaxWidth, actualMaxHeight);
+        cachedLayoutConstraints[index] = value;
+        nextLayoutConstraint = (index + 1) % cachedLayoutConstraints.length;
+        return value;
+    }
+
+    String maskedText(String value) {
+        String actual = value != null ? value : "";
+        if (sameText(maskedTextSource, actual)) {
+            return maskedText;
+        }
+        maskedTextSource = actual;
+        maskedText = actual.length() == 0 ? "" : "*".repeat(actual.length());
+        return maskedText;
+    }
+
+    UiInsets effectivePadding(UiInsets modifierPadding, UiInsets stylePadding) {
+        UiInsets modifier = modifierPadding != null ? modifierPadding : UiInsets.ZERO;
+        UiInsets style = stylePadding != null ? stylePadding : UiInsets.ZERO;
+        float left = modifier.left() + style.left();
+        float top = modifier.top() + style.top();
+        float right = modifier.right() + style.right();
+        float bottom = modifier.bottom() + style.bottom();
+        if (cachedEffectivePadding != null
+                && Float.compare(cachedEffectivePadding.left(), left) == 0
+                && Float.compare(cachedEffectivePadding.top(), top) == 0
+                && Float.compare(cachedEffectivePadding.right(), right) == 0
+                && Float.compare(cachedEffectivePadding.bottom(), bottom) == 0) {
+            return cachedEffectivePadding;
+        }
+        if (style == UiInsets.ZERO) {
+            cachedEffectivePadding = modifier;
+        } else if (modifier == UiInsets.ZERO) {
+            cachedEffectivePadding = style;
+        } else {
+            cachedEffectivePadding = UiInsets.of(left, top, right, bottom);
+        }
+        return cachedEffectivePadding;
+    }
+
+    boolean hasChildOrderRevision(long revision) {
+        return childOrderRevision == revision;
+    }
+
+    ArrayList<UiNode> mutableOrderedChildren() {
+        return orderedChildren;
+    }
+
+    ArrayList<UiNode> mutableReverseOrderedChildren() {
+        return reverseOrderedChildren;
+    }
+
+    void childOrderRevision(long revision) {
+        childOrderRevision = revision;
+    }
+
+    List<UiNode> orderedChildren(boolean frontToBack) {
+        return frontToBack ? readOnlyReverseOrderedChildren : readOnlyOrderedChildren;
     }
 
     void text(String text) {
@@ -163,6 +353,10 @@ public final class UiNode implements Disposable {
 
     void bounds(UiRect bounds) {
         this.bounds = bounds != null ? bounds : UiRect.ZERO;
+    }
+
+    void bounds(float x, float y, float width, float height) {
+        this.bounds = rendererRect(12, x, y, width, height);
     }
 
     /**
@@ -605,7 +799,37 @@ public final class UiNode implements Disposable {
         }
         disposed = true;
         parent = null;
+        modifier = UiModifier.none();
+        text = null;
+        value = null;
+        action = null;
+        image = null;
+        animationSpec = null;
+        scrollState = null;
+        listState = null;
+        customContext = null;
+        descriptor = null;
         children.clear();
+        orderedChildren.clear();
+        reverseOrderedChildren.clear();
+        childOrderRevision = Long.MIN_VALUE;
+        cachedRects = null;
+        cachedSizes = null;
+        derivedKeySuffixes = null;
+        derivedKeys = null;
+        cachedLayoutConstraints = null;
+        nextLayoutConstraint = 0;
+        cachedEffectivePadding = null;
+        maskedTextSource = null;
+        maskedText = null;
+        preferredSize = null;
+        textLayoutText = null;
+        textLayoutStyle = null;
+        textLayout = null;
+        fallbackGlyphText = null;
+        fallbackGlyphRows = null;
+        fallbackTabGlyphTexts = null;
+        fallbackTabGlyphRows = null;
     }
 
     /**

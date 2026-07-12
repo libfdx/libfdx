@@ -58,5 +58,6 @@ public final class SystemLogger implements Logger {
         if (error != null) {
             error.printStackTrace(System.err);
         }
+        System.err.flush();
     }
 }

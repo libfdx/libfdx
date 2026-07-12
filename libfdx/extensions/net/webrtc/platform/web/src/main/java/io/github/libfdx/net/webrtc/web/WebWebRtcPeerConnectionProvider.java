@@ -1,5 +1,6 @@
 package io.github.libfdx.net.webrtc.web;
 
+import io.github.libfdx.core.FdxException;
 import io.github.libfdx.net.webrtc.config.WebRtcEndpointSettings;
 import io.github.libfdx.net.webrtc.platform.WebRtcIceCandidate;
 import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnection;
@@ -7,6 +8,7 @@ import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnectionListener;
 import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnectionProvider;
 import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnectionState;
 import io.github.libfdx.net.webrtc.config.WebRtcTurnServer;
+import java.util.ArrayList;
 import org.teavm.jso.JSBody;
 
 /**
@@ -15,11 +17,15 @@ import org.teavm.jso.JSBody;
  * @author xpenatan
  */
 public final class WebWebRtcPeerConnectionProvider implements WebRtcPeerConnectionProvider {
+    private final ArrayList<WebWebRtcPeerConnection> connections = new ArrayList<WebWebRtcPeerConnection>();
     private boolean closed;
 
     @Override
     public WebRtcPeerConnection createPeerConnection(WebRtcEndpointSettings settings,
             final WebRtcPeerConnectionListener listener) {
+        if (closed) {
+            throw new FdxException("Web WebRTC peer connection provider is disposed");
+        }
         int handle = createPeerConnection(iceServersJson(settings), settings.forceRelay(),
                 new WebWebRtcCallbacks.IceCallback() {
                     @Override
@@ -46,7 +52,9 @@ public final class WebWebRtcPeerConnectionProvider implements WebRtcPeerConnecti
                         listener.error(new RuntimeException(value));
                     }
                 });
-        return new WebWebRtcPeerConnection(handle);
+        WebWebRtcPeerConnection connection = new WebWebRtcPeerConnection(handle, listener, this);
+        connections.add(connection);
+        return connection;
     }
 
     @Override
@@ -56,7 +64,34 @@ public final class WebWebRtcPeerConnectionProvider implements WebRtcPeerConnecti
 
     @Override
     public void close() {
-        closed = true;
+        if (!closed) {
+            closed = true;
+            Throwable failure = null;
+            while (!connections.isEmpty()) {
+                WebWebRtcPeerConnection connection = connections.get(connections.size() - 1);
+                try {
+                    connection.close();
+                }
+                catch (Throwable throwable) {
+                    if (failure == null) {
+                        failure = throwable;
+                    }
+                    else if (failure != throwable) {
+                        failure.addSuppressed(throwable);
+                    }
+                    connections.remove(connection);
+                }
+            }
+            if (failure instanceof RuntimeException) {
+                throw (RuntimeException) failure;
+            }
+            if (failure instanceof Error) {
+                throw (Error) failure;
+            }
+            if (failure != null) {
+                throw new FdxException("Web WebRTC peer connection provider disposal failed", failure);
+            }
+        }
     }
 
     @Override
@@ -67,6 +102,10 @@ public final class WebWebRtcPeerConnectionProvider implements WebRtcPeerConnecti
     @Override
     public boolean isDisposed() {
         return closed;
+    }
+
+    void connectionClosed(WebWebRtcPeerConnection connection) {
+        connections.remove(connection);
     }
 
     static String iceServersJson(WebRtcEndpointSettings settings) {

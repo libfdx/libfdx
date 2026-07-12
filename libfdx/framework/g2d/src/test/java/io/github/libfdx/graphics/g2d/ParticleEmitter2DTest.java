@@ -160,6 +160,12 @@ final class ParticleEmitter2DTest {
         }
 
         @Override
+        public void draw(Texture texture, int sourceX, int sourceY, int sourceWidth, int sourceHeight,
+                float x, float y, float width, float height) {
+            draw(new TextureRegion(texture, sourceX, sourceY, sourceWidth, sourceHeight), x, y, width, height);
+        }
+
+        @Override
         public void draw(TextureRegion region, float x, float y, float width, float height) {
             draw(region, x, y, width, height, 0.0f, 0.0f, 0.0f);
         }

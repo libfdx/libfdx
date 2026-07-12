@@ -99,6 +99,7 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
     private static final int COPY_BYTES_PER_ROW_ALIGNMENT = 256;
     private final WGPUContext context;
     private ByteBuffer paddedBufferUpload;
+    private ByteBuffer paddedTextureUpload;
 
     WGPUGraphicsDevice(WGPUContext context) {
         this.context = context;
@@ -115,12 +116,15 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         if (descriptor == null) {
             throw new FdxException("BufferDescriptor cannot be null");
         }
+        context.requireDeviceUsable("create a buffer");
         if (descriptor.usage() != BufferUsage.VERTEX && descriptor.usage() != BufferUsage.INDEX) {
             throw new FdxException("WGPU currently supports vertex and index buffers only");
         }
         int nativeSize = align(descriptor.size(), COPY_BUFFER_WRITE_ALIGNMENT);
         WGPUBuffer buffer = createNativeBuffer(descriptor.label(), nativeSize, descriptor.usage());
-        return new WGPUBufferHandle(buffer, descriptor.label(), nativeSize, descriptor.usage());
+        WGPUBufferAllocation allocation = new WGPUBufferAllocation(context.resourceDomain(), buffer);
+        return new WGPUBufferHandle(context.resourceDomain(), allocation, descriptor.label(), nativeSize,
+                descriptor.usage());
     }
 
     /**
@@ -131,23 +135,19 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
      */
     @Override
     public void writeBuffer(Buffer buffer, ByteBuffer data) {
-        if (buffer == null) {
-            throw new FdxException("Buffer cannot be null");
-        }
         if (data == null) {
             throw new FdxException("Buffer data cannot be null");
         }
-        WGPUBufferHandle wgpuBuffer = buffer.as();
+        context.requireDeviceUsable("write a buffer");
+        WGPUBufferHandle wgpuBuffer = WGPUResources.requireBuffer(buffer, context.resourceDomain(), "Buffer");
         int byteCount = data.remaining();
         int uploadByteCount = align(byteCount, COPY_BUFFER_WRITE_ALIGNMENT);
         if (uploadByteCount > wgpuBuffer.size()) {
             throw new FdxException("Buffer data is larger than the destination buffer");
         }
-        if (wgpuBuffer.usedByRecordedCommand()) {
-            WGPUBuffer oldBuffer = wgpuBuffer.nativeBuffer();
+        if (wgpuBuffer.allocation().hasRecordingReferences()) {
             WGPUBuffer newBuffer = createNativeBuffer(wgpuBuffer.label(), wgpuBuffer.size(), wgpuBuffer.usage());
-            wgpuBuffer.nativeBuffer(newBuffer);
-            context.destroyAfterSubmit(oldBuffer);
+            wgpuBuffer.replaceAllocation(new WGPUBufferAllocation(context.resourceDomain(), newBuffer));
         }
         ByteBuffer uploadData = bufferUploadData(data, byteCount, uploadByteCount);
         context.nativeQueue().writeBuffer(wgpuBuffer.nativeBuffer(), 0, uploadData, uploadByteCount);
@@ -159,9 +159,14 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         }
         paddedBufferUpload = ensureBuffer(paddedBufferUpload, uploadByteCount);
         paddedBufferUpload.clear();
-        ByteBuffer source = data.slice();
-        source.limit(byteCount);
-        paddedBufferUpload.put(source);
+        int sourcePosition = data.position();
+        try {
+            data.limit(sourcePosition + byteCount);
+            paddedBufferUpload.put(data);
+        }
+        finally {
+            data.position(sourcePosition);
+        }
         while (paddedBufferUpload.position() < uploadByteCount) {
             paddedBufferUpload.put((byte)0);
         }
@@ -180,9 +185,15 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         bufferDescriptor.setUsage(nativeUsage);
         bufferDescriptor.setMappedAtCreation(false);
         WGPUBuffer buffer = new WGPUBuffer();
-        context.nativeDevice().createBuffer(bufferDescriptor, buffer);
-        buffer.native_setAddress(buffer.native_getAddressLong());
-        return buffer;
+        try {
+            context.nativeDevice().createBuffer(bufferDescriptor, buffer);
+            buffer.native_setAddress(buffer.native_getAddressLong());
+            return buffer;
+        }
+        catch (RuntimeException | Error failure) {
+            rollbackBuffer(buffer, failure);
+            throw failure;
+        }
     }
 
     /**
@@ -196,73 +207,91 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         if (descriptor == null) {
             throw new FdxException("TextureDescriptor cannot be null");
         }
+        context.requireDeviceUsable("create a texture");
         if (!descriptor.usage().sampled() && !descriptor.usage().renderAttachment()) {
             throw new FdxException("WGPU texture usage must allow sampling or render attachment binding");
         }
         int mipLevelCount = mipLevelCount(descriptor);
+        WGPUTextureAllocation allocation = createTextureAllocation(descriptor.label(), descriptor.width(),
+                descriptor.height(), mipLevelCount, descriptor.format(), descriptor.usage(), descriptor.filter(),
+                descriptor.wrapS(), descriptor.wrapT());
+        return new WGPUTextureHandle(context.resourceDomain(), allocation, descriptor.label(), descriptor.width(),
+                descriptor.height(), mipLevelCount, descriptor.format(), descriptor.usage(), descriptor.filter(),
+                descriptor.wrapS(), descriptor.wrapT());
+    }
+
+    private WGPUTextureAllocation createTextureAllocation(String label, int width, int height, int mipLevelCount,
+            TextureFormat format, TextureUsage usage, TextureFilter filter, TextureWrap wrapS, TextureWrap wrapT) {
         WGPUTextureUsage nativeUsage = WGPUTextureUsage.CopyDst;
-        if (descriptor.usage().sampled()) {
+        if (usage.sampled()) {
             nativeUsage = nativeUsage.or(WGPUTextureUsage.TextureBinding);
         }
-        if (descriptor.usage().renderAttachment()) {
+        if (usage.renderAttachment()) {
             nativeUsage = nativeUsage.or(WGPUTextureUsage.RenderAttachment);
         }
-        WGPUTextureUsage viewUsage = descriptor.usage().sampled()
+        WGPUTextureUsage viewUsage = usage.sampled()
                 ? WGPUTextureUsage.TextureBinding
                 : WGPUTextureUsage.RenderAttachment;
-        if (descriptor.usage().sampled() && descriptor.usage().renderAttachment()) {
+        if (usage.sampled() && usage.renderAttachment()) {
             viewUsage = viewUsage.or(WGPUTextureUsage.RenderAttachment);
         }
         WGPUTextureDescriptor textureDescriptor = WGPUTextureDescriptor.obtain();
         textureDescriptor.setNextInChain(WGPUChainedStruct.NULL);
-        textureDescriptor.setLabel(descriptor.label());
+        textureDescriptor.setLabel(label);
         textureDescriptor.setUsage(nativeUsage);
         textureDescriptor.setDimension(WGPUTextureDimension._2D);
-        textureDescriptor.getSize().setWidth(descriptor.width());
-        textureDescriptor.getSize().setHeight(descriptor.height());
+        textureDescriptor.getSize().setWidth(width);
+        textureDescriptor.getSize().setHeight(height);
         textureDescriptor.getSize().setDepthOrArrayLayers(1);
-        textureDescriptor.setFormat(WGPUTextureFormats.toNative(descriptor.format()));
+        textureDescriptor.setFormat(WGPUTextureFormats.toNative(format));
         textureDescriptor.setMipLevelCount(mipLevelCount);
         textureDescriptor.setSampleCount(1);
         textureDescriptor.setViewFormats(WGPUVectorTextureFormat.NULL);
 
         WGPUTexture texture = new WGPUTexture();
-        context.nativeDevice().createTexture(textureDescriptor, texture);
+        WGPUTextureView view = null;
+        WGPUSampler sampler = null;
+        try {
+            context.nativeDevice().createTexture(textureDescriptor, texture);
 
-        WGPUTextureViewDescriptor viewDescriptor = WGPUTextureViewDescriptor.obtain();
-        viewDescriptor.setNextInChain(WGPUChainedStruct.NULL);
-        viewDescriptor.setLabel(descriptor.label() + " view");
-        viewDescriptor.setFormat(WGPUTextureFormats.toNative(descriptor.format()));
-        viewDescriptor.setDimension(WGPUTextureViewDimension._2D);
-        viewDescriptor.setBaseMipLevel(0);
-        viewDescriptor.setMipLevelCount(mipLevelCount);
-        viewDescriptor.setBaseArrayLayer(0);
-        viewDescriptor.setArrayLayerCount(1);
-        viewDescriptor.setAspect(WGPUTextureAspect.All);
-        viewDescriptor.setUsage(viewUsage);
-        WGPUTextureView view = new WGPUTextureView();
-        texture.createView(viewDescriptor, view);
+            WGPUTextureViewDescriptor viewDescriptor = WGPUTextureViewDescriptor.obtain();
+            viewDescriptor.setNextInChain(WGPUChainedStruct.NULL);
+            viewDescriptor.setLabel(label + " view");
+            viewDescriptor.setFormat(WGPUTextureFormats.toNative(format));
+            viewDescriptor.setDimension(WGPUTextureViewDimension._2D);
+            viewDescriptor.setBaseMipLevel(0);
+            viewDescriptor.setMipLevelCount(mipLevelCount);
+            viewDescriptor.setBaseArrayLayer(0);
+            viewDescriptor.setArrayLayerCount(1);
+            viewDescriptor.setAspect(WGPUTextureAspect.All);
+            viewDescriptor.setUsage(viewUsage);
+            view = new WGPUTextureView();
+            texture.createView(viewDescriptor, view);
 
-        WGPUSamplerDescriptor samplerDescriptor = WGPUSamplerDescriptor.obtain();
-        samplerDescriptor.setNextInChain(WGPUChainedStruct.NULL);
-        samplerDescriptor.setLabel(descriptor.label() + " sampler");
-        samplerDescriptor.setAddressModeU(toNative(descriptor.wrapS()));
-        samplerDescriptor.setAddressModeV(toNative(descriptor.wrapT()));
-        samplerDescriptor.setAddressModeW(WGPUAddressMode.ClampToEdge);
-        samplerDescriptor.setMagFilter(toNative(descriptor.filter()));
-        samplerDescriptor.setMinFilter(toNative(descriptor.filter()));
-        samplerDescriptor.setMipmapFilter(mipLevelCount > 1
-                ? toNativeMipmap(descriptor.filter())
-                : WGPUMipmapFilterMode.Nearest);
-        samplerDescriptor.setLodMinClamp(0.0f);
-        samplerDescriptor.setLodMaxClamp(mipLevelCount - 1.0f);
-        samplerDescriptor.setCompare(WGPUCompareFunction.Undefined);
-        samplerDescriptor.setMaxAnisotropy(1);
-        WGPUSampler sampler = new WGPUSampler();
-        context.nativeDevice().createSampler(samplerDescriptor, sampler);
+            WGPUSamplerDescriptor samplerDescriptor = WGPUSamplerDescriptor.obtain();
+            samplerDescriptor.setNextInChain(WGPUChainedStruct.NULL);
+            samplerDescriptor.setLabel(label + " sampler");
+            samplerDescriptor.setAddressModeU(toNative(wrapS));
+            samplerDescriptor.setAddressModeV(toNative(wrapT));
+            samplerDescriptor.setAddressModeW(WGPUAddressMode.ClampToEdge);
+            samplerDescriptor.setMagFilter(toNative(filter));
+            samplerDescriptor.setMinFilter(toNative(filter));
+            samplerDescriptor.setMipmapFilter(mipLevelCount > 1
+                    ? toNativeMipmap(filter)
+                    : WGPUMipmapFilterMode.Nearest);
+            samplerDescriptor.setLodMinClamp(0.0f);
+            samplerDescriptor.setLodMaxClamp(mipLevelCount - 1.0f);
+            samplerDescriptor.setCompare(WGPUCompareFunction.Undefined);
+            samplerDescriptor.setMaxAnisotropy(1);
+            sampler = new WGPUSampler();
+            context.nativeDevice().createSampler(samplerDescriptor, sampler);
 
-        return new WGPUTextureHandle(texture, view, sampler, descriptor.width(), descriptor.height(),
-                mipLevelCount, descriptor.format(), descriptor.usage());
+            return new WGPUTextureAllocation(context.resourceDomain(), texture, view, sampler);
+        }
+        catch (RuntimeException | Error failure) {
+            rollbackTexture(texture, view, sampler, failure);
+            throw failure;
+        }
     }
 
     private int mipLevelCount(TextureDescriptor descriptor) {
@@ -295,21 +324,23 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
      */
     @Override
     public void writeTexture(Texture texture, ByteBuffer data) {
-        if (texture == null) {
-            throw new FdxException("Texture cannot be null");
-        }
         if (data == null) {
             throw new FdxException("Texture data cannot be null");
         }
-        WGPUTextureHandle wgpuTexture = texture.as();
+        context.requireDeviceUsable("write a texture");
+        WGPUTextureHandle wgpuTexture = WGPUResources.requireTexture(texture, context.resourceDomain(), "Texture");
         int byteCount = wgpuTexture.width() * wgpuTexture.height() * 4;
         if (data.remaining() < byteCount) {
             throw new FdxException("Texture data is smaller than the destination texture");
         }
-        ByteBuffer source = data.slice();
-        source.limit(byteCount);
-        writeTextureLevel(wgpuTexture, 0, wgpuTexture.width(), wgpuTexture.height(), source, byteCount);
-        writeMipLevels(wgpuTexture, source);
+        if (wgpuTexture.allocation().hasRecordingReferences()) {
+            WGPUTextureAllocation replacement = createTextureAllocation(wgpuTexture.label(), wgpuTexture.width(),
+                    wgpuTexture.height(), wgpuTexture.mipLevelCount(), wgpuTexture.format(), wgpuTexture.usage(),
+                    wgpuTexture.filter(), wgpuTexture.wrapS(), wgpuTexture.wrapT());
+            wgpuTexture.replaceAllocation(replacement);
+        }
+        writeTextureLevel(wgpuTexture, 0, wgpuTexture.width(), wgpuTexture.height(), data, byteCount);
+        writeMipLevels(wgpuTexture, data);
     }
 
     private void writeTextureLevel(WGPUTextureHandle texture, int mipLevel, int width, int height, ByteBuffer data,
@@ -319,7 +350,7 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         ByteBuffer uploadData = data;
         int uploadByteCount = byteCount;
         if (bytesPerRow != rowBytes) {
-            uploadData = packTextureRows(data, width, height, rowBytes, bytesPerRow);
+            uploadData = packTextureRows(data, height, rowBytes, bytesPerRow);
             uploadByteCount = bytesPerRow * height;
         }
 
@@ -343,21 +374,22 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         context.nativeQueue().writeTexture(destination, uploadData, uploadByteCount, layout, size);
     }
 
-    private ByteBuffer packTextureRows(ByteBuffer source, int width, int height, int rowBytes, int bytesPerRow) {
-        ByteBuffer packed = ByteBuffer.allocateDirect(bytesPerRow * height);
-        ByteBuffer input = source.duplicate();
+    private ByteBuffer packTextureRows(ByteBuffer source, int height, int rowBytes, int bytesPerRow) {
+        int byteCount = bytesPerRow * height;
+        paddedTextureUpload = ensureBuffer(paddedTextureUpload, byteCount);
+        paddedTextureUpload.clear();
+        int sourcePosition = source.position();
         for (int y = 0; y < height; y++) {
-            ByteBuffer row = input.duplicate();
-            int sourceOffset = y * rowBytes;
-            row.position(sourceOffset);
-            row.limit(sourceOffset + rowBytes);
-            packed.put(row);
+            int sourceOffset = sourcePosition + y * rowBytes;
+            for (int x = 0; x < rowBytes; x++) {
+                paddedTextureUpload.put(source.get(sourceOffset + x));
+            }
             for (int padding = rowBytes; padding < bytesPerRow; padding++) {
-                packed.put((byte)0);
+                paddedTextureUpload.put((byte)0);
             }
         }
-        packed.flip();
-        return packed;
+        paddedTextureUpload.flip();
+        return paddedTextureUpload;
     }
 
     private ByteBuffer ensureBuffer(ByteBuffer buffer, int byteCount) {
@@ -437,6 +469,7 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         if (descriptor == null) {
             throw new FdxException("ShaderModuleDescriptor cannot be null");
         }
+        context.requireDeviceUsable("create a shader module");
         if (!descriptor.hasSource(ShaderLanguage.WGSL)) {
             throw new FdxException("WGPU currently supports WGSL shader modules only");
         }
@@ -451,8 +484,14 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         shaderDescriptor.setNextInChain(source.getChain());
 
         WGPUShaderModule shaderModule = new WGPUShaderModule();
-        context.nativeDevice().createShaderModule(shaderDescriptor, shaderModule);
-        return new WGPUShaderModuleHandle(shaderModule, ShaderLanguage.WGSL);
+        try {
+            context.nativeDevice().createShaderModule(shaderDescriptor, shaderModule);
+            return new WGPUShaderModuleHandle(context.resourceDomain(), shaderModule, ShaderLanguage.WGSL);
+        }
+        catch (RuntimeException | Error failure) {
+            rollbackShaderModule(shaderModule, failure);
+            throw failure;
+        }
     }
 
     /**
@@ -466,7 +505,9 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         if (descriptor == null) {
             throw new FdxException("RenderPipelineDescriptor cannot be null");
         }
-        WGPUShaderModuleHandle shaderModule = descriptor.shaderModule().as();
+        context.requireDeviceUsable("create a render pipeline");
+        WGPUShaderModuleHandle shaderModule = WGPUResources.requireShaderModule(descriptor.shaderModule(),
+                context.resourceDomain(), "Render pipeline shader module");
         WGPUColorTargetState colorTarget = WGPUColorTargetState.obtain();
         colorTarget.setNextInChain(WGPUChainedStruct.NULL);
         colorTarget.setFormat(WGPUTextureFormats.toNative(descriptor.colorFormat()));
@@ -483,50 +524,61 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         fragmentState.setConstants(WGPUVectorConstantEntry.NULL);
         fragmentState.setTargets(colorTargets);
 
-        WGPUBindGroupLayout textureBindGroupLayout = createTextureBindGroupLayout(descriptor.sampledTextureCount(),
-                descriptor.label());
-        WGPUBindGroupLayout uniformBindGroupLayout = usesPbrUniformBlock(descriptor)
-                ? createUniformBindGroupLayout(descriptor.label())
-                : null;
-        WGPUVectorBindGroupLayout bindGroupLayouts = WGPUVectorBindGroupLayout.obtain();
-        if (textureBindGroupLayout != null) {
-            bindGroupLayouts.push_back(textureBindGroupLayout);
+        WGPUBindGroupLayout textureBindGroupLayout = null;
+        WGPUBindGroupLayout uniformBindGroupLayout = null;
+        WGPUPipelineLayout pipelineLayout = null;
+        WGPURenderPipeline pipeline = null;
+        try {
+            textureBindGroupLayout = createTextureBindGroupLayout(descriptor.sampledTextureCount(),
+                    descriptor.label());
+            uniformBindGroupLayout = usesPbrUniformBlock(descriptor)
+                    ? createUniformBindGroupLayout(descriptor.label())
+                    : null;
+            WGPUVectorBindGroupLayout bindGroupLayouts = WGPUVectorBindGroupLayout.obtain();
+            if (textureBindGroupLayout != null) {
+                bindGroupLayouts.push_back(textureBindGroupLayout);
+            }
+            int uniformBindGroupIndex = textureBindGroupLayout != null ? 1 : 0;
+            if (uniformBindGroupLayout != null) {
+                bindGroupLayouts.push_back(uniformBindGroupLayout);
+            }
+
+            WGPUPipelineLayoutDescriptor layoutDescriptor = WGPUPipelineLayoutDescriptor.obtain();
+            layoutDescriptor.setNextInChain(WGPUChainedStruct.NULL);
+            layoutDescriptor.setLabel(descriptor.label() + " layout");
+            layoutDescriptor.setBindGroupLayouts(bindGroupLayouts);
+
+            pipelineLayout = new WGPUPipelineLayout();
+            context.nativeDevice().createPipelineLayout(layoutDescriptor, pipelineLayout);
+
+            WGPURenderPipelineDescriptor pipelineDescriptor = WGPURenderPipelineDescriptor.obtain();
+            pipelineDescriptor.setNextInChain(WGPUChainedStruct.NULL);
+            pipelineDescriptor.setLabel(descriptor.label());
+            pipelineDescriptor.getVertex().setModule(shaderModule.nativeModule());
+            pipelineDescriptor.getVertex().setEntryPoint(descriptor.vertexEntryPoint());
+            pipelineDescriptor.getVertex().setConstants(WGPUVectorConstantEntry.NULL);
+            pipelineDescriptor.getVertex().setBuffers(createVertexBuffers(descriptor.vertexLayouts()));
+            pipelineDescriptor.getPrimitive().setTopology(toNative(descriptor.primitiveTopology()));
+            pipelineDescriptor.getPrimitive().setStripIndexFormat(WGPUIndexFormat.Undefined);
+            pipelineDescriptor.getPrimitive().setFrontFace(WGPUFrontFace.CCW);
+            pipelineDescriptor.getPrimitive().setCullMode(WGPUCullMode.None);
+            pipelineDescriptor.setFragment(fragmentState);
+            pipelineDescriptor.setDepthStencil(createDepthStencilState(descriptor));
+            pipelineDescriptor.getMultisample().setCount(1);
+            pipelineDescriptor.getMultisample().setMask(-1);
+            pipelineDescriptor.getMultisample().setAlphaToCoverageEnabled(false);
+            pipelineDescriptor.setLayout(pipelineLayout);
+
+            pipeline = new WGPURenderPipeline();
+            context.nativeDevice().createRenderPipeline(pipelineDescriptor, pipeline);
+            return new WGPURenderPipelineHandle(context.resourceDomain(), pipeline, pipelineLayout,
+                    textureBindGroupLayout, uniformBindGroupLayout, descriptor.sampledTextureCount(),
+                    uniformBindGroupIndex, descriptor.vertexLayouts().length);
         }
-        int uniformBindGroupIndex = textureBindGroupLayout != null ? 1 : 0;
-        if (uniformBindGroupLayout != null) {
-            bindGroupLayouts.push_back(uniformBindGroupLayout);
+        catch (RuntimeException | Error failure) {
+            rollbackPipeline(pipeline, pipelineLayout, textureBindGroupLayout, uniformBindGroupLayout, failure);
+            throw failure;
         }
-
-        WGPUPipelineLayoutDescriptor layoutDescriptor = WGPUPipelineLayoutDescriptor.obtain();
-        layoutDescriptor.setNextInChain(WGPUChainedStruct.NULL);
-        layoutDescriptor.setLabel(descriptor.label() + " layout");
-        layoutDescriptor.setBindGroupLayouts(bindGroupLayouts);
-
-        WGPUPipelineLayout pipelineLayout = new WGPUPipelineLayout();
-        context.nativeDevice().createPipelineLayout(layoutDescriptor, pipelineLayout);
-
-        WGPURenderPipelineDescriptor pipelineDescriptor = WGPURenderPipelineDescriptor.obtain();
-        pipelineDescriptor.setNextInChain(WGPUChainedStruct.NULL);
-        pipelineDescriptor.setLabel(descriptor.label());
-        pipelineDescriptor.getVertex().setModule(shaderModule.nativeModule());
-        pipelineDescriptor.getVertex().setEntryPoint(descriptor.vertexEntryPoint());
-        pipelineDescriptor.getVertex().setConstants(WGPUVectorConstantEntry.NULL);
-        pipelineDescriptor.getVertex().setBuffers(createVertexBuffers(descriptor.vertexLayouts()));
-        pipelineDescriptor.getPrimitive().setTopology(toNative(descriptor.primitiveTopology()));
-        pipelineDescriptor.getPrimitive().setStripIndexFormat(WGPUIndexFormat.Undefined);
-        pipelineDescriptor.getPrimitive().setFrontFace(WGPUFrontFace.CCW);
-        pipelineDescriptor.getPrimitive().setCullMode(WGPUCullMode.None);
-        pipelineDescriptor.setFragment(fragmentState);
-        pipelineDescriptor.setDepthStencil(createDepthStencilState(descriptor));
-        pipelineDescriptor.getMultisample().setCount(1);
-        pipelineDescriptor.getMultisample().setMask(-1);
-        pipelineDescriptor.getMultisample().setAlphaToCoverageEnabled(false);
-        pipelineDescriptor.setLayout(pipelineLayout);
-
-        WGPURenderPipeline pipeline = new WGPURenderPipeline();
-        context.nativeDevice().createRenderPipeline(pipelineDescriptor, pipeline);
-        return new WGPURenderPipelineHandle(pipeline, pipelineLayout, textureBindGroupLayout, uniformBindGroupLayout,
-                descriptor.sampledTextureCount(), uniformBindGroupIndex);
     }
 
     private WGPUBindGroupLayout createTextureBindGroupLayout(int sampledTextureCount, String label) {
@@ -564,8 +616,14 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         descriptor.setLabel(label + " texture bind group layout");
         descriptor.setEntries(entries);
         WGPUBindGroupLayout bindGroupLayout = new WGPUBindGroupLayout();
-        context.nativeDevice().createBindGroupLayout(descriptor, bindGroupLayout);
-        return bindGroupLayout;
+        try {
+            context.nativeDevice().createBindGroupLayout(descriptor, bindGroupLayout);
+            return bindGroupLayout;
+        }
+        catch (RuntimeException | Error failure) {
+            rollbackBindGroupLayout(bindGroupLayout, failure);
+            throw failure;
+        }
     }
 
     private WGPUBindGroupLayout createUniformBindGroupLayout(String label) {
@@ -578,7 +636,7 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         WGPUBufferBindingLayout uniformLayout = WGPUBufferBindingLayout.obtain();
         uniformLayout.setNextInChain(WGPUChainedStruct.NULL);
         uniformLayout.setType(WGPUBufferBindingType.Uniform);
-        uniformLayout.setHasDynamicOffset(0);
+        uniformLayout.setHasDynamicOffset(1);
         uniformLayout.setMinBindingSize(WGPURenderPass.PBR_UNIFORM_BYTE_COUNT);
         uniformEntry.setBuffer(uniformLayout);
         entries.push_back(uniformEntry);
@@ -588,8 +646,14 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         descriptor.setLabel(label + " uniform bind group layout");
         descriptor.setEntries(entries);
         WGPUBindGroupLayout bindGroupLayout = new WGPUBindGroupLayout();
-        context.nativeDevice().createBindGroupLayout(descriptor, bindGroupLayout);
-        return bindGroupLayout;
+        try {
+            context.nativeDevice().createBindGroupLayout(descriptor, bindGroupLayout);
+            return bindGroupLayout;
+        }
+        catch (RuntimeException | Error failure) {
+            rollbackBindGroupLayout(bindGroupLayout, failure);
+            throw failure;
+        }
     }
 
     private WGPUDepthStencilState createDepthStencilState(RenderPipelineDescriptor descriptor) {
@@ -631,7 +695,7 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         blend.getColor().setSrcFactor(WGPUBlendFactor.SrcAlpha);
         blend.getColor().setDstFactor(WGPUBlendFactor.OneMinusSrcAlpha);
         blend.getAlpha().setOperation(WGPUBlendOperation.Add);
-        blend.getAlpha().setSrcFactor(WGPUBlendFactor.SrcAlpha);
+        blend.getAlpha().setSrcFactor(WGPUBlendFactor.One);
         blend.getAlpha().setDstFactor(WGPUBlendFactor.OneMinusSrcAlpha);
         return blend;
     }
@@ -658,9 +722,8 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
             VertexLayout layout = layouts[layoutIndex];
             WGPUVectorVertexAttribute nativeAttributes = new WGPUVectorVertexAttribute();
             nativeAttributes.clear();
-            VertexAttribute[] attributes = layout.attributes();
-            for (int i = 0; i < attributes.length; i++) {
-                VertexAttribute attribute = attributes[i];
+            for (int i = 0; i < layout.attributeCount(); i++) {
+                VertexAttribute attribute = layout.attribute(i);
                 WGPUVertexAttribute nativeAttribute = new WGPUVertexAttribute();
                 nativeAttribute.setShaderLocation(attribute.location());
                 nativeAttribute.setOffset(attribute.offset());
@@ -707,6 +770,50 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         }
     }
 
+    private void rollbackBuffer(WGPUBuffer buffer, Throwable failure) {
+        suppressRollback(failure, () -> new WGPUBufferAllocation(context.resourceDomain(), buffer).retire());
+    }
+
+    private void rollbackTexture(WGPUTexture texture, WGPUTextureView view, WGPUSampler sampler,
+            Throwable failure) {
+        suppressRollback(failure,
+                () -> new WGPUTextureAllocation(context.resourceDomain(), texture, view, sampler).retire());
+    }
+
+    private void rollbackShaderModule(WGPUShaderModule shaderModule, Throwable failure) {
+        suppressRollback(failure, () -> new WGPUShaderModuleHandle(context.resourceDomain(), shaderModule,
+                ShaderLanguage.WGSL).dispose());
+    }
+
+    private void rollbackPipeline(WGPURenderPipeline pipeline, WGPUPipelineLayout pipelineLayout,
+            WGPUBindGroupLayout textureBindGroupLayout, WGPUBindGroupLayout uniformBindGroupLayout,
+            Throwable failure) {
+        suppressRollback(failure, () -> new WGPURenderPipelineHandle(context.resourceDomain(), pipeline,
+                pipelineLayout, textureBindGroupLayout, uniformBindGroupLayout, 0, 0, 0).dispose());
+    }
+
+    private void rollbackBindGroupLayout(WGPUBindGroupLayout layout, Throwable failure) {
+        suppressRollback(failure, () -> {
+            WGPUCleanup cleanup = new WGPUCleanup();
+            cleanup.run(() -> {
+                if (layout.isValid()) {
+                    layout.release();
+                }
+            });
+            cleanup.run(layout::dispose);
+            cleanup.throwIfFailed();
+        });
+    }
+
+    private void suppressRollback(Throwable failure, Runnable rollback) {
+        try {
+            rollback.run();
+        }
+        catch (RuntimeException | Error cleanupFailure) {
+            failure.addSuppressed(cleanupFailure);
+        }
+    }
+
     /**
      * Returns the identifier of the provider backing this object.
      *
@@ -726,6 +833,7 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
     @Override
     @SuppressWarnings("unchecked")
     public <T> T as() {
+        context.requireDeviceUsable("access the native device");
         return (T) context.nativeDevice();
     }
 }

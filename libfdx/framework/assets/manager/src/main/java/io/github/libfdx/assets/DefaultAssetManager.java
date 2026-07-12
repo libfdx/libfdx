@@ -9,7 +9,9 @@ import io.github.libfdx.files.FileSystem;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Queue;
 
 /**
@@ -20,6 +22,7 @@ import java.util.Queue;
 public final class DefaultAssetManager implements AssetManager {
     private final Map<Class<?>, AssetLoader<?>> loaders = new LinkedHashMap<Class<?>, AssetLoader<?>>();
     private final Map<String, DefaultAssetHandle<?>> handles = new LinkedHashMap<String, DefaultAssetHandle<?>>();
+    private final List<DefaultAssetHandle<?>> handleValues = new ArrayList<DefaultAssetHandle<?>>();
     private final Queue<Runnable> updateTasks = new ArrayDeque<Runnable>();
     private final FileSystem files;
     private boolean disposed;
@@ -53,6 +56,7 @@ public final class DefaultAssetManager implements AssetManager {
         }
         DefaultAssetHandle<T> handle = new DefaultAssetHandle<T>(descriptor);
         handles.put(key, handle);
+        handleValues.add(handle);
         startLoad(handle);
         return handle;
     }
@@ -79,7 +83,8 @@ public final class DefaultAssetManager implements AssetManager {
         ensureNotDisposed();
         drainUpdateTasks();
         synchronized (this) {
-            for (DefaultAssetHandle<?> handle : handles.values()) {
+            for (int i = 0; i < handleValues.size(); i++) {
+                DefaultAssetHandle<?> handle = handleValues.get(i);
                 AssetStatus status = handle.status();
                 if (status == AssetStatus.QUEUED || status == AssetStatus.LOADING) {
                     return false;
@@ -152,6 +157,7 @@ public final class DefaultAssetManager implements AssetManager {
             DefaultAssetHandle<?> handle = iterator.next().getValue();
             if (handle.descriptor().path().equals(path)) {
                 iterator.remove();
+                handleValues.remove(handle);
                 Object asset = handle.asset();
                 if (asset instanceof Disposable) {
                     ((Disposable) asset).dispose();
@@ -187,7 +193,8 @@ public final class DefaultAssetManager implements AssetManager {
             return;
         }
         disposed = true;
-        for (DefaultAssetHandle<?> handle : handles.values()) {
+        for (int i = 0; i < handleValues.size(); i++) {
+            DefaultAssetHandle<?> handle = handleValues.get(i);
             Object asset = handle.asset();
             if (asset instanceof Disposable) {
                 ((Disposable) asset).dispose();
@@ -195,6 +202,11 @@ public final class DefaultAssetManager implements AssetManager {
             handle.unload();
         }
         handles.clear();
+        handleValues.clear();
+        loaders.clear();
+        synchronized (updateTasks) {
+            updateTasks.clear();
+        }
     }
 
     /**

@@ -2,6 +2,7 @@ package io.github.libfdx.backend.desktopc;
 
 import io.github.libfdx.runtime.core.FontRasterizer;
 import io.github.libfdx.runtime.core.RuntimeCoreProvider;
+import io.github.libfdx.runtime.core.shader.RuntimeShaderCompiler;
 
 /**
  * Provides desktop C runtime core services.
@@ -10,6 +11,7 @@ import io.github.libfdx.runtime.core.RuntimeCoreProvider;
  */
 final class DesktopCRuntimeCoreProvider implements RuntimeCoreProvider {
     private final FontRasterizer fontRasterizer = new DesktopCFreeTypeFontRasterizer();
+    private final DesktopCRuntimeShaderCompiler shaderCompiler = new DesktopCRuntimeShaderCompiler();
 
     /**
      * Returns the font rasterizer.
@@ -29,5 +31,25 @@ final class DesktopCRuntimeCoreProvider implements RuntimeCoreProvider {
     @Override
     public boolean nativeFontRasterizerAvailable() {
         return true;
+    }
+
+    /**
+     * Returns the runtime shader compiler.
+     *
+     * @return the runtime shader compiler
+     */
+    @Override
+    public RuntimeShaderCompiler shaderCompiler() {
+        return shaderCompiler;
+    }
+
+    /**
+     * Returns whether the native shader compiler can be loaded.
+     *
+     * @return true when available
+     */
+    @Override
+    public boolean nativeShaderCompilerAvailable() {
+        return shaderCompiler.available();
     }
 }

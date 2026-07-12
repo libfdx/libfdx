@@ -36,7 +36,7 @@ fun requested(vararg names: String): Boolean = names.any { it in requestedTaskNa
 val snapshotRequested = requested("prepareSnapshotDeploy", "publishSnapshot", "uploadSnapshotDeploy", "publishToMavenLocal") ||
     (plugins.hasPlugin("java-gradle-plugin") && requested("publish"))
 val deployPreparationRequested = requested("prepareSnapshotDeploy", "prepareReleaseDeploy")
-val libfdxVersion = if(snapshotRequested) LibExt.publishedLibfdxVersion else libfdxBaseVersion
+val libfdxVersion = if(snapshotRequested) "$libfdxBaseVersion-SNAPSHOT" else libfdxBaseVersion
 
 if(libfdxBaseVersion.endsWith("-SNAPSHOT")) {
     throw GradleException("The libFDX base version must not include -SNAPSHOT. Use the upcoming release version only.")
@@ -64,6 +64,7 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:framework:g2d",
     ":libfdx:framework:g3d",
     ":libfdx:framework:ui-kit",
+    ":libfdx:extensions:ecs",
     ":libfdx:extensions:scenario_validator:core",
     ":libfdx:extensions:scenario_validator:ui-kit",
     ":libfdx:tools:font",
@@ -147,8 +148,8 @@ fun Project.applyPublishingConventions() {
                 throw GradleException("$path must declare at least one MavenPublication in its own build.gradle.kts.")
             }
 
-            publications.configureEach {
-                configureMavenPublication(this@applyPublishingConventions, this)
+            publications.forEach { publication ->
+                publication.configureMavenPublication(this@applyPublishingConventions, publication)
             }
             if(deployPreparationRequested) {
                 addNoBuildDeployPublications(publishing)
@@ -267,7 +268,7 @@ fun MavenPom.configureLibfdxPom(owner: Project, artifactId: String) {
             else -> owner.publishDescription(artifactId)
         }
     )
-    url.set("https://github.com/libmdx/libfdx")
+    url.set("https://github.com/libfdx/libfdx")
     developers {
         developer {
             id.set("Xpe")
@@ -275,9 +276,9 @@ fun MavenPom.configureLibfdxPom(owner: Project, artifactId: String) {
         }
     }
     scm {
-        connection.set("scm:git:git://github.com/libmdx/libfdx.git")
-        developerConnection.set("scm:git:ssh://github.com/libmdx/libfdx.git")
-        url.set("https://github.com/libmdx/libfdx")
+        connection.set("scm:git:git://github.com/libfdx/libfdx.git")
+        developerConnection.set("scm:git:ssh://github.com/libfdx/libfdx.git")
+        url.set("https://github.com/libfdx/libfdx")
     }
     licenses {
         license {

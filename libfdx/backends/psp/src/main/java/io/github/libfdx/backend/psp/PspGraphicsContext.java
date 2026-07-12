@@ -157,6 +157,14 @@ public final class PspGraphicsContext implements GraphicsContext {
         frame.dispose();
     }
 
+    void beginFrame() {
+        frame.beginFrame();
+    }
+
+    void endFrame() {
+        frame.endFrame();
+    }
+
     static int color8888(float red, float green, float blue, float alpha) {
         int r = channel(red);
         int g = channel(green);
@@ -186,6 +194,14 @@ public final class PspGraphicsContext implements GraphicsContext {
      */
     private final class PspGraphicsFrame implements GraphicsFrame, FrameBuffer, TextureView {
         private final PspCommandEncoder commandEncoder = new PspCommandEncoder();
+
+        void beginFrame() {
+            commandEncoder.beginFrame();
+        }
+
+        void endFrame() {
+            commandEncoder.ensurePassesEnded();
+        }
 
         /**
          * Returns the command encoder.
@@ -494,9 +510,8 @@ public final class PspGraphicsContext implements GraphicsContext {
      * @author xpenatan
      */
     private static final class PspCommandEncoder implements CommandEncoder {
-        private static final int RENDER_PASS_RING_SIZE = 4;
-        private final PspRenderPass[] renderPasses = createRenderPassRing();
-        private int renderPassIndex;
+        private PspRenderPass[] renderPasses = createInitialRenderPasses();
+        private int renderPassCount;
 
         /**
          * Begins render pass.
@@ -506,10 +521,39 @@ public final class PspGraphicsContext implements GraphicsContext {
          */
         @Override
         public RenderPass beginRenderPass(RenderPassDescriptor descriptor) {
-            PspRenderPass renderPass = renderPasses[renderPassIndex];
-            renderPassIndex = (renderPassIndex + 1) & (RENDER_PASS_RING_SIZE - 1);
+            ensurePreviousPassEnded();
+            if (renderPassCount == renderPasses.length) {
+                PspRenderPass[] grown = new PspRenderPass[renderPasses.length * 2];
+                System.arraycopy(renderPasses, 0, grown, 0, renderPasses.length);
+                renderPasses = grown;
+            }
+            PspRenderPass renderPass = renderPasses[renderPassCount];
+            if (renderPass == null) {
+                renderPass = new PspRenderPass();
+                renderPasses[renderPassCount] = renderPass;
+            }
             renderPass.begin(descriptor);
+            renderPassCount++;
             return renderPass;
+        }
+
+        void beginFrame() {
+            ensurePassesEnded();
+            renderPassCount = 0;
+        }
+
+        void ensurePassesEnded() {
+            for (int i = 0; i < renderPassCount; i++) {
+                if (!renderPasses[i].isEnded()) {
+                    throw new FdxException("PSP render pass must be ended before ending the frame");
+                }
+            }
+        }
+
+        private void ensurePreviousPassEnded() {
+            if (renderPassCount > 0 && !renderPasses[renderPassCount - 1].isEnded()) {
+                throw new FdxException("Previous PSP render pass must be ended before beginning another pass");
+            }
         }
 
         void dispose() {
@@ -540,8 +584,8 @@ public final class PspGraphicsContext implements GraphicsContext {
             return (T) this;
         }
 
-        private static PspRenderPass[] createRenderPassRing() {
-            PspRenderPass[] passes = new PspRenderPass[RENDER_PASS_RING_SIZE];
+        private static PspRenderPass[] createInitialRenderPasses() {
+            PspRenderPass[] passes = new PspRenderPass[4];
             for (int i = 0; i < passes.length; i++) {
                 passes[i] = new PspRenderPass();
             }
@@ -579,6 +623,10 @@ public final class PspGraphicsContext implements GraphicsContext {
             vertexBuffer = null;
             texture = null;
             ended = false;
+        }
+
+        boolean isEnded() {
+            return ended;
         }
 
         /**

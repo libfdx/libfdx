@@ -1,5 +1,9 @@
 package io.github.libfdx.samples.basic.web;
 
+import io.github.libfdx.graphics.GraphicsAttachmentProvider;
+import io.github.libfdx.graphics.gl.web.WebGLProvider;
+import io.github.libfdx.graphics.wgpu.WebWGPUProvider;
+
 /**
  * Launches the basic web js entry point.
  *
@@ -15,6 +19,8 @@ public final class BasicWebJsLauncher {
      * @param args the args
      */
     public static void main(String[] args) {
-        BasicWebLauncherSupport.start("JS", args);
+        boolean webgpu = BasicWebLauncherSupport.webGpuRequested(args);
+        GraphicsAttachmentProvider graphics = webgpu ? new WebWGPUProvider() : new WebGLProvider();
+        BasicWebLauncherSupport.start("JS", webgpu, graphics);
     }
 }

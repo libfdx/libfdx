@@ -57,7 +57,7 @@ final class DesktopWebRtcLoopbackTest {
                 public boolean met() {
                     return serverEvents.started && serverEvents.connected && clientEvents.connected;
                 }
-            }, loopServer, loopClient, 10000), "Desktop WebRTC peers did not connect");
+            }, signalingServer, loopServer, loopClient, 10000), "Desktop WebRTC peers did not connect");
 
             NetBuffer clientPacket = client.buffers().acquire();
             clientPacket.writer().putByte(42);
@@ -69,7 +69,7 @@ final class DesktopWebRtcLoopbackTest {
                 public boolean met() {
                     return serverEvents.lastMessage == 42;
                 }
-            }, loopServer, loopClient, 5000), "Server did not receive the reliable packet");
+            }, signalingServer, loopServer, loopClient, 5000), "Server did not receive the reliable packet");
 
             NetBuffer serverPacket = server.buffers().acquire();
             serverPacket.writer().putByte(84);
@@ -81,7 +81,7 @@ final class DesktopWebRtcLoopbackTest {
                 public boolean met() {
                     return clientEvents.lastMessage == 84;
                 }
-            }, loopServer, loopClient, 5000), "Client did not receive the reliable packet");
+            }, signalingServer, loopServer, loopClient, 5000), "Client did not receive the reliable packet");
         }
         finally {
             if (client != null) {
@@ -96,10 +96,11 @@ final class DesktopWebRtcLoopbackTest {
         }
     }
 
-    private static boolean processUntil(Condition condition, WebRtcNetServer server, WebRtcNetClient client,
-            long timeoutMillis) throws InterruptedException {
+    private static boolean processUntil(Condition condition, WebRtcSignalingServer signalingServer,
+            WebRtcNetServer server, WebRtcNetClient client, long timeoutMillis) throws InterruptedException {
         long deadline = System.currentTimeMillis() + timeoutMillis;
         while (System.currentTimeMillis() < deadline) {
+            signalingServer.process(1f / 60f);
             server.process(1f / 60f);
             client.process(1f / 60f);
             if (condition.met()) {
@@ -107,6 +108,7 @@ final class DesktopWebRtcLoopbackTest {
             }
             Thread.sleep(10);
         }
+        signalingServer.process(1f / 60f);
         server.process(1f / 60f);
         client.process(1f / 60f);
         return condition.met();

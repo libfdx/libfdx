@@ -52,6 +52,10 @@ void libfdx_ios_metal_begin_render_pass(
 void libfdx_ios_metal_set_pipeline(int64_t context, int64_t pipeline);
 void libfdx_ios_metal_set_vertex_buffer(int64_t context, int32_t slot, int64_t buffer);
 void libfdx_ios_metal_set_index_buffer(int64_t context, int64_t buffer);
+void libfdx_ios_metal_set_scissor(
+        int64_t context, int32_t x, int32_t y, int32_t width, int32_t height);
+void libfdx_ios_metal_set_viewport(
+        int64_t context, int32_t x, int32_t y, int32_t width, int32_t height);
 void libfdx_ios_metal_set_texture(int64_t context, int32_t texture_slot, int32_t sampler_slot, int64_t texture);
 void libfdx_ios_metal_set_uniform_buffer(int64_t context, const void* data, int32_t byte_count);
 void libfdx_ios_metal_draw(

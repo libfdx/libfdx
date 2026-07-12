@@ -1,5 +1,9 @@
 package io.github.libfdx.samples.multiplayer.webrtc.web;
 
+import io.github.libfdx.graphics.GraphicsAttachmentProvider;
+import io.github.libfdx.graphics.gl.web.WebGLProvider;
+import io.github.libfdx.graphics.wgpu.WebWGPUProvider;
+
 /**
  * Launches the WebRTC multiplayer 2D web JS entry point.
  *
@@ -15,6 +19,8 @@ public final class MultiplayerWebRtcWebJsLauncher {
      * @param args the args
      */
     public static void main(String[] args) {
-        MultiplayerWebRtcWebLauncherSupport.start("JS", args);
+        boolean webgpu = MultiplayerWebRtcWebLauncherSupport.webGpuRequested(args);
+        GraphicsAttachmentProvider graphics = webgpu ? new WebWGPUProvider() : new WebGLProvider();
+        MultiplayerWebRtcWebLauncherSupport.start("JS", webgpu, graphics);
     }
 }

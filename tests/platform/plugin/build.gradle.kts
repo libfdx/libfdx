@@ -1,5 +1,6 @@
 import io.github.libfdx.build.LibExt
 
+import org.gradle.api.attributes.java.TargetJvmVersion
 import org.teavm.gradle.api.OptimizationLevel
 
 plugins {
@@ -14,6 +15,24 @@ java {
 
 group = "${LibExt.fdxGroup}.tests"
 
+val glRuntimeClasspath by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+val vulkanRuntimeClasspath by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+val wgpuRuntimeClasspath by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    attributes {
+        attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 25)
+    }
+}
+
 base {
     archivesName.set("tests_plugin")
 }
@@ -25,13 +44,13 @@ dependencies {
     implementation(project(":tests:platform:psp"))
 
     if (LibExt.usePublishedLibfdx) {
-        runtimeOnly("${LibExt.fdxGroup}:gl_desktop:${LibExt.publishedLibfdxVersion}")
-        runtimeOnly("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.publishedLibfdxVersion}")
-        runtimeOnly("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.publishedLibfdxVersion}")
+        glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.publishedLibfdxVersion}")
+        vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.publishedLibfdxVersion}")
+        wgpuRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.publishedLibfdxVersion}")
     } else {
-        runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop"))
-        runtimeOnly(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
-        runtimeOnly(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
+        glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
+        vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
+        wgpuRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
     }
 }
 
@@ -54,6 +73,7 @@ libfdx {
 
         target("gl") {
             displayName.set("GL")
+            runtimeClasspath(glRuntimeClasspath)
             systemProperty("libfdx.test.graphics", "gl")
             systemProperty("libfdx.test.graphicsLabel", "GL")
             launchProperty("graphics", "gl")
@@ -64,6 +84,7 @@ libfdx {
 
         target("wgpu") {
             displayName.set("WGPU")
+            runtimeClasspath(wgpuRuntimeClasspath)
             systemProperty("libfdx.test.graphics", "wgpu")
             systemProperty("libfdx.test.graphicsLabel", "WGPU")
             launchProperty("graphics", "wgpu")
@@ -74,6 +95,7 @@ libfdx {
 
         target("vulkan") {
             displayName.set("Vulkan")
+            runtimeClasspath(vulkanRuntimeClasspath)
             systemProperty("libfdx.test.graphics", "vulkan")
             systemProperty("libfdx.test.graphicsLabel", "Vulkan")
             launchProperty("graphics", "vulkan")
@@ -113,17 +135,12 @@ libfdx {
             buildDescription.set("Builds the plugin-use WebGL Wasm test web application.")
             runDescription.set("Builds and serves the plugin-use WebGL Wasm test web application.")
         }
-
-        target("webgpu") {
-            defaultPath.set("/?graphics=webgpu")
-            buildDescription.set("Builds the plugin-use WebGPU Wasm test web application.")
-            runDescription.set("Builds and serves the plugin-use WebGPU Wasm test web application.")
-        }
     }
 
     desktopC {
         minHeapSize.set(64)
         maxHeapSize.set(1024)
+        obfuscated.set(false)
 
         target("opengl") {
             displayName.set("plugin-use desktop_c OpenGL graphics test")

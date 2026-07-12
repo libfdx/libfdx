@@ -11,32 +11,50 @@ import io.github.libfdx.graphics.TextureView;
  * @author xpenatan
  */
 final class WGPUTextureViewHandle implements TextureView {
-    private final WGPUTextureView nativeView;
+    private final WGPUResourceDomain resourceDomain;
+    private final WGPUTextureHandle textureHandle;
+    private final WGPUContext frameOwner;
+    private final WGPUTextureView frameView;
     private final TextureFormat format;
-    private final int width;
-    private final int height;
 
-    WGPUTextureViewHandle(WGPUTextureView nativeView, TextureFormat format) {
-        this(nativeView, format, 0, 0);
+    WGPUTextureViewHandle(WGPUContext frameOwner, WGPUTextureView frameView, TextureFormat format) {
+        this.resourceDomain = frameOwner.resourceDomain();
+        this.textureHandle = null;
+        this.frameOwner = frameOwner;
+        this.frameView = frameView;
+        this.format = format;
     }
 
-    WGPUTextureViewHandle(WGPUTextureView nativeView, TextureFormat format, int width, int height) {
-        this.nativeView = nativeView;
-        this.format = format;
-        this.width = width;
-        this.height = height;
+    WGPUTextureViewHandle(WGPUTextureHandle textureHandle) {
+        this.resourceDomain = textureHandle.resourceDomain();
+        this.textureHandle = textureHandle;
+        this.frameOwner = null;
+        this.frameView = null;
+        this.format = textureHandle.format();
     }
 
     WGPUTextureView nativeView() {
-        return nativeView;
+        return textureHandle != null ? textureHandle.nativeView() : frameView;
     }
 
     int width() {
-        return width;
+        return textureHandle != null ? textureHandle.width() : 0;
     }
 
     int height() {
-        return height;
+        return textureHandle != null ? textureHandle.height() : 0;
+    }
+
+    WGPUResourceDomain resourceDomain() {
+        return resourceDomain;
+    }
+
+    WGPUTextureHandle textureHandle() {
+        return textureHandle;
+    }
+
+    WGPUContext frameOwner() {
+        return frameOwner;
     }
 
     /**

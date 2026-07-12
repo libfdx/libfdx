@@ -4,6 +4,7 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureWrap;
+import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.gl.GLApi;
 import io.github.libfdx.graphics.gl.GLShaderType;
 import org.teavm.interop.Address;
@@ -416,6 +417,111 @@ final class DesktopCGLApi implements GLApi {
     }
 
     /**
+     * Returns a new framebuffer handle.
+     *
+     * @return the framebuffer handle
+     */
+    @Override
+    public int genFramebuffer() {
+        return DesktopCOpenGL.genFramebuffer();
+    }
+
+    /**
+     * Binds the framebuffer, or the default framebuffer for zero.
+     *
+     * @param framebuffer the framebuffer
+     */
+    @Override
+    public void bindFramebuffer(int framebuffer) {
+        DesktopCOpenGL.glBindFramebuffer(DesktopCOpenGL.FRAMEBUFFER, framebuffer);
+    }
+
+    /**
+     * Attaches a 2D texture to the current framebuffer color attachment.
+     *
+     * @param texture the texture
+     */
+    @Override
+    public void framebufferTexture2D(int texture) {
+        DesktopCOpenGL.glFramebufferTexture2D(DesktopCOpenGL.FRAMEBUFFER, DesktopCOpenGL.COLOR_ATTACHMENT0,
+                DesktopCOpenGL.TEXTURE_2D, texture, 0);
+    }
+
+    /**
+     * Returns whether the current framebuffer is complete.
+     *
+     * @return true when complete
+     */
+    @Override
+    public boolean framebufferComplete() {
+        return DesktopCOpenGL.glCheckFramebufferStatus(DesktopCOpenGL.FRAMEBUFFER)
+                == DesktopCOpenGL.FRAMEBUFFER_COMPLETE;
+    }
+
+    /**
+     * Deletes a framebuffer handle.
+     *
+     * @param framebuffer the framebuffer
+     */
+    @Override
+    public void deleteFramebuffer(int framebuffer) {
+        DesktopCOpenGL.deleteFramebuffer(framebuffer);
+    }
+
+    /**
+     * Returns a new renderbuffer handle.
+     *
+     * @return the renderbuffer handle
+     */
+    @Override
+    public int genRenderbuffer() {
+        return DesktopCOpenGL.genRenderbuffer();
+    }
+
+    /**
+     * Binds a renderbuffer.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    @Override
+    public void bindRenderbuffer(int renderbuffer) {
+        DesktopCOpenGL.glBindRenderbuffer(DesktopCOpenGL.RENDERBUFFER, renderbuffer);
+    }
+
+    /**
+     * Allocates 24-bit depth storage for the current renderbuffer.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
+    @Override
+    public void renderbufferStorageDepth(int width, int height) {
+        DesktopCOpenGL.glRenderbufferStorage(DesktopCOpenGL.RENDERBUFFER, DesktopCOpenGL.DEPTH_COMPONENT24,
+                width, height);
+    }
+
+    /**
+     * Attaches a depth renderbuffer to the current framebuffer.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    @Override
+    public void framebufferRenderbufferDepth(int renderbuffer) {
+        DesktopCOpenGL.glFramebufferRenderbuffer(DesktopCOpenGL.FRAMEBUFFER, DesktopCOpenGL.DEPTH_ATTACHMENT,
+                DesktopCOpenGL.RENDERBUFFER, renderbuffer);
+    }
+
+    /**
+     * Deletes a renderbuffer handle.
+     *
+     * @param renderbuffer the renderbuffer
+     */
+    @Override
+    public void deleteRenderbuffer(int renderbuffer) {
+        DesktopCOpenGL.deleteRenderbuffer(renderbuffer);
+    }
+
+    /**
      * Runs the active texture step.
      *
      * @param slot the slot
@@ -528,7 +634,8 @@ final class DesktopCGLApi implements GLApi {
     @Override
     public void enableAlphaBlending() {
         DesktopCOpenGL.glEnable(DesktopCOpenGL.BLEND);
-        DesktopCOpenGL.glBlendFunc(DesktopCOpenGL.SRC_ALPHA, DesktopCOpenGL.ONE_MINUS_SRC_ALPHA);
+        DesktopCOpenGL.glBlendFuncSeparate(DesktopCOpenGL.SRC_ALPHA, DesktopCOpenGL.ONE_MINUS_SRC_ALPHA,
+                DesktopCOpenGL.ONE, DesktopCOpenGL.ONE_MINUS_SRC_ALPHA);
     }
 
     /**
@@ -583,7 +690,24 @@ final class DesktopCGLApi implements GLApi {
      */
     @Override
     public void vertexAttribPointer(int index, int size, int stride, int offset) {
-        DesktopCOpenGL.glVertexAttribPointer(index, size, DesktopCOpenGL.FLOAT, false, stride, offset);
+        DesktopCOpenGL.glVertexAttribPointer(index, size, DesktopCOpenGL.FLOAT, false, stride,
+                Address.fromLong(offset));
+    }
+
+    /**
+     * Configures a vertex attribute with its declared storage format.
+     *
+     * @param index the index
+     * @param format the format
+     * @param stride the stride
+     * @param offset the offset
+     */
+    @Override
+    public void vertexAttribPointer(int index, VertexFormat format, int stride, int offset) {
+        int nativeType = format == VertexFormat.UNORM8X4 ? DesktopCOpenGL.UNSIGNED_BYTE : DesktopCOpenGL.FLOAT;
+        boolean normalized = format == VertexFormat.UNORM8X4;
+        DesktopCOpenGL.glVertexAttribPointer(index, format.componentCount(), nativeType, normalized, stride,
+                Address.fromLong(offset));
     }
 
     /**
@@ -608,6 +732,33 @@ final class DesktopCGLApi implements GLApi {
     @Override
     public void viewport(int x, int y, int width, int height) {
         DesktopCOpenGL.glViewport(x, y, width, height);
+    }
+
+    /**
+     * Enables or disables scissor testing.
+     *
+     * @param enabled the enabled
+     */
+    @Override
+    public void enableScissorTest(boolean enabled) {
+        if (enabled) {
+            DesktopCOpenGL.glEnable(DesktopCOpenGL.SCISSOR_TEST);
+        } else {
+            DesktopCOpenGL.glDisable(DesktopCOpenGL.SCISSOR_TEST);
+        }
+    }
+
+    /**
+     * Sets the scissor rectangle.
+     *
+     * @param x the x coordinate
+     * @param y the y coordinate
+     * @param width the width in pixels
+     * @param height the height in pixels
+     */
+    @Override
+    public void scissor(int x, int y, int width, int height) {
+        DesktopCOpenGL.glScissor(x, y, width, height);
     }
 
     /**
@@ -675,6 +826,29 @@ final class DesktopCGLApi implements GLApi {
     }
 
     /**
+     * Reads the current back buffer as tightly packed RGBA8 pixels.
+     *
+     * @param width the width in pixels
+     * @param height the height in pixels
+     * @return the pixel buffer
+     */
+    @Override
+    public ByteBuffer readPixelsRgba8(int width, int height) {
+        if (width <= 0 || height <= 0) {
+            return ByteBuffer.allocateDirect(0);
+        }
+        int byteCount = Math.multiplyExact(Math.multiplyExact(width, height), 4);
+        ByteBuffer pixels = ByteBuffer.allocateDirect(byteCount);
+        DesktopCOpenGL.glPixelStorei(DesktopCOpenGL.PACK_ALIGNMENT, 1);
+        DesktopCOpenGL.glReadBuffer(DesktopCOpenGL.BACK);
+        DesktopCOpenGL.glReadPixels(0, 0, width, height, DesktopCOpenGL.RGBA, DesktopCOpenGL.UNSIGNED_BYTE,
+                pixels);
+        pixels.position(0);
+        pixels.limit(byteCount);
+        return pixels;
+    }
+
+    /**
      * Draws elements.
      *
      * @param topology the topology
@@ -685,6 +859,20 @@ final class DesktopCGLApi implements GLApi {
     public void drawElements(PrimitiveTopology topology, int indexCount, int offsetBytes) {
         DesktopCOpenGL.glDrawElements(toNative(topology), indexCount, DesktopCOpenGL.UNSIGNED_SHORT,
                 Address.fromLong(offsetBytes));
+    }
+
+    /**
+     * Draws indexed elements with a base vertex.
+     *
+     * @param topology the topology
+     * @param indexCount the index count
+     * @param offsetBytes the offset bytes
+     * @param baseVertex the base vertex
+     */
+    @Override
+    public void drawElementsBaseVertex(PrimitiveTopology topology, int indexCount, int offsetBytes, int baseVertex) {
+        DesktopCOpenGL.glDrawElementsBaseVertex(toNative(topology), indexCount, DesktopCOpenGL.UNSIGNED_SHORT,
+                Address.fromLong(offsetBytes), baseVertex);
     }
 
     /**
@@ -699,6 +887,22 @@ final class DesktopCGLApi implements GLApi {
     public void drawElementsInstanced(PrimitiveTopology topology, int indexCount, int offsetBytes, int instanceCount) {
         DesktopCOpenGL.glDrawElementsInstanced(toNative(topology), indexCount,
                 DesktopCOpenGL.UNSIGNED_SHORT, Address.fromLong(offsetBytes), instanceCount);
+    }
+
+    /**
+     * Draws instanced indexed elements with a base vertex.
+     *
+     * @param topology the topology
+     * @param indexCount the index count
+     * @param offsetBytes the offset bytes
+     * @param instanceCount the instance count
+     * @param baseVertex the base vertex
+     */
+    @Override
+    public void drawElementsInstancedBaseVertex(PrimitiveTopology topology, int indexCount, int offsetBytes,
+            int instanceCount, int baseVertex) {
+        DesktopCOpenGL.glDrawElementsInstancedBaseVertex(toNative(topology), indexCount,
+                DesktopCOpenGL.UNSIGNED_SHORT, Address.fromLong(offsetBytes), instanceCount, baseVertex);
     }
 
     private int toNative(PrimitiveTopology topology) {

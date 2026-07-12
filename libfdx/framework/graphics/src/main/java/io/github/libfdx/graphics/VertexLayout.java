@@ -93,6 +93,25 @@ public final class VertexLayout {
         return copy(attributes);
     }
 
+    /**
+     * Returns the number of attributes in this layout without creating a defensive copy.
+     *
+     * @return the attribute count
+     */
+    public int attributeCount() {
+        return attributes.length;
+    }
+
+    /**
+     * Returns an attribute in this layout without creating a defensive copy.
+     *
+     * @param index the zero-based attribute index
+     * @return the attribute at the supplied index
+     */
+    public VertexAttribute attribute(int index) {
+        return attributes[index];
+    }
+
     private static VertexAttribute[] copy(VertexAttribute[] source) {
         VertexAttribute[] copy = new VertexAttribute[source.length];
         for (int i = 0; i < source.length; i++) {

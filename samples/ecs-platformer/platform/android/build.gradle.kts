@@ -19,13 +19,13 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.toVersion(25)
-        targetCompatibility = JavaVersion.toVersion(25)
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     sourceSets {
         getByName("main") {
-            assets.srcDir(rootProject.file("assets"))
+            assets.directories.add(rootProject.file("assets").absolutePath)
         }
     }
 }

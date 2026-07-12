@@ -779,6 +779,37 @@ public final class UiModifier {
             UiAlign align, boolean enabled, boolean focusable, String style, String transitionState,
             UiTransition transition, String semanticLabel, String validationId, UiAnimationSpec contentSizeAnimation,
             UiAnimationSpec placementAnimation, String tooltipTarget) {
+        if (this.fillWidth == fillWidth
+                && this.fillHeight == fillHeight
+                && Float.compare(this.width, width) == 0
+                && Float.compare(this.height, height) == 0
+                && Float.compare(this.minWidth, minWidth) == 0
+                && Float.compare(this.minHeight, minHeight) == 0
+                && Float.compare(this.maxWidth, maxWidth) == 0
+                && Float.compare(this.maxHeight, maxHeight) == 0
+                && this.padding == padding
+                && this.margin == margin
+                && Float.compare(this.gap, gap) == 0
+                && Float.compare(this.weight, weight) == 0
+                && Float.compare(this.alpha, alpha) == 0
+                && Float.compare(this.offsetX, offsetX) == 0
+                && Float.compare(this.offsetY, offsetY) == 0
+                && Float.compare(this.scaleX, scaleX) == 0
+                && Float.compare(this.scaleY, scaleY) == 0
+                && Float.compare(this.rotation, rotation) == 0
+                && this.align == align
+                && this.enabled == enabled
+                && this.focusable == focusable
+                && this.style == style
+                && this.transitionState == transitionState
+                && this.transition == transition
+                && this.semanticLabel == semanticLabel
+                && this.validationId == validationId
+                && this.contentSizeAnimation == contentSizeAnimation
+                && this.placementAnimation == placementAnimation
+                && this.tooltipTarget == tooltipTarget) {
+            return this;
+        }
         return new UiModifier(fillWidth, fillHeight, width, height, minWidth, minHeight, maxWidth, maxHeight,
                 padding, margin, gap, weight, alpha, offsetX, offsetY, scaleX, scaleY, rotation, align, enabled,
                 focusable, style, transitionState, transition, semanticLabel, validationId, contentSizeAnimation,

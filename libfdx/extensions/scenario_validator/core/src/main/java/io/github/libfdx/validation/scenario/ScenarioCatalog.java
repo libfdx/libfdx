@@ -69,11 +69,12 @@ public final class ScenarioCatalog {
      * @return the select
      */
     public List<Scenario> select(String selection) {
-        if (selection == null || selection.length() == 0 || "all".equals(selection)) {
+        String normalizedSelection = selection != null ? selection.trim() : "";
+        if (normalizedSelection.length() == 0 || "all".equalsIgnoreCase(normalizedSelection)) {
             return scenarios();
         }
         Set<String> names = new LinkedHashSet<String>();
-        String[] parts = selection.split(",");
+        String[] parts = normalizedSelection.split(",");
         for (int i = 0; i < parts.length; i++) {
             String name = parts[i].trim();
             if (name.length() > 0) {

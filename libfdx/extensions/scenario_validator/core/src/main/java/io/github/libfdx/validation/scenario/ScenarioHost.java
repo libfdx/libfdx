@@ -238,6 +238,20 @@ public final class ScenarioHost {
      * @return the request capture
      */
     public ScenarioCapture requestCapture(String name, ScenarioContext context) {
+        ScenarioCapturePolicy policy = context != null
+                ? context.validationConfig().capturePolicy()
+                : ScenarioCapturePolicy.SCENARIO_LISTED;
+        if (policy != ScenarioCapturePolicy.ALL && policy != ScenarioCapturePolicy.SCENARIO_LISTED) {
+            return null;
+        }
+        return performCapture(name, context);
+    }
+
+    ScenarioCapture requestAutomaticCapture(String name, ScenarioContext context) {
+        return performCapture(name, context);
+    }
+
+    private ScenarioCapture performCapture(String name, ScenarioContext context) {
         ScenarioCapture capture = captureDriver != null
                 ? captureDriver.capture(name, context)
                 : new ScenarioCapture(name, frame, elapsedMillis, null);
@@ -298,8 +312,22 @@ public final class ScenarioHost {
      * @return the run
      */
     public ScenarioResult run(Scenario scenario) {
+        return run(scenario, ScenarioValidationConfig.defaults());
+    }
+
+    /**
+     * Runs one scenario with the supplied validation configuration.
+     *
+     * @param scenario the scenario
+     * @param config the validation configuration
+     * @return the scenario result
+     */
+    public ScenarioResult run(Scenario scenario, ScenarioValidationConfig config) {
+        if (scenario == null) {
+            throw new IllegalArgumentException("Scenario cannot be null.");
+        }
         clearScenarioState();
-        return scenario.run(this);
+        return scenario.run(this, config != null ? config : ScenarioValidationConfig.defaults());
     }
 
     /**
@@ -310,9 +338,32 @@ public final class ScenarioHost {
      * @return the run
      */
     public ScenarioReport run(ScenarioCatalog catalog, String selection) {
+        return run(catalog, ScenarioValidationConfig.defaults().selection(selection));
+    }
+
+    /**
+     * Runs selected scenarios with the supplied validation configuration.
+     *
+     * <p>Visual mode runs only scenarios that require a visual baseline. Behavior mode
+     * still executes those scenarios' behavior steps but does not enforce their visual
+     * baseline. Mixed mode executes every selected scenario and enforces visual baselines.</p>
+     *
+     * @param catalog the scenario catalog
+     * @param config the validation configuration
+     * @return the scenario report
+     */
+    public ScenarioReport run(ScenarioCatalog catalog, ScenarioValidationConfig config) {
+        if (catalog == null) {
+            throw new IllegalArgumentException("Scenario catalog cannot be null.");
+        }
+        ScenarioValidationConfig effectiveConfig = config != null ? config : ScenarioValidationConfig.defaults();
         ScenarioReport report = new ScenarioReport();
-        for (Scenario scenario : catalog.select(selection)) {
-            report.add(run(scenario));
+        for (Scenario scenario : catalog.select(effectiveConfig.selection())) {
+            if (effectiveConfig.mode() == ScenarioValidationMode.VISUAL
+                    && !scenario.requiresVisualBaseline()) {
+                continue;
+            }
+            report.add(run(scenario, effectiveConfig));
         }
         return report;
     }

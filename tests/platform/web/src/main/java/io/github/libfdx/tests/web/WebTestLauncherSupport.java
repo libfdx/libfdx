@@ -7,9 +7,8 @@ import io.github.libfdx.backend.web.WebApplicationConfig;
 import io.github.libfdx.backend.web.WebStorageBackend;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.FrameBuffer;
+import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.GraphicsContext;
-import io.github.libfdx.graphics.gl.web.WebGLProvider;
-import io.github.libfdx.graphics.wgpu.WebWGPUProvider;
 import io.github.libfdx.tests.AutoTestApplication;
 import io.github.libfdx.tests.TestChooserApplication;
 import io.github.libfdx.tests.TestSelector;
@@ -35,12 +34,8 @@ final class WebTestLauncherSupport {
     private WebTestLauncherSupport() {
     }
 
-    static void start(String runtimeName, String[] args) {
-        String graphics = option(args, "graphics", query("graphics"), "");
-        if (graphics.length() == 0) {
-            graphics = option(args, "api", query("api"), "webgl");
-        }
-        boolean webgpu = isWebGPU(graphics);
+    static void start(String runtimeName, String[] args, boolean webgpu,
+            GraphicsAttachmentProvider graphicsProvider) {
         String graphicsName = webgpu ? "WebGPU" : "WebGL";
         String requestedTestName = option(args, "test", query("test"), "");
         String mode = option(args, "mode", query("mode"), hasOption(args, "auto") || hasQuery("auto")
@@ -64,12 +59,8 @@ final class WebTestLauncherSupport {
         WebApplicationConfig config = new WebApplicationConfig()
                 .title("libfdx Tests - " + graphicsName + " " + runtimeName + ": " + testName)
                 .size(0, 0)
-                .canvasId("libfdx-canvas");
-        if (webgpu) {
-            config.graphics(new WebWGPUProvider());
-        } else {
-            config.graphics(new WebGLProvider());
-        }
+                .canvasId("libfdx-canvas")
+                .graphics(graphicsProvider);
 
         ApplicationListener selectedTest = test(testName, frames, modelAsset, webgpu);
         if (capture.length() > 0) {
@@ -80,6 +71,14 @@ final class WebTestLauncherSupport {
 
     private static boolean isWebGPU(String graphics) {
         return "webgpu".equalsIgnoreCase(graphics) || "wgpu".equalsIgnoreCase(graphics);
+    }
+
+    static boolean webGpuRequested(String[] args) {
+        String graphics = option(args, "graphics", query("graphics"), "");
+        if (graphics.length() == 0) {
+            graphics = option(args, "api", query("api"), "webgl");
+        }
+        return isWebGPU(graphics);
     }
 
     private static ApplicationListener test(String testName, long frames, String modelAsset, boolean webgpu) {

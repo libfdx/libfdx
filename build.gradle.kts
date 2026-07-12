@@ -224,67 +224,49 @@ tasks.register<Sync>("stage_pages") {
         projectPath = ":libfdx:tools:project-generator:platform:web",
         buildTaskName = "project_generator_webgpu_js_build",
         webappPath = "dist/web-js/webapp",
-        pagesPath = "project-generator/webgpu-js",
-        indexFile = "webgpu.html"
-    )
-    pagesWebapp(
-        projectPath = ":libfdx:tools:project-generator:platform:web",
-        buildTaskName = "project_generator_webgpu_wasm_build",
-        webappPath = "dist/web-wasm/webapp",
-        pagesPath = "project-generator/webgpu-wasm",
-        indexFile = "webgpu.html"
+        pagesPath = "project-generator/webgpu-js"
     )
     pagesWebapp(
         projectPath = ":tests:platform:web",
         buildTaskName = "test_webgl_js_build",
         webappPath = "dist/web-js/webapp",
-        pagesPath = "tests/webgl-js"
+        pagesPath = "tests/webgl-js",
+        outputProjectPath = ":tests:platform:plugin"
     )
     pagesWebapp(
         projectPath = ":tests:platform:web",
         buildTaskName = "test_webgl_wasm_build",
         webappPath = "dist/web-wasm/webapp",
-        pagesPath = "tests/webgl-wasm"
+        pagesPath = "tests/webgl-wasm",
+        outputProjectPath = ":tests:platform:plugin"
     )
     pagesWebapp(
         projectPath = ":tests:platform:web",
         buildTaskName = "test_webgpu_js_build",
         webappPath = "dist/web-js/webapp",
         pagesPath = "tests/webgpu-js",
-        indexFile = "webgpu.html"
-    )
-    pagesWebapp(
-        projectPath = ":tests:platform:web",
-        buildTaskName = "test_webgpu_wasm_build",
-        webappPath = "dist/web-wasm/webapp",
-        pagesPath = "tests/webgpu-wasm",
-        indexFile = "webgpu.html"
+        outputProjectPath = ":tests:platform:plugin"
     )
     pagesWebapp(
         projectPath = ":samples:basic:platform:web",
         buildTaskName = "basic_webgl_js_build",
         webappPath = "dist/web-js/webapp",
-        pagesPath = "samples/basic/webgl-js"
+        pagesPath = "samples/basic/webgl-js",
+        outputProjectPath = ":samples:basic:platform:plugin"
     )
     pagesWebapp(
         projectPath = ":samples:basic:platform:web",
         buildTaskName = "basic_webgl_wasm_build",
         webappPath = "dist/web-wasm/webapp",
-        pagesPath = "samples/basic/webgl-wasm"
+        pagesPath = "samples/basic/webgl-wasm",
+        outputProjectPath = ":samples:basic:platform:plugin"
     )
     pagesWebapp(
         projectPath = ":samples:basic:platform:web",
         buildTaskName = "basic_webgpu_js_build",
         webappPath = "dist/web-js/webapp",
         pagesPath = "samples/basic/webgpu-js",
-        indexFile = "webgpu.html"
-    )
-    pagesWebapp(
-        projectPath = ":samples:basic:platform:web",
-        buildTaskName = "basic_webgpu_wasm_build",
-        webappPath = "dist/web-wasm/webapp",
-        pagesPath = "samples/basic/webgpu-wasm",
-        indexFile = "webgpu.html"
+        outputProjectPath = ":samples:basic:platform:plugin"
     )
     pagesWebapp(
         projectPath = ":samples:ecs-platformer:platform:web",
@@ -302,15 +284,7 @@ tasks.register<Sync>("stage_pages") {
         projectPath = ":samples:ecs-platformer:platform:web",
         buildTaskName = "libfdx_web_js_webgpu_build",
         webappPath = "dist/web-js/webapp",
-        pagesPath = "samples/ecs-platformer/webgpu-js",
-        indexFile = "webgpu.html"
-    )
-    pagesWebapp(
-        projectPath = ":samples:ecs-platformer:platform:web",
-        buildTaskName = "libfdx_web_wasm_webgpu_build",
-        webappPath = "dist/web-wasm/webapp",
-        pagesPath = "samples/ecs-platformer/webgpu-wasm",
-        indexFile = "webgpu.html"
+        pagesPath = "samples/ecs-platformer/webgpu-js"
     )
     doLast {
         val root = pagesStagingDir.get().asFile
@@ -320,8 +294,7 @@ tasks.register<Sync>("stage_pages") {
             listOf(
                 "WebGL JS" to "webgl-js/",
                 "WebGL Wasm" to "webgl-wasm/",
-                "WebGPU JS" to "webgpu-js/",
-                "WebGPU Wasm" to "webgpu-wasm/"
+                "WebGPU JS" to "webgpu-js/?graphics=webgpu"
             )
         )
         writeSelectorPage(
@@ -330,8 +303,7 @@ tasks.register<Sync>("stage_pages") {
             listOf(
                 "WebGL JS" to "webgl-js/",
                 "WebGL Wasm" to "webgl-wasm/",
-                "WebGPU JS" to "webgpu-js/",
-                "WebGPU Wasm" to "webgpu-wasm/"
+                "WebGPU JS" to "webgpu-js/?graphics=webgpu"
             )
         )
         writeSelectorPage(
@@ -340,8 +312,7 @@ tasks.register<Sync>("stage_pages") {
             listOf(
                 "WebGL JS" to "webgl-js/",
                 "WebGL Wasm" to "webgl-wasm/",
-                "WebGPU JS" to "webgpu-js/",
-                "WebGPU Wasm" to "webgpu-wasm/"
+                "WebGPU JS" to "webgpu-js/?graphics=webgpu"
             )
         )
         writeSelectorPage(
@@ -350,8 +321,7 @@ tasks.register<Sync>("stage_pages") {
             listOf(
                 "WebGL JS" to "webgl-js/",
                 "WebGL Wasm" to "webgl-wasm/",
-                "WebGPU JS" to "webgpu-js/",
-                "WebGPU Wasm" to "webgpu-wasm/"
+                "WebGPU JS" to "webgpu-js/?graphics=webgpu"
             )
         )
     }
@@ -362,22 +332,12 @@ fun Sync.pagesWebapp(
     buildTaskName: String,
     webappPath: String,
     pagesPath: String,
-    indexFile: String = "index.html"
+    outputProjectPath: String = projectPath
 ) {
     dependsOn("$projectPath:$buildTaskName")
-    from(project(projectPath).layout.buildDirectory.dir(webappPath)) {
-        if (indexFile == "index.html") {
-            exclude("webgpu.html")
-        } else {
-            exclude("index.html", "webgpu.html")
-        }
+    from(project(outputProjectPath).layout.buildDirectory.dir(webappPath)) {
+        exclude("webgpu.html")
         into(pagesPath)
-    }
-    if (indexFile != "index.html") {
-        from(project(projectPath).layout.buildDirectory.file("$webappPath/$indexFile")) {
-            rename { "index.html" }
-            into(pagesPath)
-        }
     }
 }
 
