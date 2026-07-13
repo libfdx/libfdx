@@ -224,7 +224,7 @@ jobs:
       - name: Install desktop build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+          sudo apt-get install -y build-essential cmake libgl1-mesa-dev libpulse0 libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
 
       - name: Set up Emscripten
         uses: mymindstorm/setup-emsdk@v16
