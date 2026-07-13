@@ -8,6 +8,7 @@ import dev.onvoid.webrtc.RTCIceServer;
 import dev.onvoid.webrtc.RTCIceTransportPolicy;
 import dev.onvoid.webrtc.RTCPeerConnection;
 import dev.onvoid.webrtc.RTCPeerConnectionState;
+import dev.onvoid.webrtc.media.audio.HeadlessAudioDeviceModule;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.net.webrtc.config.WebRtcEndpointSettings;
 import io.github.libfdx.net.webrtc.platform.WebRtcIceCandidate;
@@ -25,10 +26,27 @@ import java.util.Collections;
  * @author xpenatan
  */
 public final class DesktopWebRtcPeerConnectionProvider implements WebRtcPeerConnectionProvider {
-    private final PeerConnectionFactory factory = new PeerConnectionFactory();
+    private final HeadlessAudioDeviceModule audioDeviceModule;
+    private final PeerConnectionFactory factory;
     private final ArrayList<DesktopWebRtcPeerConnection> connections =
             new ArrayList<DesktopWebRtcPeerConnection>();
     private boolean closed;
+
+    public DesktopWebRtcPeerConnectionProvider() {
+        audioDeviceModule = new HeadlessAudioDeviceModule();
+        try {
+            factory = new PeerConnectionFactory(audioDeviceModule);
+        }
+        catch (RuntimeException | Error failure) {
+            try {
+                audioDeviceModule.dispose();
+            }
+            catch (Throwable disposeFailure) {
+                failure.addSuppressed(disposeFailure);
+            }
+            throw failure;
+        }
+    }
 
     @Override
     public synchronized WebRtcPeerConnection createPeerConnection(WebRtcEndpointSettings settings,
@@ -84,6 +102,12 @@ public final class DesktopWebRtcPeerConnectionProvider implements WebRtcPeerConn
             }
             try {
                 factory.dispose();
+            }
+            catch (Throwable throwable) {
+                failure = firstFailure(failure, throwable);
+            }
+            try {
+                audioDeviceModule.dispose();
             }
             catch (Throwable throwable) {
                 failure = firstFailure(failure, throwable);
