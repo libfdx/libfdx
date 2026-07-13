@@ -43,9 +43,9 @@ dependencies {
     implementation(project(":samples:basic:platform:web"))
 
     if (LibExt.usePublishedLibfdx) {
-        glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.publishedLibfdxVersion}")
-        vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.publishedLibfdxVersion}")
-        wgpuRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.publishedLibfdxVersion}")
+        glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.fdxSnapshotVersion}")
+        vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.fdxSnapshotVersion}")
+        wgpuRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.fdxSnapshotVersion}")
     } else {
         glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
         vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))

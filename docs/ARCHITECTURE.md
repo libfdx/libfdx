@@ -873,7 +873,7 @@ Internal Gradle paths should remain the source of truth while the project is you
 
 The sibling `fdx-natives` repository builds static FreeType and Tint/Dawn dependency packages for `linux-x64-gcc`, `windows-x64-msvc`, `macos-x64-appleclang`, `macos-arm64-appleclang`, `android-arm64-v8a`, `android-armeabi-v7a`, `android-x86`, `android-x86_64`, and `web-emscripten`. Its `fdx-natives.toml` file owns dependency and toolchain pins, with Gradle update tasks for FreeType, Dawn/Tint, Android, and Emscripten versions. libFDX consumes those packages through clean task names such as `libfdx_build_native_artifacts`, `libfdx_build_windows_native_artifact_prebuilt`, `libfdx_build_web_native_artifacts_prebuilt`, and `libfdx_build_android_native_artifacts_prebuilt`; the `_prebuilt` names remain explicit aliases, not a separate dependency mode. The checked-in resolver default targets the current verified `fdx-natives` v0.1.1 release from one fixed top-level version in `:libfdx:framework:fdx:fdx-build`; advanced local overrides may still use `libfdx.runtimeFdx.nativeDepsBaseUrl` for mirror testing. Prebuilt packages are a build-time optimization only and must not become user-visible runtime dependencies.
 
-The configured dependency mode controls repository consumer wiring for tests and samples. `LibExt` reads `libfdx.toml` `[development]` values, then lets ignored root `local.properties` keys `development.usePublishedLibfdx`, `development.publishedLibfdxVersion`, and `development.pluginBootstrapLibfdxVersion` override them for one checkout. Settings always includes the local `:libfdx:*` source modules. The checked-in default is false so clean source checkouts and CI use the local Gradle plugin build for the dedicated plugin-use modules and local project dependencies for consumers. That included plugin build must stay isolated to the plugin project; it must not include or remap root `:libfdx:*` source modules under the plugin build id. It compiles against the already published, compatible `pluginBootstrapLibfdxVersion`; this bootstrap coordinate does not control emitted publication versions. When `usePublishedLibfdx` is true, plugin-use modules resolve the Gradle plugin from Maven and consumers resolve libFDX dependencies as published `<fdxGroup>:<artifact>:<publishedLibfdxVersion>` coordinates. Snapshot publication derives `<release.fdxVersion>-SNAPSHOT` independently. Builder-backed web tasks attach local generated runtime fdx web resources only when the consumer runtime classpath has direct or transitive local `:libfdx:*` project dependencies; Maven-backed consumers must get those resources from the published artifacts.
+The configured dependency mode controls repository consumer wiring for tests and samples. `LibExt` reads all coordinate values from `libfdx.toml`: `[release].fdxGroup`, the numeric current/next `[release].fdxVersion`, and the exact `[release].fdxSnapshotVersion`. Publication code must not construct a snapshot version from the numeric version or embed another snapshot value. Snapshot tasks select `fdxSnapshotVersion`; release tasks select `fdxVersion`. The selected value is shared by library publications, Gradle plugin publication and dependencies, generated-project defaults, and Maven-backed repository consumers for that mode. `[development].usePublishedLibfdx` only selects Maven-backed versus local source dependencies and may be overridden for one checkout by ignored root `local.properties`. Settings always includes the local `:libfdx:*` source modules. The checked-in dependency-mode default is false so clean source checkouts and CI use the local Gradle plugin build for the dedicated plugin-use modules and local project dependencies for consumers. That included plugin build must stay isolated to the plugin project; it must not include or remap root `:libfdx:*` source modules under the plugin build id. During aggregate deploy preparation, the isolated plugin build resolves its same-version libFDX dependencies from the prepared local deploy repository before remote repositories. Builder-backed web tasks attach local generated runtime fdx web resources only when the consumer runtime classpath has direct or transitive local `:libfdx:*` project dependencies; Maven-backed consumers must get those resources from the published artifacts.
 
 ### 9.1. Foundation Modules
 
@@ -1157,7 +1157,7 @@ Inside this repository, tests and samples should keep the source-versus-publishe
 
 ```kotlin
 if (LibExt.usePublishedLibfdx) {
-    implementation("${LibExt.fdxGroup}:fdx:${LibExt.publishedLibfdxVersion}")
+    implementation("${LibExt.fdxGroup}:fdx:${LibExt.fdxSnapshotVersion}")
 } else {
     implementation(project(":libfdx:framework:fdx:core"))
 }
@@ -1454,7 +1454,7 @@ dependencies {
 
 ### 10.11. Local Repository Sample Dependencies
 
-Tests and samples inside this repository generally use explicit `if (LibExt.usePublishedLibfdx)` branches for libFDX dependencies. By default the checked-in TOML sets the flag false, so clean source checkouts and CI use local project dependencies and the local Gradle plugin build. Settings still includes the local `:libfdx:*` modules so source projects remain available in the checkout; the Maven-vs-local choice belongs to each consumer dependency block unless a repository-only example intentionally opts out of published-artifact validation. ECS Platformer is such an example: its platform modules are plugin-first, example-only modules, so the root build convention wires their local sample/backend classpaths and their platform build files stay limited to plugin target and asset configuration. Builder-backed web tasks must not build local runtime fdx web native resources for Maven-backed consumers, but may attach those generated resources when local `:libfdx:*` project dependencies are reached directly or transitively. Developers can set `development.usePublishedLibfdx=true` in ignored root `local.properties` to resolve the Gradle plugin from Maven and use published coordinates from `LibExt.fdxGroup` and `LibExt.publishedLibfdxVersion`; `LibExt.pluginBootstrapLibfdxVersion` is reserved for the isolated included plugin build and does not select consumer or publication coordinates. The plugin included build must remain only the plugin project and must not remap the root source modules. Published desktop JVM artifacts must not encode only the publish host's LWJGL native classifier; they declare all supported LWJGL native artifacts as non-runtime-scope dependencies so LWJGL's loader can select the current runtime platform.
+Tests and samples inside this repository generally use explicit `if (LibExt.usePublishedLibfdx)` branches for libFDX dependencies. By default the checked-in TOML sets the flag false, so clean source checkouts and CI use local project dependencies and the local Gradle plugin build. Settings still includes the local `:libfdx:*` modules so source projects remain available in the checkout; the Maven-vs-local choice belongs to each consumer dependency block unless a repository-only example intentionally opts out of published-artifact validation. ECS Platformer is such an example: its platform modules are plugin-first, example-only modules, so the root build convention wires their local sample/backend classpaths and their platform build files stay limited to plugin target and asset configuration. Builder-backed web tasks must not build local runtime fdx web native resources for Maven-backed consumers, but may attach those generated resources when local `:libfdx:*` project dependencies are reached directly or transitively. Developers can set `development.usePublishedLibfdx=true` in ignored root `local.properties` to resolve the Gradle plugin and library dependencies from Maven at the `LibExt.fdxSnapshotVersion` coordinate configured in `libfdx.toml`. The plugin included build must remain only the plugin project and must not remap the root source modules. Published desktop JVM artifacts must not encode only the publish host's LWJGL native classifier; they declare all supported LWJGL native artifacts as non-runtime-scope dependencies so LWJGL's loader can select the current runtime platform.
 
 Sample `core` modules should depend on public framework APIs and feature modules:
 
@@ -1462,9 +1462,9 @@ Sample `core` modules should depend on public framework APIs and feature modules
 // :samples:basic:core
 dependencies {
     if (LibExt.usePublishedLibfdx) {
-        api("${LibExt.fdxGroup}:application:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:graphics:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:g2d:${LibExt.publishedLibfdxVersion}")
+        api("${LibExt.fdxGroup}:application:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:graphics:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:g2d:${LibExt.fdxSnapshotVersion}")
     } else {
         api(project(":libfdx:framework:application"))
         implementation(project(":libfdx:framework:graphics"))
@@ -1480,14 +1480,14 @@ Sample platform modules should depend on their sample `core` module and let Grad
 dependencies {
     implementation(project(":samples:basic:core"))
     if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:application:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:display:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:wgpu_core:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:backend_desktop:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:application:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:display:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:wgpu_core:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:backend_desktop:${LibExt.fdxSnapshotVersion}")
 
-        glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.publishedLibfdxVersion}")
-        vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.publishedLibfdxVersion}")
-        wgpuRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.publishedLibfdxVersion}")
+        glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.fdxSnapshotVersion}")
+        vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.fdxSnapshotVersion}")
+        wgpuRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.fdxSnapshotVersion}")
     } else {
         implementation(project(":libfdx:framework:application"))
         implementation(project(":libfdx:framework:display"))
@@ -1515,8 +1515,8 @@ dependencies {
     implementation(project(":samples:basic:core"))
 
     if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_desktop_c:${LibExt.publishedLibfdxVersion}")
-        runtimeOnly("${LibExt.fdxGroup}:gl_desktop_c:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_desktop_c:${LibExt.fdxSnapshotVersion}")
+        runtimeOnly("${LibExt.fdxGroup}:gl_desktop_c:${LibExt.fdxSnapshotVersion}")
     } else {
         implementation(project(":libfdx:backends:desktop_c"))
         runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_c"))
@@ -1530,7 +1530,7 @@ dependencies {
     implementation(project(":samples:basic:core"))
 
     if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_ios_c:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_ios_c:${LibExt.fdxSnapshotVersion}")
     } else {
         implementation(project(":libfdx:backends:ios_c"))
     }
@@ -1543,9 +1543,9 @@ dependencies {
     implementation(project(":samples:basic:core"))
 
     if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_web:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:gl_web:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:wgpu_web:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_web:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:gl_web:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:wgpu_web:${LibExt.fdxSnapshotVersion}")
     } else {
         implementation(project(":libfdx:backends:web"))
         implementation(project(":libfdx:extensions:graphics:gl:platform:web"))
@@ -1560,9 +1560,9 @@ dependencies {
     implementation(project(":samples:basic:core"))
 
     if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_android:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:wgpu_android_jni:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:vulkan_android_jni:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_android:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:wgpu_android_jni:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:vulkan_android_jni:${LibExt.fdxSnapshotVersion}")
     } else {
         implementation(project(":libfdx:backends:android"))
         implementation(project(":libfdx:extensions:graphics:wgpu:platform:android_jni"))

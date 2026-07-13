@@ -18,7 +18,7 @@ base {
 dependencies {
     implementation(project(":samples:basic:core"))
     if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_ios_c:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_ios_c:${LibExt.fdxSnapshotVersion}")
     } else {
         implementation(project(":libfdx:backends:ios_c"))
     }

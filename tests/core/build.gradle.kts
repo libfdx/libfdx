@@ -18,15 +18,15 @@ base {
 
 dependencies {
     if (LibExt.usePublishedLibfdx) {
-        api("${LibExt.fdxGroup}:application:${LibExt.publishedLibfdxVersion}")
-        api("${LibExt.fdxGroup}:input:${LibExt.publishedLibfdxVersion}")
-        api("${LibExt.fdxGroup}:graphics:${LibExt.publishedLibfdxVersion}")
-        api("${LibExt.fdxGroup}:camera:${LibExt.publishedLibfdxVersion}")
-        api("${LibExt.fdxGroup}:g2d:${LibExt.publishedLibfdxVersion}")
-        api("${LibExt.fdxGroup}:g3d:${LibExt.publishedLibfdxVersion}")
-        api("${LibExt.fdxGroup}:ui_kit:${LibExt.publishedLibfdxVersion}")
-        api("${LibExt.fdxGroup}:scenario_validator:${LibExt.publishedLibfdxVersion}")
-        api("${LibExt.fdxGroup}:scenario_validator_ui_kit:${LibExt.publishedLibfdxVersion}")
+        api("${LibExt.fdxGroup}:application:${LibExt.fdxSnapshotVersion}")
+        api("${LibExt.fdxGroup}:input:${LibExt.fdxSnapshotVersion}")
+        api("${LibExt.fdxGroup}:graphics:${LibExt.fdxSnapshotVersion}")
+        api("${LibExt.fdxGroup}:camera:${LibExt.fdxSnapshotVersion}")
+        api("${LibExt.fdxGroup}:g2d:${LibExt.fdxSnapshotVersion}")
+        api("${LibExt.fdxGroup}:g3d:${LibExt.fdxSnapshotVersion}")
+        api("${LibExt.fdxGroup}:ui_kit:${LibExt.fdxSnapshotVersion}")
+        api("${LibExt.fdxGroup}:scenario_validator:${LibExt.fdxSnapshotVersion}")
+        api("${LibExt.fdxGroup}:scenario_validator_ui_kit:${LibExt.fdxSnapshotVersion}")
     } else {
         api(project(":libfdx:framework:application"))
         api(project(":libfdx:framework:input"))

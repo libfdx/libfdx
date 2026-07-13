@@ -29,17 +29,31 @@ import org.gradle.plugins.signing.SigningExtension
 val libfdxName = "libfdx"
 val snapshotRepositoryUrl = "https://central.sonatype.com/repository/maven-snapshots/"
 val libfdxBaseVersion = LibExt.fdxVersion
+val libfdxSnapshotVersion = LibExt.fdxSnapshotVersion
 
 val requestedTaskNames = gradle.startParameter.taskNames.map { it.substringAfterLast(":") }.toSet()
 fun requested(vararg names: String): Boolean = names.any { it in requestedTaskNames }
 
+val releaseRequested = requested(
+    "prepareReleaseDeploy",
+    "publishRelease",
+    "uploadReleaseDeploy",
+    "signReleaseDeploy",
+    "verifyReleaseDeployArtifacts",
+    "verifyPreparedReleaseDeployArtifacts",
+    "zipReleaseDeploy"
+)
 val snapshotRequested = requested("prepareSnapshotDeploy", "publishSnapshot", "uploadSnapshotDeploy", "publishToMavenLocal") ||
-    (plugins.hasPlugin("java-gradle-plugin") && requested("publish"))
+    (plugins.hasPlugin("java-gradle-plugin") && !releaseRequested)
 val deployPreparationRequested = requested("prepareSnapshotDeploy", "prepareReleaseDeploy")
-val libfdxVersion = if(snapshotRequested) "$libfdxBaseVersion-SNAPSHOT" else libfdxBaseVersion
+val libfdxVersion = if(snapshotRequested) libfdxSnapshotVersion else libfdxBaseVersion
+extensions.extraProperties.set("libfdxSelectedVersion", libfdxVersion)
 
 if(libfdxBaseVersion.endsWith("-SNAPSHOT")) {
-    throw GradleException("The libFDX base version must not include -SNAPSHOT. Use the upcoming release version only.")
+    throw GradleException("libfdx.toml [release].fdxVersion must contain the numeric current or next version, not a snapshot version.")
+}
+if(!libfdxSnapshotVersion.endsWith("-SNAPSHOT")) {
+    throw GradleException("libfdx.toml [release].fdxSnapshotVersion must identify a Maven snapshot version.")
 }
 
 val libfdxPublishableProjectPaths = listOf(

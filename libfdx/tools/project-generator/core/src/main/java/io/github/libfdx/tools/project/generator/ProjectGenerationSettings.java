@@ -1,5 +1,11 @@
 package io.github.libfdx.tools.project.generator;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+
 /**
  * Represents a project generation settings.
  *
@@ -10,7 +16,7 @@ public final class ProjectGenerationSettings {
     public static final String DEFAULT_PACKAGE_NAME = "com.example.game";
     public static final String DEFAULT_APPLICATION_CLASS_NAME = "GameApplication";
     public static final String DEFAULT_DESKTOP_LAUNCHER_CLASS_NAME = "DesktopLauncher";
-    public static final String DEFAULT_LIBFDX_VERSION = "0.0.2-SNAPSHOT";
+    public static final String DEFAULT_LIBFDX_VERSION = loadDefaultLibfdxVersion();
 
     private final String projectName;
     private final String packageName;
@@ -26,6 +32,47 @@ public final class ProjectGenerationSettings {
         desktopLauncherClassName = clean(builder.desktopLauncherClassName, DEFAULT_DESKTOP_LAUNCHER_CLASS_NAME);
         libfdxVersion = clean(builder.libfdxVersion, DEFAULT_LIBFDX_VERSION);
         desktopPlatform = builder.desktopPlatform;
+    }
+
+    private static String loadDefaultLibfdxVersion() {
+        String resourceName = "/io/github/libfdx/tools/project/generator/libfdx.toml";
+        try (InputStream stream = ProjectGenerationSettings.class.getResourceAsStream(resourceName)) {
+            if (stream == null) {
+                throw new IllegalStateException("Missing libFDX TOML resource: " + resourceName);
+            }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+                boolean inReleaseSection = false;
+                String rawLine;
+                while ((rawLine = reader.readLine()) != null) {
+                    int commentIndex = rawLine.indexOf('#');
+                    String line = (commentIndex < 0 ? rawLine : rawLine.substring(0, commentIndex)).trim();
+                    if (line.length() == 0) {
+                        continue;
+                    }
+                    if (line.startsWith("[") && line.endsWith("]")) {
+                        inReleaseSection = line.equals("[release]");
+                        continue;
+                    }
+                    int separator = line.indexOf('=');
+                    if (!inReleaseSection || separator < 0
+                            || !line.substring(0, separator).trim().equals("fdxSnapshotVersion")) {
+                        continue;
+                    }
+                    String version = line.substring(separator + 1).trim();
+                    if (version.length() >= 2 && ((version.startsWith("\"") && version.endsWith("\""))
+                            || (version.startsWith("'") && version.endsWith("'")))) {
+                        version = version.substring(1, version.length() - 1);
+                    }
+                    if (version.length() == 0) {
+                        throw new IllegalStateException("Empty [release].fdxSnapshotVersion in " + resourceName);
+                    }
+                    return version;
+                }
+            }
+            throw new IllegalStateException("Missing [release].fdxSnapshotVersion in " + resourceName);
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not read libFDX TOML resource: " + resourceName, e);
+        }
     }
 
     /**

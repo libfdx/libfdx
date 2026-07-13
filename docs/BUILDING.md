@@ -70,30 +70,26 @@ Use ignored root `local.properties` overrides when checking published artifacts:
 
 ```properties
 development.usePublishedLibfdx=true
-development.publishedLibfdxVersion=0.0.2-SNAPSHOT
-development.pluginBootstrapLibfdxVersion=0.0.1-SNAPSHOT
 ```
 
 With `development.usePublishedLibfdx=true`, the dedicated plugin-use modules
 resolve the libFDX Gradle plugin from Maven, and consumers resolve libFDX
 dependencies as published coordinates such as
-`<fdxGroup>:<artifact>:<publishedLibfdxVersion>`. This avoids rebuilding local
-libFDX modules when the goal is to check consumers against a released or
+`<fdxGroup>:<artifact>:<fdxSnapshotVersion>`. The exact snapshot coordinate
+comes from `libfdx.toml` `[release].fdxSnapshotVersion`; the plugin publication
+and its libFDX dependencies use that same selected coordinate. This avoids
+rebuilding local libFDX modules when the goal is to check consumers against a
 snapshot build. Settings still includes the local `:libfdx:*` source modules;
 the Maven-vs-local choice is made in each consumer dependency block.
 Builder-backed web tasks use local generated runtime fdx web resources only
 when that consumer uses local `:libfdx:*` project dependencies. Delete the local
-override keys to use the `libfdx.toml` defaults again.
+override key to use the `libfdx.toml` default again.
 
-The isolated included Gradle-plugin build uses
-`development.pluginBootstrapLibfdxVersion` for its compile-time dependency set.
-That bootstrap coordinate must identify an already published, compatible libFDX
-set and does not control the version being produced. The checked-in bootstrap
-is `0.0.1-SNAPSHOT`, while repository consumer validation targets
-`0.0.2-SNAPSHOT`; keeping them separate lets the plugin compile before the next
-artifact set has been published. Snapshot publication always derives
-`<release.fdxVersion>-SNAPSHOT`; consumer checks use
-`development.publishedLibfdxVersion`.
+Keep `[release].fdxVersion` at the numeric current or next version. Snapshot
+tasks use the separate exact `[release].fdxSnapshotVersion`; release tasks use
+`fdxVersion`. Aggregate deploy preparation publishes the libraries first, then
+the isolated Gradle-plugin build resolves those same-version artifacts from
+the generated local deploy repository before remote repositories.
 
 To switch modes for one checkout, edit `local.properties` before running the
 launcher or validation task. Gradle `-P` overrides are not supported for libFDX

@@ -12,9 +12,9 @@ base {
 
 dependencies {
     if (LibExt.usePublishedLibfdx) {
-        api("${LibExt.fdxGroup}:application:${LibExt.publishedLibfdxVersion}")
-        api("${LibExt.fdxGroup}:graphics:${LibExt.publishedLibfdxVersion}")
-        api("${LibExt.fdxGroup}:g2d:${LibExt.publishedLibfdxVersion}")
+        api("${LibExt.fdxGroup}:application:${LibExt.fdxSnapshotVersion}")
+        api("${LibExt.fdxGroup}:graphics:${LibExt.fdxSnapshotVersion}")
+        api("${LibExt.fdxGroup}:g2d:${LibExt.fdxSnapshotVersion}")
     } else {
         api(project(":libfdx:framework:application"))
         api(project(":libfdx:framework:graphics"))

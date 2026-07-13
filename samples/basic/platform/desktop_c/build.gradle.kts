@@ -18,8 +18,8 @@ base {
 dependencies {
     implementation(project(":samples:basic:core"))
     if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_desktop_c:${LibExt.publishedLibfdxVersion}")
-        runtimeOnly("${LibExt.fdxGroup}:gl_desktop_c:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_desktop_c:${LibExt.fdxSnapshotVersion}")
+        runtimeOnly("${LibExt.fdxGroup}:gl_desktop_c:${LibExt.fdxSnapshotVersion}")
     } else {
         implementation(project(":libfdx:backends:desktop_c"))
         runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_c"))

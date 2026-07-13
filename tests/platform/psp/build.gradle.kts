@@ -18,9 +18,9 @@ base {
 dependencies {
     implementation(project(":tests:core"))
     if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_psp:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:g2d:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:ui_kit:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_psp:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:g2d:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:ui_kit:${LibExt.fdxSnapshotVersion}")
     } else {
         implementation(project(":libfdx:backends:psp"))
         implementation(project(":libfdx:framework:g2d"))

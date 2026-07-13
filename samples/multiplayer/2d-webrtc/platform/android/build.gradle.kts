@@ -33,10 +33,10 @@ val adbExecutable = androidComponents.sdkComponents.adb
 dependencies {
     implementation(project(":samples:multiplayer:2d-webrtc:core"))
     if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_android:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:wgpu_android_jni:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:vulkan_android_jni:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:webrtc_android_jni:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_android:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:wgpu_android_jni:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:vulkan_android_jni:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:webrtc_android_jni:${LibExt.fdxSnapshotVersion}")
     } else {
         implementation(project(":libfdx:backends:android"))
         implementation(project(":libfdx:extensions:graphics:wgpu:platform:android_jni"))

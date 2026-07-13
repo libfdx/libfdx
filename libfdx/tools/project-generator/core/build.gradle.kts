@@ -15,12 +15,19 @@ base {
 
 group = "${LibExt.fdxGroup}.tools.projectgenerator"
 
+tasks.processResources {
+    from(LibExt.rootDirectory.resolve("libfdx.toml")) {
+        into("io/github/libfdx/tools/project/generator")
+    }
+}
+
 tasks.register<JavaExec>("test_generate_project") {
     group = "verification"
     description = "Runs the project generator core smoke checks."
     dependsOn(tasks.named("testClasses"))
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("io.github.libfdx.tools.project.generator.ProjectGeneratorSmokeTest")
+    systemProperty("libfdx.expectedVersion", LibExt.fdxSnapshotVersion)
 }
 
 tasks.named<Test>("test") {

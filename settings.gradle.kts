@@ -41,14 +41,15 @@ pluginManagement {
         "false" -> false
         else -> throw IllegalArgumentException("development.usePublishedLibfdx must be true or false, got '$value'.")
     }
-    val publishedLibfdxVersion = developmentValue("publishedLibfdxVersion")
+    val fdxSnapshotVersion = tomlValue("release", "fdxSnapshotVersion")
+        ?: throw IllegalStateException("Missing [release].fdxSnapshotVersion in libfdx.toml.")
     if (!usePublishedLibfdx) {
         includeBuild("libfdx/tools/gradle-plugin")
     }
 
     plugins {
         if (usePublishedLibfdx) {
-            id("io.github.libfdx") version publishedLibfdxVersion
+            id("io.github.libfdx") version fdxSnapshotVersion
         }
     }
 

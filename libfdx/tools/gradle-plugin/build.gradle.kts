@@ -27,19 +27,20 @@ val libfdxGradlePluginDependencyArtifacts = listOf(
 
 extra["libfdxGradlePluginDependencyArtifacts"] = libfdxGradlePluginDependencyArtifacts
 apply(from = "../../../buildSrc/src/main/kotlin/publish.gradle.kts")
+val libfdxSelectedVersion = extensions.extraProperties.get("libfdxSelectedVersion") as String
 
 dependencies {
     implementation(libs.teavm.gradle.plugin)
     libfdxGradlePluginDependencyArtifacts.forEach { artifact ->
-        implementation("${LibExt.fdxGroup}:$artifact:${LibExt.pluginBootstrapLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:$artifact:$libfdxSelectedVersion")
     }
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 // Project generation must use the writer from this checkout. The included plugin build
-// deliberately compiles against previously published bootstrap artifacts, which would
-// otherwise make local desktop-C generator fixes invisible until after publication.
+// compiles against libFDX artifacts at the same selected publication version, but that
+// dependency must not hide local desktop-C generator fixes until after publication.
 sourceSets {
     main {
         java.srcDir("../../backends/desktop_c/src/main/java")

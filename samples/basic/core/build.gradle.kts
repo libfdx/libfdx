@@ -18,10 +18,10 @@ base {
 
 dependencies {
     if (LibExt.usePublishedLibfdx) {
-        api("${LibExt.fdxGroup}:application:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:graphics:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:g2d:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:ui_kit:${LibExt.publishedLibfdxVersion}")
+        api("${LibExt.fdxGroup}:application:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:graphics:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:g2d:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:ui_kit:${LibExt.fdxSnapshotVersion}")
     } else {
         api(project(":libfdx:framework:application"))
         implementation(project(":libfdx:framework:graphics"))

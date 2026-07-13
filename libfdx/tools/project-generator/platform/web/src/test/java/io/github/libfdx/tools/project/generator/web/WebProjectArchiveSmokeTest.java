@@ -31,7 +31,6 @@ public final class WebProjectArchiveSmokeTest {
                 .packageName("com.example.websmoke")
                 .applicationClassName("WebSmokeApplication")
                 .desktopLauncherClassName("WebSmokeDesktopLauncher")
-                .libfdxVersion("0.0.2-SNAPSHOT")
                 .build());
         GeneratedProject project = generation.project();
         byte[] archive = WebProjectArchive.zip(project);

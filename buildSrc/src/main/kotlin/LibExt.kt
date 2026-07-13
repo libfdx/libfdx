@@ -12,14 +12,11 @@ object LibExt {
     val fdxVersion: String
         get() = config().fdxVersion
 
+    val fdxSnapshotVersion: String
+        get() = config().fdxSnapshotVersion
+
     val usePublishedLibfdx: Boolean
         get() = config().usePublishedLibfdx
-
-    val publishedLibfdxVersion: String
-        get() = config().publishedLibfdxVersion
-
-    val pluginBootstrapLibfdxVersion: String
-        get() = config().pluginBootstrapLibfdxVersion
 
     val rootDirectory: File
         get() = config().rootDirectory
@@ -48,27 +45,17 @@ object LibExt {
             localProperties,
             "usePublishedLibfdx"
         )
-        val publishedLibfdxVersionValue = readDevelopmentValue(
-            file,
-            localProperties,
-            "publishedLibfdxVersion"
-        )
-        val pluginBootstrapLibfdxVersionValue = readDevelopmentValue(
-            file,
-            localProperties,
-            "pluginBootstrapLibfdxVersion"
-        )
         val fdxVersion = readRequiredTomlValue(file, "release", "fdxVersion")
+        val fdxSnapshotVersion = readRequiredTomlValue(file, "release", "fdxSnapshotVersion")
         return Config(
             rootDirectory = rootDirectory,
             fdxGroup = readRequiredTomlValue(file, "release", "fdxGroup"),
             fdxVersion = fdxVersion,
+            fdxSnapshotVersion = fdxSnapshotVersion,
             usePublishedLibfdx = parseBooleanValue(
                 usePublishedLibfdxValue.source,
                 usePublishedLibfdxValue.value
-            ),
-            publishedLibfdxVersion = publishedLibfdxVersionValue.value,
-            pluginBootstrapLibfdxVersion = pluginBootstrapLibfdxVersionValue.value
+            )
         )
     }
 
@@ -154,9 +141,8 @@ object LibExt {
         val rootDirectory: File,
         val fdxGroup: String,
         val fdxVersion: String,
-        val usePublishedLibfdx: Boolean,
-        val publishedLibfdxVersion: String,
-        val pluginBootstrapLibfdxVersion: String
+        val fdxSnapshotVersion: String,
+        val usePublishedLibfdx: Boolean
     )
 
     private data class ConfigValue(

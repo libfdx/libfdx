@@ -21,10 +21,10 @@ dependencies {
     implementation(libs.teavm.jso.apis)
     implementation(libs.teavm.jso.impl)
     if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_web:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:gl_web:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:wgpu_web:${LibExt.publishedLibfdxVersion}")
-        implementation("${LibExt.fdxGroup}:webrtc_web:${LibExt.publishedLibfdxVersion}")
+        implementation("${LibExt.fdxGroup}:backend_web:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:gl_web:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:wgpu_web:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:webrtc_web:${LibExt.fdxSnapshotVersion}")
     } else {
         implementation(project(":libfdx:backends:web"))
         implementation(project(":libfdx:extensions:graphics:gl:platform:web"))
