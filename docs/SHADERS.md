@@ -1,316 +1,187 @@
-# libFDX Shader Architecture
+# libFDX Shaders
 
-This document is the architecture guide for libFDX shader authoring,
-translation, runtime compilation, and provider shader module creation.
+libFDX has one public shader authoring language: WGSL. Providers either consume
+WGSL or translate it when a shader module is created.
 
-For module ownership and dependency direction, see [ARCHITECTURE.md](ARCHITECTURE.md).
-For public graphics API contracts, see [COMMON_API.md](COMMON_API.md).
+Module ownership is in [ARCHITECTURE.md](ARCHITECTURE.md); graphics resource and
+lifetime rules are in [COMMON_API.md](COMMON_API.md#9-graphics).
 
-## 1. Goal
+## Topics
 
-libFDX shader authoring is WGSL-only. A developer writes one portable WGSL
-shader and passes it to `GraphicsDevice.createShaderModule(...)`.
-The selected provider then keeps WGSL as-is or translates it at shader-module
-creation time when the native graphics API needs another shader language.
+- [1. Pipeline](#1-pipeline)
+- [2. Source and Profiles](#2-source-and-profiles)
+- [3. Runtime Compilation](#3-runtime-compilation)
+- [4. Provider Responsibilities](#4-provider-responsibilities)
+- [5. Reflection and Bindings](#5-reflection-and-bindings)
+- [6. Hot Reload](#6-hot-reload)
+- [7. Ownership](#7-ownership)
+- [8. Validation](#8-validation)
 
-The target flow is:
+## 1. Pipeline
 
 ```text
 WGSL source
   -> ShaderModuleDescriptor.wgsl(...)
-     -> provider creates a shader module
-        -> WebGPU/wgpu uses WGSL directly
-        -> GL/WebGL/GLES compiles WGSL to GLSL or GLSL ES
-        -> Vulkan compiles WGSL to SPIR-V
-        -> Metal compiles WGSL to MSL
-        -> DirectX/HLSL later
+     -> selected provider
+        -> WebGPU/wgpu: WGSL
+        -> GL/WebGL/GLES: generated GLSL/GLSL ES
+        -> Vulkan: generated SPIR-V
+        -> Metal: generated MSL where runtime translation is available
 ```
 
-The public promise is the libFDX shader pipeline. Tint is the first compiler
-backend, but Tint types are not part of the common graphics API.
+Tint is the current compiler backend, but Tint types are not public graphics
+API. Generated languages are provider handoff artifacts, never additional
+user-maintained source files.
 
-## 2. Non-Goals
+libFDX does not:
 
-- Do not generate Java shader classes for normal built-in renderer shaders.
-- Do not check in translated GLSL, SPIR-V, MSL, or HLSL copies of every shader.
-- Do not require users to add separate shader compiler artifacts when the
-  selected backend already packages the needed runtime `fdx` native capability.
-- Do not force platforms that do not need shader translation, such as PSP, to
-  package Tint or the shader compiler.
-- Do not expose Tint, SPIRV-Cross, shaderc, DXC, or platform SDK compiler types
-  through the common graphics API.
-- Do not claim target support until the compiler path and provider path are both
-  implemented and validated.
+- require generated Java shader classes;
+- check in translated copies of every built-in shader;
+- expose compiler-library or platform SDK types through common graphics;
+- package the compiler on platforms that do not need translation;
+- claim a target until both translation and provider paths are validated.
 
-## 3. Source Layout
+## 2. Source and Profiles
 
-User-project portable shader source belongs under:
+User-project shader files conventionally live under:
 
 ```text
 src/main/fdx-shaders/**/*.wgsl
 ```
 
-libFDX modules that own built-in renderer shaders keep their WGSL source inside
-the owning renderer classes. That keeps the built-in shaders available on TeaVM,
-where ordinary dependency resources are not a reliable runtime lookup path for
-framework internals. The provider still compiles that WGSL if the active
-graphics API cannot consume WGSL directly. Generated translated shader resources
-are build/test diagnostics only, not framework source.
+Built-in renderer WGSL stays in its owning renderer module/class so it is
+available on TeaVM without relying on dependency-resource lookup. Generated
+translations are diagnostics/build output, not source.
 
-A shader may declare its intended profile with a leading comment:
+A leading comment may declare portability:
 
 ```wgsl
 // @fdx.profile webgl2
 ```
 
-Valid profile IDs are:
-
-| Profile ID | Java enum | Meaning |
+| Profile ID | Java value | Contract |
 | --- | --- | --- |
-| `webgl2` or `fdx-wgsl-webgl2` | `ShaderProfile.PORTABLE_WEBGL2` | Lowest common render profile for WebGL2, OpenGL ES 3, and providers with similar limits. |
-| `webgpu` or `fdx-wgsl-webgpu` | `ShaderProfile.PORTABLE_WEBGPU` | WebGPU/wgpu-class profile for modern render and compute shaders. |
-| `native` or `fdx-native` | `ShaderProfile.NATIVE` | Provider-specific opt-in profile. Not portable unless the owner documents the supported targets. |
+| `webgl2` / `fdx-wgsl-webgl2` | `PORTABLE_WEBGL2` | WebGL2/OpenGL ES 3-class render subset. |
+| `webgpu` / `fdx-wgsl-webgpu` | `PORTABLE_WEBGPU` | Modern WebGPU/wgpu render and compute subset. |
+| `native` / `fdx-native` | `NATIVE` | Explicit provider-specific opt-in; not portable by default. |
 
-If no profile comment exists, the project default profile is used. The default is
-`webgpu`.
+No comment uses the project default, currently `webgpu`.
 
-## 4. Portable WGSL Profiles
+The WebGL2 profile excludes compute, storage buffers/textures, atomics,
+external/multisampled textures, WGSL extensions/`requires`, subgroup operations,
+override constants, 16-bit floats, and 64-bit integers. The WebGPU profile still
+excludes backend-specific extensions, `requires`, and subgroups unless a later
+capability-gated profile defines them.
 
-`fdx-wgsl-webgl2` is the strict profile. It exists so a shader can target
-WebGL2/GLES-style platforms without surprises. It excludes compute shaders,
-storage buffers, storage textures, atomics, external textures, multisampled
-textures, WGSL extensions, `requires` directives, subgroup operations, override
-constants, 16-bit float types, and 64-bit integer types.
+`NATIVE` does not make GLSL, SPIR-V, or MSL public authoring languages. Providers
+still receive WGSL through the common descriptor path.
 
-`fdx-wgsl-webgpu` is the normal modern profile. It allows WebGPU/wgpu-class
-render and compute WGSL, but it still excludes backend-specific WGSL extensions,
-`requires` directives, and subgroup operations unless a later capability-gated
-profile is added.
+## 3. Runtime Compilation
 
-`fdx-native` is reserved for future provider-specific shader pipeline metadata.
-It does not make GLSL, SPIR-V, or MSL an authoring source in the portable
-graphics API. Current graphics providers still receive WGSL and use
-Tint/runtime compilation when their GPU API needs another language.
+`framework/fdx/core` owns the optional provider-neutral compiler capability.
+Backends that need it package and register the matching native runtime `fdx`
+library.
 
-## 5. Runtime Compilation Contract
+Compiler input includes WGSL, target, stage, entry point, and target options.
+Output is translated text or SPIR-V bytes plus diagnostics.
 
-`framework/fdx/core` owns the provider-neutral shader compiler contract. It is an
-optional runtime capability supplied by backends that package the matching
-native `fdx` runtime library.
+- Translation occurs at shader-module creation, explicit editor recompilation,
+  or validation--never in a render loop.
+- Implementations cache compiler setup and may cache output by source hash,
+  target, stage, entry point, compiler/version, profile, and options.
+- A provider needing translation fails clearly when the capability is absent,
+  naming the missing capability and target.
+- Failed translation returns diagnostics and no partial/mismatched shader.
+- Platforms consuming WGSL directly do not require the compiler.
 
-The runtime compiler input is WGSL source plus:
+The internal `fdx-build` project links checksum-verified prebuilt Tint/Dawn
+packages from the pinned `fdx-natives` release. Third-party compiler source is
+not committed or built by libFDX tasks. Web Emscripten Tint currently uses the
+validated conservative optimization configuration; changing optimization is a
+separate native validation target.
 
-- requested target language;
-- shader stage;
-- entry point name;
-- GLSL profile options for GL-family targets.
+## 4. Provider Responsibilities
 
-The runtime compiler output is:
-
-- text for WGSL, GLSL, GLSL ES, MSL, and future HLSL;
-- SPIR-V bytes for Vulkan;
-- diagnostics for failures.
-
-Providers compile at shader-module creation/setup time, never inside a render
-loop. Implementations must cache native compiler setup and may cache translated
-outputs by source hash, target, stage, entry point, compiler backend, compiler
-version, and options.
-
-WGSL is the only authored shader source accepted by public shader descriptors
-and bundles. If a provider needs GLSL, GLSL ES, SPIR-V, or MSL, it must request
-runtime compilation from WGSL through the Tint-backed `framework/fdx/core`
-compiler path during shader-module creation. Generated target descriptors are
-internal handoffs from the compiler path to the provider and must not become a
-second user-maintained source of truth.
-
-If a provider receives WGSL and needs translation, but the active runtime does
-not provide the compiler capability, it must fail clearly and name the missing
-capability and target.
-
-## 6. Compiler Backend
-
-Tint is the first compiler backend. Dawn/Tint source is not committed to this
-repository and libFDX native tasks do not build it locally. The internal
-`:libfdx:framework:fdx:fdx-build` module consumes checksum-verified static
-dependency packages from the sibling `fdx-natives` release project, then links
-those packages into the platform runtime `fdx` artifacts.
-The shared C bridge exposes a small ABI that is linked into platform `fdx`
-runtime artifacts when the platform opts into shader compilation.
-
-Web Emscripten Tint builds use conservative `-O0` code generation because the
-optimized Wasm path has been unstable. Treat any higher optimization level as a
-separate validation target.
-
-Required first Tint target set:
-
-| Target | Tint direction |
-| --- | --- |
-| WebGPU/wgpu | WGSL input, WGSL output or preserved source |
-| WebGL/GLES | WGSL input, GLSL output configured for GLSL ES |
-| OpenGL | WGSL input, GLSL output configured for desktop GLSL |
-| Vulkan | WGSL input, SPIR-V output |
-| Metal | WGSL input, MSL output |
-| DirectX later | WGSL input, HLSL output |
-
-If Tint cannot translate a valid libFDX shader for a target, the runtime
-compiler must report a diagnostic and fail that shader module. It must not emit
-a partial or mismatched shader.
-
-## 7. Provider Responsibilities
-
-Provider target mapping:
-
-| Provider ID | `ShaderTarget` | Generated/consumed language |
+| Provider family | Target | Consumed/generated form |
 | --- | --- | --- |
-| `webgpu` | `WEBGPU_WGSL` | `ShaderLanguage.WGSL` |
-| `wgpu` | `WGPU_WGSL` | `ShaderLanguage.WGSL` |
-| `webgl` | `WEBGL_GLSL_ES` | `ShaderLanguage.GLSL` |
-| `gles` | `GLES_GLSL_ES` | `ShaderLanguage.GLSL` |
-| `gl` or `opengl` | `OPENGL_GLSL` | `ShaderLanguage.GLSL` |
-| `vulkan` | `VULKAN_SPIRV` | `ShaderLanguage.SPIRV` |
-| `metal` | `METAL_MSL` | `ShaderLanguage.MSL` |
-| `directx` or `d3d*` | `DIRECTX_HLSL` | future HLSL language support |
+| WebGPU | `WEBGPU_WGSL` | WGSL |
+| wgpu | `WGPU_WGSL` | WGSL |
+| WebGL | `WEBGL_GLSL_ES` | GLSL ES |
+| GLES | `GLES_GLSL_ES` | GLSL ES |
+| OpenGL | `OPENGL_GLSL` | desktop GLSL |
+| Vulkan | `VULKAN_SPIRV` | SPIR-V |
+| Metal | `METAL_MSL` | MSL |
 
-Built-in renderer shader modules are authored as WGSL-only descriptors. They
-must not attach handwritten GLSL, SPIR-V, or MSL fallbacks. WGPU/WebGPU
-providers consume WGSL directly. GL, Vulkan, and Metal providers compile WGSL
-through `framework/fdx/core` when they need native backend shader code. PSP does
-not include Tint and does not use the runtime shader compiler. iOS C Metal
-currently accepts MSL through its provider path but does not register a runtime
-compiler provider, so WGSL-only built-in shaders require a future iOS compiler
-bridge before that backend can run them.
+Built-in g2d/g3d shader descriptors contain WGSL only. A GL, Vulkan, or Metal
+provider requests translation instead of selecting a handwritten fallback.
+WGPU/WebGPU consumes the authored source.
 
-Provider-specific setup remains explicit through provider IDs and capabilities.
-Advanced provider compiler features may exist only as documented provider
-features.
+PSP is intentionally outside the Tint path. iOS C Metal can create modules from
+MSL but does not currently register the runtime WGSL compiler, so WGSL-only
+built-in renderers require that bridge before they work on that path. HLSL is
+not a current public target.
 
-## 8. Reflection And Bindings
+Provider-specific setup remains explicit. Unsupported language/profile/feature
+combinations fail during setup rather than changing rendering silently.
 
-Shader reflection is setup-time metadata. It should describe the shader contract
-without forcing per-frame inspection or allocation.
+## 5. Reflection and Bindings
 
-Reflection should include:
+Reflection is setup-time metadata for resource layout and diagnostics. It may
+describe bind group/index/type, stage visibility, vertex locations/formats,
+entry points, and target-renamed symbols.
 
-- bind group;
-- binding index;
-- binding type;
-- shader stage visibility;
-- vertex attribute location;
-- vertex attribute format;
-- entry point names;
-- target-specific generated names if the compiler rewrites them.
+- Metadata must be stable enough for high-level renderers and providers to
+  create/validate layouts without provider-specific parsing in game code.
+- Pipeline descriptors carry reflection to providers that need it.
+- Reflection and binding discovery never run per draw or allocate per frame.
+- The metadata describes the authored contract even if a compiler rewrites
+  target names.
 
-Reflection must be stable enough for high-level renderers to create bind groups,
-pipelines, and validation errors without provider-specific parsing.
-`RenderPipelineDescriptor.shaderReflection(...)` carries the metadata to
-providers that need setup-time resource layout decisions.
+## 6. Hot Reload
 
-## 9. Hot Reload Rules
+Editor reload uses the same compiler path:
 
-Editor hot reload uses the same runtime compiler capability, but compilation
-should happen only on file changes or explicit editor actions.
+1. compile only after a file change or explicit action, preferably off the
+   render thread;
+2. create/apply provider resources on the provider's required graphics thread;
+3. keep the old valid pipeline until replacement succeeds;
+4. on failure, keep rendering with the old pipeline and expose diagnostics;
+5. dispose replaced modules, pipelines, layouts, and related resources only
+   after in-flight use ends.
 
-Rules:
+Compiler request/result allocation is acceptable for an explicit editor action,
+not in the game frame loop.
 
-- Compile off the render thread when using a native bridge, process, or daemon.
-- Apply new shader modules and pipelines on the render thread or the provider's
-  required graphics thread.
-- Keep the old pipeline alive until the replacement is fully created.
-- If compilation or pipeline creation fails, keep rendering with the previous
-  valid pipeline and surface diagnostics to the editor.
-- Dispose replaced shader modules, pipelines, bind group layouts, and related
-  provider resources after they are no longer in use.
-- Do not allocate compiler request/result objects in a game frame loop. Editor
-  tools may allocate during explicit compile actions.
-
-## 10. Module Ownership
-
-Stable ownership:
+## 7. Ownership
 
 | Area | Owner |
 | --- | --- |
-| `ShaderLanguage`, `ShaderProfile`, `ShaderTarget`, descriptors, reflection values | `:libfdx:framework:graphics` |
-| Built-in 2D shader WGSL sources | `:libfdx:framework:g2d` |
-| Built-in 3D shader WGSL sources | `:libfdx:framework:g3d` |
-| Runtime shader compiler Java contract | `:libfdx:framework:fdx:core` |
-| Shader compiler native C ABI source | `:libfdx:framework:fdx:platform:shared` |
-| Runtime fdx native dependency and CMake task ownership | `:libfdx:framework:fdx:fdx-build` |
-| Desktop runtime shader compiler packaging | `:libfdx:framework:fdx:platform:desktop` |
-| Android runtime shader compiler packaging | `:libfdx:framework:fdx:platform:android` |
-| Web runtime shader compiler packaging | `:libfdx:framework:fdx:platform:web` |
-| iOS C Metal shader module creation | `:libfdx:backends:ios_c` with authored MSL until an iOS compiler bridge exists |
-| WGSL profile validation, Gradle task wiring, and user project DSL | `libfdx/tools/gradle-plugin` |
-| Provider-specific shader module creation | selected graphics provider or backend-owned provider |
+| Shader language/profile/target, descriptors, reflection | `framework/graphics` |
+| Built-in 2D WGSL | `framework/g2d` |
+| Built-in 3D WGSL | `framework/g3d` |
+| Runtime compiler Java contract | `framework/fdx/core` |
+| Shared compiler C ABI | `framework/fdx/platform/shared` |
+| Native dependency/link tasks | `framework/fdx/fdx-build` |
+| Desktop/Android/Web runtime packaging | matching `framework/fdx/platform/*` module |
+| Profile validation and user build DSL | Gradle plugin |
+| Native shader-module creation | selected provider/backend path |
 
-There is no runtime `tools/shader` module. Runtime shader compilation is a
-runtime fdx platform capability for providers that cannot consume WGSL directly.
-Tint/Dawn dependency resolution is handled by `:libfdx:framework:fdx:fdx-build`,
-which imports static libraries from `fdx-natives` packages for all runtime fdx
-native task names. Web runtime fdx builds enable the compiler by default
-because WebGL depends on WGSL-to-GLSL ES translation for built-in renderers.
+There is no separate runtime `tools/shader` service. Providers request the
+runtime-core capability only when their target cannot consume WGSL.
 
-## 11. Validation Requirements
+## 8. Validation
 
-For shader runtime/compiler changes:
+For compiler/runtime changes, validate the affected core/graphics compile, the
+native ABI/compiler tests, and each changed provider's shader creation path.
+Use focused `shader-runtime` and `shader-scene` tests before broader renderers.
 
-- validate Java compile for `framework/fdx/core` and `framework/graphics`;
-- validate affected high-level renderer modules such as `framework/g2d` and
-  `framework/g3d`;
-- validate affected providers whose shader creation path changed;
-- run the `shader-runtime` test to create a WGSL-only shader module and render
-  pipeline through the active `GraphicsDevice`;
-- run the `shader-scene` test to render a procedural WGSL-only shader scene
-  through the active provider;
-- run affected WGSL-authored built-in renderer scenes such as `outline-2d`, `outline-3d`, `fog-of-war-2d`,
-  `particles-2d`, `fog-3d`, `fog-of-war-3d`, `skybox-3d`, `billboard-3d`, `particles-3d`, `point-light-3d`, `spot-light-3d`,
-  `shadow-map-3d`, `cascade-shadow-map-3d`, and `model-skinning` when shader effects or high-level renderer shader creation
-  paths change;
-- run runtime shader compiler tests when the compiler backend or ABI changes;
-- run Gradle plugin tests or a plugin sample task when task wiring changes;
-- run provider render validation for every provider whose built-in shaders or
-  shader creation path changed.
+For high-level renderer shader changes, run the affected g2d/g3d scene on every
+provider in scope. Shader compilation alone does not prove rendered parity.
+Build a known-good GL baseline when applicable, compare rendered output under
+the same scene/input/frame conditions, and report every scoped platform/API as
+`PASS`, `BLOCKED`, or `NOT_RUN` with reasons. See the full
+[visual validation protocol](TESTING.md#4-visual-and-graphics-validation).
 
-For visual renderer changes:
-
-- use a known-good GL baseline when GL is in scope;
-- compare WebGPU/wgpu, Vulkan, Metal, WebGL/GLES, and DirectX targets only when
-  they are in scope and available;
-- report `PASS`, `BLOCKED`, or `NOT RUN` for every matrix cell in scope;
-- never claim visual parity from shader compilation alone.
-
-## 12. Implementation Status
-
-1. WGSL is the only shader authoring source of truth.
-2. Built-in `SpriteBatch` and `ModelBatch` should pass WGSL descriptors and rely
-   on provider setup-time translation where needed. `ModelBatch` owns both the
-   default PBR WGSL path and the skinned PBR WGSL variant. The default PBR
-   shader can consume a single `DirectionalShadowMap3D` or up to four
-   `CascadedShadowMap3D` shadow textures, with split-distance based
-   per-fragment cascade selection from the cascade driver camera and
-   computed per-cascade bias values. Cascaded bias starts from a world-space
-   base bias and is converted to normalized depth bias per cascade.
-3. Public shader authoring is WGSL-only. GLSL, SPIR-V, and MSL descriptors are
-   generated target artifacts owned by the runtime compiler path, not user
-   fallback sources.
-4. Tint is the first compiler backend and is packaged by default in desktop,
-   Android, and web runtime fdx native builds. Those builds link against
-   prebuilt static Tint/FreeType packages from `fdx-natives`.
-5. PSP is intentionally outside the Tint runtime compiler path.
-6. HLSL remains a future generated target for DirectX, not a second authoring
-   source.
-
-## 13. Future Tooling
-
-WGSL is the only source-of-truth language accepted by the graphics API. Future
-tools may help produce WGSL, but generated GLSL, SPIR-V, MSL, or HLSL must
-remain target artifacts after WGSL enters the provider path.
-
-Future tooling may include:
-
-- importers that convert existing shader libraries to WGSL before runtime;
-- a libFDX material graph that emits WGSL;
-- validation tools that check WGSL profile portability before launch.
-
-All future frontends must produce a `ShaderModuleDescriptor` or a compatible
-runtime compiler request. Provider-facing code should still receive explicit
-source or bytecode for the selected provider.
+Potential frontends such as material graphs or importers belong in tracked
+issues until implemented. Any future frontend must still produce WGSL for the
+same public descriptor and provider pipeline.

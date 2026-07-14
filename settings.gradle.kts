@@ -1,4 +1,66 @@
+val libfdxPublicationTaskNames = setOf(
+    "prepareSnapshotDeploy",
+    "prepareReleaseDeploy",
+    "prepareGradlePluginSnapshotDeploy",
+    "prepareGradlePluginReleaseDeploy",
+    "publishSnapshot",
+    "publishRelease",
+    "uploadSnapshotDeploy",
+    "uploadReleaseDeploy",
+    "signReleaseDeploy",
+    "verifyReleaseDeployArtifacts",
+    "verifyPreparedReleaseDeployArtifacts",
+    "zipReleaseDeploy",
+    "publishToMavenLocal"
+)
+
+fun isLibfdxPublicationTask(taskPath: String): Boolean {
+    val taskName = taskPath.substringAfterLast(":")
+    return taskName in libfdxPublicationTaskNames ||
+        taskName.startsWith("publishDeploy") && taskName.endsWith("PublicationToLibfdxDeployRepository")
+}
+
+val libfdxPublicationBuild = System.getenv("LIBFDX_PUBLICATION_BUILD")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?.let { value ->
+        when (value.lowercase()) {
+            "true" -> true
+            "false" -> false
+            else -> throw IllegalArgumentException("LIBFDX_PUBLICATION_BUILD must be true or false, got '$value'.")
+        }
+    } == true || gradle.startParameter.taskNames.any(::isLibfdxPublicationTask)
+
 pluginManagement {
+    val publicationTaskNames = setOf(
+        "prepareSnapshotDeploy",
+        "prepareReleaseDeploy",
+        "prepareGradlePluginSnapshotDeploy",
+        "prepareGradlePluginReleaseDeploy",
+        "publishSnapshot",
+        "publishRelease",
+        "uploadSnapshotDeploy",
+        "uploadReleaseDeploy",
+        "signReleaseDeploy",
+        "verifyReleaseDeployArtifacts",
+        "verifyPreparedReleaseDeployArtifacts",
+        "zipReleaseDeploy",
+        "publishToMavenLocal"
+    )
+    val publicationBuild = System.getenv("LIBFDX_PUBLICATION_BUILD")
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { value ->
+            when (value.lowercase()) {
+                "true" -> true
+                "false" -> false
+                else -> throw IllegalArgumentException("LIBFDX_PUBLICATION_BUILD must be true or false, got '$value'.")
+            }
+        } == true || gradle.startParameter.taskNames.any { taskPath ->
+        val taskName = taskPath.substringAfterLast(":")
+        taskName in publicationTaskNames ||
+            taskName.startsWith("publishDeploy") && taskName.endsWith("PublicationToLibfdxDeployRepository")
+    }
     val tomlFile = java.io.File(settingsDir, "libfdx.toml")
     val localProperties = java.util.Properties().also { properties ->
         val file = java.io.File(settingsDir, "local.properties")
@@ -31,9 +93,11 @@ pluginManagement {
     }
 
     fun developmentValue(key: String): String {
-        return localProperties.getProperty("development.$key")?.trim()?.takeIf { it.isNotEmpty() }
+        val systemKey = "libfdx.development.$key"
+        return System.getProperty(systemKey)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: localProperties.getProperty("development.$key")?.trim()?.takeIf { it.isNotEmpty() }
             ?: tomlValue("development", key)
-            ?: throw IllegalStateException("Missing development.$key in local.properties or libfdx.toml.")
+            ?: throw IllegalStateException("Missing $systemKey, development.$key in local.properties, or [development].$key in libfdx.toml.")
     }
 
     val usePublishedLibfdx = when (val value = developmentValue("usePublishedLibfdx").lowercase()) {
@@ -43,12 +107,12 @@ pluginManagement {
     }
     val fdxSnapshotVersion = tomlValue("release", "fdxSnapshotVersion")
         ?: throw IllegalStateException("Missing [release].fdxSnapshotVersion in libfdx.toml.")
-    if (!usePublishedLibfdx) {
+    if (!publicationBuild && !usePublishedLibfdx) {
         includeBuild("libfdx/tools/gradle-plugin")
     }
 
     plugins {
-        if (usePublishedLibfdx) {
+        if (!publicationBuild && usePublishedLibfdx) {
             id("io.github.libfdx") version fdxSnapshotVersion
         }
     }
@@ -118,32 +182,34 @@ include(":libfdx:backends:ios_c")
 include(":libfdx:backends:psp")
 include(":libfdx:backends:android")
 include(":libfdx:backends:web")
-include(":tests:core")
-include(":tests:platform:desktop")
-include(":tests:platform:desktop_c")
-include(":tests:platform:android")
-include(":tests:platform:web")
-include(":tests:platform:psp")
-include(":tests:platform:plugin")
-include(":benchmark:core")
-include(":benchmark:platform:desktop")
-include(":benchmark:platform:desktop_c")
-include(":benchmark:platform:plugin")
-include(":samples:basic:core")
-include(":samples:basic:platform:desktop")
-include(":samples:basic:platform:plugin")
-include(":samples:basic:platform:desktop_c")
-include(":samples:basic:platform:ios_c")
-include(":samples:basic:platform:android")
-include(":samples:basic:platform:web")
-include(":samples:ecs-platformer:core")
-include(":samples:ecs-platformer:platform:desktop")
-include(":samples:ecs-platformer:platform:desktop_c")
-include(":samples:ecs-platformer:platform:ios_c")
-include(":samples:ecs-platformer:platform:android")
-include(":samples:ecs-platformer:platform:web")
-include(":samples:multiplayer:2d-webrtc:core")
-include(":samples:multiplayer:2d-webrtc:platform:desktop")
-include(":samples:multiplayer:2d-webrtc:platform:plugin")
-include(":samples:multiplayer:2d-webrtc:platform:android")
-include(":samples:multiplayer:2d-webrtc:platform:web")
+if (!libfdxPublicationBuild) {
+    include(":tests:core")
+    include(":tests:platform:desktop")
+    include(":tests:platform:desktop_c")
+    include(":tests:platform:android")
+    include(":tests:platform:web")
+    include(":tests:platform:psp")
+    include(":tests:platform:plugin")
+    include(":benchmark:core")
+    include(":benchmark:platform:desktop")
+    include(":benchmark:platform:desktop_c")
+    include(":benchmark:platform:plugin")
+    include(":samples:basic:core")
+    include(":samples:basic:platform:desktop")
+    include(":samples:basic:platform:plugin")
+    include(":samples:basic:platform:desktop_c")
+    include(":samples:basic:platform:ios_c")
+    include(":samples:basic:platform:android")
+    include(":samples:basic:platform:web")
+    include(":samples:ecs-platformer:core")
+    include(":samples:ecs-platformer:platform:desktop")
+    include(":samples:ecs-platformer:platform:desktop_c")
+    include(":samples:ecs-platformer:platform:ios_c")
+    include(":samples:ecs-platformer:platform:android")
+    include(":samples:ecs-platformer:platform:web")
+    include(":samples:multiplayer:2d-webrtc:core")
+    include(":samples:multiplayer:2d-webrtc:platform:desktop")
+    include(":samples:multiplayer:2d-webrtc:platform:plugin")
+    include(":samples:multiplayer:2d-webrtc:platform:android")
+    include(":samples:multiplayer:2d-webrtc:platform:web")
+}

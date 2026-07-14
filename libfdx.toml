@@ -4,4 +4,4 @@ fdxVersion = "0.0.2"
 fdxSnapshotVersion = "-SNAPSHOT"
 
 [development]
-usePublishedLibfdx = false
+usePublishedLibfdx = true

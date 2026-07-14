@@ -16,10 +16,17 @@ base {
 }
 
 dependencies {
-    api(project(":libfdx:framework:application"))
-    implementation(project(":libfdx:framework:graphics"))
-    implementation(project(":libfdx:framework:g2d"))
-    implementation(project(":libfdx:extensions:ecs"))
+    if (LibExt.usePublishedLibfdx) {
+        api("${LibExt.fdxGroup}:application:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:graphics:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:g2d:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:ecs:${LibExt.fdxSnapshotVersion}")
+    } else {
+        api(project(":libfdx:framework:application"))
+        implementation(project(":libfdx:framework:graphics"))
+        implementation(project(":libfdx:framework:g2d"))
+        implementation(project(":libfdx:extensions:ecs"))
+    }
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
 }

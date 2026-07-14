@@ -32,8 +32,9 @@ The sample keeps the full platform module matrix. Desktop, web, desktop C, and
 iOS C modules apply the libFDX Gradle plugin directly, keep only plugin target
 and asset configuration in their build files, use the plugin-generated
 `libfdx_*` tasks, and own their launcher classes. The root build convention
-supplies their local sample/backend classpaths. Android remains a normal
-Android module for manifest, activity, and asset wiring.
+supplies their sample classpaths and selects published or local libFDX
+dependencies according to `development.usePublishedLibfdx`. Android remains a
+normal Android module for manifest, activity, and asset wiring.
 
 Run the desktop sample from the repository root:
 

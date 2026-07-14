@@ -20,6 +20,7 @@ permissions:
 env:
   CENTRAL_PORTAL_USERNAME: ${{ secrets.CENTRAL_PORTAL_USERNAME }}
   CENTRAL_PORTAL_PASSWORD: ${{ secrets.CENTRAL_PORTAL_PASSWORD }}
+  LIBFDX_PUBLICATION_BUILD: "true"
 
 jobs:
   build_windows:
@@ -147,9 +148,9 @@ jobs:
           java-version: 25
 
       - name: Set up Emscripten
-        uses: mymindstorm/setup-emsdk@v16
+        uses: emscripten-core/setup-emsdk@v16
         with:
-          version: 6.0.0
+          version: 6.0.3
 
       - name: Change wrapper permissions
         run: chmod +x ./gradlew
@@ -211,6 +212,8 @@ jobs:
   validate:
     name: Run Gradle Checks
     runs-on: ubuntu-latest
+    env:
+      LIBFDX_PUBLICATION_BUILD: "false"
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -245,7 +248,7 @@ jobs:
       - name: Run checks
         run: |
           chmod +x ./gradlew
-          ./gradlew check --continue --warning-mode all --console=plain
+          ./gradlew -Dlibfdx.development.usePublishedLibfdx=false check --continue --warning-mode all --console=plain
 
   publish:
     name: Build and Upload

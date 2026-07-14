@@ -77,6 +77,11 @@ object LibExt {
     }
 
     private fun readDevelopmentValue(file: File, localProperties: Properties, key: String): ConfigValue {
+        val systemKey = "libfdx.development.$key"
+        val systemValue = System.getProperty(systemKey)?.trim()?.takeIf { it.isNotEmpty() }
+        if (systemValue != null) {
+            return ConfigValue("system property $systemKey", systemValue)
+        }
         val localKey = "development.$key"
         val localValue = localProperties.getProperty(localKey)?.trim()?.takeIf { it.isNotEmpty() }
         if (localValue != null) {

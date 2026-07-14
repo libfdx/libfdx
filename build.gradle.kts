@@ -42,6 +42,22 @@ subprojects {
         dependencies.add("runtimeOnly", rootProject.project(projectPath))
     }
 
+    fun implementationLibfdx(projectPath: String, artifactId: String) {
+        if (LibExt.usePublishedLibfdx) {
+            dependencies.add("implementation", "${LibExt.fdxGroup}:$artifactId:${LibExt.fdxSnapshotVersion}")
+        } else {
+            implementationProject(projectPath)
+        }
+    }
+
+    fun runtimeOnlyLibfdx(projectPath: String, artifactId: String) {
+        if (LibExt.usePublishedLibfdx) {
+            dependencies.add("runtimeOnly", "${LibExt.fdxGroup}:$artifactId:${LibExt.fdxSnapshotVersion}")
+        } else {
+            runtimeOnlyProject(projectPath)
+        }
+    }
+
     fun archiveName(name: String) {
         extensions.configure(BasePluginExtension::class.java) {
             archivesName.set(name)
@@ -58,13 +74,13 @@ subprojects {
             configureJava25()
             archiveName("sample_ecs_platformer_desktop")
             implementationProject(":samples:ecs-platformer:core")
-            implementationProject(":libfdx:framework:application")
-            implementationProject(":libfdx:framework:display")
-            implementationProject(":libfdx:extensions:graphics:wgpu:core")
-            implementationProject(":libfdx:backends:desktop")
-            runtimeOnlyProject(":libfdx:extensions:graphics:gl:platform:desktop")
-            runtimeOnlyProject(":libfdx:extensions:graphics:vulkan:platform:desktop")
-            runtimeOnlyProject(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm")
+            implementationLibfdx(":libfdx:framework:application", "application")
+            implementationLibfdx(":libfdx:framework:display", "display")
+            implementationLibfdx(":libfdx:extensions:graphics:wgpu:core", "wgpu_core")
+            implementationLibfdx(":libfdx:backends:desktop", "backend_desktop")
+            runtimeOnlyLibfdx(":libfdx:extensions:graphics:gl:platform:desktop", "gl_desktop")
+            runtimeOnlyLibfdx(":libfdx:extensions:graphics:vulkan:platform:desktop", "vulkan_desktop")
+            runtimeOnlyLibfdx(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm", "wgpu_desktop_ffm")
         }
 
         ":samples:ecs-platformer:platform:web" -> pluginManager.withPlugin("io.github.libfdx") {
@@ -75,9 +91,9 @@ subprojects {
             dependencies.add("implementation", libs.teavm.jso)
             dependencies.add("implementation", libs.teavm.jso.apis)
             dependencies.add("implementation", libs.teavm.jso.impl)
-            implementationProject(":libfdx:backends:web")
-            implementationProject(":libfdx:extensions:graphics:gl:platform:web")
-            implementationProject(":libfdx:extensions:graphics:wgpu:platform:web")
+            implementationLibfdx(":libfdx:backends:web", "backend_web")
+            implementationLibfdx(":libfdx:extensions:graphics:gl:platform:web", "gl_web")
+            implementationLibfdx(":libfdx:extensions:graphics:wgpu:platform:web", "wgpu_web")
         }
 
         ":samples:ecs-platformer:platform:desktop_c" -> pluginManager.withPlugin("io.github.libfdx") {
@@ -85,8 +101,8 @@ subprojects {
             configureJava25()
             archiveName("sample_ecs_platformer_desktop_c")
             implementationProject(":samples:ecs-platformer:core")
-            implementationProject(":libfdx:backends:desktop_c")
-            runtimeOnlyProject(":libfdx:extensions:graphics:gl:platform:desktop_c")
+            implementationLibfdx(":libfdx:backends:desktop_c", "backend_desktop_c")
+            runtimeOnlyLibfdx(":libfdx:extensions:graphics:gl:platform:desktop_c", "gl_desktop_c")
         }
 
         ":samples:ecs-platformer:platform:ios_c" -> pluginManager.withPlugin("io.github.libfdx") {
@@ -94,16 +110,16 @@ subprojects {
             configureJava25()
             archiveName("sample_ecs_platformer_ios_c")
             implementationProject(":samples:ecs-platformer:core")
-            implementationProject(":libfdx:backends:ios_c")
+            implementationLibfdx(":libfdx:backends:ios_c", "backend_ios_c")
         }
 
         ":samples:ecs-platformer:platform:android" -> pluginManager.withPlugin("com.android.application") {
             ecsPlatformerGroup()
             archiveName("sample_ecs_platformer_android")
             implementationProject(":samples:ecs-platformer:core")
-            implementationProject(":libfdx:backends:android")
-            implementationProject(":libfdx:extensions:graphics:wgpu:platform:android_jni")
-            implementationProject(":libfdx:extensions:graphics:vulkan:platform:android_jni")
+            implementationLibfdx(":libfdx:backends:android", "backend_android")
+            implementationLibfdx(":libfdx:extensions:graphics:wgpu:platform:android_jni", "wgpu_android_jni")
+            implementationLibfdx(":libfdx:extensions:graphics:vulkan:platform:android_jni", "vulkan_android_jni")
         }
     }
 }
@@ -184,22 +200,24 @@ tasks.register("printFdxVersion") {
     }
 }
 
-tasks.register("benchmark_desktop") {
-    group = "benchmark"
-    description = "Runs the full desktop JVM benchmark suite and generates Markdown reports."
-    dependsOn(":benchmark:platform:desktop:benchmark_desktop")
-}
+if (findProject(":benchmark:platform:desktop") != null) {
+    tasks.register("benchmark_desktop") {
+        group = "benchmark"
+        description = "Runs the full desktop JVM benchmark suite and generates Markdown reports."
+        dependsOn(":benchmark:platform:desktop:benchmark_desktop")
+    }
 
-tasks.register("benchmark_desktop_c_debug") {
-    group = "benchmark"
-    description = "Runs the full desktop_c Debug benchmark suite and generates Markdown reports."
-    dependsOn(":benchmark:platform:desktop_c:benchmark_desktop_c_debug")
-}
+    tasks.register("benchmark_desktop_c_debug") {
+        group = "benchmark"
+        description = "Runs the full desktop_c Debug benchmark suite and generates Markdown reports."
+        dependsOn(":benchmark:platform:desktop_c:benchmark_desktop_c_debug")
+    }
 
-tasks.register("benchmark_desktop_c_release") {
-    group = "benchmark"
-    description = "Runs the full desktop_c Release benchmark suite and generates Markdown reports."
-    dependsOn(":benchmark:platform:desktop_c:benchmark_desktop_c_release")
+    tasks.register("benchmark_desktop_c_release") {
+        group = "benchmark"
+        description = "Runs the full desktop_c Release benchmark suite and generates Markdown reports."
+        dependsOn(":benchmark:platform:desktop_c:benchmark_desktop_c_release")
+    }
 }
 
 val pagesStagingDir = layout.buildDirectory.dir("pages")

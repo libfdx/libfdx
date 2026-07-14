@@ -1,288 +1,126 @@
-# libFDX Building
+# Building libFDX
 
-This document explains how to build and run libFDX from a local checkout. It
-is for contributors and engine developers who need to run samples, generate
-platform-native artifacts, or verify that a local environment can build the
-current repository.
+This guide is for contributors building libFDX from a checkout. For runnable
+examples, use [SAMPLES.md](SAMPLES.md). For validation commands, use
+[TESTING.md](TESTING.md). Module and artifact ownership is defined in
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
-This is not the architecture source of truth. Use
-[Architecture](ARCHITECTURE.md) for module ownership and dependency direction,
-and use [Testing](TESTING.md) when the goal is to validate behavior rather than
-start a sample.
-
-## Index
+## Topics
 
 - [1. Requirements](#1-requirements)
-- [2. Local Build Workflow](#2-local-build-workflow)
-- [3. Repository Dependency Mode](#3-repository-dependency-mode)
+- [2. Contributor Workflow](#2-contributor-workflow)
+- [3. Dependency Mode](#3-dependency-mode)
 - [4. Native Artifacts](#4-native-artifacts)
-- [5. Basic Desktop Sample](#5-basic-desktop-sample)
-- [6. Basic Android Sample](#6-basic-android-sample)
-- [7. Basic iOS C Sample](#7-basic-ios-c-sample)
-- [8. Basic Web Sample](#8-basic-web-sample)
-- [9. ECS Platformer Sample](#9-ecs-platformer-sample)
-- [10. WebRTC Multiplayer Sample](#10-webrtc-multiplayer-sample)
+- [5. Publication Preparation](#5-publication-preparation)
 
 ## 1. Requirements
 
-- JDK 25 available on `PATH`
-- Gradle wrapper from this repository
-- Desktop runtime support for desktop launchers
-- Android SDK plus a connected device or emulator for Android launchers
-- Native platform toolchains only for compiling the libFDX runtime bridge and
-  linking prebuilt dependency packages
-- Emscripten SDK for web native artifacts; activate it with `emsdk_env` or set
-  `EMSDK` so repository tasks can find the SDK checkout
+- JDK 25 on `PATH`;
+- the repository Gradle wrapper;
+- the platform SDK/toolchain only for targets you intend to build;
+- Android SDK plus a connected device/emulator for Android runs;
+- Emscripten SDK for web native artifacts (`emsdk_env` active or `EMSDK` set).
 
-Common/JVM/web/native modules target Java 25 source and bytecode compatibility.
-Android application and library modules use Java 17 source/target compatibility;
-AGP performs the Android compilation, lint, desugaring, and DEX boundary.
+Common JVM, web, and native-facing Java modules target Java 25. Android
+application/provider modules use the supported Java 17 bytecode boundary under
+AGP.
 
-## 2. Local Build Workflow
+## 2. Contributor Workflow
 
-For a normal local development pass, start with the smallest launcher that
-proves the change:
-
-1. Use a desktop sample when checking application startup or a provider-neutral
-   rendering path.
-2. Use `libfdx_build_native_artifacts` only when the changed target consumes
-   generated native resources.
-3. Use the commands in [Testing](TESTING.md) when checking a specific provider,
-   widget, visual path, input path, or PSP capture.
-
-The sample tasks in this document are interactive launchers. They are useful for
-manual checks and smoke runs, but they do not replace validation tasks when a
-change needs deterministic pass/fail evidence.
-
-## 3. Repository Dependency Mode
-
-Tests and samples can run against either the local source modules or already
-published libFDX artifacts. A clean checkout compiles and exercises the local
-`:libfdx:*` project dependencies and the local `libfdx/tools/gradle-plugin`
-build. That is the expected mode for repository development and CI because
-task wiring, samples, and tests must match the source that was checked out.
-Runtime launcher modules use explicit Gradle tasks and standalone builders
-instead of applying the plugin. The included plugin build must stay isolated to
-the plugin project; it must not include or remap root `:libfdx:*` source modules
-under the plugin build id.
-
-Use ignored root `local.properties` overrides when checking published artifacts:
+Use local dependency mode while changing framework code:
 
 ```properties
-development.usePublishedLibfdx=true
+# local.properties (ignored by Git)
+development.usePublishedLibfdx=false
 ```
 
-With `development.usePublishedLibfdx=true`, the dedicated plugin-use modules
-resolve the libFDX Gradle plugin from Maven, and consumers resolve libFDX
-dependencies as published coordinates such as
-`<fdxGroup>:<artifact>:<fdxSnapshotVersion>`. The exact snapshot coordinate
-comes from `libfdx.toml` `[release].fdxSnapshotVersion`; the plugin publication
-and its libFDX dependencies use that same selected coordinate. This avoids
-rebuilding local libFDX modules when the goal is to check consumers against a
-snapshot build. Settings still includes the local `:libfdx:*` source modules;
-the Maven-vs-local choice is made in each consumer dependency block.
-Builder-backed web tasks use local generated runtime fdx web resources only
-when that consumer uses local `:libfdx:*` project dependencies. Delete the local
-override key to use the `libfdx.toml` default again.
+Then run the narrowest task that proves the change. Typical starting points are:
 
-Keep `[release].fdxVersion` at the numeric current or next version. Snapshot
-tasks use the separate exact `[release].fdxSnapshotVersion`; release tasks use
-`fdxVersion`. Aggregate deploy preparation publishes the libraries first, then
-the isolated Gradle-plugin build resolves those same-version artifacts from
-the generated local deploy repository before remote repositories.
+```powershell
+./gradlew check
+./gradlew :tests:platform:desktop:test_desktop_gl_run
+./gradlew libfdx_build_native_artifacts
+```
 
-To switch modes for one checkout, edit `local.properties` before running the
-launcher or validation task. Gradle `-P` overrides are not supported for libFDX
-dependency mode.
+The desktop run is interactive unless finite validation properties are supplied.
+Native generation is needed only when the affected target consumes generated
+native resources. See [TESTING.md](TESTING.md) before expanding to a provider or
+platform matrix.
+
+## 3. Dependency Mode
+
+Repository consumers--samples, tests, benchmarks, and plugin-use modules--can use
+published artifacts or checked-out projects.
+
+| Mode | Selection | Intended use |
+| --- | --- | --- |
+| Published | `development.usePublishedLibfdx=true` | Clean checkout and examples without compiling libFDX first. |
+| Local | `development.usePublishedLibfdx=false` | Develop and validate framework changes. |
+| Publication | Selected automatically by publication tasks | Build Maven output without consumer/bootstrap dependencies. |
+
+Published mode is the checked-in default in `libfdx.toml`. It resolves the exact
+`[release].fdxSnapshotVersion`. With the current configuration that version is
+`-SNAPSHOT`; it is not constructed from `fdxVersion` as `0.0.2-SNAPSHOT`.
+Plugin-use modules resolve the matching published Gradle plugin.
+
+Override the default in ignored root `local.properties`, or for one invocation:
+
+```powershell
+./gradlew "-Dlibfdx.development.usePublishedLibfdx=false" <task>
+```
+
+Precedence is system property, `local.properties`, then `libfdx.toml`. Gradle
+`-P` project properties are not supported for this setting.
+
+Publication tasks ignore the consumer default and use a reduced project graph
+without samples, tests, benchmarks, or consumer plugin resolution. Libraries
+are prepared first; the isolated Gradle-plugin build then resolves the same
+version from the generated deploy repository. Therefore leaving the checked-in
+default at `true` does not create a release or snapshot publication bootstrap
+cycle.
+
+Version roles remain separate:
+
+- `[release].fdxVersion` is the numeric release coordinate;
+- `[release].fdxSnapshotVersion` is the exact snapshot coordinate and must end
+  in `-SNAPSHOT`;
+- `prepareReleaseDeploy` uses the release version;
+- `prepareSnapshotDeploy` uses the snapshot version.
+
+Builder-backed web consumers use generated local runtime resources only in local
+mode. Published consumers receive those resources from Maven artifacts.
 
 ## 4. Native Artifacts
 
-Native artifacts are built by explicit native/platform tasks before they are
-used by tests, samples, generated platform projects, or local packaging tasks.
-The aggregate task is a convenience entry point for generating the native files
-that the current machine can build.
-
-Use the aggregate task when you want to build the native artifacts supported by
-the current machine, including built-in WGSL shader support for GL, Vulkan,
-WebGL/GLES, or other providers that require runtime shader translation:
+Build the native artifacts supported by the current machine with:
 
 ```powershell
-.\gradlew.bat libfdx_build_native_artifacts
+./gradlew libfdx_build_native_artifacts
 ```
 
-Runtime fdx desktop, Android, and web native builds enable the Tint-backed
-runtime shader compiler by default. They do not build FreeType or Tint/Dawn
-from source in libFDX; those static libraries are downloaded from the pinned
-`fdx-natives` release and linked into the final runtime `fdx` artifacts. The
-aggregate task is the clean-safe setup command to run before desktop GL/UI
-samples or tests that use WGSL-only built-in renderers such as `SpriteBatch`.
-It can be run after the normal Gradle `clean` task when you want a fresh native
-rebuild of the libFDX bridge artifacts.
+This is the clean-safe setup task for providers that need the runtime `fdx`
+bridge, FreeType, or WGSL translation. libFDX links checksum-verified prebuilt
+FreeType and Tint/Dawn packages from the pinned `fdx-natives` release; it does
+not build those third-party projects from source.
 
-On Windows, this builds the current host runtime fdx desktop C file, the
-runtime fdx web JS/WASM files, and Android AAR outputs when the Android SDK is
-available. It does not prove that Linux or macOS native files were built; those
-must be built on their matching platform jobs or machines.
+The aggregate task proves only the targets available on the current host. It
+does not prove native output for another operating system. For web builds, keep
+the shader compiler enabled because built-in renderer sources are WGSL even
+when WebGL ultimately executes generated GLSL ES.
 
-If the web native configure step cannot start `emcmake` after a reinstall,
-confirm the Emscripten SDK is installed and either run `emsdk_env.bat`/
-`emsdk_env.ps1` in the shell before Gradle or set `EMSDK` to the SDK root.
-The repository task also uses the SDK-bundled Python when `EMSDK_PYTHON` is
-not already set, which avoids depending on a global Python installation.
-Do not disable the web shader compiler for WebGL renderer validation: WebGL
-executes generated GLSL ES, but built-in renderer shader source is WGSL-only.
+If Gradle cannot find `emcmake`, activate `emsdk_env` or set `EMSDK`. The build
+uses the SDK-bundled Python when `EMSDK_PYTHON` is not set.
 
-## 5. Basic Desktop Sample
+## 5. Publication Preparation
 
-The basic desktop sample is the fastest way to confirm that a desktop launcher
-starts and that a selected graphics provider can present a frame. Use the
-provider-specific task that matches the backend path you are checking.
-Desktop sample windows start maximized by default. Pass
-`-Dlibfdx.sample.maximized=false` to use the sample's configured startup size.
-
-From the repository root on Windows, use the task for the graphics stack you
-want:
+Prepare one version family at a time:
 
 ```powershell
-.\gradlew.bat :samples:basic:platform:desktop:basic_desktop_gl_run
-.\gradlew.bat :samples:basic:platform:desktop:basic_desktop_wgpu_run
-.\gradlew.bat :samples:basic:platform:desktop:basic_desktop_vulkan_run
+./gradlew prepareSnapshotDeploy
+./gradlew prepareReleaseDeploy
 ```
 
-The desktop-c sample exposes platform-module aliases backed by the
-plugin-use module's generated project:
-
-```powershell
-.\gradlew.bat :samples:basic:platform:desktop_c:basic_desktop_c_opengl_generate_debug
-.\gradlew.bat :samples:basic:platform:desktop_c:basic_desktop_c_opengl_build_debug
-.\gradlew.bat :samples:basic:platform:desktop_c:basic_desktop_c_opengl_run_debug
-```
-
-Packaged desktop JVM `_build` aliases are part of the plugin-use sample module:
-
-```powershell
-.\gradlew.bat :samples:basic:platform:plugin:libfdx_desktop_jvm_gl_build
-.\gradlew.bat :samples:basic:platform:plugin:libfdx_desktop_jvm_wgpu_build
-.\gradlew.bat :samples:basic:platform:plugin:libfdx_desktop_jvm_vulkan_build
-```
-
-## 6. Basic Android Sample
-
-The Android sample tasks build and launch the basic sample on a connected
-Android device or emulator. They require the Android SDK and device/emulator
-setup before Gradle can install or run the app.
-
-Use the task for the Android graphics stack you want:
-
-```powershell
-.\gradlew.bat :samples:basic:platform:android:basic_android_gles_run
-.\gradlew.bat :samples:basic:platform:android:basic_android_wgpu_jni_run
-.\gradlew.bat :samples:basic:platform:android:basic_android_vulkan_run
-.\gradlew.bat :samples:basic:platform:android:basic_android_vulkan_fallback_run
-```
-
-## 7. Basic iOS C Sample
-
-The iOS C sample generates TeaVM C output plus an Xcode project. The Gradle task
-can run on Windows, but building or running the generated iOS app requires
-macOS with Xcode.
-
-```powershell
-.\gradlew.bat :samples:basic:platform:ios_c:basic_ios_c_gles_generate
-.\gradlew.bat :samples:basic:platform:ios_c:basic_ios_c_metal_generate
-```
-
-The generated Xcode project is written under
-`samples/basic/platform/plugin/build/dist/ios-c/xcode`. The GLES task writes a
-GLKit/OpenGLES project. The Metal task writes a native Metal/MetalKit project
-that links system Apple frameworks and the generated libFDX native bridge.
-
-## 8. Basic Web Sample
-
-The basic web launchers live in `:samples:basic:platform:web`. The runtime web
-module exposes WebGL JavaScript/Wasm and WebGPU JavaScript aliases:
-
-```powershell
-.\gradlew.bat :samples:basic:platform:web:basic_webgl_js_run
-.\gradlew.bat :samples:basic:platform:web:basic_webgl_wasm_run
-.\gradlew.bat :samples:basic:platform:web:basic_webgpu_js_run
-```
-
-TeaVM WasmGC cannot currently compile the substituted JS-native jWebGPU
-binding path. For WebGPU use `basic_webgpu_js_run`; for Wasm use
-`basic_webgl_wasm_run`.
-
-For web launchers, a width or height of `0` or a negative value means the
-canvas fills the browser window.
-
-## 9. ECS Platformer Sample
-
-The ECS platformer sample is a code-first fixed-level platformer example that
-uses the optional `:libfdx:extensions:ecs` module for gameplay and the CC0
-Kenney Pixel Platformer pack for visuals.
-Its desktop, web, desktop C, and iOS C platform modules apply the libFDX
-Gradle plugin directly, keep platform build files to plugin target/asset
-configuration, and use the plugin-generated `libfdx_*` task names. The root
-build convention supplies their local sample/backend classpaths. Android
-remains a normal Android application module.
-
-```powershell
-.\gradlew.bat :samples:ecs-platformer:core:test
-.\gradlew.bat :samples:ecs-platformer:platform:desktop:libfdx_desktop_jvm_gl_run
-.\gradlew.bat :samples:ecs-platformer:platform:desktop:libfdx_desktop_jvm_wgpu_run
-.\gradlew.bat :samples:ecs-platformer:platform:desktop:libfdx_desktop_jvm_vulkan_run
-.\gradlew.bat :samples:ecs-platformer:platform:web:libfdx_web_js_webgl_run
-```
-
-## 10. WebRTC Multiplayer Sample
-
-The WebRTC multiplayer sample requires a standalone signaling server process.
-Start the signaling server first:
-
-```powershell
-.\gradlew.bat :libfdx:extensions:net:webrtc:signaling_server:webrtc_signaling_server_run
-```
-
-The default endpoint is `ws://127.0.0.1:7777`. Configure it with Gradle system
-properties when needed:
-
-```powershell
-.\gradlew.bat `
-  -Dlibfdx.webrtc.signaling.host=0.0.0.0 `
-  -Dlibfdx.webrtc.signaling.port=7777 `
-  -Dlibfdx.webrtc.signaling.tickRate=30 `
-  -Dlibfdx.webrtc.signaling.maxEventsPerTick=128 `
-  -Dlibfdx.webrtc.signaling.maxQueuedEvents=4096 `
-  :libfdx:extensions:net:webrtc:signaling_server:webrtc_signaling_server_run
-```
-
-The standalone server runs its own processing loop. Embedded tools that create
-`WebRtcSignalingServer` directly should call `server.process(deltaTime)` from
-their backend loop.
-
-Then run the desktop sample clients in separate terminals. One client can host
-a room:
-
-```powershell
-.\gradlew.bat `
-  -Dlibfdx.sample.playerName=Host `
-  -Dlibfdx.sample.autoHost=true `
-  -Dlibfdx.sample.hostRoomId=test-room `
-  :samples:multiplayer:2d-webrtc:platform:desktop:multiplayer_2d_webrtc_desktop_wgpu_run
-```
-
-Another client can join the same room:
-
-```powershell
-.\gradlew.bat `
-  -Dlibfdx.sample.playerName=Client `
-  -Dlibfdx.sample.autoJoinRoom=test-room `
-  :samples:multiplayer:2d-webrtc:platform:desktop:multiplayer_2d_webrtc_desktop_wgpu_run
-```
-
-Web clients also connect to the standalone signaling server. Use the `signaling`
-query parameter when the server is not on the default local endpoint.
-
-```powershell
-.\gradlew.bat :samples:multiplayer:2d-webrtc:platform:web:multiplayer_2d_webrtc_webgl_js_run
-```
+These tasks assemble local deploy repositories for inspection/upload; they do
+not change the checked-in dependency-mode default. Confirm produced POM
+versions and run the release workflow appropriate to the requested publication
+before uploading.
