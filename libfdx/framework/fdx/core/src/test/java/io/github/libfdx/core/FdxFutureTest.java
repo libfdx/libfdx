@@ -4,9 +4,14 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -109,5 +114,84 @@ final class FdxFutureTest {
         failed.onSuccess(value -> failureCalls[0] += 100);
         assertEquals(1, failureCalls[0]);
         assertSame(resultFailure, assertThrows(RuntimeException.class, failed::get));
+    }
+
+    @Test
+    void successCallbackRegisteredFromAnotherThreadDuringDispatchRunsOnce() throws Exception {
+        FdxFuture<String> future = FdxFuture.pending();
+        CountDownLatch dispatchStarted = new CountDownLatch(1);
+        CountDownLatch releaseDispatch = new CountDownLatch(1);
+        AtomicInteger lateCalls = new AtomicInteger();
+        AtomicReference<Throwable> completionFailure = new AtomicReference<Throwable>();
+
+        future.onSuccess(value -> {
+            dispatchStarted.countDown();
+            await(releaseDispatch);
+        });
+
+        Thread completionThread = new Thread(() -> {
+            try {
+                future.complete("ready");
+            } catch (Throwable error) {
+                completionFailure.set(error);
+            }
+        }, "fdx-future-success-completion");
+        completionThread.start();
+
+        assertTrue(dispatchStarted.await(5L, TimeUnit.SECONDS));
+        future.onSuccess(value -> lateCalls.incrementAndGet());
+        releaseDispatch.countDown();
+        completionThread.join(5_000L);
+
+        assertFalse(completionThread.isAlive());
+        assertNull(completionFailure.get());
+        assertEquals(1, lateCalls.get());
+    }
+
+    @Test
+    void failureCallbackRegisteredFromAnotherThreadDuringDispatchRunsOnce() throws Exception {
+        FdxFuture<String> future = FdxFuture.pending();
+        RuntimeException resultFailure = new IllegalStateException("operation failed");
+        CountDownLatch dispatchStarted = new CountDownLatch(1);
+        CountDownLatch releaseDispatch = new CountDownLatch(1);
+        AtomicInteger lateCalls = new AtomicInteger();
+        AtomicReference<Throwable> completionFailure = new AtomicReference<Throwable>();
+
+        future.onFailure(error -> {
+            dispatchStarted.countDown();
+            await(releaseDispatch);
+        });
+
+        Thread completionThread = new Thread(() -> {
+            try {
+                future.completeExceptionally(resultFailure);
+            } catch (Throwable error) {
+                completionFailure.set(error);
+            }
+        }, "fdx-future-failure-completion");
+        completionThread.start();
+
+        assertTrue(dispatchStarted.await(5L, TimeUnit.SECONDS));
+        future.onFailure(error -> {
+            assertSame(resultFailure, error);
+            lateCalls.incrementAndGet();
+        });
+        releaseDispatch.countDown();
+        completionThread.join(5_000L);
+
+        assertFalse(completionThread.isAlive());
+        assertNull(completionFailure.get());
+        assertEquals(1, lateCalls.get());
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            if (!latch.await(5L, TimeUnit.SECONDS)) {
+                throw new AssertionError("Timed out waiting for callback dispatch");
+            }
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError("Interrupted while waiting for callback dispatch", error);
+        }
     }
 }

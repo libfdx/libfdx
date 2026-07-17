@@ -10,8 +10,11 @@ import java.lang.management.ManagementFactory;
 import java.lang.reflect.Proxy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -71,6 +74,68 @@ final class DefaultAssetManagerTest {
         manager.dispose();
         assertEquals(1, secondAsset.disposeCount);
         assertEquals(AssetStatus.UNLOADED, second.status());
+    }
+
+    @Test
+    void lateCompletionAfterUnloadIsRejectedAndDisposed() {
+        DefaultAssetManager manager = new DefaultAssetManager(files());
+        FdxFuture<TestAsset> loaderFuture = FdxFuture.pending();
+        manager.registerLoader(TestAsset.class, loader(loaderFuture));
+        AssetDescriptor<TestAsset> descriptor = AssetDescriptor.of("pending.asset", TestAsset.class);
+
+        AssetHandle<TestAsset> handle = manager.load(descriptor);
+        assertEquals(AssetStatus.LOADING, handle.status());
+        assertFalse(handle.future().isDone());
+
+        manager.unload(descriptor.path());
+
+        assertEquals(AssetStatus.UNLOADED, handle.status());
+        assertNull(handle.asset());
+        assertTrue(handle.future().isFailed());
+        assertThrows(RuntimeException.class, handle.future()::get);
+
+        TestAsset lateAsset = new TestAsset();
+        loaderFuture.complete(lateAsset);
+
+        assertEquals(1, lateAsset.disposeCount);
+        assertEquals(AssetStatus.UNLOADED, handle.status());
+        assertNull(handle.asset());
+        assertNull(manager.find(descriptor.path(), TestAsset.class));
+    }
+
+    @Test
+    void lateCompletionAfterManagerDisposeIsRejectedAndDisposed() {
+        DefaultAssetManager manager = new DefaultAssetManager(files());
+        FdxFuture<TestAsset> loaderFuture = FdxFuture.pending();
+        manager.registerLoader(TestAsset.class, loader(loaderFuture));
+        AssetHandle<TestAsset> handle = manager.load(AssetDescriptor.of("pending.asset", TestAsset.class));
+
+        manager.dispose();
+
+        assertTrue(manager.isDisposed());
+        assertEquals(AssetStatus.UNLOADED, handle.status());
+        assertTrue(handle.future().isFailed());
+
+        TestAsset lateAsset = new TestAsset();
+        loaderFuture.complete(lateAsset);
+
+        assertEquals(1, lateAsset.disposeCount);
+        assertEquals(AssetStatus.UNLOADED, handle.status());
+        assertNull(handle.asset());
+    }
+
+    private static AssetLoader<TestAsset> loader(FdxFuture<TestAsset> future) {
+        return new AssetLoader<TestAsset>() {
+            @Override
+            public Class<TestAsset> type() {
+                return TestAsset.class;
+            }
+
+            @Override
+            public FdxFuture<TestAsset> load(AssetLoadContext context, AssetDescriptor<TestAsset> descriptor) {
+                return future;
+            }
+        };
     }
 
     private static FileSystem files() {

@@ -39,7 +39,8 @@ public interface AssetHandle<T> {
     T asset();
 
     /**
-     * Returns the future.
+     * Returns the future. If its manager unloads this handle or is disposed
+     * before loading completes, the future completes with failure.
      *
      * @return the future
      */

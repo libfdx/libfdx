@@ -60,7 +60,8 @@ public interface AssetManager extends Disposable {
     <T> T find(String path, Class<T> type);
 
     /**
-     * Unloads the resource at the given path.
+     * Unloads the resource at the given path. If loading is still pending, the
+     * matching handle becomes unloaded and its future completes with failure.
      *
      * @param path the asset or file path
      */

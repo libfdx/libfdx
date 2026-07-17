@@ -200,6 +200,9 @@ public final class FdxFuture<T> {
             done = true;
             dispatchingCallbacks = true;
             callbacks = takeSuccessCallbacks();
+            if (callbacks == null) {
+                dispatchingCallbacks = false;
+            }
             failureCallbacks.clear();
         }
         Throwable callbackFailure = null;
@@ -208,6 +211,9 @@ public final class FdxFuture<T> {
                 callbackFailure = invokeCallbacks(callbacks, value, callbackFailure);
                 synchronized (this) {
                     callbacks = takeSuccessCallbacks();
+                    if (callbacks == null) {
+                        dispatchingCallbacks = false;
+                    }
                 }
             }
         } finally {
@@ -234,6 +240,9 @@ public final class FdxFuture<T> {
             done = true;
             dispatchingCallbacks = true;
             callbacks = takeFailureCallbacks();
+            if (callbacks == null) {
+                dispatchingCallbacks = false;
+            }
             successCallbacks.clear();
         }
         Throwable callbackFailure = null;
@@ -242,6 +251,9 @@ public final class FdxFuture<T> {
                 callbackFailure = invokeCallbacks(callbacks, actualError, callbackFailure);
                 synchronized (this) {
                     callbacks = takeFailureCallbacks();
+                    if (callbacks == null) {
+                        dispatchingCallbacks = false;
+                    }
                 }
             }
         } finally {

@@ -6,12 +6,12 @@ import io.github.libfdx.core.FdxFuture;
 import io.github.libfdx.core.FdxTask;
 import io.github.libfdx.files.FileSystem;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 
 /**
@@ -25,7 +25,7 @@ public final class DefaultAssetManager implements AssetManager {
     private final List<DefaultAssetHandle<?>> handleValues = new ArrayList<DefaultAssetHandle<?>>();
     private final Queue<Runnable> updateTasks = new ArrayDeque<Runnable>();
     private final FileSystem files;
-    private boolean disposed;
+    private volatile boolean disposed;
 
     /**
      * Creates a default asset manager.
@@ -151,19 +151,23 @@ public final class DefaultAssetManager implements AssetManager {
      * @param path the asset or file path
      */
     @Override
-    public synchronized void unload(String path) {
-        Iterator<Map.Entry<String, DefaultAssetHandle<?>>> iterator = handles.entrySet().iterator();
-        while (iterator.hasNext()) {
-            DefaultAssetHandle<?> handle = iterator.next().getValue();
-            if (handle.descriptor().path().equals(path)) {
-                iterator.remove();
-                handleValues.remove(handle);
-                Object asset = handle.asset();
-                if (asset instanceof Disposable) {
-                    ((Disposable) asset).dispose();
+    public void unload(String path) {
+        List<DefaultAssetHandle<?>> unloadedHandles = new ArrayList<DefaultAssetHandle<?>>();
+        synchronized (this) {
+            Iterator<Map.Entry<String, DefaultAssetHandle<?>>> iterator = handles.entrySet().iterator();
+            while (iterator.hasNext()) {
+                DefaultAssetHandle<?> handle = iterator.next().getValue();
+                if (handle.descriptor().path().equals(path)) {
+                    iterator.remove();
+                    handleValues.remove(handle);
+                    unloadedHandles.add(handle);
                 }
-                handle.unload();
             }
+        }
+        for (int i = 0; i < unloadedHandles.size(); i++) {
+            DefaultAssetHandle<?> handle = unloadedHandles.get(i);
+            handle.unload(new FdxException(
+                    "Asset unloaded before loading completed: " + handle.descriptor().path()));
         }
     }
 
@@ -175,6 +179,7 @@ public final class DefaultAssetManager implements AssetManager {
      */
     @Override
     public synchronized void registerLoader(Class<?> type, AssetLoader<?> loader) {
+        ensureNotDisposed();
         if (type == null) {
             throw new FdxException("Asset loader type cannot be null");
         }
@@ -188,24 +193,25 @@ public final class DefaultAssetManager implements AssetManager {
      * Releases resources held by this instance.
      */
     @Override
-    public synchronized void dispose() {
-        if (disposed) {
-            return;
-        }
-        disposed = true;
-        for (int i = 0; i < handleValues.size(); i++) {
-            DefaultAssetHandle<?> handle = handleValues.get(i);
-            Object asset = handle.asset();
-            if (asset instanceof Disposable) {
-                ((Disposable) asset).dispose();
+    public void dispose() {
+        List<DefaultAssetHandle<?>> disposedHandles;
+        synchronized (this) {
+            if (disposed) {
+                return;
             }
-            handle.unload();
+            disposed = true;
+            disposedHandles = new ArrayList<DefaultAssetHandle<?>>(handleValues);
+            handles.clear();
+            handleValues.clear();
+            loaders.clear();
         }
-        handles.clear();
-        handleValues.clear();
-        loaders.clear();
         synchronized (updateTasks) {
             updateTasks.clear();
+        }
+        for (int i = 0; i < disposedHandles.size(); i++) {
+            DefaultAssetHandle<?> handle = disposedHandles.get(i);
+            handle.unload(new FdxException(
+                    "Asset manager disposed before loading completed: " + handle.descriptor().path()));
         }
     }
 
@@ -268,6 +274,12 @@ public final class DefaultAssetManager implements AssetManager {
         }
     }
 
+    private static void disposeAsset(Object asset) {
+        if (asset instanceof Disposable) {
+            ((Disposable) asset).dispose();
+        }
+    }
+
     /**
      * Provides the default implementation of an asset load context.
      *
@@ -306,17 +318,24 @@ public final class DefaultAssetManager implements AssetManager {
         @Override
         public <T> FdxFuture<T> completeOnUpdate(final FdxTask<T> task) {
             final FdxFuture<T> future = FdxFuture.pending();
+            boolean rejected;
             synchronized (updateTasks) {
-                updateTasks.add(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            future.complete(task.run());
-                        } catch (Throwable error) {
-                            future.completeExceptionally(error);
+                rejected = disposed;
+                if (!rejected) {
+                    updateTasks.add(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                future.complete(task.run());
+                            } catch (Throwable error) {
+                                future.completeExceptionally(error);
+                            }
                         }
-                    }
-                });
+                    });
+                }
+            }
+            if (rejected) {
+                future.completeExceptionally(new FdxException("AssetManager is disposed"));
             }
             return future;
         }
@@ -389,24 +408,50 @@ public final class DefaultAssetManager implements AssetManager {
             return future;
         }
 
-        void loading() {
-            status = AssetStatus.LOADING;
+        synchronized void loading() {
+            if (status == AssetStatus.QUEUED) {
+                status = AssetStatus.LOADING;
+            }
         }
 
         void complete(T asset) {
-            this.asset = asset;
-            status = AssetStatus.LOADED;
+            boolean accepted;
+            synchronized (this) {
+                accepted = status == AssetStatus.QUEUED || status == AssetStatus.LOADING;
+                if (accepted) {
+                    this.asset = asset;
+                    status = AssetStatus.LOADED;
+                }
+            }
+            if (!accepted) {
+                disposeAsset(asset);
+                return;
+            }
             future.complete(asset);
         }
 
         void fail(Throwable error) {
-            status = AssetStatus.FAILED;
+            synchronized (this) {
+                if (status != AssetStatus.QUEUED && status != AssetStatus.LOADING) {
+                    return;
+                }
+                status = AssetStatus.FAILED;
+            }
             future.completeExceptionally(error != null ? error : new FdxException("Asset load failed"));
         }
 
-        void unload() {
-            status = AssetStatus.UNLOADED;
-            asset = null;
+        void unload(Throwable error) {
+            T unloadedAsset;
+            synchronized (this) {
+                if (status == AssetStatus.UNLOADED) {
+                    return;
+                }
+                status = AssetStatus.UNLOADED;
+                unloadedAsset = asset;
+                asset = null;
+            }
+            disposeAsset(unloadedAsset);
+            future.completeExceptionally(error);
         }
     }
 }

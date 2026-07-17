@@ -22,7 +22,14 @@ dependencies {
     api(project(":libfdx:framework:net"))
     api(project(":libfdx:framework:storage"))
     api(project(":libfdx:framework:graphics"))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
+
+tasks.named<Test>("test") {
+    useJUnitPlatform()
+}
+
 java {
     withSourcesJar()
     withJavadocJar()

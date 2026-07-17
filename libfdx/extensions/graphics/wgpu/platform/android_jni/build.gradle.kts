@@ -38,12 +38,7 @@ base {
 
 dependencies {
     api(project(":libfdx:extensions:graphics:wgpu:core"))
-    api(libs.jwebgpu.android) {
-        exclude(group = "com.github.xpenatan.jParser", module = "runtime-jni_linux_x64")
-        exclude(group = "com.github.xpenatan.jParser", module = "runtime-jni_mac_arm64")
-        exclude(group = "com.github.xpenatan.jParser", module = "runtime-jni_mac_x64")
-        exclude(group = "com.github.xpenatan.jParser", module = "runtime-jni_windows_x64")
-    }
+    api(libs.jwebgpu.android)
 }
 val androidJavadocJar = tasks.register("androidJavadocJar", org.gradle.api.tasks.bundling.Jar::class) {
     archiveClassifier.set("javadoc")

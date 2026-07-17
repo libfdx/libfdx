@@ -6,6 +6,7 @@ import io.github.libfdx.core.Logger;
 import io.github.libfdx.display.Displays;
 import io.github.libfdx.files.FileSystem;
 import io.github.libfdx.graphics.Graphics;
+import io.github.libfdx.input.DefaultInput;
 import io.github.libfdx.input.Input;
 import io.github.libfdx.net.Network;
 import io.github.libfdx.storage.DefaultStorage;
@@ -27,7 +28,7 @@ public final class DefaultFdx implements Fdx {
     private final Logger logger;
 
     /**
-     * Creates a default fdx.
+     * Creates a default fdx with a standalone default input service.
      *
      * @param app the app
      * @param displays the displays
@@ -36,7 +37,7 @@ public final class DefaultFdx implements Fdx {
      * @param logger the logger
      */
     public DefaultFdx(Application app, Displays displays, Graphics graphics, FileSystem files, Logger logger) {
-        this(app, displays, graphics, null, files, logger);
+        this(app, displays, graphics, new DefaultInput(), files, logger);
     }
 
     /**
@@ -91,6 +92,15 @@ public final class DefaultFdx implements Fdx {
         }
         if (graphics == null) {
             throw new FdxException("Graphics cannot be null");
+        }
+        if (input == null) {
+            throw new FdxException("Input cannot be null");
+        }
+        if (files == null) {
+            throw new FdxException("FileSystem cannot be null");
+        }
+        if (storage == null) {
+            throw new FdxException("Storage cannot be null");
         }
         if (logger == null) {
             throw new FdxException("Logger cannot be null");

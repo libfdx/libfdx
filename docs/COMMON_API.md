@@ -399,7 +399,11 @@ disposal.
 - `get(...)` fails clearly when an asset is unavailable or has the wrong type.
 - `find(...)` returns `null` for an unavailable or mismatched asset.
 - A handle's asset value remains `null` until loading succeeds.
-- The manager disposes only assets whose ownership it accepted.
+- Unloading a queued or loading handle, or disposing its manager, completes the
+  handle's future with failure.
+- A loader result that arrives after unload or manager disposal is not
+  published; a disposable result is released immediately.
+- The manager disposes only assets transferred to it by a loader.
 
 Decoded image bytes and GPU textures are different ownership domains. A source
 loader must not hide provider-backed texture creation.

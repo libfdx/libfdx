@@ -16,8 +16,7 @@ base {
 
 dependencies {
     api(project(":libfdx:extensions:graphics:wgpu:core"))
-    runtimeOnly(libs.jwebgpu.jni)
-    runtimeOnly(libs.jwebgpu.jni.desktop)
+    runtimeOnly(libs.bundles.jwebgpu.desktop.jni)
 }
 java {
     withSourcesJar()

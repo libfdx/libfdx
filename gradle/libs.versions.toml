@@ -1,6 +1,6 @@
 [versions]
 android-gradle-plugin = "8.12.2"
-jwebgpu = "-SNAPSHOT"
+jwebgpu = "0.3.2"
 jmultiplatform = "0.1.3"
 junit-jupiter = "5.13.4"
 junit-platform = "1.13.4"
@@ -15,12 +15,19 @@ android-application = { id = "com.android.application", version.ref = "android-g
 android-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }
 
 [libraries]
-jwebgpu-android = { module = "com.github.xpenatan.jWebGPU:webgpu-android", version.ref = "jwebgpu" }
+jwebgpu-android = { module = "com.github.xpenatan.jWebGPU:webgpu-android-wgpu", version.ref = "jwebgpu" }
 jwebgpu-core = { module = "com.github.xpenatan.jWebGPU:webgpu-core", version.ref = "jwebgpu" }
-jwebgpu-ffm = { module = "com.github.xpenatan.jWebGPU:webgpu-ffm", version.ref = "jwebgpu" }
-jwebgpu-ffm-desktop = { module = "com.github.xpenatan.jWebGPU:webgpu-ffm_desktop", version.ref = "jwebgpu" }
+jwebgpu-ffm = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-ffm", version.ref = "jwebgpu" }
+jwebgpu-ffm-windows-x64 = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-ffm-wgpu_windows_x64", version.ref = "jwebgpu" }
+jwebgpu-ffm-linux-x64 = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-ffm-wgpu_linux_x64", version.ref = "jwebgpu" }
+jwebgpu-ffm-mac-x64 = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-ffm-wgpu_mac_x64", version.ref = "jwebgpu" }
+jwebgpu-ffm-mac-arm64 = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-ffm-wgpu_mac_arm64", version.ref = "jwebgpu" }
 jwebgpu-jni = { module = "com.github.xpenatan.jWebGPU:webgpu-jni", version.ref = "jwebgpu" }
-jwebgpu-jni-desktop = { module = "com.github.xpenatan.jWebGPU:webgpu-jni_desktop", version.ref = "jwebgpu" }
+jwebgpu-jni-desktop = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-jni", version.ref = "jwebgpu" }
+jwebgpu-jni-windows-x64 = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-jni-wgpu_windows_x64", version.ref = "jwebgpu" }
+jwebgpu-jni-linux-x64 = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-jni-wgpu_linux_x64", version.ref = "jwebgpu" }
+jwebgpu-jni-mac-x64 = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-jni-wgpu_mac_x64", version.ref = "jwebgpu" }
+jwebgpu-jni-mac-arm64 = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-jni-wgpu_mac_arm64", version.ref = "jwebgpu" }
 jwebgpu-web = { module = "com.github.xpenatan.jWebGPU:webgpu-web", version.ref = "jwebgpu" }
 jwebgpu-web-wasm = { module = "com.github.xpenatan.jWebGPU:webgpu-web_wasm", version.ref = "jwebgpu" }
 jmultiplatform = { module = "com.github.xpenatan:jMultiplatform", version.ref = "jmultiplatform" }
@@ -42,3 +49,20 @@ teavm-jso-apis = { module = "org.teavm:teavm-jso-apis", version.ref = "teavm" }
 teavm-jso-impl = { module = "org.teavm:teavm-jso-impl", version.ref = "teavm" }
 webrtc-android = { module = "io.github.webrtc-sdk:android", version.ref = "webrtc-android" }
 webrtc-java = { module = "dev.onvoid.webrtc:webrtc-java", version.ref = "webrtc-java" }
+
+[bundles]
+jwebgpu-desktop-ffm = [
+    "jwebgpu-ffm",
+    "jwebgpu-ffm-windows-x64",
+    "jwebgpu-ffm-linux-x64",
+    "jwebgpu-ffm-mac-x64",
+    "jwebgpu-ffm-mac-arm64",
+]
+jwebgpu-desktop-jni = [
+    "jwebgpu-jni",
+    "jwebgpu-jni-desktop",
+    "jwebgpu-jni-windows-x64",
+    "jwebgpu-jni-linux-x64",
+    "jwebgpu-jni-mac-x64",
+    "jwebgpu-jni-mac-arm64",
+]
