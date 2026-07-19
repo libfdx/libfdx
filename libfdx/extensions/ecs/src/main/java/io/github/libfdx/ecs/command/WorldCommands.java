@@ -1,14 +1,13 @@
 package io.github.libfdx.ecs.command;
 
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.ecs.World;
 import io.github.libfdx.ecs.manager.Manager;
 import io.github.libfdx.ecs.system.System;
 
-import java.util.ArrayList;
-
 public final class WorldCommands {
     private final World world;
-    private final ArrayList<Command> commands = new ArrayList<>();
+    private final Array<Command> commands = new Array<>();
 
     public WorldCommands(World world) {
         this.world = world;

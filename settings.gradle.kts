@@ -20,14 +20,19 @@ fun isLibfdxPublicationTask(taskPath: String): Boolean {
         taskName.startsWith("publishDeploy") && taskName.endsWith("PublicationToLibfdxDeployRepository")
 }
 
-val libfdxPublicationBuild = System.getenv("LIBFDX_PUBLICATION_BUILD")
+val libfdxPublicationBuild = (
+    System.getProperty("libfdx.publicationBuild")
+        ?: System.getenv("LIBFDX_PUBLICATION_BUILD")
+    )
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
     ?.let { value ->
         when (value.lowercase()) {
             "true" -> true
             "false" -> false
-            else -> throw IllegalArgumentException("LIBFDX_PUBLICATION_BUILD must be true or false, got '$value'.")
+            else -> throw IllegalArgumentException(
+                "libfdx.publicationBuild or LIBFDX_PUBLICATION_BUILD must be true or false, got '$value'."
+            )
         }
     } == true || gradle.startParameter.taskNames.any(::isLibfdxPublicationTask)
 
@@ -47,14 +52,19 @@ pluginManagement {
         "zipReleaseDeploy",
         "publishToMavenLocal"
     )
-    val publicationBuild = System.getenv("LIBFDX_PUBLICATION_BUILD")
+    val publicationBuild = (
+        System.getProperty("libfdx.publicationBuild")
+            ?: System.getenv("LIBFDX_PUBLICATION_BUILD")
+        )
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
         ?.let { value ->
             when (value.lowercase()) {
                 "true" -> true
                 "false" -> false
-                else -> throw IllegalArgumentException("LIBFDX_PUBLICATION_BUILD must be true or false, got '$value'.")
+                else -> throw IllegalArgumentException(
+                    "libfdx.publicationBuild or LIBFDX_PUBLICATION_BUILD must be true or false, got '$value'."
+                )
             }
         } == true || gradle.startParameter.taskNames.any { taskPath ->
         val taskName = taskPath.substringAfterLast(":")

@@ -15,6 +15,7 @@ base {
 }
 
 dependencies {
+    implementation(project(":libfdx:framework:collections"))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
 }

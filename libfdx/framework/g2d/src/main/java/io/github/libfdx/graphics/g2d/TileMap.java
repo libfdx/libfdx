@@ -1,6 +1,6 @@
 package io.github.libfdx.graphics.g2d;
 
-import io.github.libfdx.collections.FdxArray;
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.core.FdxException;
 
 /**
@@ -13,7 +13,7 @@ public final class TileMap {
     private final int height;
     private final float tileWidth;
     private final float tileHeight;
-    private final FdxArray<TileLayer> layers = new FdxArray<TileLayer>();
+    private final Array<TileLayer> layers = new Array<TileLayer>();
 
     /**
      * Creates a tile map.

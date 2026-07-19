@@ -1,5 +1,7 @@
 package io.github.libfdx.ecs;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.ecs.command.WorldCommands;
 import io.github.libfdx.ecs.component.ComponentMapper;
 import io.github.libfdx.ecs.component.ComponentStore;
@@ -8,11 +10,7 @@ import io.github.libfdx.ecs.event.EventDispatcher;
 import io.github.libfdx.ecs.manager.Manager;
 import io.github.libfdx.ecs.query.EntityMatcher;
 import io.github.libfdx.ecs.system.System;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 public final class World {
     private static final int INDEX_BITS = 20;
@@ -30,14 +28,14 @@ public final class World {
     private boolean updating;
     private boolean flushingCommands;
 
-    private final Map<Class<?>, ComponentStore<?>> stores = new HashMap<>();
-    private final Map<Class<?>, ComponentMapper<?>> mappers = new HashMap<>();
-    private final ArrayList<Class<?>[]> componentTypes = new ArrayList<>();
-    private final ArrayList<EntityList> entityLists = new ArrayList<>();
-    private final LinkedHashMap<Class<?>, Manager> managers = new LinkedHashMap<>();
-    private final LinkedHashMap<Class<?>, System> systems = new LinkedHashMap<>();
-    private final ArrayList<Manager> managerOrder = new ArrayList<>();
-    private final ArrayList<System> systemOrder = new ArrayList<>();
+    private final ObjectMap<Class<?>, ComponentStore<?>> stores = new ObjectMap<>();
+    private final ObjectMap<Class<?>, ComponentMapper<?>> mappers = new ObjectMap<>();
+    private final Array<Class<?>[]> componentTypes = new Array<>();
+    private final Array<EntityList> entityLists = new Array<>();
+    private final ObjectMap<Class<?>, Manager> managers = new ObjectMap<>();
+    private final ObjectMap<Class<?>, System> systems = new ObjectMap<>();
+    private final Array<Manager> managerOrder = new Array<>();
+    private final Array<System> systemOrder = new Array<>();
     private final WorldCommands commands = new WorldCommands(this);
     private final EventDispatcher events = new EventDispatcher(this);
 
@@ -303,7 +301,7 @@ public final class World {
         Class<?> type = manager.getClass();
         Manager previous = managers.put(type, manager);
         if (previous != null) {
-            managerOrder.remove(previous);
+            managerOrder.removeValue(previous);
             previous.onDetach(this);
         }
         managerOrder.add(manager);
@@ -313,7 +311,7 @@ public final class World {
     public void applyRemoveManager(Class<? extends Manager> type) {
         Manager manager = managers.remove(type);
         if (manager != null) {
-            managerOrder.remove(manager);
+            managerOrder.removeValue(manager);
             manager.onDetach(this);
         }
     }
@@ -322,7 +320,7 @@ public final class World {
         Class<?> type = system.getClass();
         System previous = systems.put(type, system);
         if (previous != null) {
-            systemOrder.remove(previous);
+            systemOrder.removeValue(previous);
             previous.onDetach(this);
         }
         systemOrder.add(system);
@@ -332,7 +330,7 @@ public final class World {
     public void applyRemoveSystem(Class<? extends System> type) {
         System system = systems.remove(type);
         if (system != null) {
-            systemOrder.remove(system);
+            systemOrder.removeValue(system);
             system.onDetach(this);
         }
     }
@@ -396,6 +394,9 @@ public final class World {
     }
 
     public boolean hasNow(int entity, Class<?> type) {
+        if (type == null) {
+            return false;
+        }
         ComponentStore<?> store = stores.get(type);
         return store != null && store.has(entity);
     }
@@ -436,7 +437,13 @@ public final class World {
         if (type == null) {
             throw new IllegalArgumentException("component type cannot be null.");
         }
-        return (ComponentStore<T>) stores.computeIfAbsent(type, ComponentStore::new);
+        ComponentStore<?> existing = stores.get(type);
+        if (existing != null) {
+            return (ComponentStore<T>) existing;
+        }
+        ComponentStore<T> created = new ComponentStore<>(type);
+        stores.put(type, created);
+        return created;
     }
 
     private int entityHandle(int index) {

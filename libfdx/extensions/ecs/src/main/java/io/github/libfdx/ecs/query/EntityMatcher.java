@@ -1,15 +1,14 @@
 package io.github.libfdx.ecs.query;
 
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.ecs.World;
-
-import java.util.LinkedHashSet;
 
 public final class EntityMatcher {
     private final World world;
-    private final LinkedHashSet<Class<?>> allTypes = new LinkedHashSet<>();
-    private final LinkedHashSet<Class<?>> oneTypes = new LinkedHashSet<>();
-    private final LinkedHashSet<Class<?>> anyTypes = new LinkedHashSet<>();
-    private final LinkedHashSet<Class<?>> excludedTypes = new LinkedHashSet<>();
+    private final Array<Class<?>> allTypes = new Array<>();
+    private final Array<Class<?>> oneTypes = new Array<>();
+    private final Array<Class<?>> anyTypes = new Array<>();
+    private final Array<Class<?>> excludedTypes = new Array<>();
     private boolean frozen;
 
     public EntityMatcher(World world) {
@@ -49,15 +48,15 @@ public final class EntityMatcher {
     }
 
     public boolean matchesAttached(int entity) {
-        for (Class<?> type : allTypes) {
-            if (!world.hasNow(entity, type)) {
+        for (int i = 0; i < allTypes.size(); i++) {
+            if (!world.hasNow(entity, allTypes.get(i))) {
                 return false;
             }
         }
         if (!oneTypes.isEmpty()) {
             int count = 0;
-            for (Class<?> type : oneTypes) {
-                if (world.hasNow(entity, type)) {
+            for (int i = 0; i < oneTypes.size(); i++) {
+                if (world.hasNow(entity, oneTypes.get(i))) {
                     count++;
                 }
             }
@@ -67,8 +66,8 @@ public final class EntityMatcher {
         }
         if (!anyTypes.isEmpty()) {
             boolean found = false;
-            for (Class<?> type : anyTypes) {
-                if (world.hasNow(entity, type)) {
+            for (int i = 0; i < anyTypes.size(); i++) {
+                if (world.hasNow(entity, anyTypes.get(i))) {
                     found = true;
                     break;
                 }
@@ -77,8 +76,8 @@ public final class EntityMatcher {
                 return false;
             }
         }
-        for (Class<?> type : excludedTypes) {
-            if (world.hasNow(entity, type)) {
+        for (int i = 0; i < excludedTypes.size(); i++) {
+            if (world.hasNow(entity, excludedTypes.get(i))) {
                 return false;
             }
         }
@@ -86,17 +85,18 @@ public final class EntityMatcher {
     }
 
     public Class<?>[] candidateTypes() {
-        if (!allTypes.isEmpty()) {
-            return allTypes.toArray(Class<?>[]::new);
+        Class<?>[] result = new Class<?>[allTypes.size()];
+        for (int i = 0; i < allTypes.size(); i++) {
+            result[i] = allTypes.get(i);
         }
-        return new Class<?>[0];
+        return result;
     }
 
     public void freeze() {
         frozen = true;
     }
 
-    private void addTypes(LinkedHashSet<Class<?>> target, Class<?>... types) {
+    private void addTypes(Array<Class<?>> target, Class<?>... types) {
         requireMutable();
         if (types == null) {
             return;
@@ -105,7 +105,9 @@ public final class EntityMatcher {
             if (type == null) {
                 throw new IllegalArgumentException("component type cannot be null.");
             }
-            target.add(type);
+            if (!target.contains(type)) {
+                target.add(type);
+            }
         }
     }
 

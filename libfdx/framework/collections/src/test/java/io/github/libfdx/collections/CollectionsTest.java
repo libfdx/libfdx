@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class CollectionsTest {
     @Test
     void arrayGrowsAndPreservesOrderWhenOrdered() {
-        FdxArray<String> array = new FdxArray<String>(true, 1);
+        Array<String> array = new Array<String>(true, 1);
 
         array.add("a").add("b").add("c");
 
@@ -36,7 +36,7 @@ final class CollectionsTest {
 
     @Test
     void arrayCanRemoveWithoutPreservingOrder() {
-        FdxArray<String> array = new FdxArray<String>(false, 2);
+        Array<String> array = new Array<String>(false, 2);
         array.add("a").add("b").add("c");
 
         assertEquals("a", array.removeIndex(0));
@@ -48,7 +48,7 @@ final class CollectionsTest {
 
     @Test
     void arrayInsertsSwapsAndTruncates() {
-        FdxArray<String> ordered = new FdxArray<String>(true, 2);
+        Array<String> ordered = new Array<String>(true, 2);
         ordered.add("a").add("c");
         ordered.insert(1, "b").insert(3, "d");
 
@@ -58,7 +58,7 @@ final class CollectionsTest {
         ordered.truncate(8);
         assertArrayEquals(new Object[] { "c", "b" }, ordered.toArray());
 
-        FdxArray<String> unordered = new FdxArray<String>(false, 3);
+        Array<String> unordered = new Array<String>(false, 3);
         unordered.add("a").add("b").add("c");
         unordered.insert(0, "z");
 
@@ -70,7 +70,7 @@ final class CollectionsTest {
 
     @Test
     void arrayRemovesRangesAndReverses() {
-        FdxArray<String> ordered = new FdxArray<String>(true, 5);
+        Array<String> ordered = new Array<String>(true, 5);
         ordered.add("a").add("b").add("c").add("d").add("e");
 
         ordered.removeRange(1, 3);
@@ -78,7 +78,7 @@ final class CollectionsTest {
         ordered.reverse();
         assertArrayEquals(new Object[] { "e", "a" }, ordered.toArray());
 
-        FdxArray<String> unordered = new FdxArray<String>(false, 6);
+        Array<String> unordered = new Array<String>(false, 6);
         unordered.add("a").add("b").add("c").add("d").add("e").add("f");
 
         unordered.removeRange(1, 3);
@@ -96,7 +96,7 @@ final class CollectionsTest {
         String first = new String("same");
         String second = new String("same");
         String probe = new String("same");
-        FdxArray<String> array = new FdxArray<String>(true, 4);
+        Array<String> array = new Array<String>(true, 4);
         array.add(first).add(null).add(second).add(first);
 
         assertTrue(array.contains(probe));
@@ -118,9 +118,9 @@ final class CollectionsTest {
         String first = new String("a");
         String second = new String("a");
         String third = new String("b");
-        FdxArray<String> array = new FdxArray<String>(true, 4);
+        Array<String> array = new Array<String>(true, 4);
         array.add(first).add(third).add(second).add("c");
-        FdxArray<String> values = new FdxArray<String>(2);
+        Array<String> values = new Array<String>(2);
         values.add(new String("a")).add(third);
 
         assertTrue(array.removeAll(values));
@@ -129,9 +129,9 @@ final class CollectionsTest {
         assertArrayEquals(new Object[] { "c" }, array.toArray());
         assertFalse(array.removeAll(values));
 
-        FdxArray<String> identityArray = new FdxArray<String>(true, 3);
+        Array<String> identityArray = new Array<String>(true, 3);
         identityArray.add(first).add(new String("b")).add(second);
-        FdxArray<String> identityValues = new FdxArray<String>(2);
+        Array<String> identityValues = new Array<String>(2);
         identityValues.add(new String("a")).add(second);
 
         assertTrue(identityArray.removeAll(identityValues, true));
@@ -142,7 +142,7 @@ final class CollectionsTest {
 
     @Test
     void arrayStackHelpersUseFrontAndBackWithoutExtraStorage() {
-        FdxArray<String> array = new FdxArray<String>(2);
+        Array<String> array = new Array<String>(2);
         array.add("a").add("b");
 
         assertTrue(array.notEmpty());

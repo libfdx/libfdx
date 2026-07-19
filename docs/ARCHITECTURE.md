@@ -139,6 +139,10 @@ they do not create stack-specific sample folders.
   starts.
 - `ecs` and scenario validation are optional user-created features. They are not
   backend-owned services and are not exposed through `Fdx`.
+- `ecs` owns only generic storage, lifecycle, component queries, systems,
+  managers, commands, and events. Game/UI/editor meaning belongs to consumers
+  and is expressed through functional component signatures, never entity names
+  or framework-defined domain entity types.
 
 ### 3.3. Providers And Backends
 
@@ -225,7 +229,7 @@ name the provider directly (`wgpu_core`, not `graphics_wgpu`).
 | `:libfdx:framework:g2d` | `g2d` | Complete 2D rendering/font/particle/map toolkit. |
 | `:libfdx:framework:g3d` | `g3d` | Complete 3D model/material/animation/lighting toolkit. |
 | `:libfdx:framework:ui-kit` | `ui_kit` | Built-in declarative/retained game UI toolkit. |
-| `:libfdx:extensions:ecs` | `ecs` | Optional pure-Java entity component system. |
+| `:libfdx:extensions:ecs` | `ecs` | Optional pure-Java ECS with component-composition queries. |
 | `:libfdx:extensions:scenario_validator:core` | `scenario_validator` | Optional runtime scenario validation engine. |
 | `:libfdx:extensions:scenario_validator:ui-kit` | `scenario_validator_ui_kit` | Optional UI Kit validation adapter. |
 

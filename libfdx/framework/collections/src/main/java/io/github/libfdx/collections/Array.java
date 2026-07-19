@@ -10,7 +10,7 @@ import java.util.NoSuchElementException;
  * @param <T> the value type
  * @author xpenatan
  */
-public final class FdxArray<T> implements Iterable<T> {
+public final class Array<T> implements Iterable<T> {
     private Object[] items;
     private int size;
     private boolean ordered;
@@ -18,7 +18,7 @@ public final class FdxArray<T> implements Iterable<T> {
     /**
      * Creates an ordered array.
      */
-    public FdxArray() {
+    public Array() {
         this(true, 16);
     }
 
@@ -27,7 +27,7 @@ public final class FdxArray<T> implements Iterable<T> {
      *
      * @param capacity the initial capacity
      */
-    public FdxArray(int capacity) {
+    public Array(int capacity) {
         this(true, capacity);
     }
 
@@ -37,7 +37,7 @@ public final class FdxArray<T> implements Iterable<T> {
      * @param ordered whether removals preserve order
      * @param capacity the initial capacity
      */
-    public FdxArray(boolean ordered, int capacity) {
+    public Array(boolean ordered, int capacity) {
         if (capacity < 0) {
             throw new IllegalArgumentException("capacity must be >= 0");
         }
@@ -51,7 +51,7 @@ public final class FdxArray<T> implements Iterable<T> {
      * @param value the value
      * @return this array
      */
-    public FdxArray<T> add(T value) {
+    public Array<T> add(T value) {
         ensureCapacity(1);
         items[size++] = value;
         return this;
@@ -63,7 +63,7 @@ public final class FdxArray<T> implements Iterable<T> {
      * @param values the values
      * @return this array
      */
-    public FdxArray<T> addAll(FdxArray<? extends T> values) {
+    public Array<T> addAll(Array<? extends T> values) {
         ensureCapacity(values.size);
         for (int i = 0; i < values.size; i++) {
             items[size++] = values.items[i];
@@ -78,7 +78,7 @@ public final class FdxArray<T> implements Iterable<T> {
      * @param value the value
      * @return this array
      */
-    public FdxArray<T> insert(int index, T value) {
+    public Array<T> insert(int index, T value) {
         checkInsertIndex(index);
         ensureCapacity(1);
         if (ordered) {
@@ -270,7 +270,7 @@ public final class FdxArray<T> implements Iterable<T> {
      * @param values the values to remove
      * @return true if any value was removed
      */
-    public boolean removeAll(FdxArray<? extends T> values) {
+    public boolean removeAll(Array<? extends T> values) {
         return removeAll(values, false);
     }
 
@@ -281,7 +281,7 @@ public final class FdxArray<T> implements Iterable<T> {
      * @param identity true to compare by identity
      * @return true if any value was removed
      */
-    public boolean removeAll(FdxArray<? extends T> values, boolean identity) {
+    public boolean removeAll(Array<? extends T> values, boolean identity) {
         if (values == this) {
             boolean changed = size > 0;
             clear();
@@ -305,7 +305,7 @@ public final class FdxArray<T> implements Iterable<T> {
      * @param end the last index to remove
      * @return this array
      */
-    public FdxArray<T> removeRange(int start, int end) {
+    public Array<T> removeRange(int start, int end) {
         checkRange(start, end);
         int count = end - start + 1;
         int newSize = size - count;
@@ -328,7 +328,7 @@ public final class FdxArray<T> implements Iterable<T> {
      * @param second the second index
      * @return this array
      */
-    public FdxArray<T> swap(int first, int second) {
+    public Array<T> swap(int first, int second) {
         checkIndex(first);
         checkIndex(second);
         Object value = items[first];
@@ -342,7 +342,7 @@ public final class FdxArray<T> implements Iterable<T> {
      *
      * @return this array
      */
-    public FdxArray<T> reverse() {
+    public Array<T> reverse() {
         for (int i = 0, last = size - 1; i < last; i++, last--) {
             Object value = items[i];
             items[i] = items[last];
@@ -357,7 +357,7 @@ public final class FdxArray<T> implements Iterable<T> {
      * @param newSize the maximum size
      * @return this array
      */
-    public FdxArray<T> truncate(int newSize) {
+    public Array<T> truncate(int newSize) {
         if (newSize < 0) {
             throw new IllegalArgumentException("newSize must be >= 0");
         }
@@ -382,7 +382,7 @@ public final class FdxArray<T> implements Iterable<T> {
      * @param additionalCapacity the additional capacity
      * @return this array
      */
-    public FdxArray<T> ensureCapacity(int additionalCapacity) {
+    public Array<T> ensureCapacity(int additionalCapacity) {
         if (additionalCapacity < 0) {
             throw new IllegalArgumentException("additionalCapacity must be >= 0");
         }
@@ -398,7 +398,7 @@ public final class FdxArray<T> implements Iterable<T> {
      *
      * @return this array
      */
-    public FdxArray<T> shrink() {
+    public Array<T> shrink() {
         if (items.length != size) {
             resize(Math.max(1, size));
         }
@@ -456,7 +456,7 @@ public final class FdxArray<T> implements Iterable<T> {
      * @param ordered whether removals preserve order
      * @return this array
      */
-    public FdxArray<T> ordered(boolean ordered) {
+    public Array<T> ordered(boolean ordered) {
         this.ordered = ordered;
         return this;
     }
@@ -529,10 +529,10 @@ public final class FdxArray<T> implements Iterable<T> {
     }
 
     private static final class ArrayIterator<T> implements Iterator<T> {
-        private final FdxArray<T> array;
+        private final Array<T> array;
         private int index;
 
-        ArrayIterator(FdxArray<T> array) {
+        ArrayIterator(Array<T> array) {
             this.array = array;
         }
 

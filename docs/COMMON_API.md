@@ -590,6 +590,13 @@ reusable storage.
 
 - Entity handles are opaque integers belonging to one world; `0` is no entity.
 - Components are non-null objects keyed by an explicit `Class<T>`.
+- Entities have no intrinsic game, UI, editor, or other domain kind. A system
+  processes an entity only when its component composition satisfies that
+  system's matcher.
+- Names and labels are presentation data, not routing data. Applications define
+  functional signatures from the components a feature actually consumes.
+- An entity may match several feature signatures at once. Shared and hybrid
+  compositions are valid; the ECS does not impose mutually exclusive domains.
 - There is no reflection, annotation scanning, automatic field mapping, or
   automatic serialization.
 - Structural mutations are deferred through world commands and applied at

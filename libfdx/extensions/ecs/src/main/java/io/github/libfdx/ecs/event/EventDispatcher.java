@@ -1,16 +1,14 @@
 package io.github.libfdx.ecs.event;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.IntMap;
 import io.github.libfdx.ecs.World;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
 
 public final class EventDispatcher {
     private final World world;
-    private final Map<Integer, ArrayList<EventListener>> listeners = new HashMap<>();
-    private final ArrayList<QueuedEvent> queue = new ArrayList<>();
-    private final ArrayList<Event> pool = new ArrayList<>();
+    private final IntMap<Array<EventListener>> listeners = new IntMap<>();
+    private final Array<QueuedEvent> queue = new Array<>();
+    private final Array<Event> pool = new Array<>();
     private boolean flushing;
 
     public EventDispatcher(World world) {
@@ -19,9 +17,8 @@ public final class EventDispatcher {
 
     public Event obtain(int type) {
         Event event;
-        int last = pool.size() - 1;
-        if (last >= 0) {
-            event = pool.remove(last);
+        if (pool.notEmpty()) {
+            event = pool.pop();
         } else {
             event = new Event();
         }
@@ -52,15 +49,20 @@ public final class EventDispatcher {
         if (listener == null) {
             throw new IllegalArgumentException("listener cannot be null.");
         }
-        listeners.computeIfAbsent(type, ignored -> new ArrayList<>()).add(listener);
+        Array<EventListener> typedListeners = listeners.get(type);
+        if (typedListeners == null) {
+            typedListeners = new Array<>();
+            listeners.put(type, typedListeners);
+        }
+        typedListeners.add(listener);
     }
 
     public void removeListener(int type, EventListener listener) {
-        ArrayList<EventListener> typedListeners = listeners.get(type);
+        Array<EventListener> typedListeners = listeners.get(type);
         if (typedListeners == null) {
             return;
         }
-        typedListeners.remove(listener);
+        typedListeners.removeValue(listener);
         if (typedListeners.isEmpty()) {
             listeners.remove(type);
         }
@@ -76,7 +78,7 @@ public final class EventDispatcher {
             for (int i = 0; i < count; i++) {
                 QueuedEvent queued = queue.get(i);
                 Event event = queued.event;
-                ArrayList<EventListener> typedListeners = listeners.get(event.type());
+                Array<EventListener> typedListeners = listeners.get(event.type());
                 if (typedListeners != null) {
                     for (int listenerIndex = 0; listenerIndex < typedListeners.size(); listenerIndex++) {
                         typedListeners.get(listenerIndex).onEvent(world, event);
@@ -92,7 +94,7 @@ public final class EventDispatcher {
                 pool.add(event);
             }
             if (count > 0) {
-                queue.subList(0, count).clear();
+                queue.removeRange(0, count - 1);
             }
         } finally {
             flushing = false;
