@@ -6,6 +6,9 @@ plugins {
     id("base")
 }
 
+val libfdxRepositoryConsumersIncluded = gradle.extensions.extraProperties
+    .get("libfdxRepositoryConsumersIncluded") as Boolean
+
 LibExt.configure(rootProject.projectDir)
 
 allprojects {
@@ -201,7 +204,7 @@ tasks.register("printFdxVersion") {
     }
 }
 
-if (findProject(":benchmark:platform:desktop") != null) {
+if (libfdxRepositoryConsumersIncluded) {
     tasks.register("benchmark_desktop") {
         group = "benchmark"
         description = "Runs the full desktop JVM benchmark suite and generates Markdown reports."
@@ -221,128 +224,130 @@ if (findProject(":benchmark:platform:desktop") != null) {
     }
 }
 
-val pagesStagingDir = layout.buildDirectory.dir("pages")
+if (libfdxRepositoryConsumersIncluded) {
+    val pagesStagingDir = layout.buildDirectory.dir("pages")
 
-tasks.register<Sync>("stage_pages") {
-    group = "publishing"
-    description = "Builds and stages hosted web outputs under build/pages."
-    into(pagesStagingDir)
-    pagesWebapp(
-        projectPath = ":libfdx:tools:project-generator:platform:web",
-        buildTaskName = "project_generator_webgl_js_build",
-        webappPath = "dist/web-js/webapp",
-        pagesPath = "project-generator/webgl-js"
-    )
-    pagesWebapp(
-        projectPath = ":libfdx:tools:project-generator:platform:web",
-        buildTaskName = "project_generator_webgl_wasm_build",
-        webappPath = "dist/web-wasm/webapp",
-        pagesPath = "project-generator/webgl-wasm"
-    )
-    pagesWebapp(
-        projectPath = ":libfdx:tools:project-generator:platform:web",
-        buildTaskName = "project_generator_webgpu_js_build",
-        webappPath = "dist/web-js/webapp",
-        pagesPath = "project-generator/webgpu-js"
-    )
-    pagesWebapp(
-        projectPath = ":tests:platform:web",
-        buildTaskName = "test_webgl_js_build",
-        webappPath = "dist/web-js/webapp",
-        pagesPath = "tests/webgl-js",
-        outputProjectPath = ":tests:platform:plugin"
-    )
-    pagesWebapp(
-        projectPath = ":tests:platform:web",
-        buildTaskName = "test_webgl_wasm_build",
-        webappPath = "dist/web-wasm/webapp",
-        pagesPath = "tests/webgl-wasm",
-        outputProjectPath = ":tests:platform:plugin"
-    )
-    pagesWebapp(
-        projectPath = ":tests:platform:web",
-        buildTaskName = "test_webgpu_js_build",
-        webappPath = "dist/web-js/webapp",
-        pagesPath = "tests/webgpu-js",
-        outputProjectPath = ":tests:platform:plugin"
-    )
-    pagesWebapp(
-        projectPath = ":samples:basic:platform:web",
-        buildTaskName = "basic_webgl_js_build",
-        webappPath = "dist/web-js/webapp",
-        pagesPath = "samples/basic/webgl-js",
-        outputProjectPath = ":samples:basic:platform:plugin"
-    )
-    pagesWebapp(
-        projectPath = ":samples:basic:platform:web",
-        buildTaskName = "basic_webgl_wasm_build",
-        webappPath = "dist/web-wasm/webapp",
-        pagesPath = "samples/basic/webgl-wasm",
-        outputProjectPath = ":samples:basic:platform:plugin"
-    )
-    pagesWebapp(
-        projectPath = ":samples:basic:platform:web",
-        buildTaskName = "basic_webgpu_js_build",
-        webappPath = "dist/web-js/webapp",
-        pagesPath = "samples/basic/webgpu-js",
-        outputProjectPath = ":samples:basic:platform:plugin"
-    )
-    pagesWebapp(
-        projectPath = ":samples:ecs-platformer:platform:web",
-        buildTaskName = "libfdx_web_js_webgl_build",
-        webappPath = "dist/web-js/webapp",
-        pagesPath = "samples/ecs-platformer/webgl-js"
-    )
-    pagesWebapp(
-        projectPath = ":samples:ecs-platformer:platform:web",
-        buildTaskName = "libfdx_web_wasm_webgl_build",
-        webappPath = "dist/web-wasm/webapp",
-        pagesPath = "samples/ecs-platformer/webgl-wasm"
-    )
-    pagesWebapp(
-        projectPath = ":samples:ecs-platformer:platform:web",
-        buildTaskName = "libfdx_web_js_webgpu_build",
-        webappPath = "dist/web-js/webapp",
-        pagesPath = "samples/ecs-platformer/webgpu-js"
-    )
-    doLast {
-        val root = pagesStagingDir.get().asFile
-        writeSelectorPage(
-            root.resolve("project-generator/index.html"),
-            "Project Generator",
-            listOf(
-                "WebGL JS" to "webgl-js/",
-                "WebGL Wasm" to "webgl-wasm/",
-                "WebGPU JS" to "webgpu-js/?graphics=webgpu"
-            )
+    tasks.register<Sync>("stage_pages") {
+        group = "publishing"
+        description = "Builds and stages hosted web outputs under build/pages."
+        into(pagesStagingDir)
+        pagesWebapp(
+            projectPath = ":libfdx:tools:project-generator:platform:web",
+            buildTaskName = "project_generator_webgl_js_build",
+            webappPath = "dist/web-js/webapp",
+            pagesPath = "project-generator/webgl-js"
         )
-        writeSelectorPage(
-            root.resolve("tests/index.html"),
-            "Tests",
-            listOf(
-                "WebGL JS" to "webgl-js/",
-                "WebGL Wasm" to "webgl-wasm/",
-                "WebGPU JS" to "webgpu-js/?graphics=webgpu"
-            )
+        pagesWebapp(
+            projectPath = ":libfdx:tools:project-generator:platform:web",
+            buildTaskName = "project_generator_webgl_wasm_build",
+            webappPath = "dist/web-wasm/webapp",
+            pagesPath = "project-generator/webgl-wasm"
         )
-        writeSelectorPage(
-            root.resolve("samples/basic/index.html"),
-            "Basic Sample",
-            listOf(
-                "WebGL JS" to "webgl-js/",
-                "WebGL Wasm" to "webgl-wasm/",
-                "WebGPU JS" to "webgpu-js/?graphics=webgpu"
-            )
+        pagesWebapp(
+            projectPath = ":libfdx:tools:project-generator:platform:web",
+            buildTaskName = "project_generator_webgpu_js_build",
+            webappPath = "dist/web-js/webapp",
+            pagesPath = "project-generator/webgpu-js"
         )
-        writeSelectorPage(
-            root.resolve("samples/ecs-platformer/index.html"),
-            "ECS Platformer",
-            listOf(
-                "WebGL JS" to "webgl-js/",
-                "WebGL Wasm" to "webgl-wasm/",
-                "WebGPU JS" to "webgpu-js/?graphics=webgpu"
-            )
+        pagesWebapp(
+            projectPath = ":tests:platform:web",
+            buildTaskName = "test_webgl_js_build",
+            webappPath = "dist/web-js/webapp",
+            pagesPath = "tests/webgl-js",
+            outputProjectPath = ":tests:platform:plugin"
         )
+        pagesWebapp(
+            projectPath = ":tests:platform:web",
+            buildTaskName = "test_webgl_wasm_build",
+            webappPath = "dist/web-wasm/webapp",
+            pagesPath = "tests/webgl-wasm",
+            outputProjectPath = ":tests:platform:plugin"
+        )
+        pagesWebapp(
+            projectPath = ":tests:platform:web",
+            buildTaskName = "test_webgpu_js_build",
+            webappPath = "dist/web-js/webapp",
+            pagesPath = "tests/webgpu-js",
+            outputProjectPath = ":tests:platform:plugin"
+        )
+        pagesWebapp(
+            projectPath = ":samples:basic:platform:web",
+            buildTaskName = "basic_webgl_js_build",
+            webappPath = "dist/web-js/webapp",
+            pagesPath = "samples/basic/webgl-js",
+            outputProjectPath = ":samples:basic:platform:plugin"
+        )
+        pagesWebapp(
+            projectPath = ":samples:basic:platform:web",
+            buildTaskName = "basic_webgl_wasm_build",
+            webappPath = "dist/web-wasm/webapp",
+            pagesPath = "samples/basic/webgl-wasm",
+            outputProjectPath = ":samples:basic:platform:plugin"
+        )
+        pagesWebapp(
+            projectPath = ":samples:basic:platform:web",
+            buildTaskName = "basic_webgpu_js_build",
+            webappPath = "dist/web-js/webapp",
+            pagesPath = "samples/basic/webgpu-js",
+            outputProjectPath = ":samples:basic:platform:plugin"
+        )
+        pagesWebapp(
+            projectPath = ":samples:ecs-platformer:platform:web",
+            buildTaskName = "libfdx_web_js_webgl_build",
+            webappPath = "dist/web-js/webapp",
+            pagesPath = "samples/ecs-platformer/webgl-js"
+        )
+        pagesWebapp(
+            projectPath = ":samples:ecs-platformer:platform:web",
+            buildTaskName = "libfdx_web_wasm_webgl_build",
+            webappPath = "dist/web-wasm/webapp",
+            pagesPath = "samples/ecs-platformer/webgl-wasm"
+        )
+        pagesWebapp(
+            projectPath = ":samples:ecs-platformer:platform:web",
+            buildTaskName = "libfdx_web_js_webgpu_build",
+            webappPath = "dist/web-js/webapp",
+            pagesPath = "samples/ecs-platformer/webgpu-js"
+        )
+        doLast {
+            val root = pagesStagingDir.get().asFile
+            writeSelectorPage(
+                root.resolve("project-generator/index.html"),
+                "Project Generator",
+                listOf(
+                    "WebGL JS" to "webgl-js/",
+                    "WebGL Wasm" to "webgl-wasm/",
+                    "WebGPU JS" to "webgpu-js/?graphics=webgpu"
+                )
+            )
+            writeSelectorPage(
+                root.resolve("tests/index.html"),
+                "Tests",
+                listOf(
+                    "WebGL JS" to "webgl-js/",
+                    "WebGL Wasm" to "webgl-wasm/",
+                    "WebGPU JS" to "webgpu-js/?graphics=webgpu"
+                )
+            )
+            writeSelectorPage(
+                root.resolve("samples/basic/index.html"),
+                "Basic Sample",
+                listOf(
+                    "WebGL JS" to "webgl-js/",
+                    "WebGL Wasm" to "webgl-wasm/",
+                    "WebGPU JS" to "webgpu-js/?graphics=webgpu"
+                )
+            )
+            writeSelectorPage(
+                root.resolve("samples/ecs-platformer/index.html"),
+                "ECS Platformer",
+                listOf(
+                    "WebGL JS" to "webgl-js/",
+                    "WebGL Wasm" to "webgl-wasm/",
+                    "WebGPU JS" to "webgpu-js/?graphics=webgpu"
+                )
+            )
+        }
     }
 }
 

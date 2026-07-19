@@ -4,51 +4,51 @@ import io.github.libfdx.ecs.World;
 import io.github.libfdx.ecs.component.ComponentMapper;
 import io.github.libfdx.ecs.entity.EntityList;
 import io.github.libfdx.samples.ecs.platformer.PlatformerConstants;
-import io.github.libfdx.samples.ecs.platformer.component.Bounds;
-import io.github.libfdx.samples.ecs.platformer.component.InputState;
-import io.github.libfdx.samples.ecs.platformer.component.LevelState;
-import io.github.libfdx.samples.ecs.platformer.component.Player;
-import io.github.libfdx.samples.ecs.platformer.component.Position;
-import io.github.libfdx.samples.ecs.platformer.component.RenderSprite;
-import io.github.libfdx.samples.ecs.platformer.component.Solid;
-import io.github.libfdx.samples.ecs.platformer.component.Velocity;
+import io.github.libfdx.samples.ecs.platformer.component.BoundsComponent;
+import io.github.libfdx.samples.ecs.platformer.component.InputStateComponent;
+import io.github.libfdx.samples.ecs.platformer.component.LevelStateComponent;
+import io.github.libfdx.samples.ecs.platformer.component.PlayerComponent;
+import io.github.libfdx.samples.ecs.platformer.component.PositionComponent;
+import io.github.libfdx.samples.ecs.platformer.component.RenderSpriteComponent;
+import io.github.libfdx.samples.ecs.platformer.component.SolidComponent;
+import io.github.libfdx.samples.ecs.platformer.component.VelocityComponent;
 
 public final class PlayerSystem extends BaseGameSystem {
-    private ComponentMapper<InputState> inputs;
-    private ComponentMapper<LevelState> states;
-    private ComponentMapper<Position> positions;
-    private ComponentMapper<Velocity> velocities;
-    private ComponentMapper<Bounds> bounds;
-    private ComponentMapper<Player> players;
-    private ComponentMapper<RenderSprite> sprites;
+    private ComponentMapper<InputStateComponent> inputs;
+    private ComponentMapper<LevelStateComponent> states;
+    private ComponentMapper<PositionComponent> positions;
+    private ComponentMapper<VelocityComponent> velocities;
+    private ComponentMapper<BoundsComponent> bounds;
+    private ComponentMapper<PlayerComponent> players;
+    private ComponentMapper<RenderSpriteComponent> sprites;
     private EntityList solids;
 
     @Override
     protected void attach(World world) {
-        inputs = world.mapper(InputState.class);
-        states = world.mapper(LevelState.class);
-        positions = world.mapper(Position.class);
-        velocities = world.mapper(Velocity.class);
-        bounds = world.mapper(Bounds.class);
-        players = world.mapper(Player.class);
-        sprites = world.mapper(RenderSprite.class);
-        solids = world.entities(world.matcher().all(Solid.class, Position.class, Bounds.class));
+        inputs = world.mapper(InputStateComponent.class);
+        states = world.mapper(LevelStateComponent.class);
+        positions = world.mapper(PositionComponent.class);
+        velocities = world.mapper(VelocityComponent.class);
+        bounds = world.mapper(BoundsComponent.class);
+        players = world.mapper(PlayerComponent.class);
+        sprites = world.mapper(RenderSpriteComponent.class);
+        solids = world.entities(world.matcher().all(SolidComponent.class, PositionComponent.class, BoundsComponent.class));
     }
 
     @Override
     public void update() {
-        LevelState state = firstState();
-        InputState input = firstInput();
+        LevelStateComponent state = firstState();
+        InputStateComponent input = firstInput();
         if (state == null || input == null || state.restarting) {
             return;
         }
         float delta = deltaTime();
         for (int i = 0; i < players.size(); i++) {
             int entity = players.entityAt(i);
-            Position position = positions.require(entity);
-            Velocity velocity = velocities.require(entity);
-            Bounds playerBounds = bounds.require(entity);
-            Player player = players.componentAt(i);
+            PositionComponent position = positions.require(entity);
+            VelocityComponent velocity = velocities.require(entity);
+            BoundsComponent playerBounds = bounds.require(entity);
+            PlayerComponent player = players.componentAt(i);
             if (state.gameOver || state.completed) {
                 velocity.x = 0.0f;
                 return;
@@ -86,7 +86,7 @@ public final class PlayerSystem extends BaseGameSystem {
                 state.gameOver = true;
                 velocity.y = 0.0f;
             }
-            RenderSprite sprite = sprites.get(entity);
+            RenderSpriteComponent sprite = sprites.get(entity);
             if (sprite != null) {
                 sprite.regionId = player.onGround && Math.abs(velocity.x) > 0.001f
                         ? PlatformerConstants.REGION_PLAYER_WALK
@@ -95,14 +95,14 @@ public final class PlayerSystem extends BaseGameSystem {
         }
     }
 
-    private void resolveHorizontal(Position position, Bounds playerBounds, Velocity velocity) {
+    private void resolveHorizontal(PositionComponent position, BoundsComponent playerBounds, VelocityComponent velocity) {
         if (velocity.x == 0.0f) {
             return;
         }
         for (int i = 0; i < solids.size(); i++) {
             int solid = solids.entityAt(i);
-            Position solidPosition = positions.require(solid);
-            Bounds solidBounds = bounds.require(solid);
+            PositionComponent solidPosition = positions.require(solid);
+            BoundsComponent solidBounds = bounds.require(solid);
             if (!overlaps(position, playerBounds, solidPosition, solidBounds)) {
                 continue;
             }
@@ -115,11 +115,11 @@ public final class PlayerSystem extends BaseGameSystem {
         }
     }
 
-    private void resolveVertical(Position position, Bounds playerBounds, Velocity velocity, Player player) {
+    private void resolveVertical(PositionComponent position, BoundsComponent playerBounds, VelocityComponent velocity, PlayerComponent player) {
         for (int i = 0; i < solids.size(); i++) {
             int solid = solids.entityAt(i);
-            Position solidPosition = positions.require(solid);
-            Bounds solidBounds = bounds.require(solid);
+            PositionComponent solidPosition = positions.require(solid);
+            BoundsComponent solidBounds = bounds.require(solid);
             if (!overlaps(position, playerBounds, solidPosition, solidBounds)) {
                 continue;
             }
@@ -133,7 +133,7 @@ public final class PlayerSystem extends BaseGameSystem {
         }
     }
 
-    private static boolean overlaps(Position aPosition, Bounds aBounds, Position bPosition, Bounds bBounds) {
+    private static boolean overlaps(PositionComponent aPosition, BoundsComponent aBounds, PositionComponent bPosition, BoundsComponent bBounds) {
         return Math.abs(aPosition.x - bPosition.x) < aBounds.halfWidth + bBounds.halfWidth
                 && Math.abs(aPosition.y - bPosition.y) < aBounds.halfHeight + bBounds.halfHeight;
     }
@@ -142,11 +142,11 @@ public final class PlayerSystem extends BaseGameSystem {
         return Math.max(min, Math.min(max, value));
     }
 
-    private LevelState firstState() {
+    private LevelStateComponent firstState() {
         return states.size() > 0 ? states.componentAt(0) : null;
     }
 
-    private InputState firstInput() {
+    private InputStateComponent firstInput() {
         return inputs.size() > 0 ? inputs.componentAt(0) : null;
     }
 }

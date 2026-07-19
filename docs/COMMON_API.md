@@ -592,12 +592,27 @@ reusable storage.
 - Components are non-null objects that implement
   `io.github.libfdx.ecs.component.Component` and are keyed by an explicit
   `Class<T>`, where `T extends Component`.
+- Every concrete component class name ends with `Component`. Supporting value
+  objects that are not attachable components do not use this suffix by
+  requirement.
 - `GameComponent` and `UiComponent` are concrete marker components. Attaching
   one lets the user choose whether an entity belongs to game or UI routing.
 - Game and UI matchers select `GameComponent.class` and `UiComponent.class`
   respectively, optionally combined with the functional components a system
   consumes.
 - Names and labels are presentation data, never game/UI routing data.
+- `TransformComponent` is the default spatial component. It owns a non-null
+  `io.github.libfdx.ecs.transform.Transform` value object through its `transform`
+  field. `Transform` stores position as `x`, `y`, `z`, scale as `scaleX`,
+  `scaleY`, `scaleZ`, authoritative rotation in its owned `Quaternion rotation`,
+  and a derived local TRS `Matrix4 matrix`. `Transform` does not implement
+  `Component` and cannot be attached directly.
+- After directly mutating position, scale, or the quaternion, callers invoke
+  `Transform.updateMatrix()`. It normalizes the quaternion and rewrites the
+  existing matrix without allocating. `set(...)` and `copy()` rebuild the
+  matrix and keep quaternion/matrix instances independently owned.
+- The derived matrix is runtime state rather than persistence data. ECS does
+  not define a serialized transform representation.
 - There is no reflection, annotation scanning, automatic field mapping, or
   automatic serialization.
 - Structural mutations are deferred through world commands and applied at

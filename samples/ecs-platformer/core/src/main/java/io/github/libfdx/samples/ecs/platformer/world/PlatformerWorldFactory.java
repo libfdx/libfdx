@@ -2,18 +2,18 @@ package io.github.libfdx.samples.ecs.platformer.world;
 
 import io.github.libfdx.ecs.World;
 import io.github.libfdx.samples.ecs.platformer.PlatformerConstants;
-import io.github.libfdx.samples.ecs.platformer.component.Bounds;
-import io.github.libfdx.samples.ecs.platformer.component.Collectible;
-import io.github.libfdx.samples.ecs.platformer.component.Enemy;
-import io.github.libfdx.samples.ecs.platformer.component.Goal;
-import io.github.libfdx.samples.ecs.platformer.component.Hazard;
-import io.github.libfdx.samples.ecs.platformer.component.InputState;
-import io.github.libfdx.samples.ecs.platformer.component.LevelState;
-import io.github.libfdx.samples.ecs.platformer.component.Player;
-import io.github.libfdx.samples.ecs.platformer.component.Position;
-import io.github.libfdx.samples.ecs.platformer.component.RenderSprite;
-import io.github.libfdx.samples.ecs.platformer.component.Solid;
-import io.github.libfdx.samples.ecs.platformer.component.Velocity;
+import io.github.libfdx.samples.ecs.platformer.component.BoundsComponent;
+import io.github.libfdx.samples.ecs.platformer.component.CollectibleComponent;
+import io.github.libfdx.samples.ecs.platformer.component.EnemyComponent;
+import io.github.libfdx.samples.ecs.platformer.component.GoalComponent;
+import io.github.libfdx.samples.ecs.platformer.component.HazardComponent;
+import io.github.libfdx.samples.ecs.platformer.component.InputStateComponent;
+import io.github.libfdx.samples.ecs.platformer.component.LevelStateComponent;
+import io.github.libfdx.samples.ecs.platformer.component.PlayerComponent;
+import io.github.libfdx.samples.ecs.platformer.component.PositionComponent;
+import io.github.libfdx.samples.ecs.platformer.component.RenderSpriteComponent;
+import io.github.libfdx.samples.ecs.platformer.component.SolidComponent;
+import io.github.libfdx.samples.ecs.platformer.component.VelocityComponent;
 import io.github.libfdx.samples.ecs.platformer.input.PlatformerInput;
 import io.github.libfdx.samples.ecs.platformer.system.CameraSystem;
 import io.github.libfdx.samples.ecs.platformer.system.EnemySystem;
@@ -33,7 +33,7 @@ public final class PlatformerWorldFactory {
 
     public static World create(PlatformerInput input, RenderSystem renderSystem) {
         World world = new World();
-        LevelState state = createState(world);
+        LevelStateComponent state = createState(world);
         createBackground(world);
         createLevel(world, state);
         createPlayer(world);
@@ -50,21 +50,21 @@ public final class PlatformerWorldFactory {
         return world;
     }
 
-    private static LevelState createState(World world) {
-        LevelState state = new LevelState();
+    private static LevelStateComponent createState(World world) {
+        LevelStateComponent state = new LevelStateComponent();
         int entity = world.createEntity();
         world.add(entity, state);
-        world.add(entity, new InputState());
+        world.add(entity, new InputStateComponent());
         return state;
     }
 
     private static void createPlayer(World world) {
         int entity = world.createEntity();
-        world.add(entity, new Position(PlatformerConstants.PLAYER_START_X, PlatformerConstants.PLAYER_START_Y));
-        world.add(entity, new Velocity(0.0f, 0.0f));
-        world.add(entity, new Bounds(PlatformerConstants.PLAYER_HALF_WIDTH, PlatformerConstants.PLAYER_HALF_HEIGHT));
-        world.add(entity, new Player());
-        world.add(entity, new RenderSprite(PlatformerConstants.REGION_PLAYER_IDLE,
+        world.add(entity, new PositionComponent(PlatformerConstants.PLAYER_START_X, PlatformerConstants.PLAYER_START_Y));
+        world.add(entity, new VelocityComponent(0.0f, 0.0f));
+        world.add(entity, new BoundsComponent(PlatformerConstants.PLAYER_HALF_WIDTH, PlatformerConstants.PLAYER_HALF_HEIGHT));
+        world.add(entity, new PlayerComponent());
+        world.add(entity, new RenderSpriteComponent(PlatformerConstants.REGION_PLAYER_IDLE,
                 PlatformerConstants.LAYER_PLAYER));
     }
 
@@ -79,7 +79,7 @@ public final class PlatformerWorldFactory {
         createCloud(world, 2.18f, 0.60f, 0.16f);
     }
 
-    private static void createLevel(World world, LevelState state) {
+    private static void createLevel(World world, LevelStateComponent state) {
         createGrassSpan(world, PlatformerConstants.LEVEL_LEFT, PlatformerConstants.GROUND_TILE_Y, 14);
         createGrassSpan(world, 0.92f, PlatformerConstants.GROUND_TILE_Y, 7);
         createGrassSpan(world, 2.00f, PlatformerConstants.GROUND_TILE_Y, 13);
@@ -167,11 +167,11 @@ public final class PlatformerWorldFactory {
 
     private static void createTile(World world, float x, float y, int region, boolean solid) {
         int entity = world.createEntity();
-        world.add(entity, new Position(x, y));
-        world.add(entity, new Bounds(PlatformerConstants.TILE_HALF, PlatformerConstants.TILE_HALF));
-        world.add(entity, new RenderSprite(region, PlatformerConstants.LAYER_PLATFORM));
+        world.add(entity, new PositionComponent(x, y));
+        world.add(entity, new BoundsComponent(PlatformerConstants.TILE_HALF, PlatformerConstants.TILE_HALF));
+        world.add(entity, new RenderSpriteComponent(region, PlatformerConstants.LAYER_PLATFORM));
         if (solid) {
-            world.add(entity, new Solid());
+            world.add(entity, new SolidComponent());
         }
     }
 
@@ -188,45 +188,45 @@ public final class PlatformerWorldFactory {
                 PlatformerConstants.LAYER_BACKGROUND, 0.10f);
     }
 
-    private static void createCollectible(World world, LevelState state, float x, float y, int region) {
+    private static void createCollectible(World world, LevelStateComponent state, float x, float y, int region) {
         int entity = world.createEntity();
-        world.add(entity, new Position(x, y));
-        world.add(entity, new Bounds(ITEM_HALF, ITEM_HALF));
-        world.add(entity, new Collectible(1));
-        world.add(entity, new RenderSprite(region, PlatformerConstants.LAYER_ITEM));
+        world.add(entity, new PositionComponent(x, y));
+        world.add(entity, new BoundsComponent(ITEM_HALF, ITEM_HALF));
+        world.add(entity, new CollectibleComponent(1));
+        world.add(entity, new RenderSpriteComponent(region, PlatformerConstants.LAYER_ITEM));
         state.coinTotal++;
     }
 
     private static void createHazard(World world, float x, float y, int region) {
         int entity = world.createEntity();
-        world.add(entity, new Position(x, y));
-        world.add(entity, new Bounds(PlatformerConstants.TILE_HALF * 0.82f, PlatformerConstants.TILE_HALF * 0.62f));
-        world.add(entity, new Hazard());
-        world.add(entity, new RenderSprite(region, PlatformerConstants.LAYER_HAZARD));
+        world.add(entity, new PositionComponent(x, y));
+        world.add(entity, new BoundsComponent(PlatformerConstants.TILE_HALF * 0.82f, PlatformerConstants.TILE_HALF * 0.62f));
+        world.add(entity, new HazardComponent());
+        world.add(entity, new RenderSpriteComponent(region, PlatformerConstants.LAYER_HAZARD));
     }
 
     private static void createEnemy(World world, float x, float y, float minX, float maxX, float speed, int region) {
         int entity = world.createEntity();
-        world.add(entity, new Position(x, y));
-        world.add(entity, new Velocity(-speed, 0.0f));
-        world.add(entity, new Bounds(ENEMY_HALF_WIDTH, ENEMY_HALF_HEIGHT));
-        world.add(entity, new Enemy(x, y, minX, maxX, speed));
-        world.add(entity, new RenderSprite(region, PlatformerConstants.LAYER_ENEMY));
+        world.add(entity, new PositionComponent(x, y));
+        world.add(entity, new VelocityComponent(-speed, 0.0f));
+        world.add(entity, new BoundsComponent(ENEMY_HALF_WIDTH, ENEMY_HALF_HEIGHT));
+        world.add(entity, new EnemyComponent(x, y, minX, maxX, speed));
+        world.add(entity, new RenderSpriteComponent(region, PlatformerConstants.LAYER_ENEMY));
     }
 
     private static void createGoal(World world, float x, float y) {
         int entity = world.createEntity();
-        world.add(entity, new Position(x, y));
-        world.add(entity, new Bounds(0.075f, 0.13f));
-        world.add(entity, new Goal());
-        world.add(entity, new RenderSprite(PlatformerConstants.REGION_DOOR, PlatformerConstants.LAYER_GOAL));
+        world.add(entity, new PositionComponent(x, y));
+        world.add(entity, new BoundsComponent(0.075f, 0.13f));
+        world.add(entity, new GoalComponent());
+        world.add(entity, new RenderSpriteComponent(PlatformerConstants.REGION_DOOR, PlatformerConstants.LAYER_GOAL));
     }
 
     private static void createSprite(World world, float x, float y, float width, float height, int region, int layer,
             float parallax) {
         int entity = world.createEntity();
-        world.add(entity, new Position(x, y));
-        world.add(entity, new Bounds(width * 0.5f, height * 0.5f));
-        world.add(entity, new RenderSprite(region, layer).parallax(parallax));
+        world.add(entity, new PositionComponent(x, y));
+        world.add(entity, new BoundsComponent(width * 0.5f, height * 0.5f));
+        world.add(entity, new RenderSpriteComponent(region, layer).parallax(parallax));
     }
 }

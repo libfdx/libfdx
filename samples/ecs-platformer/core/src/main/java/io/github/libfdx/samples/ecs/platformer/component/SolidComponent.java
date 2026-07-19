@@ -2,5 +2,5 @@ package io.github.libfdx.samples.ecs.platformer.component;
 
 import io.github.libfdx.ecs.component.Component;
 
-public final class Goal implements Component {
+public final class SolidComponent implements Component {
 }

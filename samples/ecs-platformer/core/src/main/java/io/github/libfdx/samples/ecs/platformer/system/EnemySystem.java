@@ -2,37 +2,37 @@ package io.github.libfdx.samples.ecs.platformer.system;
 
 import io.github.libfdx.ecs.World;
 import io.github.libfdx.ecs.component.ComponentMapper;
-import io.github.libfdx.samples.ecs.platformer.component.Enemy;
-import io.github.libfdx.samples.ecs.platformer.component.LevelState;
-import io.github.libfdx.samples.ecs.platformer.component.Position;
-import io.github.libfdx.samples.ecs.platformer.component.Velocity;
+import io.github.libfdx.samples.ecs.platformer.component.EnemyComponent;
+import io.github.libfdx.samples.ecs.platformer.component.LevelStateComponent;
+import io.github.libfdx.samples.ecs.platformer.component.PositionComponent;
+import io.github.libfdx.samples.ecs.platformer.component.VelocityComponent;
 
 public final class EnemySystem extends BaseGameSystem {
-    private ComponentMapper<LevelState> states;
-    private ComponentMapper<Enemy> enemies;
-    private ComponentMapper<Position> positions;
-    private ComponentMapper<Velocity> velocities;
+    private ComponentMapper<LevelStateComponent> states;
+    private ComponentMapper<EnemyComponent> enemies;
+    private ComponentMapper<PositionComponent> positions;
+    private ComponentMapper<VelocityComponent> velocities;
 
     @Override
     protected void attach(World world) {
-        states = world.mapper(LevelState.class);
-        enemies = world.mapper(Enemy.class);
-        positions = world.mapper(Position.class);
-        velocities = world.mapper(Velocity.class);
+        states = world.mapper(LevelStateComponent.class);
+        enemies = world.mapper(EnemyComponent.class);
+        positions = world.mapper(PositionComponent.class);
+        velocities = world.mapper(VelocityComponent.class);
     }
 
     @Override
     public void update() {
-        LevelState state = firstState();
+        LevelStateComponent state = firstState();
         if (state == null || state.gameOver || state.completed || state.restarting) {
             return;
         }
         float delta = deltaTime();
         for (int i = 0; i < enemies.size(); i++) {
             int entity = enemies.entityAt(i);
-            Enemy enemy = enemies.componentAt(i);
-            Position position = positions.require(entity);
-            Velocity velocity = velocities.require(entity);
+            EnemyComponent enemy = enemies.componentAt(i);
+            PositionComponent position = positions.require(entity);
+            VelocityComponent velocity = velocities.require(entity);
             velocity.x = enemy.speed * enemy.direction;
             position.x += velocity.x * delta;
             if (position.x < enemy.minX) {
@@ -45,7 +45,7 @@ public final class EnemySystem extends BaseGameSystem {
         }
     }
 
-    private LevelState firstState() {
+    private LevelStateComponent firstState() {
         return states.size() > 0 ? states.componentAt(0) : null;
     }
 }

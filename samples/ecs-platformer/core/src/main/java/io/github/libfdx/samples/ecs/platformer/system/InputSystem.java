@@ -2,12 +2,12 @@ package io.github.libfdx.samples.ecs.platformer.system;
 
 import io.github.libfdx.ecs.World;
 import io.github.libfdx.ecs.component.ComponentMapper;
-import io.github.libfdx.samples.ecs.platformer.component.InputState;
+import io.github.libfdx.samples.ecs.platformer.component.InputStateComponent;
 import io.github.libfdx.samples.ecs.platformer.input.PlatformerInput;
 
 public final class InputSystem extends BaseGameSystem {
     private final PlatformerInput input;
-    private ComponentMapper<InputState> states;
+    private ComponentMapper<InputStateComponent> states;
 
     public InputSystem(PlatformerInput input) {
         this.input = input;
@@ -15,7 +15,7 @@ public final class InputSystem extends BaseGameSystem {
 
     @Override
     protected void attach(World world) {
-        states = world.mapper(InputState.class);
+        states = world.mapper(InputStateComponent.class);
     }
 
     @Override

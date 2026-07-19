@@ -141,8 +141,13 @@ they do not create stack-specific sample folders.
   backend-owned services and are not exposed through `Fdx`.
 - `ecs` owns generic storage, lifecycle, component queries, systems, managers,
   commands, events, and the `GameComponent` / `UiComponent` classification
-  markers. Consumers distinguish game and UI entities through those components,
-  never entity names or entity subclasses.
+  markers. It also owns the provider-neutral `TransformComponent` and its
+  contained `io.github.libfdx.ecs.transform.Transform` value object. The ECS
+  artifact exposes `framework/math` as an API dependency because `Transform`
+  uses `Quaternion` as its authoritative rotation and `Matrix4` as its derived
+  local TRS matrix. Concrete component class names end with `Component`.
+  Consumers distinguish game and UI entities through those components, never
+  entity names or entity subclasses.
 
 ### 3.3. Providers And Backends
 
@@ -343,13 +348,19 @@ roots and prevents repository layout names from leaking into public packages.
 - release tasks use `[release].fdxVersion` exactly;
 - publication code must not construct one value from the other.
 
-Repository configuration has three effective modes:
+Repository configuration has four effective modes:
 
 | Mode | Purpose | Graph/dependencies |
 | --- | --- | --- |
 | Published | Clean checkout and example usage | Consumer projects use Maven artifacts and the published plugin at the configured snapshot version. |
 | Local | Contributor/source validation | Consumers use checked-out `:libfdx:*` projects and the included isolated plugin build. |
+| Included library | Local composite consumption, such as fdx-engine | Gradle detects the parent build and configures only local publishable framework, extension, backend, and tool projects. Repository consumers, their aggregate tasks, and consumer plugin resolution are omitted. |
 | Publication | Snapshot/release preparation | Only local publishable framework/extension/backend/tool projects are configured; samples, tests, benchmarks, and consumer plugin resolution are omitted. |
+
+Included-library mode is derived from Gradle's parent-build identity. An
+including build does not set publication state or another cross-build mode
+property. Root aggregate tasks that require repository consumers are registered
+only when those consumers belong to the selected graph.
 
 The checked-in `usePublishedLibfdx` default is `true`. A system property
 `libfdx.development.usePublishedLibfdx` overrides ignored root

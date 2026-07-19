@@ -35,6 +35,11 @@ val libfdxPublicationBuild = (
             )
         }
     } == true || gradle.startParameter.taskNames.any(::isLibfdxPublicationTask)
+val libfdxRepositoryConsumersIncluded = !libfdxPublicationBuild && gradle.parent == null
+gradle.extensions.extraProperties.set(
+    "libfdxRepositoryConsumersIncluded",
+    libfdxRepositoryConsumersIncluded
+)
 
 pluginManagement {
     val publicationTaskNames = setOf(
@@ -71,6 +76,7 @@ pluginManagement {
         taskName in publicationTaskNames ||
             taskName.startsWith("publishDeploy") && taskName.endsWith("PublicationToLibfdxDeployRepository")
     }
+    val repositoryConsumersIncluded = !publicationBuild && gradle.parent == null
     val tomlFile = java.io.File(settingsDir, "libfdx.toml")
     val localProperties = java.util.Properties().also { properties ->
         val file = java.io.File(settingsDir, "local.properties")
@@ -117,12 +123,12 @@ pluginManagement {
     }
     val fdxSnapshotVersion = tomlValue("release", "fdxSnapshotVersion")
         ?: throw IllegalStateException("Missing [release].fdxSnapshotVersion in libfdx.toml.")
-    if (!publicationBuild && !usePublishedLibfdx) {
+    if (repositoryConsumersIncluded && !usePublishedLibfdx) {
         includeBuild("libfdx/tools/gradle-plugin")
     }
 
     plugins {
-        if (!publicationBuild && usePublishedLibfdx) {
+        if (repositoryConsumersIncluded && usePublishedLibfdx) {
             id("io.github.libfdx") version fdxSnapshotVersion
         }
     }
@@ -193,7 +199,7 @@ include(":libfdx:backends:ios_c")
 include(":libfdx:backends:psp")
 include(":libfdx:backends:android")
 include(":libfdx:backends:web")
-if (!libfdxPublicationBuild) {
+if (libfdxRepositoryConsumersIncluded) {
     include(":tests:core")
     include(":tests:platform:desktop")
     include(":tests:platform:desktop_c")

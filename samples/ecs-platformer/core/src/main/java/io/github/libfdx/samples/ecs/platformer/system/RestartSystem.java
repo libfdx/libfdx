@@ -3,38 +3,38 @@ package io.github.libfdx.samples.ecs.platformer.system;
 import io.github.libfdx.ecs.World;
 import io.github.libfdx.ecs.component.ComponentMapper;
 import io.github.libfdx.samples.ecs.platformer.PlatformerConstants;
-import io.github.libfdx.samples.ecs.platformer.component.Collectible;
-import io.github.libfdx.samples.ecs.platformer.component.Enemy;
-import io.github.libfdx.samples.ecs.platformer.component.InputState;
-import io.github.libfdx.samples.ecs.platformer.component.LevelState;
-import io.github.libfdx.samples.ecs.platformer.component.Player;
-import io.github.libfdx.samples.ecs.platformer.component.Position;
-import io.github.libfdx.samples.ecs.platformer.component.Velocity;
+import io.github.libfdx.samples.ecs.platformer.component.CollectibleComponent;
+import io.github.libfdx.samples.ecs.platformer.component.EnemyComponent;
+import io.github.libfdx.samples.ecs.platformer.component.InputStateComponent;
+import io.github.libfdx.samples.ecs.platformer.component.LevelStateComponent;
+import io.github.libfdx.samples.ecs.platformer.component.PlayerComponent;
+import io.github.libfdx.samples.ecs.platformer.component.PositionComponent;
+import io.github.libfdx.samples.ecs.platformer.component.VelocityComponent;
 
 public final class RestartSystem extends BaseGameSystem {
-    private ComponentMapper<InputState> inputs;
-    private ComponentMapper<LevelState> states;
-    private ComponentMapper<Position> positions;
-    private ComponentMapper<Velocity> velocities;
-    private ComponentMapper<Player> players;
-    private ComponentMapper<Collectible> collectibles;
-    private ComponentMapper<Enemy> enemies;
+    private ComponentMapper<InputStateComponent> inputs;
+    private ComponentMapper<LevelStateComponent> states;
+    private ComponentMapper<PositionComponent> positions;
+    private ComponentMapper<VelocityComponent> velocities;
+    private ComponentMapper<PlayerComponent> players;
+    private ComponentMapper<CollectibleComponent> collectibles;
+    private ComponentMapper<EnemyComponent> enemies;
 
     @Override
     protected void attach(World world) {
-        inputs = world.mapper(InputState.class);
-        states = world.mapper(LevelState.class);
-        positions = world.mapper(Position.class);
-        velocities = world.mapper(Velocity.class);
-        players = world.mapper(Player.class);
-        collectibles = world.mapper(Collectible.class);
-        enemies = world.mapper(Enemy.class);
+        inputs = world.mapper(InputStateComponent.class);
+        states = world.mapper(LevelStateComponent.class);
+        positions = world.mapper(PositionComponent.class);
+        velocities = world.mapper(VelocityComponent.class);
+        players = world.mapper(PlayerComponent.class);
+        collectibles = world.mapper(CollectibleComponent.class);
+        enemies = world.mapper(EnemyComponent.class);
     }
 
     @Override
     public void update() {
-        LevelState state = firstState();
-        InputState input = firstInput();
+        LevelStateComponent state = firstState();
+        InputStateComponent input = firstInput();
         if (state != null && state.restarting) {
             state.restarting = false;
             return;
@@ -46,9 +46,9 @@ public final class RestartSystem extends BaseGameSystem {
         state.restarting = true;
         for (int i = 0; i < players.size(); i++) {
             int entity = players.entityAt(i);
-            Position position = positions.require(entity);
-            Velocity velocity = velocities.require(entity);
-            Player player = players.componentAt(i);
+            PositionComponent position = positions.require(entity);
+            VelocityComponent velocity = velocities.require(entity);
+            PlayerComponent player = players.componentAt(i);
             position.x = PlatformerConstants.PLAYER_START_X;
             position.y = PlatformerConstants.PLAYER_START_Y;
             velocity.x = 0.0f;
@@ -65,11 +65,11 @@ public final class RestartSystem extends BaseGameSystem {
         }
     }
 
-    private LevelState firstState() {
+    private LevelStateComponent firstState() {
         return states.size() > 0 ? states.componentAt(0) : null;
     }
 
-    private InputState firstInput() {
+    private InputStateComponent firstInput() {
         return inputs.size() > 0 ? inputs.componentAt(0) : null;
     }
 }

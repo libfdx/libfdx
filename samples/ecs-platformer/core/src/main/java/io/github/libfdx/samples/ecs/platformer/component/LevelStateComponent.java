@@ -2,7 +2,7 @@ package io.github.libfdx.samples.ecs.platformer.component;
 
 import io.github.libfdx.ecs.component.Component;
 
-public final class LevelState implements Component {
+public final class LevelStateComponent implements Component {
     public float cameraX;
     public int coinsCollected;
     public int coinTotal;

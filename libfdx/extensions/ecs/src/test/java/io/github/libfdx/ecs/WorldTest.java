@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.libfdx.ecs.component.Component;
 import io.github.libfdx.ecs.component.ComponentMapper;
 import io.github.libfdx.ecs.component.GameComponent;
+import io.github.libfdx.ecs.component.TransformComponent;
 import io.github.libfdx.ecs.component.UiComponent;
 import io.github.libfdx.ecs.entity.EntityList;
 import io.github.libfdx.ecs.event.Event;
@@ -26,8 +27,8 @@ final class WorldTest {
         World world = new World();
 
         int entity = world.createEntity();
-        world.add(entity, new Transform(1.0f, 2.0f));
-        world.add(entity, new Velocity(3.0f, 4.0f));
+        world.add(entity, new TransformComponent(1.0f, 2.0f, 0.0f));
+        world.add(entity, new VelocityComponent(3.0f, 4.0f));
 
         assertFalse(world.isAttached(entity));
         assertEquals(0, world.entityCount());
@@ -36,8 +37,8 @@ final class WorldTest {
 
         assertTrue(world.isAttached(entity));
         assertEquals(1, world.entityCount());
-        assertEquals(1.0f, world.require(entity, Transform.class).x);
-        assertEquals(4.0f, world.require(entity, Velocity.class).y);
+        assertEquals(1.0f, world.require(entity, TransformComponent.class).transform.x);
+        assertEquals(4.0f, world.require(entity, VelocityComponent.class).y);
     }
 
     @Test
@@ -60,18 +61,18 @@ final class WorldTest {
     @Test
     void returnsStableMappersAndIteratesDenseComponents() {
         World world = new World();
-        ComponentMapper<Transform> firstMapper = world.mapper(Transform.class);
-        ComponentMapper<Transform> secondMapper = world.mapper(Transform.class);
+        ComponentMapper<TransformComponent> firstMapper = world.mapper(TransformComponent.class);
+        ComponentMapper<TransformComponent> secondMapper = world.mapper(TransformComponent.class);
         int a = world.createEntity();
         int b = world.createEntity();
-        world.add(a, new Transform(1.0f, 0.0f));
-        world.add(b, new Transform(2.0f, 0.0f));
+        world.add(a, new TransformComponent(1.0f, 0.0f, 0.0f));
+        world.add(b, new TransformComponent(2.0f, 0.0f, 0.0f));
         world.flushCommands();
 
         assertSame(firstMapper, secondMapper);
         assertEquals(2, firstMapper.size());
         assertEquals(a, firstMapper.entityAt(0));
-        assertEquals(1.0f, firstMapper.componentAt(0).x);
+        assertEquals(1.0f, firstMapper.componentAt(0).transform.x);
         assertEquals(b, firstMapper.entityAt(1));
     }
 
@@ -81,19 +82,26 @@ final class WorldTest {
         int moving = world.createEntity();
         int named = world.createEntity();
         int ui = world.createEntity();
-        world.add(moving, new Transform(0.0f, 0.0f));
-        world.add(moving, new Velocity(1.0f, 0.0f));
-        world.add(named, new Transform(0.0f, 0.0f));
-        world.add(named, new Name("box"));
-        world.add(ui, new UiLayout());
-        world.add(ui, new UiRenderable());
-        world.add(ui, new EditorOnly());
+        world.add(moving, new TransformComponent(0.0f, 0.0f, 0.0f));
+        world.add(moving, new VelocityComponent(1.0f, 0.0f));
+        world.add(named, new TransformComponent(0.0f, 0.0f, 0.0f));
+        world.add(named, new NameComponent("box"));
+        world.add(ui, new UiLayoutComponent());
+        world.add(ui, new UiRenderableComponent());
+        world.add(ui, new EditorOnlyComponent());
 
-        EntityList movingEntities = world.entities(world.matcher().all(Transform.class, Velocity.class));
-        EntityList exactlyOneIdentity = world.entities(world.matcher().one(Name.class, UiLayout.class));
-        EntityList anyRenderable = world.entities(world.matcher().any(Name.class, Velocity.class));
+        EntityList movingEntities = world.entities(
+            world.matcher().all(TransformComponent.class, VelocityComponent.class)
+        );
+        EntityList exactlyOneIdentity = world.entities(
+            world.matcher().one(NameComponent.class, UiLayoutComponent.class)
+        );
+        EntityList anyRenderable = world.entities(
+            world.matcher().any(NameComponent.class, VelocityComponent.class)
+        );
         EntityList runtimeUi = world.entities(
-            world.matcher().all(UiLayout.class, UiRenderable.class).exclude(EditorOnly.class)
+            world.matcher().all(UiLayoutComponent.class, UiRenderableComponent.class)
+                .exclude(EditorOnlyComponent.class)
         );
 
         world.flushCommands();
@@ -104,7 +112,7 @@ final class WorldTest {
         assertEquals(2, anyRenderable.size());
         assertTrue(runtimeUi.isEmpty());
 
-        world.remove(moving, Velocity.class);
+        world.remove(moving, VelocityComponent.class);
         world.flushCommands();
 
         assertTrue(movingEntities.isEmpty());
@@ -115,11 +123,11 @@ final class WorldTest {
         World world = new World();
         int game = world.createEntity();
         int ui = world.createEntity();
-        world.add(game, new Name("Shared Name"));
-        world.add(game, new Transform(0.0f, 0.0f));
+        world.add(game, new NameComponent("Shared Name"));
+        world.add(game, new TransformComponent(0.0f, 0.0f, 0.0f));
         world.add(game, new GameComponent());
-        world.add(ui, new Name("Shared Name"));
-        world.add(ui, new Transform(0.0f, 0.0f));
+        world.add(ui, new NameComponent("Shared Name"));
+        world.add(ui, new TransformComponent(0.0f, 0.0f, 0.0f));
         world.add(ui, new UiComponent());
 
         EntityList gameEntities = world.entities(world.matcher().all(GameComponent.class));
@@ -229,8 +237,8 @@ final class WorldTest {
     void clearsEntitiesComponentsManagersSystemsEventsAndLists() {
         World world = new World();
         int entity = world.createEntity();
-        world.add(entity, new Transform(1.0f, 2.0f));
-        EntityList transforms = world.entities(world.matcher().all(Transform.class));
+        world.add(entity, new TransformComponent(1.0f, 2.0f, 0.0f));
+        EntityList transforms = world.entities(world.matcher().all(TransformComponent.class));
         TestManager manager = world.addManager(new TestManager());
         TestSystem system = world.addSystem(new TestSystem());
         world.events().addListener(1, (eventWorld, event) -> { });
@@ -254,44 +262,34 @@ final class WorldTest {
     void rejectsReadsForDetachedEntities() {
         World world = new World();
 
-        assertThrows(IllegalStateException.class, () -> world.get(123, Transform.class));
+        assertThrows(IllegalStateException.class, () -> world.get(123, TransformComponent.class));
     }
 
-    static final class Transform implements Component {
+    static final class VelocityComponent implements Component {
         float x;
         float y;
 
-        Transform(float x, float y) {
+        VelocityComponent(float x, float y) {
             this.x = x;
             this.y = y;
         }
     }
 
-    static final class Velocity implements Component {
-        float x;
-        float y;
-
-        Velocity(float x, float y) {
-            this.x = x;
-            this.y = y;
-        }
-    }
-
-    static final class Name implements Component {
+    static final class NameComponent implements Component {
         final String value;
 
-        Name(String value) {
+        NameComponent(String value) {
             this.value = value;
         }
     }
 
-    static final class UiLayout implements Component {
+    static final class UiLayoutComponent implements Component {
     }
 
-    static final class UiRenderable implements Component {
+    static final class UiRenderableComponent implements Component {
     }
 
-    static final class EditorOnly implements Component {
+    static final class EditorOnlyComponent implements Component {
     }
 
     private static boolean contains(EntityList entities, int expected) {

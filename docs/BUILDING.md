@@ -56,6 +56,7 @@ published artifacts or checked-out projects.
 | --- | --- | --- |
 | Published | `development.usePublishedLibfdx=true` | Clean checkout and examples without compiling libFDX first. |
 | Local | `development.usePublishedLibfdx=false` | Develop and validate framework changes. |
+| Included library | Selected automatically when another Gradle build includes libFDX | Supply local library projects to a composite consumer without configuring repository samples, tests, benchmarks, or plugin-use modules. |
 | Publication | Selected automatically by publication tasks | Build Maven output without consumer/bootstrap dependencies. |
 
 Published mode is the checked-in default in `libfdx.toml`. It resolves the exact
@@ -72,12 +73,14 @@ Override the default in ignored root `local.properties`, or for one invocation:
 Precedence is system property, `local.properties`, then `libfdx.toml`. Gradle
 `-P` project properties are not supported for this setting.
 
-Publication tasks ignore the consumer default and use a reduced project graph
-without samples, tests, benchmarks, or consumer plugin resolution. Libraries
-are prepared first; the isolated Gradle-plugin build then resolves the same
-version from the generated deploy repository. Therefore leaving the checked-in
-default at `true` does not create a release or snapshot publication bootstrap
-cycle.
+Included-library and publication modes ignore the consumer default and use a
+reduced project graph without samples, tests, benchmarks, consumer plugin
+resolution, or root aggregate tasks that require those projects. Included
+library mode comes directly from Gradle's parent-build identity; including
+builds do not set libFDX publication state. During publication, libraries are
+prepared first; the isolated Gradle-plugin build then resolves the same version
+from the generated deploy repository. Therefore leaving the checked-in default
+at `true` does not create a release or snapshot publication bootstrap cycle.
 
 Version roles remain separate:
 

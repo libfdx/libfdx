@@ -2,7 +2,7 @@ package io.github.libfdx.samples.ecs.platformer.component;
 
 import io.github.libfdx.ecs.component.Component;
 
-public final class Enemy implements Component {
+public final class EnemyComponent implements Component {
     public final float startX;
     public final float startY;
     public final float minX;
@@ -10,7 +10,7 @@ public final class Enemy implements Component {
     public final float speed;
     public int direction = -1;
 
-    public Enemy(float startX, float startY, float minX, float maxX, float speed) {
+    public EnemyComponent(float startX, float startY, float minX, float maxX, float speed) {
         this.startX = startX;
         this.startY = startY;
         this.minX = minX;
@@ -18,7 +18,7 @@ public final class Enemy implements Component {
         this.speed = speed;
     }
 
-    public void reset(Position position, Velocity velocity) {
+    public void reset(PositionComponent position, VelocityComponent velocity) {
         position.x = startX;
         position.y = startY;
         direction = -1;

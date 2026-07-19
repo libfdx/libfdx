@@ -7,20 +7,20 @@ import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.g2d.SpriteBatch;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 import io.github.libfdx.samples.ecs.platformer.PlatformerConstants;
-import io.github.libfdx.samples.ecs.platformer.component.Bounds;
-import io.github.libfdx.samples.ecs.platformer.component.Collectible;
-import io.github.libfdx.samples.ecs.platformer.component.LevelState;
-import io.github.libfdx.samples.ecs.platformer.component.Position;
-import io.github.libfdx.samples.ecs.platformer.component.RenderSprite;
+import io.github.libfdx.samples.ecs.platformer.component.BoundsComponent;
+import io.github.libfdx.samples.ecs.platformer.component.CollectibleComponent;
+import io.github.libfdx.samples.ecs.platformer.component.LevelStateComponent;
+import io.github.libfdx.samples.ecs.platformer.component.PositionComponent;
+import io.github.libfdx.samples.ecs.platformer.component.RenderSpriteComponent;
 
 public final class RenderSystem extends BaseGameSystem {
     private final SpriteBatch batch;
     private final TextureRegion[] regions;
-    private ComponentMapper<LevelState> states;
-    private ComponentMapper<Position> positions;
-    private ComponentMapper<Bounds> bounds;
-    private ComponentMapper<RenderSprite> sprites;
-    private ComponentMapper<Collectible> collectibles;
+    private ComponentMapper<LevelStateComponent> states;
+    private ComponentMapper<PositionComponent> positions;
+    private ComponentMapper<BoundsComponent> bounds;
+    private ComponentMapper<RenderSpriteComponent> sprites;
+    private ComponentMapper<CollectibleComponent> collectibles;
     private EntityList renderables;
 
     public RenderSystem(SpriteBatch batch, TextureRegion[] regions) {
@@ -30,12 +30,12 @@ public final class RenderSystem extends BaseGameSystem {
 
     @Override
     protected void attach(World world) {
-        states = world.mapper(LevelState.class);
-        positions = world.mapper(Position.class);
-        bounds = world.mapper(Bounds.class);
-        sprites = world.mapper(RenderSprite.class);
-        collectibles = world.mapper(Collectible.class);
-        renderables = world.entities(world.matcher().all(Position.class, Bounds.class, RenderSprite.class));
+        states = world.mapper(LevelStateComponent.class);
+        positions = world.mapper(PositionComponent.class);
+        bounds = world.mapper(BoundsComponent.class);
+        sprites = world.mapper(RenderSpriteComponent.class);
+        collectibles = world.mapper(CollectibleComponent.class);
+        renderables = world.entities(world.matcher().all(PositionComponent.class, BoundsComponent.class, RenderSpriteComponent.class));
     }
 
     @Override
@@ -43,7 +43,7 @@ public final class RenderSystem extends BaseGameSystem {
         if (batch == null || regions == null) {
             return;
         }
-        LevelState state = firstState();
+        LevelStateComponent state = firstState();
         float cameraX = state != null ? state.cameraX : 0.0f;
         batch.begin(LoadOp.clear(0.0f, 0.0f, 0.0f, 1.0f));
         drawLayer(PlatformerConstants.LAYER_BACKGROUND, cameraX);
@@ -61,7 +61,7 @@ public final class RenderSystem extends BaseGameSystem {
     private void drawLayer(int layer, float cameraX) {
         for (int i = 0; i < renderables.size(); i++) {
             int entity = renderables.entityAt(i);
-            RenderSprite sprite = sprites.require(entity);
+            RenderSpriteComponent sprite = sprites.require(entity);
             if (sprite.layer != layer || sprite.regionId < 0 || sprite.regionId >= regions.length
                     || regions[sprite.regionId] == null) {
                 continue;
@@ -69,8 +69,8 @@ public final class RenderSystem extends BaseGameSystem {
             if (collectibles.has(entity) && collectibles.require(entity).collected) {
                 continue;
             }
-            Position position = positions.require(entity);
-            Bounds entityBounds = bounds.require(entity);
+            PositionComponent position = positions.require(entity);
+            BoundsComponent entityBounds = bounds.require(entity);
             float screenX = screenX(position, sprite, cameraX);
             if (screenX + entityBounds.halfWidth < -1.14f || screenX - entityBounds.halfWidth > 1.14f) {
                 continue;
@@ -83,7 +83,7 @@ public final class RenderSystem extends BaseGameSystem {
         batch.color(1.0f, 1.0f, 1.0f, 1.0f);
     }
 
-    private void drawHud(LevelState state) {
+    private void drawHud(LevelStateComponent state) {
         if (state == null || state.coinsCollected <= 0 || !validRegion(PlatformerConstants.REGION_COIN)) {
             return;
         }
@@ -98,11 +98,11 @@ public final class RenderSystem extends BaseGameSystem {
         return regionId >= 0 && regionId < regions.length && regions[regionId] != null;
     }
 
-    private float screenX(Position position, RenderSprite sprite, float cameraX) {
+    private float screenX(PositionComponent position, RenderSpriteComponent sprite, float cameraX) {
         return position.x - cameraX * sprite.parallax;
     }
 
-    private LevelState firstState() {
+    private LevelStateComponent firstState() {
         return states.size() > 0 ? states.componentAt(0) : null;
     }
 }

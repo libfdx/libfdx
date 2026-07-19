@@ -2,7 +2,7 @@ package io.github.libfdx.samples.ecs.platformer.component;
 
 import io.github.libfdx.ecs.component.Component;
 
-public final class InputState implements Component {
+public final class InputStateComponent implements Component {
     public boolean leftDown;
     public boolean rightDown;
     public boolean jumpDown;
