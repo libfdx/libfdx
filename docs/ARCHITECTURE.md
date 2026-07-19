@@ -139,10 +139,10 @@ they do not create stack-specific sample folders.
   starts.
 - `ecs` and scenario validation are optional user-created features. They are not
   backend-owned services and are not exposed through `Fdx`.
-- `ecs` owns only generic storage, lifecycle, component queries, systems,
-  managers, commands, and events. Game/UI/editor meaning belongs to consumers
-  and is expressed through functional component signatures, never entity names
-  or framework-defined domain entity types.
+- `ecs` owns generic storage, lifecycle, component queries, systems, managers,
+  commands, events, and the `GameComponent` / `UiComponent` classification
+  markers. Consumers distinguish game and UI entities through those components,
+  never entity names or entity subclasses.
 
 ### 3.3. Providers And Backends
 

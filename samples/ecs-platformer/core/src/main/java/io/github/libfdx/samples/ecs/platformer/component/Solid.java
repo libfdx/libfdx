@@ -1,4 +1,6 @@
 package io.github.libfdx.samples.ecs.platformer.component;
 
-public final class Solid {
+import io.github.libfdx.ecs.component.Component;
+
+public final class Solid implements Component {
 }

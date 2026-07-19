@@ -4,7 +4,7 @@ import io.github.libfdx.ecs.World;
 
 import java.util.Arrays;
 
-public final class ComponentStore<T> {
+public final class ComponentStore<T extends Component> {
     private final Class<T> type;
     private int[] entities = new int[8];
     private Object[] components = new Object[8];

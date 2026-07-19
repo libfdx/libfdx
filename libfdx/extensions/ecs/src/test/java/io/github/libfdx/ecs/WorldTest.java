@@ -9,7 +9,10 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.libfdx.ecs.component.Component;
 import io.github.libfdx.ecs.component.ComponentMapper;
+import io.github.libfdx.ecs.component.GameComponent;
+import io.github.libfdx.ecs.component.UiComponent;
 import io.github.libfdx.ecs.entity.EntityList;
 import io.github.libfdx.ecs.event.Event;
 import io.github.libfdx.ecs.manager.Manager;
@@ -108,45 +111,40 @@ final class WorldTest {
     }
 
     @Test
-    void routesSameNamedEntitiesByFunctionalComponentsAndAllowsHybridComposition() {
+    void routesSameNamedEntitiesByGameAndUiComponents() {
         World world = new World();
         int game = world.createEntity();
         int ui = world.createEntity();
-        int hybrid = world.createEntity();
         world.add(game, new Name("Shared Name"));
         world.add(game, new Transform(0.0f, 0.0f));
-        world.add(game, new GameBehavior());
+        world.add(game, new GameComponent());
         world.add(ui, new Name("Shared Name"));
-        world.add(ui, new UiLayout());
-        world.add(ui, new UiRenderable());
-        world.add(hybrid, new Name("Shared Name"));
-        world.add(hybrid, new Transform(0.0f, 0.0f));
-        world.add(hybrid, new GameBehavior());
-        world.add(hybrid, new UiLayout());
-        world.add(hybrid, new UiRenderable());
+        world.add(ui, new Transform(0.0f, 0.0f));
+        world.add(ui, new UiComponent());
 
-        EntityList gameEntities = world.entities(world.matcher().all(Transform.class, GameBehavior.class));
-        EntityList uiEntities = world.entities(world.matcher().all(UiLayout.class, UiRenderable.class));
+        EntityList gameEntities = world.entities(world.matcher().all(GameComponent.class));
+        EntityList uiEntities = world.entities(world.matcher().all(UiComponent.class));
         world.flushCommands();
 
-        assertEquals(2, gameEntities.size());
-        assertEquals(2, uiEntities.size());
+        assertEquals(1, gameEntities.size());
+        assertEquals(1, uiEntities.size());
         assertTrue(contains(gameEntities, game));
         assertFalse(contains(gameEntities, ui));
-        assertTrue(contains(gameEntities, hybrid));
         assertFalse(contains(uiEntities, game));
         assertTrue(contains(uiEntities, ui));
-        assertTrue(contains(uiEntities, hybrid));
 
-        world.add(ui, new Transform(0.0f, 0.0f));
-        world.add(ui, new GameBehavior());
-        world.remove(hybrid, UiRenderable.class);
+        world.remove(game, GameComponent.class);
+        world.add(game, new UiComponent());
+        world.remove(ui, UiComponent.class);
+        world.add(ui, new GameComponent());
         world.flushCommands();
 
-        assertEquals(3, gameEntities.size());
+        assertEquals(1, gameEntities.size());
         assertEquals(1, uiEntities.size());
-        assertTrue(contains(uiEntities, ui));
-        assertFalse(contains(uiEntities, hybrid));
+        assertTrue(contains(gameEntities, ui));
+        assertFalse(contains(gameEntities, game));
+        assertTrue(contains(uiEntities, game));
+        assertFalse(contains(uiEntities, ui));
     }
 
     @Test
@@ -259,7 +257,7 @@ final class WorldTest {
         assertThrows(IllegalStateException.class, () -> world.get(123, Transform.class));
     }
 
-    static final class Transform {
+    static final class Transform implements Component {
         float x;
         float y;
 
@@ -269,7 +267,7 @@ final class WorldTest {
         }
     }
 
-    static final class Velocity {
+    static final class Velocity implements Component {
         float x;
         float y;
 
@@ -279,7 +277,7 @@ final class WorldTest {
         }
     }
 
-    static final class Name {
+    static final class Name implements Component {
         final String value;
 
         Name(String value) {
@@ -287,16 +285,13 @@ final class WorldTest {
         }
     }
 
-    static final class GameBehavior {
+    static final class UiLayout implements Component {
     }
 
-    static final class UiLayout {
+    static final class UiRenderable implements Component {
     }
 
-    static final class UiRenderable {
-    }
-
-    static final class EditorOnly {
+    static final class EditorOnly implements Component {
     }
 
     private static boolean contains(EntityList entities, int expected) {

@@ -3,6 +3,7 @@ package io.github.libfdx.ecs;
 import io.github.libfdx.collections.Array;
 import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.ecs.command.WorldCommands;
+import io.github.libfdx.ecs.component.Component;
 import io.github.libfdx.ecs.component.ComponentMapper;
 import io.github.libfdx.ecs.component.ComponentStore;
 import io.github.libfdx.ecs.entity.EntityList;
@@ -28,9 +29,9 @@ public final class World {
     private boolean updating;
     private boolean flushingCommands;
 
-    private final ObjectMap<Class<?>, ComponentStore<?>> stores = new ObjectMap<>();
-    private final ObjectMap<Class<?>, ComponentMapper<?>> mappers = new ObjectMap<>();
-    private final Array<Class<?>[]> componentTypes = new Array<>();
+    private final ObjectMap<Class<? extends Component>, ComponentStore<?>> stores = new ObjectMap<>();
+    private final ObjectMap<Class<? extends Component>, ComponentMapper<?>> mappers = new ObjectMap<>();
+    private final Array<Class<? extends Component>[]> componentTypes = new Array<>();
     private final Array<EntityList> entityLists = new Array<>();
     private final ObjectMap<Class<?>, Manager> managers = new ObjectMap<>();
     private final ObjectMap<Class<?>, System> systems = new ObjectMap<>();
@@ -65,20 +66,20 @@ public final class World {
         commands.clear();
     }
 
-    public <T> void add(int entity, T component) {
+    public <T extends Component> void add(int entity, T component) {
         commands.add(entity, component);
     }
 
-    public <T> void add(int entity, Class<T> type, T component) {
+    public <T extends Component> void add(int entity, Class<T> type, T component) {
         commands.add(entity, type, component);
     }
 
-    public <T> T get(int entity, Class<T> type) {
+    public <T extends Component> T get(int entity, Class<T> type) {
         requireReadableEntity(entity);
         return store(type).get(entity);
     }
 
-    public <T> T require(int entity, Class<T> type) {
+    public <T extends Component> T require(int entity, Class<T> type) {
         T component = get(entity, type);
         if (component == null) {
             throw new IllegalStateException("Missing component " + type.getName() + " for entity " + entity + ".");
@@ -86,16 +87,16 @@ public final class World {
         return component;
     }
 
-    public <T> boolean has(int entity, Class<T> type) {
+    public <T extends Component> boolean has(int entity, Class<T> type) {
         requireReadableEntity(entity);
         return hasNow(entity, type);
     }
 
-    public void remove(int entity, Class<?> type) {
+    public void remove(int entity, Class<? extends Component> type) {
         commands.remove(entity, type);
     }
 
-    public <T> ComponentMapper<T> mapper(Class<T> type) {
+    public <T extends Component> ComponentMapper<T> mapper(Class<T> type) {
         if (type == null) {
             throw new IllegalArgumentException("component type cannot be null.");
         }
@@ -260,14 +261,14 @@ public final class World {
             return;
         }
         int index = entityIndex(entity);
-        Class<?>[] types = componentTypes(index);
+        Class<? extends Component>[] types = componentTypes(index);
         for (int i = 0; i < types.length; i++) {
             ComponentStore<?> store = stores.get(types[i]);
             if (store != null) {
                 store.remove(entity);
             }
         }
-        setComponentTypes(index, new Class<?>[0]);
+        setComponentTypes(index, componentTypeArray(0));
         attached[index] = false;
         reserved[index] = false;
         generations[index]++;
@@ -279,7 +280,7 @@ public final class World {
         entityCount--;
     }
 
-    public <T> void applyAdd(int entity, Class<T> type, T component) {
+    public <T extends Component> void applyAdd(int entity, Class<T> type, T component) {
         requireAttachedForApply(entity);
         ComponentStore<T> store = store(type);
         boolean alreadyHad = store.has(entity);
@@ -289,7 +290,7 @@ public final class World {
         }
     }
 
-    public void applyRemove(int entity, Class<?> type) {
+    public void applyRemove(int entity, Class<? extends Component> type) {
         requireAttachedForApply(entity);
         ComponentStore<?> store = stores.get(type);
         if (store != null && store.remove(entity)) {
@@ -381,7 +382,7 @@ public final class World {
         }
     }
 
-    public <T> void requireComponentType(Class<T> type, T component) {
+    public <T extends Component> void requireComponentType(Class<T> type, T component) {
         if (type == null) {
             throw new IllegalArgumentException("component type cannot be null.");
         }
@@ -393,7 +394,7 @@ public final class World {
         }
     }
 
-    public boolean hasNow(int entity, Class<?> type) {
+    public boolean hasNow(int entity, Class<? extends Component> type) {
         if (type == null) {
             return false;
         }
@@ -401,7 +402,7 @@ public final class World {
         return store != null && store.has(entity);
     }
 
-    public ComponentStore<?> smallestStore(Class<?>[] types) {
+    public ComponentStore<?> smallestStore(Class<? extends Component>[] types) {
         ComponentStore<?> smallest = null;
         for (int i = 0; i < types.length; i++) {
             ComponentStore<?> store = stores.get(types[i]);
@@ -433,7 +434,7 @@ public final class World {
     }
 
     @SuppressWarnings("unchecked")
-    private <T> ComponentStore<T> store(Class<T> type) {
+    private <T extends Component> ComponentStore<T> store(Class<T> type) {
         if (type == null) {
             throw new IllegalArgumentException("component type cannot be null.");
         }
@@ -476,30 +477,30 @@ public final class World {
         freeIndices = Arrays.copyOf(freeIndices, capacity);
     }
 
-    private Class<?>[] componentTypes(int index) {
+    private Class<? extends Component>[] componentTypes(int index) {
         if (index >= componentTypes.size()) {
-            return new Class<?>[0];
+            return componentTypeArray(0);
         }
         return componentTypes.get(index);
     }
 
-    private void addComponentType(int index, Class<?> type) {
-        Class<?>[] types = componentTypes(index);
+    private void addComponentType(int index, Class<? extends Component> type) {
+        Class<? extends Component>[] types = componentTypes(index);
         for (int i = 0; i < types.length; i++) {
             if (types[i] == type) {
                 return;
             }
         }
-        Class<?>[] updated = Arrays.copyOf(types, types.length + 1);
+        Class<? extends Component>[] updated = Arrays.copyOf(types, types.length + 1);
         updated[types.length] = type;
         setComponentTypes(index, updated);
     }
 
-    private void removeComponentType(int index, Class<?> type) {
-        Class<?>[] types = componentTypes(index);
+    private void removeComponentType(int index, Class<? extends Component> type) {
+        Class<? extends Component>[] types = componentTypes(index);
         for (int i = 0; i < types.length; i++) {
             if (types[i] == type) {
-                Class<?>[] updated = new Class<?>[types.length - 1];
+                Class<? extends Component>[] updated = componentTypeArray(types.length - 1);
                 java.lang.System.arraycopy(types, 0, updated, 0, i);
                 java.lang.System.arraycopy(types, i + 1, updated, i, types.length - i - 1);
                 setComponentTypes(index, updated);
@@ -508,9 +509,9 @@ public final class World {
         }
     }
 
-    private void setComponentTypes(int index, Class<?>[] types) {
+    private void setComponentTypes(int index, Class<? extends Component>[] types) {
         while (componentTypes.size() <= index) {
-            componentTypes.add(new Class<?>[0]);
+            componentTypes.add(componentTypeArray(0));
         }
         componentTypes.set(index, types);
     }
@@ -519,5 +520,10 @@ public final class World {
         for (int i = 0; i < entityLists.size(); i++) {
             entityLists.get(i).refresh();
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Class<? extends Component>[] componentTypeArray(int length) {
+        return (Class<? extends Component>[]) new Class<?>[length];
     }
 }

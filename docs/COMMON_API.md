@@ -589,14 +589,15 @@ components, mappers, queries, lists, events, managers, systems, commands, and
 reusable storage.
 
 - Entity handles are opaque integers belonging to one world; `0` is no entity.
-- Components are non-null objects keyed by an explicit `Class<T>`.
-- Entities have no intrinsic game, UI, editor, or other domain kind. A system
-  processes an entity only when its component composition satisfies that
-  system's matcher.
-- Names and labels are presentation data, not routing data. Applications define
-  functional signatures from the components a feature actually consumes.
-- An entity may match several feature signatures at once. Shared and hybrid
-  compositions are valid; the ECS does not impose mutually exclusive domains.
+- Components are non-null objects that implement
+  `io.github.libfdx.ecs.component.Component` and are keyed by an explicit
+  `Class<T>`, where `T extends Component`.
+- `GameComponent` and `UiComponent` are concrete marker components. Attaching
+  one lets the user choose whether an entity belongs to game or UI routing.
+- Game and UI matchers select `GameComponent.class` and `UiComponent.class`
+  respectively, optionally combined with the functional components a system
+  consumes.
+- Names and labels are presentation data, never game/UI routing data.
 - There is no reflection, annotation scanning, automatic field mapping, or
   automatic serialization.
 - Structural mutations are deferred through world commands and applied at

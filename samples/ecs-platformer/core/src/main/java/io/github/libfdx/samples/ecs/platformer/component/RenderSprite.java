@@ -1,6 +1,8 @@
 package io.github.libfdx.samples.ecs.platformer.component;
 
-public final class RenderSprite {
+import io.github.libfdx.ecs.component.Component;
+
+public final class RenderSprite implements Component {
     public int regionId;
     public final int layer;
     public float parallax = 1.0f;

@@ -2,35 +2,40 @@ package io.github.libfdx.ecs.query;
 
 import io.github.libfdx.collections.Array;
 import io.github.libfdx.ecs.World;
+import io.github.libfdx.ecs.component.Component;
 
 public final class EntityMatcher {
     private final World world;
-    private final Array<Class<?>> allTypes = new Array<>();
-    private final Array<Class<?>> oneTypes = new Array<>();
-    private final Array<Class<?>> anyTypes = new Array<>();
-    private final Array<Class<?>> excludedTypes = new Array<>();
+    private final Array<Class<? extends Component>> allTypes = new Array<>();
+    private final Array<Class<? extends Component>> oneTypes = new Array<>();
+    private final Array<Class<? extends Component>> anyTypes = new Array<>();
+    private final Array<Class<? extends Component>> excludedTypes = new Array<>();
     private boolean frozen;
 
     public EntityMatcher(World world) {
         this.world = world;
     }
 
-    public EntityMatcher all(Class<?>... types) {
+    @SafeVarargs
+    public final EntityMatcher all(Class<? extends Component>... types) {
         addTypes(allTypes, types);
         return this;
     }
 
-    public EntityMatcher one(Class<?>... types) {
+    @SafeVarargs
+    public final EntityMatcher one(Class<? extends Component>... types) {
         addTypes(oneTypes, types);
         return this;
     }
 
-    public EntityMatcher any(Class<?>... types) {
+    @SafeVarargs
+    public final EntityMatcher any(Class<? extends Component>... types) {
         addTypes(anyTypes, types);
         return this;
     }
 
-    public EntityMatcher exclude(Class<?>... types) {
+    @SafeVarargs
+    public final EntityMatcher exclude(Class<? extends Component>... types) {
         addTypes(excludedTypes, types);
         return this;
     }
@@ -84,8 +89,8 @@ public final class EntityMatcher {
         return true;
     }
 
-    public Class<?>[] candidateTypes() {
-        Class<?>[] result = new Class<?>[allTypes.size()];
+    public Class<? extends Component>[] candidateTypes() {
+        Class<? extends Component>[] result = componentTypeArray(allTypes.size());
         for (int i = 0; i < allTypes.size(); i++) {
             result[i] = allTypes.get(i);
         }
@@ -96,14 +101,20 @@ public final class EntityMatcher {
         frozen = true;
     }
 
-    private void addTypes(Array<Class<?>> target, Class<?>... types) {
+    private void addTypes(
+        Array<Class<? extends Component>> target,
+        Class<? extends Component>[] types
+    ) {
         requireMutable();
         if (types == null) {
             return;
         }
-        for (Class<?> type : types) {
+        for (Class<? extends Component> type : types) {
             if (type == null) {
                 throw new IllegalArgumentException("component type cannot be null.");
+            }
+            if (!Component.class.isAssignableFrom(type)) {
+                throw new IllegalArgumentException(type.getName() + " does not implement Component.");
             }
             if (!target.contains(type)) {
                 target.add(type);
@@ -115,5 +126,10 @@ public final class EntityMatcher {
         if (frozen) {
             throw new IllegalStateException("Matcher cannot change after an EntityList is created.");
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Class<? extends Component>[] componentTypeArray(int length) {
+        return (Class<? extends Component>[]) new Class<?>[length];
     }
 }

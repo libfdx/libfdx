@@ -2,6 +2,7 @@ package io.github.libfdx.ecs.entity;
 
 import io.github.libfdx.collections.IntArray;
 import io.github.libfdx.ecs.World;
+import io.github.libfdx.ecs.component.Component;
 import io.github.libfdx.ecs.component.ComponentStore;
 import io.github.libfdx.ecs.query.EntityMatcher;
 
@@ -35,7 +36,7 @@ public final class EntityList {
 
     public void refresh() {
         entities.clear();
-        Class<?>[] candidateTypes = matcher.candidateTypes();
+        Class<? extends Component>[] candidateTypes = matcher.candidateTypes();
         if (candidateTypes.length == 0) {
             world.collectAttachedEntities(this);
             return;

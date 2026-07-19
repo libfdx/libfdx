@@ -2,6 +2,7 @@ package io.github.libfdx.ecs.command;
 
 import io.github.libfdx.collections.Array;
 import io.github.libfdx.ecs.World;
+import io.github.libfdx.ecs.component.Component;
 import io.github.libfdx.ecs.manager.Manager;
 import io.github.libfdx.ecs.system.System;
 
@@ -24,7 +25,7 @@ public final class WorldCommands {
         commands.add(target -> target.applyDestroy(entity));
     }
 
-    public <T> void add(int entity, T component) {
+    public <T extends Component> void add(int entity, T component) {
         if (component == null) {
             throw new IllegalArgumentException("component cannot be null.");
         }
@@ -33,13 +34,13 @@ public final class WorldCommands {
         add(entity, type, component);
     }
 
-    public <T> void add(int entity, Class<T> type, T component) {
+    public <T extends Component> void add(int entity, Class<T> type, T component) {
         world.requireMutableEntity(entity);
         world.requireComponentType(type, component);
         commands.add(target -> target.applyAdd(entity, type, component));
     }
 
-    public void remove(int entity, Class<?> type) {
+    public void remove(int entity, Class<? extends Component> type) {
         world.requireMutableEntity(entity);
         if (type == null) {
             throw new IllegalArgumentException("component type cannot be null.");

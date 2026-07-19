@@ -1,6 +1,8 @@
 package io.github.libfdx.samples.ecs.platformer.component;
 
-public final class Enemy {
+import io.github.libfdx.ecs.component.Component;
+
+public final class Enemy implements Component {
     public final float startX;
     public final float startY;
     public final float minX;

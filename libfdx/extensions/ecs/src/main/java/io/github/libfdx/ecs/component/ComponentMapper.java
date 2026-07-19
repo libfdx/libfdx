@@ -2,7 +2,7 @@ package io.github.libfdx.ecs.component;
 
 import io.github.libfdx.ecs.World;
 
-public final class ComponentMapper<T> {
+public final class ComponentMapper<T extends Component> {
     private final World world;
     private final ComponentStore<T> store;
 

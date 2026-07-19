@@ -1,6 +1,8 @@
 package io.github.libfdx.samples.ecs.platformer.component;
 
-public final class Collectible {
+import io.github.libfdx.ecs.component.Component;
+
+public final class Collectible implements Component {
     public final int value;
     public boolean collected;
 
