@@ -123,7 +123,6 @@ public final class SpriteOutlineRenderer2D implements Disposable {
     private FloatBuffer uploadFloats;
     private int vertexBufferSlot;
     private RenderPass pass;
-    private RenderPass flushSlotPass;
     private Texture currentTexture;
     private boolean ownsPass;
     private boolean drawing;
@@ -201,7 +200,6 @@ public final class SpriteOutlineRenderer2D implements Disposable {
         ownsPass = true;
         drawing = true;
         resetFlushBufferSlots();
-        flushSlotPass = pass;
     }
 
     /**
@@ -215,10 +213,7 @@ public final class SpriteOutlineRenderer2D implements Disposable {
             throw new FdxException("RenderPass cannot be null");
         }
         this.pass = pass;
-        if (flushSlotPass != pass) {
-            resetFlushBufferSlots();
-            flushSlotPass = pass;
-        }
+        resetFlushBufferSlots();
         ownsPass = false;
         drawing = true;
     }
@@ -304,7 +299,6 @@ public final class SpriteOutlineRenderer2D implements Disposable {
         drawing = false;
         if (ownsPass) {
             pass.end();
-            flushSlotPass = null;
         }
         ownsPass = false;
         pass = null;

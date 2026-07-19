@@ -638,9 +638,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 : null;
     }
 
-    private static boolean usesGpuPbrShader(String providerId) {
+    static boolean usesGpuPbrShader(String providerId) {
         return "gl".equals(providerId) || "gles".equals(providerId) || "webgl".equals(providerId)
-                || "wgpu".equals(providerId) || "vulkan".equals(providerId) || "metal".equals(providerId);
+                || "wgpu".equals(providerId) || "vulkan".equals(providerId) || "metal".equals(providerId)
+                || "d3d12".equals(providerId);
     }
 
     /**
@@ -1815,6 +1816,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
             if ("metal".equals(providerId)) {
                 return "model batch metal" + skinning + " pbr";
+            }
+            if ("d3d12".equals(providerId)) {
+                return "model batch d3d12" + skinning + " pbr";
             }
             return "model batch gl" + skinning + " pbr";
         }

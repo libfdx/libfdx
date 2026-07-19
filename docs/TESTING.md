@@ -68,16 +68,20 @@ listed here. Do not infer an option from a similar platform.
 ./gradlew :tests:platform:desktop:test_desktop_gl_run
 ./gradlew :tests:platform:desktop:test_desktop_wgpu_run
 ./gradlew :tests:platform:desktop:test_desktop_vulkan_run
+./gradlew :tests:platform:desktop:test_desktop_d3d12_run
 ```
+
+The Direct3D 12 task is Windows x64-only. Add
+`-Dlibfdx.validation.d3d12=true` when debug-layer validation is required.
 
 Desktop windows start maximized. Set `-Dlibfdx.test.maximized=false` for the
 configured test size. Width/height, visibility, safe area, UI scale, and frame
 rate diagnostic properties are launcher options; use them only when relevant to
 the scenario.
 
-Recorded-command resource changes should include a focused WGPU or Vulkan run,
-even if GL passes, because delayed submission exposes lifetime hazards that
-immediate GL execution may hide.
+Recorded-command resource changes should include a focused WGPU, Vulkan, or
+Direct3D 12 run, even if GL passes, because delayed submission exposes lifetime
+hazards that immediate GL execution may hide.
 
 ### Desktop C
 
@@ -150,8 +154,9 @@ rendered frame and connect the observed result to the mechanism changed.
 
 For a local screen/widget/sample change, validate the directly affected
 platform/API first. For shared graphics/UI output or requested provider parity,
-desktop requires GL, Vulkan, and WGPU. Add other platforms/APIs only when they
-are affected or explicitly requested.
+desktop requires GL, Vulkan, and WGPU, plus the Java 25 FFM Direct3D 12 provider
+on Windows x64. Add other platforms/APIs only when they are affected or
+explicitly requested.
 
 Use the same scene, viewport, scale, assets, input sequence, timing, and frame
 count across comparisons. Record every required cell as:
@@ -192,7 +197,8 @@ surface-format conversion.
 
 ### 4.4 Recorded-command hazards
 
-When GL is correct but Vulkan/WGPU is not, check these before changing layout:
+When GL is correct but Vulkan, Direct3D 12, or WGPU is not, check these before
+changing layout:
 
 - vertex/index/instance/uniform buffers overwritten after binding but before
   submission;

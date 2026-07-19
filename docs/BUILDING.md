@@ -104,9 +104,13 @@ FreeType and Tint/Dawn packages from the pinned `fdx-natives` release; it does
 not build those third-party projects from source.
 
 The aggregate task proves only the targets available on the current host. It
-does not prove native output for another operating system. For web builds, keep
-the shader compiler enabled because built-in renderer sources are WGSL even
-when WebGL ultimately executes generated GLSL ES.
+does not prove native output for another operating system. Direct3D 12 is not a
+native build artifact: `d3d12_core` uses Java 25 FFM to call the Windows x64
+`d3d12`, `dxgi`, and `d3dcompiler_47` system libraries directly. Consumers add
+only `d3d12_core`, run with native access enabled for the unnamed module, and do
+not compile or package a libFDX Direct3D DLL. The provider does not route through
+WGPU. For web builds, keep the shader compiler enabled because built-in renderer
+sources are WGSL even when WebGL ultimately executes generated GLSL ES.
 
 If Gradle cannot find `emcmake`, activate `emsdk_env` or set `EMSDK`. The build
 uses the SDK-bundled Python when `EMSDK_PYTHON` is not set.

@@ -7,6 +7,7 @@ import io.github.libfdx.graphics.g2d.BitmapFont;
 import io.github.libfdx.graphics.g2d.BitmapFontFiles;
 import io.github.libfdx.graphics.g2d.BitmapFontLayout;
 import io.github.libfdx.graphics.g2d.FreeTypeFontOptions;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.logging.Level;
@@ -20,6 +21,7 @@ import java.util.logging.Logger;
 final class UiTextEngine implements Disposable {
     private static final Logger LOGGER = Logger.getLogger(UiTextEngine.class.getName());
     private static final int LAYOUT_CACHE_LIMIT = 512;
+    private static final int FONT_KEY_CACHE_LIMIT = 512;
     private static final UiFont DEFAULT_FONT = UiFont.family("Dialog", 16.0f);
     private static final float MIN_RASTER_SCALE = 1.0f;
     private static final float MAX_RASTER_SCALE = 4.0f;
@@ -31,6 +33,7 @@ final class UiTextEngine implements Disposable {
     private final Map<String, BitmapFont> fonts = new LinkedHashMap<String, BitmapFont>();
     private final Map<String, Boolean> unavailableFonts = new LinkedHashMap<String, Boolean>();
     private final Map<String, BitmapFontLayout> layouts = new LinkedHashMap<String, BitmapFontLayout>();
+    private final Map<UiFont, CachedFontKey> fontKeys = new IdentityHashMap<UiFont, CachedFontKey>();
     private UiFont lastResolvedFont;
     private float lastResolvedRasterScale;
     private BitmapFont lastResolvedBitmapFont;
@@ -163,12 +166,28 @@ final class UiTextEngine implements Disposable {
                 * RASTER_SCALE_STEP);
     }
 
-    private String key(UiFont font, float rasterScale) {
-        if (font.kind() == UiFontKind.BITMAP) {
-            return font.kind().name() + "|" + System.identityHashCode(font.bitmapFont());
+    String key(UiFont font, float rasterScale) {
+        CachedFontKey cached = fontKeys.get(font);
+        if (cached != null && Float.compare(cached.rasterScale, rasterScale) == 0) {
+            return cached.value;
         }
-        return font.kind().name() + "|" + font.family() + "|" + font.path() + "|" + font.size() + "|"
-                + font.characters() + "|" + rasterScale;
+        String value;
+        if (font.kind() == UiFontKind.BITMAP) {
+            value = font.kind().name() + "|" + System.identityHashCode(font.bitmapFont());
+        } else {
+            value = font.kind().name() + "|" + font.family() + "|" + font.path() + "|" + font.size() + "|"
+                    + font.characters() + "|" + rasterScale;
+        }
+        if (cached == null) {
+            if (fontKeys.size() >= FONT_KEY_CACHE_LIMIT) {
+                fontKeys.clear();
+            }
+            cached = new CachedFontKey();
+            fontKeys.put(font, cached);
+        }
+        cached.rasterScale = rasterScale;
+        cached.value = value;
+        return value;
     }
 
     private String layoutKey(String text, UiTextStyle style, float maxWidth, float displayScale) {
@@ -208,6 +227,7 @@ final class UiTextEngine implements Disposable {
         fonts.clear();
         unavailableFonts.clear();
         layouts.clear();
+        fontKeys.clear();
         clearLastResolvedFont();
     }
 
@@ -219,5 +239,10 @@ final class UiTextEngine implements Disposable {
     @Override
     public boolean isDisposed() {
         return disposed;
+    }
+
+    private static final class CachedFontKey {
+        private float rasterScale;
+        private String value;
     }
 }

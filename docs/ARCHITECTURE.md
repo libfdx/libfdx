@@ -33,7 +33,7 @@ shared game code
 
 platform launcher
   -> backend (desktop, web, Android, PSP, desktop C, iOS C)
-  -> selected provider modules (GL, Vulkan, WGPU, WebRTC)
+  -> selected provider modules (GL, Vulkan, Direct3D 12, WGPU, WebRTC)
 ```
 
 The arrows mean "depends on." Portable modules never depend back on a concrete
@@ -185,9 +185,9 @@ Graphics-provider selection is a startup decision. Changing providers requires
 application restart unless a backend explicitly owns complete teardown and
 recreation. Portable code does not assume live cross-provider resource sharing.
 
-Shader authoring is WGSL-only. Providers that need GLSL/GLSL ES, SPIR-V, or MSL
-translate WGSL through the optional runtime compiler capability during shader
-module creation. See [Shaders](SHADERS.md).
+Shader authoring is WGSL-only. Providers that need GLSL/GLSL ES, SPIR-V, HLSL,
+or MSL translate WGSL through the optional runtime compiler capability during
+shader module creation. See [Shaders](SHADERS.md).
 
 ## 5. Module And Artifact Catalog
 
@@ -241,6 +241,7 @@ name the provider directly (`wgpu_core`, not `graphics_wgpu`).
 | `:libfdx:extensions:graphics:vulkan:platform:desktop` | `vulkan_desktop` | Desktop Vulkan runtime dependencies. |
 | `:libfdx:extensions:graphics:vulkan:platform:desktop_c` | `vulkan_desktop_c` | Desktop C Vulkan bridge resources. |
 | `:libfdx:extensions:graphics:vulkan:platform:android_jni` | `vulkan_android_jni` | Android Vulkan JNI/ABI integration. |
+| `:libfdx:extensions:graphics:d3d12:core` | `d3d12_core` | Windows Direct3D 12 provider, Java 25 FFM bindings, public setup types, and portable graphics adapters. |
 | `:libfdx:extensions:graphics:wgpu:core` | `wgpu_core` | Shared WebGPU/wgpu provider and public setup types. |
 | `:libfdx:extensions:graphics:wgpu:platform:desktop_jni` | `wgpu_desktop_jni` | Desktop WGPU JNI runtime. |
 | `:libfdx:extensions:graphics:wgpu:platform:desktop_ffm` | `wgpu_desktop_ffm` | Desktop WGPU FFM runtime (Java 25). |
@@ -370,8 +371,16 @@ committed or rebuilt by normal libFDX tasks.
 - Gamepad contracts are part of `framework/input`; current backends provide
   their platform implementations directly. No standalone input-provider module
   is checked in.
-- WGPU/WebGPU, GL/WebGL, and Vulkan are the checked-in graphics provider
-  families. DirectX/HLSL is not a current module or public authoring path.
+- WGPU/WebGPU, GL/WebGL, Vulkan, and Windows Direct3D 12 are the checked-in
+  graphics provider families. Direct3D 12 is an independent provider implemented
+  in `d3d12_core` with Java 25 FFM calls to the Windows `d3d12`, `dxgi`, and
+  `d3dcompiler_47` system libraries; it has no custom JNI DLL and does not route
+  through WGPU. Portable shader authoring remains WGSL-only, with HLSL generated
+  by the runtime compiler for Direct3D 12.
+- The Direct3D 12 provider currently targets Windows x64. Its attachments are
+  independent; cross-window shared graphics contexts are not supported yet and
+  fail during provider setup instead of silently falling back to another
+  provider.
 - WebGPU browser tasks use JavaScript; current Wasm launchers use WebGL because
   the substituted JS-native jWebGPU binding path is not WasmGC-compatible.
 - iOS C is experimental and generates an Xcode handoff project; native build and

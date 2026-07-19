@@ -6,7 +6,8 @@ benchmark runs can stay aligned with local framework changes.
 ## Layout
 
 - `core`: benchmark cases and result writing.
-- `platform/desktop`: JVM desktop benchmark launchers and reports for GL, WGPU, and Vulkan.
+- `platform/desktop`: JVM desktop benchmark launchers and reports for GL, WGPU,
+  Vulkan, and Windows Direct3D 12.
 - `platform/desktop_c`: TeaVM C desktop_c benchmark launchers and report task aliases for GL and Vulkan.
 - `platform/plugin`: libFDX Gradle plugin wiring for generated desktop_c benchmark executables.
 - `assets`: benchmark-owned assets loaded at runtime.
@@ -14,8 +15,9 @@ benchmark runs can stay aligned with local framework changes.
 ## Desktop Benchmarks
 
 The desktop benchmark task runs the SpriteBatch stress benchmark across GL,
-WGPU, and Vulkan with visible windows, vSync disabled, the frame limiter
-disabled, 8191 rotating/scaling 32x32 sprites, and 8 seconds per provider:
+WGPU, Vulkan, and Direct3D 12 on Windows, with visible windows, vSync disabled,
+the frame limiter disabled, 8191 rotating/scaling 32x32 sprites, and 8 seconds
+per provider:
 
 ```powershell
 .\gradlew.bat :benchmark:platform:desktop:benchmark_desktop
@@ -33,7 +35,11 @@ Individual provider tasks are also available:
 .\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_wgpu_ffm
 .\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_vulkan_ffm
 .\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_vulkan_jni
+.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_d3d12
 ```
+
+The Direct3D 12 task is available only on Windows x64. The aggregate desktop
+benchmark includes it only on that platform.
 
 ## Desktop C Benchmarks
 

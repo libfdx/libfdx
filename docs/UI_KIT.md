@@ -238,7 +238,7 @@ to another display/context or lifecycle.
 
 UI Kit renders with g2d for rectangles, images, nine-patches, glyphs, and custom
 draw hooks. It uses common graphics only for lower-level clipping/targets and
-never imports GL, Vulkan, WGPU, or backend classes.
+never imports GL, Vulkan, Direct3D 12, WGPU, or backend classes.
 
 - Rendering respects layer order, clipping/scissor, opacity, transforms, and
   the same z-order used by input.

@@ -118,7 +118,6 @@ public final class FogOfWarRenderer2D implements Disposable {
     private FloatBuffer uploadFloats;
     private int vertexBufferSlot;
     private RenderPass pass;
-    private RenderPass flushSlotPass;
     private boolean ownsPass;
     private boolean drawing;
     private boolean disposed;
@@ -189,7 +188,6 @@ public final class FogOfWarRenderer2D implements Disposable {
         ownsPass = true;
         drawing = true;
         resetFlushBufferSlots();
-        flushSlotPass = pass;
     }
 
     /**
@@ -203,10 +201,7 @@ public final class FogOfWarRenderer2D implements Disposable {
             throw new FdxException("RenderPass cannot be null");
         }
         this.pass = pass;
-        if (flushSlotPass != pass) {
-            resetFlushBufferSlots();
-            flushSlotPass = pass;
-        }
+        resetFlushBufferSlots();
         ownsPass = false;
         drawing = true;
     }
@@ -291,7 +286,6 @@ public final class FogOfWarRenderer2D implements Disposable {
         drawing = false;
         if (ownsPass) {
             pass.end();
-            flushSlotPass = null;
         }
         ownsPass = false;
         pass = null;

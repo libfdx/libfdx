@@ -19,8 +19,8 @@ Four layers keep portable code separate from platform details:
 
 1. **Framework APIs** define application, files, input, display, networking,
    graphics, assets, 2D, 3D, and UI concepts.
-2. **Extensions** add optional providers and features such as GL, Vulkan, WGPU,
-   WebRTC, ECS, and scenario validation.
+2. **Extensions** add optional providers and features such as GL, Vulkan,
+   Direct3D 12, WGPU, WebRTC, ECS, and scenario validation.
 3. **Backends** run the application on desktop, web, Android, PSP, desktop C,
    or iOS C.
 4. **Launchers** choose a backend/provider stack; shared game modules do not.

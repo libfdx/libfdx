@@ -76,6 +76,7 @@ subprojects {
             implementationProject(":samples:ecs-platformer:core")
             implementationLibfdx(":libfdx:framework:application", "application")
             implementationLibfdx(":libfdx:framework:display", "display")
+            implementationLibfdx(":libfdx:extensions:graphics:d3d12:core", "d3d12_core")
             implementationLibfdx(":libfdx:extensions:graphics:wgpu:core", "wgpu_core")
             implementationLibfdx(":libfdx:backends:desktop", "backend_desktop")
             runtimeOnlyLibfdx(":libfdx:extensions:graphics:gl:platform:desktop", "gl_desktop")

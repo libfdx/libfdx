@@ -39,10 +39,14 @@ val wgpuFfmRuntimeClasspath by configurations.creating {
     }
 }
 
+val windowsX64 = System.getProperty("os.name", "").lowercase().startsWith("windows") &&
+        System.getProperty("os.arch", "").lowercase() in setOf("amd64", "x86_64")
+
 dependencies {
     implementation(project(":benchmark:core"))
     if (LibExt.usePublishedLibfdx) {
         implementation("${LibExt.fdxGroup}:backend_desktop:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:d3d12_core:${LibExt.fdxSnapshotVersion}")
         implementation("${LibExt.fdxGroup}:wgpu_core:${LibExt.fdxSnapshotVersion}")
 
         glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.fdxSnapshotVersion}")
@@ -51,6 +55,7 @@ dependencies {
         wgpuFfmRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.fdxSnapshotVersion}")
     } else {
         implementation(project(":libfdx:backends:desktop"))
+        implementation(project(":libfdx:extensions:graphics:d3d12:core"))
         implementation(project(":libfdx:extensions:graphics:wgpu:core"))
 
         glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
@@ -93,7 +98,7 @@ fun JavaExec.configureSpriteBatchStressRun(
     systemProperty("libfdx.benchmark.visible", System.getProperty("libfdx.benchmark.visible", "true"))
     systemProperty("libfdx.benchmark.vsync", "false")
     systemProperty("libfdx.benchmark.foregroundFps", "0")
-    jvmArgs("-Dorg.lwjgl.system.stackSize=1048576")
+    jvmArgs("-Dorg.lwjgl.system.stackSize=1024")
     if (JavaVersion.current().majorVersion.toInt() >= 22) {
         jvmArgs("--enable-native-access=ALL-UNNAMED")
     }
@@ -177,6 +182,21 @@ val benchmarkSpriteBatchStressVulkanJni = tasks.register<JavaExec>("benchmark_sp
     useLwjglJniOnJava25()
 }
 
+val benchmarkSpriteBatchStressD3D12 = if (windowsX64) {
+    tasks.register<JavaExec>("benchmark_sprite_batch_stress_d3d12") {
+        configureSpriteBatchStressRun(
+            "Runs SpriteBatch stress benchmark with Direct3D 12 through Java 25 FFM.",
+            "d3d12",
+            "d3d12",
+            "Direct3D 12",
+            files()
+        )
+        useJava25Launcher()
+    }
+} else {
+    null
+}
+
 benchmarkSpriteBatchStressGlJni.configure {
     mustRunAfter(benchmarkSpriteBatchStressGlFfm)
 }
@@ -197,6 +217,10 @@ benchmarkSpriteBatchStressVulkanJni.configure {
     mustRunAfter(benchmarkSpriteBatchStressVulkanFfm)
 }
 
+benchmarkSpriteBatchStressD3D12?.configure {
+    mustRunAfter(benchmarkSpriteBatchStressVulkanJni)
+}
+
 val spriteBatchStressTasks = listOf(
     benchmarkSpriteBatchStressGlFfm,
     benchmarkSpriteBatchStressGlJni,
@@ -204,7 +228,7 @@ val spriteBatchStressTasks = listOf(
     benchmarkSpriteBatchStressWgpuFfm,
     benchmarkSpriteBatchStressVulkanFfm,
     benchmarkSpriteBatchStressVulkanJni
-)
+) + listOfNotNull(benchmarkSpriteBatchStressD3D12)
 
 val generateSpriteBatchStressReport = tasks.register("generate_sprite_batch_stress_report") {
     group = "benchmark"
@@ -235,7 +259,7 @@ val generateSpriteBatchStressReport = tasks.register("generate_sprite_batch_stre
             appendLine("- Benchmark: 8191 rotating/scaling sprites")
             appendLine("- Sprite: 32x32 from `benchmark/assets/fdx.png`")
             appendLine("- Runtime: visible window, vSync off, foreground frame limiter off")
-            appendLine("- Backend tuning: Vulkan uses 3 frames in flight; WGPU skips per-frame instance event polling")
+            appendLine("- Backend tuning: Vulkan and Direct3D 12 use 3 frames in flight; WGPU skips per-frame instance event polling")
             appendLine()
             appendLine("| Rank | Graphics Option | Provider | Java | Frames | Elapsed (s) | Avg FPS | Sprite Draws/s | Relative |")
             appendLine("| ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |")

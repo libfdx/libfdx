@@ -21,6 +21,8 @@ public final class ShaderModuleDescriptor {
     private int[] spirvVertexWords;
     private int[] spirvFragmentWords;
     private String mslSource;
+    private String hlslVertexSource;
+    private String hlslFragmentSource;
 
     /**
      * Creates a shader module descriptor.
@@ -55,6 +57,13 @@ public final class ShaderModuleDescriptor {
                 .label(label)
                 .generatedLanguage(ShaderLanguage.MSL)
                 .generatedMsl(source);
+    }
+
+    static ShaderModuleDescriptor generatedHlsl(String label, String vertexSource, String fragmentSource) {
+        return new ShaderModuleDescriptor()
+                .label(label)
+                .generatedLanguage(ShaderLanguage.HLSL)
+                .generatedHlsl(vertexSource, fragmentSource);
     }
 
     /**
@@ -241,6 +250,36 @@ public final class ShaderModuleDescriptor {
         return mslSource;
     }
 
+    ShaderModuleDescriptor generatedHlsl(String vertexSource, String fragmentSource) {
+        if (vertexSource == null || vertexSource.length() == 0) {
+            throw new FdxException("HLSL vertex shader source cannot be empty");
+        }
+        if (fragmentSource == null || fragmentSource.length() == 0) {
+            throw new FdxException("HLSL fragment shader source cannot be empty");
+        }
+        this.hlslVertexSource = vertexSource;
+        this.hlslFragmentSource = fragmentSource;
+        return this;
+    }
+
+    /**
+     * Returns the HLSL vertex source.
+     *
+     * @return the HLSL vertex source
+     */
+    public String hlslVertexSource() {
+        return hlslVertexSource;
+    }
+
+    /**
+     * Returns the HLSL fragment source.
+     *
+     * @return the HLSL fragment source
+     */
+    public String hlslFragmentSource() {
+        return hlslFragmentSource;
+    }
+
     /**
      * Returns whether this instance has source.
      *
@@ -261,6 +300,10 @@ public final class ShaderModuleDescriptor {
         }
         if (language == ShaderLanguage.MSL) {
             return mslSource != null && mslSource.length() > 0;
+        }
+        if (language == ShaderLanguage.HLSL) {
+            return hlslVertexSource != null && hlslVertexSource.length() > 0
+                    && hlslFragmentSource != null && hlslFragmentSource.length() > 0;
         }
         return false;
     }

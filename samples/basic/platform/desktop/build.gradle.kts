@@ -42,6 +42,7 @@ dependencies {
     if (LibExt.usePublishedLibfdx) {
         implementation("${LibExt.fdxGroup}:application:${LibExt.fdxSnapshotVersion}")
         implementation("${LibExt.fdxGroup}:display:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:d3d12_core:${LibExt.fdxSnapshotVersion}")
         implementation("${LibExt.fdxGroup}:wgpu_core:${LibExt.fdxSnapshotVersion}")
         implementation("${LibExt.fdxGroup}:backend_desktop:${LibExt.fdxSnapshotVersion}")
 
@@ -51,6 +52,7 @@ dependencies {
     } else {
         implementation(project(":libfdx:framework:application"))
         implementation(project(":libfdx:framework:display"))
+        implementation(project(":libfdx:extensions:graphics:d3d12:core"))
         implementation(project(":libfdx:extensions:graphics:wgpu:core"))
         implementation(project(":libfdx:backends:desktop"))
 
@@ -62,53 +64,32 @@ dependencies {
 
 val sampleMainClass = "io.github.libfdx.samples.basic.desktop.BasicDesktopLauncher"
 
-tasks.register<JavaExec>("basic_desktop_gl_run") {
+fun registerGraphicsRun(
+    taskName: String,
+    graphics: String,
+    graphicsLabel: String,
+    providerClasspath: FileCollection
+) = tasks.register<JavaExec>(taskName) {
     group = "application"
-    description = "Runs the basic desktop sample with GL."
-    classpath = sourceSets["main"].runtimeClasspath + glRuntimeClasspath
+    description = "Runs the basic desktop sample with $graphicsLabel."
+    classpath = sourceSets["main"].runtimeClasspath + providerClasspath
     mainClass.set(sampleMainClass)
     workingDir = rootProject.projectDir
     javaLauncher.set(javaToolchains.launcherFor {
         languageVersion.set(JavaLanguageVersion.of(25))
     })
-    jvmArgs("-Dorg.lwjgl.system.stackSize=1048576", "--enable-native-access=ALL-UNNAMED")
-    systemProperty("libfdx.sample.graphics", "gl")
-    systemProperty("libfdx.sample.graphicsLabel", "GL")
+    jvmArgs("-Dorg.lwjgl.system.stackSize=1024", "--enable-native-access=ALL-UNNAMED")
+    systemProperty("libfdx.sample.graphics", graphics)
+    systemProperty("libfdx.sample.graphicsLabel", graphicsLabel)
     System.getProperty("libfdx.sample.exitAfterFrames")?.takeIf { it.isNotBlank() }?.let { frames ->
         systemProperty("libfdx.sample.exitAfterFrames", frames)
+    }
+    System.getProperty("libfdx.sample.maximized")?.takeIf { it.isNotBlank() }?.let { maximized ->
+        systemProperty("libfdx.sample.maximized", maximized)
     }
 }
 
-tasks.register<JavaExec>("basic_desktop_wgpu_run") {
-    group = "application"
-    description = "Runs the basic desktop sample with WGPU."
-    classpath = sourceSets["main"].runtimeClasspath + wgpuRuntimeClasspath
-    mainClass.set(sampleMainClass)
-    workingDir = rootProject.projectDir
-    javaLauncher.set(javaToolchains.launcherFor {
-        languageVersion.set(JavaLanguageVersion.of(25))
-    })
-    jvmArgs("-Dorg.lwjgl.system.stackSize=1048576", "--enable-native-access=ALL-UNNAMED")
-    systemProperty("libfdx.sample.graphics", "wgpu")
-    systemProperty("libfdx.sample.graphicsLabel", "WGPU")
-    System.getProperty("libfdx.sample.exitAfterFrames")?.takeIf { it.isNotBlank() }?.let { frames ->
-        systemProperty("libfdx.sample.exitAfterFrames", frames)
-    }
-}
-
-tasks.register<JavaExec>("basic_desktop_vulkan_run") {
-    group = "application"
-    description = "Runs the basic desktop sample with Vulkan."
-    classpath = sourceSets["main"].runtimeClasspath + vulkanRuntimeClasspath
-    mainClass.set(sampleMainClass)
-    workingDir = rootProject.projectDir
-    javaLauncher.set(javaToolchains.launcherFor {
-        languageVersion.set(JavaLanguageVersion.of(25))
-    })
-    jvmArgs("-Dorg.lwjgl.system.stackSize=1048576", "--enable-native-access=ALL-UNNAMED")
-    systemProperty("libfdx.sample.graphics", "vulkan")
-    systemProperty("libfdx.sample.graphicsLabel", "Vulkan")
-    System.getProperty("libfdx.sample.exitAfterFrames")?.takeIf { it.isNotBlank() }?.let { frames ->
-        systemProperty("libfdx.sample.exitAfterFrames", frames)
-    }
-}
+registerGraphicsRun("basic_desktop_gl_run", "gl", "GL", glRuntimeClasspath)
+registerGraphicsRun("basic_desktop_wgpu_run", "wgpu", "WGPU", wgpuRuntimeClasspath)
+registerGraphicsRun("basic_desktop_vulkan_run", "vulkan", "Vulkan", vulkanRuntimeClasspath)
+registerGraphicsRun("basic_desktop_d3d12_run", "d3d12", "Direct3D 12", files())

@@ -163,7 +163,7 @@ public final class ProjectGenerator {
                 + "    javaLauncher.set(javaToolchains.launcherFor {\n"
                 + "        languageVersion.set(JavaLanguageVersion.of(25))\n"
                 + "    })\n"
-                + "    jvmArgs(\"-Dorg.lwjgl.system.stackSize=1048576\")\n"
+                + "    jvmArgs(\"-Dorg.lwjgl.system.stackSize=1024\")\n"
                 + "    jvmArgs(\"--enable-native-access=ALL-UNNAMED\")\n"
                 + "}\n"
                 + "\n"

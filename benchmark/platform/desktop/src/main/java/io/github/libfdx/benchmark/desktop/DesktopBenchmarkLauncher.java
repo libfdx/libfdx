@@ -8,6 +8,7 @@ import io.github.libfdx.backend.desktop.DesktopVulkanProvider;
 import io.github.libfdx.benchmark.graphics.SpriteBatchStressBenchmark;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
+import io.github.libfdx.graphics.d3d12.D3D12Provider;
 import io.github.libfdx.graphics.wgpu.WGPUProvider;
 
 public final class DesktopBenchmarkLauncher {
@@ -48,6 +49,9 @@ public final class DesktopBenchmarkLauncher {
             }
             return provider;
         }
+        if (isD3D12(graphics)) {
+            return new D3D12Provider().vSync(vSync).framesInFlight(3);
+        }
         return new WGPUProvider().vSync(vSync).processEventsEachFrame(false);
     }
 
@@ -70,7 +74,17 @@ public final class DesktopBenchmarkLauncher {
         if ("vulkan".equalsIgnoreCase(graphics) || "vk".equalsIgnoreCase(graphics)) {
             return "Vulkan";
         }
+        if (isD3D12(graphics)) {
+            return "Direct3D 12";
+        }
         return "WGPU";
+    }
+
+    private static boolean isD3D12(String graphics) {
+        return "d3d12".equalsIgnoreCase(graphics)
+                || "direct3d12".equalsIgnoreCase(graphics)
+                || "directx12".equalsIgnoreCase(graphics)
+                || "dx12".equalsIgnoreCase(graphics);
     }
 
     private static long exitAfterNanos() {
@@ -82,7 +96,7 @@ public final class DesktopBenchmarkLauncher {
         if (seconds <= 0.0) {
             return 0L;
         }
-        double nanos = seconds * 1000000000.0;
+        double nanos = seconds * 1_000_000_000.0;
         if (nanos >= Long.MAX_VALUE) {
             return Long.MAX_VALUE;
         }

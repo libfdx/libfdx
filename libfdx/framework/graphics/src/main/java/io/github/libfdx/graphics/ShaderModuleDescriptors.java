@@ -63,7 +63,7 @@ public final class ShaderModuleDescriptors {
             case METAL_MSL:
                 return compileMsl(descriptor, target, providerName);
             case DIRECTX_HLSL:
-                throw new FdxException("Shader target " + target + " is not supported by ShaderModuleDescriptor yet");
+                return compileHlsl(descriptor, target, providerName);
             default:
                 throw new FdxException("Unsupported shader target: " + target);
         }
@@ -119,6 +119,21 @@ public final class ShaderModuleDescriptors {
         String fragment = compileText(compiler, descriptor, source, target, RuntimeShaderCompileStage.FRAGMENT,
                 descriptor.fragmentEntryPoint());
         return ShaderModuleDescriptor.generatedMsl(descriptor.label(), combineMsl(vertex, fragment))
+                .entryPoints(descriptor.vertexEntryPoint(), descriptor.fragmentEntryPoint());
+    }
+
+    private static ShaderModuleDescriptor compileHlsl(ShaderModuleDescriptor descriptor, ShaderTarget target,
+            String providerName) {
+        String source = requireWgsl(descriptor, target, providerName, "HLSL");
+        if (descriptor.hasSource(ShaderLanguage.HLSL)) {
+            return descriptor;
+        }
+        RuntimeShaderCompiler compiler = requireCompiler(descriptor, target, providerName, "HLSL");
+        String vertex = compileText(compiler, descriptor, source, target, RuntimeShaderCompileStage.VERTEX,
+                descriptor.vertexEntryPoint());
+        String fragment = compileText(compiler, descriptor, source, target, RuntimeShaderCompileStage.FRAGMENT,
+                descriptor.fragmentEntryPoint());
+        return ShaderModuleDescriptor.generatedHlsl(descriptor.label(), vertex, fragment)
                 .entryPoints(descriptor.vertexEntryPoint(), descriptor.fragmentEntryPoint());
     }
 

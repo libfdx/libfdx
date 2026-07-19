@@ -62,7 +62,7 @@ tasks.register<JavaExec>("project_generator_desktop_gl_run") {
     javaLauncher.set(javaToolchains.launcherFor {
         languageVersion.set(JavaLanguageVersion.of(25))
     })
-    jvmArgs("-Dorg.lwjgl.system.stackSize=1048576", "--enable-native-access=ALL-UNNAMED")
+    jvmArgs("-Dorg.lwjgl.system.stackSize=1024", "--enable-native-access=ALL-UNNAMED")
     listOf(
             "libfdx.projectGenerator.output",
             "libfdx.projectGenerator.exitAfterFrames",

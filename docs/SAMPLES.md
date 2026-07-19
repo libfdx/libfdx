@@ -23,10 +23,13 @@ replace `./gradlew` with `./gradlew.bat` if needed.
 ./gradlew :samples:basic:platform:desktop:basic_desktop_gl_run
 ./gradlew :samples:basic:platform:desktop:basic_desktop_wgpu_run
 ./gradlew :samples:basic:platform:desktop:basic_desktop_vulkan_run
+./gradlew :samples:basic:platform:desktop:basic_desktop_d3d12_run
 ```
 
 Desktop windows start maximized. Use
 `-Dlibfdx.sample.maximized=false` to use the configured size.
+The Direct3D 12 task requires Windows x64 and Java 25 native access. It uses the
+Windows system Direct3D libraries through FFM; there is no provider DLL to build.
 
 ### Android
 
@@ -75,6 +78,7 @@ SpriteBatch rendering with CC0 Kenney assets.
 ./gradlew :samples:ecs-platformer:platform:desktop:libfdx_desktop_jvm_gl_run
 ./gradlew :samples:ecs-platformer:platform:desktop:libfdx_desktop_jvm_wgpu_run
 ./gradlew :samples:ecs-platformer:platform:desktop:libfdx_desktop_jvm_vulkan_run
+./gradlew :samples:ecs-platformer:platform:desktop:libfdx_desktop_jvm_d3d12_run
 ./gradlew :samples:ecs-platformer:platform:web:libfdx_web_js_webgl_run
 ```
 

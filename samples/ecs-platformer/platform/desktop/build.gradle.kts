@@ -38,5 +38,14 @@ libfdx {
             buildDescription.set("Builds the ECS platformer desktop Vulkan release jar.")
             runDescription.set("Runs the ECS platformer desktop sample with Vulkan.")
         }
+        target("d3d12") {
+            displayName.set("Direct3D 12")
+            systemProperty("libfdx.sample.graphics", "d3d12")
+            systemProperty("libfdx.sample.graphicsLabel", "Direct3D 12")
+            launchProperty("graphics", "d3d12")
+            launchProperty("graphicsLabel", "Direct3D 12")
+            buildDescription.set("Builds the ECS platformer desktop Direct3D 12 release jar.")
+            runDescription.set("Runs the ECS platformer desktop sample with Direct3D 12 on Windows.")
+        }
     }
 }

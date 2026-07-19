@@ -5,6 +5,7 @@ import io.github.libfdx.backend.desktop.DesktopApplicationConfig;
 import io.github.libfdx.backend.desktop.DesktopOpenGLProvider;
 import io.github.libfdx.backend.desktop.DesktopVulkanProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
+import io.github.libfdx.graphics.d3d12.D3D12Provider;
 import io.github.libfdx.graphics.wgpu.WGPUProvider;
 import io.github.libfdx.samples.ecs.platformer.EcsPlatformerApplication;
 import java.io.IOException;
@@ -50,6 +51,9 @@ public final class EcsPlatformerDesktopLauncher {
         if ("vulkan".equalsIgnoreCase(graphics) || "vk".equalsIgnoreCase(graphics)) {
             return new DesktopVulkanProvider();
         }
+        if (isD3D12(graphics)) {
+            return new D3D12Provider();
+        }
         return new WGPUProvider();
     }
 
@@ -70,7 +74,17 @@ public final class EcsPlatformerDesktopLauncher {
         if ("vulkan".equalsIgnoreCase(graphics) || "vk".equalsIgnoreCase(graphics)) {
             return "Vulkan";
         }
+        if (isD3D12(graphics)) {
+            return "Direct3D 12";
+        }
         return "WGPU";
+    }
+
+    private static boolean isD3D12(String graphics) {
+        return "d3d12".equalsIgnoreCase(graphics)
+                || "direct3d12".equalsIgnoreCase(graphics)
+                || "directx12".equalsIgnoreCase(graphics)
+                || "dx12".equalsIgnoreCase(graphics);
     }
 
     private static long exitAfterFrames(String[] args) {

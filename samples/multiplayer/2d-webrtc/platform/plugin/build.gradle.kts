@@ -80,6 +80,11 @@ libfdx {
             systemProperty("libfdx.sample.graphics", "vulkan")
             systemProperty("libfdx.sample.graphicsLabel", "Vulkan")
         }
+        target("d3d12") {
+            displayName.set("Direct3D 12")
+            systemProperty("libfdx.sample.graphics", "d3d12")
+            systemProperty("libfdx.sample.graphicsLabel", "Direct3D 12")
+        }
     }
     js {
         mainClass.set("io.github.libfdx.samples.multiplayer.webrtc.web.MultiplayerWebRtcWebJsLauncher")

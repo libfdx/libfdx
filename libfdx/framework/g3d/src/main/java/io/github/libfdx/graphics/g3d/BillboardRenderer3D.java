@@ -84,7 +84,6 @@ public final class BillboardRenderer3D implements Disposable {
     private FloatBuffer uploadFloats;
     private Texture currentTexture;
     private RenderPass pass;
-    private RenderPass flushSlotPass;
     private int vertexBufferSlot;
     private int floatCount;
     private int vertexCount;
@@ -160,7 +159,6 @@ public final class BillboardRenderer3D implements Disposable {
         drawing = true;
         resetBatch();
         resetFlushBufferSlots();
-        flushSlotPass = pass;
     }
 
     /**
@@ -177,10 +175,7 @@ public final class BillboardRenderer3D implements Disposable {
         ownsPass = false;
         drawing = true;
         resetBatch();
-        if (flushSlotPass != pass) {
-            resetFlushBufferSlots();
-            flushSlotPass = pass;
-        }
+        resetFlushBufferSlots();
     }
 
     /**
@@ -279,7 +274,6 @@ public final class BillboardRenderer3D implements Disposable {
         drawing = false;
         if (ownsPass) {
             pass.end();
-            flushSlotPass = null;
         }
         ownsPass = false;
         pass = null;

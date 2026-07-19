@@ -130,7 +130,7 @@ open class LibfdxDesktopJvmExtension @Inject constructor(
     val launchPropertiesResourceName: Property<String> = objects.property(String::class.java)
         .convention("libfdx-desktop-launch.properties")
     val jvmArgs: ListProperty<String> = objects.listProperty(String::class.java)
-        .convention(listOf("-Dorg.lwjgl.system.stackSize=1048576"))
+        .convention(listOf("-Dorg.lwjgl.system.stackSize=1024"))
     val systemProperties: MapProperty<String, String> = objects.mapProperty(String::class.java, String::class.java)
         .convention(emptyMap())
     val defaultSystemProperties: MapProperty<String, String> =

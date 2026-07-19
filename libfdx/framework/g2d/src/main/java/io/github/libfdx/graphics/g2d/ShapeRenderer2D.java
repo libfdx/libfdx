@@ -74,7 +74,6 @@ public final class ShapeRenderer2D implements Disposable {
     private Buffer[] vertexBuffers;
     private ByteBuffer uploadBuffer;
     private RenderPass pass;
-    private RenderPass flushSlotPass;
     private int vertexBufferSlot;
     private boolean ownsPass;
     private boolean drawing;
@@ -149,7 +148,6 @@ public final class ShapeRenderer2D implements Disposable {
         ownsPass = true;
         drawing = true;
         resetFlushBufferSlots();
-        flushSlotPass = pass;
     }
 
     /**
@@ -163,10 +161,7 @@ public final class ShapeRenderer2D implements Disposable {
             throw new FdxException("RenderPass cannot be null");
         }
         this.pass = pass;
-        if (flushSlotPass != pass) {
-            resetFlushBufferSlots();
-            flushSlotPass = pass;
-        }
+        resetFlushBufferSlots();
         ownsPass = false;
         drawing = true;
     }
@@ -441,7 +436,6 @@ public final class ShapeRenderer2D implements Disposable {
         drawing = false;
         if (ownsPass) {
             pass.end();
-            flushSlotPass = null;
         }
         ownsPass = false;
         pass = null;

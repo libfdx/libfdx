@@ -90,6 +90,7 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:extensions:graphics:vulkan:platform:desktop",
     ":libfdx:extensions:graphics:vulkan:platform:desktop_c",
     ":libfdx:extensions:graphics:vulkan:platform:android_jni",
+    ":libfdx:extensions:graphics:d3d12:core",
     ":libfdx:extensions:graphics:wgpu:core",
     ":libfdx:extensions:graphics:wgpu:platform:desktop_jni",
     ":libfdx:extensions:graphics:wgpu:platform:desktop_ffm",

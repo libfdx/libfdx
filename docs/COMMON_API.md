@@ -50,8 +50,8 @@ job an object performs, not the native object used by one provider.
   explicit backend-to-graphics-provider setup exception.
 - A backend or provider must not silently substitute behavior with different
   semantics.
-- Higher-level modules depend on common modules, not GL, Vulkan, WGPU, or a
-  concrete platform backend.
+- Higher-level modules depend on common modules, not GL, Vulkan, Direct3D 12,
+  WGPU, or a concrete platform backend.
 
 ### 1.2 Provider access is explicit
 
@@ -198,7 +198,7 @@ native capabilities registered by a backend/platform. It is not a game-facing
 service registry.
 
 Current capabilities include FreeType font rasterization and optional WGSL
-translation for providers that require GLSL, SPIR-V, or MSL.
+translation for providers that require GLSL, SPIR-V, HLSL, or MSL.
 
 - Font rasterization occurs during load/cache creation, never every UI frame.
 - Shader translation occurs during shader-module creation, explicit editor
@@ -478,7 +478,8 @@ disposable resources unless a higher-level owner explicitly accepts them.
 Recorded-command providers must retain any native allocation referenced by
 recorded work until that work is submitted or abandoned. Later rewrites or
 disposal must not mutate or invalidate already recorded commands. This rule is
-essential for Vulkan and WGPU even when immediate GL behavior appears correct.
+essential for Vulkan, Direct3D 12, and WGPU even when immediate GL behavior
+appears correct.
 
 ### 9.5 Rendering conventions
 

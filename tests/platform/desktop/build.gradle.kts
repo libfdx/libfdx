@@ -49,6 +49,7 @@ dependencies {
     implementation(project(":tests:core"))
     if (LibExt.usePublishedLibfdx) {
         implementation("${LibExt.fdxGroup}:backend_desktop:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:d3d12_core:${LibExt.fdxSnapshotVersion}")
         implementation("${LibExt.fdxGroup}:wgpu_core:${LibExt.fdxSnapshotVersion}")
 
         glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.fdxSnapshotVersion}")
@@ -57,6 +58,7 @@ dependencies {
         runtimeFdxClasspath("${LibExt.fdxGroup}:fdx_desktop:${LibExt.fdxSnapshotVersion}")
     } else {
         implementation(project(":libfdx:backends:desktop"))
+        implementation(project(":libfdx:extensions:graphics:d3d12:core"))
         implementation(project(":libfdx:extensions:graphics:wgpu:core"))
 
         glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
@@ -66,35 +68,49 @@ dependencies {
     }
 }
 
-val testRuntimeClasspath = sourceSets["main"].runtimeClasspath +
-        glRuntimeClasspath + wgpuRuntimeClasspath + vulkanRuntimeClasspath
-
-tasks.register<JavaExec>("test_desktop_gl_run") {
+fun registerGraphicsTestRun(
+    taskName: String,
+    descriptionText: String,
+    graphics: String,
+    graphicsLabel: String,
+    providerClasspath: FileCollection
+) = tasks.register<JavaExec>(taskName) {
     group = "application"
-    description = "Runs graphics tests with desktop GL."
-    classpath = testRuntimeClasspath
+    description = descriptionText
+    classpath = sourceSets["main"].runtimeClasspath + providerClasspath
     mainClass.set("io.github.libfdx.tests.desktop.DesktopTestLauncher")
-    systemProperty("libfdx.test.graphics", "gl")
-    systemProperty("libfdx.test.graphicsLabel", "GL")
+    systemProperty("libfdx.test.graphics", graphics)
+    systemProperty("libfdx.test.graphicsLabel", graphicsLabel)
 }
 
-tasks.register<JavaExec>("test_desktop_wgpu_run") {
-    group = "application"
-    description = "Runs graphics tests with WGPU."
-    classpath = testRuntimeClasspath
-    mainClass.set("io.github.libfdx.tests.desktop.DesktopTestLauncher")
-    systemProperty("libfdx.test.graphics", "wgpu")
-    systemProperty("libfdx.test.graphicsLabel", "WGPU")
-}
-
-tasks.register<JavaExec>("test_desktop_vulkan_run") {
-    group = "application"
-    description = "Runs graphics tests with desktop Vulkan."
-    classpath = testRuntimeClasspath
-    mainClass.set("io.github.libfdx.tests.desktop.DesktopTestLauncher")
-    systemProperty("libfdx.test.graphics", "vulkan")
-    systemProperty("libfdx.test.graphicsLabel", "Vulkan")
-}
+val d3d12Run = registerGraphicsTestRun(
+    "test_desktop_d3d12_run",
+    "Runs graphics tests with Direct3D 12 through Java 25 FFM on Windows.",
+    "d3d12",
+    "Direct3D 12",
+    files()
+)
+val glRun = registerGraphicsTestRun(
+    "test_desktop_gl_run",
+    "Runs graphics tests with desktop GL.",
+    "gl",
+    "GL",
+    glRuntimeClasspath
+)
+val wgpuRun = registerGraphicsTestRun(
+    "test_desktop_wgpu_run",
+    "Runs graphics tests with WGPU.",
+    "wgpu",
+    "WGPU",
+    wgpuRuntimeClasspath
+)
+val vulkanRun = registerGraphicsTestRun(
+    "test_desktop_vulkan_run",
+    "Runs graphics tests with desktop Vulkan.",
+    "vulkan",
+    "Vulkan",
+    vulkanRuntimeClasspath
+)
 
 tasks.register<JavaExec>("test_math_acceleration_desktop") {
     group = "application_test"
@@ -119,20 +135,18 @@ val cleanTestRuntimeStorage = tasks.register<Delete>("clean_test_runtime_storage
     }
 }
 
-tasks.matching {
-    it.name == "test_desktop_gl_run" ||
-            it.name == "test_desktop_wgpu_run" ||
-            it.name == "test_desktop_vulkan_run"
-}.configureEach {
-    finalizedBy(cleanTestRuntimeStorage)
+listOf(d3d12Run, glRun, wgpuRun, vulkanRun).forEach { runTask ->
+    runTask.configure { finalizedBy(cleanTestRuntimeStorage) }
 }
 
 tasks.withType<JavaExec>().configureEach {
     workingDir = rootProject.projectDir
+    minHeapSize = "64m"
+    maxHeapSize = "1g"
     javaLauncher.set(javaToolchains.launcherFor {
         languageVersion.set(JavaLanguageVersion.of(25))
     })
-    jvmArgs("-Dorg.lwjgl.system.stackSize=1048576", "--enable-native-access=ALL-UNNAMED")
+    jvmArgs("-Dorg.lwjgl.system.stackSize=1024", "--enable-native-access=ALL-UNNAMED")
     gradle.startParameter.systemPropertiesArgs
             .filterKeys {
                 (it.startsWith("libfdx.test.") || it.startsWith("libfdx.validation."))

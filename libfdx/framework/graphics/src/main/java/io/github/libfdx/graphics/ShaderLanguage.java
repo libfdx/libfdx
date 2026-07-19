@@ -9,5 +9,6 @@ public enum ShaderLanguage {
     WGSL,
     GLSL,
     SPIRV,
-    MSL
+    MSL,
+    HLSL
 }

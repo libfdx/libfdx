@@ -161,6 +161,30 @@ final class ShaderModuleDescriptorsTest {
     }
 
     @Test
+    void requireHlslTargetCompilesBothStages() {
+        RecordingCompiler compiler = new RecordingCompiler(request ->
+                RuntimeShaderCompileResult.text(request.stage() == RuntimeShaderCompileStage.VERTEX
+                        ? "float4 vs_main() : SV_Position { return 0.0f; }"
+                        : "float4 fs_main() : SV_Target { return 1.0f; }"));
+        RuntimeCore.registerProvider(new TestRuntimeCoreProvider(compiler));
+
+        ShaderModuleDescriptor ready = ShaderModuleDescriptors.requireTarget(
+                ShaderModuleDescriptor.wgsl("hlsl", "wgsl source")
+                        .entryPoints("vs_main", "fs_main"),
+                ShaderTarget.DIRECTX_HLSL,
+                "Direct3D 12");
+
+        assertTrue(ready.hasSource(ShaderLanguage.HLSL));
+        assertTrue(ready.hlslVertexSource().contains("vs_main"));
+        assertTrue(ready.hlslFragmentSource().contains("fs_main"));
+        assertEquals(2, compiler.requests.size());
+        assertRequest(compiler.requests.get(0), RuntimeShaderCompileTarget.DIRECTX_HLSL,
+                RuntimeShaderCompileStage.VERTEX, "vs_main");
+        assertRequest(compiler.requests.get(1), RuntimeShaderCompileTarget.DIRECTX_HLSL,
+                RuntimeShaderCompileStage.FRAGMENT, "fs_main");
+    }
+
+    @Test
     void missingCompilerForWgslOnlyNativeTargetFailsClearly() {
         RuntimeCore.registerProvider(new TestRuntimeCoreProvider(null));
 

@@ -42,6 +42,7 @@ dependencies {
         implementation("${LibExt.fdxGroup}:display:${LibExt.fdxSnapshotVersion}")
         implementation("${LibExt.fdxGroup}:backend_desktop:${LibExt.fdxSnapshotVersion}")
         implementation("${LibExt.fdxGroup}:webrtc_desktop_jni:${LibExt.fdxSnapshotVersion}")
+        implementation("${LibExt.fdxGroup}:d3d12_core:${LibExt.fdxSnapshotVersion}")
         implementation("${LibExt.fdxGroup}:wgpu_core:${LibExt.fdxSnapshotVersion}")
         glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.fdxSnapshotVersion}")
         vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.fdxSnapshotVersion}")
@@ -51,6 +52,7 @@ dependencies {
         implementation(project(":libfdx:framework:display"))
         implementation(project(":libfdx:backends:desktop"))
         implementation(project(":libfdx:extensions:net:webrtc:platform:desktop_jni"))
+        implementation(project(":libfdx:extensions:graphics:d3d12:core"))
         implementation(project(":libfdx:extensions:graphics:wgpu:core"))
         glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
         vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
@@ -65,6 +67,7 @@ fun JavaExec.configureMultiplayerRun(graphics: String, label: String) {
     classpath = sourceSets["main"].runtimeClasspath + when (graphics) {
         "gl" -> glRuntimeClasspath
         "vulkan" -> vulkanRuntimeClasspath
+        "d3d12" -> files()
         else -> wgpuRuntimeClasspath
     }
     mainClass.set(sampleMainClass)
@@ -72,7 +75,7 @@ fun JavaExec.configureMultiplayerRun(graphics: String, label: String) {
     javaLauncher.set(javaToolchains.launcherFor {
         languageVersion.set(JavaLanguageVersion.of(25))
     })
-    jvmArgs("-Dorg.lwjgl.system.stackSize=1048576", "--enable-native-access=ALL-UNNAMED")
+    jvmArgs("-Dorg.lwjgl.system.stackSize=1024", "--enable-native-access=ALL-UNNAMED")
     systemProperty("libfdx.sample.graphics", graphics)
     systemProperty("libfdx.sample.graphicsLabel", label)
     System.getProperty("libfdx.sample.signalingUrl")?.takeIf { it.isNotBlank() }?.let {
@@ -114,4 +117,9 @@ tasks.register<JavaExec>("multiplayer_2d_webrtc_desktop_wgpu_run") {
 tasks.register<JavaExec>("multiplayer_2d_webrtc_desktop_vulkan_run") {
     description = "Runs the WebRTC multiplayer 2D desktop sample with Vulkan."
     configureMultiplayerRun("vulkan", "Vulkan")
+}
+
+tasks.register<JavaExec>("multiplayer_2d_webrtc_desktop_d3d12_run") {
+    description = "Runs the WebRTC multiplayer 2D desktop sample with Direct3D 12 on Windows."
+    configureMultiplayerRun("d3d12", "Direct3D 12")
 }

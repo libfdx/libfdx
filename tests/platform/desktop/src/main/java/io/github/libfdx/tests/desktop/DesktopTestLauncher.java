@@ -6,6 +6,7 @@ import io.github.libfdx.backend.desktop.DesktopApplicationConfig;
 import io.github.libfdx.backend.desktop.DesktopOpenGLProvider;
 import io.github.libfdx.backend.desktop.DesktopVulkanProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
+import io.github.libfdx.graphics.d3d12.D3D12Provider;
 import io.github.libfdx.graphics.wgpu.WGPUProvider;
 import io.github.libfdx.tests.AutoTestApplication;
 import io.github.libfdx.tests.TestChooserApplication;
@@ -26,6 +27,8 @@ import java.util.Properties;
  */
 public final class DesktopTestLauncher {
     private static final String LAUNCH_PROPERTIES_PATH = "libfdx-desktop-launch.properties";
+    private static final String DEFAULT_TEST_MIN_HEAP = "-Xms64m";
+    private static final String DEFAULT_TEST_MAX_HEAP = "-Xmx1g";
     private static final Properties LAUNCH_PROPERTIES = loadLaunchProperties();
 
     private DesktopTestLauncher() {
@@ -46,7 +49,7 @@ public final class DesktopTestLauncher {
         String testName = selectedTestName(frames);
         boolean explicitSize = hasProperty("libfdx.test.width") || hasProperty("libfdx.test.height");
         boolean maximized = Boolean.parseBoolean(System.getProperty("libfdx.test.maximized",
-                explicitSize ? "false" : "false"));
+                explicitSize ? "false" : "true"));
         int width = intProperty("libfdx.test.width", defaultWidth(testName));
         int height = intProperty("libfdx.test.height", defaultHeight(testName));
         System.out.println("[info] DesktopTestLauncher starting " + launchDisplayName(testName)
@@ -140,6 +143,11 @@ public final class DesktopTestLauncher {
             }
             return provider;
         }
+        if (isD3D12(graphics)) {
+            return new D3D12Provider()
+                    .vSync(vSync)
+                    .validation(Boolean.getBoolean("libfdx.validation.d3d12"));
+        }
         return new WGPUProvider().vSync(vSync);
     }
 
@@ -162,13 +170,23 @@ public final class DesktopTestLauncher {
         if ("vulkan".equalsIgnoreCase(graphics) || "vk".equalsIgnoreCase(graphics)) {
             return "Vulkan";
         }
+        if (isD3D12(graphics)) {
+            return "Direct3D 12";
+        }
         return "WGPU";
+    }
+
+    private static boolean isD3D12(String graphics) {
+        return "d3d12".equalsIgnoreCase(graphics)
+                || "direct3d12".equalsIgnoreCase(graphics)
+                || "directx12".equalsIgnoreCase(graphics)
+                || "dx12".equalsIgnoreCase(graphics);
     }
 
     private static String[] graphicsOptions(String currentGraphics) {
         String configured = System.getProperty("libfdx.test.graphicsOptions", "");
         if (configured.trim().length() == 0) {
-            return new String[] { "gl", "wgpu", "vulkan" };
+            return new String[] { "gl", "wgpu", "vulkan", "d3d12" };
         }
         String[] split = configured.split(",");
         ArrayList<String> options = new ArrayList<String>();
@@ -179,7 +197,7 @@ public final class DesktopTestLauncher {
             }
         }
         if (options.size() == 0) {
-            return new String[] { "gl", "wgpu", "vulkan" };
+            return new String[] { "gl", "wgpu", "vulkan", "d3d12" };
         }
         return options.toArray(new String[options.size()]);
     }
@@ -313,12 +331,20 @@ public final class DesktopTestLauncher {
             for (int i = 0; i < arguments.size(); i++) {
                 String argument = arguments.get(i);
                 if (argument.startsWith("--enable-native-access")
-                        || argument.startsWith("-Dorg.lwjgl.system.stackSize")) {
+                        || argument.startsWith("-Dorg.lwjgl.system.stackSize")
+                        || argument.startsWith("-Xms")
+                        || argument.startsWith("-Xmx")) {
                     command.add(argument);
                 }
             }
             if (!containsPrefix(command, "--enable-native-access")) {
                 command.add("--enable-native-access=ALL-UNNAMED");
+            }
+            if (!containsPrefix(command, "-Xms")) {
+                command.add(DEFAULT_TEST_MIN_HEAP);
+            }
+            if (!containsPrefix(command, "-Xmx")) {
+                command.add(DEFAULT_TEST_MAX_HEAP);
             }
         }
 

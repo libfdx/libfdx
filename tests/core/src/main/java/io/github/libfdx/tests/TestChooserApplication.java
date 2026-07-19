@@ -665,7 +665,7 @@ public final class TestChooserApplication extends ApplicationAdapter {
         return trimmed.length() > 0 ? trimmed : null;
     }
 
-    private static String graphicsDisplayName(String graphicsName) {
+    static String graphicsDisplayName(String graphicsName) {
         if ("gl".equalsIgnoreCase(graphicsName)) {
             return "GL";
         }
@@ -680,6 +680,12 @@ public final class TestChooserApplication extends ApplicationAdapter {
         }
         if ("vulkan".equalsIgnoreCase(graphicsName) || "vk".equalsIgnoreCase(graphicsName)) {
             return "Vulkan";
+        }
+        if ("d3d12".equalsIgnoreCase(graphicsName)
+                || "direct3d12".equalsIgnoreCase(graphicsName)
+                || "directx12".equalsIgnoreCase(graphicsName)
+                || "dx12".equalsIgnoreCase(graphicsName)) {
+            return "Direct3D 12";
         }
         return graphicsName;
     }

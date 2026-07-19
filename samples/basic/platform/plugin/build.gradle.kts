@@ -57,6 +57,7 @@ libfdx {
     desktopJvm {
         mainClass.set("io.github.libfdx.samples.basic.desktop.BasicDesktopLauncher")
         forwardSystemProperty("libfdx.sample.exitAfterFrames")
+        forwardSystemProperty("libfdx.sample.maximized")
         target("gl") {
             displayName.set("GL")
             runtimeClasspath(glRuntimeClasspath)
@@ -86,6 +87,15 @@ libfdx {
             launchProperty("graphicsLabel", "Vulkan")
             buildDescription.set("Builds the plugin-use basic desktop Vulkan release jar.")
             runDescription.set("Runs the plugin-use basic desktop sample with Vulkan.")
+        }
+        target("d3d12") {
+            displayName.set("Direct3D 12")
+            systemProperty("libfdx.sample.graphics", "d3d12")
+            systemProperty("libfdx.sample.graphicsLabel", "Direct3D 12")
+            launchProperty("graphics", "d3d12")
+            launchProperty("graphicsLabel", "Direct3D 12")
+            buildDescription.set("Builds the plugin-use basic desktop Direct3D 12 release jar.")
+            runDescription.set("Runs the plugin-use basic desktop sample with Direct3D 12 on Windows.")
         }
     }
     js {

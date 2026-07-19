@@ -26,6 +26,7 @@ WGSL source
         -> WebGPU/wgpu: WGSL
         -> GL/WebGL/GLES: generated GLSL/GLSL ES
         -> Vulkan: generated SPIR-V
+        -> Direct3D 12: generated HLSL
         -> Metal: generated MSL where runtime translation is available
 ```
 
@@ -73,8 +74,8 @@ override constants, 16-bit floats, and 64-bit integers. The WebGPU profile still
 excludes backend-specific extensions, `requires`, and subgroups unless a later
 capability-gated profile defines them.
 
-`NATIVE` does not make GLSL, SPIR-V, or MSL public authoring languages. Providers
-still receive WGSL through the common descriptor path.
+`NATIVE` does not make GLSL, SPIR-V, HLSL, or MSL public authoring languages.
+Providers still receive WGSL through the common descriptor path.
 
 ## 3. Runtime Compilation
 
@@ -110,16 +111,18 @@ separate native validation target.
 | GLES | `GLES_GLSL_ES` | GLSL ES |
 | OpenGL | `OPENGL_GLSL` | desktop GLSL |
 | Vulkan | `VULKAN_SPIRV` | SPIR-V |
+| Direct3D 12 | `DIRECTX_HLSL` | HLSL |
 | Metal | `METAL_MSL` | MSL |
 
-Built-in g2d/g3d shader descriptors contain WGSL only. A GL, Vulkan, or Metal
-provider requests translation instead of selecting a handwritten fallback.
-WGPU/WebGPU consumes the authored source.
+Built-in g2d/g3d shader descriptors contain WGSL only. A GL, Vulkan,
+Direct3D 12, or Metal provider requests translation instead of selecting a
+handwritten fallback. WGPU/WebGPU consumes the authored source.
 
 PSP is intentionally outside the Tint path. iOS C Metal can create modules from
 MSL but does not currently register the runtime WGSL compiler, so WGSL-only
-built-in renderers require that bridge before they work on that path. HLSL is
-not a current public target.
+built-in renderers require that bridge before they work on that path. The
+Windows Direct3D 12 provider compiles generated HLSL during shader-module
+creation; HLSL is a provider handoff target, not a user authoring language.
 
 Provider-specific setup remains explicit. Unsupported language/profile/feature
 combinations fail during setup rather than changing rendering silently.
