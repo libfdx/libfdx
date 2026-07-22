@@ -49,6 +49,9 @@ class LibfdxGradlePlugin : Plugin<Project> {
             teavm.getWasmGC(),
             teavm.getC()
         )
+        extension.ecsProject.projectClasses.from(
+            project.extensions.getByType<SourceSetContainer>().getByName("main").output
+        )
 
         project.afterEvaluate {
             registerBitmapFontTasks(project, extension)
@@ -430,6 +433,9 @@ class LibfdxGradlePlugin : Plugin<Project> {
     }
 
     private fun registerTasks(project: Project, extension: LibfdxExtension) {
+        if(extension.ecsProject.enabled.get()) {
+            registerEcsProjectBundleTask(project, extension.ecsProject)
+        }
         if(extension.isDeclared(LibfdxTarget.JS)) {
             registerJsTasks(project, extension)
         }
@@ -450,6 +456,27 @@ class LibfdxGradlePlugin : Plugin<Project> {
         if(extension.isDeclared(LibfdxTarget.IOS_C)) {
             registerIosCTargetTasks(project, extension)
             registerIosCTasks(project, extension)
+        }
+    }
+
+    private fun registerEcsProjectBundleTask(project: Project, extension: LibfdxEcsProjectExtension) {
+        project.tasks.register<LibfdxEcsProjectBundleTask>(ECS_PROJECT_BUNDLE_TASK) {
+            group = TASK_GROUP
+            description = "Builds the portable ECS project bundle consumed by the desktop editor."
+            dependsOn(JavaPlugin.CLASSES_TASK_NAME)
+            projectId.set(extension.projectId)
+            entryClass.set(extension.entryClass)
+            projectManifest.set(extension.projectManifest)
+            assetsDirectory.set(extension.assetsDirectory)
+            scenesDirectory.set(extension.scenesDirectory)
+            projectClasses.from(extension.projectClasses)
+            allowedDependencies.from(extension.allowedDependencies)
+            toolingAbi.set(extension.toolingAbi)
+            libfdxAbi.set(extension.libfdxAbi)
+            gradleRoot.set(extension.gradleRoot)
+            gradleProject.set(extension.gradleProject)
+            desktopBundleTask.set(extension.desktopBundleTask)
+            outputFile.set(extension.outputFile)
         }
     }
 

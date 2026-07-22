@@ -14,7 +14,7 @@ import java.nio.charset.StandardCharsets;
 public final class ProjectGenerationSettings {
     public static final String DEFAULT_PROJECT_NAME = "libfdx-game";
     public static final String DEFAULT_PACKAGE_NAME = "com.example.game";
-    public static final String DEFAULT_APPLICATION_CLASS_NAME = "GameApplication";
+    public static final String DEFAULT_APPLICATION_CLASS_NAME = "GameProject";
     public static final String DEFAULT_DESKTOP_LAUNCHER_CLASS_NAME = "DesktopLauncher";
     public static final String DEFAULT_LIBFDX_VERSION = loadDefaultLibfdxVersion();
 
@@ -42,6 +42,8 @@ public final class ProjectGenerationSettings {
             }
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
                 boolean inReleaseSection = false;
+                String baseVersion = null;
+                String snapshotVersion = null;
                 String rawLine;
                 while ((rawLine = reader.readLine()) != null) {
                     int commentIndex = rawLine.indexOf('#');
@@ -54,8 +56,11 @@ public final class ProjectGenerationSettings {
                         continue;
                     }
                     int separator = line.indexOf('=');
-                    if (!inReleaseSection || separator < 0
-                            || !line.substring(0, separator).trim().equals("fdxSnapshotVersion")) {
+                    if (!inReleaseSection || separator < 0) {
+                        continue;
+                    }
+                    String key = line.substring(0, separator).trim();
+                    if (!key.equals("fdxVersion") && !key.equals("fdxSnapshotVersion")) {
                         continue;
                     }
                     String version = line.substring(separator + 1).trim();
@@ -64,9 +69,18 @@ public final class ProjectGenerationSettings {
                         version = version.substring(1, version.length() - 1);
                     }
                     if (version.length() == 0) {
-                        throw new IllegalStateException("Empty [release].fdxSnapshotVersion in " + resourceName);
+                        throw new IllegalStateException("Empty [release]." + key + " in " + resourceName);
                     }
-                    return version;
+                    if (key.equals("fdxVersion")) {
+                        baseVersion = version;
+                    } else {
+                        snapshotVersion = version;
+                    }
+                }
+                if (snapshotVersion != null) {
+                    return snapshotVersion.startsWith("-") && baseVersion != null
+                            ? baseVersion + snapshotVersion
+                            : snapshotVersion;
                 }
             }
             throw new IllegalStateException("Missing [release].fdxSnapshotVersion in " + resourceName);

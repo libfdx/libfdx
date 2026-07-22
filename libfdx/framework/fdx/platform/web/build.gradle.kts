@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 import org.gradle.api.GradleException
 import org.gradle.api.tasks.Copy
 import org.gradle.language.jvm.tasks.ProcessResources
@@ -8,7 +7,6 @@ plugins {
     id("java-library")
 }
 
-group = "${LibExt.fdxGroup}.runtime.fdx"
 
 java {
     sourceCompatibility = JavaVersion.toVersion(25)

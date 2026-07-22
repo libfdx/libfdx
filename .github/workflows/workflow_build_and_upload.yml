@@ -294,6 +294,11 @@ jobs:
             exit 1
           fi
 
+      - name: Install publication native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
@@ -367,19 +372,19 @@ jobs:
             fi
           done
 
-      - name: Prepare release deploy files
+      - name: Prepare release staging files
         if: ${{ inputs.isRelease }}
         env:
           SIGNING_KEY: ${{ secrets.PGP_SECRET }}
           SIGNING_PASSWORD: ${{ secrets.PGP_PASSPHRASE }}
-        run: ./gradlew prepareReleaseDeploy
+        run: ./gradlew prepareRelease
 
-      - name: Upload release deploy files artifact
+      - name: Upload release staging files artifact
         uses: actions/upload-artifact@v7
         if: ${{ inputs.shouldUpload && inputs.isRelease }}
         with:
-          name: release-deploy-${{ steps.version.outputs.value }}
-          path: ./build/release-deploy/
+          name: release-staging-${{ steps.version.outputs.value }}
+          path: ./build/staging-deploy/
 
       - name: Upload release to repository
         uses: nick-fields/retry@v4
@@ -394,11 +399,11 @@ jobs:
           retry_on: error
           command: ./gradlew publishRelease
 
-      - name: Prepare snapshot deploy files
+      - name: Prepare snapshot staging files
         if: ${{ !inputs.isRelease }}
-        run: ./gradlew prepareSnapshotDeploy
+        run: ./gradlew prepareSnapshot
 
-      - name: Upload snapshot deploy files artifact
+      - name: Upload snapshot staging files artifact
         uses: actions/upload-artifact@v7
         if: ${{ inputs.shouldUpload && !inputs.isRelease }}
         with:
@@ -412,7 +417,7 @@ jobs:
           max_attempts: 6
           timeout_minutes: 30
           retry_on: error
-          command: ./gradlew uploadSnapshotDeploy
+          command: ./gradlew publishSnapshot
 
       - name: Create Git tag
         uses: actions/github-script@v9

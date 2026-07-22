@@ -64,6 +64,22 @@ public final class DefaultFileSystem implements FileSystem {
     }
 
     /**
+     * Adds an internal root ahead of every existing root.
+     *
+     * <p>This is intended for isolated desktop tooling views that must resolve
+     * one project's assets before process-level fallback roots.</p>
+     *
+     * @param root the prioritized internal root
+     * @return this default file system for chaining
+     */
+    public DefaultFileSystem addInternalRootFirst(File root) {
+        if (root != null) {
+            internalRoots.add(0, root);
+        }
+        return this;
+    }
+
+    /**
      * Runs the classpath step.
      *
      * @param path the asset or file path

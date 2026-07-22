@@ -39,6 +39,8 @@ open class LibfdxExtension @Inject constructor(
         }
     val shaders: LibfdxShadersExtension =
         objects.newInstance(LibfdxShadersExtension::class.java, project, objects)
+    val ecsProject: LibfdxEcsProjectExtension =
+        objects.newInstance(LibfdxEcsProjectExtension::class.java, project, objects)
 
     val js: LibfdxJsExtension by lazy {
         objects.newInstance(LibfdxJsExtension::class.java, project, jsConfig)
@@ -80,6 +82,11 @@ open class LibfdxExtension @Inject constructor(
         action.execute(shaders)
     }
 
+    fun ecsProject(action: Action<in LibfdxEcsProjectExtension>) {
+        ecsProject.enabled.set(true)
+        action.execute(ecsProject)
+    }
+
     fun js(action: Action<in LibfdxJsExtension>) {
         declaredTargets.add(LibfdxTarget.JS)
         action.execute(js)
@@ -112,6 +119,48 @@ open class LibfdxExtension @Inject constructor(
 
     internal fun isDeclared(target: LibfdxTarget): Boolean {
         return declaredTargets.contains(target)
+    }
+}
+
+open class LibfdxEcsProjectExtension @Inject constructor(
+    project: Project,
+    objects: ObjectFactory
+) {
+    internal val enabled: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
+    val projectId: Property<String> = objects.property(String::class.java)
+    val entryClass: Property<String> = objects.property(String::class.java)
+    val projectRoot: DirectoryProperty = objects.directoryProperty()
+        .convention(project.rootProject.layout.projectDirectory)
+    val projectManifest: RegularFileProperty = objects.fileProperty()
+        .convention(projectRoot.file("fdx-project.json"))
+    val assetsDirectory: DirectoryProperty = objects.directoryProperty()
+        .convention(projectRoot.dir("assets"))
+    val scenesDirectory: DirectoryProperty = objects.directoryProperty()
+        .convention(projectRoot.dir("scenes"))
+    val projectClasses: ConfigurableFileCollection = project.files()
+    val allowedDependencies: ConfigurableFileCollection = project.files()
+    val toolingAbi: Property<Int> = objects.property(Int::class.javaObjectType).convention(1)
+    val libfdxAbi: Property<String> = objects.property(String::class.java)
+        .convention(project.provider { project.version.toString() })
+    val gradleRoot: Property<String> = objects.property(String::class.java).convention(projectRoot.map { root ->
+        val relative = root.asFile.toPath().toAbsolutePath().normalize()
+            .relativize(project.rootProject.projectDir.toPath().toAbsolutePath().normalize())
+            .toString()
+            .replace('\\', '/')
+        relative.ifEmpty { "." }
+    })
+    val gradleProject: Property<String> = objects.property(String::class.java).convention(project.path)
+    val desktopBundleTask: Property<String> = objects.property(String::class.java)
+        .convention(ECS_PROJECT_BUNDLE_TASK)
+    val outputFile: RegularFileProperty = objects.fileProperty()
+        .convention(project.layout.buildDirectory.file(projectId.map { id -> "fdx-project/$id.fdxproject" }))
+
+    fun projectClasses(vararg paths: Any) {
+        projectClasses.from(*paths)
+    }
+
+    fun allowedDependencies(vararg paths: Any) {
+        allowedDependencies.from(*paths)
     }
 }
 

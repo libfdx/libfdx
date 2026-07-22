@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     id("maven-publish")
@@ -8,7 +7,6 @@ plugins {
 val androidCompileSdkVersion = providers.gradleProperty("androidCompileSdk").get().toInt()
 val androidMinSdkVersion = providers.gradleProperty("androidMinSdk").get().toInt()
 
-group = "${LibExt.fdxGroup}.wgpu"
 
 android {
     namespace = "io.github.libfdx.graphics.wgpu.android"

@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     id("maven-publish")
@@ -12,7 +11,6 @@ java {
     withJavadocJar()
 }
 
-group = "${LibExt.fdxGroup}.d3d12"
 
 val moduleName = "d3d12_core"
 

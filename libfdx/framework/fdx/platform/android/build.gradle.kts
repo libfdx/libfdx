@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 import org.gradle.api.GradleException
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
@@ -22,7 +21,6 @@ plugins {
     alias(libs.plugins.android.library)
 }
 
-group = "${LibExt.fdxGroup}.runtime.fdx"
 
 val androidCompileSdkVersion = providers.gradleProperty("androidCompileSdk").get().toInt()
 val androidMinSdkVersion = providers.gradleProperty("androidMinSdk").get().toInt()

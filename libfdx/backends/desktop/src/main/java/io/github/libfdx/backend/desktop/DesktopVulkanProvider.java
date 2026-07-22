@@ -2838,8 +2838,10 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
             context.requireDeviceUsable("create a texture");
             if (descriptor.format() != TextureFormat.RGBA8_UNORM
-                    && descriptor.format() != TextureFormat.RGBA8_UNORM_SRGB) {
-                throw new FdxException("Vulkan currently supports RGBA8 sampled textures only");
+                    && descriptor.format() != TextureFormat.RGBA8_UNORM_SRGB
+                    && descriptor.format() != TextureFormat.BGRA8_UNORM
+                    && descriptor.format() != TextureFormat.BGRA8_UNORM_SRGB) {
+                throw new FdxException("Vulkan textures require an RGBA8 or BGRA8 color format");
             }
             if (!descriptor.usage().sampled() && !descriptor.usage().renderAttachment()) {
                 throw new FdxException("Vulkan texture usage must allow sampling or render attachment binding");

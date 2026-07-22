@@ -27,7 +27,12 @@ tasks.register<JavaExec>("test_generate_project") {
     dependsOn(tasks.named("testClasses"))
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("io.github.libfdx.tools.project.generator.ProjectGeneratorSmokeTest")
-    systemProperty("libfdx.expectedVersion", LibExt.fdxSnapshotVersion)
+    val expectedVersion = if (LibExt.fdxSnapshotVersion.startsWith("-")) {
+        LibExt.fdxVersion + LibExt.fdxSnapshotVersion
+    } else {
+        LibExt.fdxSnapshotVersion
+    }
+    systemProperty("libfdx.expectedVersion", expectedVersion)
 }
 
 tasks.named<Test>("test") {

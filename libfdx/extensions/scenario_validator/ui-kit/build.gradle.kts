@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     id("maven-publish")
@@ -12,7 +11,6 @@ java {
 
 val moduleName = "scenario_validator_ui_kit"
 
-group = "${LibExt.fdxGroup}.scenario_validator"
 
 base {
     archivesName.set(moduleName)

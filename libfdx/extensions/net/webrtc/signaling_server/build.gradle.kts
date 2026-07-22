@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 
 plugins {
@@ -11,7 +10,6 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "${LibExt.fdxGroup}.webrtc"
 
 val moduleName = "webrtc_signaling_server"
 

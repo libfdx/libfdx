@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 import org.gradle.api.attributes.java.TargetJvmVersion
 
@@ -12,7 +11,6 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "${LibExt.fdxGroup}.assets"
 
 val moduleName = "asset_loaders"
 

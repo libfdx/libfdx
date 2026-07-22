@@ -125,7 +125,7 @@ public final class ProjectGeneratorApplication extends ApplicationAdapter {
                 body.panel(Ui.modifier().width(420.0f).padding(10.0f).gap(6.0f), form -> {
                     field(form, "Project name", projectName);
                     field(form, "Package", packageName);
-                    field(form, "Application class", applicationClassName);
+                    field(form, "ECS project class", applicationClassName);
                     field(form, "Desktop launcher", desktopLauncherClassName);
                     field(form, "libfdx version", libfdxVersion);
                     field(form, exportTarget.destinationLabel(), destination);

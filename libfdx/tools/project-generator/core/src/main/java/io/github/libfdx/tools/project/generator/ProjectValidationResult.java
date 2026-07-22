@@ -40,7 +40,7 @@ public final class ProjectValidationResult {
             errors.add("Package name must contain valid Java package segments.");
         }
         if (!validJavaIdentifier(settings.applicationClassName())) {
-            errors.add("Application class name must be a valid Java class identifier.");
+            errors.add("ECS project class name must be a valid Java class identifier.");
         }
         if (!validJavaIdentifier(settings.desktopLauncherClassName())) {
             errors.add("Desktop launcher class name must be a valid Java class identifier.");

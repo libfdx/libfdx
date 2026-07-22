@@ -1,23 +1,15 @@
 val libfdxPublicationTaskNames = setOf(
-    "prepareSnapshotDeploy",
-    "prepareReleaseDeploy",
-    "prepareGradlePluginSnapshotDeploy",
-    "prepareGradlePluginReleaseDeploy",
+    "prepareSnapshot",
+    "prepareRelease",
     "publishSnapshot",
     "publishRelease",
-    "uploadSnapshotDeploy",
-    "uploadReleaseDeploy",
-    "signReleaseDeploy",
-    "verifyReleaseDeployArtifacts",
-    "verifyPreparedReleaseDeployArtifacts",
-    "zipReleaseDeploy",
+    "uploadReleaseToMavenCentral",
     "publishToMavenLocal"
 )
 
 fun isLibfdxPublicationTask(taskPath: String): Boolean {
     val taskName = taskPath.substringAfterLast(":")
-    return taskName in libfdxPublicationTaskNames ||
-        taskName.startsWith("publishDeploy") && taskName.endsWith("PublicationToLibfdxDeployRepository")
+    return taskName in libfdxPublicationTaskNames
 }
 
 val libfdxPublicationBuild = (
@@ -43,18 +35,11 @@ gradle.extensions.extraProperties.set(
 
 pluginManagement {
     val publicationTaskNames = setOf(
-        "prepareSnapshotDeploy",
-        "prepareReleaseDeploy",
-        "prepareGradlePluginSnapshotDeploy",
-        "prepareGradlePluginReleaseDeploy",
+        "prepareSnapshot",
+        "prepareRelease",
         "publishSnapshot",
         "publishRelease",
-        "uploadSnapshotDeploy",
-        "uploadReleaseDeploy",
-        "signReleaseDeploy",
-        "verifyReleaseDeployArtifacts",
-        "verifyPreparedReleaseDeployArtifacts",
-        "zipReleaseDeploy",
+        "uploadReleaseToMavenCentral",
         "publishToMavenLocal"
     )
     val publicationBuild = (
@@ -73,8 +58,7 @@ pluginManagement {
             }
         } == true || gradle.startParameter.taskNames.any { taskPath ->
         val taskName = taskPath.substringAfterLast(":")
-        taskName in publicationTaskNames ||
-            taskName.startsWith("publishDeploy") && taskName.endsWith("PublicationToLibfdxDeployRepository")
+        taskName in publicationTaskNames
     }
     val repositoryConsumersIncluded = !publicationBuild && gradle.parent == null
     val tomlFile = java.io.File(settingsDir, "libfdx.toml")
@@ -165,7 +149,8 @@ include(":libfdx:framework:camera")
 include(":libfdx:framework:g2d")
 include(":libfdx:framework:g3d")
 include(":libfdx:framework:ui-kit")
-include(":libfdx:extensions:ecs")
+include(":libfdx:extensions:ecs:core")
+include(":libfdx:extensions:ecs:tooling")
 include(":libfdx:extensions:scenario_validator:core")
 include(":libfdx:extensions:scenario_validator:ui-kit")
 include(":libfdx:tools:font")
@@ -211,22 +196,22 @@ if (libfdxRepositoryConsumersIncluded) {
     include(":benchmark:platform:desktop")
     include(":benchmark:platform:desktop_c")
     include(":benchmark:platform:plugin")
-    include(":samples:basic:core")
-    include(":samples:basic:platform:desktop")
-    include(":samples:basic:platform:plugin")
-    include(":samples:basic:platform:desktop_c")
-    include(":samples:basic:platform:ios_c")
-    include(":samples:basic:platform:android")
-    include(":samples:basic:platform:web")
-    include(":samples:ecs-platformer:core")
-    include(":samples:ecs-platformer:platform:desktop")
-    include(":samples:ecs-platformer:platform:desktop_c")
-    include(":samples:ecs-platformer:platform:ios_c")
-    include(":samples:ecs-platformer:platform:android")
-    include(":samples:ecs-platformer:platform:web")
-    include(":samples:multiplayer:2d-webrtc:core")
-    include(":samples:multiplayer:2d-webrtc:platform:desktop")
-    include(":samples:multiplayer:2d-webrtc:platform:plugin")
-    include(":samples:multiplayer:2d-webrtc:platform:android")
-    include(":samples:multiplayer:2d-webrtc:platform:web")
+    include(":samples:2d:sprite-movement:core")
+    include(":samples:2d:sprite-movement:platform:desktop")
+    include(":samples:2d:sprite-movement:platform:plugin")
+    include(":samples:2d:sprite-movement:platform:desktop_c")
+    include(":samples:2d:sprite-movement:platform:ios_c")
+    include(":samples:2d:sprite-movement:platform:android")
+    include(":samples:2d:sprite-movement:platform:web")
+    include(":samples:2d:ecs-platformer:core")
+    include(":samples:2d:ecs-platformer:platform:desktop")
+    include(":samples:2d:ecs-platformer:platform:desktop_c")
+    include(":samples:2d:ecs-platformer:platform:ios_c")
+    include(":samples:2d:ecs-platformer:platform:android")
+    include(":samples:2d:ecs-platformer:platform:web")
+    include(":samples:2d:multiplayer-webrtc:core")
+    include(":samples:2d:multiplayer-webrtc:platform:desktop")
+    include(":samples:2d:multiplayer-webrtc:platform:plugin")
+    include(":samples:2d:multiplayer-webrtc:platform:android")
+    include(":samples:2d:multiplayer-webrtc:platform:web")
 }

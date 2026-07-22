@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     id("maven-publish")
@@ -10,7 +9,6 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "${LibExt.fdxGroup}.gl"
 
 val moduleName = "gl_desktop"
 val lwjglVersion = libs.versions.lwjgl.get()

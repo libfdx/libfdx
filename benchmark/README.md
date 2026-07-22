@@ -1,66 +1,42 @@
 # libFDX Benchmarks
 
-Performance benchmarks for libFDX. These modules live in the main repository so
-benchmark runs can stay aligned with local framework changes.
+Benchmarks live in the repository so they can run against checked-out framework
+changes. `core` owns benchmark cases/results; platform modules own launchers and
+generated reports. The plugin module validates generated native benchmark
+tasks.
 
-## Layout
+Establish correctness before using benchmark results as evidence. Compare
+providers with the same scene, workload, duration, visibility, and frame-limit
+settings.
 
-- `core`: benchmark cases and result writing.
-- `platform/desktop`: JVM desktop benchmark launchers and reports for GL, WGPU,
-  Vulkan, and Windows Direct3D 12.
-- `platform/desktop_c`: TeaVM C desktop_c benchmark launchers and report task aliases for GL and Vulkan.
-- `platform/plugin`: libFDX Gradle plugin wiring for generated desktop_c benchmark executables.
-- `assets`: benchmark-owned assets loaded at runtime.
+## Desktop JVM
 
-## Desktop Benchmarks
-
-The desktop benchmark task runs the SpriteBatch stress benchmark across GL,
-WGPU, Vulkan, and Direct3D 12 on Windows, with visible windows, vSync disabled,
-the frame limiter disabled, 8191 rotating/scaling 32x32 sprites, and 8 seconds
-per provider:
+Run the maintained desktop provider set with:
 
 ```powershell
 .\gradlew.bat :benchmark:platform:desktop:benchmark_desktop
 ```
 
-The generated report is written to
-`build/reports/benchmark/desktop-sprite-batch-stress.md`.
-
-Individual provider tasks are also available:
-
-```powershell
-.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_gl_ffm
-.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_gl_jni
-.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_wgpu_jni
-.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_wgpu_ffm
-.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_vulkan_ffm
-.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_vulkan_jni
-.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_stress_d3d12
-```
-
-The Direct3D 12 task is available only on Windows x64. The aggregate desktop
-benchmark includes it only on that platform.
-
-## Desktop C Benchmarks
-
-The desktop_c benchmark runs the same SpriteBatch stress benchmark through the
-TeaVM C desktop backend:
+The current SpriteBatch stress report is written under
+`build/reports/benchmark`. Use Gradle task discovery for individual provider
+variants rather than copying their names into another catalog:
 
 ```powershell
-.\gradlew.bat :benchmark:platform:desktop_c:benchmark_desktop_c_gl_debug
-.\gradlew.bat :benchmark:platform:desktop_c:benchmark_desktop_c_gl_release
-.\gradlew.bat :benchmark:platform:desktop_c:benchmark_desktop_c_vulkan_debug
-.\gradlew.bat :benchmark:platform:desktop_c:benchmark_desktop_c_vulkan_release
+.\gradlew.bat :benchmark:platform:desktop:tasks --all
 ```
 
-Aggregate tasks run both GL and Vulkan:
+Platform-specific providers are included only where supported by the active
+host.
+
+## Desktop C
+
+Run the aggregate debug or release benchmark with:
 
 ```powershell
 .\gradlew.bat :benchmark:platform:desktop_c:benchmark_desktop_c_debug
 .\gradlew.bat :benchmark:platform:desktop_c:benchmark_desktop_c_release
 ```
 
-On Windows, desktop_c benchmark run tasks open a separate console by default.
-Use `"-Plibfdx.desktopC.openConsole=false"` for inline/headless Gradle runs.
-
-Generated reports are written under `build/reports/benchmark`.
+Native execution requires the matching host toolchain. On Windows, desktop C
+run tasks may open a separate console; inspect the task/build source for the
+current inline/headless option and generated report location.

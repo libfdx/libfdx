@@ -4,16 +4,12 @@ import org.gradle.api.tasks.testing.Test
 
 plugins {
     id("maven-publish")
+    alias(libs.plugins.easy.publishing)
     `kotlin-dsl`
     `java-gradle-plugin`
 }
 
 LibExt.configure(rootProject.projectDir)
-
-allprojects {
-    group = LibExt.fdxGroup
-    version = LibExt.fdxVersion
-}
 
 val libfdxGradlePluginDependencyArtifacts = listOf(
     "tools_font",
@@ -26,8 +22,35 @@ val libfdxGradlePluginDependencyArtifacts = listOf(
 )
 
 extra["libfdxGradlePluginDependencyArtifacts"] = libfdxGradlePluginDependencyArtifacts
-apply(from = "../../../buildSrc/src/main/kotlin/publish.gradle.kts")
-val libfdxSelectedVersion = extensions.extraProperties.get("libfdxSelectedVersion") as String
+val libfdxReleaseRequested = extensions.extraProperties.get("easyPublishing.releaseRequested") as Boolean
+val libfdxSelectedVersion = if (libfdxReleaseRequested) LibExt.fdxVersion else LibExt.fdxSnapshotVersion
+
+easyPublishing {
+    groupId.set(LibExt.fdxGroup)
+    releaseVersion.set(LibExt.fdxVersion)
+    snapshotVersion.set(LibExt.fdxSnapshotVersion)
+
+    snapshotRepositoryUrl.set("https://central.sonatype.com/repository/maven-snapshots/")
+    releaseRepositoryUrl.set("https://central.sonatype.com")
+    username.set(providers.environmentVariable("CENTRAL_PORTAL_USERNAME"))
+    password.set(providers.environmentVariable("CENTRAL_PORTAL_PASSWORD"))
+    signingKey.set(providers.environmentVariable("SIGNING_KEY"))
+    signingPassword.set(providers.environmentVariable("SIGNING_PASSWORD"))
+    automaticRelease.set(
+        providers.environmentVariable("CENTRAL_PUBLISHING_TYPE")
+            .map { it.equals("AUTOMATIC", ignoreCase = true) }
+            .orElse(false)
+    )
+
+    pomName.set("libFDX Gradle plugin")
+    pomDescription.set("Gradle plugin for building libFDX web, desktop_c, PSP, and asset tasks.")
+    projectUrl.set("https://github.com/libfdx/libfdx")
+    developerId.set("Xpe")
+    developerName.set("Natan")
+    scmUrl.set("https://github.com/libfdx/libfdx")
+    scmConnection.set("scm:git:https://github.com/libfdx/libfdx.git")
+    scmDeveloperConnection.set("scm:git:ssh://git@github.com/libfdx/libfdx.git")
+}
 
 dependencies {
     implementation(libs.teavm.gradle.plugin)

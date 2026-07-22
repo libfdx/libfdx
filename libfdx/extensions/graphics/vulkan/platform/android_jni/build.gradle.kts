@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     id("maven-publish")
@@ -9,7 +8,6 @@ val androidCompileSdkVersion = providers.gradleProperty("androidCompileSdk").get
 val androidMinSdkVersion = providers.gradleProperty("androidMinSdk").get().toInt()
 val androidNdkVersion = providers.gradleProperty("androidNdkVersion").get()
 
-group = "${LibExt.fdxGroup}.vulkan"
 
 android {
     namespace = "io.github.libfdx.graphics.vulkan.android"

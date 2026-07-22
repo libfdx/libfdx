@@ -5,34 +5,31 @@
 [![Snapshot](https://img.shields.io/badge/snapshot---SNAPSHOT-red)](https://central.sonatype.com/service/rest/repository/browse/maven-snapshots/io/github/libfdx/fdx/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
-libFDX is a modular Java game framework. Shared game code uses provider-neutral
-APIs; a platform launcher selects the backend and graphics provider.
+libFDX is a modular Java game framework. Shared game code uses portable APIs;
+platform launchers select a backend and optional graphics/network providers.
+It is inspired by libGDX, but is a new framework rather than a fork or
+compatibility layer.
 
-The project is inspired by libGDX, but is a new framework rather than a fork or
-compatibility layer. It is under active early development: current contracts
-are documented, while planned work belongs in
-[GitHub issues](https://github.com/libfdx/libfdx/issues).
+The project is under active early development. Source and Javadocs define exact
+APIs, while implemented behavior is exercised by tests and samples. Planned
+work belongs in [GitHub issues](https://github.com/libfdx/libfdx/issues).
 
-## Mental Model
+## Structure
 
-Four layers keep portable code separate from platform details:
+libFDX separates four responsibilities:
 
-1. **Framework APIs** define application, files, input, display, networking,
-   graphics, assets, 2D, 3D, and UI concepts.
-2. **Extensions** add optional providers and features such as GL, Vulkan,
-   Direct3D 12, WGPU, WebRTC, ECS, and scenario validation.
-3. **Backends** run the application on desktop, web, Android, PSP, desktop C,
-   or iOS C.
-4. **Launchers** choose a backend/provider stack; shared game modules do not.
+1. **Framework modules** define portable runtime, graphics, asset, 2D, 3D, and
+   UI APIs.
+2. **Extensions** add optional providers and features.
+3. **Backends** connect the runtime to desktop, web, Android, and native
+   platforms.
+4. **Launchers** select the backend/provider stack for one application.
 
-The backend passes a typed `Fdx` runtime root to application code. User-created
-objects such as asset managers, sprite batches, UI roots, and ECS worlds remain
-explicitly owned by the application.
+The backend passes a typed `Fdx` runtime root to application code. User-owned
+objects such as asset managers, batches, UI roots, and ECS worlds remain
+explicit rather than becoming global services.
 
 ```java
-import io.github.libfdx.Fdx;
-import io.github.libfdx.application.ApplicationAdapter;
-
 public final class MyGame extends ApplicationAdapter {
     private Fdx fdx;
 
@@ -49,57 +46,40 @@ public final class MyGame extends ApplicationAdapter {
 }
 ```
 
+See [Architecture](docs/ARCHITECTURE.md) for the dependency model and
+[Common API](docs/COMMON_API.md) for cross-cutting lifecycle and ownership
+rules.
+
 ## Try It
+
+Use JDK 25 and the repository Gradle wrapper. From the repository root on
+Windows:
+
+```powershell
+.\gradlew.bat :samples:2d:sprite-movement:platform:desktop:sprite_movement_desktop_gl_run
+```
+
+A clean checkout uses configured published artifacts. Contributors changing
+checked-out framework code should enable local dependency mode; see
+[Contributing](CONTRIBUTING.md).
 
 Hosted tools and demos:
 
 - [Project Generator](https://libfdx.github.io/project-generator/)
 - [Tests](https://libfdx.github.io/tests/)
-- [Basic Sample](https://libfdx.github.io/samples/basic/)
-- [ECS Platformer](https://libfdx.github.io/samples/ecs-platformer/)
 
-Repository requirements:
+## Guides
 
-- JDK 25 and this repository's Gradle wrapper
-- Android SDK/device only for Android targets
-- Native platform toolchains only for native targets
+- [Contributing](CONTRIBUTING.md): checkout setup and validation.
+- [Shaders](docs/SHADERS.md): WGSL authoring and provider translation.
+- [UI Kit](docs/UI_KIT.md): UI ownership, composition, state, and rendering.
+- [Gradle plugin](libfdx/tools/gradle-plugin/README.md): project-generation DSL.
+- [Scenario validator](libfdx/extensions/scenario_validator/README.md): runtime
+  validation flows.
+- [2D samples](samples/2d/) and [benchmarks](benchmark/README.md): executable
+  examples and performance entry points.
 
-Run a desktop sample from the repository root on Windows:
-
-```powershell
-.\gradlew.bat :samples:basic:platform:desktop:basic_desktop_gl_run
-```
-
-A clean checkout resolves sample dependencies from the configured Maven
-snapshot, so the framework does not need to be published locally first.
-Contributors validating checked-out source should select local dependency mode;
-see [Building](docs/BUILDING.md#3-dependency-mode).
-
-Common/JVM/web/native modules target Java 25. Android application and library
-modules target Java 17 bytecode for Android toolchain compatibility.
-
-## Documentation
-
-Choose the document that matches the question:
-
-| Goal | Document |
-| --- | --- |
-| Understand module ownership, dependencies, providers, packages, and artifacts | [Architecture](docs/ARCHITECTURE.md) |
-| Understand portable behavior, lifecycle, ownership, nullability, and provider boundaries | [Common API](docs/COMMON_API.md) |
-| Build the checkout or prepare native artifacts | [Building](docs/BUILDING.md) |
-| Run samples | [Samples](docs/SAMPLES.md) |
-| Choose and configure a build-time generator | [Builders](docs/BUILDERS.md) |
-| Select validation for a change | [Testing](docs/TESTING.md) |
-| Understand WGSL authoring and provider translation | [Shaders](docs/SHADERS.md) |
-| Understand UI composition and runtime behavior | [UI Kit](docs/UI_KIT.md) |
-| Understand reusable runtime scenario validation | [Scenario Validator](docs/SCENARIO_VALIDATOR.md) |
-| Run performance benchmarks | [Benchmarks](benchmark/README.md) |
-
-Java source and published Javadoc artifacts are authoritative for exact class,
-method, and constructor signatures. The documents above explain the stable
-meaning and ownership of those APIs instead of copying every declaration.
-
-## Support And Community
+## Community
 
 - [Discord](https://discord.gg/CutyWq27Gu)
 - [Patreon](https://patreon.com/libfdx)
