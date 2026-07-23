@@ -191,6 +191,8 @@ public final class UiKitTest extends ApplicationAdapter {
     private UiState<String> floatInput;
     private UiState<String> messageInput;
     private UiState<String> growingMessageInput;
+    private UiBooleanState messageReadOnly;
+    private int textFieldSubmitCount;
     private UiScrollState navScroll;
     private UiScrollState settingsScroll;
     private UiScrollState[] sectionScrolls;
@@ -389,6 +391,7 @@ public final class UiKitTest extends ApplicationAdapter {
         messageInput = Ui.state("Line 1 message\nLine 2 with more text\nLine 3 keeps the body scrollable\n"
                 + "Line 4 still inside the area\nLine 5 validates clipping\nLine 6 remains reachable");
         growingMessageInput = Ui.state("Short message\nsecond line");
+        messageReadOnly = Ui.state(false);
         navScroll = new UiScrollState();
         settingsScroll = new UiScrollState();
         sectionScrolls = new UiScrollState[SECTIONS.length];
@@ -1013,7 +1016,7 @@ public final class UiKitTest extends ApplicationAdapter {
         fieldRow(content, "Float", floatInput, UiTextInputFilter.FLOAT);
         content.text("Message area", Ui.modifier().style("muted"));
         content.textArea(Ui.modifier().fillWidth().height(92.0f).semanticLabel("Message area").style("text-area"),
-                messageInput, UiTextAreaOptions.defaults().minHeight(92.0f));
+                messageInput, UiTextAreaOptions.defaults().readOnly(messageReadOnly.get()).minHeight(92.0f));
         content.text("Auto-grow area", Ui.modifier().style("muted"));
         content.textArea(Ui.modifier().fillWidth().semanticLabel("Auto grow text area").style("text-area"),
                 growingMessageInput, UiTextAreaOptions.defaults().autoGrow(true).minHeight(52.0f).maxHeight(118.0f));
@@ -1028,7 +1031,7 @@ public final class UiKitTest extends ApplicationAdapter {
         content.row(Ui.modifier().fillWidth().gap(8.0f), row -> {
             row.text(label, Ui.modifier().width(86.0f).style("muted"));
             row.textField(Ui.modifier().fillWidth().weight(1.0f).semanticLabel(label + " field"),
-                    state, inputFilter);
+                    state, inputFilter, "String".equals(label) ? () -> textFieldSubmitCount++ : null);
         });
     }
 
@@ -1919,6 +1922,8 @@ public final class UiKitTest extends ApplicationAdapter {
         stringField = find(root.rootNode(), UiNodeType.TEXT_FIELD, "String field");
         intField = find(root.rootNode(), UiNodeType.TEXT_FIELD, "Integer field");
         floatField = find(root.rootNode(), UiNodeType.TEXT_FIELD, "Float field");
+        assertMouseDoubleClickCopies(stringField, name.get().indexOf("Player") + 2, "Player",
+                "single-line field word");
         clickTextInputAt(stringField, 1.0f, 0.5f);
         input.dispatchTextInput("!");
         if (!name.get().endsWith("!")) {
@@ -1939,6 +1944,13 @@ public final class UiKitTest extends ApplicationAdapter {
         input.dispatchTextInput("abc7");
         clickTextInputAt(floatField, 1.0f, 0.5f);
         input.dispatchTextInput("x.5q");
+        stringField = find(root.rootNode(), UiNodeType.TEXT_FIELD, "String field");
+        clickTextInputAt(stringField, 1.0f, 0.5f);
+        int submitsBeforeEnter = textFieldSubmitCount;
+        pressKey(Key.ENTER);
+        if (textFieldSubmitCount != submitsBeforeEnter + 1) {
+            throw new FdxException("UiKitTest single-line Enter did not invoke its submit action");
+        }
         textSelectionChecked = true;
     }
 
@@ -2030,6 +2042,93 @@ public final class UiKitTest extends ApplicationAdapter {
         if (messageInput.get().indexOf("validated text area") < 0) {
             throw new FdxException("UiKitTest text area did not accept multiline text input: " + messageInput.get());
         }
+        String wordBoundaryText = "alpha você !!!  beta";
+        messageInput.set(wordBoundaryText);
+        settleValidationLayout();
+        messageArea = find(root.rootNode(), UiNodeType.TEXT_AREA, "Message area");
+        messageArea.scrollState().scrollTo(0.0f, 0.0f);
+        assertMouseDoubleClickCopies(messageArea, wordBoundaryText.indexOf("alpha") + 2, "alpha",
+                "ordinary word");
+        assertMouseDoubleClickCopies(messageArea, wordBoundaryText.indexOf("você") + 2, "você",
+                "Unicode word");
+        assertMouseDoubleClickCopies(messageArea, wordBoundaryText.indexOf("!!!") + 1, "!",
+                "punctuation");
+        assertMouseDoubleClickCopies(messageArea, wordBoundaryText.indexOf("  "), "  ",
+                "whitespace run");
+        assertTouchDoubleTapCopies(messageArea, wordBoundaryText.indexOf("beta") + 2, "beta",
+                "touch word");
+        clickTextInputAt(messageArea, 1.0f, 1.0f);
+        String verticalSelectionText = "line-00 selectable value\n"
+                + "line-01 selectable value\n"
+                + "line-02 selectable value\n"
+                + "line-03 selectable value\n"
+                + "line-04 selectable value\n"
+                + "line-05 selectable value\n"
+                + "line-06 selectable value\n"
+                + "line-07 selectable value\n"
+                + "line-08 selectable value\n"
+                + "line-09 selectable value\n"
+                + "line-10 selectable value\n"
+                + "line-11 selectable value";
+        messageInput.set(verticalSelectionText);
+        settleValidationLayout();
+        messageArea = find(root.rootNode(), UiNodeType.TEXT_AREA, "Message area");
+        messageArea.scrollState().scrollTo(0.0f, 0.0f);
+        dragTextAreaScrollGutter(messageArea, 8.0f, 0.2f, 0.8f);
+        messageArea = find(root.rootNode(), UiNodeType.TEXT_AREA, "Message area");
+        if (messageArea.scrollState().y() <= 0.0f) {
+            throw new FdxException("UiKitTest text area scrollbar gutter did not scroll");
+        }
+        String scrollMarker = "scrollbar-marker";
+        input.dispatchTextInput(scrollMarker);
+        String afterScrollbarDrag = messageInput.get();
+        if (afterScrollbarDrag.length() != verticalSelectionText.length() + scrollMarker.length()
+                || !verticalSelectionText.equals(afterScrollbarDrag.replace(scrollMarker, ""))) {
+            throw new FdxException("UiKitTest near-scrollbar drag became a text selection: "
+                    + afterScrollbarDrag);
+        }
+        messageInput.set(verticalSelectionText);
+        settleValidationLayout();
+        messageArea = find(root.rootNode(), UiNodeType.TEXT_AREA, "Message area");
+        float verticalScroll = 5.0f * 20.0f;
+        messageArea.scrollState().scrollTo(0.0f, verticalScroll);
+        settleValidationLayout();
+        messageArea = find(root.rootNode(), UiNodeType.TEXT_AREA, "Message area");
+        int scrolledWordOffset = verticalSelectionText.indexOf("line-07 selectable value")
+                + "line-07 ".length() + 3;
+        assertMouseDoubleClickCopies(messageArea, scrolledWordOffset, "selectable",
+                "vertically scrolled word");
+        dragTextAreaMouseLine(messageArea, 7, verticalScroll, 20.0f, 10.0f, 8.0f);
+        input.dispatchTextInput("replacement-line");
+        String expectedVerticalSelection = verticalSelectionText.replace(
+                "line-07 selectable value", "replacement-line");
+        if (!expectedVerticalSelection.equals(messageInput.get())) {
+            throw new FdxException("UiKitTest text area pointer selection ignored vertical scroll: "
+                    + messageInput.get());
+        }
+        String horizontalText = "horizontal caret validation " + "0123456789".repeat(80);
+        messageInput.set(horizontalText);
+        settleValidationLayout();
+        messageArea = find(root.rootNode(), UiNodeType.TEXT_AREA, "Message area");
+        messageArea.scrollState().scrollTo(0.0f, 0.0f);
+        clickTextInputAt(messageArea, 0.0f, 0.5f);
+        pressKey(Key.HOME);
+        for (int i = 0; i < horizontalText.length(); i++) {
+            input.dispatchKeyDown(Key.RIGHT);
+            input.dispatchKeyUp(Key.RIGHT);
+        }
+        settleValidationLayout();
+        messageArea = find(root.rootNode(), UiNodeType.TEXT_AREA, "Message area");
+        if (messageArea.scrollState().x() <= 0.0f) {
+            throw new FdxException("UiKitTest text area did not horizontally scroll to keep the right-moving "
+                    + "caret visible");
+        }
+        clickTextInputAt(messageArea, 1.0f, 0.5f);
+        input.dispatchTextInput("!");
+        if (!messageInput.get().endsWith("!")) {
+            throw new FdxException("UiKitTest text area pointer hit testing ignored horizontal scroll: "
+                    + messageInput.get());
+        }
         growingMessageInput.set("Auto grow line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8");
         settleValidationLayout();
         growArea = find(root.rootNode(), UiNodeType.TEXT_AREA, "Auto grow text area");
@@ -2037,6 +2136,30 @@ public final class UiKitTest extends ApplicationAdapter {
             throw new FdxException("UiKitTest auto-grow text area did not respect min/max height: "
                     + growArea.bounds().height());
         }
+        messageReadOnly.set(true);
+        showValidationSection(SECTION_BUTTONS);
+        settleValidationLayout();
+        showValidationSection(SECTION_TEXT_FIELDS);
+        settleValidationLayout();
+        messageArea = find(root.rootNode(), UiNodeType.TEXT_AREA, "Message area");
+        String readOnlyValue = messageInput.get();
+        if (textInputController != null) {
+            textInputController.reset();
+        }
+        clickTextInputAt(messageArea, 0.5f, 0.5f);
+        input.dispatchTextInput("must-not-edit");
+        pressKey(Key.BACKSPACE);
+        pressKey(Key.DELETE);
+        pressKey(Key.ENTER);
+        if (!readOnlyValue.equals(messageInput.get())) {
+            throw new FdxException("UiKitTest read-only text area accepted an edit: " + messageInput.get());
+        }
+        if (textInputController != null
+                && (textInputController.visible() || textInputController.showCount() > 0)) {
+            throw new FdxException("UiKitTest read-only text area opened a platform editor");
+        }
+        messageReadOnly.set(false);
+        settleValidationLayout();
         textAreaChecked = true;
     }
 
@@ -2198,6 +2321,53 @@ public final class UiKitTest extends ApplicationAdapter {
         settleValidationLayout();
     }
 
+    private void assertMouseDoubleClickCopies(UiNode node, int characterOffset, String expected, String label) {
+        int[] point = textCharacterPoint(node, characterOffset);
+        input.dispatchPointerMoved(point[0], point[1]);
+        input.dispatchPointerDown(MouseButton.LEFT, point[0], point[1]);
+        input.dispatchPointerUp(MouseButton.LEFT, point[0], point[1]);
+        input.dispatchPointerDown(MouseButton.LEFT, point[0], point[1]);
+        input.dispatchPointerUp(MouseButton.LEFT, point[0], point[1]);
+        settleValidationLayout();
+        pressShortcut(Key.C);
+        String copied = input.clipboard().getText();
+        if (!expected.equals(copied)) {
+            throw new FdxException("UiKitTest double-click selected the wrong " + label
+                    + ": expected='" + expected + "', copied='" + copied + "'");
+        }
+        logger.info("UiKitTest verified mouse double-click " + label + ": copied='" + copied + "'");
+    }
+
+    private void assertTouchDoubleTapCopies(UiNode node, int characterOffset, String expected, String label) {
+        int[] point = textCharacterPoint(node, characterOffset);
+        input.dispatchTouchDown(0, point[0], point[1], 1.0f);
+        input.dispatchTouchUp(0, point[0], point[1], 1.0f);
+        input.dispatchTouchDown(0, point[0], point[1], 1.0f);
+        input.dispatchTouchUp(0, point[0], point[1], 1.0f);
+        settleValidationLayout();
+        pressShortcut(Key.C);
+        String copied = input.clipboard().getText();
+        if (!expected.equals(copied)) {
+            throw new FdxException("UiKitTest double-tap selected the wrong " + label
+                    + ": expected='" + expected + "', copied='" + copied + "'");
+        }
+        logger.info("UiKitTest verified touch double-tap " + label + ": copied='" + copied + "'");
+    }
+
+    private int[] textCharacterPoint(UiNode node, int characterOffset) {
+        if (node == null) {
+            throw new FdxException("UiKitTest cannot resolve a character point for a null text node");
+        }
+        UiRect start = root.textCaretBounds(node, characterOffset);
+        UiRect end = root.textCaretBounds(node, characterOffset + 1);
+        if (start == null || end == null) {
+            throw new FdxException("UiKitTest could not resolve caret bounds for text offset " + characterOffset);
+        }
+        int x = root.displayX((start.x() + end.x()) * 0.5f);
+        int y = root.displayY(start.y() + start.height() * 0.5f);
+        return new int[] { x, y };
+    }
+
     private void dragTextInput(UiNode node, float startPercent, float endPercent) {
         if (node == null) {
             return;
@@ -2229,6 +2399,38 @@ public final class UiKitTest extends ApplicationAdapter {
         settleValidationLayout();
     }
 
+    private void dragTextAreaMouseLine(UiNode node, int lineIndex, float scrollY, float lineHeight,
+            float horizontalPadding, float verticalPadding) {
+        if (node == null) {
+            return;
+        }
+        UiRect bounds = node.bounds();
+        float lineCenterY = bounds.y() + verticalPadding + lineIndex * lineHeight - scrollY + lineHeight * 0.5f;
+        int downX = root.displayX(bounds.x() + horizontalPadding);
+        int upX = root.displayX(bounds.right() - horizontalPadding - 6.0f);
+        int y = root.displayY(lineCenterY);
+        input.dispatchPointerMoved(downX, y);
+        input.dispatchPointerDown(MouseButton.LEFT, downX, y);
+        input.dispatchPointerMoved(upX, y);
+        input.dispatchPointerUp(MouseButton.LEFT, upX, y);
+        settleValidationLayout();
+    }
+
+    private void dragTextAreaScrollGutter(UiNode node, float rightInset, float startYPercent, float endYPercent) {
+        if (node == null) {
+            return;
+        }
+        UiRect bounds = node.bounds();
+        int x = root.displayX(bounds.right() - rightInset);
+        int downY = root.displayY(bounds.y() + insideExtent(bounds.height(), startYPercent));
+        int upY = root.displayY(bounds.y() + insideExtent(bounds.height(), endYPercent));
+        input.dispatchPointerMoved(x, downY);
+        input.dispatchPointerDown(MouseButton.LEFT, x, downY);
+        input.dispatchPointerMoved(x, upY);
+        input.dispatchPointerUp(MouseButton.LEFT, x, upY);
+        settleValidationLayout();
+    }
+
     private float insideExtent(float extent, float percent) {
         float clamped = clamp(percent, 0.0f, 1.0f);
         float value = extent * clamped;
@@ -2243,6 +2445,12 @@ public final class UiKitTest extends ApplicationAdapter {
         input.dispatchKeyDown(key);
         input.dispatchKeyUp(key);
         input.dispatchKeyUp(Key.CONTROL_LEFT);
+        settleValidationLayout();
+    }
+
+    private void pressKey(Key key) {
+        input.dispatchKeyDown(key);
+        input.dispatchKeyUp(key);
         settleValidationLayout();
     }
 

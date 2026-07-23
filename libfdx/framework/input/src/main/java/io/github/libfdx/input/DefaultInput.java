@@ -17,6 +17,7 @@ public final class DefaultInput implements Input {
     private final Cursor cursor;
     private final Gamepads gamepads;
     private final TextInputController textInputController;
+    private final Clipboard clipboard;
     private final List<InputProcessor> processors = new ArrayList<InputProcessor>();
     private final Set<Key> keys = EnumSet.noneOf(Key.class);
     private final Set<MouseButton> buttons = EnumSet.noneOf(MouseButton.class);
@@ -57,11 +58,27 @@ public final class DefaultInput implements Input {
      */
     public DefaultInput(ProviderId providerId, InputCapabilities capabilities, Cursor cursor, Gamepads gamepads,
             TextInputController textInputController) {
+        this(providerId, capabilities, cursor, gamepads, textInputController, new MemoryClipboard());
+    }
+
+    /**
+     * Creates a default input.
+     *
+     * @param providerId the provider ID
+     * @param capabilities the capabilities
+     * @param cursor the cursor
+     * @param gamepads the gamepads
+     * @param textInputController the text input controller
+     * @param clipboard the text clipboard
+     */
+    public DefaultInput(ProviderId providerId, InputCapabilities capabilities, Cursor cursor, Gamepads gamepads,
+            TextInputController textInputController, Clipboard clipboard) {
         this.providerId = providerId != null ? providerId : ProviderId.of("default_input");
         this.capabilities = capabilities != null ? capabilities : DefaultInputCapabilities.none();
         this.cursor = cursor;
         this.gamepads = gamepads;
         this.textInputController = textInputController != null ? textInputController : TextInputController.NONE;
+        this.clipboard = clipboard != null ? clipboard : new MemoryClipboard();
     }
 
     /**
@@ -122,6 +139,16 @@ public final class DefaultInput implements Input {
     @Override
     public void hideTextInput() {
         textInputController.hideTextInput();
+    }
+
+    /**
+     * Returns the text clipboard.
+     *
+     * @return the clipboard
+     */
+    @Override
+    public Clipboard clipboard() {
+        return clipboard;
     }
 
     /**

@@ -133,6 +133,16 @@ public final class FreeTypeFontOptions {
         for (char c = 32; c <= 126; c++) {
             builder.append(c);
         }
+        // Include the printable Latin-1 range by default. Restricting the atlas to ASCII
+        // made ordinary localized text such as "você", "ótimo", "não", and "ação"
+        // silently render through the fallback question-mark glyph.
+        for (char c = 160; c <= 255; c++) {
+            builder.append(c);
+        }
+        for (char c = 0x0100; c <= 0x017f; c++) {
+            builder.append(c);
+        }
+        builder.append("–—‘’“”•…€");
         return builder.toString();
     }
 

@@ -536,6 +536,20 @@ public final class UiScope {
      * @return the text field
      */
     public UiNode textField(UiModifier modifier, UiState<String> state, UiTextInputFilter inputFilter) {
+        return textField(modifier, state, inputFilter, null);
+    }
+
+    /**
+     * Runs the text field step with an action invoked when Enter is pressed.
+     *
+     * @param modifier the modifier
+     * @param state the state
+     * @param inputFilter the input filter
+     * @param submitAction the Enter-key submit action
+     * @return the text field
+     */
+    public UiNode textField(UiModifier modifier, UiState<String> state, UiTextInputFilter inputFilter,
+            Runnable submitAction) {
         UiNode node = addNode(UiNodeType.TEXT_FIELD, null, interactive(modifier));
         node.value(state != null ? state.get() : "");
         UiTextFieldModel model = node.descriptor() instanceof UiTextFieldModel
@@ -543,7 +557,9 @@ public final class UiScope {
                 : new UiTextFieldModel(state);
         model.state(state);
         model.multiline(false);
+        model.readOnly(false);
         model.inputFilter(inputFilter);
+        model.submitAction(submitAction);
         node.descriptor(model);
         return node;
     }
@@ -596,6 +612,7 @@ public final class UiScope {
                 : new UiTextFieldModel(state);
         model.state(state);
         model.multiline(true);
+        model.readOnly(options != null && options.readOnly());
         model.inputFilter(UiTextInputFilter.STRING);
         model.textAreaOptions(options);
         UiScrollState scrollState = root.scrollState(node.derivedKey(NODE_KEY_TEXT_AREA_SCROLL, ":text-area"));

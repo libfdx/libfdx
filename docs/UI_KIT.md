@@ -107,6 +107,18 @@ fonts at a suitable effective UI scale to avoid blurry upscaling.
 Text fields retain cursor, selection, filtering, masking, validation, and
 scroll state. Focused editors use the platform text-input session exposed by
 `Input`; native/DOM editor presentation remains backend-owned.
+Single-line fields can provide a submit action through the
+`textField(modifier, state, inputFilter, submitAction)` overload; Enter invokes
+that action while multiline text areas continue to insert a newline.
+`UiTextAreaOptions.readOnly(true)` keeps output text scrollable and selectable
+for copying without opening a platform editor or allowing mutations. Ctrl+C,
+Ctrl+X, and Ctrl+V use `Input.clipboard()`; the desktop backend bridges that
+service to the operating-system clipboard. Multiline text, caret, hit testing,
+and selection highlights all use the same resolved font line height so their
+geometry remains aligned after scrolling. A primary-button double-click or
+touch double-tap selects the text unit under the pointer in the shared UI Kit
+input path. Unicode letters and combining marks remain in one word; whitespace
+runs are selected together; punctuation is selected independently.
 
 `UiRoot` owns hit testing and event routing for pointer/touch, wheel scrolling,
 keyboard/text focus, navigation, gestures, and drag/drop. Pointer capture keeps

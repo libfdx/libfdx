@@ -135,7 +135,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         display = new DesktopDisplay(windowHandle, displayConfig.title());
         display.refreshSizes();
         input = new DefaultInput(ProviderId.of("desktop_input"), DefaultInputCapabilities.desktop(),
-                new DefaultCursor(), new DefaultGamepads());
+                new DefaultCursor(), new DefaultGamepads(), null, new DesktopClipboard(windowHandle));
         installCallbacks(listener);
 
         DefaultFileSystem files = new DefaultFileSystem();

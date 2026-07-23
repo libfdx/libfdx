@@ -185,7 +185,10 @@ public final class UiG2DRenderer implements UiRenderer {
         }
         if (isTextInput(node)) {
             drawTextSelection(root, node, alpha);
-            if (node.focused()) {
+            UiTextFieldModel model = node.descriptor() instanceof UiTextFieldModel
+                    ? (UiTextFieldModel) node.descriptor()
+                    : null;
+            if (node.focused() && model != null && !model.readOnly()) {
                 drawTextInputCaret(root, node, alpha);
             }
         }
@@ -477,13 +480,16 @@ public final class UiG2DRenderer implements UiRenderer {
         int start = model.selectionMin();
         int end = model.selectionMax();
         if (node.type() == UiNodeType.TEXT_AREA) {
-            drawMultilineSelection(root, model.value(), start, end, bounds, style, textAreaScrollY(node), alpha);
+            drawMultilineSelection(root, model.value(), start, end, bounds, style,
+                    textAreaScrollX(node), textAreaScrollY(node), alpha);
         } else {
             String text = nodeText(node);
             int safeStart = Math.max(0, Math.min(start, text.length()));
             int safeEnd = Math.max(safeStart, Math.min(end, text.length()));
-            float x = bounds.x() + textWidth(root, text, 0, safeStart, style);
-            float width = textWidth(root, text, safeStart, safeEnd, style);
+            float startX = textWidth(root, text, 0, safeStart, style);
+            float endX = textWidth(root, text, 0, safeEnd, style);
+            float x = bounds.x() + startX;
+            float width = Math.max(0.0f, endX - startX);
             float height = Math.min(bounds.height(), Math.max(12.0f, textLineHeight(root, style)));
             float y = bounds.y() + Math.max(0.0f, (bounds.height() - height) * 0.5f);
             drawRect(root, x, y, width, height, 0.25f, 0.50f, 0.90f, alpha * 0.65f);
@@ -491,7 +497,7 @@ public final class UiG2DRenderer implements UiRenderer {
     }
 
     private void drawMultilineSelection(UiRoot root, String value, int start, int end, UiRect bounds,
-            UiTextStyle style, float scrollY, float alpha) {
+            UiTextStyle style, float scrollX, float scrollY, float alpha) {
         String text = value != null ? value : "";
         float lineHeight = textLineHeight(root, style);
         int lineStart = 0;
@@ -503,8 +509,10 @@ public final class UiG2DRenderer implements UiRenderer {
                 if (rangeEnd > rangeStart || (start <= i && end > i && rangeStart == i)) {
                     int from = Math.max(lineStart, rangeStart);
                     int to = Math.max(from, Math.min(i, rangeEnd));
-                    float x = bounds.x() + textWidth(root, text, lineStart, from, style);
-                    float width = Math.max(3.0f, textWidth(root, text, from, to, style));
+                    float startX = textWidth(root, text, lineStart, from, style);
+                    float endX = textWidth(root, text, lineStart, to, style);
+                    float x = bounds.x() + startX - scrollX;
+                    float width = Math.max(3.0f, endX - startX);
                     float y = bounds.y() + lineIndex * lineHeight - scrollY;
                     drawRect(root, x, y, width, lineHeight, 0.25f, 0.50f, 0.90f, alpha * 0.65f);
                 }
@@ -630,7 +638,7 @@ public final class UiG2DRenderer implements UiRenderer {
         }
         if (node.type() == UiNodeType.TEXT_AREA) {
             drawTextAreaBitmapText(root, font, text, nodeTextBounds(root, node), textStyle, alpha,
-                    textAreaScrollY(node));
+                    textAreaScrollX(node), textAreaScrollY(node));
             return;
         }
         drawBitmapText(root, font, text, node, nodeTextBounds(root, node), textStyle, alpha);
@@ -684,6 +692,7 @@ public final class UiG2DRenderer implements UiRenderer {
         float x = bounds.x();
         float y;
         if (node.type() == UiNodeType.TEXT_AREA) {
+            x -= textAreaScrollX(node);
             y = bounds.y() - textAreaScrollY(node);
         } else {
             y = bounds.y() + Math.max(0.0f, (bounds.height() - 7.0f) * 0.5f);
@@ -1033,15 +1042,17 @@ public final class UiG2DRenderer implements UiRenderer {
     }
 
     private void drawTextAreaBitmapText(UiRoot root, BitmapFont font, String text, UiRect bounds, UiTextStyle style,
-            float alpha, float scrollY) {
+            float alpha, float scrollX, float scrollY) {
+        float x = bounds.x() - scrollX;
         float y = bounds.y() - scrollY;
+        float lineHeight = textLineHeight(root, style);
         int start = 0;
         int lineIndex = 0;
         String value = text != null ? text : "";
         for (int i = 0; i <= value.length(); i++) {
             if (i == value.length() || value.charAt(i) == '\n') {
-                drawBitmapLine(root, font, value, start, i, bounds.x(),
-                        y + lineIndex * style.lineHeight(), style.size(), style.color(), alpha);
+                drawBitmapLine(root, font, value, start, i, x,
+                        y + lineIndex * lineHeight, style.size(), style.color(), alpha);
                 start = i + 1;
                 lineIndex++;
             }
@@ -1312,6 +1323,13 @@ public final class UiG2DRenderer implements UiRenderer {
     private float textAreaScrollY(UiNode node) {
         if (node.scrollState() != null) {
             return node.scrollState().y();
+        }
+        return 0.0f;
+    }
+
+    private float textAreaScrollX(UiNode node) {
+        if (node.scrollState() != null) {
+            return node.scrollState().x();
         }
         return 0.0f;
     }

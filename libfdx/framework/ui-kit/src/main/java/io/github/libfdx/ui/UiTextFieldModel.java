@@ -17,6 +17,7 @@ final class UiTextFieldModel {
     private UiTextAreaOptions textAreaOptions = UiTextAreaOptions.defaults();
     private UiScrollState scrollState;
     private UiTextInputFilter inputFilter = UiTextInputFilter.STRING;
+    private Runnable submitAction;
 
     UiTextFieldModel(UiState<String> state) {
         this.state = state;
@@ -122,6 +123,18 @@ final class UiTextFieldModel {
 
     void inputFilter(UiTextInputFilter inputFilter) {
         this.inputFilter = inputFilter != null ? inputFilter : UiTextInputFilter.STRING;
+    }
+
+    void submitAction(Runnable submitAction) {
+        this.submitAction = submitAction;
+    }
+
+    boolean submit() {
+        if (submitAction == null) {
+            return false;
+        }
+        submitAction.run();
+        return true;
     }
 
     boolean multiline() {

@@ -50,6 +50,13 @@ public interface Input extends FdxService, ProviderHandle {
     void hideTextInput();
 
     /**
+     * Returns the text clipboard used by this input backend.
+     *
+     * @return the clipboard
+     */
+    Clipboard clipboard();
+
+    /**
      * Returns whether key pressed is enabled or true.
      *
      * @param key the key

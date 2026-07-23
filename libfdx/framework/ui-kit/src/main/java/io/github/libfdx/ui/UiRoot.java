@@ -7,6 +7,7 @@ import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.input.Input;
 import io.github.libfdx.input.Key;
 import io.github.libfdx.input.KeyEvent;
+import io.github.libfdx.input.MouseButton;
 import io.github.libfdx.input.PointerEvent;
 import io.github.libfdx.input.PointerType;
 import io.github.libfdx.input.TextInputEvent;
@@ -39,10 +40,12 @@ public final class UiRoot implements Disposable, UiStateListener {
     private static final float CHECKBOX_LABEL_GAP = 8.0f;
     private static final float WINDOW_TITLE_HEIGHT = 30.0f;
     private static final float WINDOW_RESIZE_HANDLE = 18.0f;
-    private static final float SCROLLBAR_SIZE = 4.0f;
+    private static final float SCROLLBAR_HIT_SIZE = 12.0f;
     private static final float SCROLLBAR_MIN_THUMB = 22.0f;
     private static final float SCROLL_BODY_DRAG_SLOP = 8.0f;
     private static final float TOUCH_TEXT_AREA_DRAG_SLOP = 8.0f;
+    private static final float TEXT_TAP_SLOP = 6.0f;
+    private static final long DOUBLE_TEXT_TAP_TIMEOUT_NANOS = 500_000_000L;
     private static final int RECT_WINDOW_TITLE = 3;
     private static final int RECT_WINDOW_RESIZE = 4;
     private static final int RECT_TEXT_INPUT = 5;
@@ -136,13 +139,21 @@ public final class UiRoot implements Disposable, UiStateListener {
     private float pendingScrollBodyStartY;
     private UiNode activeTextNode;
     private int activeTextSelectionAnchor;
+    private float activeTextSelectionStartX;
+    private float activeTextSelectionStartY;
+    private boolean activeTextSelectionMoved;
+    private UiNode lastTextTapNode;
+    private PointerType lastTextTapType;
+    private int lastTextTapPointerId;
+    private long lastTextTapTimeNanos = Long.MIN_VALUE;
+    private float lastTextTapX;
+    private float lastTextTapY;
     private UiNode pendingTouchTextAreaNode;
     private float pendingTouchTextAreaStartX;
     private float pendingTouchTextAreaStartY;
     private UiNode pendingTextInputTapNode;
     private float pendingTextInputTapStartX;
     private float pendingTextInputTapStartY;
-    private String clipboardText = "";
     private int nextWindowZOrder = 1;
     private long childOrderRevision;
     private long compositionPass;
@@ -425,6 +436,16 @@ public final class UiRoot implements Disposable, UiStateListener {
      */
     public float uiY(int displayY) {
         return displayY / effectiveUiScale();
+    }
+
+    /**
+     * Returns the resolved line height used to render and hit-test the supplied text node.
+     *
+     * @param node the text node
+     * @return the resolved logical line height
+     */
+    public float textLineHeight(UiNode node) {
+        return textLineHeight(textStyleFor(node));
     }
 
     /**
@@ -775,6 +796,12 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (activeTextNode == node) {
             activeTextNode = null;
             activeTextSelectionAnchor = 0;
+            activeTextSelectionStartX = 0.0f;
+            activeTextSelectionStartY = 0.0f;
+            activeTextSelectionMoved = false;
+        }
+        if (lastTextTapNode == node) {
+            clearLastTextTap();
         }
     }
 
@@ -908,6 +935,9 @@ public final class UiRoot implements Disposable, UiStateListener {
         float x = uiX(event.x());
         float y = uiY(event.y());
         HitResult hit = hitTestResult(x, y);
+        if (!isTextInput(hit.node)) {
+            clearLastTextTap();
+        }
         setHovered(hit.node);
         clearPendingScrollBodyGesture();
         clearPendingTextInputTapGesture();
@@ -967,6 +997,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         float y = uiY(event.y());
         HitResult hit = hitTestResult(x, y);
         boolean handled = false;
+        UiNode completedTextTapNode = null;
         if (activeScrollNode != null) {
             activeScrollNode = null;
             activeScrollPointerMode = SCROLL_POINTER_NONE;
@@ -975,8 +1006,16 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         if (activeTextNode != null) {
             updateActiveTextSelection(x, y);
+            if (!activeTextSelectionMoved && activeTextNode == hit.node) {
+                completedTextTapNode = activeTextNode;
+            } else {
+                clearLastTextTap();
+            }
             activeTextNode = null;
             activeTextSelectionAnchor = 0;
+            activeTextSelectionStartX = 0.0f;
+            activeTextSelectionStartY = 0.0f;
+            activeTextSelectionMoved = false;
             handled = true;
         }
         if (pendingTouchTextAreaNode != null) {
@@ -1009,10 +1048,14 @@ public final class UiRoot implements Disposable, UiStateListener {
                 } else if (!handled && isTextInput(pressedNode)) {
                     if (pendingTextInputTap == pressedNode) {
                         activateTextInputTap(pressedNode, x, y);
+                        completedTextTapNode = pressedNode;
                     }
                     handled = true;
                 }
             }
+        }
+        if (completedTextTapNode != null) {
+            completeTextTap(completedTextTapNode, event, x, y);
         }
         pressedNode = null;
         setHovered(hit.node);
@@ -1098,11 +1141,17 @@ public final class UiRoot implements Disposable, UiStateListener {
                 updatePlatformTextInput(focusedNode);
                 return true;
             }
-            if (event.key() == Key.ENTER && model.multiline()) {
-                model.insert("\n");
-                ensureTextCursorVisible(focusedNode);
-                updatePlatformTextInput(focusedNode);
-                return true;
+            if (event.key() == Key.ENTER) {
+                if (model.multiline()) {
+                    model.insert("\n");
+                    ensureTextCursorVisible(focusedNode);
+                    updatePlatformTextInput(focusedNode);
+                    return true;
+                }
+                if (model.submit()) {
+                    updatePlatformTextInput(focusedNode);
+                    return true;
+                }
             }
         }
         if ((event.key() == Key.ENTER || event.key() == Key.SPACE) && focusedNode.activatable()) {
@@ -2339,6 +2388,9 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         activeTextNode = node;
         activeTextSelectionAnchor = model.selectionStart();
+        activeTextSelectionStartX = x;
+        activeTextSelectionStartY = y;
+        activeTextSelectionMoved = false;
         ensureTextCursorVisible(node);
         updatePlatformTextInput(node);
         requestCompose();
@@ -2348,6 +2400,12 @@ public final class UiRoot implements Disposable, UiStateListener {
         UiTextFieldModel model = textModel(activeTextNode);
         if (model == null) {
             return;
+        }
+        float deltaX = x - activeTextSelectionStartX;
+        float deltaY = y - activeTextSelectionStartY;
+        float slop = TEXT_TAP_SLOP;
+        if (deltaX * deltaX + deltaY * deltaY >= slop * slop) {
+            activeTextSelectionMoved = true;
         }
         model.select(activeTextSelectionAnchor, textIndexAtPointer(activeTextNode, x, y));
         ensureTextCursorVisible(activeTextNode);
@@ -2396,8 +2454,10 @@ public final class UiRoot implements Disposable, UiStateListener {
         String value = model.value();
         UiTextStyle style = textStyleFor(node);
         UiRect bounds = textInputBounds(node);
+        float localX = x - bounds.x();
         float localY = y - bounds.y();
         if (node.type() == UiNodeType.TEXT_AREA && model.scrollState() != null) {
+            localX += model.scrollState().x();
             localY += model.scrollState().y();
         }
         int line = node.type() == UiNodeType.TEXT_AREA
@@ -2405,7 +2465,150 @@ public final class UiRoot implements Disposable, UiStateListener {
                 : 0;
         int lineStart = lineStart(value, line);
         int lineEnd = lineEnd(value, lineStart);
-        return textIndexForX(value, lineStart, lineEnd, style, Math.max(0.0f, x - bounds.x()));
+        return textIndexForX(value, lineStart, lineEnd, style, Math.max(0.0f, localX));
+    }
+
+    private int textCharacterAtPointer(UiNode node, float x, float y) {
+        UiTextFieldModel model = textModel(node);
+        if (model == null) {
+            return -1;
+        }
+        String value = model.value();
+        UiTextStyle style = textStyleFor(node);
+        UiRect bounds = textInputBounds(node);
+        float localX = x - bounds.x();
+        float localY = y - bounds.y();
+        if (node.type() == UiNodeType.TEXT_AREA && model.scrollState() != null) {
+            localX += model.scrollState().x();
+            localY += model.scrollState().y();
+        }
+        int line = node.type() == UiNodeType.TEXT_AREA
+                ? Math.max(0, Math.min(textLineCount(value) - 1,
+                        (int) (localY / Math.max(1.0f, textLineHeight(style)))))
+                : 0;
+        int start = lineStart(value, line);
+        int end = lineEnd(value, start);
+        if (start >= end || localX < 0.0f) {
+            return -1;
+        }
+        UiTextStyle actual = style != null ? style : UiTextStyle.text();
+        BitmapFont font = textFont(actual);
+        float scale = font != null ? font.scale(actual.size()) : 1.0f;
+        float cursor = 0.0f;
+        int previous = -1;
+        for (int i = start; i < end; i++) {
+            int codePoint = value.charAt(i);
+            BitmapFontGlyph glyph = font != null ? font.glyph(codePoint) : null;
+            float next = cursor;
+            if (glyph != null) {
+                if (previous >= 0) {
+                    next += font.kerning(previous, codePoint) * scale;
+                }
+                next += glyph.xAdvance() * scale;
+                previous = codePoint;
+            } else {
+                next += font != null ? actual.size() * 0.5f : 8.0f;
+                previous = -1;
+            }
+            if (localX < next) {
+                return i;
+            }
+            cursor = next;
+        }
+        return -1;
+    }
+
+    private void completeTextTap(UiNode node, PointerEvent event, float x, float y) {
+        if (node == null || event == null || !isPrimaryTextTap(event)) {
+            clearLastTextTap();
+            return;
+        }
+        long elapsedNanos = event.timeNanos() - lastTextTapTimeNanos;
+        float deltaX = x - lastTextTapX;
+        float deltaY = y - lastTextTapY;
+        float slop = TEXT_TAP_SLOP;
+        boolean doubleTap = node == lastTextTapNode
+                && event.type() == lastTextTapType
+                && event.pointerId() == lastTextTapPointerId
+                && elapsedNanos >= 0L
+                && elapsedNanos <= DOUBLE_TEXT_TAP_TIMEOUT_NANOS
+                && deltaX * deltaX + deltaY * deltaY <= slop * slop;
+        if (doubleTap) {
+            selectTextUnitAtPointer(node, x, y);
+            clearLastTextTap();
+            return;
+        }
+        lastTextTapNode = node;
+        lastTextTapType = event.type();
+        lastTextTapPointerId = event.pointerId();
+        lastTextTapTimeNanos = event.timeNanos();
+        lastTextTapX = x;
+        lastTextTapY = y;
+    }
+
+    private boolean isPrimaryTextTap(PointerEvent event) {
+        return event.type() == PointerType.TOUCH || event.button() == MouseButton.LEFT;
+    }
+
+    private void clearLastTextTap() {
+        lastTextTapNode = null;
+        lastTextTapType = null;
+        lastTextTapPointerId = 0;
+        lastTextTapTimeNanos = Long.MIN_VALUE;
+        lastTextTapX = 0.0f;
+        lastTextTapY = 0.0f;
+    }
+
+    private void selectTextUnitAtPointer(UiNode node, float x, float y) {
+        UiTextFieldModel model = textModel(node);
+        if (model == null) {
+            return;
+        }
+        String value = model.value();
+        int characterIndex = textCharacterAtPointer(node, x, y);
+        if (characterIndex < 0 || characterIndex >= value.length()) {
+            model.cursor(textIndexAtPointer(node, x, y));
+        } else {
+            int codePoint = value.codePointAt(characterIndex);
+            int category = textSelectionCategory(codePoint);
+            int start = characterIndex;
+            int end = characterIndex + Character.charCount(codePoint);
+            if (category != 2) {
+                while (start > 0) {
+                    int previous = value.codePointBefore(start);
+                    if (previous == '\n' || textSelectionCategory(previous) != category) {
+                        break;
+                    }
+                    start -= Character.charCount(previous);
+                }
+                while (end < value.length()) {
+                    int next = value.codePointAt(end);
+                    if (next == '\n' || textSelectionCategory(next) != category) {
+                        break;
+                    }
+                    end += Character.charCount(next);
+                }
+            }
+            model.select(start, end);
+        }
+        ensureTextCursorVisible(node);
+        updatePlatformTextInput(node);
+        requestCompose();
+    }
+
+    private int textSelectionCategory(int codePoint) {
+        int type = Character.getType(codePoint);
+        if (Character.isLetterOrDigit(codePoint)
+                || type == Character.NON_SPACING_MARK
+                || type == Character.COMBINING_SPACING_MARK
+                || type == Character.ENCLOSING_MARK
+                || type == Character.CONNECTOR_PUNCTUATION) {
+            return 0;
+        }
+        if (Character.isWhitespace(codePoint)) {
+            return 1;
+        }
+        return 2;
     }
 
     private int lineStart(String value, int targetLine) {
@@ -2447,20 +2650,43 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (text == null || start >= end || x <= 0.0f) {
             return Math.max(0, start);
         }
+        UiTextStyle actual = style != null ? style : UiTextStyle.text();
         float cursor = 0.0f;
         int safeStart = Math.max(0, Math.min(start, text.length()));
         int safeEnd = Math.max(safeStart, Math.min(end, text.length()));
+        BitmapFont font = textFont(actual);
+        float scale = font != null ? font.scale(actual.size()) : 1.0f;
+        int previous = -1;
         for (int i = safeStart; i < safeEnd; i++) {
-            float advance = textWidth(text, i, i + 1, style);
-            if (x < cursor + advance * 0.5f) {
+            int codePoint = text.charAt(i);
+            BitmapFontGlyph glyph = font != null ? font.glyph(codePoint) : null;
+            float next = cursor;
+            if (glyph != null) {
+                if (previous >= 0) {
+                    next += font.kerning(previous, codePoint) * scale;
+                }
+                next += glyph.xAdvance() * scale;
+                previous = codePoint;
+            } else {
+                next += font != null ? actual.size() * 0.5f : 8.0f;
+                previous = -1;
+            }
+            if (x < (cursor + next) * 0.5f) {
                 return i;
             }
-            cursor += advance;
+            cursor = next;
         }
         return safeEnd;
     }
 
-    UiRect textCaretBounds(UiNode node, int offset) {
+    /**
+     * Returns the rendered caret bounds for a text offset.
+     *
+     * @param node the text field or text area node
+     * @param offset the UTF-16 text offset
+     * @return the caret bounds, or {@code null} when the node is not a text input
+     */
+    public UiRect textCaretBounds(UiNode node, int offset) {
         UiTextFieldModel model = textModel(node);
         if (model == null) {
             return null;
@@ -2474,7 +2700,8 @@ public final class UiRoot implements Disposable, UiStateListener {
             int line = lineIndexForOffset(text, cursor);
             int start = lineStart(text, line);
             int end = Math.max(start, Math.min(cursor, lineEnd(text, start)));
-            float x = bounds.x() + textWidth(text, start, end, style);
+            float scrollX = model.scrollState() != null ? model.scrollState().x() : 0.0f;
+            float x = bounds.x() + textWidth(text, start, end, style) - scrollX;
             float y = bounds.y() + line * textLineHeight(style)
                     - (model.scrollState() != null ? model.scrollState().y() : 0.0f);
             return node.rendererRect(RECT_TEXT_CARET, x, y, 1.5f, textLineHeight(style));
@@ -2525,19 +2752,34 @@ public final class UiRoot implements Disposable, UiStateListener {
             return true;
         }
         if (key == Key.C) {
-            clipboardText = model.selectedText();
+            copySelection(model);
             return true;
         }
         if (key == Key.X) {
-            clipboardText = model.selectedText();
+            copySelection(model);
             model.deleteSelection();
             return true;
         }
         if (key == Key.V) {
-            model.insert(clipboardText);
+            model.insert(clipboardText());
             return true;
         }
         return false;
+    }
+
+    private void copySelection(UiTextFieldModel model) {
+        String selected = model.selectedText();
+        if (selected.length() > 0 && input != null && input.clipboard() != null) {
+            input.clipboard().setText(selected);
+        }
+    }
+
+    private String clipboardText() {
+        if (input == null || input.clipboard() == null) {
+            return "";
+        }
+        String text = input.clipboard().getText();
+        return text != null ? text : "";
     }
 
     private boolean isShortcutDown() {
@@ -2555,17 +2797,30 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         UiScrollState state = model.scrollState();
         UiRect viewport = textInputBounds(node);
-        float lineHeight = textLineHeight(textStyleFor(node));
-        int line = lineIndexForOffset(model.value(), model.cursor());
+        UiTextStyle style = textStyleFor(node);
+        float lineHeight = textLineHeight(style);
+        String value = model.value();
+        int cursor = model.cursor();
+        int line = lineIndexForOffset(value, cursor);
+        int start = lineStart(value, line);
+        int end = Math.max(start, Math.min(cursor, lineEnd(value, start)));
+        float cursorLeft = textWidth(value, start, end, style);
+        float cursorRight = cursorLeft + 1.5f;
         float cursorTop = line * lineHeight;
         float cursorBottom = cursorTop + lineHeight;
+        float x = state.x();
         float y = state.y();
+        if (cursorLeft < x) {
+            x = cursorLeft;
+        } else if (cursorRight > x + viewport.width()) {
+            x = cursorRight - viewport.width();
+        }
         if (cursorTop < y) {
             y = cursorTop;
         } else if (cursorBottom > y + viewport.height()) {
             y = cursorBottom - viewport.height();
         }
-        state.scrollTo(state.x(), y);
+        state.scrollTo(x, y);
     }
 
     private UiNode scrollTarget(UiNode node) {
@@ -2766,6 +3021,7 @@ public final class UiRoot implements Disposable, UiStateListener {
 
     private void cancelPendingTextInputTapGesture() {
         clearPendingTextInputTapGesture();
+        clearLastTextTap();
         if (pressedNode != null && isTextInput(pressedNode)) {
             pressedNode.pressed(false);
             pressedNode = null;
@@ -2854,8 +3110,10 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (!isScrollable(node) || width <= 0.0f || height <= 0.0f) {
             return null;
         }
-        return node.rendererRect(RECT_SCROLL_VERTICAL_TRACK, x + width - SCROLLBAR_SIZE, y,
-                SCROLLBAR_SIZE, height);
+        float contentRight = x + width;
+        float hitWidth = Math.min(bounds.width(), SCROLLBAR_HIT_SIZE + padding.right());
+        return node.rendererRect(RECT_SCROLL_VERTICAL_TRACK, contentRight - SCROLLBAR_HIT_SIZE, y,
+                hitWidth, height);
     }
 
     private UiRect scrollHorizontalTrack(UiNode node) {
@@ -2871,8 +3129,10 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (!isScrollable(node) || width <= 0.0f || height <= 0.0f) {
             return null;
         }
-        return node.rendererRect(RECT_SCROLL_HORIZONTAL_TRACK, x, y + height - SCROLLBAR_SIZE,
-                width, SCROLLBAR_SIZE);
+        float contentBottom = y + height;
+        float hitHeight = Math.min(bounds.height(), SCROLLBAR_HIT_SIZE + padding.bottom());
+        return node.rendererRect(RECT_SCROLL_HORIZONTAL_TRACK, x, contentBottom - SCROLLBAR_HIT_SIZE,
+                width, hitHeight);
     }
 
     private UiRect scrollVerticalThumb(UiNode node, UiScrollState state) {
@@ -2885,11 +3145,11 @@ public final class UiRoot implements Disposable, UiStateListener {
         float travel = Math.max(0.0f, track.height() - thumbHeight);
         if (travel <= 0.0f) {
             return node.rendererRect(RECT_SCROLL_VERTICAL_THUMB,
-                    track.x(), track.y(), SCROLLBAR_SIZE, track.height());
+                    track.x(), track.y(), track.width(), track.height());
         }
         float thumbY = track.y() + travel * state.y() / Math.max(1.0f, state.maxY());
         return node.rendererRect(RECT_SCROLL_VERTICAL_THUMB,
-                track.x(), thumbY, SCROLLBAR_SIZE, thumbHeight);
+                track.x(), thumbY, track.width(), thumbHeight);
     }
 
     private UiRect scrollHorizontalThumb(UiNode node, UiScrollState state) {
@@ -2902,11 +3162,11 @@ public final class UiRoot implements Disposable, UiStateListener {
         float travel = Math.max(0.0f, track.width() - thumbWidth);
         if (travel <= 0.0f) {
             return node.rendererRect(RECT_SCROLL_HORIZONTAL_THUMB,
-                    track.x(), track.y(), track.width(), SCROLLBAR_SIZE);
+                    track.x(), track.y(), track.width(), track.height());
         }
         float thumbX = track.x() + travel * state.x() / Math.max(1.0f, state.maxX());
         return node.rendererRect(RECT_SCROLL_HORIZONTAL_THUMB,
-                thumbX, track.y(), thumbWidth, SCROLLBAR_SIZE);
+                thumbX, track.y(), thumbWidth, track.height());
     }
 
     private float scrollYFromPointer(UiNode node, UiScrollState state, float pointerY) {

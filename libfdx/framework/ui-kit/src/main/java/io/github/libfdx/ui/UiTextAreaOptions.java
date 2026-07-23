@@ -6,14 +6,16 @@ package io.github.libfdx.ui;
  * @author xpenatan
  */
 public final class UiTextAreaOptions {
-    private static final UiTextAreaOptions DEFAULTS = new UiTextAreaOptions(false, 96.0f, Float.NaN);
+    private static final UiTextAreaOptions DEFAULTS = new UiTextAreaOptions(false, false, 96.0f, Float.NaN);
 
     private final boolean autoGrow;
+    private final boolean readOnly;
     private final float minHeight;
     private final float maxHeight;
 
-    private UiTextAreaOptions(boolean autoGrow, float minHeight, float maxHeight) {
+    private UiTextAreaOptions(boolean autoGrow, boolean readOnly, float minHeight, float maxHeight) {
         this.autoGrow = autoGrow;
+        this.readOnly = readOnly;
         this.minHeight = minHeight > 0.0f ? minHeight : 96.0f;
         this.maxHeight = maxHeight > 0.0f ? maxHeight : Float.NaN;
     }
@@ -34,7 +36,21 @@ public final class UiTextAreaOptions {
      * @return this UI text area options for chaining
      */
     public UiTextAreaOptions autoGrow(boolean autoGrow) {
-        return new UiTextAreaOptions(autoGrow, minHeight, maxHeight);
+        return new UiTextAreaOptions(autoGrow, readOnly, minHeight, maxHeight);
+    }
+
+    /**
+     * Sets whether the text area is read only and returns these options.
+     *
+     * <p>Read-only text areas remain scrollable and selectable for copying, but
+     * do not open a platform editor, accept text changes, or render an insertion
+     * caret.</p>
+     *
+     * @param readOnly whether editing is disabled
+     * @return these UI text area options for chaining
+     */
+    public UiTextAreaOptions readOnly(boolean readOnly) {
+        return new UiTextAreaOptions(autoGrow, readOnly, minHeight, maxHeight);
     }
 
     /**
@@ -44,7 +60,7 @@ public final class UiTextAreaOptions {
      * @return this UI text area options for chaining
      */
     public UiTextAreaOptions minHeight(float minHeight) {
-        return new UiTextAreaOptions(autoGrow, minHeight, maxHeight);
+        return new UiTextAreaOptions(autoGrow, readOnly, minHeight, maxHeight);
     }
 
     /**
@@ -54,7 +70,7 @@ public final class UiTextAreaOptions {
      * @return this UI text area options for chaining
      */
     public UiTextAreaOptions maxHeight(float maxHeight) {
-        return new UiTextAreaOptions(autoGrow, minHeight, maxHeight);
+        return new UiTextAreaOptions(autoGrow, readOnly, minHeight, maxHeight);
     }
 
     /**
@@ -64,6 +80,15 @@ public final class UiTextAreaOptions {
      */
     public boolean autoGrow() {
         return autoGrow;
+    }
+
+    /**
+     * Returns whether the text area is read only.
+     *
+     * @return true when editing is disabled; false otherwise
+     */
+    public boolean readOnly() {
+        return readOnly;
     }
 
     /**
