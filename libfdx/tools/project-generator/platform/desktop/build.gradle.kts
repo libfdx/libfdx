@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.jvm.tasks.Jar
@@ -17,7 +16,6 @@ base {
     archivesName.set("project_generator_desktop")
 }
 
-group = "${LibExt.fdxGroup}.tools.projectgenerator"
 
 dependencies {
     implementation(project(":libfdx:tools:project-generator:core"))

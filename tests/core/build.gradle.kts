@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     id("java-library")
@@ -9,7 +8,6 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "${LibExt.fdxGroup}.tests"
 
 
 base {
@@ -17,16 +15,16 @@ base {
 }
 
 dependencies {
-    if (LibExt.usePublishedLibfdx) {
-        api("${LibExt.fdxGroup}:application:${LibExt.fdxSnapshotVersion}")
-        api("${LibExt.fdxGroup}:input:${LibExt.fdxSnapshotVersion}")
-        api("${LibExt.fdxGroup}:graphics:${LibExt.fdxSnapshotVersion}")
-        api("${LibExt.fdxGroup}:camera:${LibExt.fdxSnapshotVersion}")
-        api("${LibExt.fdxGroup}:g2d:${LibExt.fdxSnapshotVersion}")
-        api("${LibExt.fdxGroup}:g3d:${LibExt.fdxSnapshotVersion}")
-        api("${LibExt.fdxGroup}:ui_kit:${LibExt.fdxSnapshotVersion}")
-        api("${LibExt.fdxGroup}:scenario_validator:${LibExt.fdxSnapshotVersion}")
-        api("${LibExt.fdxGroup}:scenario_validator_ui_kit:${LibExt.fdxSnapshotVersion}")
+    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
+        api("${libs.versions.libfdxGroup.get()}:application:${libs.versions.libfdxSnapshot.get()}")
+        api("${libs.versions.libfdxGroup.get()}:input:${libs.versions.libfdxSnapshot.get()}")
+        api("${libs.versions.libfdxGroup.get()}:graphics:${libs.versions.libfdxSnapshot.get()}")
+        api("${libs.versions.libfdxGroup.get()}:camera:${libs.versions.libfdxSnapshot.get()}")
+        api("${libs.versions.libfdxGroup.get()}:g2d:${libs.versions.libfdxSnapshot.get()}")
+        api("${libs.versions.libfdxGroup.get()}:g3d:${libs.versions.libfdxSnapshot.get()}")
+        api("${libs.versions.libfdxGroup.get()}:ui_kit:${libs.versions.libfdxSnapshot.get()}")
+        api("${libs.versions.libfdxGroup.get()}:scenario_validator:${libs.versions.libfdxSnapshot.get()}")
+        api("${libs.versions.libfdxGroup.get()}:scenario_validator_ui_kit:${libs.versions.libfdxSnapshot.get()}")
     } else {
         api(project(":libfdx:framework:application"))
         api(project(":libfdx:framework:input"))

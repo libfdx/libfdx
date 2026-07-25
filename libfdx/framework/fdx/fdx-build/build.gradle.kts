@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 import java.io.File
 import java.net.URI
 import java.security.MessageDigest
@@ -14,7 +13,6 @@ plugins {
     base
 }
 
-group = "${LibExt.fdxGroup}.runtime.fdx"
 
 description = "Internal runtime fdx native build orchestration."
 

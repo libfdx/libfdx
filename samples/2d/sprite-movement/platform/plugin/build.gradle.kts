@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 import org.gradle.api.attributes.java.TargetJvmVersion
 
@@ -12,7 +11,6 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "${LibExt.fdxGroup}.samples.g2d.spritemovement"
 
 val glRuntimeClasspath by configurations.creating {
     isCanBeConsumed = false
@@ -42,10 +40,10 @@ dependencies {
     implementation(project(":samples:2d:sprite-movement:platform:ios_c"))
     implementation(project(":samples:2d:sprite-movement:platform:web"))
 
-    if (LibExt.usePublishedLibfdx) {
-        glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.fdxSnapshotVersion}")
-        vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.fdxSnapshotVersion}")
-        wgpuRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.fdxSnapshotVersion}")
+    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
+        glRuntimeClasspath("${libs.versions.libfdxGroup.get()}:gl_desktop:${libs.versions.libfdxSnapshot.get()}")
+        vulkanRuntimeClasspath("${libs.versions.libfdxGroup.get()}:vulkan_desktop:${libs.versions.libfdxSnapshot.get()}")
+        wgpuRuntimeClasspath("${libs.versions.libfdxGroup.get()}:wgpu_desktop_ffm:${libs.versions.libfdxSnapshot.get()}")
     } else {
         glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
         vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))

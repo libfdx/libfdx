@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     id("java")
@@ -9,7 +8,6 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "${LibExt.fdxGroup}.tests"
 
 base {
     archivesName.set("tests_psp")
@@ -17,10 +15,10 @@ base {
 
 dependencies {
     implementation(project(":tests:core"))
-    if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_psp:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:g2d:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:ui_kit:${LibExt.fdxSnapshotVersion}")
+    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
+        implementation("${libs.versions.libfdxGroup.get()}:backend_psp:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:g2d:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:ui_kit:${libs.versions.libfdxSnapshot.get()}")
     } else {
         implementation(project(":libfdx:backends:psp"))
         implementation(project(":libfdx:framework:g2d"))

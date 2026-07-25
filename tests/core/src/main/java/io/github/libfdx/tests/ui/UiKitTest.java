@@ -15,6 +15,7 @@ import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.g2d.G2DAssetLoaders;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 import io.github.libfdx.input.Cursor;
+import io.github.libfdx.input.Clipboard;
 import io.github.libfdx.input.DefaultCursor;
 import io.github.libfdx.input.DefaultGamepads;
 import io.github.libfdx.input.DefaultInput;
@@ -90,6 +91,9 @@ public final class UiKitTest extends ApplicationAdapter {
     private static final String LOGO_ASSET = "fdx_logo_dark.png";
     private static final String PATCH_ASSET = "ui_panel_patch.png";
     private static final String FREETYPE_FONT_ASSET = "font/freetype/lsans.ttf";
+    private static final String EMOJI_GRIN = new String(Character.toChars(0x1F600));
+    private static final String EMOJI_BEAM = new String(Character.toChars(0x1F601));
+    private static final String EMOJI_JOY = new String(Character.toChars(0x1F602));
     private static final String REQUESTED_SCENARIO = "requested";
     private static final float TOOLS_INITIAL_X = 0.0f;
     private static final float TOOLS_INITIAL_Y = 430.0f;
@@ -126,6 +130,17 @@ public final class UiKitTest extends ApplicationAdapter {
     private static final int SECTION_SCROLLVIEW = 9;
     private static final int SECTION_OVERLAYS = 10;
     private static final int SECTION_TOOLTIPS = 11;
+    private static final int SECTION_TOGGLES = 12;
+    private static final int SECTION_LOADING = 13;
+    private static final int SECTION_COLLAPSE = 14;
+    private static final int SECTION_THEMES = 15;
+    private static final String[] THEME_NAMES = new String[] {
+            "Graphite",
+            "Porcelain",
+            "Cobalt",
+            "Aubergine",
+            "High contrast"
+    };
     private static final String[] SECTIONS = new String[] {
             "Buttons",
             "Checkboxes",
@@ -138,7 +153,11 @@ public final class UiKitTest extends ApplicationAdapter {
             "Windows",
             "Scroll view",
             "Overlays",
-            "Tooltips"
+            "Tooltips",
+            "Toggles & choices",
+            "Loading & status",
+            "Disclosure panels",
+            "Themes"
     };
     private static final String[] ACTIVITY = new String[] {
             "preload assets",
@@ -186,12 +205,19 @@ public final class UiKitTest extends ApplicationAdapter {
     private UiFloatState sliderPrecise;
     private UiIntState activeSection;
     private UiIntState activeDemoTab;
+    private UiIntState activeTheme;
+    private UiIntState radioChoice;
     private UiState<String> name;
+    private UiState<String> emojiInput;
     private UiState<String> intInput;
     private UiState<String> floatInput;
     private UiState<String> messageInput;
     private UiState<String> growingMessageInput;
     private UiBooleanState messageReadOnly;
+    private UiBooleanState switchEnabled;
+    private UiBooleanState switchCompact;
+    private UiBooleanState collapseBasics;
+    private UiBooleanState collapseAdvanced;
     private int textFieldSubmitCount;
     private UiScrollState navScroll;
     private UiScrollState settingsScroll;
@@ -203,6 +229,9 @@ public final class UiKitTest extends ApplicationAdapter {
     private UiWindowState statsWindow;
     private TextureRegion logoRegion;
     private TextureRegion panelPatchRegion;
+    private UiTheme[] demoThemes;
+    private UiStyle inlineLoadingStyle;
+    private UiStyle inlineButtonStyle;
     private String capturePath;
     private long captureFrame;
     private boolean captured;
@@ -232,6 +261,10 @@ public final class UiKitTest extends ApplicationAdapter {
     private boolean textInputTouchDragChecked;
     private boolean scrollBodyDragChecked;
     private boolean scrollChildDragChecked;
+    private boolean emojiChecked;
+    private boolean newWidgetsChecked;
+    private boolean themeSwitchingChecked;
+    private boolean constrainedLayoutChecked;
     private boolean initialVisualDebug;
     private boolean scaleGloballyActive;
     private boolean driveAutomation;
@@ -346,13 +379,22 @@ public final class UiKitTest extends ApplicationAdapter {
         Texture patch = assets.get(PATCH_ASSET, Texture.class);
         logoRegion = new TextureRegion(logo);
         panelPatchRegion = new TextureRegion(patch);
+        demoThemes = createThemes();
+        inlineLoadingStyle = UiStyle.style()
+                .background(UiDrawable.color(UiColor.rgba8888(0x331b4dff)))
+                .foreground(UiDrawable.color(UiColor.rgba8888(0xe56bffff)));
+        inlineButtonStyle = UiStyle.button()
+                .background(UiDrawable.color(UiColor.rgba8888(0xb6378cff)))
+                .foreground(UiDrawable.color(UiColor.rgba8888(0xffe66dff)))
+                .text(textStyle(15.0f, 0xffffffff).wrap(false).ellipsis(true));
 
         Input backendInput = fdx.input();
         Input rootInput;
         if (validationActive) {
             textInputController = new RecordingTextInputController();
+            Clipboard backendClipboard = backendInput != null ? backendInput.clipboard() : null;
             input = new DefaultInput(ProviderId.of("uikit_validation_input"), inputCapabilities(backendInput),
-                    inputCursor(backendInput), inputGamepads(backendInput), textInputController);
+                    inputCursor(backendInput), inputGamepads(backendInput), textInputController, backendClipboard);
             rootInput = input;
         } else {
             input = backendInput instanceof DefaultInput ? backendInput.<DefaultInput>as() : new DefaultInput();
@@ -385,13 +427,20 @@ public final class UiKitTest extends ApplicationAdapter {
         sliderPrecise = Ui.state(0.125f);
         activeSection = Ui.state(initialSection());
         activeDemoTab = Ui.state(0);
+        activeTheme = Ui.state(initialTheme());
+        radioChoice = Ui.state(1);
         name = Ui.state("Player");
+        emojiInput = Ui.state("Emoji " + EMOJI_GRIN);
         intInput = Ui.state("42");
         floatInput = Ui.state("0.75");
         messageInput = Ui.state("Line 1 message\nLine 2 with more text\nLine 3 keeps the body scrollable\n"
                 + "Line 4 still inside the area\nLine 5 validates clipping\nLine 6 remains reachable");
         growingMessageInput = Ui.state("Short message\nsecond line");
         messageReadOnly = Ui.state(false);
+        switchEnabled = Ui.state(true);
+        switchCompact = Ui.state(false);
+        collapseBasics = Ui.state(true);
+        collapseAdvanced = Ui.state(false);
         navScroll = new UiScrollState();
         settingsScroll = new UiScrollState();
         sectionScrolls = new UiScrollState[SECTIONS.length];
@@ -418,7 +467,7 @@ public final class UiKitTest extends ApplicationAdapter {
                 .minSize(240.0f, 170.0f);
 
         root = new UiToolkit(fdx.files())
-                .theme(theme())
+                .theme(theme(activeTheme.get()))
                 .root(display, graphics)
                 .input(rootInput)
                 .safeArea(Ui.insets(Float.parseFloat(System.getProperty("libfdx.test.safeArea",
@@ -644,6 +693,19 @@ public final class UiKitTest extends ApplicationAdapter {
             if (validationFullPlan && !scrollChildDragChecked) {
                 throw new FdxException("UiKitTest did not validate scroll view child drag scrolling");
             }
+            if (validationFullPlan && !emojiChecked) {
+                throw new FdxException("UiKitTest did not validate emoji editing and clipboard round trips");
+            }
+            if (validationFullPlan && !newWidgetsChecked) {
+                throw new FdxException(
+                        "UiKitTest did not validate switches, radio choices, loading, and disclosure panels");
+            }
+            if (validationFullPlan && !themeSwitchingChecked) {
+                throw new FdxException("UiKitTest did not validate theme switching");
+            }
+            if (validationFullPlan && !constrainedLayoutChecked) {
+                throw new FdxException("UiKitTest did not validate constrained button layout");
+            }
             if (validationFullPlan && !windowMoveChecked) {
                 throw new FdxException("UiKitTest movable window did not move after title-bar drag");
             }
@@ -816,8 +878,16 @@ public final class UiKitTest extends ApplicationAdapter {
             buildScrollViewSection(content);
         } else if (section == SECTION_OVERLAYS) {
             buildOverlaySection(content);
-        } else {
+        } else if (section == SECTION_TOOLTIPS) {
             buildTooltipSection(content);
+        } else if (section == SECTION_TOGGLES) {
+            buildToggleSection(content);
+        } else if (section == SECTION_LOADING) {
+            buildLoadingSection(content);
+        } else if (section == SECTION_COLLAPSE) {
+            buildCollapseSection(content);
+        } else {
+            buildThemeSection(content);
         }
     }
 
@@ -846,6 +916,32 @@ public final class UiKitTest extends ApplicationAdapter {
             tile(grid, "toggle", showDetails.get() ? "shown" : "hidden");
             tile(grid, "count", String.valueOf(clickCount.get()));
         });
+        content.divider(Ui.modifier().fillWidth());
+        content.text("Constrained layout", Ui.modifier().style("muted"));
+        content.text("Three 150 px button requests shrink into a 250 px row without wrapping.",
+                Ui.modifier().style("small"));
+        content.panel(Ui.modifier().width(270.0f).padding(10.0f).style("tile"), panel ->
+                panel.row(Ui.modifier().width(250.0f).height(40.0f).gap(6.0f)
+                                .semanticLabel("Constrained row"),
+                        row -> {
+                            row.button("Alpha", Ui.modifier().width(150.0f)
+                                            .semanticLabel("Constrained Alpha")
+                                            .validationId(UiKitValidationScenarios.CONSTRAINED_ALPHA),
+                                    () -> incrementClick());
+                            row.button("Beta", Ui.modifier().width(150.0f)
+                                            .semanticLabel("Constrained Beta")
+                                            .validationId(UiKitValidationScenarios.CONSTRAINED_BETA),
+                                    () -> incrementClick());
+                            row.button("Gamma", Ui.modifier().width(150.0f)
+                                            .semanticLabel("Constrained Gamma")
+                                            .validationId(UiKitValidationScenarios.CONSTRAINED_GAMMA),
+                                    () -> incrementClick());
+                        }));
+        content.text("Inline customization", Ui.modifier().style("muted"));
+        content.button("One-off styled button",
+                Ui.modifier().style(inlineButtonStyle), () -> incrementClick());
+        content.text("An inline style can override the active theme for one button.",
+                Ui.modifier().style("small"));
     }
 
     private void buildCheckboxSection(UiScope content) {
@@ -1014,6 +1110,15 @@ public final class UiKitTest extends ApplicationAdapter {
         fieldRow(content, "String", name, UiTextInputFilter.STRING);
         fieldRow(content, "Integer", intInput, UiTextInputFilter.INTEGER);
         fieldRow(content, "Float", floatInput, UiTextInputFilter.FLOAT);
+        content.text("Unicode " + EMOJI_GRIN + "  " + EMOJI_BEAM + "  " + EMOJI_JOY,
+                Ui.modifier().style("section"));
+        content.row(Ui.modifier().fillWidth().gap(8.0f), row -> {
+            row.text("Emoji", Ui.modifier().width(86.0f).style("muted"));
+            row.textField(Ui.modifier().fillWidth().weight(1.0f)
+                            .semanticLabel("Emoji field")
+                            .validationId(UiKitValidationScenarios.EMOJI_FIELD),
+                    emojiInput, UiTextInputFilter.STRING);
+        });
         content.text("Message area", Ui.modifier().style("muted"));
         content.textArea(Ui.modifier().fillWidth().height(92.0f).semanticLabel("Message area").style("text-area"),
                 messageInput, UiTextAreaOptions.defaults().readOnly(messageReadOnly.get()).minHeight(92.0f));
@@ -1023,6 +1128,7 @@ public final class UiKitTest extends ApplicationAdapter {
         content.panel(Ui.modifier().fillWidth().padding(10.0f).gap(4.0f).style("tile"), panel -> {
             panel.text("name " + name.get(), Ui.modifier().style("small"));
             panel.text("int " + intInput.get() + "  float " + floatInput.get(), Ui.modifier().style("small"));
+            panel.text("clipboard-ready Unicode " + emojiInput.get(), Ui.modifier().style("small"));
             panel.text("message lines " + messageLineCount(), Ui.modifier().style("small"));
         });
     }
@@ -1171,6 +1277,105 @@ public final class UiKitTest extends ApplicationAdapter {
         });
     }
 
+    private void buildToggleSection(UiScope content) {
+        content.text("Toggles & choices", Ui.modifier().style("title"));
+        content.text("Switches", Ui.modifier().style("muted"));
+        content.panel(Ui.modifier().fillWidth().padding(10.0f).gap(10.0f).style("tile"), panel -> {
+            panel.toggleSwitch("Notifications",
+                    Ui.modifier().fillWidth().semanticLabel("Notifications switch")
+                            .validationId(UiKitValidationScenarios.SWITCH_NOTIFICATIONS),
+                    switchEnabled);
+            panel.toggleSwitch("Compact controls",
+                    Ui.modifier().fillWidth().semanticLabel("Compact controls switch"),
+                    switchCompact);
+            panel.toggleSwitch("Disabled switch",
+                    Ui.modifier().fillWidth().enabled(false).semanticLabel("Disabled switch"),
+                    switchCompact);
+        });
+        content.divider(Ui.modifier().fillWidth());
+        content.text("Single-choice radio group", Ui.modifier().style("muted"));
+        content.row(Ui.modifier().fillWidth().gap(18.0f), row -> {
+            row.radioButton("Balanced", Ui.modifier().semanticLabel("Balanced radio"), radioChoice, 0);
+            row.radioButton("Quality",
+                    Ui.modifier().semanticLabel("Quality radio")
+                            .validationId(UiKitValidationScenarios.RADIO_QUALITY),
+                    radioChoice, 1);
+            row.radioButton("Performance", Ui.modifier().semanticLabel("Performance radio"), radioChoice, 2);
+        });
+        content.text("selected " + radioChoiceLabel(), Ui.modifier().style("small"));
+    }
+
+    private void buildLoadingSection(UiScope content) {
+        content.text("Loading & status", Ui.modifier().style("title"));
+        content.text("Determinate", Ui.modifier().style("muted"));
+        progressRow(content, "Volume", volume, 0.0f, 1.0f,
+                Ui.modifier().fillWidth().weight(1.0f).semanticLabel("Loading determinate progress"));
+        content.divider(Ui.modifier().fillWidth());
+        content.text("Indeterminate", Ui.modifier().style("muted"));
+        content.panel(Ui.modifier().fillWidth().padding(12.0f).gap(12.0f).style("tile"), panel -> {
+            panel.row(Ui.modifier().fillWidth().gap(12.0f), row -> {
+                row.loadingSpinner(Ui.modifier().size(36.0f, 36.0f)
+                        .semanticLabel("Loading spinner")
+                        .validationId(UiKitValidationScenarios.LOADING_SPINNER));
+                row.column(Ui.modifier().fillWidth().weight(1.0f).gap(6.0f), details -> {
+                    details.text("Synchronizing UI assets", Ui.modifier().style("section"));
+                    details.loadingBar(Ui.modifier().fillWidth().height(12.0f)
+                            .semanticLabel("Loading bar")
+                            .validationId(UiKitValidationScenarios.LOADING_BAR));
+                    details.text("Animation is driven by UiRoot elapsed time", Ui.modifier().style("small"));
+                });
+            });
+        });
+        content.loadingBar(Ui.modifier().fillWidth().height(16.0f).style(inlineLoadingStyle)
+                .semanticLabel("Inline styled loading bar"));
+    }
+
+    private void buildCollapseSection(UiScope content) {
+        content.text("Disclosure panels", Ui.modifier().style("title"));
+        content.text("Click the highlighted header to show or hide its content", Ui.modifier().style("muted"));
+        content.collapseBar("Basic disclosure",
+                Ui.modifier().fillWidth().validationId(UiKitValidationScenarios.COLLAPSE_BASIC),
+                collapseBasics, body -> {
+                    body.text("This content is composed only while the disclosure is expanded.",
+                            Ui.modifier().style("small"));
+                    body.text("The header clearly communicates its expanded or collapsed state.",
+                            Ui.modifier().style("small"));
+                });
+        content.collapseBar("Advanced customization", Ui.modifier().fillWidth(), collapseAdvanced, body -> {
+            body.text("Each disclosure owns independent state and body content.",
+                    Ui.modifier().style("small"));
+            body.text("Header, indicator, and body spacing can be customized through styles.",
+                    Ui.modifier().style("small"));
+        });
+    }
+
+    private void buildThemeSection(UiScope content) {
+        content.text("Themes", Ui.modifier().style("title"));
+        content.text("Choose one global palette, then visit a widget section to inspect its themed states.",
+                Ui.modifier().style("muted"));
+        content.text("Available palettes", Ui.modifier().style("section"));
+        content.grid(3, Ui.modifier().fillWidth().gap(8.0f), grid -> {
+            for (int i = 0; i < THEME_NAMES.length; i++) {
+                final int themeIndex = i;
+                UiModifier modifier = Ui.modifier().fillWidth();
+                if (activeTheme.get() == themeIndex) {
+                    modifier = modifier.style("nav-active");
+                }
+                if (themeIndex == 2) {
+                    modifier = modifier.validationId(UiKitValidationScenarios.THEME_COBALT);
+                }
+                grid.button(THEME_NAMES[i], modifier, () -> selectTheme(themeIndex));
+            }
+        });
+        content.panel(Ui.modifier().fillWidth().padding(12.0f).gap(5.0f).style("tile"), summary -> {
+            summary.text("Active palette: " + THEME_NAMES[activeTheme.get()], Ui.modifier().style("section"));
+            summary.text("The selected palette applies to every widget section and window.",
+                    Ui.modifier().style("small"));
+            summary.text("Palette selection persists while navigating between sections.",
+                    Ui.modifier().style("small"));
+        });
+    }
+
     private void buildFloatingWindows(UiScope page, float drawnVolume) {
         if (activeSection.get() != SECTION_WINDOWS) {
             return;
@@ -1293,6 +1498,9 @@ public final class UiKitTest extends ApplicationAdapter {
         if (requested == null || requested.length() == 0) {
             return SECTION_BUTTONS;
         }
+        if ("collapse bars".equalsIgnoreCase(requested)) {
+            return SECTION_COLLAPSE;
+        }
         for (int i = 0; i < SECTIONS.length; i++) {
             if (SECTIONS[i].equalsIgnoreCase(requested)) {
                 return i;
@@ -1306,6 +1514,47 @@ public final class UiKitTest extends ApplicationAdapter {
         } catch (NumberFormatException ignored) {
         }
         return SECTION_BUTTONS;
+    }
+
+    private int initialTheme() {
+        String requested = System.getProperty("libfdx.test.uiTheme", "");
+        if (requested != null && requested.length() > 0) {
+            for (int i = 0; i < THEME_NAMES.length; i++) {
+                if (THEME_NAMES[i].equalsIgnoreCase(requested)) {
+                    return i;
+                }
+            }
+            try {
+                int index = Integer.parseInt(requested);
+                if (index >= 0 && index < THEME_NAMES.length) {
+                    return index;
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return 0;
+    }
+
+    private void selectTheme(int index) {
+        int selected = Math.max(0, Math.min(THEME_NAMES.length - 1, index));
+        activeTheme.set(selected);
+        if (root != null) {
+            root.theme(theme(selected));
+        }
+    }
+
+    private String radioChoiceLabel() {
+        int selected = radioChoice.get();
+        if (selected == 0) {
+            return "Balanced";
+        }
+        if (selected == 2) {
+            return "Performance";
+        }
+        if (selected == 3) {
+            return "Nested";
+        }
+        return "Quality";
     }
 
     private void tile(UiScope grid, String title, String value) {
@@ -1386,71 +1635,257 @@ public final class UiKitTest extends ApplicationAdapter {
         }
     }
 
-    private UiTheme theme() {
-        UiTextStyle text = textStyle(16.0f, 0xe7edf5ff).lineHeight(20.0f);
-        UiTextStyle muted = textStyle(13.0f, 0xa9b6c5ff).lineHeight(17.0f);
-        UiTextStyle title = textStyle(22.0f, 0xf7fbffff).lineHeight(26.0f);
+    private UiTheme[] createThemes() {
+        UiTheme[] themes = new UiTheme[THEME_NAMES.length];
+        for (int i = 0; i < themes.length; i++) {
+            themes[i] = buildTheme(i);
+        }
+        return themes;
+    }
+
+    private UiTheme theme(int index) {
+        int selected = Math.max(0, Math.min(THEME_NAMES.length - 1, index));
+        if (demoThemes != null && selected < demoThemes.length && demoThemes[selected] != null) {
+            return demoThemes[selected];
+        }
+        return buildTheme(selected);
+    }
+
+    private UiTheme buildTheme(int index) {
+        int textColor = 0xe8eaedff;
+        int mutedColor = 0xa6abb4ff;
+        int titleColor = 0xf7f8faff;
+        int accentTextColor = 0xffffffff;
+        int buttonColor = 0x343840ff;
+        int buttonHoverColor = 0x424751ff;
+        int buttonPressedColor = 0x5b6472ff;
+        int buttonDisabledColor = 0x26292fff;
+        int disabledTextColor = 0x797e87ff;
+        int panelColor = 0x202329ff;
+        int sectionPanelColor = 0x1b1e23ff;
+        int navColor = 0x15171bff;
+        int fieldColor = 0x111317ff;
+        int fieldFocusColor = 0x262a31ff;
+        int tileColor = 0x1a1d22ff;
+        int stageColor = 0x111318ff;
+        int popupColor = 0x292d34ff;
+        int tooltipColor = 0x0d0f12f2;
+        int accentColor = 0x667085ff;
+        int accentHoverColor = 0x6c7685ff;
+        int accentPressedColor = 0x555d69ff;
+        int controlColor = 0x343941ff;
+        int progressColor = 0x9aa3afff;
+        int dividerColor = 0x454a53ff;
+        boolean light = false;
+        boolean useNinePatch = index == 0;
+
+        if (index == 1) {
+            textColor = 0x22252aff;
+            mutedColor = 0x69707aff;
+            titleColor = 0x15171aff;
+            accentTextColor = 0xffffffff;
+            buttonColor = 0xe4e7ebff;
+            buttonHoverColor = 0xd8dde3ff;
+            buttonPressedColor = 0xb9c2ceff;
+            buttonDisabledColor = 0xf1f2f4ff;
+            disabledTextColor = 0x8b929cff;
+            panelColor = 0xf7f8faff;
+            sectionPanelColor = 0xf0f2f5ff;
+            navColor = 0xe9ecf0ff;
+            fieldColor = 0xffffffff;
+            fieldFocusColor = 0xe9eff8ff;
+            tileColor = 0xffffffff;
+            stageColor = 0xedeff2ff;
+            popupColor = 0xffffffff;
+            tooltipColor = 0x1b1d21f2;
+            accentColor = 0x315c9dff;
+            accentHoverColor = 0x3e6cb0ff;
+            accentPressedColor = 0x274c83ff;
+            controlColor = 0xc9cfd7ff;
+            progressColor = 0x5a73a5ff;
+            dividerColor = 0xb8bec7ff;
+            light = true;
+        } else if (index == 2) {
+            textColor = 0xe9edfbff;
+            mutedColor = 0xa3acc4ff;
+            titleColor = 0xf8faffff;
+            accentTextColor = 0xffffffff;
+            buttonColor = 0x2c3345ff;
+            buttonHoverColor = 0x39445bff;
+            buttonPressedColor = 0x4169b2ff;
+            buttonDisabledColor = 0x222736ff;
+            disabledTextColor = 0x747d95ff;
+            panelColor = 0x1b2130ff;
+            sectionPanelColor = 0x171c29ff;
+            navColor = 0x111620ff;
+            fieldColor = 0x0d111aff;
+            fieldFocusColor = 0x1e2a42ff;
+            tileColor = 0x171d2bff;
+            stageColor = 0x0d121cff;
+            popupColor = 0x252d42ff;
+            tooltipColor = 0x0a0e16f2;
+            accentColor = 0x4668b5ff;
+            accentHoverColor = 0x4c6fbeff;
+            accentPressedColor = 0x3a5798ff;
+            controlColor = 0x30394eff;
+            progressColor = 0x7d9be5ff;
+            dividerColor = 0x424d66ff;
+        } else if (index == 3) {
+            textColor = 0xf3edf5ff;
+            mutedColor = 0xbdafc1ff;
+            titleColor = 0xfffaffff;
+            accentTextColor = 0xffffffff;
+            buttonColor = 0x443746ff;
+            buttonHoverColor = 0x59465bff;
+            buttonPressedColor = 0x744b78ff;
+            buttonDisabledColor = 0x302833ff;
+            disabledTextColor = 0x827585ff;
+            panelColor = 0x2b222dff;
+            sectionPanelColor = 0x251d27ff;
+            navColor = 0x1c171eff;
+            fieldColor = 0x161117ff;
+            fieldFocusColor = 0x332538ff;
+            tileColor = 0x241c26ff;
+            stageColor = 0x171218ff;
+            popupColor = 0x3a2d3dff;
+            tooltipColor = 0x130f14f2;
+            accentColor = 0x81558dff;
+            accentHoverColor = 0x8e609aff;
+            accentPressedColor = 0x6b4475ff;
+            controlColor = 0x4a3a4dff;
+            progressColor = 0xb987c5ff;
+            dividerColor = 0x5e4b62ff;
+        } else if (index == 4) {
+            textColor = 0xffffffff;
+            mutedColor = 0xe6e6e6ff;
+            titleColor = 0xffffffff;
+            accentTextColor = 0x000000ff;
+            buttonColor = 0x242424ff;
+            buttonHoverColor = 0x3d3d3dff;
+            buttonPressedColor = 0x005fccff;
+            buttonDisabledColor = 0x171717ff;
+            disabledTextColor = 0x999999ff;
+            panelColor = 0x080808ff;
+            sectionPanelColor = 0x000000ff;
+            navColor = 0x0d0d0dff;
+            fieldColor = 0x000000ff;
+            fieldFocusColor = 0x292300ff;
+            tileColor = 0x121212ff;
+            stageColor = 0x000000ff;
+            popupColor = 0x1a1a1aff;
+            tooltipColor = 0x000000f5;
+            accentColor = 0xffd400ff;
+            accentHoverColor = 0xffe45cff;
+            accentPressedColor = 0xd6b300ff;
+            controlColor = 0x333333ff;
+            progressColor = 0x00afffff;
+            dividerColor = 0xffffffff;
+        }
+
+        validatePaletteContrast(index,
+                textColor, mutedColor, titleColor, accentTextColor,
+                panelColor, navColor,
+                buttonColor, buttonHoverColor, buttonPressedColor,
+                accentColor, accentHoverColor, accentPressedColor);
+
+        UiTextStyle text = textStyle(16.0f, textColor).lineHeight(20.0f);
+        UiTextStyle muted = textStyle(13.0f, mutedColor).lineHeight(17.0f);
+        UiTextStyle title = textStyle(22.0f, titleColor).lineHeight(26.0f);
+        UiTextStyle buttonText = textStyle(15.0f, titleColor).lineHeight(19.0f)
+                .wrap(false)
+                .ellipsis(true);
+        UiTextStyle disabledButtonText = textStyle(15.0f, disabledTextColor).lineHeight(19.0f)
+                .wrap(false)
+                .ellipsis(true);
+        UiTextStyle activeButtonText = textStyle(15.0f, accentTextColor).lineHeight(19.0f)
+                .wrap(false)
+                .ellipsis(true);
         UiStyle button = UiStyle.button()
-                .text(textStyle(15.0f, 0xf7fbffff).lineHeight(19.0f))
-                .background(UiDrawable.color(UiColor.rgba8888(0x33404dff)))
-                .hover(UiStyle.button().text(text).background(UiDrawable.color(UiColor.rgba8888(0x40546aff))))
-                .pressed(UiStyle.button().text(text).background(UiDrawable.color(UiColor.rgba8888(0x297ed6ff))))
+                .text(buttonText)
+                .background(UiDrawable.color(UiColor.rgba8888(buttonColor)))
+                .hover(UiStyle.button().text(buttonText)
+                        .background(UiDrawable.color(UiColor.rgba8888(buttonHoverColor))))
+                .pressed(UiStyle.button().text(buttonText)
+                        .background(UiDrawable.color(UiColor.rgba8888(buttonPressedColor))))
                 .disabled(UiStyle.button()
-                        .text(textStyle(15.0f, 0x7f8a96ff).lineHeight(19.0f))
-                        .background(UiDrawable.color(UiColor.rgba8888(0x202832aa))));
+                        .text(disabledButtonText)
+                        .background(UiDrawable.color(UiColor.rgba8888(buttonDisabledColor))));
         UiStyle textField = UiStyle.style()
                 .padding(10.0f, 6.0f)
                 .text(text.wrap(false).ellipsis(true))
-                .background(UiDrawable.color(UiColor.rgba8888(0x101720ff)));
+                .background(UiDrawable.color(UiColor.rgba8888(fieldColor)));
         UiStyle textArea = UiStyle.style()
                 .padding(10.0f, 8.0f)
                 .text(text.wrap(false).ellipsis(false))
-                .background(UiDrawable.color(UiColor.rgba8888(0x101720ff)));
+                .background(UiDrawable.color(UiColor.rgba8888(fieldColor)));
         UiStyle ninePanel = UiStyle.style()
                 .padding(12.0f)
                 .text(text)
-                .background(UiDrawable.ninePatch(UiNinePatch.region(panelPatchRegion,
-                        Ui.insets(5.0f), Ui.insets(7.0f))));
+                .background(useNinePatch
+                        ? UiDrawable.ninePatch(UiNinePatch.region(panelPatchRegion,
+                                Ui.insets(5.0f), Ui.insets(7.0f)))
+                        : UiDrawable.color(UiColor.rgba8888(panelColor)));
         UiStyle window = UiStyle.style()
                 .padding(Ui.insets(14.0f, 42.0f, 14.0f, 14.0f))
                 .text(text)
-                .background(UiDrawable.color(UiColor.rgba8888(0x18212bff)));
+                .background(UiDrawable.color(UiColor.rgba8888(panelColor)));
+        UiStyle control = UiStyle.style()
+                .background(UiDrawable.color(UiColor.rgba8888(controlColor)))
+                .foreground(UiDrawable.color(UiColor.rgba8888(accentColor)))
+                .text(text.wrap(false).ellipsis(true));
+        UiStyle progress = UiStyle.style()
+                .background(UiDrawable.color(UiColor.rgba8888(controlColor)))
+                .foreground(UiDrawable.color(UiColor.rgba8888(progressColor)))
+                .text(text);
 
-        return Ui.darkTheme()
+        return (light ? Ui.lightTheme() : Ui.darkTheme())
+                .colors(UiColor.rgba8888(navColor), UiColor.rgba8888(textColor))
                 .text(UiStyle.style().text(text))
                 .button(button)
+                .checkbox(control)
+                .toggleSwitch(control)
+                .radioButton(control)
+                .slider(control)
+                .progressBar(progress)
+                .loadingIndicator(control)
+                .divider(UiStyle.style()
+                        .foreground(UiDrawable.color(UiColor.rgba8888(dividerColor))))
+                .collapseBar(control.padding(8.0f))
                 .panel(UiStyle.style().padding(12.0f).text(text)
-                        .background(UiDrawable.color(UiColor.rgba8888(0x18212bff))))
+                        .background(UiDrawable.color(UiColor.rgba8888(panelColor))))
                 .window(window)
-                .tabs(UiStyle.style().padding(4.0f).text(textStyle(14.0f, 0xe7edf5ff).lineHeight(18.0f))
-                        .background(UiDrawable.color(UiColor.rgba8888(0x101820ff))))
-                .textField(textField.focused(textField.background(UiDrawable.color(UiColor.rgba8888(0x172334ff)))))
-                .style("text-area", textArea.focused(textArea.background(UiDrawable.color(UiColor.rgba8888(0x172334ff)))))
+                .tabs(UiStyle.style().padding(4.0f).text(textStyle(14.0f, textColor).lineHeight(18.0f))
+                        .background(UiDrawable.color(UiColor.rgba8888(navColor)))
+                        .foreground(UiDrawable.color(UiColor.rgba8888(accentColor))))
+                .textField(textField.focused(textField
+                        .background(UiDrawable.color(UiColor.rgba8888(fieldFocusColor)))))
+                .style("text-area", textArea.focused(textArea
+                        .background(UiDrawable.color(UiColor.rgba8888(fieldFocusColor)))))
                 .style("title", UiStyle.style().text(title))
-                .style("section", UiStyle.style().text(textStyle(15.0f, 0xdce8f5ff).lineHeight(19.0f)))
+                .style("section", UiStyle.style().text(textStyle(15.0f, titleColor).lineHeight(19.0f)))
                 .style("muted", UiStyle.style().text(muted))
-                .style("small", UiStyle.style().text(textStyle(12.0f, 0xa9b6c5ff).lineHeight(16.0f)))
-                .style("metric", UiStyle.style().text(textStyle(16.0f, 0x9fd7ffff).lineHeight(20.0f)))
+                .style("small", UiStyle.style().text(textStyle(12.0f, mutedColor).lineHeight(16.0f)))
+                .style("metric", UiStyle.style().text(textStyle(16.0f, accentColor).lineHeight(20.0f)))
                 .style("nine-panel", ninePanel)
                 .style("section-panel", UiStyle.style().padding(12.0f).text(text)
-                        .background(UiDrawable.color(UiColor.rgba8888(0x151d26ff))))
+                        .background(UiDrawable.color(UiColor.rgba8888(sectionPanelColor))))
                 .style("nav-panel", UiStyle.style().padding(10.0f).text(text)
-                        .background(UiDrawable.color(UiColor.rgba8888(0x101820ff))))
+                        .background(UiDrawable.color(UiColor.rgba8888(navColor))))
                 .style("nav-active", UiStyle.button()
-                        .text(textStyle(15.0f, 0xf8fbffff).lineHeight(19.0f))
-                        .background(UiDrawable.color(UiColor.rgba8888(0x2f6f5eff)))
-                        .hover(UiStyle.button().text(text)
-                                .background(UiDrawable.color(UiColor.rgba8888(0x3b7d6aff))))
-                        .pressed(UiStyle.button().text(text)
-                                .background(UiDrawable.color(UiColor.rgba8888(0x246050ff)))))
+                        .text(activeButtonText)
+                        .background(UiDrawable.color(UiColor.rgba8888(accentColor)))
+                        .hover(UiStyle.button().text(activeButtonText)
+                                .background(UiDrawable.color(UiColor.rgba8888(accentHoverColor))))
+                        .pressed(UiStyle.button().text(activeButtonText)
+                                .background(UiDrawable.color(UiColor.rgba8888(accentPressedColor)))))
                 .style("tile", UiStyle.style().padding(10.0f).text(text)
-                        .background(UiDrawable.color(UiColor.rgba8888(0x121a23ff))))
-                .style("stage", UiStyle.style().background(UiDrawable.color(UiColor.rgba8888(0x0f151dff))))
-                .style("scroll", UiStyle.style().background(UiDrawable.color(UiColor.rgba8888(0x0f151dff))))
+                        .background(UiDrawable.color(UiColor.rgba8888(tileColor))))
+                .style("stage", UiStyle.style().background(UiDrawable.color(UiColor.rgba8888(stageColor))))
+                .style("scroll", UiStyle.style().background(UiDrawable.color(UiColor.rgba8888(stageColor))))
                 .style("popup-panel", UiStyle.style().padding(10.0f).text(text)
-                        .background(UiDrawable.color(UiColor.rgba8888(0x243244ff))))
+                        .background(UiDrawable.color(UiColor.rgba8888(popupColor))))
                 .style("tooltip-panel", UiStyle.style().padding(8.0f).text(muted)
-                        .background(UiDrawable.color(UiColor.rgba8888(0x111820ee))));
+                        .background(UiDrawable.color(UiColor.rgba8888(tooltipColor))));
     }
 
     private UiTextStyle textStyle(float size, int rgba) {
@@ -1634,7 +2069,75 @@ public final class UiKitTest extends ApplicationAdapter {
                         })
                         .expect(UiScenarioAssertions.sliderValue(
                                 UiKitValidationScenarios.SETTINGS_TEXT_SIZE_SLIDER, 2.02f, 0.05f)));
-        builder.entry(23L, captureAllScenarios, true,
+        builder.entry(23L, true, true,
+                Scenario.named("emoji-clipboard")
+                        .custom("show-text-inputs", context -> showValidationSection(SECTION_TEXT_FIELDS))
+                        .expect(UiScenarioAssertions.exists(UiKitValidationScenarios.EMOJI_FIELD))
+                        .custom("validate-emoji-clipboard", context -> validateEmojiAndClipboard()));
+        builder.entry(24L, true, true,
+                Scenario.named("toggles-and-radio")
+                        .custom("show-toggles", context -> showValidationSection(SECTION_TOGGLES))
+                        .expect(UiScenarioAssertions.exists(UiKitValidationScenarios.SWITCH_NOTIFICATIONS))
+                        .expect(UiScenarioAssertions.exists(UiKitValidationScenarios.RADIO_QUALITY))
+                        .custom("validate-toggles", context -> validateToggleChoices()));
+        builder.entry(25L, true, true,
+                Scenario.named("loading-indicators")
+                        .custom("show-loading", context -> showValidationSection(SECTION_LOADING))
+                        .expect(UiScenarioAssertions.boundsAtLeast(
+                                UiKitValidationScenarios.LOADING_BAR, 20.0f, 4.0f))
+                        .expect(UiScenarioAssertions.boundsAtLeast(
+                                UiKitValidationScenarios.LOADING_SPINNER, 20.0f, 20.0f))
+                        .custom("validate-loading", context -> validateLoadingIndicators()));
+        builder.entry(26L, true, true,
+                Scenario.named("collapse-bars")
+                        .custom("show-collapse", context -> showValidationSection(SECTION_COLLAPSE))
+                        .expect(UiScenarioAssertions.exists(UiKitValidationScenarios.COLLAPSE_BASIC))
+                        .custom("validate-collapse", context -> validateCollapseBars()));
+        builder.entry(27L, true, true,
+                Scenario.named("button-constrained-layout")
+                        .custom("show-buttons", context -> showValidationSection(SECTION_BUTTONS))
+                        .custom("validate-constrained-layout", context -> validateConstrainedButtonLayout())
+                        .action(UiScenarioActions.press(UiKitValidationScenarios.CONSTRAINED_GAMMA))
+                        .custom("validate-pressed-gamma", context -> validatePressedConstrainedButton())
+                        .action(UiScenarioActions.release(UiKitValidationScenarios.CONSTRAINED_GAMMA)));
+        builder.entry(28L, true, true,
+                Scenario.named("theme-cobalt")
+                        .custom("show-themes", context -> showValidationSection(SECTION_THEMES))
+                        .action(UiScenarioActions.click(UiKitValidationScenarios.THEME_COBALT))
+                        .custom("settle-theme", context -> settleValidationLayout())
+                        .custom("validate-theme", context -> validateActiveTheme(2)));
+        builder.entry(29L, true, true,
+                Scenario.named("theme-graphite")
+                        .custom("show-graphite", context -> prepareThemeSection(0))
+                        .custom("validate-theme", context -> validateActiveTheme(0)));
+        builder.entry(30L, true, true,
+                Scenario.named("theme-porcelain")
+                        .custom("show-porcelain", context -> prepareThemeSection(1))
+                        .custom("validate-theme", context -> validateActiveTheme(1)));
+        builder.entry(31L, true, true,
+                Scenario.named("theme-aubergine")
+                        .custom("show-aubergine", context -> prepareThemeSection(3))
+                        .custom("validate-theme", context -> validateActiveTheme(3)));
+        builder.entry(32L, true, true,
+                Scenario.named("theme-high-contrast")
+                        .custom("show-high-contrast", context -> prepareThemeSection(4))
+                        .custom("validate-theme", context -> validateActiveTheme(4)));
+        builder.entry(33L, true, true,
+                Scenario.named("switch-off")
+                        .custom("prepare-switch-on", context -> prepareToggleSwitch(true))
+                        .action(UiScenarioActions.click(UiKitValidationScenarios.SWITCH_NOTIFICATIONS))
+                        .expect(UiScenarioAssertions.checked(
+                                UiKitValidationScenarios.SWITCH_NOTIFICATIONS, false)));
+        builder.entry(34L, true, true,
+                Scenario.named("switch-on")
+                        .custom("prepare-switch-on", context -> prepareToggleSwitch(true))
+                        .action(UiScenarioActions.click(UiKitValidationScenarios.SWITCH_NOTIFICATIONS))
+                        .expect(UiScenarioAssertions.checked(
+                                UiKitValidationScenarios.SWITCH_NOTIFICATIONS, false))
+                        .action(UiScenarioActions.click(UiKitValidationScenarios.SWITCH_NOTIFICATIONS))
+                        .expect(UiScenarioAssertions.checked(
+                                UiKitValidationScenarios.SWITCH_NOTIFICATIONS, true)));
+        builder.entry(35L, captureAllScenarios, true,
                 Scenario.named("open-modal")
                         .custom("reset-global-scale", context -> resetGlobalScaleForValidation())
                         .custom("settle", context -> settleValidationLayout())
@@ -1643,6 +2146,19 @@ public final class UiKitTest extends ApplicationAdapter {
                         .expect(UiScenarioAssertions.modalOpen(UiKitValidationScenarios.MODAL_ID))
                         .action(ScenarioActions.emit("ui.modal.opened:" + UiKitValidationScenarios.MODAL_ID)));
         return builder.build();
+    }
+
+    private void prepareToggleSwitch(boolean checked) {
+        selectTheme(0);
+        showValidationSection(SECTION_TOGGLES);
+        switchEnabled.set(checked);
+        settleValidationLayout();
+    }
+
+    private void prepareThemeSection(int index) {
+        showValidationSection(SECTION_THEMES);
+        selectTheme(index);
+        settleValidationLayout();
     }
 
     private void showValidationSection(int section) {
@@ -1909,6 +2425,214 @@ public final class UiKitTest extends ApplicationAdapter {
         activeDemoTab.set(1);
         settleValidationLayout();
         tabsChecked = true;
+    }
+
+    private void validateEmojiAndClipboard() {
+        String initial = "Emoji " + EMOJI_GRIN;
+        emojiInput.set(initial);
+        settleValidationLayout();
+        UiNode field = find(root.rootNode(), UiNodeType.TEXT_FIELD, "Emoji field");
+        if (field == null) {
+            throw new FdxException("UiKitTest could not find the emoji text field");
+        }
+
+        clickTextInputAt(field, 1.0f, 0.5f);
+        pressKey(Key.BACKSPACE);
+        if (!"Emoji ".equals(emojiInput.get())) {
+            throw new FdxException("UiKitTest backspace split or failed to remove one emoji code point: "
+                    + emojiInput.get());
+        }
+        input.dispatchTextInput(EMOJI_GRIN + EMOJI_BEAM);
+        String expected = "Emoji " + EMOJI_GRIN + EMOJI_BEAM;
+        if (!expected.equals(emojiInput.get())) {
+            throw new FdxException("UiKitTest text input did not preserve emoji code points: " + emojiInput.get());
+        }
+
+        pressShortcut(Key.A);
+        pressShortcut(Key.C);
+        String copied = input.clipboard().getText();
+        if (!expected.equals(copied)) {
+            throw new FdxException("UiKitTest clipboard did not preserve emoji text: expected='"
+                    + expected + "', copied='" + copied + "'");
+        }
+        input.clipboard().setText("Pasted " + EMOJI_JOY);
+        pressShortcut(Key.V);
+        if (!("Pasted " + EMOJI_JOY).equals(emojiInput.get())) {
+            throw new FdxException("UiKitTest clipboard paste did not replace the selected emoji text: "
+                    + emojiInput.get());
+        }
+        logger.info("UiKitTest verified emoji rendering/editing and clipboard round trip");
+        emojiChecked = true;
+    }
+
+    private void validateToggleChoices() {
+        UiNode toggle = find(root.rootNode(), UiNodeType.SWITCH, "Notifications");
+        if (toggle == null || toggle.bounds().width() < 48.0f || toggle.bounds().height() < 28.0f) {
+            throw new FdxException("UiKitTest switch did not receive usable bounds");
+        }
+        boolean before = switchEnabled.get();
+        click(toggle);
+        settleValidationLayout();
+        if (switchEnabled.get() == before) {
+            throw new FdxException("UiKitTest switch did not toggle through pointer input");
+        }
+        toggle = find(root.rootNode(), UiNodeType.SWITCH, "Notifications");
+        click(toggle);
+        settleValidationLayout();
+
+        radioChoice.set(0);
+        settleValidationLayout();
+        UiNode quality = find(root.rootNode(), UiNodeType.RADIO_BUTTON, "Quality");
+        if (quality == null || quality.bounds().height() < 28.0f) {
+            throw new FdxException("UiKitTest radio choice did not receive a usable target");
+        }
+        click(quality);
+        settleValidationLayout();
+        if (radioChoice.get() != 1) {
+            throw new FdxException("UiKitTest radio choice did not update the shared state: " + radioChoice.get());
+        }
+    }
+
+    private void validateLoadingIndicators() {
+        UiNode bar = find(root.rootNode(), UiNodeType.LOADING_BAR, "Loading bar");
+        UiNode spinner = find(root.rootNode(), UiNodeType.LOADING_SPINNER, "Loading spinner");
+        if (bar == null || spinner == null) {
+            throw new FdxException("UiKitTest could not find both loading indicators");
+        }
+        if (bar.bounds().width() <= 20.0f || bar.bounds().height() < 4.0f) {
+            throw new FdxException("UiKitTest loading bar did not receive usable bounds: "
+                    + bar.bounds().width() + "x" + bar.bounds().height());
+        }
+        if (spinner.bounds().width() < 20.0f || spinner.bounds().height() < 20.0f) {
+            throw new FdxException("UiKitTest spinner did not receive usable bounds: "
+                    + spinner.bounds().width() + "x" + spinner.bounds().height());
+        }
+    }
+
+    private void validateCollapseBars() {
+        UiNode collapse = find(root.rootNode(), UiNodeType.COLLAPSE_BAR, "Basic disclosure");
+        if (collapse == null || collapse.bounds().height() < 44.0f || collapse.children().isEmpty()) {
+            throw new FdxException("UiKitTest expanded collapse bar did not compose its body");
+        }
+        click(collapse);
+        settleValidationLayout();
+        collapse = find(root.rootNode(), UiNodeType.COLLAPSE_BAR, "Basic disclosure");
+        if (collapse == null || collapse.bounds().height() < 44.0f
+                || collapse.checked() || !collapse.children().isEmpty()) {
+            throw new FdxException("UiKitTest collapsed disclosure retained visible body content");
+        }
+        click(collapse);
+        settleValidationLayout();
+        collapse = find(root.rootNode(), UiNodeType.COLLAPSE_BAR, "Basic disclosure");
+        if (collapse == null || !collapse.checked() || collapse.children().isEmpty()) {
+            throw new FdxException("UiKitTest disclosure did not recompose its expanded body");
+        }
+        newWidgetsChecked = true;
+    }
+
+    private void validateConstrainedButtonLayout() {
+        UiNode row = find(root.rootNode(), UiNodeType.ROW, "Constrained row");
+        UiNode alpha = find(root.rootNode(), UiNodeType.BUTTON, "Alpha");
+        UiNode beta = find(root.rootNode(), UiNodeType.BUTTON, "Beta");
+        UiNode gamma = find(root.rootNode(), UiNodeType.BUTTON, "Gamma");
+        if (row == null || alpha == null || beta == null || gamma == null) {
+            throw new FdxException("UiKitTest could not find constrained layout nodes");
+        }
+        assertInside(alpha.bounds(), row.bounds(), "Alpha");
+        assertInside(beta.bounds(), row.bounds(), "Beta");
+        assertInside(gamma.bounds(), row.bounds(), "Gamma");
+        if (alpha.bounds().width() >= 150.0f || beta.bounds().width() >= 150.0f
+                || gamma.bounds().width() >= 150.0f) {
+            throw new FdxException("UiKitTest constrained row did not shrink fixed-width children");
+        }
+        constrainedLayoutChecked = true;
+    }
+
+    private void validateActiveTheme(int index) {
+        if (activeTheme.get() != index || root.theme() != theme(index)) {
+            throw new FdxException("UiKitTest did not apply the " + THEME_NAMES[index] + " theme");
+        }
+        themeSwitchingChecked = true;
+    }
+
+    private void validatePaletteContrast(int index,
+            int textColor, int mutedColor, int titleColor, int accentTextColor,
+            int panelColor, int navColor,
+            int buttonColor, int buttonHoverColor, int buttonPressedColor,
+            int accentColor, int accentHoverColor, int accentPressedColor) {
+        String name = THEME_NAMES[index];
+        assertContrast(name + " text on panel", textColor, panelColor);
+        assertContrast(name + " muted text on panel", mutedColor, panelColor);
+        assertContrast(name + " navigation text", textColor, navColor);
+        assertContrast(name + " button text", titleColor, buttonColor);
+        assertContrast(name + " hovered button text", titleColor, buttonHoverColor);
+        assertContrast(name + " pressed button text", titleColor, buttonPressedColor);
+        assertContrast(name + " selected text", accentTextColor, accentColor);
+        assertContrast(name + " hovered selected text", accentTextColor, accentHoverColor);
+        assertContrast(name + " pressed selected text", accentTextColor, accentPressedColor);
+    }
+
+    private void assertContrast(String label, int foreground, int background) {
+        double foregroundLuminance = relativeLuminance(foreground);
+        double backgroundLuminance = relativeLuminance(background);
+        double lighter = Math.max(foregroundLuminance, backgroundLuminance);
+        double darker = Math.min(foregroundLuminance, backgroundLuminance);
+        double ratio = (lighter + 0.05) / (darker + 0.05);
+        if (ratio < 4.5) {
+            throw new FdxException("UiKitTest " + label + " contrast is " + ratio + ":1; expected at least 4.5:1");
+        }
+    }
+
+    private double relativeLuminance(int rgba) {
+        double red = linearColorComponent((rgba >>> 24) & 0xff);
+        double green = linearColorComponent((rgba >>> 16) & 0xff);
+        double blue = linearColorComponent((rgba >>> 8) & 0xff);
+        return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+    }
+
+    private double linearColorComponent(int component) {
+        double value = component / 255.0;
+        if (value <= 0.04045) {
+            return value / 12.92;
+        }
+        return Math.pow((value + 0.055) / 1.055, 2.4);
+    }
+
+    private void validatePressedConstrainedButton() {
+        UiNode gamma = find(root.rootNode(), UiNodeType.BUTTON, "Gamma");
+        UiStyle button = root.theme() != null ? root.theme().style("button") : null;
+        if (gamma == null || !gamma.pressed()) {
+            throw new FdxException("UiKitTest did not hold Gamma in its pressed state for validation");
+        }
+        validateSingleLineButtonState("default", button);
+        validateSingleLineButtonState("hover", button != null ? button.hover() : null);
+        validateSingleLineButtonState("pressed", button != null ? button.pressed() : null);
+        validateSingleLineButtonState("disabled", button != null ? button.disabled() : null);
+        UiStyle selectedNavigation = root.theme() != null ? root.theme().style("nav-active") : null;
+        validateSingleLineButtonState("selected navigation", selectedNavigation);
+        validateSingleLineButtonState("selected navigation hover",
+                selectedNavigation != null ? selectedNavigation.hover() : null);
+        validateSingleLineButtonState("selected navigation pressed",
+                selectedNavigation != null ? selectedNavigation.pressed() : null);
+    }
+
+    private void validateSingleLineButtonState(String state, UiStyle style) {
+        UiTextStyle text = style != null ? style.textStyle() : null;
+        if (text == null || text.wrap() || !text.ellipsis()) {
+            throw new FdxException("UiKitTest " + state
+                    + " button style can wrap or clip overflowing text");
+        }
+    }
+
+    private void assertInside(UiRect child, UiRect parent, String label) {
+        if (child.width() < 0.0f || child.height() < 0.0f
+                || child.x() < parent.x() - 0.5f || child.y() < parent.y() - 0.5f
+                || child.right() > parent.right() + 0.5f || child.bottom() > parent.bottom() + 0.5f) {
+            throw new FdxException("UiKitTest " + label + " escaped constrained bounds: child="
+                    + child.x() + "," + child.y() + " " + child.width() + "x" + child.height()
+                    + ", parent=" + parent.x() + "," + parent.y() + " "
+                    + parent.width() + "x" + parent.height());
+        }
     }
 
     private void validateTextSelectionAndCopyPaste() {

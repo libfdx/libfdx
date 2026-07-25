@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     id("java")
@@ -9,7 +8,6 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "${LibExt.fdxGroup}.tests"
 
 base {
     archivesName.set("tests_desktop_c")
@@ -17,10 +15,10 @@ base {
 
 dependencies {
     implementation(project(":tests:core"))
-    if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_desktop_c:${LibExt.fdxSnapshotVersion}")
-        runtimeOnly("${LibExt.fdxGroup}:gl_desktop_c:${LibExt.fdxSnapshotVersion}")
-        runtimeOnly("${LibExt.fdxGroup}:vulkan_desktop_c:${LibExt.fdxSnapshotVersion}")
+    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
+        implementation("${libs.versions.libfdxGroup.get()}:backend_desktop_c:${libs.versions.libfdxSnapshot.get()}")
+        runtimeOnly("${libs.versions.libfdxGroup.get()}:gl_desktop_c:${libs.versions.libfdxSnapshot.get()}")
+        runtimeOnly("${libs.versions.libfdxGroup.get()}:vulkan_desktop_c:${libs.versions.libfdxSnapshot.get()}")
     } else {
         implementation(project(":libfdx:backends:desktop_c"))
         runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_c"))

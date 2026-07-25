@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 import org.gradle.api.tasks.TaskProvider
 import java.time.Instant
@@ -10,7 +9,6 @@ plugins {
     id("io.github.libfdx")
 }
 
-group = "${LibExt.fdxGroup}.benchmark"
 
 base {
     archivesName.set("benchmark_plugin")

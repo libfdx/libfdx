@@ -120,7 +120,7 @@ The repository supports published dependencies for clean-checkout consumers
 and checked-out projects for local framework development. Composite and
 publication builds may configure a reduced project graph. Exact selection,
 versions, included builds, publications, artifacts, and task names are defined
-by `libfdx.toml`, `settings.gradle.kts`, and the relevant Gradle build files.
+by `gradle/libs.versions.toml`, `settings.gradle.kts`, and the relevant Gradle build files.
 
 Contributor setup is documented in [Contributing](../CONTRIBUTING.md). Do not
 copy the live Gradle project or artifact catalog into this document.

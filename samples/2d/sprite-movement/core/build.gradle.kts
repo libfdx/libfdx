@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     id("java-library")
@@ -10,7 +9,6 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "${LibExt.fdxGroup}.samples.g2d.spritemovement"
 
 
 base {
@@ -18,19 +16,19 @@ base {
 }
 
 dependencies {
-    if (LibExt.usePublishedLibfdx) {
-        api("${LibExt.fdxGroup}:application:${LibExt.fdxSnapshotVersion}")
-        api("${LibExt.fdxGroup}:ecs:${LibExt.fdxSnapshotVersion}")
-        api("${LibExt.fdxGroup}:ecs_tooling:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:asset_loaders:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:camera:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:collections:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:files:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:graphics:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:g2d:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:input:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:json:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:math:${LibExt.fdxSnapshotVersion}")
+    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
+        api("${libs.versions.libfdxGroup.get()}:application:${libs.versions.libfdxSnapshot.get()}")
+        api("${libs.versions.libfdxGroup.get()}:ecs:${libs.versions.libfdxSnapshot.get()}")
+        api("${libs.versions.libfdxGroup.get()}:ecs_tooling:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:asset_loaders:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:camera:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:collections:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:files:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:graphics:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:g2d:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:input:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:json:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:math:${libs.versions.libfdxSnapshot.get()}")
     } else {
         api(project(":libfdx:framework:application"))
         api(project(":libfdx:extensions:ecs:core"))
@@ -58,7 +56,7 @@ libfdx {
         projectRoot.set(sampleRoot)
         gradleRoot.set("../../..")
         gradleProject.set(":samples:2d:sprite-movement:core")
-        libfdxAbi.set(LibExt.fdxVersion)
+        libfdxAbi.set(libs.versions.libfdxRelease.get())
     }
 }
 

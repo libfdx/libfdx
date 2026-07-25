@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 import org.gradle.api.attributes.java.TargetJvmVersion
 import org.gradle.jvm.toolchain.JavaLanguageVersion
@@ -7,7 +6,6 @@ plugins {
     id("java")
 }
 
-group = "${LibExt.fdxGroup}.samples.g2d.spritemovement"
 
 
 java {
@@ -39,16 +37,16 @@ base {
 
 dependencies {
     implementation(project(":samples:2d:sprite-movement:core"))
-    if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:application:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:display:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:d3d12_core:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:wgpu_core:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:backend_desktop:${LibExt.fdxSnapshotVersion}")
+    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
+        implementation("${libs.versions.libfdxGroup.get()}:application:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:display:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:d3d12_core:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:wgpu_core:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:backend_desktop:${libs.versions.libfdxSnapshot.get()}")
 
-        glRuntimeClasspath("${LibExt.fdxGroup}:gl_desktop:${LibExt.fdxSnapshotVersion}")
-        vulkanRuntimeClasspath("${LibExt.fdxGroup}:vulkan_desktop:${LibExt.fdxSnapshotVersion}")
-        wgpuRuntimeClasspath("${LibExt.fdxGroup}:wgpu_desktop_ffm:${LibExt.fdxSnapshotVersion}")
+        glRuntimeClasspath("${libs.versions.libfdxGroup.get()}:gl_desktop:${libs.versions.libfdxSnapshot.get()}")
+        vulkanRuntimeClasspath("${libs.versions.libfdxGroup.get()}:vulkan_desktop:${libs.versions.libfdxSnapshot.get()}")
+        wgpuRuntimeClasspath("${libs.versions.libfdxGroup.get()}:wgpu_desktop_ffm:${libs.versions.libfdxSnapshot.get()}")
     } else {
         implementation(project(":libfdx:framework:application"))
         implementation(project(":libfdx:framework:display"))

@@ -231,7 +231,8 @@ public final class UiNode implements Disposable {
             return maskedText;
         }
         maskedTextSource = actual;
-        maskedText = actual.length() == 0 ? "" : "*".repeat(actual.length());
+        int codePointCount = actual.codePointCount(0, actual.length());
+        maskedText = codePointCount == 0 ? "" : "*".repeat(codePointCount);
         return maskedText;
     }
 
@@ -600,7 +601,8 @@ public final class UiNode implements Disposable {
     }
 
     void cacheFallbackGlyphRows(String text) {
-        int length = text != null ? text.length() : 0;
+        int textLength = text != null ? text.length() : 0;
+        int length = text != null ? text.codePointCount(0, textLength) : 0;
         if (length <= 0) {
             fallbackGlyphText = text;
             return;
@@ -613,8 +615,11 @@ public final class UiNode implements Disposable {
         if (fallbackGlyphRows == null || fallbackGlyphRows.length < length) {
             fallbackGlyphRows = new long[length];
         }
-        for (int i = 0; i < length; i++) {
-            fallbackGlyphRows[i] = UiG2DRenderer.fallbackGlyphRows(text.charAt(i));
+        int index = 0;
+        for (int i = 0; i < textLength;) {
+            int codePoint = text.codePointAt(i);
+            fallbackGlyphRows[index++] = UiG2DRenderer.fallbackGlyphRows(codePoint);
+            i += Character.charCount(codePoint);
         }
         fallbackGlyphText = text;
     }
@@ -645,7 +650,8 @@ public final class UiNode implements Disposable {
             fallbackTabGlyphTexts = texts;
             fallbackTabGlyphRows = rows;
         }
-        int length = text != null ? text.length() : 0;
+        int textLength = text != null ? text.length() : 0;
+        int length = text != null ? text.codePointCount(0, textLength) : 0;
         long[] rows = fallbackTabGlyphRows[index];
         if (sameText(fallbackTabGlyphTexts[index], text)
                 && rows != null
@@ -656,8 +662,11 @@ public final class UiNode implements Disposable {
             rows = new long[length];
             fallbackTabGlyphRows[index] = rows;
         }
-        for (int i = 0; i < length; i++) {
-            rows[i] = UiG2DRenderer.fallbackGlyphRows(text.charAt(i));
+        int rowIndex = 0;
+        for (int i = 0; i < textLength;) {
+            int codePoint = text.codePointAt(i);
+            rows[rowIndex++] = UiG2DRenderer.fallbackGlyphRows(codePoint);
+            i += Character.charCount(codePoint);
         }
         fallbackTabGlyphTexts[index] = text;
     }
@@ -690,15 +699,26 @@ public final class UiNode implements Disposable {
             action.run();
             return;
         }
-        if (type == UiNodeType.CHECKBOX && descriptor instanceof UiBooleanState) {
+        if ((type == UiNodeType.CHECKBOX || type == UiNodeType.SWITCH || type == UiNodeType.COLLAPSE_BAR)
+                && descriptor instanceof UiBooleanState) {
             UiBooleanState state = (UiBooleanState) descriptor;
             state.toggle();
             checked = state.get();
+            return;
+        }
+        if (type == UiNodeType.RADIO_BUTTON && descriptor instanceof UiRadioModel) {
+            UiRadioModel model = (UiRadioModel) descriptor;
+            model.select();
+            checked = model.selected();
         }
     }
 
     boolean activatable() {
-        return action != null || type == UiNodeType.CHECKBOX;
+        return action != null
+                || type == UiNodeType.CHECKBOX
+                || type == UiNodeType.SWITCH
+                || type == UiNodeType.RADIO_BUTTON
+                || type == UiNodeType.COLLAPSE_BAR;
     }
 
     /**

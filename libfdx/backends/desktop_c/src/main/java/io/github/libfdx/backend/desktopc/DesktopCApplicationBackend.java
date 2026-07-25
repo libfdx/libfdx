@@ -89,7 +89,7 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
             display = new DesktopCDisplay(windowHandle, displayConfig.title());
             display.refreshSizes();
             input = new DefaultInput(ProviderId.of("desktop_c_input"), DefaultInputCapabilities.desktop(),
-                    new DefaultCursor(), new DefaultGamepads());
+                    new DefaultCursor(), new DefaultGamepads(), null, new DesktopCClipboard(windowHandle));
 
             graphics = graphicsProvider.create(new DesktopCGraphicsEnvironment(display, NativeWindow.glfw(windowHandle)));
         } catch (RuntimeException error) {

@@ -1,20 +1,25 @@
 [versions]
-android-gradle-plugin = "9.1.1"
-easy-publishing = "0.1.0"
+libfdxGroup = "io.github.libfdx"
+libfdxRelease = "0.0.2"
+libfdxSnapshot = "-SNAPSHOT"
+
+easyPublishing = "0.1.0"
+androidGradlePlugin = "9.1.1"
 jwebgpu = "0.3.3"
 jmultiplatform = "0.1.3"
-junit-jupiter = "5.13.4"
-junit-platform = "1.13.4"
-java-websocket = "1.5.7"
+junitJupiter = "5.13.4"
+junitPlatform = "1.13.4"
+javaWebsocket = "1.5.7"
 lwjgl = "3.4.1"
 teavm = "0.15.0"
-webrtc-android = "137.7151.05"
-webrtc-java = "0.14.0"
+usePublishedLibfdx = "true"
+webrtcAndroid = "137.7151.05"
+webrtcJava = "0.14.0"
 
 [plugins]
-android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
-android-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }
-easy-publishing = { id = "com.github.xpenatan.easy-publishing", version.ref = "easy-publishing" }
+android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
+android-library = { id = "com.android.library", version.ref = "androidGradlePlugin" }
+easyPublishing = { id = "com.github.xpenatan.easy-publishing", version.ref = "easyPublishing" }
 
 [libraries]
 jwebgpu-android = { module = "com.github.xpenatan.jWebGPU:webgpu-android-wgpu", version.ref = "jwebgpu" }
@@ -33,9 +38,9 @@ jwebgpu-jni-mac-arm64 = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-j
 jwebgpu-web = { module = "com.github.xpenatan.jWebGPU:webgpu-web", version.ref = "jwebgpu" }
 jwebgpu-web-wasm = { module = "com.github.xpenatan.jWebGPU:webgpu-web_wasm", version.ref = "jwebgpu" }
 jmultiplatform = { module = "com.github.xpenatan:jMultiplatform", version.ref = "jmultiplatform" }
-junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit-jupiter" }
-junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
-java-websocket = { module = "org.java-websocket:Java-WebSocket", version.ref = "java-websocket" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junitJupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junitPlatform" }
+java-websocket = { module = "org.java-websocket:Java-WebSocket", version.ref = "javaWebsocket" }
 lwjgl = { module = "org.lwjgl:lwjgl", version.ref = "lwjgl" }
 lwjgl-freetype = { module = "org.lwjgl:lwjgl-freetype", version.ref = "lwjgl" }
 lwjgl-glfw = { module = "org.lwjgl:lwjgl-glfw", version.ref = "lwjgl" }
@@ -49,8 +54,8 @@ teavm-extension-spi = { module = "org.teavm:teavm-extension-spi", version.ref = 
 teavm-jso = { module = "org.teavm:teavm-jso", version.ref = "teavm" }
 teavm-jso-apis = { module = "org.teavm:teavm-jso-apis", version.ref = "teavm" }
 teavm-jso-impl = { module = "org.teavm:teavm-jso-impl", version.ref = "teavm" }
-webrtc-android = { module = "io.github.webrtc-sdk:android", version.ref = "webrtc-android" }
-webrtc-java = { module = "dev.onvoid.webrtc:webrtc-java", version.ref = "webrtc-java" }
+webrtc-android = { module = "io.github.webrtc-sdk:android", version.ref = "webrtcAndroid" }
+webrtc-java = { module = "dev.onvoid.webrtc:webrtc-java", version.ref = "webrtcJava" }
 
 [bundles]
 jwebgpu-desktop-ffm = [

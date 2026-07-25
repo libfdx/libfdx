@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     alias(libs.plugins.android.application)
@@ -8,7 +7,6 @@ val androidCompileSdkVersion = providers.gradleProperty("androidCompileSdk").get
 val androidMinSdkVersion = providers.gradleProperty("androidMinSdk").get().toInt()
 val androidTargetSdkVersion = providers.gradleProperty("androidTargetSdk").get().toInt()
 
-group = "${LibExt.fdxGroup}.tests"
 
 android {
     namespace = "io.github.libfdx.tests.android"
@@ -38,10 +36,10 @@ val adbExecutable = androidComponents.sdkComponents.adb
 
 dependencies {
     implementation(project(":tests:core"))
-    if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_android:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:wgpu_android_jni:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:vulkan_android_jni:${LibExt.fdxSnapshotVersion}")
+    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
+        implementation("${libs.versions.libfdxGroup.get()}:backend_android:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:wgpu_android_jni:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:vulkan_android_jni:${libs.versions.libfdxSnapshot.get()}")
     } else {
         implementation(project(":libfdx:backends:android"))
         implementation(project(":libfdx:extensions:graphics:wgpu:platform:android_jni"))

@@ -27,6 +27,16 @@ final class UiKitValidationScenarios {
     static final String TOOLTIP_TEXT_TARGET = "tooltips.text";
     static final String TOOLTIP_CHECKBOX_TARGET = "tooltips.checkbox";
     static final String TOOLTIP_TEXT_FIELD_TARGET = "tooltips.textField";
+    static final String EMOJI_FIELD = "text.emoji";
+    static final String SWITCH_NOTIFICATIONS = "toggles.notifications";
+    static final String RADIO_QUALITY = "toggles.quality";
+    static final String LOADING_BAR = "loading.bar";
+    static final String LOADING_SPINNER = "loading.spinner";
+    static final String COLLAPSE_BASIC = "collapse.basic";
+    static final String THEME_COBALT = "themes.cobalt";
+    static final String CONSTRAINED_ALPHA = "layout.alpha";
+    static final String CONSTRAINED_BETA = "layout.beta";
+    static final String CONSTRAINED_GAMMA = "layout.gamma";
 
     /**
      * Represents a plan.

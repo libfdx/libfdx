@@ -190,7 +190,7 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         textInputController.canvas(canvas);
         DefaultInput createdInput = new DefaultInput(ProviderId.of("web_input"),
                 new DefaultInputCapabilities(true, true, true, true, false, false), new DefaultCursor(),
-                new DefaultGamepads(), textInputController);
+                new DefaultGamepads(), textInputController, new WebClipboard());
         textInputController.input(createdInput);
         return createdInput;
     }

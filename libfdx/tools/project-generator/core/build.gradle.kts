@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     id("java-library")
@@ -13,10 +12,9 @@ base {
     archivesName.set("project_generator_core")
 }
 
-group = "${LibExt.fdxGroup}.tools.projectgenerator"
 
 tasks.processResources {
-    from(LibExt.rootDirectory.resolve("libfdx.toml")) {
+    from(rootProject.layout.projectDirectory.file("gradle/libs.versions.toml")) {
         into("io/github/libfdx/tools/project/generator")
     }
 }
@@ -27,10 +25,10 @@ tasks.register<JavaExec>("test_generate_project") {
     dependsOn(tasks.named("testClasses"))
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("io.github.libfdx.tools.project.generator.ProjectGeneratorSmokeTest")
-    val expectedVersion = if (LibExt.fdxSnapshotVersion.startsWith("-")) {
-        LibExt.fdxVersion + LibExt.fdxSnapshotVersion
+    val expectedVersion = if (libs.versions.libfdxSnapshot.get().startsWith("-")) {
+        libs.versions.libfdxRelease.get() + libs.versions.libfdxSnapshot.get()
     } else {
-        LibExt.fdxSnapshotVersion
+        libs.versions.libfdxSnapshot.get()
     }
     systemProperty("libfdx.expectedVersion", expectedVersion)
 }

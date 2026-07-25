@@ -277,7 +277,7 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
     private DefaultInput createInput() {
         DefaultInput createdInput = new DefaultInput(ProviderId.of("android_input"),
                 new DefaultInputCapabilities(true, true, true, true, false, false), new DefaultCursor(),
-                new DefaultGamepads(), textInputController);
+                new DefaultGamepads(), textInputController, new AndroidClipboard(activity));
         if (textInputController != null) {
             textInputController.input(createdInput);
         }

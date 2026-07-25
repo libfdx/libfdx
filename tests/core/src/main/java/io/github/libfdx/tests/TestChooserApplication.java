@@ -719,7 +719,7 @@ public final class TestChooserApplication extends ApplicationAdapter {
                 .size(mutedSize)
                 .lineHeight(mutedLineHeight)
                 .color(UiColor.rgba8888(0xaeb7c4ff));
-        UiTextStyle buttonText = text.align(UiTextAlign.CENTER);
+        UiTextStyle buttonText = text.align(UiTextAlign.CENTER).wrap(false).ellipsis(true);
         UiTextStyle listButtonText = text.align(UiTextAlign.START).ellipsis(true).wrap(false);
         UiTextStyle selectedListButtonText = listButtonText.color(UiColor.rgba8888(0xffffffff));
         UiStyle button = UiStyle.button()

@@ -64,6 +64,20 @@ public final class FreeTypeFontOptions {
     }
 
     /**
+     * Adds characters to the current glyph set and returns this free type font options.
+     *
+     * <p>This is useful for adding application-specific symbols or emoji while keeping
+     * the default localized Latin glyphs.</p>
+     *
+     * @param characters the characters to add
+     * @return this free type font options for chaining
+     */
+    public FreeTypeFontOptions addCharacters(String characters) {
+        String additional = characters != null ? characters : "";
+        return new FreeTypeFontOptions(family, size, this.characters + additional, padding, atlasWidth);
+    }
+
+    /**
      * Sets the padding and returns this free type font options.
      *
      * @param padding the padding
@@ -147,13 +161,15 @@ public final class FreeTypeFontOptions {
     }
 
     private static String unique(String characters) {
-        Set<Character> seen = new LinkedHashSet<Character>();
-        for (int i = 0; i < characters.length(); i++) {
-            seen.add(Character.valueOf(characters.charAt(i)));
+        Set<Integer> seen = new LinkedHashSet<Integer>();
+        for (int i = 0; i < characters.length();) {
+            int codePoint = characters.codePointAt(i);
+            seen.add(Integer.valueOf(codePoint));
+            i += Character.charCount(codePoint);
         }
         StringBuilder builder = new StringBuilder();
-        for (Character character : seen) {
-            builder.append(character.charValue());
+        for (Integer codePoint : seen) {
+            builder.appendCodePoint(codePoint.intValue());
         }
         return builder.toString();
     }

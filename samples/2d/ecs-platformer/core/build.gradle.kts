@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     id("java-library")
@@ -9,18 +8,17 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "${LibExt.fdxGroup}.samples.ecs.platformer"
 
 base {
     archivesName.set("sample_ecs_platformer_core")
 }
 
 dependencies {
-    if (LibExt.usePublishedLibfdx) {
-        api("${LibExt.fdxGroup}:application:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:graphics:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:g2d:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:ecs:${LibExt.fdxSnapshotVersion}")
+    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
+        api("${libs.versions.libfdxGroup.get()}:application:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:graphics:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:g2d:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:ecs:${libs.versions.libfdxSnapshot.get()}")
     } else {
         api(project(":libfdx:framework:application"))
         implementation(project(":libfdx:framework:graphics"))

@@ -18,7 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Represents an ui G2 d renderer.
+ * Renders UI nodes using the libFDX 2D graphics pipeline.
  *
  * @author xpenatan
  */
@@ -55,6 +55,7 @@ public final class UiG2DRenderer implements UiRenderer {
     private static final UiColor DEBUG_DEFAULT = UiColor.rgba8888(0xa9b6c599);
     private static final UiColor DEBUG_WINDOW_TITLE = UiColor.rgba8888(0xffd166ee);
     private static final UiColor DEBUG_WINDOW_RESIZE = UiColor.rgba8888(0xff4fd8ff);
+    private static final UiColor CONTROL_DARK = UiColor.rgba8888(0x17202aff);
 
     private final GraphicsContext graphics;
     private final ShapeRenderer2D shapes;
@@ -176,10 +177,22 @@ public final class UiG2DRenderer implements UiRenderer {
         }
         if (node.type() == UiNodeType.CHECKBOX) {
             drawCheckbox(root, node, alpha);
+        } else if (node.type() == UiNodeType.SWITCH) {
+            drawSwitch(root, node, alpha);
+        } else if (node.type() == UiNodeType.RADIO_BUTTON) {
+            drawRadioButton(root, node, alpha);
         } else if (node.type() == UiNodeType.SLIDER) {
             drawSlider(root, node, alpha);
         } else if (node.type() == UiNodeType.PROGRESS_BAR) {
             drawProgressBar(root, node, alpha);
+        } else if (node.type() == UiNodeType.LOADING_BAR) {
+            drawLoadingBar(root, node, alpha);
+        } else if (node.type() == UiNodeType.LOADING_SPINNER) {
+            drawLoadingSpinner(root, node, alpha);
+        } else if (node.type() == UiNodeType.DIVIDER) {
+            drawDivider(root, node, alpha);
+        } else if (node.type() == UiNodeType.COLLAPSE_BAR) {
+            drawCollapseBar(root, node, alpha);
         } else if (node.type() == UiNodeType.TABS) {
             drawTabs(root, node, alpha);
         }
@@ -248,6 +261,9 @@ public final class UiG2DRenderer implements UiRenderer {
             }
             return;
         }
+        if (usesInternalBackground(node)) {
+            return;
+        }
         UiStyle style = root.styleFor(node);
         UiDrawable background = style != null ? stateStyle(node, style).background() : defaultBackground(node);
         if (background == null || background.type() == UiDrawableType.NONE) {
@@ -274,16 +290,85 @@ public final class UiG2DRenderer implements UiRenderer {
 
     private void drawCheckbox(UiRoot root, UiNode node, float alpha) {
         UiRect box = checkboxBox(root, node);
-        drawRect(root, box, 0.07f, 0.08f, 0.10f, alpha);
-        drawRect(root, box.x(), box.y(), box.width(), 1.0f, 0.32f, 0.40f, 0.50f, alpha);
-        drawRect(root, box.x(), box.bottom() - 1.0f, box.width(), 1.0f, 0.32f, 0.40f, 0.50f, alpha);
-        drawRect(root, box.x(), box.y(), 1.0f, box.height(), 0.32f, 0.40f, 0.50f, alpha);
-        drawRect(root, box.right() - 1.0f, box.y(), 1.0f, box.height(), 0.32f, 0.40f, 0.50f, alpha);
+        UiStyle style = controlStyle(root, node);
+        UiColor track = drawableColor(style != null ? style.background() : null, UiColor.rgba8888(0x121820ff));
+        UiColor accent = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x47a8ffff));
+        float localAlpha = node.modifier().enabled() ? alpha : alpha * 0.55f;
+        drawRect(root, box, track.red(), track.green(), track.blue(), track.alpha() * localAlpha);
+        drawOutline(root, box, accent, localAlpha * 0.62f);
         if (node.checked()) {
             float inset = Math.max(2.0f, box.width() * 0.16f);
             drawRect(root, box.x() + inset, box.y() + inset,
                     Math.max(0.0f, box.width() - inset * 2.0f), Math.max(0.0f, box.height() - inset * 2.0f),
-                    0.28f, 0.68f, 1.0f, alpha);
+                    accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha);
+        }
+    }
+
+    private void drawSwitch(UiRoot root, UiNode node, float alpha) {
+        UiRect content = node.bounds().inset(root.effectivePadding(node));
+        float height = Math.min(24.0f, Math.max(0.0f, content.height() - 4.0f));
+        float width = Math.min(44.0f, Math.max(0.0f, content.width() - 4.0f));
+        if (height <= 0.0f || width <= 0.0f) {
+            return;
+        }
+        height = Math.min(height, width);
+        width = Math.max(height, width);
+        float x = content.x() + Math.max(0.0f, (Math.min(48.0f, content.width()) - width) * 0.5f);
+        float y = content.y() + Math.max(0.0f, (content.height() - height) * 0.5f);
+        UiRect trackBounds = node.rendererRect(3, x, y, width, height);
+        UiStyle style = controlStyle(root, node);
+        UiColor off = drawableColor(style != null ? style.background() : null, UiColor.rgba8888(0x303946ff));
+        UiColor on = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x47a8ffff));
+        UiColor label = style != null && style.textStyle() != null && style.textStyle().color() != null
+                ? style.textStyle().color()
+                : UiColor.WHITE;
+        float localAlpha = node.modifier().enabled() ? alpha : alpha * 0.55f;
+        UiColor track = node.checked() ? on : off;
+        float trackRed = track.red();
+        float trackGreen = track.green();
+        float trackBlue = track.blue();
+        if (node.focused() || node.hovered()) {
+            UiColor interaction = node.checked() ? contrastingColor(on) : on;
+            float interactionAmount = node.focused() ? 0.16f : 0.08f;
+            trackRed += (interaction.red() - trackRed) * interactionAmount;
+            trackGreen += (interaction.green() - trackGreen) * interactionAmount;
+            trackBlue += (interaction.blue() - trackBlue) * interactionAmount;
+        }
+        drawRoundedTrack(root, trackBounds, trackRed, trackGreen, trackBlue, track.alpha() * localAlpha);
+        float thumbRadius = Math.max(0.0f, height * 0.5f - 3.0f);
+        float thumbCenterX = node.checked()
+                ? trackBounds.right() - height * 0.5f
+                : trackBounds.x() + height * 0.5f;
+        UiColor thumb = node.checked() ? contrastingColor(on) : label;
+        drawFilledCircle(root, thumbCenterX, trackBounds.y() + height * 0.5f,
+                thumbRadius, thumb, localAlpha);
+    }
+
+    private void drawRadioButton(UiRoot root, UiNode node, float alpha) {
+        UiRect hitBox = checkboxBox(root, node);
+        float visualSize = Math.min(20.0f, Math.min(hitBox.width(), hitBox.height()));
+        if (visualSize <= 0.0f) {
+            return;
+        }
+        UiRect box = node.rendererRect(4,
+                hitBox.x() + (hitBox.width() - visualSize) * 0.5f,
+                hitBox.y() + (hitBox.height() - visualSize) * 0.5f,
+                visualSize, visualSize);
+        UiStyle style = controlStyle(root, node);
+        UiColor track = drawableColor(style != null ? style.background() : null, UiColor.rgba8888(0x303946ff));
+        UiColor accent = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x47a8ffff));
+        float localAlpha = node.modifier().enabled() ? alpha : alpha * 0.55f;
+        float centerX = box.x() + box.width() * 0.5f;
+        float centerY = box.y() + box.height() * 0.5f;
+        float radius = visualSize * 0.5f;
+        if (node.focused() || node.hovered()) {
+            drawFilledCircle(root, centerX, centerY, radius + (node.focused() ? 3.0f : 2.0f),
+                    accent, localAlpha * (node.focused() ? 0.28f : 0.14f));
+        }
+        drawFilledCircle(root, centerX, centerY, radius, accent, localAlpha * 0.92f);
+        drawFilledCircle(root, centerX, centerY, Math.max(0.0f, radius - 2.0f), track, localAlpha);
+        if (node.checked()) {
+            drawFilledCircle(root, centerX, centerY, Math.max(2.0f, radius - 5.0f), accent, localAlpha);
         }
     }
 
@@ -313,6 +398,9 @@ public final class UiG2DRenderer implements UiRenderer {
     }
 
     private boolean textureBackground(UiRoot root, UiNode node) {
+        if (usesInternalBackground(node)) {
+            return false;
+        }
         UiStyle style = root.styleFor(node);
         UiDrawable background = style != null ? stateStyle(node, style).background() : defaultBackground(node);
         if (node.type() == UiNodeType.MODAL && node.descriptor() instanceof UiModal) {
@@ -347,10 +435,15 @@ public final class UiG2DRenderer implements UiRenderer {
         float trackHeight = 4.0f;
         boolean enabled = node.modifier().enabled();
         float sliderAlpha = enabled ? alpha : alpha * 0.55f;
-        drawRect(root, trackX, y, trackWidth, trackHeight, 0.20f, 0.23f, 0.28f, sliderAlpha);
+        UiStyle style = controlStyle(root, node);
+        UiColor track = drawableColor(style != null ? style.background() : null, UiColor.rgba8888(0x303946ff));
+        UiColor accent = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x47a8ffff));
+        drawRect(root, trackX, y, trackWidth, trackHeight,
+                track.red(), track.green(), track.blue(), track.alpha() * sliderAlpha);
         float progress = sliderProgress(node);
         if (enabled) {
-            drawRect(root, trackX, y, trackWidth * progress, trackHeight, 0.28f, 0.68f, 1.0f, sliderAlpha);
+            drawRect(root, trackX, y, trackWidth * progress, trackHeight,
+                    accent.red(), accent.green(), accent.blue(), accent.alpha() * sliderAlpha);
         } else {
             drawRect(root, trackX, y, trackWidth * progress, trackHeight, 0.36f, 0.43f, 0.50f, sliderAlpha);
         }
@@ -364,20 +457,131 @@ public final class UiG2DRenderer implements UiRenderer {
 
     private void drawProgressBar(UiRoot root, UiNode node, float alpha) {
         UiRect bounds = node.bounds().inset(root.effectivePadding(node));
-        float trackHeight = Math.max(6.0f, Math.min(bounds.height(), 14.0f));
+        if (bounds.width() <= 0.0f || bounds.height() <= 0.0f) {
+            return;
+        }
+        float trackHeight = Math.min(bounds.height(), 14.0f);
         float trackX = bounds.x();
         float trackY = bounds.y() + Math.max(0.0f, (bounds.height() - trackHeight) * 0.5f);
         float trackWidth = bounds.width();
         boolean enabled = node.modifier().enabled();
         float localAlpha = enabled ? alpha : alpha * 0.55f;
-        drawRect(root, trackX, trackY, trackWidth, trackHeight, 0.18f, 0.22f, 0.28f, localAlpha);
+        UiStyle style = controlStyle(root, node);
+        UiColor track = drawableColor(style != null ? style.background() : null, UiColor.rgba8888(0x28313cff));
+        UiColor accent = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x63cd8fff));
+        drawRect(root, trackX, trackY, trackWidth, trackHeight,
+                track.red(), track.green(), track.blue(), track.alpha() * localAlpha);
         float progress = progressValue(node);
         if (enabled) {
-            drawRect(root, trackX, trackY, trackWidth * progress, trackHeight, 0.39f, 0.80f, 0.58f, localAlpha);
+            drawRect(root, trackX, trackY, trackWidth * progress, trackHeight,
+                    accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha);
         } else {
             drawRect(root, trackX, trackY, trackWidth * progress, trackHeight, 0.36f, 0.43f, 0.50f, localAlpha);
         }
-        drawRect(root, trackX, trackY, trackWidth, 1.0f, 0.42f, 0.50f, 0.60f, localAlpha * 0.8f);
+        drawRect(root, trackX, trackY, trackWidth, 1.0f,
+                accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha * 0.58f);
+    }
+
+    private void drawLoadingBar(UiRoot root, UiNode node, float alpha) {
+        UiRect bounds = node.bounds().inset(root.effectivePadding(node));
+        if (bounds.width() <= 0.0f || bounds.height() <= 0.0f) {
+            return;
+        }
+        float height = Math.min(8.0f, bounds.height());
+        float y = bounds.y() + Math.max(0.0f, (bounds.height() - height) * 0.5f);
+        UiStyle style = controlStyle(root, node);
+        UiColor track = drawableColor(style != null ? style.background() : null, UiColor.rgba8888(0x28313cff));
+        UiColor accent = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x47a8ffff));
+        float localAlpha = node.modifier().enabled() ? alpha : alpha * 0.55f;
+        drawRect(root, bounds.x(), y, bounds.width(), height,
+                track.red(), track.green(), track.blue(), track.alpha() * localAlpha);
+        float segment = Math.max(12.0f, bounds.width() * 0.32f);
+        float travel = bounds.width() + segment;
+        float phase = (root.elapsedSeconds() * 0.72f) % 1.0f;
+        float x = bounds.x() - segment + travel * phase;
+        float clippedX = Math.max(bounds.x(), x);
+        float clippedRight = Math.min(bounds.right(), x + segment);
+        if (clippedRight > clippedX) {
+            drawRect(root, clippedX, y, clippedRight - clippedX, height,
+                    accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha);
+        }
+    }
+
+    private void drawLoadingSpinner(UiRoot root, UiNode node, float alpha) {
+        UiRect bounds = node.bounds().inset(root.effectivePadding(node));
+        UiStyle style = controlStyle(root, node);
+        UiColor accent = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x47a8ffff));
+        float localAlpha = node.modifier().enabled() ? alpha : alpha * 0.55f;
+        float centerX = bounds.x() + bounds.width() * 0.5f;
+        float centerY = bounds.y() + bounds.height() * 0.5f;
+        float radius = Math.max(2.0f, Math.min(bounds.width(), bounds.height()) * 0.34f);
+        int leading = (int) (root.elapsedSeconds() * 10.0f) & 7;
+        for (int i = 0; i < 8; i++) {
+            double angle = Math.PI * 2.0 * i / 8.0;
+            float x = centerX + (float) Math.cos(angle) * radius - 1.5f;
+            float y = centerY + (float) Math.sin(angle) * radius - 1.5f;
+            int distance = (i - leading + 8) & 7;
+            float fade = 1.0f - distance / 9.0f;
+            drawRect(root, x, y, 3.0f, 3.0f,
+                    accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha * fade);
+        }
+    }
+
+    private void drawDivider(UiRoot root, UiNode node, float alpha) {
+        UiRect bounds = node.bounds().inset(root.effectivePadding(node));
+        if (bounds.width() <= 0.0f || bounds.height() <= 0.0f) {
+            return;
+        }
+        UiStyle style = controlStyle(root, node);
+        UiColor color = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x465362ff));
+        float height = Math.min(bounds.height(), 1.0f);
+        drawRect(root, bounds.x(), bounds.y() + Math.max(0.0f, (bounds.height() - height) * 0.5f),
+                bounds.width(), height, color.red(), color.green(), color.blue(), color.alpha() * alpha);
+    }
+
+    private void drawCollapseBar(UiRoot root, UiNode node, float alpha) {
+        UiRect bounds = node.bounds();
+        float headerHeight = Math.min(44.0f, bounds.height());
+        UiStyle style = controlStyle(root, node);
+        UiColor surface = drawableColor(style != null ? style.background() : null, UiColor.rgba8888(0x202a35ff));
+        UiColor accent = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x47a8ffff));
+        float localAlpha = node.modifier().enabled() ? alpha : alpha * 0.55f;
+        drawRect(root, bounds, surface.red(), surface.green(), surface.blue(), surface.alpha() * localAlpha);
+        float stateAlpha = node.checked() ? 0.11f : 0.0f;
+        if (node.hovered()) {
+            stateAlpha = Math.max(stateAlpha, 0.15f);
+        }
+        if (node.pressed()) {
+            stateAlpha = Math.max(stateAlpha, 0.22f);
+        }
+        if (stateAlpha > 0.0f) {
+            drawRect(root, bounds.x(), bounds.y(), bounds.width(), headerHeight,
+                    accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha * stateAlpha);
+        }
+        drawOutline(root, bounds, accent, localAlpha * (node.focused() ? 0.92f : 0.30f));
+        drawRect(root, bounds.x(), bounds.y() + headerHeight - 1.0f, bounds.width(), 1.0f,
+                accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha * 0.58f);
+        if (node.checked() && bounds.height() > headerHeight) {
+            drawRect(root, bounds.x(), bounds.y() + headerHeight, 3.0f, bounds.height() - headerHeight,
+                    accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha * 0.72f);
+        }
+        UiInsets padding = root.effectivePadding(node);
+        float leading = Math.max(14.0f, padding.left());
+        float centerX = bounds.x() + leading + 7.0f;
+        float centerY = bounds.y() + headerHeight * 0.5f;
+        if (node.checked()) {
+            drawFilledTriangle(root,
+                    centerX - 7.0f, centerY - 3.5f,
+                    centerX + 7.0f, centerY - 3.5f,
+                    centerX, centerY + 4.5f,
+                    accent, localAlpha);
+        } else {
+            drawFilledTriangle(root,
+                    centerX - 3.5f, centerY - 7.0f,
+                    centerX + 4.5f, centerY,
+                    centerX - 3.5f, centerY + 7.0f,
+                    accent, localAlpha);
+        }
     }
 
     private void drawTabs(UiRoot root, UiNode node, float alpha) {
@@ -389,33 +593,38 @@ public final class UiG2DRenderer implements UiRenderer {
         boolean enabled = node.modifier().enabled();
         float localAlpha = enabled ? alpha : alpha * 0.55f;
         int active = root.tabActiveIndex(node);
+        UiStyle style = controlStyle(root, node);
+        UiColor surface = drawableColor(style != null ? style.background() : null, UiColor.rgba8888(0x10141bff));
+        UiColor accent = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x4fb3ffff));
         drawRect(root, content.x(), content.bottom() - 1.0f, content.width(), 1.0f,
-                0.30f, 0.37f, 0.46f, localAlpha);
+                accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha * 0.38f);
         for (int i = 0; i < count; i++) {
             UiRect tab = root.tabBounds(node, i);
             boolean selected = i == active;
             if (selected) {
-                drawRect(root, tab, 0.16f, 0.28f, 0.36f, localAlpha);
+                drawRect(root, tab, accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha * 0.24f);
             } else {
-                drawRect(root, tab, 0.10f, 0.14f, 0.18f, localAlpha * 0.88f);
+                drawRect(root, tab, surface.red(), surface.green(), surface.blue(), surface.alpha() * localAlpha);
             }
             drawRect(root, tab.right() - 1.0f, tab.y() + 5.0f, 1.0f, Math.max(0.0f, tab.height() - 10.0f),
-                    0.25f, 0.31f, 0.39f, localAlpha * 0.72f);
+                    accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha * 0.26f);
             if (selected) {
                 drawRect(root, tab.x(), tab.y(), tab.width(), 2.0f,
-                        0.31f, 0.70f, 1.0f, localAlpha);
+                        accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha);
                 drawRect(root, tab.x(), tab.bottom() - 1.0f, tab.width(), 1.0f,
-                        0.16f, 0.28f, 0.36f, localAlpha);
+                        accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha * 0.24f);
             }
         }
         if (node.focused()) {
             float focusAlpha = localAlpha * 0.9f;
-            drawRect(root, content.x(), content.y(), content.width(), 1.0f, 0.50f, 0.72f, 1.0f, focusAlpha);
+            drawRect(root, content.x(), content.y(), content.width(), 1.0f,
+                    accent.red(), accent.green(), accent.blue(), accent.alpha() * focusAlpha);
             drawRect(root, content.x(), content.bottom() - 1.0f, content.width(), 1.0f,
-                    0.50f, 0.72f, 1.0f, focusAlpha);
-            drawRect(root, content.x(), content.y(), 1.0f, content.height(), 0.50f, 0.72f, 1.0f, focusAlpha);
+                    accent.red(), accent.green(), accent.blue(), accent.alpha() * focusAlpha);
+            drawRect(root, content.x(), content.y(), 1.0f, content.height(),
+                    accent.red(), accent.green(), accent.blue(), accent.alpha() * focusAlpha);
             drawRect(root, content.right() - 1.0f, content.y(), 1.0f, content.height(),
-                    0.50f, 0.72f, 1.0f, focusAlpha);
+                    accent.red(), accent.green(), accent.blue(), accent.alpha() * focusAlpha);
         }
     }
 
@@ -427,6 +636,9 @@ public final class UiG2DRenderer implements UiRenderer {
         UiRect bounds = node.bounds().inset(root.effectivePadding(node));
         float trackAlpha = alpha * 0.72f;
         float thumbAlpha = alpha * 0.92f;
+        UiStyle style = controlStyle(root, node);
+        UiColor track = drawableColor(style != null ? style.background() : null, UiColor.rgba8888(0x212b38ff));
+        UiColor thumb = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x6b8099ff));
         if (state.canScrollY() && state.contentHeight() > 0.0f) {
             float width = 4.0f;
             float trackHeight = Math.max(0.0f, bounds.height());
@@ -435,9 +647,9 @@ public final class UiG2DRenderer implements UiRenderer {
             float travel = Math.max(0.0f, trackHeight - thumbHeight);
             float y = bounds.y() + travel * state.y() / Math.max(1.0f, state.maxY());
             drawRect(root, bounds.right() - width, bounds.y(), width, trackHeight,
-                    0.13f, 0.17f, 0.22f, trackAlpha);
+                    track.red(), track.green(), track.blue(), track.alpha() * trackAlpha);
             drawRect(root, bounds.right() - width, y, width, thumbHeight,
-                    0.42f, 0.50f, 0.60f, thumbAlpha);
+                    thumb.red(), thumb.green(), thumb.blue(), thumb.alpha() * thumbAlpha);
         }
         if (state.canScrollX() && state.contentWidth() > 0.0f) {
             float height = 4.0f;
@@ -447,9 +659,9 @@ public final class UiG2DRenderer implements UiRenderer {
             float travel = Math.max(0.0f, trackWidth - thumbWidth);
             float x = bounds.x() + travel * state.x() / Math.max(1.0f, state.maxX());
             drawRect(root, bounds.x(), bounds.bottom() - height, trackWidth, height,
-                    0.13f, 0.17f, 0.22f, trackAlpha);
+                    track.red(), track.green(), track.blue(), track.alpha() * trackAlpha);
             drawRect(root, x, bounds.bottom() - height, thumbWidth, height,
-                    0.42f, 0.50f, 0.60f, thumbAlpha);
+                    thumb.red(), thumb.green(), thumb.blue(), thumb.alpha() * thumbAlpha);
         }
     }
 
@@ -605,10 +817,23 @@ public final class UiG2DRenderer implements UiRenderer {
     private UiRect nodeTextBounds(UiRoot root, UiNode node) {
         UiInsets padding = root.effectivePadding(node);
         UiRect bounds = node.bounds();
-        if (node.type() == UiNodeType.CHECKBOX) {
+        if (node.type() == UiNodeType.CHECKBOX || node.type() == UiNodeType.RADIO_BUTTON) {
             UiRect box = checkboxBox(root, node);
             float textX = box.right() + 8.0f;
             return node.rendererRect(1, textX, bounds.y(), Math.max(0.0f, bounds.right() - textX), bounds.height());
+        }
+        if (node.type() == UiNodeType.SWITCH) {
+            float textX = bounds.x() + padding.left() + 56.0f;
+            return node.rendererRect(1, textX, bounds.y(),
+                    Math.max(0.0f, bounds.right() - padding.right() - textX), bounds.height());
+        }
+        if (node.type() == UiNodeType.COLLAPSE_BAR) {
+            float leading = Math.max(14.0f, padding.left());
+            float x = bounds.x() + leading + 28.0f;
+            float rightInset = Math.max(14.0f, padding.right());
+            return node.rendererRect(1, x, bounds.y(),
+                    Math.max(0.0f, bounds.right() - rightInset - x),
+                    Math.min(44.0f, Math.max(0.0f, bounds.height())));
         }
         if (node.type() == UiNodeType.WINDOW) {
             UiRect title = root.windowTitleBar(node);
@@ -628,7 +853,9 @@ public final class UiG2DRenderer implements UiRenderer {
         if (text == null || text.length() == 0) {
             return;
         }
-        if (node.type() == UiNodeType.CHECKBOX && !node.checkboxLabel()) {
+        if ((node.type() == UiNodeType.CHECKBOX
+                || node.type() == UiNodeType.SWITCH
+                || node.type() == UiNodeType.RADIO_BUTTON) && !node.checkboxLabel()) {
             return;
         }
         UiTextStyle textStyle = nodeTextStyle(root, node);
@@ -674,10 +901,12 @@ public final class UiG2DRenderer implements UiRenderer {
         if (text == null || text.length() == 0) {
             return;
         }
-        if (node.type() == UiNodeType.CHECKBOX && !node.checkboxLabel()) {
+        if ((node.type() == UiNodeType.CHECKBOX
+                || node.type() == UiNodeType.SWITCH
+                || node.type() == UiNodeType.RADIO_BUTTON) && !node.checkboxLabel()) {
             return;
         }
-        int length = text.length();
+        int length = text.codePointCount(0, text.length());
         long[] glyphRows = node.fallbackGlyphRows(text);
         if (glyphRows == null || glyphRows.length < length) {
             return;
@@ -725,7 +954,7 @@ public final class UiG2DRenderer implements UiRenderer {
         float localAlpha = enabled ? alpha : alpha * 0.55f;
         for (int i = 0; i < count; i++) {
             String label = root.tabLabel(node, i);
-            int labelLength = label != null ? label.length() : 0;
+            int labelLength = label != null ? label.codePointCount(0, label.length()) : 0;
             long[] glyphRows = node.fallbackTabGlyphRows(i, label);
             if (labelLength <= 0 || glyphRows == null || glyphRows.length < labelLength) {
                 continue;
@@ -764,6 +993,9 @@ public final class UiG2DRenderer implements UiRenderer {
     }
 
     private void drawBackgroundImage(UiRoot root, UiNode node, float alpha) {
+        if (usesInternalBackground(node)) {
+            return;
+        }
         UiStyle style = root.styleFor(node);
         UiDrawable background = style != null ? stateStyle(node, style).background() : null;
         if (background == null) {
@@ -944,6 +1176,137 @@ public final class UiG2DRenderer implements UiRenderer {
                 red, green, blue, alpha);
     }
 
+    private void drawOutline(UiRoot root, UiRect rect, UiColor color, float alpha) {
+        if (rect == null || color == null || rect.width() <= 0.0f || rect.height() <= 0.0f) {
+            return;
+        }
+        float lineAlpha = color.alpha() * alpha;
+        drawRect(root, rect.x(), rect.y(), rect.width(), 1.0f,
+                color.red(), color.green(), color.blue(), lineAlpha);
+        drawRect(root, rect.x(), rect.bottom() - 1.0f, rect.width(), 1.0f,
+                color.red(), color.green(), color.blue(), lineAlpha);
+        drawRect(root, rect.x(), rect.y(), 1.0f, rect.height(),
+                color.red(), color.green(), color.blue(), lineAlpha);
+        drawRect(root, rect.right() - 1.0f, rect.y(), 1.0f, rect.height(),
+                color.red(), color.green(), color.blue(), lineAlpha);
+    }
+
+    private void drawRoundedTrack(UiRoot root, UiRect rect, UiColor color, float alpha) {
+        if (rect == null || color == null || rect.width() <= 0.0f || rect.height() <= 0.0f) {
+            return;
+        }
+        drawRoundedTrack(root, rect, color.red(), color.green(), color.blue(), color.alpha() * alpha);
+    }
+
+    private void drawRoundedTrack(UiRoot root, UiRect rect,
+            float red, float green, float blue, float alpha) {
+        if (rect == null || rect.width() <= 0.0f || rect.height() <= 0.0f || alpha <= 0.0f) {
+            return;
+        }
+        float radius = Math.min(rect.width(), rect.height()) * 0.5f;
+        if (rect.width() > radius * 2.0f) {
+            drawRect(root, rect.x() + radius, rect.y(), rect.width() - radius * 2.0f, rect.height(),
+                    red, green, blue, alpha);
+        }
+        drawFilledCircle(root, rect.x() + radius, rect.y() + rect.height() * 0.5f,
+                radius, red, green, blue, alpha);
+        if (rect.width() > radius * 2.0f) {
+            drawFilledCircle(root, rect.right() - radius, rect.y() + rect.height() * 0.5f,
+                    radius, red, green, blue, alpha);
+        }
+    }
+
+    private void drawFilledCircle(UiRoot root, float centerX, float centerY, float radius,
+            UiColor color, float alpha) {
+        if (color == null || radius <= 0.0f || alpha <= 0.0f) {
+            return;
+        }
+        drawFilledCircle(root, centerX, centerY, radius,
+                color.red(), color.green(), color.blue(), color.alpha() * alpha);
+    }
+
+    private void drawFilledCircle(UiRoot root, float centerX, float centerY, float radius,
+            float red, float green, float blue, float alpha) {
+        if (radius <= 0.0f || alpha <= 0.0f) {
+            return;
+        }
+        int bands = Math.max(4, (int) Math.ceil(radius * 2.0f));
+        float bandHeight = radius * 2.0f / bands;
+        float radiusSquared = radius * radius;
+        for (int i = 0; i < bands; i++) {
+            float y = centerY - radius + i * bandHeight;
+            float sampleY = y + bandHeight * 0.5f - centerY;
+            float halfWidth = (float) Math.sqrt(Math.max(0.0f, radiusSquared - sampleY * sampleY));
+            drawRect(root, centerX - halfWidth, y, halfWidth * 2.0f, bandHeight + 0.02f,
+                    red, green, blue, alpha);
+        }
+    }
+
+    private void drawFilledTriangle(UiRoot root,
+            float x1, float y1, float x2, float y2, float x3, float y3,
+            UiColor color, float alpha) {
+        if (color == null || alpha <= 0.0f) {
+            return;
+        }
+        float left = Math.min(x1, Math.min(x2, x3));
+        float top = Math.min(y1, Math.min(y2, y3));
+        float right = Math.max(x1, Math.max(x2, x3));
+        float bottom = Math.max(y1, Math.max(y2, y3));
+        if (currentClip != null && (left < currentClip.x() || top < currentClip.y()
+                || right > currentClip.right() || bottom > currentClip.bottom())) {
+            return;
+        }
+        shapes.filledTriangle(
+                ndcX(root, x1), ndcY(root, y1, 0.0f),
+                ndcX(root, x2), ndcY(root, y2, 0.0f),
+                ndcX(root, x3), ndcY(root, y3, 0.0f),
+                color.red(), color.green(), color.blue(), color.alpha() * alpha);
+    }
+
+    private UiColor contrastingColor(UiColor color) {
+        if (color == null) {
+            return UiColor.WHITE;
+        }
+        float luminance = color.red() * 0.2126f + color.green() * 0.7152f + color.blue() * 0.0722f;
+        return luminance > 0.58f ? CONTROL_DARK : UiColor.WHITE;
+    }
+
+    private void drawLine(UiRoot root, float x1, float y1, float x2, float y2, UiColor color, float alpha) {
+        if (color == null || alpha <= 0.0f) {
+            return;
+        }
+        shapes.line(ndcX(root, x1), ndcY(root, y1, 0.0f),
+                ndcX(root, x2), ndcY(root, y2, 0.0f),
+                color.red(), color.green(), color.blue(), color.alpha() * alpha);
+    }
+
+    private boolean usesInternalBackground(UiNode node) {
+        if (node == null) {
+            return false;
+        }
+        UiNodeType type = node.type();
+        return type == UiNodeType.CHECKBOX
+                || type == UiNodeType.SWITCH
+                || type == UiNodeType.RADIO_BUTTON
+                || type == UiNodeType.SLIDER
+                || type == UiNodeType.PROGRESS_BAR
+                || type == UiNodeType.LOADING_BAR
+                || type == UiNodeType.LOADING_SPINNER
+                || type == UiNodeType.DIVIDER
+                || type == UiNodeType.COLLAPSE_BAR;
+    }
+
+    private UiStyle controlStyle(UiRoot root, UiNode node) {
+        UiStyle style = root.styleFor(node);
+        return style != null ? stateStyle(node, style) : null;
+    }
+
+    private UiColor drawableColor(UiDrawable drawable, UiColor fallback) {
+        return drawable != null && drawable.type() == UiDrawableType.COLOR && drawable.color() != null
+                ? drawable.color()
+                : fallback;
+    }
+
     private UiRect nodeClip(UiNode node, UiRect inheritedClip) {
         UiRect clip = inheritedClip;
         if (node.type() == UiNodeType.SCROLL || node.type() == UiNodeType.TEXT_FIELD
@@ -1111,12 +1474,13 @@ public final class UiG2DRenderer implements UiRenderer {
         float displayScale = root.effectiveUiScale();
         float cursor = x;
         int previous = -1;
-        for (int i = safeStart; i < safeEnd; i++) {
-            int codePoint = text.charAt(i);
+        for (int i = safeStart; i < safeEnd;) {
+            int codePoint = text.codePointAt(i);
             BitmapFontGlyph glyph = font.glyph(codePoint);
             if (glyph == null) {
                 cursor += size * 0.5f;
                 previous = -1;
+                i += Character.charCount(codePoint);
                 continue;
             }
             if (previous >= 0) {
@@ -1131,6 +1495,7 @@ public final class UiG2DRenderer implements UiRenderer {
                     color.red(), color.green(), color.blue(), color.alpha() * alpha);
             cursor += glyph.xAdvance() * scale;
             previous = codePoint;
+            i += Character.charCount(codePoint);
         }
     }
 
@@ -1177,8 +1542,11 @@ public final class UiG2DRenderer implements UiRenderer {
         }
     }
 
-    static long fallbackGlyphRows(char c) {
-        char glyph = fallbackGlyphChar(c);
+    static long fallbackGlyphRows(int codePoint) {
+        if (!Character.isBmpCodePoint(codePoint)) {
+            return UNKNOWN_FALLBACK_GLYPH;
+        }
+        char glyph = fallbackGlyphChar((char) codePoint);
         if (glyph == '\n') {
             return FALLBACK_GLYPH_NEWLINE;
         }
@@ -1394,12 +1762,13 @@ public final class UiG2DRenderer implements UiRenderer {
             float scale = font.scale(actual.size());
             float width = 0.0f;
             int previous = -1;
-            for (int i = safeStart; i < safeEnd; i++) {
-                int codePoint = text.charAt(i);
+            for (int i = safeStart; i < safeEnd;) {
+                int codePoint = text.codePointAt(i);
                 BitmapFontGlyph glyph = font.glyph(codePoint);
                 if (glyph == null) {
                     width += actual.size() * 0.5f;
                     previous = -1;
+                    i += Character.charCount(codePoint);
                     continue;
                 }
                 if (previous >= 0) {
@@ -1407,10 +1776,11 @@ public final class UiG2DRenderer implements UiRenderer {
                 }
                 width += glyph.xAdvance() * scale;
                 previous = codePoint;
+                i += Character.charCount(codePoint);
             }
             return width;
         }
-        return (safeEnd - safeStart) * 8.0f;
+        return text.codePointCount(safeStart, safeEnd) * 8.0f;
     }
 
     private boolean isTextInput(UiNode node) {

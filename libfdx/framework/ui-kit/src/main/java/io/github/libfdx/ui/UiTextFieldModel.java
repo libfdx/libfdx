@@ -46,16 +46,16 @@ final class UiTextFieldModel {
     }
 
     void cursor(int cursor) {
-        int length = value().length();
-        this.cursor = Math.max(0, Math.min(length, cursor));
+        String value = value();
+        this.cursor = codePointBoundary(value, cursor);
         this.selectionStart = this.cursor;
         this.selectionEnd = this.cursor;
     }
 
     void select(int anchor, int cursor) {
-        int length = value().length();
-        this.selectionStart = Math.max(0, Math.min(length, anchor));
-        this.selectionEnd = Math.max(0, Math.min(length, cursor));
+        String value = value();
+        this.selectionStart = codePointBoundary(value, anchor);
+        this.selectionEnd = codePointBoundary(value, cursor);
         this.cursor = this.selectionEnd;
     }
 
@@ -173,19 +173,22 @@ final class UiTextFieldModel {
             next.delete(at, deleteTo);
         }
         int inserted = 0;
-        for (int i = 0; i < text.length(); i++) {
-            char character = text.charAt(i);
-            if (!multiline && (character == '\n' || character == '\r')) {
+        for (int i = 0; i < text.length();) {
+            int codePoint = text.codePointAt(i);
+            int codePointLength = Character.charCount(codePoint);
+            i += codePointLength;
+            if (!multiline && (codePoint == '\n' || codePoint == '\r')) {
                 continue;
             }
-            if (character == '\r') {
+            if (codePoint == '\r') {
                 continue;
             }
-            next.insert(at + inserted, character);
+            String characters = new String(Character.toChars(codePoint));
+            next.insert(at + inserted, characters);
             if (accepts(next.toString())) {
-                inserted++;
+                inserted += codePointLength;
             } else {
-                next.deleteCharAt(at + inserted);
+                next.delete(at + inserted, at + inserted + codePointLength);
             }
         }
         if (inserted > 0 || deleteTo > at) {
@@ -206,9 +209,10 @@ final class UiTextFieldModel {
         if (cursor <= 0 || value.length() == 0) {
             return;
         }
-        int at = Math.max(0, Math.min(cursor, value.length()));
-        state.set(value.substring(0, at - 1) + value.substring(at));
-        cursor(at - 1);
+        int at = codePointBoundary(value, cursor);
+        int previous = value.offsetByCodePoints(at, -1);
+        state.set(value.substring(0, previous) + value.substring(at));
+        cursor(previous);
     }
 
     void delete() {
@@ -223,8 +227,9 @@ final class UiTextFieldModel {
         if (cursor >= value.length()) {
             return;
         }
-        int at = Math.max(0, Math.min(cursor, value.length()));
-        state.set(value.substring(0, at) + value.substring(at + 1));
+        int at = codePointBoundary(value, cursor);
+        int next = value.offsetByCodePoints(at, 1);
+        state.set(value.substring(0, at) + value.substring(next));
         cursor(at);
     }
 
@@ -241,8 +246,7 @@ final class UiTextFieldModel {
 
     void moveCursor(int cursor, boolean extendSelection) {
         int previous = this.cursor;
-        int length = value().length();
-        int next = Math.max(0, Math.min(length, cursor));
+        int next = codePointBoundary(value(), cursor);
         if (extendSelection) {
             int anchor = hasSelection() ? selectionStart : previous;
             select(anchor, next);
@@ -251,11 +255,34 @@ final class UiTextFieldModel {
         }
     }
 
+    int previousCursor() {
+        String value = value();
+        int at = codePointBoundary(value, cursor);
+        return at > 0 ? value.offsetByCodePoints(at, -1) : 0;
+    }
+
+    int nextCursor() {
+        String value = value();
+        int at = codePointBoundary(value, cursor);
+        return at < value.length() ? value.offsetByCodePoints(at, 1) : value.length();
+    }
+
     private void clampSelection() {
-        int length = value().length();
-        cursor = Math.max(0, Math.min(length, cursor));
-        selectionStart = Math.max(0, Math.min(length, selectionStart));
-        selectionEnd = Math.max(0, Math.min(length, selectionEnd));
+        String value = value();
+        cursor = codePointBoundary(value, cursor);
+        selectionStart = codePointBoundary(value, selectionStart);
+        selectionEnd = codePointBoundary(value, selectionEnd);
+    }
+
+    private int codePointBoundary(String text, int offset) {
+        int length = text != null ? text.length() : 0;
+        int value = Math.max(0, Math.min(length, offset));
+        if (value > 0 && value < length
+                && Character.isLowSurrogate(text.charAt(value))
+                && Character.isHighSurrogate(text.charAt(value - 1))) {
+            value--;
+        }
+        return value;
     }
 
     private boolean accepts(String value) {

@@ -34,7 +34,7 @@ For one invocation, use:
 ```
 
 The system property overrides `local.properties`, which overrides
-`libfdx.toml`. Composite and publication builds select their own reduced graphs;
+`gradle/libs.versions.toml`. Composite and publication builds select their own reduced graphs;
 contributors do not set a separate publication mode.
 
 ## Choose Validation By Scope

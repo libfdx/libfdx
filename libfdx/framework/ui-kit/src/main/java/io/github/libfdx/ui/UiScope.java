@@ -352,6 +352,81 @@ public final class UiScope {
     }
 
     /**
+     * Creates a toggle switch.
+     *
+     * @param state the checked state
+     * @return the switch node
+     */
+    public UiNode toggleSwitch(UiBooleanState state) {
+        return toggleSwitch("", UiModifier.none(), state);
+    }
+
+    /**
+     * Creates a labeled toggle switch.
+     *
+     * @param text the label
+     * @param state the checked state
+     * @return the switch node
+     */
+    public UiNode toggleSwitch(String text, UiBooleanState state) {
+        return toggleSwitch(text, UiModifier.none(), state);
+    }
+
+    /**
+     * Creates a labeled toggle switch.
+     *
+     * @param text the label
+     * @param modifier the modifier
+     * @param state the checked state
+     * @return the switch node
+     */
+    public UiNode toggleSwitch(String text, UiModifier modifier, UiBooleanState state) {
+        UiNode node = addNode(UiNodeType.SWITCH, null, interactive(modifier));
+        boolean hasLabel = text != null && text.length() > 0;
+        node.text(hasLabel ? text : " ");
+        node.checkboxLabel(hasLabel);
+        node.checked(state != null && state.get());
+        node.descriptor(state);
+        return node;
+    }
+
+    /**
+     * Creates one radio-button choice.
+     *
+     * @param text the label
+     * @param selectedValue the shared selected value
+     * @param value the value represented by this radio button
+     * @return the radio-button node
+     */
+    public UiNode radioButton(String text, UiIntState selectedValue, int value) {
+        return radioButton(text, UiModifier.none(), selectedValue, value);
+    }
+
+    /**
+     * Creates one radio-button choice.
+     *
+     * @param text the label
+     * @param modifier the modifier
+     * @param selectedValue the shared selected value
+     * @param value the value represented by this radio button
+     * @return the radio-button node
+     */
+    public UiNode radioButton(String text, UiModifier modifier, UiIntState selectedValue, int value) {
+        UiNode node = addNode(UiNodeType.RADIO_BUTTON, null, interactive(modifier));
+        boolean hasLabel = text != null && text.length() > 0;
+        node.text(hasLabel ? text : " ");
+        node.checkboxLabel(hasLabel);
+        UiRadioModel model = node.descriptor() instanceof UiRadioModel
+                ? (UiRadioModel) node.descriptor()
+                : new UiRadioModel(selectedValue, value);
+        model.update(selectedValue, value);
+        node.checked(model.selected());
+        node.intValue(value);
+        node.descriptor(model);
+        return node;
+    }
+
+    /**
      * Runs the slider step.
      *
      * @param state the state
@@ -458,6 +533,95 @@ public final class UiScope {
         UiRange range = model.range();
         node.floatValue(range.clamp(value));
         node.descriptor(model);
+        return node;
+    }
+
+    /**
+     * Creates an indeterminate linear loading indicator.
+     *
+     * @return the loading-bar node
+     */
+    public UiNode loadingBar() {
+        return loadingBar(UiModifier.none());
+    }
+
+    /**
+     * Creates an indeterminate linear loading indicator.
+     *
+     * @param modifier the modifier
+     * @return the loading-bar node
+     */
+    public UiNode loadingBar(UiModifier modifier) {
+        return addNode(UiNodeType.LOADING_BAR, null, modifier);
+    }
+
+    /**
+     * Creates an indeterminate circular loading indicator.
+     *
+     * @return the spinner node
+     */
+    public UiNode loadingSpinner() {
+        return loadingSpinner(UiModifier.none());
+    }
+
+    /**
+     * Creates an indeterminate circular loading indicator.
+     *
+     * @param modifier the modifier
+     * @return the spinner node
+     */
+    public UiNode loadingSpinner(UiModifier modifier) {
+        return addNode(UiNodeType.LOADING_SPINNER, null, modifier);
+    }
+
+    /**
+     * Creates a visual divider.
+     *
+     * @return the divider node
+     */
+    public UiNode divider() {
+        return divider(UiModifier.none());
+    }
+
+    /**
+     * Creates a visual divider.
+     *
+     * @param modifier the modifier
+     * @return the divider node
+     */
+    public UiNode divider(UiModifier modifier) {
+        return addNode(UiNodeType.DIVIDER, null, modifier);
+    }
+
+    /**
+     * Creates an expandable disclosure bar and composes its content while expanded.
+     *
+     * @param title the header title
+     * @param expanded the expansion state
+     * @param content the expanded content
+     * @return the collapse-bar node
+     */
+    public UiNode collapseBar(String title, UiBooleanState expanded, UiContent content) {
+        return collapseBar(title, UiModifier.none(), expanded, content);
+    }
+
+    /**
+     * Creates an expandable disclosure bar and composes its content while expanded.
+     *
+     * @param title the header title
+     * @param modifier the modifier
+     * @param expanded the expansion state
+     * @param content the expanded content
+     * @return the collapse-bar node
+     */
+    public UiNode collapseBar(String title, UiModifier modifier, UiBooleanState expanded, UiContent content) {
+        UiNode node = addNode(UiNodeType.COLLAPSE_BAR, null, interactive(modifier));
+        node.text(title != null ? title : "");
+        node.checked(expanded != null && expanded.get());
+        node.descriptor(expanded);
+        if (node.checked()) {
+            build(node, content);
+        }
         return node;
     }
 

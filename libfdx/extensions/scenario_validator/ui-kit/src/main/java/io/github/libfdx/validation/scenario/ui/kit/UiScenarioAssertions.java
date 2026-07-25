@@ -275,8 +275,11 @@ public final class UiScenarioAssertions {
     public static ScenarioAssertion checked(UiScenarioTarget target, boolean expected) {
         return ScenarioAssertions.assertion("ui.checked(" + target.description() + ")", context -> {
             UiNode node = target.require(context);
-            context.assertTrue(node.type() == UiNodeType.CHECKBOX,
-                    "UI target is not a checkbox: " + target.description());
+            context.assertTrue(node.type() == UiNodeType.CHECKBOX
+                            || node.type() == UiNodeType.SWITCH
+                            || node.type() == UiNodeType.RADIO_BUTTON
+                            || node.type() == UiNodeType.COLLAPSE_BAR,
+                    "UI target is not a checkable control: " + target.description());
             context.assertEquals(Boolean.valueOf(expected), Boolean.valueOf(node.checked()),
                     "UI checked state mismatch for " + target.description());
         });

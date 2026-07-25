@@ -62,6 +62,18 @@ final class DesktopCGLFW {
         glfwSetWindowTitle(Address.fromLong(window), title);
     }
 
+    static Address getClipboardString(long window) {
+        return glfwGetClipboardString(Address.fromLong(window));
+    }
+
+    static void setClipboardString(long window, Address text) {
+        glfwSetClipboardString(Address.fromLong(window), text);
+    }
+
+    static int getError() {
+        return glfwGetError(Address.fromLong(0L));
+    }
+
     static boolean windowShouldClose(long window) {
         return glfwWindowShouldClose(Address.fromLong(window));
     }
@@ -125,6 +137,15 @@ final class DesktopCGLFW {
 
     @Import(name = "glfwSetWindowTitle")
     private static native void glfwSetWindowTitle(Address window, String title);
+
+    @Import(name = "glfwGetClipboardString")
+    private static native Address glfwGetClipboardString(Address window);
+
+    @Import(name = "glfwSetClipboardString")
+    private static native void glfwSetClipboardString(Address window, Address text);
+
+    @Import(name = "glfwGetError")
+    private static native int glfwGetError(Address description);
 
     @Import(name = "glfwWindowShouldClose")
     private static native boolean glfwWindowShouldClose(Address window);

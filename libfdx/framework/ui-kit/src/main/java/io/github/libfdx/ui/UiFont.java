@@ -1,6 +1,7 @@
 package io.github.libfdx.ui;
 
 import io.github.libfdx.graphics.g2d.BitmapFont;
+import io.github.libfdx.graphics.g2d.FreeTypeFontOptions;
 
 /**
  * Represents an ui font.
@@ -93,6 +94,24 @@ public final class UiFont {
      */
     public UiFont characters(String characters) {
         return new UiFont(kind, family, path, size, bitmapFont, characters, fallback);
+    }
+
+    /**
+     * Adds characters to this font's glyph set and returns this UI font.
+     *
+     * <p>When no explicit set exists, the standard FreeType character set is retained.
+     * This makes it convenient to opt into a finite set of symbols or emoji without
+     * losing ordinary localized text.</p>
+     *
+     * @param characters the characters to add
+     * @return this UI font for chaining
+     */
+    public UiFont addCharacters(String characters) {
+        String base = this.characters != null
+                ? this.characters
+                : FreeTypeFontOptions.defaults(size).characters();
+        String additional = characters != null ? characters : "";
+        return new UiFont(kind, family, path, size, bitmapFont, base + additional, fallback);
     }
 
     /**

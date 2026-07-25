@@ -92,19 +92,24 @@ public final class BitmapFont implements Disposable {
         Map<Integer, BitmapFontGlyph> glyphs = new LinkedHashMap<Integer, BitmapFontGlyph>();
         int columns = Math.max(1, texture.width() / Math.max(1, glyphWidth));
         Set<Integer> seen = new LinkedHashSet<Integer>();
-        for (int i = 0; i < text.length(); i++) {
-            int codePoint = text.charAt(i);
+        int glyphIndex = 0;
+        for (int i = 0; i < text.length();) {
+            int codePoint = text.codePointAt(i);
             if (!seen.add(Integer.valueOf(codePoint))) {
+                glyphIndex++;
+                i += Character.charCount(codePoint);
                 continue;
             }
-            int column = i % columns;
-            int row = i / columns;
+            int column = glyphIndex % columns;
+            int row = glyphIndex / columns;
             int x = column * glyphWidth;
             int y = row * glyphHeight;
             if (x + glyphWidth <= texture.width() && y + glyphHeight <= texture.height()) {
                 glyphs.put(Integer.valueOf(codePoint), new BitmapFontGlyph(codePoint,
                         new TextureRegion(texture, x, y, glyphWidth, glyphHeight), 0.0f, 0.0f, glyphWidth));
             }
+            glyphIndex++;
+            i += Character.charCount(codePoint);
         }
         List<Texture> pages = new ArrayList<Texture>();
         pages.add(texture);
@@ -228,8 +233,8 @@ public final class BitmapFont implements Disposable {
         float scale = scale(size);
         float width = 0.0f;
         int previous = -1;
-        for (int i = 0; i < text.length(); i++) {
-            int codePoint = text.charAt(i);
+        for (int i = 0; i < text.length();) {
+            int codePoint = text.codePointAt(i);
             BitmapFontGlyph glyph = glyph(codePoint);
             if (glyph == null) {
                 width += nativeSize * 0.5f * scale;
@@ -241,6 +246,7 @@ public final class BitmapFont implements Disposable {
                 width += glyph.xAdvance() * scale;
                 previous = codePoint;
             }
+            i += Character.charCount(codePoint);
         }
         return width;
     }
@@ -328,7 +334,7 @@ public final class BitmapFont implements Disposable {
         }
         int start = 0;
         while (start < value.length()) {
-            int end = start + 1;
+            int end = start + Character.charCount(value.codePointAt(start));
             int best = -1;
             while (end <= value.length()) {
                 String candidate = value.substring(start, end);
@@ -336,19 +342,33 @@ public final class BitmapFont implements Disposable {
                 if (candidateWidth > maxWidth) {
                     break;
                 }
-                if (end == value.length() || Character.isWhitespace(value.charAt(end - 1))) {
+                int previous = value.codePointBefore(end);
+                if (end == value.length() || Character.isWhitespace(previous)) {
                     best = end;
                 }
-                end++;
+                if (end == value.length()) {
+                    break;
+                }
+                end += Character.charCount(value.codePointAt(end));
             }
             if (best <= start) {
-                best = Math.max(start + 1, end - 1);
+                best = end > value.length() ? value.length() : end;
+                if (width(value.substring(start, best), size) > maxWidth && best > start) {
+                    best = value.offsetByCodePoints(best, -1);
+                }
+                if (best <= start) {
+                    best = start + Character.charCount(value.codePointAt(start));
+                }
             }
             String line = value.substring(start, best).trim();
             appendLine(line, size, lines, widths);
             start = best;
-            while (start < value.length() && Character.isWhitespace(value.charAt(start))) {
-                start++;
+            while (start < value.length()) {
+                int codePoint = value.codePointAt(start);
+                if (!Character.isWhitespace(codePoint)) {
+                    break;
+                }
+                start += Character.charCount(codePoint);
             }
         }
     }
@@ -361,7 +381,7 @@ public final class BitmapFont implements Disposable {
         float markerWidth = width(marker, size);
         int end = value.length();
         while (end > 0 && width(value.substring(0, end), size) + markerWidth > maxWidth) {
-            end--;
+            end = value.offsetByCodePoints(end, -1);
         }
         return value.substring(0, end) + marker;
     }

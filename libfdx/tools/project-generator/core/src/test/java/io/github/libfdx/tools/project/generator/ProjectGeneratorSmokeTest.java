@@ -18,7 +18,7 @@ public final class ProjectGeneratorSmokeTest {
         String expectedVersion = System.getProperty("libfdx.expectedVersion");
         require(expectedVersion != null && expectedVersion.length() > 0, "Expected libFDX version was not provided");
         require(expectedVersion.equals(ProjectGenerationSettings.builder().build().libfdxVersion()),
-                "Default libFDX version does not match libfdx.toml");
+                "Default libFDX version does not match libs.versions.toml");
 
         ProjectGenerationSettings settings = ProjectGenerationSettings.builder()
                 .projectName("demo-game")

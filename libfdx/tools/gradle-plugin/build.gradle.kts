@@ -1,15 +1,13 @@
-import io.github.libfdx.build.LibExt
 import org.gradle.api.publish.tasks.GenerateModuleMetadata
 import org.gradle.api.tasks.testing.Test
 
 plugins {
     id("maven-publish")
-    alias(libs.plugins.easy.publishing)
+    alias(libs.plugins.easyPublishing)
     `kotlin-dsl`
     `java-gradle-plugin`
 }
 
-LibExt.configure(rootProject.projectDir)
 
 val libfdxGradlePluginDependencyArtifacts = listOf(
     "tools_font",
@@ -23,12 +21,12 @@ val libfdxGradlePluginDependencyArtifacts = listOf(
 
 extra["libfdxGradlePluginDependencyArtifacts"] = libfdxGradlePluginDependencyArtifacts
 val libfdxReleaseRequested = extensions.extraProperties.get("easyPublishing.releaseRequested") as Boolean
-val libfdxSelectedVersion = if (libfdxReleaseRequested) LibExt.fdxVersion else LibExt.fdxSnapshotVersion
+val libfdxSelectedVersion = if (libfdxReleaseRequested) libs.versions.libfdxRelease.get() else libs.versions.libfdxSnapshot.get()
 
 easyPublishing {
-    groupId.set(LibExt.fdxGroup)
-    releaseVersion.set(LibExt.fdxVersion)
-    snapshotVersion.set(LibExt.fdxSnapshotVersion)
+    groupId.set(libs.versions.libfdxGroup.get())
+    releaseVersion.set(libs.versions.libfdxRelease.get())
+    snapshotVersion.set(libs.versions.libfdxSnapshot.get())
 
     snapshotRepositoryUrl.set("https://central.sonatype.com/repository/maven-snapshots/")
     releaseRepositoryUrl.set("https://central.sonatype.com")
@@ -55,7 +53,7 @@ easyPublishing {
 dependencies {
     implementation(libs.teavm.gradle.plugin)
     libfdxGradlePluginDependencyArtifacts.forEach { artifact ->
-        implementation("${LibExt.fdxGroup}:$artifact:$libfdxSelectedVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:$artifact:$libfdxSelectedVersion")
     }
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)

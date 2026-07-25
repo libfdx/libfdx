@@ -32,14 +32,31 @@ public final class UiTheme {
      */
     public static UiTheme light() {
         Map<String, UiStyle> styles = new LinkedHashMap<String, UiStyle>();
-        styles.put("text", UiStyle.style().text(UiTextStyle.text().color(UiColor.rgba8888(0x20242cff))));
-        styles.put("button", UiStyle.button().background(UiDrawable.color(UiColor.rgba8888(0xe8ebf0ff))));
-        styles.put("panel", UiStyle.style().padding(12.0f).background(UiDrawable.color(UiColor.rgba8888(0xf7f8faff))));
-        styles.put("window", UiStyle.style().padding(UiInsets.of(12.0f, 38.0f, 12.0f, 12.0f))
+        UiTextStyle text = UiTextStyle.text().color(UiColor.rgba8888(0x20242cff));
+        styles.put("text", UiStyle.style().text(text));
+        styles.put("button", UiStyle.button().text(text.wrap(false).ellipsis(true))
+                .background(UiDrawable.color(UiColor.rgba8888(0xe8ebf0ff))));
+        styles.put("checkbox", controlStyle(0xd1d7e0ff, 0x2377d1ff, 0x20242cff));
+        styles.put("switch", controlStyle(0xc5ccd6ff, 0x2377d1ff, 0x20242cff));
+        styles.put("radio-button", controlStyle(0xc5ccd6ff, 0x2377d1ff, 0x20242cff));
+        styles.put("slider", controlStyle(0xc5ccd6ff, 0x2377d1ff, 0x20242cff));
+        styles.put("progress-bar", controlStyle(0xd1d7e0ff, 0x249d65ff, 0x20242cff));
+        styles.put("loading-indicator", controlStyle(0xd1d7e0ff, 0x2377d1ff, 0x20242cff));
+        styles.put("divider", controlStyle(0x00000000, 0xb8c0ccff, 0x20242cff));
+        styles.put("collapse-bar", controlStyle(0xe8ebf0ff, 0x2377d1ff, 0x20242cff).padding(8.0f));
+        styles.put("panel", UiStyle.style().padding(12.0f).text(text)
                 .background(UiDrawable.color(UiColor.rgba8888(0xf7f8faff))));
-        styles.put("text-field", UiStyle.style().padding(8.0f, 4.0f).background(UiDrawable.color(UiColor.WHITE)));
-        styles.put("text-area", UiStyle.style().padding(8.0f, 6.0f).background(UiDrawable.color(UiColor.WHITE)));
-        styles.put("tabs", UiStyle.style().padding(4.0f).background(UiDrawable.color(UiColor.rgba8888(0xe8ebf0ff))));
+        styles.put("window", UiStyle.style().padding(UiInsets.of(12.0f, 38.0f, 12.0f, 12.0f))
+                .text(text)
+                .background(UiDrawable.color(UiColor.rgba8888(0xf7f8faff))));
+        styles.put("text-field", UiStyle.style().padding(8.0f, 4.0f).text(text)
+                .background(UiDrawable.color(UiColor.WHITE)));
+        styles.put("text-area", UiStyle.style().padding(8.0f, 6.0f).text(text)
+                .background(UiDrawable.color(UiColor.WHITE)));
+        styles.put("tabs", UiStyle.style().padding(4.0f)
+                .text(text.wrap(false).ellipsis(true))
+                .background(UiDrawable.color(UiColor.rgba8888(0xe8ebf0ff)))
+                .foreground(UiDrawable.color(UiColor.rgba8888(0x2377d1ff))));
         return new UiTheme(styles, new LinkedHashMap<String, UiDrawable>(), new LinkedHashMap<String, UiFont>(),
                 UiColor.WHITE, UiColor.rgba8888(0x20242cff));
     }
@@ -51,14 +68,31 @@ public final class UiTheme {
      */
     public static UiTheme dark() {
         Map<String, UiStyle> styles = new LinkedHashMap<String, UiStyle>();
-        styles.put("text", UiStyle.style().text(UiTextStyle.text().color(UiColor.rgba8888(0xf2f4f8ff))));
-        styles.put("button", UiStyle.button().background(UiDrawable.color(UiColor.rgba8888(0x343b46ff))));
-        styles.put("panel", UiStyle.style().padding(12.0f).background(UiDrawable.color(UiColor.rgba8888(0x20242cff))));
-        styles.put("window", UiStyle.style().padding(UiInsets.of(12.0f, 38.0f, 12.0f, 12.0f))
+        UiTextStyle text = UiTextStyle.text().color(UiColor.rgba8888(0xf2f4f8ff));
+        styles.put("text", UiStyle.style().text(text));
+        styles.put("button", UiStyle.button().text(text.wrap(false).ellipsis(true))
+                .background(UiDrawable.color(UiColor.rgba8888(0x343b46ff))));
+        styles.put("checkbox", controlStyle(0x242c36ff, 0x47a8ffff, 0xf2f4f8ff));
+        styles.put("switch", controlStyle(0x303946ff, 0x47a8ffff, 0xf2f4f8ff));
+        styles.put("radio-button", controlStyle(0x303946ff, 0x47a8ffff, 0xf2f4f8ff));
+        styles.put("slider", controlStyle(0x303946ff, 0x47a8ffff, 0xf2f4f8ff));
+        styles.put("progress-bar", controlStyle(0x28313cff, 0x63cd8fff, 0xf2f4f8ff));
+        styles.put("loading-indicator", controlStyle(0x28313cff, 0x47a8ffff, 0xf2f4f8ff));
+        styles.put("divider", controlStyle(0x00000000, 0x465362ff, 0xf2f4f8ff));
+        styles.put("collapse-bar", controlStyle(0x202a35ff, 0x47a8ffff, 0xf2f4f8ff).padding(8.0f));
+        styles.put("panel", UiStyle.style().padding(12.0f).text(text)
                 .background(UiDrawable.color(UiColor.rgba8888(0x20242cff))));
-        styles.put("text-field", UiStyle.style().padding(8.0f, 4.0f).background(UiDrawable.color(UiColor.rgba8888(0x10141bff))));
-        styles.put("text-area", UiStyle.style().padding(8.0f, 6.0f).background(UiDrawable.color(UiColor.rgba8888(0x10141bff))));
-        styles.put("tabs", UiStyle.style().padding(4.0f).background(UiDrawable.color(UiColor.rgba8888(0x10141bff))));
+        styles.put("window", UiStyle.style().padding(UiInsets.of(12.0f, 38.0f, 12.0f, 12.0f))
+                .text(text)
+                .background(UiDrawable.color(UiColor.rgba8888(0x20242cff))));
+        styles.put("text-field", UiStyle.style().padding(8.0f, 4.0f).text(text)
+                .background(UiDrawable.color(UiColor.rgba8888(0x10141bff))));
+        styles.put("text-area", UiStyle.style().padding(8.0f, 6.0f).text(text)
+                .background(UiDrawable.color(UiColor.rgba8888(0x10141bff))));
+        styles.put("tabs", UiStyle.style().padding(4.0f)
+                .text(text.wrap(false).ellipsis(true))
+                .background(UiDrawable.color(UiColor.rgba8888(0x10141bff)))
+                .foreground(UiDrawable.color(UiColor.rgba8888(0x47a8ffff))));
         return new UiTheme(styles, new LinkedHashMap<String, UiDrawable>(), new LinkedHashMap<String, UiFont>(),
                 UiColor.rgba8888(0x10141bff), UiColor.rgba8888(0xf2f4f8ff));
     }
@@ -94,6 +128,86 @@ public final class UiTheme {
      */
     public UiTheme panel(UiStyle style) {
         return style("panel", style);
+    }
+
+    /**
+     * Sets the checkbox style and returns this UI theme.
+     *
+     * @param style the style
+     * @return this UI theme for chaining
+     */
+    public UiTheme checkbox(UiStyle style) {
+        return style("checkbox", style);
+    }
+
+    /**
+     * Sets the toggle-switch style and returns this UI theme.
+     *
+     * @param style the style
+     * @return this UI theme for chaining
+     */
+    public UiTheme toggleSwitch(UiStyle style) {
+        return style("switch", style);
+    }
+
+    /**
+     * Sets the radio-button style and returns this UI theme.
+     *
+     * @param style the style
+     * @return this UI theme for chaining
+     */
+    public UiTheme radioButton(UiStyle style) {
+        return style("radio-button", style);
+    }
+
+    /**
+     * Sets the slider style and returns this UI theme.
+     *
+     * @param style the style
+     * @return this UI theme for chaining
+     */
+    public UiTheme slider(UiStyle style) {
+        return style("slider", style);
+    }
+
+    /**
+     * Sets the progress-bar style and returns this UI theme.
+     *
+     * @param style the style
+     * @return this UI theme for chaining
+     */
+    public UiTheme progressBar(UiStyle style) {
+        return style("progress-bar", style);
+    }
+
+    /**
+     * Sets the indeterminate loading-indicator style and returns this UI theme.
+     *
+     * @param style the style
+     * @return this UI theme for chaining
+     */
+    public UiTheme loadingIndicator(UiStyle style) {
+        return style("loading-indicator", style);
+    }
+
+    /**
+     * Sets the divider style and returns this UI theme.
+     *
+     * @param style the style
+     * @return this UI theme for chaining
+     */
+    public UiTheme divider(UiStyle style) {
+        return style("divider", style);
+    }
+
+    /**
+     * Sets the collapse-bar style and returns this UI theme.
+     *
+     * @param style the style
+     * @return this UI theme for chaining
+     */
+    public UiTheme collapseBar(UiStyle style) {
+        return style("collapse-bar", style);
     }
 
     /**
@@ -238,5 +352,12 @@ public final class UiTheme {
      */
     public UiColor textColor() {
         return textColor;
+    }
+
+    private static UiStyle controlStyle(int background, int foreground, int text) {
+        return UiStyle.style()
+                .background(UiDrawable.color(UiColor.rgba8888(background)))
+                .foreground(UiDrawable.color(UiColor.rgba8888(foreground)))
+                .text(UiTextStyle.text().color(UiColor.rgba8888(text)).wrap(false).ellipsis(true));
     }
 }

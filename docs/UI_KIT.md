@@ -85,9 +85,14 @@ small constraint-based layout vocabulary. Modifiers express size constraints,
 padding/gaps, weight, alignment, aspect ratio, offset, clipping, drawing,
 input, and semantics.
 
-Scroll views retain scroll state and clip overflow. Dynamic lists preserve
-keyed item identity. Windows retain position, size, and z-order. Safe-area
-insets and parent constraints keep content inside the active display.
+Rows and columns shrink fixed and weighted children down to their effective
+minimums when their requested sizes do not fit. If even the combined minimums
+cannot fit, the remaining space is distributed proportionally without
+producing negative sizes or escaping the parent. Scroll containers are the
+explicit exception: they retain overflow so it remains reachable. Dynamic
+lists preserve keyed item identity. Windows retain position, size, and
+z-order. Safe-area insets and parent constraints keep content inside the active
+display.
 
 `UiRoot.uiScale(...)` scales logical units. `autoUiScale(true)` multiplies that
 scale by `Display.contentScale()`; applications should not apply the same
@@ -98,11 +103,58 @@ motion values. `UiDrawable` supports colors, textures/regions, and nine-patch
 drawing. Nine-patch splits and content padding affect both measurement and
 drawing rather than creating another layout system.
 
+Named theme styles are appropriate for reusable visual roles. A one-off
+element can receive a complete `UiStyle` directly:
+
+```java
+UiStyle warning = UiStyle.button()
+    .background(UiDrawable.color(UiColor.rgba8888(0xb6378cff)))
+    .foreground(UiDrawable.color(UiColor.rgba8888(0xffe66dff)));
+
+ui.button("Delete", Ui.modifier().style(warning), this::delete);
+```
+
+The inline style takes precedence over the widget's named/default theme style.
+Applying a named style later replaces it. Built-in control rendering uses each
+style's background, foreground, text, padding, state variants, and minimum
+size, so a theme does not need renderer-specific color constants.
+
+## Widgets
+
+Containers and text can be combined with buttons, checkboxes, toggle switches,
+radio-button groups, sliders, determinate progress bars, indeterminate loading
+bars and spinners, dividers, tabs, text fields, multiline text areas, images,
+disclosure/collapse panels, virtual lists, popups, tooltips, modals, and movable/resizable
+windows.
+
+Switches and collapse bars use `UiBooleanState`. Radio buttons share a
+`UiIntState` and select their declared value. A radio group contributes one
+Tab stop; arrow keys move and select within the group. Collapse headers are
+full-row controls operated by click, Enter, or Space, and their bodies are
+composed only while expanded. Loading indicators use `UiRoot` elapsed time and
+therefore respect deterministic update and animation timing.
+
 ## Text And Input
 
 Text measurement/rendering uses bitmap-font data. FreeType sources are
 rasterized into cached atlases during loading, not per frame. Generate or load
 fonts at a suitable effective UI scale to avoid blurry upscaling.
+
+Text measurement, wrapping, truncation, hit testing, selection, caret movement,
+insertion, backspace, and delete operate on Unicode code points. Supplementary
+characters such as emoji are never split into isolated UTF-16 surrogates.
+FreeType atlases remain finite: the selected font must contain the glyph and
+the application must include it in the configured character set. The
+convenience method below retains the normal localized Latin set:
+
+```java
+String emoji = new String(Character.toChars(0x1f600));
+UiFont font = UiFont.freeType("fonts/ui.ttf", 18)
+    .addCharacters(emoji);
+```
+
+The current atlas path renders a font's outline/monochrome glyph. It does not
+promise color-font emoji layers.
 
 Text fields retain cursor, selection, filtering, masking, validation, and
 scroll state. Focused editors use the platform text-input session exposed by
@@ -112,13 +164,31 @@ Single-line fields can provide a submit action through the
 that action while multiline text areas continue to insert a newline.
 `UiTextAreaOptions.readOnly(true)` keeps output text scrollable and selectable
 for copying without opening a platform editor or allowing mutations. Ctrl+C,
-Ctrl+X, and Ctrl+V use `Input.clipboard()`; the desktop backend bridges that
-service to the operating-system clipboard. Multiline text, caret, hit testing,
-and selection highlights all use the same resolved font line height so their
-geometry remains aligned after scrolling. A primary-button double-click or
-touch double-tap selects the text unit under the pointer in the shared UI Kit
-input path. Unicode letters and combining marks remain in one word; whitespace
-runs are selected together; punctuation is selected independently.
+Ctrl+X, and Ctrl+V use `Input.clipboard()`.
+
+Clipboard behavior is backend-owned:
+
+- JVM desktop uses the operating-system clipboard, with GLFW available for a
+  headless desktop process. It retains the most recent local value if another
+  process temporarily prevents system access.
+- Desktop C uses the GLFW system clipboard with explicit UTF-8 conversion,
+  bounded access retries, and the same last-value fallback during contention.
+- Android uses `ClipboardManager` and preserves the last local value when
+  lifecycle or privacy restrictions temporarily deny clipboard access.
+- Web mirrors programmatic writes to `navigator.clipboard` and keeps an
+  immediate synchronous cache. Browser reads remain asynchronous and
+  permission-gated; the backend's native DOM editor is the authoritative
+  interactive copy/paste path.
+- iOS C and PSP currently use `MemoryClipboard`; PSP has no general platform
+  text clipboard. Applications on a backend without a system bridge still get
+  deterministic in-process copy/paste.
+
+Multiline text, caret, hit testing, and selection highlights all use the same
+resolved font line height so their geometry remains aligned after scrolling. A
+primary-button double-click or touch double-tap selects the text unit under the
+pointer in the shared UI Kit input path. Unicode letters and combining marks
+remain in one word; whitespace runs are selected together; punctuation is
+selected independently.
 
 `UiRoot` owns hit testing and event routing for pointer/touch, wheel scrolling,
 keyboard/text focus, navigation, gestures, and drag/drop. Pointer capture keeps
@@ -155,3 +225,9 @@ platform scope described in
 
 Use stable `validationId` values when authoring reusable flows with the
 [scenario validator](../libfdx/extensions/scenario_validator/README.md#ui-selection).
+
+The repository `ui` test exposes every built-in widget in its section list. Its
+automation covers constrained bounds, control activation, loading-indicator
+sizes, collapse composition, theme changes, Unicode editing, and an emoji
+clipboard round trip. The same screen includes Graphite, Porcelain, Cobalt,
+Aubergine, and High Contrast theme previews plus inline-style examples.

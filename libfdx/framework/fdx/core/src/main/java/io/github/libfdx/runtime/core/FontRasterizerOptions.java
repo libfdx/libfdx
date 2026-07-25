@@ -74,13 +74,15 @@ public final class FontRasterizerOptions {
     }
 
     private static String unique(String characters) {
-        Set<Character> seen = new LinkedHashSet<Character>();
-        for (int i = 0; i < characters.length(); i++) {
-            seen.add(Character.valueOf(characters.charAt(i)));
+        Set<Integer> seen = new LinkedHashSet<Integer>();
+        for (int i = 0; i < characters.length();) {
+            int codePoint = characters.codePointAt(i);
+            seen.add(Integer.valueOf(codePoint));
+            i += Character.charCount(codePoint);
         }
         StringBuilder builder = new StringBuilder();
-        for (Character character : seen) {
-            builder.append(character.charValue());
+        for (Integer codePoint : seen) {
+            builder.appendCodePoint(codePoint.intValue());
         }
         return builder.toString();
     }

@@ -49,7 +49,8 @@ public final class UiStyle {
      * @return a new UI style
      */
     public static UiStyle button() {
-        return DEFAULT.padding(10.0f, 6.0f);
+        return DEFAULT.padding(10.0f, 6.0f)
+                .text(UiTextStyle.text().wrap(false).ellipsis(true));
     }
 
     /**

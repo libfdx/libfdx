@@ -86,9 +86,12 @@ final class AndroidFreeTypeFontRasterizer implements FontRasterizer {
 
     private int[] codePoints(String characters) {
         String text = characters != null ? characters : "";
-        int[] codePoints = new int[text.length()];
-        for (int i = 0; i < text.length(); i++) {
-            codePoints[i] = text.charAt(i);
+        int[] codePoints = new int[text.codePointCount(0, text.length())];
+        int index = 0;
+        for (int i = 0; i < text.length();) {
+            int codePoint = text.codePointAt(i);
+            codePoints[index++] = codePoint;
+            i += Character.charCount(codePoint);
         }
         return codePoints;
     }

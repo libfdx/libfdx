@@ -18,6 +18,7 @@ final class DesktopClipboard implements Clipboard {
     private static final int ACCESS_ATTEMPTS = 50;
     private static final long RETRY_NANOS = 10_000_000L;
     private final long windowHandle;
+    private String cachedText = "";
 
     DesktopClipboard(long windowHandle) {
         this.windowHandle = windowHandle;
@@ -28,16 +29,18 @@ final class DesktopClipboard implements Clipboard {
         for (int attempt = 0; attempt < ACCESS_ATTEMPTS; attempt++) {
             String value = getTextOnce();
             if (value != null) {
-                return value;
+                cachedText = value;
+                return cachedText;
             }
             waitForClipboard();
         }
-        return "";
+        return cachedText;
     }
 
     @Override
     public void setText(String text) {
         String value = text != null ? text : "";
+        cachedText = value;
         for (int attempt = 0; attempt < ACCESS_ATTEMPTS; attempt++) {
             setTextOnce(value);
             String stored = getTextOnce();

@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     id("java-library")
@@ -13,7 +12,6 @@ base {
     archivesName.set("project_generator_ui")
 }
 
-group = "${LibExt.fdxGroup}.tools.projectgenerator"
 
 dependencies {
     api(project(":libfdx:tools:project-generator:core"))

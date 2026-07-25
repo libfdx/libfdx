@@ -1,67 +1,12 @@
-val libfdxPublicationTaskNames = setOf(
-    "prepareSnapshot",
-    "prepareRelease",
-    "publishSnapshot",
-    "publishRelease",
-    "uploadReleaseToMavenCentral",
-    "publishToMavenLocal"
-)
-
-fun isLibfdxPublicationTask(taskPath: String): Boolean {
-    val taskName = taskPath.substringAfterLast(":")
-    return taskName in libfdxPublicationTaskNames
-}
-
-val libfdxPublicationBuild = (
-    System.getProperty("libfdx.publicationBuild")
-        ?: System.getenv("LIBFDX_PUBLICATION_BUILD")
-    )
-    ?.trim()
-    ?.takeIf { it.isNotEmpty() }
-    ?.let { value ->
-        when (value.lowercase()) {
-            "true" -> true
-            "false" -> false
-            else -> throw IllegalArgumentException(
-                "libfdx.publicationBuild or LIBFDX_PUBLICATION_BUILD must be true or false, got '$value'."
-            )
-        }
-    } == true || gradle.startParameter.taskNames.any(::isLibfdxPublicationTask)
-val libfdxRepositoryConsumersIncluded = !libfdxPublicationBuild && gradle.parent == null
+val libfdxRepositoryConsumersIncluded = gradle.parent == null
 gradle.extensions.extraProperties.set(
     "libfdxRepositoryConsumersIncluded",
     libfdxRepositoryConsumersIncluded
 )
 
 pluginManagement {
-    val publicationTaskNames = setOf(
-        "prepareSnapshot",
-        "prepareRelease",
-        "publishSnapshot",
-        "publishRelease",
-        "uploadReleaseToMavenCentral",
-        "publishToMavenLocal"
-    )
-    val publicationBuild = (
-        System.getProperty("libfdx.publicationBuild")
-            ?: System.getenv("LIBFDX_PUBLICATION_BUILD")
-        )
-        ?.trim()
-        ?.takeIf { it.isNotEmpty() }
-        ?.let { value ->
-            when (value.lowercase()) {
-                "true" -> true
-                "false" -> false
-                else -> throw IllegalArgumentException(
-                    "libfdx.publicationBuild or LIBFDX_PUBLICATION_BUILD must be true or false, got '$value'."
-                )
-            }
-        } == true || gradle.startParameter.taskNames.any { taskPath ->
-        val taskName = taskPath.substringAfterLast(":")
-        taskName in publicationTaskNames
-    }
-    val repositoryConsumersIncluded = !publicationBuild && gradle.parent == null
-    val tomlFile = java.io.File(settingsDir, "libfdx.toml")
+    val repositoryConsumersIncluded = gradle.parent == null
+    val tomlFile = java.io.File(settingsDir, "gradle/libs.versions.toml")
     val localProperties = java.util.Properties().also { properties ->
         val file = java.io.File(settingsDir, "local.properties")
         if (file.isFile) {
@@ -96,8 +41,10 @@ pluginManagement {
         val systemKey = "libfdx.development.$key"
         return System.getProperty(systemKey)?.trim()?.takeIf { it.isNotEmpty() }
             ?: localProperties.getProperty("development.$key")?.trim()?.takeIf { it.isNotEmpty() }
-            ?: tomlValue("development", key)
-            ?: throw IllegalStateException("Missing $systemKey, development.$key in local.properties, or [development].$key in libfdx.toml.")
+            ?: tomlValue("versions", key)
+            ?: throw IllegalStateException(
+                "Missing $systemKey, development.$key in local.properties, or [versions].$key in gradle/libs.versions.toml."
+            )
     }
 
     val usePublishedLibfdx = when (val value = developmentValue("usePublishedLibfdx").lowercase()) {
@@ -105,15 +52,21 @@ pluginManagement {
         "false" -> false
         else -> throw IllegalArgumentException("development.usePublishedLibfdx must be true or false, got '$value'.")
     }
-    val fdxSnapshotVersion = tomlValue("release", "fdxSnapshotVersion")
-        ?: throw IllegalStateException("Missing [release].fdxSnapshotVersion in libfdx.toml.")
+    gradle.extensions.extraProperties.set(
+        "libfdxUsePublishedLibfdx",
+        usePublishedLibfdx
+    )
+    val libfdxSnapshot = tomlValue("versions", "libfdxSnapshot")
+        ?: throw IllegalStateException(
+            "Missing [versions].libfdxSnapshot in gradle/libs.versions.toml."
+        )
     if (repositoryConsumersIncluded && !usePublishedLibfdx) {
         includeBuild("libfdx/tools/gradle-plugin")
     }
 
     plugins {
         if (repositoryConsumersIncluded && usePublishedLibfdx) {
-            id("io.github.libfdx") version fdxSnapshotVersion
+            id("io.github.libfdx") version libfdxSnapshot
         }
     }
 

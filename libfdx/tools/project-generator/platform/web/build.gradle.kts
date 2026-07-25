@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 import com.sun.net.httpserver.HttpServer
 import org.gradle.api.file.FileCollection
@@ -21,7 +20,6 @@ base {
     archivesName.set("project_generator_web")
 }
 
-group = "${LibExt.fdxGroup}.tools.projectgenerator"
 
 dependencies {
     implementation(project(":libfdx:tools:project-generator:core"))
@@ -44,7 +42,7 @@ fun registerWebBuild(taskName: String, descriptionText: String, target: String, 
     tasks.register(taskName) {
         group = "application"
         description = descriptionText
-        if (!LibExt.usePublishedLibfdx) {
+        if (!(gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
             dependsOn(":libfdx:framework:fdx:platform:web:generate_runtime_fdx_web_native")
         }
         dependsOn(builderClasspath)

@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     id("java")
@@ -9,7 +8,6 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "${LibExt.fdxGroup}.tests"
 
 base {
     archivesName.set("tests_web")
@@ -20,10 +18,10 @@ dependencies {
     implementation(libs.teavm.jso)
     implementation(libs.teavm.jso.apis)
     implementation(libs.teavm.jso.impl)
-    if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_web:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:gl_web:${LibExt.fdxSnapshotVersion}")
-        implementation("${LibExt.fdxGroup}:wgpu_web:${LibExt.fdxSnapshotVersion}")
+    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
+        implementation("${libs.versions.libfdxGroup.get()}:backend_web:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:gl_web:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:wgpu_web:${libs.versions.libfdxSnapshot.get()}")
     } else {
         implementation(project(":libfdx:backends:web"))
         implementation(project(":libfdx:extensions:graphics:gl:platform:web"))

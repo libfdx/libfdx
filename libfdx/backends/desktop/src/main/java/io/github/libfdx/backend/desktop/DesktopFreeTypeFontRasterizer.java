@@ -109,11 +109,12 @@ final class DesktopFreeTypeFontRasterizer implements FontRasterizer {
     private List<GlyphBitmap> loadGlyphs(FT_Face face, FontRasterizerOptions options, float baseLine) {
         List<GlyphBitmap> glyphs = new ArrayList<GlyphBitmap>();
         String characters = options.characters();
-        for (int i = 0; i < characters.length(); i++) {
-            int codePoint = characters.charAt(i);
+        for (int i = 0; i < characters.length();) {
+            int codePoint = characters.codePointAt(i);
             check(FT_Load_Char(face, codePoint, FT_LOAD_DEFAULT), "load glyph " + codePoint);
             check(FT_Render_Glyph(face.glyph(), FT_RENDER_MODE_NORMAL), "render glyph " + codePoint);
             glyphs.add(readGlyph(face, codePoint, baseLine));
+            i += Character.charCount(codePoint);
         }
         return glyphs;
     }

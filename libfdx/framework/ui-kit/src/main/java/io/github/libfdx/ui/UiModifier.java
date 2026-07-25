@@ -8,7 +8,7 @@ package io.github.libfdx.ui;
 public final class UiModifier {
     private static final UiModifier NONE = new UiModifier(false, false, Float.NaN, Float.NaN, Float.NaN, Float.NaN,
             Float.NaN, Float.NaN, UiInsets.ZERO, UiInsets.ZERO, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
-            0.0f, UiAlign.START, true, false, null, null, null, null, null, null, null, null);
+            0.0f, UiAlign.START, true, false, null, null, null, null, null, null, null, null, null);
 
     private final boolean fillWidth;
     private final boolean fillHeight;
@@ -32,6 +32,7 @@ public final class UiModifier {
     private final boolean enabled;
     private final boolean focusable;
     private final String style;
+    private final UiStyle inlineStyle;
     private final String transitionState;
     private final UiTransition transition;
     private final String semanticLabel;
@@ -45,7 +46,7 @@ public final class UiModifier {
             float weight, float alpha, float offsetX, float offsetY, float scaleX, float scaleY, float rotation,
             UiAlign align, boolean enabled, boolean focusable, String style, String transitionState,
             UiTransition transition, String semanticLabel, String validationId, UiAnimationSpec contentSizeAnimation,
-            UiAnimationSpec placementAnimation, String tooltipTarget) {
+            UiAnimationSpec placementAnimation, String tooltipTarget, UiStyle inlineStyle) {
         this.fillWidth = fillWidth;
         this.fillHeight = fillHeight;
         this.width = width;
@@ -68,6 +69,7 @@ public final class UiModifier {
         this.enabled = enabled;
         this.focusable = focusable;
         this.style = style;
+        this.inlineStyle = inlineStyle;
         this.transitionState = transitionState;
         this.transition = transition;
         this.semanticLabel = semanticLabel;
@@ -401,9 +403,20 @@ public final class UiModifier {
      * @return this UI modifier for chaining
      */
     public UiModifier style(String style) {
-        return copy(fillWidth, fillHeight, width, height, minWidth, minHeight, maxWidth, maxHeight, padding, margin,
-                gap, weight, alpha, offsetX, offsetY, scaleX, scaleY, rotation, align, enabled, focusable, style,
-                transitionState, transition, semanticLabel, validationId, contentSizeAnimation, placementAnimation);
+        return copyStyle(style, null);
+    }
+
+    /**
+     * Sets a one-off style for this element and returns this UI modifier.
+     *
+     * <p>The inline style takes precedence over the widget's named theme style.
+     * Applying a named style later replaces it.</p>
+     *
+     * @param style the inline style
+     * @return this UI modifier for chaining
+     */
+    public UiModifier style(UiStyle style) {
+        return copyStyle(null, style);
     }
 
     /**
@@ -699,6 +712,15 @@ public final class UiModifier {
     }
 
     /**
+     * Returns the one-off style, or {@code null} when this modifier uses a named theme style.
+     *
+     * @return the inline style
+     */
+    public UiStyle inlineStyle() {
+        return inlineStyle;
+    }
+
+    /**
      * Returns the transition state.
      *
      * @return the transition state
@@ -801,6 +823,7 @@ public final class UiModifier {
                 && this.enabled == enabled
                 && this.focusable == focusable
                 && this.style == style
+                && this.inlineStyle == inlineStyle
                 && this.transitionState == transitionState
                 && this.transition == transition
                 && this.semanticLabel == semanticLabel
@@ -813,6 +836,16 @@ public final class UiModifier {
         return new UiModifier(fillWidth, fillHeight, width, height, minWidth, minHeight, maxWidth, maxHeight,
                 padding, margin, gap, weight, alpha, offsetX, offsetY, scaleX, scaleY, rotation, align, enabled,
                 focusable, style, transitionState, transition, semanticLabel, validationId, contentSizeAnimation,
-                placementAnimation, tooltipTarget);
+                placementAnimation, tooltipTarget, inlineStyle);
+    }
+
+    private UiModifier copyStyle(String style, UiStyle inlineStyle) {
+        if (this.style == style && this.inlineStyle == inlineStyle) {
+            return this;
+        }
+        return new UiModifier(fillWidth, fillHeight, width, height, minWidth, minHeight, maxWidth, maxHeight,
+                padding, margin, gap, weight, alpha, offsetX, offsetY, scaleX, scaleY, rotation, align, enabled,
+                focusable, style, transitionState, transition, semanticLabel, validationId, contentSizeAnimation,
+                placementAnimation, tooltipTarget, inlineStyle);
     }
 }

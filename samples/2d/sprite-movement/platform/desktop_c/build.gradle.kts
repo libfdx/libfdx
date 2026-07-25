@@ -1,4 +1,3 @@
-import io.github.libfdx.build.LibExt
 
 plugins {
     id("java")
@@ -9,7 +8,6 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-group = "${LibExt.fdxGroup}.samples.g2d.spritemovement"
 
 base {
     archivesName.set("sample_2d_sprite_movement_desktop_c")
@@ -17,9 +15,9 @@ base {
 
 dependencies {
     implementation(project(":samples:2d:sprite-movement:core"))
-    if (LibExt.usePublishedLibfdx) {
-        implementation("${LibExt.fdxGroup}:backend_desktop_c:${LibExt.fdxSnapshotVersion}")
-        runtimeOnly("${LibExt.fdxGroup}:gl_desktop_c:${LibExt.fdxSnapshotVersion}")
+    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
+        implementation("${libs.versions.libfdxGroup.get()}:backend_desktop_c:${libs.versions.libfdxSnapshot.get()}")
+        runtimeOnly("${libs.versions.libfdxGroup.get()}:gl_desktop_c:${libs.versions.libfdxSnapshot.get()}")
     } else {
         implementation(project(":libfdx:backends:desktop_c"))
         runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_c"))

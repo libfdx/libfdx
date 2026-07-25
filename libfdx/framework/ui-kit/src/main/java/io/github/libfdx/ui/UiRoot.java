@@ -38,6 +38,10 @@ public final class UiRoot implements Disposable, UiStateListener {
     private static final int SCROLL_POINTER_BODY = 3;
     private static final float CHECKBOX_SIZE = 20.0f;
     private static final float CHECKBOX_LABEL_GAP = 8.0f;
+    private static final float SWITCH_WIDTH = 48.0f;
+    private static final float SWITCH_HEIGHT = 28.0f;
+    private static final float RADIO_SIZE = 28.0f;
+    private static final float COLLAPSE_HEADER_HEIGHT = 44.0f;
     private static final float WINDOW_TITLE_HEIGHT = 30.0f;
     private static final float WINDOW_RESIZE_HANDLE = 18.0f;
     private static final float SCROLLBAR_HIT_SIZE = 12.0f;
@@ -1090,6 +1094,9 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (handleTabsKey(focusedNode, event.key())) {
             return true;
         }
+        if (handleRadioKey(focusedNode, event.key())) {
+            return true;
+        }
         if (event.key() == Key.TAB || (!isTextInput(focusedNode) && event.key() == Key.DOWN)
                 || (!isTextInput(focusedNode) && event.key() == Key.RIGHT)) {
             return focusNext(1);
@@ -1118,13 +1125,13 @@ public final class UiRoot implements Disposable, UiStateListener {
                 return true;
             }
             if (event.key() == Key.LEFT) {
-                model.moveCursor(model.cursor() - 1, isShiftDown());
+                model.moveCursor(model.previousCursor(), isShiftDown());
                 ensureTextCursorVisible(focusedNode);
                 updatePlatformTextInput(focusedNode);
                 return true;
             }
             if (event.key() == Key.RIGHT) {
-                model.moveCursor(model.cursor() + 1, isShiftDown());
+                model.moveCursor(model.nextCursor(), isShiftDown());
                 ensureTextCursorVisible(focusedNode);
                 updatePlatformTextInput(focusedNode);
                 return true;
@@ -1161,6 +1168,58 @@ public final class UiRoot implements Disposable, UiStateListener {
         return false;
     }
 
+    private boolean handleRadioKey(UiNode node, Key key) {
+        if (node == null || node.type() != UiNodeType.RADIO_BUTTON
+                || !(node.descriptor() instanceof UiRadioModel)) {
+            return false;
+        }
+        int direction;
+        if (key == Key.RIGHT || key == Key.DOWN) {
+            direction = 1;
+        } else if (key == Key.LEFT || key == Key.UP) {
+            direction = -1;
+        } else {
+            return false;
+        }
+        UiRadioModel group = (UiRadioModel) node.descriptor();
+        focusableNodes.clear();
+        try {
+            collectRadioGroup(rootNode, group, focusableNodes);
+            if (focusableNodes.isEmpty()) {
+                return false;
+            }
+            int current = focusableNodes.indexOf(node);
+            int next = current + direction;
+            if (next < 0) {
+                next = focusableNodes.size() - 1;
+            } else if (next >= focusableNodes.size()) {
+                next = 0;
+            }
+            UiNode choice = focusableNodes.get(next);
+            choice.activate();
+            setFocused(choice);
+            return true;
+        }
+        finally {
+            focusableNodes.clear();
+        }
+    }
+
+    private void collectRadioGroup(UiNode node, UiRadioModel group, List<UiNode> result) {
+        if (node == null || !node.visible()) {
+            return;
+        }
+        if (node.type() == UiNodeType.RADIO_BUTTON && node.modifier().enabled()
+                && node.descriptor() instanceof UiRadioModel
+                && group.sameGroup((UiRadioModel) node.descriptor())) {
+            result.add(node);
+        }
+        List<UiNode> children = node.children();
+        for (int i = 0; i < children.size(); i++) {
+            collectRadioGroup(children.get(i), group, result);
+        }
+    }
+
     private boolean focusNext(int direction) {
         focusableNodes.clear();
         try {
@@ -1190,12 +1249,33 @@ public final class UiRoot implements Disposable, UiStateListener {
             return;
         }
         if (isFocusable(node)) {
-            result.add(node);
+            if (node.type() == UiNodeType.RADIO_BUTTON && node.descriptor() instanceof UiRadioModel) {
+                UiRadioModel group = (UiRadioModel) node.descriptor();
+                int existing = radioGroupIndex(result, group);
+                if (existing < 0) {
+                    result.add(node);
+                } else if (node.checked() && !result.get(existing).checked()) {
+                    result.set(existing, node);
+                }
+            } else {
+                result.add(node);
+            }
         }
         List<UiNode> children = node.children();
         for (int i = 0; i < children.size(); i++) {
             collectFocusable(children.get(i), result);
         }
+    }
+
+    private int radioGroupIndex(List<UiNode> nodes, UiRadioModel group) {
+        for (int i = 0; i < nodes.size(); i++) {
+            UiNode node = nodes.get(i);
+            if (node.descriptor() instanceof UiRadioModel
+                    && group.sameGroup((UiRadioModel) node.descriptor())) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     boolean handleTextInput(TextInputEvent event) {
@@ -1239,6 +1319,10 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     UiStyle styleFor(UiNode node) {
+        UiStyle inline = node.modifier().inlineStyle();
+        if (inline != null) {
+            return inline;
+        }
         String styleName = node.modifier().style();
         if (styleName == null) {
             styleName = defaultStyleName(node.type());
@@ -1295,15 +1379,19 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private void layoutNode(UiNode node, UiRect bounds) {
+        layoutNode(node, bounds, false, false);
+    }
+
+    private void layoutNode(UiNode node, UiRect bounds, boolean allowWidthOverflow, boolean allowHeightOverflow) {
         UiModifier modifier = node.modifier();
         UiInsets margin = modifier.margin();
         UiRect area = node.rendererRect(RECT_LAYOUT_AREA, bounds.x() + margin.left(), bounds.y() + margin.top(),
                 bounds.width() - margin.horizontal(), bounds.height() - margin.vertical());
         UiSize preferred = preferredSize(node, area.width(), area.height());
         float widthValue = chooseDimension(modifier.width(), modifier.isFillWidth(), preferred.width(), area.width(),
-                modifier.minWidth(), modifier.maxWidth());
+                minimumWidth(node), modifier.maxWidth(), allowWidthOverflow);
         float heightValue = chooseDimension(modifier.height(), modifier.isFillHeight(), preferred.height(), area.height(),
-                modifier.minHeight(), modifier.maxHeight());
+                minimumHeight(node), modifier.maxHeight(), allowHeightOverflow);
         float x = alignX(area, widthValue, modifier.align()) + modifier.offsetX();
         float y = area.y() + modifier.offsetY();
         UiRect targetBounds = node.rendererRect(RECT_LAYOUT_TARGET, x, y, widthValue, heightValue);
@@ -1341,7 +1429,13 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         UiInsets padding = effectivePadding(node);
         UiRect inner = node.rendererRect(RECT_LAYOUT_INNER, bounds.x() + padding.left(), bounds.y() + padding.top(),
-                bounds.width() - padding.horizontal(), bounds.height() - padding.vertical());
+                Math.max(0.0f, bounds.width() - padding.horizontal()),
+                Math.max(0.0f, bounds.height() - padding.vertical()));
+        if (node.type() == UiNodeType.COLLAPSE_BAR) {
+            float headerHeight = Math.min(COLLAPSE_HEADER_HEIGHT, inner.height());
+            inner = node.rendererRect(RECT_LAYOUT_INNER, inner.x(), inner.y() + headerHeight,
+                    inner.width(), Math.max(0.0f, inner.height() - headerHeight));
+        }
         if (node.type() == UiNodeType.SCROLL && node.scrollState() != null) {
             layoutScroll(node, inner);
             layoutOverlayChildren(node, bounds);
@@ -1408,7 +1502,10 @@ public final class UiRoot implements Disposable, UiStateListener {
         int childCount = layoutChildCount(children);
         float gap = node.modifier().gap();
         float availableHeight = Math.max(0.0f, inner.height() - gap * Math.max(0, childCount - 1));
-        float fixedHeight = 0.0f;
+        boolean allowOverflow = node.type() == UiNodeType.SCROLL;
+        float fixedPreferred = 0.0f;
+        float fixedMinimum = 0.0f;
+        float weightedMinimum = 0.0f;
         float weight = 0.0f;
         for (int i = 0; i < children.size(); i++) {
             UiNode child = children.get(i);
@@ -1417,12 +1514,30 @@ public final class UiRoot implements Disposable, UiStateListener {
             }
             if (child.modifier().weight() > 0.0f) {
                 weight += child.modifier().weight();
+                weightedMinimum += minimumHeight(child);
             } else if (child.modifier().isFillHeight()) {
                 weight += 1.0f;
+                weightedMinimum += minimumHeight(child);
             } else {
-                fixedHeight += preferredSize(child, inner.width(), availableHeight).height();
+                fixedPreferred += preferredSize(child, inner.width(), availableHeight).height();
+                fixedMinimum += minimumHeight(child);
             }
         }
+        float minimumTotal = fixedMinimum + weightedMinimum;
+        float minimumScale = minimumTotal > 0.0f
+                ? Math.min(1.0f, availableHeight / minimumTotal)
+                : 1.0f;
+        float fixedAllocated = fixedPreferred;
+        if (!allowOverflow && minimumScale >= 1.0f && fixedPreferred > fixedMinimum) {
+            float fixedRoom = Math.max(fixedMinimum, availableHeight - weightedMinimum);
+            float fixedRatio = clamp((fixedRoom - fixedMinimum) / (fixedPreferred - fixedMinimum), 0.0f, 1.0f);
+            fixedAllocated = fixedMinimum + (fixedPreferred - fixedMinimum) * fixedRatio;
+        } else if (!allowOverflow && minimumScale < 1.0f) {
+            fixedAllocated = fixedMinimum * minimumScale;
+        }
+        float weightedAllocated = allowOverflow
+                ? Math.max(0.0f, availableHeight - fixedPreferred)
+                : Math.max(0.0f, availableHeight - fixedAllocated);
         float y = inner.y();
         for (int i = 0; i < children.size(); i++) {
             UiNode child = children.get(i);
@@ -1434,12 +1549,31 @@ public final class UiRoot implements Disposable, UiStateListener {
                     ? child.modifier().weight()
                     : child.modifier().isFillHeight() ? 1.0f : 0.0f;
             if (childWeight > 0.0f && weight > 0.0f) {
-                heightValue = Math.max(0.0f, availableHeight - fixedHeight) * childWeight / weight;
+                if (allowOverflow) {
+                    heightValue = weightedAllocated * childWeight / weight;
+                } else if (minimumScale < 1.0f) {
+                    heightValue = minimumHeight(child) * minimumScale;
+                } else {
+                    float minimum = minimumHeight(child);
+                    float extra = Math.max(0.0f, weightedAllocated - weightedMinimum);
+                    heightValue = minimum + extra * childWeight / weight;
+                }
             } else {
-                heightValue = preferredSize(child, inner.width(), availableHeight).height();
+                float preferred = preferredSize(child, inner.width(), availableHeight).height();
+                if (allowOverflow) {
+                    heightValue = preferred;
+                } else if (minimumScale < 1.0f) {
+                    heightValue = minimumHeight(child) * minimumScale;
+                } else if (fixedPreferred > fixedMinimum) {
+                    float ratio = (fixedAllocated - fixedMinimum) / (fixedPreferred - fixedMinimum);
+                    heightValue = minimumHeight(child)
+                            + Math.max(0.0f, preferred - minimumHeight(child)) * ratio;
+                } else {
+                    heightValue = minimumHeight(child);
+                }
             }
             layoutNode(child, child.rendererRect(RECT_LAYOUT_CHILD_INPUT,
-                    inner.x(), y, inner.width(), heightValue));
+                    inner.x(), y, inner.width(), heightValue), allowOverflow, allowOverflow);
             y += heightValue + gap;
         }
     }
@@ -1449,7 +1583,9 @@ public final class UiRoot implements Disposable, UiStateListener {
         int childCount = layoutChildCount(children);
         float gap = node.modifier().gap();
         float availableWidth = Math.max(0.0f, inner.width() - gap * Math.max(0, childCount - 1));
-        float fixedWidth = 0.0f;
+        float fixedPreferred = 0.0f;
+        float fixedMinimum = 0.0f;
+        float weightedMinimum = 0.0f;
         float weight = 0.0f;
         for (int i = 0; i < children.size(); i++) {
             UiNode child = children.get(i);
@@ -1458,12 +1594,28 @@ public final class UiRoot implements Disposable, UiStateListener {
             }
             if (child.modifier().weight() > 0.0f) {
                 weight += child.modifier().weight();
+                weightedMinimum += minimumWidth(child);
             } else if (child.modifier().isFillWidth()) {
                 weight += 1.0f;
+                weightedMinimum += minimumWidth(child);
             } else {
-                fixedWidth += preferredSize(child, availableWidth, inner.height()).width();
+                fixedPreferred += preferredSize(child, availableWidth, inner.height()).width();
+                fixedMinimum += minimumWidth(child);
             }
         }
+        float minimumTotal = fixedMinimum + weightedMinimum;
+        float minimumScale = minimumTotal > 0.0f
+                ? Math.min(1.0f, availableWidth / minimumTotal)
+                : 1.0f;
+        float fixedAllocated = fixedPreferred;
+        if (minimumScale >= 1.0f && fixedPreferred > fixedMinimum) {
+            float fixedRoom = Math.max(fixedMinimum, availableWidth - weightedMinimum);
+            float fixedRatio = clamp((fixedRoom - fixedMinimum) / (fixedPreferred - fixedMinimum), 0.0f, 1.0f);
+            fixedAllocated = fixedMinimum + (fixedPreferred - fixedMinimum) * fixedRatio;
+        } else if (minimumScale < 1.0f) {
+            fixedAllocated = fixedMinimum * minimumScale;
+        }
+        float weightedAllocated = Math.max(0.0f, availableWidth - fixedAllocated);
         float x = inner.x();
         for (int i = 0; i < children.size(); i++) {
             UiNode child = children.get(i);
@@ -1476,13 +1628,27 @@ public final class UiRoot implements Disposable, UiStateListener {
                     ? child.modifier().weight()
                     : child.modifier().isFillWidth() ? 1.0f : 0.0f;
             if (childWeight > 0.0f && weight > 0.0f) {
-                widthValue = Math.max(0.0f, availableWidth - fixedWidth) * childWeight / weight;
+                if (minimumScale < 1.0f) {
+                    widthValue = minimumWidth(child) * minimumScale;
+                } else {
+                    float minimum = minimumWidth(child);
+                    float extra = Math.max(0.0f, weightedAllocated - weightedMinimum);
+                    widthValue = minimum + extra * childWeight / weight;
+                }
             } else {
-                widthValue = preferred.width();
+                if (minimumScale < 1.0f) {
+                    widthValue = minimumWidth(child) * minimumScale;
+                } else if (fixedPreferred > fixedMinimum) {
+                    float ratio = (fixedAllocated - fixedMinimum) / (fixedPreferred - fixedMinimum);
+                    widthValue = minimumWidth(child)
+                            + Math.max(0.0f, preferred.width() - minimumWidth(child)) * ratio;
+                } else {
+                    widthValue = minimumWidth(child);
+                }
             }
             UiModifier childModifier = child.modifier();
             float heightValue = chooseDimension(childModifier.height(), childModifier.isFillHeight(),
-                    preferred.height(), inner.height(), childModifier.minHeight(), childModifier.maxHeight());
+                    preferred.height(), inner.height(), minimumHeight(child), childModifier.maxHeight(), false);
             float y = inner.y() + Math.max(0.0f, inner.height() - heightValue) * 0.5f;
             layoutNode(child, child.rendererRect(RECT_LAYOUT_CHILD_INPUT, x, y, widthValue, heightValue));
             x += widthValue + gap;
@@ -1493,7 +1659,8 @@ public final class UiRoot implements Disposable, UiStateListener {
         List<UiNode> children = node.children();
         int columns = Math.max(1, node.intValue());
         float gap = node.modifier().gap();
-        float cellWidth = (inner.width() - gap * Math.max(0, columns - 1)) / columns;
+        float cellWidth = Math.max(0.0f,
+                (inner.width() - gap * Math.max(0, columns - 1)) / columns);
         float y = inner.y();
         float rowHeight = 0.0f;
         int layoutIndex = 0;
@@ -1508,9 +1675,11 @@ public final class UiRoot implements Disposable, UiStateListener {
                 rowHeight = 0.0f;
             }
             UiSize preferred = preferredSize(child, cellWidth, inner.height());
-            rowHeight = Math.max(rowHeight, preferred.height());
+            float availableHeight = Math.max(0.0f, inner.bottom() - y);
+            float childHeight = Math.min(preferred.height(), availableHeight);
+            rowHeight = Math.max(rowHeight, childHeight);
             float x = inner.x() + column * (cellWidth + gap);
-            layoutNode(child, child.rendererRect(RECT_LAYOUT_CHILD_INPUT, x, y, cellWidth, preferred.height()));
+            layoutNode(child, child.rendererRect(RECT_LAYOUT_CHILD_INPUT, x, y, cellWidth, childHeight));
             layoutIndex++;
         }
     }
@@ -1581,9 +1750,9 @@ public final class UiRoot implements Disposable, UiStateListener {
             }
             UiSize preferred = preferredSize(child, inner.width(), inner.height());
             float widthValue = chooseDimension(child.modifier().width(), child.modifier().isFillWidth(),
-                    preferred.width(), inner.width(), child.modifier().minWidth(), child.modifier().maxWidth());
+                    preferred.width(), inner.width(), minimumWidth(child), child.modifier().maxWidth(), false);
             float heightValue = chooseDimension(child.modifier().height(), child.modifier().isFillHeight(),
-                    preferred.height(), inner.height(), child.modifier().minHeight(), child.modifier().maxHeight());
+                    preferred.height(), inner.height(), minimumHeight(child), child.modifier().maxHeight(), false);
             float x;
             float y;
             if (tooltip != null) {
@@ -1663,7 +1832,9 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         UiModifier modifier = node.modifier();
         if (!Float.isNaN(modifier.width()) && !Float.isNaN(modifier.height())) {
-            UiSize explicit = node.layoutSize(SIZE_PREFERRED_RESULT, modifier.width(), modifier.height());
+            UiSize explicit = node.layoutSize(SIZE_PREFERRED_RESULT,
+                    Math.max(minimumWidth(node), modifier.width()),
+                    Math.max(minimumHeight(node), modifier.height()));
             node.cachePreferredSize(layoutPass, availableWidth, availableHeight, explicit);
             return explicit;
         }
@@ -1685,12 +1856,44 @@ public final class UiRoot implements Disposable, UiStateListener {
                         text.width() + CHECKBOX_SIZE + CHECKBOX_LABEL_GAP,
                         Math.max(CHECKBOX_SIZE + padding.vertical(), text.height()));
             }
+        } else if (node.type() == UiNodeType.SWITCH) {
+            if (!node.checkboxLabel()) {
+                size = node.layoutSize(SIZE_PREFERRED_BASE,
+                        SWITCH_WIDTH + padding.horizontal(), SWITCH_HEIGHT + padding.vertical());
+            } else {
+                UiSize text = textSize(node, node.text(), padding, availableWidth);
+                size = node.layoutSize(SIZE_PREFERRED_BASE,
+                        text.width() + SWITCH_WIDTH + CHECKBOX_LABEL_GAP,
+                        Math.max(SWITCH_HEIGHT + padding.vertical(), text.height()));
+            }
+        } else if (node.type() == UiNodeType.RADIO_BUTTON) {
+            UiSize text = textSize(node, node.text(), padding, availableWidth);
+            size = node.layoutSize(SIZE_PREFERRED_BASE,
+                    node.checkboxLabel()
+                            ? text.width() + RADIO_SIZE + CHECKBOX_LABEL_GAP
+                            : RADIO_SIZE + padding.horizontal(),
+                    Math.max(RADIO_SIZE + padding.vertical(), text.height()));
         } else if (node.type() == UiNodeType.SLIDER) {
             size = node.layoutSize(SIZE_PREFERRED_BASE,
                     160.0f + padding.horizontal(), 24.0f + padding.vertical());
         } else if (node.type() == UiNodeType.PROGRESS_BAR) {
             size = node.layoutSize(SIZE_PREFERRED_BASE,
                     160.0f + padding.horizontal(), 16.0f + padding.vertical());
+        } else if (node.type() == UiNodeType.LOADING_BAR) {
+            size = node.layoutSize(SIZE_PREFERRED_BASE,
+                    160.0f + padding.horizontal(), 12.0f + padding.vertical());
+        } else if (node.type() == UiNodeType.LOADING_SPINNER) {
+            size = node.layoutSize(SIZE_PREFERRED_BASE,
+                    28.0f + padding.horizontal(), 28.0f + padding.vertical());
+        } else if (node.type() == UiNodeType.DIVIDER) {
+            size = node.layoutSize(SIZE_PREFERRED_BASE,
+                    64.0f + padding.horizontal(), 1.0f + padding.vertical());
+        } else if (node.type() == UiNodeType.COLLAPSE_BAR) {
+            UiSize text = textSize(node, node.text(), padding, availableWidth);
+            UiSize content = preferredColumnSize(node, availableWidth, availableHeight, padding);
+            size = node.layoutSize(SIZE_PREFERRED_BASE,
+                    Math.max(text.width() + 56.0f, content.width()),
+                    COLLAPSE_HEADER_HEIGHT + content.height());
         } else if (node.type() == UiNodeType.TABS) {
             size = tabsSize(node, padding);
         } else if (node.type() == UiNodeType.TEXT_FIELD) {
@@ -1711,6 +1914,8 @@ public final class UiRoot implements Disposable, UiStateListener {
             size = node.layoutSize(SIZE_PREFERRED_BASE, padding.horizontal(), padding.vertical());
         } else if (node.type() == UiNodeType.ROW) {
             size = preferredRowSize(node, availableWidth, availableHeight, padding);
+        } else if (node.type() == UiNodeType.GRID) {
+            size = preferredGridSize(node, availableWidth, availableHeight, padding);
         } else {
             size = preferredColumnSize(node, availableWidth, availableHeight, padding);
         }
@@ -1722,7 +1927,9 @@ public final class UiRoot implements Disposable, UiStateListener {
     private UiSize applyExplicitPreferredSize(UiNode node, UiModifier modifier, UiSize size) {
         float widthValue = !Float.isNaN(modifier.width()) ? modifier.width() : size.width();
         float heightValue = !Float.isNaN(modifier.height()) ? modifier.height() : size.height();
-        return node.layoutSize(SIZE_PREFERRED_RESULT, widthValue, heightValue);
+        return node.layoutSize(SIZE_PREFERRED_RESULT,
+                Math.max(minimumWidth(node), widthValue),
+                Math.max(minimumHeight(node), heightValue));
     }
 
     private boolean isColumnContainer(UiNodeType type) {
@@ -1732,6 +1939,7 @@ public final class UiRoot implements Disposable, UiStateListener {
                 || type == UiNodeType.SCROLL
                 || type == UiNodeType.ITEM
                 || type == UiNodeType.ANIMATED_VISIBILITY
+                || type == UiNodeType.COLLAPSE_BAR
                 || type == UiNodeType.WINDOW
                 || type == UiNodeType.MODAL
                 || type == UiNodeType.POPUP
@@ -1778,8 +1986,44 @@ public final class UiRoot implements Disposable, UiStateListener {
         return node.layoutSize(SIZE_ROW, widthValue, heightValue);
     }
 
+    private UiSize preferredGridSize(UiNode node, float availableWidth, float availableHeight, UiInsets padding) {
+        int columns = Math.max(1, node.intValue());
+        float gap = node.modifier().gap();
+        float innerAvailableWidth = Math.max(0.0f, availableWidth - padding.horizontal());
+        float cellAvailableWidth = Math.max(0.0f,
+                (innerAvailableWidth - gap * Math.max(0, columns - 1)) / columns);
+        float maxCellWidth = 0.0f;
+        float rowHeight = 0.0f;
+        float rowsHeight = 0.0f;
+        int count = 0;
+        List<UiNode> children = node.children();
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
+            if (!isLayoutChild(child)) {
+                continue;
+            }
+            UiSize childSize = preferredSize(child, cellAvailableWidth, availableHeight);
+            maxCellWidth = Math.max(maxCellWidth, childSize.width());
+            rowHeight = Math.max(rowHeight, childSize.height());
+            count++;
+            if (count % columns == 0) {
+                rowsHeight += rowHeight;
+                rowHeight = 0.0f;
+            }
+        }
+        if (count % columns != 0) {
+            rowsHeight += rowHeight;
+        }
+        int rows = count == 0 ? 0 : (count + columns - 1) / columns;
+        int usedColumns = Math.min(columns, count);
+        float widthValue = padding.horizontal() + maxCellWidth * usedColumns
+                + gap * Math.max(0, usedColumns - 1);
+        float heightValue = padding.vertical() + rowsHeight + gap * Math.max(0, rows - 1);
+        return node.layoutSize(SIZE_COLUMN, widthValue, heightValue);
+    }
+
     private UiSize textSize(UiNode node, String text, UiInsets padding, float availableWidth) {
-        int fallbackLength = text != null ? text.length() : 0;
+        int fallbackLength = text != null ? text.codePointCount(0, text.length()) : 0;
         UiStyle style = styleFor(node);
         UiTextStyle textStyle = style != null ? style.textStyle() : UiTextStyle.text();
         float maxWidth = textStyle.wrap() || textStyle.ellipsis() ? availableWidth : 0.0f;
@@ -1852,6 +2096,30 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (type == UiNodeType.PANEL) {
             return "panel";
         }
+        if (type == UiNodeType.CHECKBOX) {
+            return "checkbox";
+        }
+        if (type == UiNodeType.SWITCH) {
+            return "switch";
+        }
+        if (type == UiNodeType.RADIO_BUTTON) {
+            return "radio-button";
+        }
+        if (type == UiNodeType.SLIDER) {
+            return "slider";
+        }
+        if (type == UiNodeType.PROGRESS_BAR) {
+            return "progress-bar";
+        }
+        if (type == UiNodeType.LOADING_BAR || type == UiNodeType.LOADING_SPINNER) {
+            return "loading-indicator";
+        }
+        if (type == UiNodeType.DIVIDER) {
+            return "divider";
+        }
+        if (type == UiNodeType.COLLAPSE_BAR) {
+            return "collapse-bar";
+        }
         if (type == UiNodeType.TEXT_FIELD) {
             return "text-field";
         }
@@ -1870,7 +2138,8 @@ public final class UiRoot implements Disposable, UiStateListener {
         return null;
     }
 
-    private float chooseDimension(float explicit, boolean fill, float preferred, float available, float min, float max) {
+    private float chooseDimension(float explicit, boolean fill, float preferred, float available, float min, float max,
+            boolean allowOverflow) {
         float value = !Float.isNaN(explicit) ? explicit : fill ? available : preferred;
         if (!Float.isNaN(min)) {
             value = Math.max(value, min);
@@ -1878,7 +2147,24 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (!Float.isNaN(max)) {
             value = Math.min(value, max);
         }
+        if (!allowOverflow) {
+            value = Math.min(value, Math.max(0.0f, available));
+        }
         return Math.max(0.0f, value);
+    }
+
+    private float minimumWidth(UiNode node) {
+        float modifierMinimum = node != null ? node.modifier().minWidth() : Float.NaN;
+        UiStyle style = node != null ? styleFor(node) : null;
+        float styleMinimum = style != null ? style.minimumSize().width() : 0.0f;
+        return Math.max(styleMinimum, Float.isNaN(modifierMinimum) ? 0.0f : modifierMinimum);
+    }
+
+    private float minimumHeight(UiNode node) {
+        float modifierMinimum = node != null ? node.modifier().minHeight() : Float.NaN;
+        UiStyle style = node != null ? styleFor(node) : null;
+        float styleMinimum = style != null ? style.minimumSize().height() : 0.0f;
+        return Math.max(styleMinimum, Float.isNaN(modifierMinimum) ? 0.0f : modifierMinimum);
     }
 
     private float alignX(UiRect area, float width, UiAlign align) {
@@ -2496,8 +2782,8 @@ public final class UiRoot implements Disposable, UiStateListener {
         float scale = font != null ? font.scale(actual.size()) : 1.0f;
         float cursor = 0.0f;
         int previous = -1;
-        for (int i = start; i < end; i++) {
-            int codePoint = value.charAt(i);
+        for (int i = start; i < end;) {
+            int codePoint = value.codePointAt(i);
             BitmapFontGlyph glyph = font != null ? font.glyph(codePoint) : null;
             float next = cursor;
             if (glyph != null) {
@@ -2514,6 +2800,7 @@ public final class UiRoot implements Disposable, UiStateListener {
                 return i;
             }
             cursor = next;
+            i += Character.charCount(codePoint);
         }
         return -1;
     }
@@ -2657,8 +2944,8 @@ public final class UiRoot implements Disposable, UiStateListener {
         BitmapFont font = textFont(actual);
         float scale = font != null ? font.scale(actual.size()) : 1.0f;
         int previous = -1;
-        for (int i = safeStart; i < safeEnd; i++) {
-            int codePoint = text.charAt(i);
+        for (int i = safeStart; i < safeEnd;) {
+            int codePoint = text.codePointAt(i);
             BitmapFontGlyph glyph = font != null ? font.glyph(codePoint) : null;
             float next = cursor;
             if (glyph != null) {
@@ -2675,6 +2962,7 @@ public final class UiRoot implements Disposable, UiStateListener {
                 return i;
             }
             cursor = next;
+            i += Character.charCount(codePoint);
         }
         return safeEnd;
     }
@@ -2692,7 +2980,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             return null;
         }
         String text = model.value();
-        int cursor = Math.max(0, Math.min(offset, text.length()));
+        int cursor = codePointBoundary(text, offset);
         UiTextStyle style = textStyleFor(node);
         UiRect bounds = textInputBounds(node);
         float lineHeight = Math.min(bounds.height(), Math.max(12.0f, textLineHeight(style)));
@@ -2724,12 +3012,13 @@ public final class UiRoot implements Disposable, UiStateListener {
             float scale = font.scale(actual.size());
             float width = 0.0f;
             int previous = -1;
-            for (int i = safeStart; i < safeEnd; i++) {
-                int codePoint = text.charAt(i);
+            for (int i = safeStart; i < safeEnd;) {
+                int codePoint = text.codePointAt(i);
                 BitmapFontGlyph glyph = font.glyph(codePoint);
                 if (glyph == null) {
                     width += actual.size() * 0.5f;
                     previous = -1;
+                    i += Character.charCount(codePoint);
                     continue;
                 }
                 if (previous >= 0) {
@@ -2737,10 +3026,22 @@ public final class UiRoot implements Disposable, UiStateListener {
                 }
                 width += glyph.xAdvance() * scale;
                 previous = codePoint;
+                i += Character.charCount(codePoint);
             }
             return width;
         }
-        return (safeEnd - safeStart) * 8.0f;
+        return text.codePointCount(safeStart, safeEnd) * 8.0f;
+    }
+
+    private int codePointBoundary(String text, int offset) {
+        int length = text != null ? text.length() : 0;
+        int value = Math.max(0, Math.min(length, offset));
+        if (value > 0 && value < length
+                && Character.isLowSurrogate(text.charAt(value))
+                && Character.isHighSurrogate(text.charAt(value - 1))) {
+            value--;
+        }
+        return value;
     }
 
     private boolean handleTextShortcut(UiTextFieldModel model, Key key) {
