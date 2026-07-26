@@ -5,7 +5,7 @@ libfdxSnapshot = "-SNAPSHOT"
 
 easyPublishing = "0.1.0"
 androidGradlePlugin = "9.1.1"
-jwebgpu = "0.3.3"
+jwebgpu = "-SNAPSHOT"
 jmultiplatform = "0.1.3"
 junitJupiter = "5.13.4"
 junitPlatform = "1.13.4"
