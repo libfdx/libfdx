@@ -133,7 +133,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 return input.color;
             }
             """;
-    private static final String PBR_SHADER_SOURCE = """
+    static final String PBR_SHADER_SOURCE = """
             struct VertexInput {
                 @location(0) position : vec3f,
                 @location(1) normal : vec3f,
@@ -159,6 +159,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 ambientColor : vec4f,
                 lightDirection : vec4f,
                 lightColorIntensity : vec4f,
+                fillLightDirection : vec4f,
+                fillLightColorIntensity : vec4f,
+                postProcessing : vec4f,
                 textureFlags : vec4f,
                 emissiveFlags : vec4f,
                 fogColor : vec4f,
@@ -188,6 +191,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 shadowCameraDirection : vec4f,
                 shadowCameraUp : vec4f,
                 shadowCameraParams : vec4f,
+                shadowFilterParams : vec4f,
             };
             @group(0) @binding(0) var baseColorTexture : texture_2d<f32>;
             @group(0) @binding(1) var baseColorSampler : sampler;
@@ -227,6 +231,24 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
             fn linearToSrgb(value : vec3f) -> vec3f {
                 return pow(max(value, vec3f(0.0)), vec3f(1.0 / 2.2));
+            }
+            fn neutralToneMapping(colorIn : vec3f) -> vec3f {
+                const startCompression = 0.76;
+                const desaturation = 0.15;
+                let darkest = min(colorIn.r, min(colorIn.g, colorIn.b));
+                let offset = select(0.04, darkest - 6.25 * darkest * darkest, darkest < 0.08);
+                var color = max(colorIn - vec3f(offset), vec3f(0.0));
+                let peak = max(color.r, max(color.g, color.b));
+                if (peak < startCompression) {
+                    return color;
+                }
+                let distanceToWhite = 1.0 - startCompression;
+                let mappedPeak = 1.0 - distanceToWhite * distanceToWhite
+                        / (peak + distanceToWhite - startCompression);
+                color *= mappedPeak / max(peak, 0.000001);
+                let desaturationAmount = 1.0
+                        - 1.0 / (desaturation * (peak - mappedPeak) + 1.0);
+                return mix(color, vec3f(mappedPeak), vec3f(desaturationAmount));
             }
             fn distributionGGX(n : vec3f, h : vec3f, roughness : f32) -> f32 {
                 let a = roughness * roughness;
@@ -281,7 +303,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 let f = fresnelSchlick(ndv, f0);
                 let kd = (vec3f(1.0) - f) * (1.0 - metallic);
                 let irradiance = skyEnvironmentColor(n) * uniforms.skyParams.y;
-                let diffuse = irradiance * albedo;
+                let diffuse = irradiance * albedo / PI;
                 let reflection = reflect(-v, n);
                 let glossy = skyEnvironmentColor(reflection);
                 let blurred = skyEnvironmentColor(mix(reflection, n, clamp(roughness * 0.72, 0.0, 1.0)));
@@ -314,17 +336,24 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 let b = normalize(cross(n, t));
                 return normalize(mat3x3<f32>(t, b, n) * sampleNormal);
             }
+            fn unpackShadowDepth(encodedDepth : vec4f) -> f32 {
+                return encodedDepth.r + encodedDepth.g / 255.0;
+            }
             fn shadowDepth(cascadeIndex : i32, uv : vec2f) -> f32 {
                 if (cascadeIndex == 1) {
-                    return textureSampleLevel(shadowTexture1, shadowSampler1, uv, 0.0).r;
+                    return unpackShadowDepth(
+                            textureSampleLevel(shadowTexture1, shadowSampler1, uv, 0.0));
                 }
                 if (cascadeIndex == 2) {
-                    return textureSampleLevel(shadowTexture2, shadowSampler2, uv, 0.0).r;
+                    return unpackShadowDepth(
+                            textureSampleLevel(shadowTexture2, shadowSampler2, uv, 0.0));
                 }
                 if (cascadeIndex == 3) {
-                    return textureSampleLevel(shadowTexture3, shadowSampler3, uv, 0.0).r;
+                    return unpackShadowDepth(
+                            textureSampleLevel(shadowTexture3, shadowSampler3, uv, 0.0));
                 }
-                return textureSampleLevel(shadowTexture0, shadowSampler0, uv, 0.0).r;
+                return unpackShadowDepth(
+                        textureSampleLevel(shadowTexture0, shadowSampler0, uv, 0.0));
             }
             fn shadowViewDistance(worldPosition : vec3f) -> f32 {
                 return dot(worldPosition - uniforms.shadowCameraPosition.xyz,
@@ -395,6 +424,12 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 }
                 return uniforms.shadowBiases.x;
             }
+            fn shadowVisibility(cascadeIndex : i32, uv : vec2f, currentDepth : f32,
+                    bias : f32, offset : vec2f) -> f32 {
+                let closestDepth = shadowDepth(cascadeIndex, uv + offset);
+                return select(1.0, 1.0 - uniforms.shadowParams.z,
+                        currentDepth - bias > closestDepth);
+            }
             fn directionalShadow(worldPosition : vec3f) -> f32 {
                 let cascadeIndex = shadowCascadeIndex(worldPosition);
                 if (cascadeIndex < 0) {
@@ -411,11 +446,47 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     return 1.0;
                 }
                 let currentDepth = clamp(ndc.z * 0.5 + 0.5, 0.0, 1.0);
-                let closestDepth = shadowDepth(cascadeIndex, uv);
-                if (currentDepth - shadowBias(cascadeIndex) > closestDepth) {
-                    return 1.0 - uniforms.shadowParams.z;
-                }
-                return 1.0;
+                let bias = shadowBias(cascadeIndex);
+                let radiusX = max(uniforms.shadowFilterParams.x, 0.000001)
+                        * uniforms.shadowFilterParams.z;
+                let radiusY = max(uniforms.shadowFilterParams.y, 0.000001)
+                        * uniforms.shadowFilterParams.z;
+                let x0 = -2.0 * radiusX;
+                let x1 = -radiusX;
+                let x2 = 0.0;
+                let x3 = radiusX;
+                let x4 = 2.0 * radiusX;
+                let y0 = -2.0 * radiusY;
+                let y1 = -radiusY;
+                let y2 = 0.0;
+                let y3 = radiusY;
+                let y4 = 2.0 * radiusY;
+                var visibility = shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x0, y0));
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x1, y0)) * 4.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x2, y0)) * 6.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x3, y0)) * 4.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x4, y0));
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x0, y1)) * 4.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x1, y1)) * 16.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x2, y1)) * 24.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x3, y1)) * 16.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x4, y1)) * 4.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x0, y2)) * 6.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x1, y2)) * 24.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x2, y2)) * 36.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x3, y2)) * 24.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x4, y2)) * 6.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x0, y3)) * 4.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x1, y3)) * 16.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x2, y3)) * 24.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x3, y3)) * 16.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x4, y3)) * 4.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x0, y4));
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x1, y4)) * 4.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x2, y4)) * 6.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x3, y4)) * 4.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x4, y4));
+                return visibility / 256.0;
             }
             @fragment
             fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
@@ -446,10 +517,17 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 let n = mappedNormal(input.normal, input.worldPosition, uv);
                 let v = normalize(uniforms.cameraPosition.xyz - input.worldPosition);
                 let l = normalize(-uniforms.lightDirection.xyz);
-                let albedo = srgbToLinear(base.rgb);
+                let albedo = base.rgb;
                 let radiance = uniforms.lightColorIntensity.rgb * uniforms.lightColorIntensity.a;
                 let shadow = directionalShadow(input.worldPosition);
                 var color = pbrLightContribution(n, v, l, albedo, metallic, roughness, radiance * shadow);
+                let fillRadiance = uniforms.fillLightColorIntensity.rgb
+                        * uniforms.fillLightColorIntensity.a;
+                if (uniforms.fillLightColorIntensity.a > 0.0) {
+                    color += pbrLightContribution(n, v,
+                            normalize(-uniforms.fillLightDirection.xyz),
+                            albedo, metallic, roughness, fillRadiance);
+                }
                 let pointLightCount = i32(uniforms.pointLightCount.x);
                 for (var i : i32 = 0; i < 4; i = i + 1) {
                     if (i < pointLightCount) {
@@ -496,7 +574,12 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 let fogRange = max(uniforms.fogParams.y - uniforms.fogParams.x, 0.0001);
                 let fogAmount = clamp((viewDistance - uniforms.fogParams.x) / fogRange,
                         0.0, uniforms.fogParams.z);
-                return vec4f(mix(linearToSrgb(color), uniforms.fogColor.rgb, fogAmount), base.a);
+                color = mix(color, srgbToLinear(uniforms.fogColor.rgb), fogAmount);
+                color *= max(uniforms.postProcessing.y, 0.0001);
+                if (uniforms.postProcessing.x > 0.5) {
+                    color = neutralToneMapping(color);
+                }
+                return vec4f(linearToSrgb(color), base.a);
             }
             """;
     private static final String PBR_SKINNED_SHADER_SOURCE = skinnedPbrShaderSource();
@@ -559,6 +642,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                         + "                shadowCameraDirection : vec4f,\n"
                         + "                shadowCameraUp : vec4f,\n"
                         + "                shadowCameraParams : vec4f,\n"
+                        + "                shadowFilterParams : vec4f,\n"
                         + "            };",
                 "                shadowViewProjection0 : mat4x4<f32>,\n"
                         + "                shadowViewProjection1 : mat4x4<f32>,\n"
@@ -571,6 +655,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                         + "                shadowCameraDirection : vec4f,\n"
                         + "                shadowCameraUp : vec4f,\n"
                         + "                shadowCameraParams : vec4f,\n"
+                        + "                shadowFilterParams : vec4f,\n"
                         + "                skinningParams : vec4f,\n"
                         + "                boneMatrices : array<mat4x4<f32>, 64>,\n"
                         + "            };");
@@ -1273,11 +1358,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             float diffuseIntensity = sky.diffuseIntensity();
             float specularIntensity = sky.specularIntensity();
             return obtainColorVertex(
-                    (kdRed * irradiance.red * diffuseIntensity * red
+                    (kdRed * irradiance.red * diffuseIntensity * red / PI
                             + (prefilteredRed * envBrdfRed + sun.red() * sunSpec) * specularIntensity) * ao,
-                    (kdGreen * irradiance.green * diffuseIntensity * green
+                    (kdGreen * irradiance.green * diffuseIntensity * green / PI
                             + (prefilteredGreen * envBrdfGreen + sun.green() * sunSpec) * specularIntensity) * ao,
-                    (kdBlue * irradiance.blue * diffuseIntensity * blue
+                    (kdBlue * irradiance.blue * diffuseIntensity * blue / PI
                             + (prefilteredBlue * envBrdfBlue + sun.blue() * sunSpec) * specularIntensity) * ao,
                     0.0f);
         }
@@ -1839,12 +1924,35 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             Color ambient = environment.ambientColor();
             pass.setUniform3f("u_ambientColor", ambient.red(), ambient.green(), ambient.blue());
             DirectionalLight directional = null;
+            DirectionalLight fillDirectional = null;
             for (int i = 0; i < environment.lights().size(); i++) {
                 Light light = environment.lights().get(i);
                 if (light instanceof DirectionalLight) {
-                    directional = (DirectionalLight)light;
-                    break;
+                    if (directional == null) {
+                        directional = (DirectionalLight)light;
+                    }
+                    else {
+                        fillDirectional = (DirectionalLight)light;
+                        break;
+                    }
                 }
+            }
+            pass.setUniform4f("u_postProcessing",
+                    environment.neutralToneMappingEnabled() ? 1.0f : 0.0f,
+                    environment.exposure(), 0.0f, 0.0f);
+            if (fillDirectional == null) {
+                pass.setUniform3f("u_fillLightDirection", 0.4f, -0.5f, 0.7f);
+                pass.setUniform3f("u_fillLightColor", 1.0f, 1.0f, 1.0f);
+                pass.setUniform1f("u_fillLightIntensity", 0.0f);
+            }
+            else {
+                Vector3 fillDirection = fillDirectional.direction();
+                Color fillColor = fillDirectional.color();
+                pass.setUniform3f("u_fillLightDirection",
+                        fillDirection.x(), fillDirection.y(), fillDirection.z());
+                pass.setUniform3f("u_fillLightColor",
+                        fillColor.red(), fillColor.green(), fillColor.blue());
+                pass.setUniform1f("u_fillLightIntensity", fillDirectional.intensity());
             }
             applyFog(pass, environment);
             applySkyEnvironment(pass, environment);
@@ -2007,6 +2115,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 pass.setUniform4f("u_shadowCameraDirection", 0.0f, 0.0f, -1.0f, 0.0f);
                 pass.setUniform4f("u_shadowCameraUp", 0.0f, 1.0f, 0.0f, 0.0f);
                 pass.setUniform4f("u_shadowCameraParams", 0.0f, 0.0f, 0.0f, 1.0f);
+                pass.setUniform4f("u_shadowFilterParams", 0.0f, 0.0f, 0.0f, 0.0f);
                 return;
             }
             shadowMap.lightViewProjection().copyValues(shadowMatrix, 0);
@@ -2021,6 +2130,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             pass.setUniform4f("u_shadowCameraDirection", 0.0f, 0.0f, -1.0f, 0.0f);
             pass.setUniform4f("u_shadowCameraUp", 0.0f, 1.0f, 0.0f, 0.0f);
             pass.setUniform4f("u_shadowCameraParams", 0.0f, 0.0f, 0.0f, 1.0f);
+            pass.setUniform4f("u_shadowFilterParams",
+                    1.0f / Math.max(1, shadowMap.texture().width()),
+                    1.0f / Math.max(1, shadowMap.texture().height()),
+                    1.35f, 0.0f);
         }
 
         private void applyCascadedDirectionalShadow(RenderPass pass, CascadedShadowMap3D cascaded) {
@@ -2073,6 +2186,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             pass.setUniform4f("u_shadowCameraUp", shadowCameraUp.x(), shadowCameraUp.y(), shadowCameraUp.z(), 0.0f);
             pass.setUniform4f("u_shadowCameraParams", cascaded.viewCameraNear(), cascaded.viewCameraFar(),
                     cascaded.viewCameraTanHalfFov(), cascaded.viewCameraAspect());
+            DirectionalShadowMap3D firstCascade = cascadeCount > 0 ? cascaded.cascade(0) : null;
+            pass.setUniform4f("u_shadowFilterParams",
+                    firstCascade != null ? 1.0f / Math.max(1, firstCascade.texture().width()) : 0.0f,
+                    firstCascade != null ? 1.0f / Math.max(1, firstCascade.texture().height()) : 0.0f,
+                    1.35f, 0.0f);
         }
 
         private float shadowYSign() {

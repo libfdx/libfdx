@@ -14,6 +14,7 @@ public final class DisplayConfig {
     private boolean maximized;
     private boolean vSync = true;
     private int foregroundFps = 60;
+    private int samples;
 
     /**
      * Returns the title.
@@ -163,6 +164,26 @@ public final class DisplayConfig {
      */
     public DisplayConfig foregroundFps(int foregroundFps) {
         this.foregroundFps = foregroundFps;
+        return this;
+    }
+
+    /**
+     * Returns the requested framebuffer sample count.
+     *
+     * @return the sample count, or zero when multisampling is disabled
+     */
+    public int samples() {
+        return samples;
+    }
+
+    /**
+     * Sets the requested framebuffer sample count and returns this display config.
+     *
+     * @param samples the sample count, or zero to disable multisampling
+     * @return this display config for chaining
+     */
+    public DisplayConfig samples(int samples) {
+        this.samples = Math.max(0, samples);
         return this;
     }
 }

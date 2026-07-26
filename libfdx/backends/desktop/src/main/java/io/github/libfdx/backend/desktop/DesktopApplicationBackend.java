@@ -189,6 +189,9 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE, GLFW.GLFW_FALSE);
         GLFW.glfwWindowHint(GLFW.GLFW_RESIZABLE, config.resizable() ? GLFW.GLFW_TRUE : GLFW.GLFW_FALSE);
         GLFW.glfwWindowHint(GLFW.GLFW_MAXIMIZED, config.maximized() ? GLFW.GLFW_TRUE : GLFW.GLFW_FALSE);
+        if (graphicsRequirements.clientApi() == GraphicsClientApi.OPENGL) {
+            GLFW.glfwWindowHint(GLFW.GLFW_SAMPLES, config.samples());
+        }
 
         long sharedWindow = graphicsRequirements.clientApi() == GraphicsClientApi.OPENGL && display != null
                 ? display.windowHandle()

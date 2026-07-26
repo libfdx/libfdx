@@ -18,6 +18,8 @@ public final class Environment3D {
     private float fogStartDistance;
     private float fogEndDistance = 1.0f;
     private boolean fogEnabled;
+    private boolean neutralToneMappingEnabled;
+    private float exposure = 1.0f;
     private DirectionalShadowMap3D directionalShadowMap;
     private CascadedShadowMap3D cascadedShadowMap;
     private SkyEnvironment3D skyEnvironment;
@@ -106,6 +108,32 @@ public final class Environment3D {
         fogStartDistance = 0.0f;
         fogEndDistance = 1.0f;
         fogEnabled = false;
+        return this;
+    }
+
+    /**
+     * Enables neutral display tonemapping and returns this environment.
+     *
+     * @param exposure the positive scene exposure multiplier
+     * @return this environment for chaining
+     */
+    public Environment3D neutralToneMapping(float exposure) {
+        if (exposure <= 0.0f) {
+            throw new FdxException("Tone mapping exposure must be greater than zero");
+        }
+        neutralToneMappingEnabled = true;
+        this.exposure = exposure;
+        return this;
+    }
+
+    /**
+     * Disables display tonemapping and restores unit exposure.
+     *
+     * @return this environment for chaining
+     */
+    public Environment3D clearToneMapping() {
+        neutralToneMappingEnabled = false;
+        exposure = 1.0f;
         return this;
     }
 
@@ -210,6 +238,24 @@ public final class Environment3D {
      */
     public boolean fogEnabled() {
         return fogEnabled;
+    }
+
+    /**
+     * Returns whether neutral display tonemapping is enabled.
+     *
+     * @return true when neutral tonemapping is enabled
+     */
+    public boolean neutralToneMappingEnabled() {
+        return neutralToneMappingEnabled;
+    }
+
+    /**
+     * Returns the scene exposure multiplier.
+     *
+     * @return the positive exposure multiplier
+     */
+    public float exposure() {
+        return exposure;
     }
 
     /**

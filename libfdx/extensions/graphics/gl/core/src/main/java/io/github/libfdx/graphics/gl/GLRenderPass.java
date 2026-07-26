@@ -30,18 +30,21 @@ final class GLRenderPass implements RenderPass {
     private static final int AMBIENT_COLOR_OFFSET = 40;
     private static final int LIGHT_DIRECTION_OFFSET = 44;
     private static final int LIGHT_COLOR_INTENSITY_OFFSET = 48;
-    private static final int TEXTURE_FLAGS_OFFSET = 52;
-    private static final int EMISSIVE_FLAGS_OFFSET = 56;
-    private static final int FOG_COLOR_OFFSET = 60;
-    private static final int FOG_PARAMS_OFFSET = 64;
-    private static final int SKY_ZENITH_COLOR_OFFSET = 68;
-    private static final int SKY_HORIZON_COLOR_OFFSET = 72;
-    private static final int SKY_NADIR_COLOR_OFFSET = 76;
-    private static final int SKY_SUN_COLOR_OFFSET = 80;
-    private static final int SKY_SUN_DIRECTION_OFFSET = 84;
-    private static final int SKY_PARAMS_OFFSET = 88;
+    private static final int FILL_LIGHT_DIRECTION_OFFSET = 52;
+    private static final int FILL_LIGHT_COLOR_INTENSITY_OFFSET = 56;
+    private static final int POST_PROCESSING_OFFSET = 60;
+    private static final int TEXTURE_FLAGS_OFFSET = 64;
+    private static final int EMISSIVE_FLAGS_OFFSET = 68;
+    private static final int FOG_COLOR_OFFSET = 72;
+    private static final int FOG_PARAMS_OFFSET = 76;
+    private static final int SKY_ZENITH_COLOR_OFFSET = 80;
+    private static final int SKY_HORIZON_COLOR_OFFSET = 84;
+    private static final int SKY_NADIR_COLOR_OFFSET = 88;
+    private static final int SKY_SUN_COLOR_OFFSET = 92;
+    private static final int SKY_SUN_DIRECTION_OFFSET = 96;
+    private static final int SKY_PARAMS_OFFSET = 100;
     private static final int MAX_POINT_LIGHTS = 4;
-    private static final int POINT_LIGHT_COUNT_OFFSET = 92;
+    private static final int POINT_LIGHT_COUNT_OFFSET = 104;
     private static final int POINT_LIGHT_POSITIONS_OFFSET = POINT_LIGHT_COUNT_OFFSET + 4;
     private static final int POINT_LIGHT_COLORS_OFFSET = POINT_LIGHT_POSITIONS_OFFSET + MAX_POINT_LIGHTS * 4;
     private static final int MAX_SPOT_LIGHTS = 4;
@@ -60,7 +63,8 @@ final class GLRenderPass implements RenderPass {
     private static final int SHADOW_CAMERA_DIRECTION_OFFSET = SHADOW_CAMERA_POSITION_OFFSET + 4;
     private static final int SHADOW_CAMERA_UP_OFFSET = SHADOW_CAMERA_DIRECTION_OFFSET + 4;
     private static final int SHADOW_CAMERA_PARAMS_OFFSET = SHADOW_CAMERA_UP_OFFSET + 4;
-    private static final int SKINNING_PARAMS_OFFSET = SHADOW_CAMERA_PARAMS_OFFSET + 4;
+    private static final int SHADOW_FILTER_PARAMS_OFFSET = SHADOW_CAMERA_PARAMS_OFFSET + 4;
+    private static final int SKINNING_PARAMS_OFFSET = SHADOW_FILTER_PARAMS_OFFSET + 4;
     private static final int MAX_BONES = 64;
     private static final int BONE_MATRICES_OFFSET = SKINNING_PARAMS_OFFSET + 4;
     private static final int PBR_UNIFORM_BINDING = 0;
@@ -447,6 +451,8 @@ final class GLRenderPass implements RenderPass {
         }
         if ("u_lightIntensity".equals(name)) {
             setPbrUniformFloat(LIGHT_COLOR_INTENSITY_OFFSET + 3, value);
+        } else if ("u_fillLightIntensity".equals(name)) {
+            setPbrUniformFloat(FILL_LIGHT_COLOR_INTENSITY_OFFSET + 3, value);
         } else if ("u_pointLightCount".equals(name)) {
             setPbrUniformFloat(POINT_LIGHT_COUNT_OFFSET, value);
         } else if ("u_spotLightCount".equals(name)) {
@@ -469,6 +475,11 @@ final class GLRenderPass implements RenderPass {
         } else if ("u_lightColor".equals(name)) {
             setPbrUniform4f(LIGHT_COLOR_INTENSITY_OFFSET, x, y, z,
                     pbrUniformFloats.get(LIGHT_COLOR_INTENSITY_OFFSET + 3));
+        } else if ("u_fillLightDirection".equals(name)) {
+            setPbrUniform4f(FILL_LIGHT_DIRECTION_OFFSET, x, y, z, 0.0f);
+        } else if ("u_fillLightColor".equals(name)) {
+            setPbrUniform4f(FILL_LIGHT_COLOR_INTENSITY_OFFSET, x, y, z,
+                    pbrUniformFloats.get(FILL_LIGHT_COLOR_INTENSITY_OFFSET + 3));
         } else if ("u_fogColor".equals(name)) {
             setPbrUniform4f(FOG_COLOR_OFFSET, x, y, z, 1.0f);
         } else if ("u_skyZenithColor".equals(name)) {
@@ -499,6 +510,12 @@ final class GLRenderPass implements RenderPass {
             setPbrUniform4f(LIGHT_DIRECTION_OFFSET, x, y, z, w);
         } else if ("u_lightColor".equals(name)) {
             setPbrUniform4f(LIGHT_COLOR_INTENSITY_OFFSET, x, y, z, w);
+        } else if ("u_fillLightDirection".equals(name)) {
+            setPbrUniform4f(FILL_LIGHT_DIRECTION_OFFSET, x, y, z, w);
+        } else if ("u_fillLightColor".equals(name)) {
+            setPbrUniform4f(FILL_LIGHT_COLOR_INTENSITY_OFFSET, x, y, z, w);
+        } else if ("u_postProcessing".equals(name)) {
+            setPbrUniform4f(POST_PROCESSING_OFFSET, x, y, z, w);
         } else if ("u_fogColor".equals(name)) {
             setPbrUniform4f(FOG_COLOR_OFFSET, x, y, z, w);
         } else if ("u_fogParams".equals(name)) {
@@ -566,6 +583,9 @@ final class GLRenderPass implements RenderPass {
             }
             else if ("u_shadowCameraParams".equals(name)) {
                 setPbrUniform4f(SHADOW_CAMERA_PARAMS_OFFSET, x, y, z, w);
+            }
+            else if ("u_shadowFilterParams".equals(name)) {
+                setPbrUniform4f(SHADOW_FILTER_PARAMS_OFFSET, x, y, z, w);
             }
             else if ("u_skinningParams".equals(name)) {
                 setPbrUniform4f(SKINNING_PARAMS_OFFSET, x, y, z, w);

@@ -15,4 +15,22 @@ final class PbrShaderProviderTest {
     void unknownProviderKeepsCompatibilityFallback() {
         assertFalse(PbrShaderProvider.usesGpuPbrShader("custom"));
     }
+
+    @Test
+    void baseColorTextureIsLinearizedExactlyOnce() {
+        assertTrue(PbrShaderProvider.PBR_SHADER_SOURCE.contains(
+                "base = vec4f(base.rgb * srgbToLinear(texel.rgb), base.a * texel.a);"));
+        assertFalse(PbrShaderProvider.PBR_SHADER_SOURCE.contains(
+                "let albedo = srgbToLinear(base.rgb);"));
+    }
+
+    @Test
+    void gpuPbrShaderIncludesReferenceQualityDisplayAndLightingFeatures() {
+        assertTrue(PbrShaderProvider.PBR_SHADER_SOURCE.contains("fn neutralToneMapping"));
+        assertTrue(PbrShaderProvider.PBR_SHADER_SOURCE.contains("fillLightColorIntensity"));
+        assertTrue(PbrShaderProvider.PBR_SHADER_SOURCE.contains("irradiance * albedo / PI"));
+        assertTrue(PbrShaderProvider.PBR_SHADER_SOURCE.contains("fn unpackShadowDepth"));
+        assertTrue(PbrShaderProvider.PBR_SHADER_SOURCE.contains("return visibility / 256.0;"));
+        assertFalse(PbrShaderProvider.PBR_SHADER_SOURCE.contains("return visibility / 9.0;"));
+    }
 }

@@ -23,6 +23,7 @@ import io.github.libfdx.graphics.ShaderReflection;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
+import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.VertexAttribute;
 import io.github.libfdx.graphics.VertexFormat;
@@ -75,7 +76,8 @@ public final class DirectionalShadowMap3D implements Disposable {
         }
         this.graphics = graphics;
         texture = graphics.device().createTexture(TextureDescriptor
-                .rgba8RenderTarget("directional shadow map", width, height));
+                .rgba8RenderTarget("directional shadow map", width, height)
+                .filter(TextureFilter.NEAREST));
         target = new DefaultRenderTarget3D(width, height, texture.view());
         shaderProvider = new ShadowDepthShaderProvider(graphics);
         batch = new ModelBatch(graphics, new ModelBatchConfig().shaderProvider(shaderProvider));
@@ -365,7 +367,13 @@ public final class DirectionalShadowMap3D implements Disposable {
                 }
                 @fragment
                 fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
-                    return vec4f(input.depth, input.depth, input.depth, 1.0);
+                    let depth = min(input.depth, 0.999999);
+                    let raw = fract(depth * vec2f(1.0, 255.0));
+                    return vec4f(
+                            raw.x - raw.y / 255.0,
+                            raw.y,
+                            0.0,
+                            1.0);
                 }
                 """;
         private static final ShaderReflection REFLECTION = ShaderReflection.of(new ShaderBinding[] {

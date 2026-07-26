@@ -131,4 +131,15 @@ public final class DesktopApplicationConfig extends ApplicationConfig {
         displayConfig.foregroundFps(foregroundFps);
         return this;
     }
+
+    /**
+     * Sets the framebuffer sample count and returns this desktop application config.
+     *
+     * @param samples the sample count, or zero to disable multisampling
+     * @return this desktop application config for chaining
+     */
+    public DesktopApplicationConfig samples(int samples) {
+        displayConfig.samples(samples);
+        return this;
+    }
 }
