@@ -118,7 +118,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     private float tooltipWakeSeconds = -1.0f;
     private UiInsets safeArea = UiInsets.ZERO;
     private float uiScale = 1.0f;
-    private boolean autoUiScale;
+    private boolean autoUiScale = true;
     private boolean debugLines;
     private float animationScale = 1.0f;
     private UiWindowState activeWindowState;
@@ -362,18 +362,22 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     /**
-     * Returns the auto UI scale.
+     * Returns whether the root automatically applies {@link Display#contentScale()}.
      *
-     * @return true if auto UI scale succeeds or is active; false otherwise
+     * <p>Automatic display scaling is enabled by default.</p>
+     *
+     * @return true when display content scaling is applied
      */
     public boolean autoUiScale() {
         return autoUiScale;
     }
 
     /**
-     * Sets the auto UI scale and returns this UI root.
+     * Sets whether the root automatically applies {@link Display#contentScale()} and returns this UI root.
      *
-     * @param autoUiScale the auto UI scale
+     * <p>Disable this only when an application already converts its UI units to display-scaled units.</p>
+     *
+     * @param autoUiScale true to apply display content scaling
      * @return this UI root for chaining
      */
     public UiRoot autoUiScale(boolean autoUiScale) {
@@ -945,6 +949,11 @@ public final class UiRoot implements Disposable, UiStateListener {
         setHovered(hit.node);
         clearPendingScrollBodyGesture();
         clearPendingTextInputTapGesture();
+        if (hit.node != null && hit.node.type() == UiNodeType.TEXT_AREA
+                && beginScrollPointer(hit.node, x, y, false)) {
+            pressedNode = null;
+            return true;
+        }
         UiNode scroll = findAncestorOrSelf(hit.node, UiNodeType.SCROLL);
         if (scroll != null && beginScrollPointer(scroll, x, y, hit.node == scroll)) {
             setFocused(null);

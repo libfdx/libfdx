@@ -288,7 +288,6 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter {
         uiRoot = new UiToolkit(fdx.files())
                 .theme(selectorTheme())
                 .root(display, graphics)
-                .autoUiScale(true)
                 .input(input);
         uiRoot.setContent(this::buildSelectorUi);
         capturePath = System.getProperty("libfdx.test.capture", "");

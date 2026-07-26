@@ -53,7 +53,6 @@ public final class WebDefaultPreloadApplicationListener implements WebPreloadApp
     @Override
     public void create(WebPreloadContext context) {
         displayedProgress = 0.0f;
-        context.ui().autoUiScale(true);
         context.ui().theme(theme());
         context.ui().setContent(ui -> ui.column(Ui.modifier().fill().padding(PAGE_PADDING).gap(LOGO_PROGRESS_GAP), page -> {
             page.spacer(Ui.modifier().weight(1.0f));

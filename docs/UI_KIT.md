@@ -94,9 +94,11 @@ lists preserve keyed item identity. Windows retain position, size, and
 z-order. Safe-area insets and parent constraints keep content inside the active
 display.
 
-`UiRoot.uiScale(...)` scales logical units. `autoUiScale(true)` multiplies that
-scale by `Display.contentScale()`; applications should not apply the same
-display scaling twice.
+`UiRoot` automatically multiplies logical UI units by `Display.contentScale()`,
+so platform DPI scaling works without application setup. `uiScale(...)` applies
+an additional application-selected scale. Applications that already convert UI
+units to display-scaled units can opt out with `autoUiScale(false)` and should
+not apply the same display scaling twice.
 
 Themes provide reusable colors, spacing, fonts, drawables, widget states, and
 motion values. `UiDrawable` supports colors, textures/regions, and nine-patch

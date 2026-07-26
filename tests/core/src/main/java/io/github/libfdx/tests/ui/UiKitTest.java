@@ -32,6 +32,7 @@ import io.github.libfdx.ui.Ui;
 import io.github.libfdx.ui.UiAlign;
 import io.github.libfdx.ui.UiBooleanState;
 import io.github.libfdx.ui.UiColor;
+import io.github.libfdx.ui.UiContent;
 import io.github.libfdx.ui.UiDrawable;
 import io.github.libfdx.ui.UiFloatState;
 import io.github.libfdx.ui.UiFloatAnimatable;
@@ -472,7 +473,6 @@ public final class UiKitTest extends ApplicationAdapter {
                 .input(rootInput)
                 .safeArea(Ui.insets(Float.parseFloat(System.getProperty("libfdx.test.safeArea",
                         String.valueOf(DEFAULT_SAFE_AREA)))))
-                .autoUiScale(Boolean.parseBoolean(System.getProperty("libfdx.test.autoUiScale", "false")))
                 .debugLines(visualDebug.get());
         scaleGloballyActive = scaleGlobally.get();
         if (scaleGloballyActive) {
@@ -769,34 +769,39 @@ public final class UiKitTest extends ApplicationAdapter {
         final UiFloatAnimatable animatedVolume = ui.floatAnimatable("volume-meter", currentVolume);
         animatedVolume.animateTo(currentVolume, Ui.animation().durationMillis(180));
         final float drawnVolume = animatedVolume.get();
+        final boolean compact = compactViewport();
         final float bodyGap = 10.0f;
-        final float navWidth = 188.0f;
+        final float navWidth = compact ? 152.0f : 188.0f;
         final float settingsWidth = 270.0f;
 
         ui.column(Ui.modifier().fill().gap(10.0f), page -> {
-            buildHeader(page);
+            buildHeader(page, compact);
             page.row(Ui.modifier().fill().weight(1.0f).gap(bodyGap), body -> {
-                buildSectionNav(body, navWidth);
+                buildSectionNav(body, navWidth, compact);
                 body.panel(Ui.modifier().fill().weight(1.0f).padding(12.0f).gap(10.0f).style("section-panel"),
                         content -> content.scrollView(Ui.modifier().fill().weight(1.0f)
                                         .semanticLabel("Active section"),
                                 activeSectionScroll(),
                                 scroll -> buildActiveSection(scroll, drawnVolume)));
-                buildSettingsPanel(body, settingsWidth);
+                if (!compact) {
+                    buildSettingsPanel(body, settingsWidth);
+                }
             });
             buildFloatingWindows(page, drawnVolume);
             buildOverlays(page);
         });
     }
 
-    private void buildHeader(UiScope page) {
+    private void buildHeader(UiScope page, boolean compact) {
         page.panel(Ui.modifier().fillWidth().height(62.0f).padding(12.0f).gap(6.0f).style("nine-panel"),
                 header -> {
                     header.row(Ui.modifier().fillWidth().gap(10.0f), row -> {
-                        row.text("UI KIT", Ui.modifier().width(96.0f).style("title"));
-                        row.text(activeSectionName() + "  |  " + statusText(),
+                        row.text("UI KIT", Ui.modifier().width(compact ? 78.0f : 96.0f).style("title"));
+                        row.text(compact ? activeSectionName() : activeSectionName() + "  |  " + statusText(),
                                 Ui.modifier().fillWidth().weight(1.0f).style("muted"));
-                        row.button("Press", () -> incrementClick());
+                        if (!compact) {
+                            row.button("Press", () -> incrementClick());
+                        }
                         row.button("Modal",
                                 Ui.modifier().validationId(UiKitValidationScenarios.HEADER_MODAL_BUTTON),
                                 () -> showModal.set(true));
@@ -805,7 +810,7 @@ public final class UiKitTest extends ApplicationAdapter {
                 });
     }
 
-    private void buildSectionNav(UiScope body, float width) {
+    private void buildSectionNav(UiScope body, float width, boolean includeSettings) {
         body.panel(Ui.modifier().width(width).fillHeight().padding(10.0f).gap(6.0f).style("nav-panel"), nav -> {
             nav.scrollView(Ui.modifier().fill().weight(1.0f).semanticLabel("Sections nav"), navScroll, scroll -> {
                 scroll.text("sections", Ui.modifier().style("section"));
@@ -818,6 +823,10 @@ public final class UiKitTest extends ApplicationAdapter {
                     }
                     scroll.button(label, modifier, () -> activeSection.set(section));
                 }
+                if (includeSettings) {
+                    scroll.divider(Ui.modifier().fillWidth());
+                    buildSettingsControls(scroll, true);
+                }
                 if (validationActive) {
                     scroll.spacer(Ui.modifier().height(VALIDATION_NAV_SPACER_HEIGHT));
                 }
@@ -828,30 +837,39 @@ public final class UiKitTest extends ApplicationAdapter {
     private void buildSettingsPanel(UiScope body, float width) {
         body.panel(Ui.modifier().width(width).fillHeight().padding(10.0f).gap(8.0f).style("nav-panel"), settings -> {
             settings.scrollView(Ui.modifier().fill().weight(1.0f), settingsScroll, scroll -> {
-                scroll.text("settings", Ui.modifier().style("section"));
-                scroll.row(Ui.modifier().fillWidth().gap(8.0f), row -> {
-                    row.text("Content scale", Ui.modifier().fillWidth().weight(1.0f).style("muted"));
-                    row.text(contentScaleValue(), Ui.modifier().width(64.0f).style("metric"));
-                });
-                checkboxLabel(scroll, "Visual debug", visualDebug, COMPACT_CHECKBOX_SIZE);
-                checkboxLabel(scroll, "Scale globally", scaleGlobally);
-                if (compactViewport()) {
-                    scroll.slider(Ui.modifier().fillWidth().enabled(scaleGlobally.get())
-                                    .semanticLabel("Text size setting")
-                                    .validationId(UiKitValidationScenarios.SETTINGS_TEXT_SIZE_SLIDER),
-                            uiScale, UI_SCALE_MINIMUM, UI_SCALE_MAXIMUM);
-                } else {
-                    scroll.row(Ui.modifier().fillWidth().gap(8.0f), row -> {
-                        row.text("Text size", Ui.modifier().width(78.0f).style("muted").enabled(scaleGlobally.get()));
-                        row.slider(Ui.modifier().fillWidth().weight(1.0f).enabled(scaleGlobally.get())
-                                        .semanticLabel("Text size setting")
-                                        .validationId(UiKitValidationScenarios.SETTINGS_TEXT_SIZE_SLIDER),
-                                uiScale, UI_SCALE_MINIMUM, UI_SCALE_MAXIMUM);
-                        row.text(scaleValue(uiScale.get()), Ui.modifier().width(48.0f).style("metric").enabled(scaleGlobally.get()));
-                    });
-                }
+                buildSettingsControls(scroll, false);
             });
         });
+    }
+
+    private void buildSettingsControls(UiScope content, boolean compact) {
+        content.text("settings", Ui.modifier().style("section"));
+        if (compact) {
+            content.text("Content scale " + contentScaleValue(), Ui.modifier().style("small"));
+        } else {
+            content.row(Ui.modifier().fillWidth().gap(8.0f), row -> {
+                row.text("Content scale", Ui.modifier().fillWidth().weight(1.0f).style("muted"));
+                row.text(contentScaleValue(), Ui.modifier().width(64.0f).style("metric"));
+            });
+        }
+        checkboxLabel(content, "Visual debug", visualDebug, COMPACT_CHECKBOX_SIZE);
+        checkboxLabel(content, "Scale globally", scaleGlobally);
+        if (compact) {
+            content.slider(Ui.modifier().fillWidth().enabled(scaleGlobally.get())
+                            .semanticLabel("Text size setting")
+                            .validationId(UiKitValidationScenarios.SETTINGS_TEXT_SIZE_SLIDER),
+                    uiScale, UI_SCALE_MINIMUM, UI_SCALE_MAXIMUM);
+        } else {
+            content.row(Ui.modifier().fillWidth().gap(8.0f), row -> {
+                row.text("Text size", Ui.modifier().width(78.0f).style("muted").enabled(scaleGlobally.get()));
+                row.slider(Ui.modifier().fillWidth().weight(1.0f).enabled(scaleGlobally.get())
+                                .semanticLabel("Text size setting")
+                                .validationId(UiKitValidationScenarios.SETTINGS_TEXT_SIZE_SLIDER),
+                        uiScale, UI_SCALE_MINIMUM, UI_SCALE_MAXIMUM);
+                row.text(scaleValue(uiScale.get()), Ui.modifier().width(48.0f).style("metric")
+                        .enabled(scaleGlobally.get()));
+            });
+        }
     }
 
     private void buildActiveSection(UiScope content, float drawnVolume) {
@@ -1244,6 +1262,7 @@ public final class UiKitTest extends ApplicationAdapter {
     }
 
     private void buildTooltipSection(UiScope content) {
+        boolean compact = compactViewport();
         content.text("Tooltips", Ui.modifier().style("title"));
         content.text("Hover targets", Ui.modifier().style("muted"));
         content.row(Ui.modifier().fillWidth().gap(8.0f), row -> {
@@ -1251,28 +1270,37 @@ public final class UiKitTest extends ApplicationAdapter {
             row.button("Slow hint", Ui.modifier().semanticLabel("Slow hint"), () -> incrementClick());
         });
         content.panel(Ui.modifier().fillWidth().padding(10.0f).gap(12.0f).style("tile"), panel -> {
-            panel.row(Ui.modifier().fillWidth().gap(18.0f), row -> {
-                row.text("Text hover",
-                        Ui.modifier()
-                                .width(132.0f)
+            UiContent tooltipTargets = targets -> {
+                UiModifier textTarget = compact
+                        ? Ui.modifier().fillWidth()
+                        : Ui.modifier().width(132.0f);
+                targets.text("Text hover",
+                        textTarget
                                 .height(32.0f)
                                 .validationId(UiKitValidationScenarios.TOOLTIP_TEXT_TARGET)
                                 .tooltipTarget(UiKitValidationScenarios.TOOLTIP_TEXT_TARGET)
                                 .style("section"));
-                row.checkbox("Checkbox hover",
-                        Ui.modifier()
-                                .width(184.0f)
+                UiModifier checkboxTarget = compact
+                        ? Ui.modifier().fillWidth()
+                        : Ui.modifier().width(184.0f);
+                targets.checkbox("Checkbox hover",
+                        checkboxTarget
                                 .validationId(UiKitValidationScenarios.TOOLTIP_CHECKBOX_TARGET)
                                 .tooltipTarget(UiKitValidationScenarios.TOOLTIP_CHECKBOX_TARGET)
                                 .style("small"),
                         compactChecked);
-                row.textField(Ui.modifier().fillWidth().weight(1.0f)
+                targets.textField(Ui.modifier().fillWidth().weight(1.0f)
                                 .height(32.0f)
                                 .validationId(UiKitValidationScenarios.TOOLTIP_TEXT_FIELD_TARGET)
                                 .tooltipTarget(UiKitValidationScenarios.TOOLTIP_TEXT_FIELD_TARGET)
                                 .semanticLabel("Tooltip text field"),
                         name, UiTextInputFilter.STRING);
-            });
+            };
+            if (compact) {
+                panel.column(Ui.modifier().fillWidth().gap(8.0f), tooltipTargets);
+            } else {
+                panel.row(Ui.modifier().fillWidth().gap(18.0f), tooltipTargets);
+            }
             panel.spacer(Ui.modifier().height(64.0f));
         });
     }
@@ -1482,7 +1510,23 @@ public final class UiKitTest extends ApplicationAdapter {
     }
 
     private boolean compactViewport() {
-        return display != null && display.width() > 0 && display.width() < 1100;
+        if (display == null || display.width() <= 0) {
+            return false;
+        }
+        float scale = 1.0f;
+        if (root != null) {
+            scale = root.uiScale();
+            if (root.autoUiScale()) {
+                scale *= display.contentScale();
+            }
+        } else {
+            if (scaleGlobally != null && scaleGlobally.get() && uiScale != null) {
+                scale = uiScale.get();
+            }
+            scale *= display.contentScale();
+        }
+        scale = Math.max(0.25f, Math.min(4.0f, scale));
+        return display.width() / scale < 1100.0f;
     }
 
     private UiScrollState activeSectionScroll() {
@@ -2071,7 +2115,10 @@ public final class UiKitTest extends ApplicationAdapter {
                                 UiKitValidationScenarios.SETTINGS_TEXT_SIZE_SLIDER, 2.02f, 0.05f)));
         builder.entry(23L, true, true,
                 Scenario.named("emoji-clipboard")
-                        .custom("show-text-inputs", context -> showValidationSection(SECTION_TEXT_FIELDS))
+                        .custom("show-text-inputs", context -> {
+                            resetGlobalScaleForValidation();
+                            showValidationSection(SECTION_TEXT_FIELDS);
+                        })
                         .expect(UiScenarioAssertions.exists(UiKitValidationScenarios.EMOJI_FIELD))
                         .custom("validate-emoji-clipboard", context -> validateEmojiAndClipboard()));
         builder.entry(24L, true, true,
@@ -2685,6 +2732,14 @@ public final class UiKitTest extends ApplicationAdapter {
         }
         textInputController.reset();
         clickTextInputAt(stringField, 1.0f, 0.5f);
+        if (!textInputController.visible()) {
+            UiRect bounds = stringField.bounds();
+            throw new FdxException("UiKitTest did not focus String field at bounds "
+                    + bounds.x() + "," + bounds.y() + " " + bounds.width() + "x" + bounds.height()
+                    + "; focused=" + stringField.focused()
+                    + ", displayScale=" + display.contentScale()
+                    + ", effectiveScale=" + root.displayX(100.0f) / 100.0f);
+        }
         textInputController.assertVisible(TextInputType.TEXT, false, "String field");
         if (textInputController.updateCount() <= 0) {
             throw new FdxException("UiKitTest text field did not update the platform text input selection");
@@ -2849,9 +2904,12 @@ public final class UiKitTest extends ApplicationAdapter {
         }
         clickTextInputAt(messageArea, 1.0f, 0.5f);
         input.dispatchTextInput("!");
-        if (!messageInput.get().endsWith("!")) {
+        String horizontallyEdited = messageInput.get();
+        int horizontalMarker = horizontallyEdited.indexOf('!');
+        if (horizontalMarker < horizontalText.length() - 4
+                || !horizontalText.equals(horizontallyEdited.replace("!", ""))) {
             throw new FdxException("UiKitTest text area pointer hit testing ignored horizontal scroll: "
-                    + messageInput.get());
+                    + horizontallyEdited);
         }
         growingMessageInput.set("Auto grow line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8");
         settleValidationLayout();
@@ -3159,7 +3217,8 @@ public final class UiKitTest extends ApplicationAdapter {
         float clamped = clamp(percent, 0.0f, 1.0f);
         float value = extent * clamped;
         if (clamped >= 1.0f && extent > 1.0f) {
-            return extent - 1.0f;
+            // Stay inside both the widget and any overlaid parent or nested scrollbar hit gutter.
+            return extent - Math.min(28.0f, extent * 0.25f);
         }
         return value;
     }
@@ -3708,6 +3767,19 @@ public final class UiKitTest extends ApplicationAdapter {
 
     private void validateTextSizeSliderReleaseCommit() {
         UiNode slider = find(root.rootNode(), UiNodeType.SLIDER, "Text size setting");
+        UiNode nav = find(root.rootNode(), UiNodeType.SCROLL, "Sections nav");
+        if (compactViewport() && slider != null && nav != null) {
+            float targetY = navScroll.y();
+            if (slider.bounds().bottom() > nav.bounds().bottom()) {
+                targetY += slider.bounds().bottom() - nav.bounds().bottom() + 8.0f;
+            } else if (slider.bounds().y() < nav.bounds().y()) {
+                targetY -= nav.bounds().y() - slider.bounds().y() + 8.0f;
+            }
+            navScroll.scrollTo(navScroll.x(), targetY);
+            root.requestCompose();
+            settleValidationLayout();
+            slider = find(root.rootNode(), UiNodeType.SLIDER, "Text size setting");
+        }
         if (slider == null) {
             throw new FdxException("UiKitTest could not find the text size slider");
         }
@@ -3721,7 +3793,11 @@ public final class UiKitTest extends ApplicationAdapter {
         input.dispatchTouchMoved(0, moveX, y, 1.0f);
         if (Math.abs(uiScale.get() - appliedBefore) < 0.01f) {
             input.dispatchTouchUp(0, moveX, y, 1.0f);
-            throw new FdxException("UiKitTest text size touch drag did not update the slider state");
+            throw new FdxException("UiKitTest text size touch drag did not update the slider state: slider="
+                    + bounds.x() + "," + bounds.y() + " " + bounds.width() + "x" + bounds.height()
+                    + ", enabled=" + slider.modifier().enabled()
+                    + ", nav=" + (nav != null ? nav.bounds() : "missing")
+                    + ", scrollY=" + navScroll.y() + "/" + navScroll.maxY());
         }
         applyGlobalScale();
         if (Math.abs(root.uiScale() - appliedBefore) > 0.0001f) {

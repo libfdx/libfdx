@@ -116,8 +116,7 @@ public final class AutoTestApplication extends ApplicationAdapter {
         loadTimeoutSeconds = floatProperty("libfdx.test.autoLoadTimeoutSeconds", DEFAULT_LOAD_TIMEOUT_SECONDS);
         overlay = new UiToolkit(fdx.files())
                 .theme(theme())
-                .root(display, graphics)
-                .autoUiScale(true);
+                .root(display, graphics);
         overlay.setContent(this::buildOverlay);
         System.out.println("[info] AutoTestApplication starting " + tests.length + " tests"
                 + ", durationSeconds=" + testDurationSeconds

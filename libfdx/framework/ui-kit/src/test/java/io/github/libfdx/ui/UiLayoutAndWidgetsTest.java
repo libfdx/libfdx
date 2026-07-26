@@ -5,11 +5,29 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.libfdx.core.ProviderId;
+import io.github.libfdx.display.Display;
 import io.github.libfdx.input.Key;
 import io.github.libfdx.input.KeyEvent;
 import org.junit.jupiter.api.Test;
 
 final class UiLayoutAndWidgetsTest {
+    @Test
+    void displayContentScaleIsAppliedByDefaultAndCanBeDisabled() {
+        UiRoot root = new UiRoot(null, new ScaledDisplay(1.5f), null, null);
+
+        assertTrue(root.autoUiScale());
+        assertEquals(1.5f, root.effectiveUiScale(), 0.001f);
+        assertEquals(15, root.displayX(10.0f));
+
+        root.autoUiScale(false);
+
+        assertFalse(root.autoUiScale());
+        assertEquals(1.0f, root.effectiveUiScale(), 0.001f);
+        assertEquals(10, root.displayX(10.0f));
+        root.dispose();
+    }
+
     @Test
     void rowShrinksFixedChildrenInsideConstrainedSpace() {
         UiRoot root = new UiRoot(null, null, null, null);
@@ -167,5 +185,66 @@ final class UiLayoutAndWidgetsTest {
                 "Child right edge " + bounds.right() + " exceeded " + parent.right());
         assertTrue(bounds.bottom() <= parent.bottom() + 0.001f,
                 "Child bottom edge " + bounds.bottom() + " exceeded " + parent.bottom());
+    }
+
+    private static final class ScaledDisplay implements Display {
+        private final float contentScale;
+
+        private ScaledDisplay(float contentScale) {
+            this.contentScale = contentScale;
+        }
+
+        @Override
+        public ProviderId providerId() {
+            return ProviderId.of("ui-test");
+        }
+
+        @Override
+        public <T> T as() {
+            return null;
+        }
+
+        @Override
+        public String title() {
+            return "UI test";
+        }
+
+        @Override
+        public void title(String title) {
+        }
+
+        @Override
+        public int width() {
+            return 800;
+        }
+
+        @Override
+        public int height() {
+            return 600;
+        }
+
+        @Override
+        public int framebufferWidth() {
+            return Math.round(width() * contentScale);
+        }
+
+        @Override
+        public int framebufferHeight() {
+            return Math.round(height() * contentScale);
+        }
+
+        @Override
+        public float contentScale() {
+            return contentScale;
+        }
+
+        @Override
+        public boolean closeRequested() {
+            return false;
+        }
+
+        @Override
+        public void requestClose() {
+        }
     }
 }

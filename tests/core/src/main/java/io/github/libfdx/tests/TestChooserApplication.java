@@ -139,7 +139,6 @@ public final class TestChooserApplication extends ApplicationAdapter {
                 .theme(theme(compactLayout))
                 .root(display, graphics)
                 .input(fdx.input())
-                .autoUiScale(!compactLayout)
                 .debugLines(debugLines.get());
         root.setContent(this::buildUi);
         System.out.println("[info] TestChooserApplication ready, graphicsOptions=" + graphicsOptionList());
