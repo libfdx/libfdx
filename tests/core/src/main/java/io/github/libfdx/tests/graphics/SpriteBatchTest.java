@@ -14,8 +14,11 @@ import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.g2d.Batch2D;
 import io.github.libfdx.graphics.g2d.G2DAssetLoaders;
+import io.github.libfdx.graphics.g2d.SpriteBatchConfig;
 import io.github.libfdx.graphics.g2d.SpriteBatch;
+import io.github.libfdx.graphics.g2d.StandardSpriteTechnique;
 import io.github.libfdx.graphics.g2d.TextureRegion;
+import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphProvider;
 import io.github.libfdx.tests.TestFpsLogger;
 
 import java.nio.ByteBuffer;
@@ -29,8 +32,15 @@ public final class SpriteBatchTest extends ApplicationAdapter {
     private static final String PLAYER_ASSET = "player.png";
     private static final int PLAYER_FRAME_WIDTH = 256;
     private static final int PLAYER_FRAME_HEIGHT = 256;
+    private static final float[] GRAPH_CENTERS_X = {
+            -0.55f, 0.0f, 0.55f
+    };
+    private static final float[] GRAPH_CENTERS_Y = {
+            0.45f, 0.45f, 0.45f
+    };
 
     private final long exitAfterFrames;
+    private final boolean graphShaders;
     private Application application;
     private Display display;
     private GraphicsContext graphics;
@@ -38,6 +48,7 @@ public final class SpriteBatchTest extends ApplicationAdapter {
     private Logger logger;
     private TestFpsLogger fpsLogger;
     private Batch2D batch;
+    private ShaderGraphProvider graphProvider;
     private TextureRegion[][] playerFrames;
     private String capturePath;
     private long captureFrame;
@@ -51,7 +62,18 @@ public final class SpriteBatchTest extends ApplicationAdapter {
      * @param exitAfterFrames the exit after frames
      */
     public SpriteBatchTest(long exitAfterFrames) {
+        this(exitAfterFrames, false);
+    }
+
+    /**
+     * Creates a sprite batch test.
+     *
+     * @param exitAfterFrames the exit after frames
+     * @param graphShaders whether to use the standard graph technique
+     */
+    public SpriteBatchTest(long exitAfterFrames, boolean graphShaders) {
         this.exitAfterFrames = exitAfterFrames;
+        this.graphShaders = graphShaders;
     }
 
     /**
@@ -68,7 +90,15 @@ public final class SpriteBatchTest extends ApplicationAdapter {
         logger = fdx.logger();
         fpsLogger = TestFpsLogger.create(logger, "SpriteBatchTest");
         G2DAssetLoaders.register(assets, graphics);
-        batch = new SpriteBatch(graphics);
+        if (graphShaders) {
+            graphProvider = new ShaderGraphProvider(graphics,
+                    StandardSpriteTechnique.compile(graphics));
+            batch = new SpriteBatch(graphics,
+                    new SpriteBatchConfig()
+                            .shaderProvider(graphProvider));
+        } else {
+            batch = new SpriteBatch(graphics);
+        }
 
         assets.load(AssetDescriptor.of(PLAYER_ASSET, Texture.class));
         assets.finishLoading();
@@ -94,6 +124,11 @@ public final class SpriteBatchTest extends ApplicationAdapter {
         batch.draw(frame(1, 1), -0.42f, -0.25f, 0.35f, 0.35f);
         batch.draw(frame(2, 0), 0.06f, -0.25f, 0.35f, 0.35f);
         batch.draw(frame(3, 2), 0.54f, -0.25f, 0.35f, 0.35f);
+        if (graphShaders) {
+            batch.draw(frame(0, 0), GRAPH_CENTERS_X,
+                    GRAPH_CENTERS_Y, GRAPH_CENTERS_X.length,
+                    0.24f, 0.24f, 0.12f, 0.12f, 0.0f);
+        }
         batch.end();
 
         if (capturePath != null && capturePath.length() > 0 && !captured && renderedFrames >= captureFrame) {
@@ -115,6 +150,10 @@ public final class SpriteBatchTest extends ApplicationAdapter {
         if (batch != null) {
             batch.dispose();
             batch = null;
+        }
+        if (graphProvider != null) {
+            graphProvider.dispose();
+            graphProvider = null;
         }
         if (assets != null) {
             assets.dispose();

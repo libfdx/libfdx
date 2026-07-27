@@ -259,6 +259,14 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
                 .position(editorCameraX, editorCameraY, editorCameraZ)
                 .lookAt(editorTargetX, editorTargetY, editorTargetZ)
                 .update();
+        if (cascaded) {
+            int width = framebufferWidth();
+            int height = framebufferHeight();
+            int leftWidth = Math.max(1, width / 2);
+            camera.viewport(leftWidth, height).update();
+            editorCamera.viewport(Math.max(1, width - leftWidth), height).update();
+            cascadedShadowMap.update(camera);
+        }
         capturePath = System.getProperty("libfdx.test.capture", "");
         captureEvery = Integer.parseInt(System.getProperty("libfdx.test.captureEvery", "0"));
         uiVisible = Boolean.parseBoolean(System.getProperty("libfdx.test.shadowUi", "true"));
@@ -354,17 +362,21 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
                 .color(graphics.currentFrame().colorAttachment(), loadOp, StoreOp.store())
                 .depthClear(1.0f)
                 .label("shadow-map-3d split viewport"));
-        pass.setViewport(x, y, width, height);
-        pass.setScissor(x, y, width, height);
-        skybox.begin(pass);
-        skybox.draw(renderCamera);
-        skybox.end();
-        batch.begin(pass, renderCamera);
-        for (int i = 0; i < instances.length; i++) {
-            batch.render(instances[i]);
+        try {
+            pass.setViewport(x, y, width, height);
+            pass.setScissor(x, y, width, height);
+            skybox.begin(pass);
+            skybox.draw(renderCamera);
+            skybox.end();
+            batch.begin(pass, renderCamera);
+            for (int i = 0; i < instances.length; i++) {
+                batch.render(instances[i]);
+            }
+            batch.end();
         }
-        batch.end();
-        pass.end();
+        finally {
+            pass.end();
+        }
     }
 
     /**
@@ -1353,6 +1365,7 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
         try {
             FrameBuffer frameBuffer = graphics.currentFrame().frameBuffer();
             ByteBuffer pixels = frameBuffer.readPixelsRgba8();
+            FramebufferCapture.validateSceneFrame(frameBuffer.width(), frameBuffer.height(), pixels);
             FramebufferCapture.writePpm(path, frameBuffer.width(), frameBuffer.height(), pixels);
             logger.info("ShadowMap3DTest captured framebuffer to " + path);
         } catch (Exception e) {

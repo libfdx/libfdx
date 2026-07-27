@@ -9,17 +9,21 @@ import io.github.libfdx.graphics.BufferUsage;
 import io.github.libfdx.graphics.CommandEncoder;
 import io.github.libfdx.graphics.FrameBuffer;
 import io.github.libfdx.graphics.GraphicsContext;
+import io.github.libfdx.graphics.GraphicsCapabilities;
 import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.RenderPass;
+import io.github.libfdx.graphics.RenderPassCompatibility;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
-import io.github.libfdx.graphics.ShaderLanguage;
-import io.github.libfdx.graphics.ShaderModule;
-import io.github.libfdx.graphics.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.RenderTargetLayout;
+import io.github.libfdx.graphics.shader.ShaderLanguage;
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.TextureFilter;
@@ -263,6 +267,12 @@ public final class PspGraphicsContext implements GraphicsContext {
             return SCREEN_HEIGHT;
         }
 
+        @Override
+        public RenderPassCompatibility compatibility() {
+            return RenderPassCompatibility.of(RenderTargetLayout.color(format()),
+                    SCREEN_WIDTH, SCREEN_HEIGHT);
+        }
+
         /**
          * Returns the read pixels RGBA8.
          *
@@ -359,6 +369,7 @@ public final class PspGraphicsContext implements GraphicsContext {
             if (descriptor == null) {
                 throw new FdxException("TextureDescriptor cannot be null");
             }
+            descriptor.validate(capabilities());
             if (descriptor.format() != TextureFormat.RGBA8_UNORM) {
                 throw new FdxException("PSP currently supports RGBA8_UNORM sampled textures only");
             }
@@ -410,7 +421,7 @@ public final class PspGraphicsContext implements GraphicsContext {
             if (descriptor == null) {
                 throw new FdxException("ShaderModuleDescriptor cannot be null");
             }
-            return new PspShaderModule(descriptor.label(), descriptor.language());
+            return new PspShaderModule(descriptor.label(), descriptor.language(), descriptor.reflection());
         }
 
         /**
@@ -425,6 +436,10 @@ public final class PspGraphicsContext implements GraphicsContext {
                 throw new FdxException("RenderPipelineDescriptor cannot be null");
             }
             PspShaderModule shader = checked(descriptor.shaderModule(), PspShaderModule.class, "shader module");
+            descriptor.validate(capabilities());
+            if (descriptor.renderTargetLayout().colorAttachmentCount() != 1) {
+                throw new FdxException("PSP requires exactly one color attachment");
+            }
             if (descriptor.colorFormat() != TextureFormat.RGBA8_UNORM) {
                 throw new FdxException("PSP render pipeline color format must be RGBA8_UNORM");
             }
@@ -434,28 +449,32 @@ public final class PspGraphicsContext implements GraphicsContext {
                     throw new FdxException("PSP SpriteBatch pipeline must use triangle-list topology");
                 }
                 validateSpriteLayout(descriptor, 32, 1);
-                return new PspRenderPipeline(shader, PspPipelineKind.SPRITE, 32, true, GU_TRIANGLES);
+                return new PspRenderPipeline(shader, PspPipelineKind.SPRITE, 32, true, GU_TRIANGLES,
+                        descriptor.renderTargetLayout());
             }
             if ("white sprite batch".equals(label)) {
                 if (descriptor.primitiveTopology() != PrimitiveTopology.TRIANGLE_LIST) {
                     throw new FdxException("PSP SpriteBatch pipeline must use triangle-list topology");
                 }
                 validateSpriteLayout(descriptor, 16, 1);
-                return new PspRenderPipeline(shader, PspPipelineKind.WHITE_SPRITE, 16, true, GU_TRIANGLES);
+                return new PspRenderPipeline(shader, PspPipelineKind.WHITE_SPRITE, 16, true, GU_TRIANGLES,
+                        descriptor.renderTargetLayout());
             }
             if ("shape renderer 2d triangles".equals(label)) {
                 if (descriptor.primitiveTopology() != PrimitiveTopology.TRIANGLE_LIST) {
                     throw new FdxException("PSP shape triangle pipeline must use triangle-list topology");
                 }
                 validateShapeLayout(descriptor);
-                return new PspRenderPipeline(shader, PspPipelineKind.SHAPE, 24, false, GU_TRIANGLES);
+                return new PspRenderPipeline(shader, PspPipelineKind.SHAPE, 24, false, GU_TRIANGLES,
+                        descriptor.renderTargetLayout());
             }
             if ("shape renderer 2d lines".equals(label)) {
                 if (descriptor.primitiveTopology() != PrimitiveTopology.LINE_LIST) {
                     throw new FdxException("PSP shape line pipeline must use line-list topology");
                 }
                 validateShapeLayout(descriptor);
-                return new PspRenderPipeline(shader, PspPipelineKind.SHAPE, 24, false, GU_LINES);
+                return new PspRenderPipeline(shader, PspPipelineKind.SHAPE, 24, false, GU_LINES,
+                        descriptor.renderTargetLayout());
             }
             throw new FdxException("Unsupported PSP render pipeline: " + label);
         }
@@ -522,6 +541,8 @@ public final class PspGraphicsContext implements GraphicsContext {
         @Override
         public RenderPass beginRenderPass(RenderPassDescriptor descriptor) {
             ensurePreviousPassEnded();
+            RenderPassCompatibility compatibility = descriptor.validate(
+                    GraphicsCapabilities.conservativeRender());
             if (renderPassCount == renderPasses.length) {
                 PspRenderPass[] grown = new PspRenderPass[renderPasses.length * 2];
                 System.arraycopy(renderPasses, 0, grown, 0, renderPasses.length);
@@ -532,7 +553,8 @@ public final class PspGraphicsContext implements GraphicsContext {
                 renderPass = new PspRenderPass();
                 renderPasses[renderPassCount] = renderPass;
             }
-            renderPass.begin(descriptor);
+            renderPass.begin(descriptor, RenderPassCompatibility.of(
+                    compatibility.targetLayout(), SCREEN_WIDTH, SCREEN_HEIGHT));
             renderPassCount++;
             return renderPass;
         }
@@ -604,9 +626,10 @@ public final class PspGraphicsContext implements GraphicsContext {
         private PspTexture texture;
         private ByteBuffer convertedSpriteVertices;
         private ByteBuffer convertedShapeVertices;
+        private RenderPassCompatibility compatibility;
         private boolean ended = true;
 
-        void begin(RenderPassDescriptor descriptor) {
+        void begin(RenderPassDescriptor descriptor, RenderPassCompatibility compatibility) {
             if (descriptor == null) {
                 throw new FdxException("RenderPassDescriptor cannot be null");
             }
@@ -622,11 +645,19 @@ public final class PspGraphicsContext implements GraphicsContext {
             pipeline = null;
             vertexBuffer = null;
             texture = null;
+            compatibility = null;
+            this.compatibility = compatibility;
             ended = false;
         }
 
         boolean isEnded() {
             return ended;
+        }
+
+        @Override
+        public RenderPassCompatibility compatibility() {
+            ensureOpen();
+            return compatibility;
         }
 
         /**
@@ -638,6 +669,10 @@ public final class PspGraphicsContext implements GraphicsContext {
         public void setPipeline(RenderPipeline pipeline) {
             ensureOpen();
             this.pipeline = checked(pipeline, PspRenderPipeline.class, "render pipeline");
+            if (!compatibility.isCompatible(this.pipeline.targetLayout())) {
+                this.pipeline = null;
+                throw new FdxException("PSP render pipeline target layout is incompatible with the active pass");
+            }
         }
 
         /**
@@ -882,15 +917,22 @@ public final class PspGraphicsContext implements GraphicsContext {
         private final int stride;
         private final boolean textured;
         private final int guPrimitive;
+        private final RenderTargetLayout targetLayout;
         private boolean disposed;
 
         PspRenderPipeline(PspShaderModule shader, PspPipelineKind kind, int stride, boolean textured,
-                int guPrimitive) {
+                int guPrimitive, RenderTargetLayout targetLayout) {
             this.shader = shader;
             this.kind = kind;
             this.stride = stride;
             this.textured = textured;
             this.guPrimitive = guPrimitive;
+            this.targetLayout = targetLayout;
+        }
+
+        @Override
+        public RenderTargetLayout targetLayout() {
+            return targetLayout;
         }
 
         /**
@@ -942,11 +984,13 @@ public final class PspGraphicsContext implements GraphicsContext {
     private static final class PspShaderModule implements ShaderModule {
         private final String label;
         private final ShaderLanguage language;
+        private final ShaderReflection reflection;
         private boolean disposed;
 
-        PspShaderModule(String label, ShaderLanguage language) {
+        PspShaderModule(String label, ShaderLanguage language, ShaderReflection reflection) {
             this.label = label != null ? label : "";
             this.language = language != null ? language : ShaderLanguage.WGSL;
+            this.reflection = reflection != null ? reflection : ShaderReflection.empty();
         }
 
         /**
@@ -957,6 +1001,11 @@ public final class PspGraphicsContext implements GraphicsContext {
         @Override
         public ShaderLanguage language() {
             return language;
+        }
+
+        @Override
+        public ShaderReflection reflection() {
+            return reflection;
         }
 
         /**

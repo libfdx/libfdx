@@ -1,6 +1,10 @@
 package io.github.libfdx.graphics;
 
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.graphics.internal.PortableSha256;
+
+import java.util.Arrays;
+import java.util.Objects;
 
 /**
  * Represents a vertex layout.
@@ -11,6 +15,7 @@ public final class VertexLayout {
     private final int arrayStride;
     private final VertexStepMode stepMode;
     private final VertexAttribute[] attributes;
+    private final String structuralKey;
 
     private VertexLayout(int arrayStride, VertexStepMode stepMode, VertexAttribute[] attributes) {
         if (arrayStride <= 0) {
@@ -30,6 +35,7 @@ public final class VertexLayout {
         this.arrayStride = arrayStride;
         this.stepMode = stepMode;
         this.attributes = copy(attributes);
+        structuralKey = computeStructuralKey();
     }
 
     /**
@@ -110,6 +116,41 @@ public final class VertexLayout {
      */
     public VertexAttribute attribute(int index) {
         return attributes[index];
+    }
+
+    /**
+     * Returns a deterministic structural cache key.
+     *
+     * @return structural key
+     */
+    public String structuralKey() {
+        return structuralKey;
+    }
+
+    @Override
+    public boolean equals(Object object) {
+        return object instanceof VertexLayout other
+                && arrayStride == other.arrayStride && stepMode == other.stepMode
+                && Arrays.equals(attributes, other.attributes);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(arrayStride, stepMode, Arrays.hashCode(attributes));
+    }
+
+    private String computeStructuralKey() {
+        PortableSha256 digest = new PortableSha256()
+                .updateSizedUtf8("fdx-vertex-layout-v1")
+                .updateInt(arrayStride)
+                .updateSizedUtf8(stepMode.name())
+                .updateInt(attributes.length);
+        for (VertexAttribute attribute : attributes) {
+            digest.updateInt(attribute.location())
+                    .updateSizedUtf8(attribute.format().name())
+                    .updateInt(attribute.offset());
+        }
+        return digest.digestHex();
     }
 
     private static VertexAttribute[] copy(VertexAttribute[] source) {

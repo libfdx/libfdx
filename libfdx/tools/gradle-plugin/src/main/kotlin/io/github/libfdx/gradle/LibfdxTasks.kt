@@ -11,10 +11,10 @@ import io.github.libfdx.backend.psp.PspProject
 import io.github.libfdx.backend.psp.PspProjectWriter
 import io.github.libfdx.backend.web.WebApp
 import io.github.libfdx.backend.web.WebAppWriter
-import io.github.libfdx.graphics.ShaderProfile
-import io.github.libfdx.graphics.ShaderProfileValidator
-import io.github.libfdx.graphics.ShaderValidationDiagnostic
-import io.github.libfdx.graphics.ShaderValidationSeverity
+import io.github.libfdx.graphics.shader.ShaderProfile
+import io.github.libfdx.graphics.shader.ShaderProfileValidator
+import io.github.libfdx.graphics.shader.ShaderValidationDiagnostic
+import io.github.libfdx.graphics.shader.ShaderValidationSeverity
 import io.github.libfdx.tools.font.BitmapFontGenerator
 import io.github.libfdx.tools.font.BitmapFontSpec
 import org.gradle.api.DefaultTask

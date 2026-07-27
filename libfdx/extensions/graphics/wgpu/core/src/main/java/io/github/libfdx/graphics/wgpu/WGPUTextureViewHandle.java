@@ -37,11 +37,13 @@ final class WGPUTextureViewHandle implements TextureView {
         return textureHandle != null ? textureHandle.nativeView() : frameView;
     }
 
-    int width() {
+    @Override
+    public int width() {
         return textureHandle != null ? textureHandle.width() : 0;
     }
 
-    int height() {
+    @Override
+    public int height() {
         return textureHandle != null ? textureHandle.height() : 0;
     }
 
@@ -65,6 +67,11 @@ final class WGPUTextureViewHandle implements TextureView {
     @Override
     public TextureFormat format() {
         return format;
+    }
+
+    @Override
+    public int sampleCount() {
+        return textureHandle != null ? textureHandle.sampleCount() : 1;
     }
 
     /**

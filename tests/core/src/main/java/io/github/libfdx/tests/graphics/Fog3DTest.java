@@ -268,7 +268,10 @@ public final class Fog3DTest extends ApplicationAdapter {
     private void captureFrame(String path) {
         try {
             ByteBuffer pixels = FramebufferCapture.readPixelsRgba8(graphics);
-            FramebufferCapture.writePpm(path, framebufferWidth(), framebufferHeight(), pixels);
+            int width = framebufferWidth();
+            int height = framebufferHeight();
+            FramebufferCapture.validateSceneFrame(width, height, pixels);
+            FramebufferCapture.writePpm(path, width, height, pixels);
             logger.info("Fog3DTest captured framebuffer to " + path);
         } catch (Exception e) {
             throw new FdxException("Could not capture Fog3DTest framebuffer", e);

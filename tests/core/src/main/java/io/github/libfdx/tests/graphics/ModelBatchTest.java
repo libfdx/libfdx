@@ -14,6 +14,7 @@ import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.camera.controller.OrbitCameraController3D;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.LoadOp;
+import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
@@ -22,6 +23,8 @@ import io.github.libfdx.graphics.g3d.Environment3D;
 import io.github.libfdx.graphics.g3d.G3DAssetLoaders;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
+import io.github.libfdx.graphics.g3d.ModelBatchConfig;
+import io.github.libfdx.graphics.g3d.ShaderGraphPbrTestSupport;
 import io.github.libfdx.tests.TestFpsLogger;
 
 import java.nio.ByteBuffer;
@@ -44,6 +47,7 @@ public final class ModelBatchTest extends ApplicationAdapter {
     private AssetManager assets;
     private GraphicsContext graphics;
     private ModelBatch batch;
+    private ShaderProvider graphShaderProvider;
     private Camera camera;
     private OrbitCameraController3D cameraInput;
     private Model model;
@@ -92,12 +96,28 @@ public final class ModelBatchTest extends ApplicationAdapter {
         assets = new DefaultAssetManager(fdx.files());
         G3DAssetLoaders.register(assets, graphics);
 
-        batch = new ModelBatch(graphics);
-        batch.environment(new Environment3D()
+        Environment3D environment = new Environment3D()
                 .ambientColor(new Color(0.24f, 0.24f, 0.27f, 1.0f))
                 .add(new DirectionalLight()
                         .direction(-0.35f, -0.65f, -1.0f)
-                        .intensity(1.45f)));
+                        .intensity(1.45f));
+        if (Boolean.getBoolean("libfdx.test.pbrFillLight")) {
+            environment.add(new DirectionalLight()
+                    .direction(0.55f, -0.25f, 0.80f)
+                    .color(new Color(0.42f, 0.62f, 1.0f, 1.0f))
+                    .intensity(0.72f));
+        }
+        if (Boolean.getBoolean("libfdx.test.pbrToneMapping")) {
+            environment.neutralToneMapping(Float.parseFloat(
+                    System.getProperty("libfdx.test.pbrExposure", "1.35")));
+        }
+        if (Boolean.getBoolean("libfdx.test.shaderGraphPbr")) {
+            graphShaderProvider = ShaderGraphPbrTestSupport.provider(graphics);
+            batch = new ModelBatch(graphics, new ModelBatchConfig()
+                    .shaderProvider(graphShaderProvider)).environment(environment);
+        } else {
+            batch = new ModelBatch(graphics).environment(environment);
+        }
         assets.load(AssetDescriptor.of(gltfAsset, Model.class));
         assets.finishLoading();
         model = assets.get(gltfAsset, Model.class);
@@ -131,8 +151,19 @@ public final class ModelBatchTest extends ApplicationAdapter {
         float seconds = renderedFrames / 60.0f;
         instance.transform(Matrix4.rotationY(seconds * 0.45f));
         batch.begin(LoadOp.clear(0.04f, 0.045f, 0.06f, 1.0f), camera);
-        batch.render(instance);
-        batch.end();
+        try {
+            batch.render(instance);
+        } catch (RuntimeException failure) {
+            failure.printStackTrace(System.err);
+            throw failure;
+        } finally {
+            try {
+                batch.end();
+            } catch (RuntimeException failure) {
+                failure.printStackTrace(System.err);
+                throw failure;
+            }
+        }
         if (capturePath != null && capturePath.length() > 0) {
             if (captureEvery > 0 && capturePath.indexOf('%') >= 0) {
                 if (renderedFrames % captureEvery == 0) {
@@ -161,6 +192,8 @@ public final class ModelBatchTest extends ApplicationAdapter {
             batch.dispose();
             batch = null;
         }
+        ShaderGraphPbrTestSupport.dispose(graphShaderProvider);
+        graphShaderProvider = null;
         if (assets != null) {
             assets.dispose();
             assets = null;
@@ -192,7 +225,10 @@ public final class ModelBatchTest extends ApplicationAdapter {
     private void captureFrame(String path) {
         try {
             ByteBuffer pixels = FramebufferCapture.readPixelsRgba8(graphics);
-            FramebufferCapture.writePpm(path, framebufferWidth(), framebufferHeight(), pixels);
+            int width = framebufferWidth();
+            int height = framebufferHeight();
+            FramebufferCapture.validateSceneFrame(width, height, pixels);
+            FramebufferCapture.writePpm(path, width, height, pixels);
             logger.info("ModelBatchTest captured framebuffer to " + path);
         } catch (Exception e) {
             throw new FdxException("Could not capture ModelBatchTest framebuffer", e);

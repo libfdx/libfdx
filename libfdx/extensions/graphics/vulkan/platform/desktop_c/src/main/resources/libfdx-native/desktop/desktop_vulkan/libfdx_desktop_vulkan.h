@@ -28,7 +28,7 @@ int64_t fdx_desktop_vulkan_create_render_pipeline(int64_t contextHandle, int64_t
         int32_t vertexLayoutCount, const int32_t* attributeBindingsData,
         const int32_t* attributeLocationsData, const int32_t* attributeFormatsData,
         const int32_t* attributeOffsetsData, int32_t attributeCount, int32_t sampledTextureCountValue,
-        int32_t pbrUniformsEnabled, int32_t depthTestEnabled, int32_t depthWriteEnabled);
+        int32_t uniformBufferEnabled, int32_t depthTestEnabled, int32_t depthWriteEnabled);
 void fdx_desktop_vulkan_begin_render_pass(int64_t contextHandle, int32_t clear,
         float red, float green, float blue, float alpha, int32_t store, int32_t depthClear,
         float depthClearValue);
@@ -41,7 +41,8 @@ void fdx_desktop_vulkan_set_viewport(int64_t contextHandle, int32_t x, int32_t y
         int32_t width, int32_t height);
 void fdx_desktop_vulkan_bind_textures(int64_t contextHandle, int64_t pipelineHandle,
         const int64_t* textureHandles, int32_t count);
-void fdx_desktop_vulkan_bind_uniforms(int64_t contextHandle, int64_t pipelineHandle, void* data, int32_t size);
+int32_t fdx_desktop_vulkan_bind_uniforms(int64_t contextHandle, int64_t pipelineHandle,
+        void* data, int32_t size);
 void fdx_desktop_vulkan_draw(int64_t contextHandle, int32_t vertexCount,
         int32_t instanceCount, int32_t firstVertex, int32_t firstInstance);
 void fdx_desktop_vulkan_draw_indexed(int64_t contextHandle, int32_t indexCount,

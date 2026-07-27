@@ -13,7 +13,7 @@ import java.util.Set;
  *
  * @author xpenatan
  */
-public final class PbrMaterial implements Material, Disposable {
+public class PbrMaterial implements Material, Disposable {
     private final String id;
     private Color baseColor = Color.WHITE;
     private Texture baseColorTexture;

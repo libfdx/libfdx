@@ -10,11 +10,15 @@ import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.Mesh;
 import io.github.libfdx.graphics.RenderPass;
+import io.github.libfdx.graphics.RenderPassCompatibility;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
-import io.github.libfdx.graphics.ShaderLanguage;
-import io.github.libfdx.graphics.ShaderModule;
-import io.github.libfdx.graphics.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.RenderTargetLayout;
+import io.github.libfdx.graphics.shader.ShaderLanguage;
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.shader.runtime.ShaderParameterBlock;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameterHandle;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.TextureFormat;
@@ -607,6 +611,11 @@ final class AnimationControllerTest {
         }
 
         @Override
+        public RenderTargetLayout targetLayout() {
+            return descriptor.renderTargetLayout();
+        }
+
+        @Override
         public void dispose() {
             disposed = true;
         }
@@ -635,6 +644,14 @@ final class AnimationControllerTest {
         private int drawCalls;
 
         @Override
+        public RenderPassCompatibility compatibility() {
+            return RenderPassCompatibility.of(
+                    RenderTargetLayout.color(
+                            TextureFormat.RGBA8_UNORM),
+                    64, 64);
+        }
+
+        @Override
         public void setPipeline(RenderPipeline pipeline) {
             FakeRenderPipeline fake = pipeline.as();
             assertNotNull(fake.descriptor());
@@ -653,7 +670,40 @@ final class AnimationControllerTest {
         }
 
         @Override
+        public void setTextureBinding(int group, int binding, Texture texture) {
+        }
+
+        @Override
+        public void setTextureSamplerBinding(int group, int binding, Texture texture) {
+        }
+
+        @Override
+        public void setParameterBlock(int group, int binding, ShaderParameterBlock block) {
+            ShaderParameterHandle skinning = block.layout().findHandle("skinningParams");
+            if (skinning == null) {
+                return;
+            }
+            ByteBuffer data = block.readOnlyData().order(ByteOrder.nativeOrder());
+            skinningBoneCount = data.getFloat(skinning.byteOffsetInt());
+            ShaderParameterHandle firstBone = block.layout()
+                    .requireArrayElementHandle("boneMatrices", 0);
+            bone0 = new float[16];
+            int offset = firstBone.byteOffsetInt();
+            int stride = firstBone.matrixStrideInt();
+            for (int column = 0; column < 4; column++) {
+                for (int row = 0; row < 4; row++) {
+                    bone0[column * 4 + row] = data.getFloat(
+                            offset + column * stride + row * Float.BYTES);
+                }
+            }
+        }
+
+        @Override
         public void setUniform1i(String name, int value) {
+        }
+
+        @Override
+        public void setUniform1i(ShaderParameterHandle parameter, int value) {
         }
 
         @Override
@@ -661,7 +711,15 @@ final class AnimationControllerTest {
         }
 
         @Override
+        public void setUniform1f(ShaderParameterHandle parameter, float value) {
+        }
+
+        @Override
         public void setUniform3f(String name, float x, float y, float z) {
+        }
+
+        @Override
+        public void setUniform3f(ShaderParameterHandle parameter, float x, float y, float z) {
         }
 
         @Override
@@ -672,8 +730,22 @@ final class AnimationControllerTest {
         }
 
         @Override
+        public void setUniform4f(ShaderParameterHandle parameter, float x, float y, float z, float w) {
+            if ("skinningParams".equals(parameter.path())) {
+                skinningBoneCount = x;
+            }
+        }
+
+        @Override
         public void setUniformMatrix4(String name, float[] values) {
             if ("u_bone0".equals(name)) {
+                bone0 = values.clone();
+            }
+        }
+
+        @Override
+        public void setUniformMatrix4(ShaderParameterHandle parameter, float[] values) {
+            if ("boneMatrices[0]".equals(parameter.path())) {
                 bone0 = values.clone();
             }
         }

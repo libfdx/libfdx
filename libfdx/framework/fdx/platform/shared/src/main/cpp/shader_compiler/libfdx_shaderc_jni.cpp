@@ -39,19 +39,43 @@ std::string Base64Encode(const std::vector<uint8_t>& bytes) {
     return out;
 }
 
-std::string EncodeResult(const fdx_shaderc_result& result) {
-    const char* diagnostics = result.diagnostics != nullptr ? result.diagnostics : "";
+std::string EncodeResult(int32_t status,
+                         int32_t output_kind,
+                         const uint8_t* output,
+                         int32_t output_size,
+                         const char* diagnostic_text,
+                         const uint8_t* reflection,
+                         int32_t reflection_size,
+                         const uint8_t* target_interface,
+                         int32_t target_interface_size) {
+    const char* diagnostics = diagnostic_text != nullptr ? diagnostic_text : "";
     int32_t diagnostic_size = static_cast<int32_t>(std::char_traits<char>::length(diagnostics));
     std::vector<uint8_t> bytes;
-    bytes.reserve(16 + static_cast<size_t>(result.output_size) + static_cast<size_t>(diagnostic_size));
-    WriteInt(bytes, result.status);
-    WriteInt(bytes, result.output_kind);
-    WriteInt(bytes, result.output_size);
+    bytes.reserve(32 + static_cast<size_t>(output_size) +
+                  static_cast<size_t>(diagnostic_size) +
+                  static_cast<size_t>(reflection_size) +
+                  static_cast<size_t>(target_interface_size));
+    bytes.push_back('F');
+    bytes.push_back('D');
+    bytes.push_back('X');
+    bytes.push_back('R');
+    WriteInt(bytes, 2);
+    WriteInt(bytes, status);
+    WriteInt(bytes, output_kind);
+    WriteInt(bytes, output_size);
     WriteInt(bytes, diagnostic_size);
-    if (result.output != nullptr && result.output_size > 0) {
-        bytes.insert(bytes.end(), result.output, result.output + result.output_size);
+    WriteInt(bytes, reflection_size);
+    WriteInt(bytes, target_interface_size);
+    if (output != nullptr && output_size > 0) {
+        bytes.insert(bytes.end(), output, output + output_size);
     }
     bytes.insert(bytes.end(), diagnostics, diagnostics + diagnostic_size);
+    if (reflection != nullptr && reflection_size > 0) {
+        bytes.insert(bytes.end(), reflection, reflection + reflection_size);
+    }
+    if (target_interface != nullptr && target_interface_size > 0) {
+        bytes.insert(bytes.end(), target_interface, target_interface + target_interface_size);
+    }
     return Base64Encode(bytes);
 }
 
@@ -77,6 +101,31 @@ class JStringChars {
     const char* chars_;
 };
 
+std::string CompileEncoded(const char* source,
+                           int32_t source_size,
+                           int32_t target,
+                           int32_t stage,
+                           const char* entry_point,
+                           const char* glsl_profile,
+                           const char* glsl_es_profile) {
+    void* result = fdx_shaderc_compile_wgsl_handle(source, source_size, target, stage, entry_point,
+                                                   glsl_profile, glsl_es_profile);
+    if (result == nullptr) {
+        return EncodeResult(1, FDX_SHADERC_OUTPUT_NONE, nullptr, 0,
+                            "Runtime shader compiler allocation failed", nullptr, 0, nullptr, 0);
+    }
+    std::string encoded =
+        EncodeResult(fdx_shaderc_result_status(result), fdx_shaderc_result_output_kind(result),
+                     fdx_shaderc_result_output(result), fdx_shaderc_result_output_size(result),
+                     fdx_shaderc_result_diagnostics(result),
+                     fdx_shaderc_result_reflection(result),
+                     fdx_shaderc_result_reflection_size(result),
+                     fdx_shaderc_result_target_interface(result),
+                     fdx_shaderc_result_target_interface_size(result));
+    fdx_shaderc_result_free(result);
+    return encoded;
+}
+
 }  // namespace
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -94,20 +143,11 @@ Java_io_github_libfdx_tools_shader_FdxTintAndroidJniCompilerBridge_compileNative
     JStringChars glsl_chars(env, glsl_profile);
     JStringChars glsl_es_chars(env, glsl_es_profile);
 
-    fdx_shaderc_options options = {};
-    options.target = target;
-    options.stage = stage;
-    options.entry_point = entry_chars.c_str();
-    options.glsl_profile = glsl_chars.c_str();
-    options.glsl_es_profile = glsl_es_chars.c_str();
-
-    fdx_shaderc_result result = {};
-    fdx_shaderc_compile_wgsl(source_chars.c_str(),
-                             static_cast<int32_t>(std::char_traits<char>::length(source_chars.c_str())),
-                             &options,
-                             &result);
-    std::string encoded = EncodeResult(result);
-    fdx_shaderc_free_result(&result);
+    std::string encoded =
+        CompileEncoded(source_chars.c_str(),
+                       static_cast<int32_t>(std::char_traits<char>::length(source_chars.c_str())),
+                       target, stage, entry_chars.c_str(), glsl_chars.c_str(),
+                       glsl_es_chars.c_str());
     return env->NewStringUTF(encoded.c_str());
 }
 
@@ -115,14 +155,30 @@ extern "C" JNIEXPORT jstring JNICALL
 Java_io_github_libfdx_backend_android_AndroidRuntimeShaderCompiler_compileNative(
     JNIEnv* env,
     jclass,
-    jstring source,
+    jbyteArray source,
     jint target,
     jint stage,
     jstring entry_point,
     jstring glsl_profile,
     jstring glsl_es_profile) {
-    return Java_io_github_libfdx_tools_shader_FdxTintAndroidJniCompilerBridge_compileNative(env, nullptr, source,
-            target, stage, entry_point, glsl_profile, glsl_es_profile);
+    JStringChars entry_chars(env, entry_point);
+    JStringChars glsl_chars(env, glsl_profile);
+    JStringChars glsl_es_chars(env, glsl_es_profile);
+    jsize source_size = source != nullptr ? env->GetArrayLength(source) : 0;
+    std::vector<uint8_t> source_bytes(static_cast<size_t>(source_size));
+    if (source_size > 0) {
+        env->GetByteArrayRegion(source, 0, source_size,
+                                reinterpret_cast<jbyte*>(source_bytes.data()));
+        if (env->ExceptionCheck()) {
+            return nullptr;
+        }
+    }
+    const char* source_data =
+        source_bytes.empty() ? nullptr : reinterpret_cast<const char*>(source_bytes.data());
+    std::string encoded =
+        CompileEncoded(source_data, source_size, target, stage, entry_chars.c_str(),
+                       glsl_chars.c_str(), glsl_es_chars.c_str());
+    return env->NewStringUTF(encoded.c_str());
 }
 
 extern "C" JNIEXPORT jboolean JNICALL

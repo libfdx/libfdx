@@ -98,7 +98,7 @@ final class DesktopCVulkan {
 
     static long createRenderPipeline(long context, long shaderModule, int primitiveTopology, int[] vertexStrides,
             int[] vertexStepModes, int[] attributeBindings, int[] attributeLocations, int[] attributeFormats,
-            int[] attributeOffsets, int sampledTextureCount, boolean pbrUniformsEnabled, boolean depthTestEnabled,
+            int[] attributeOffsets, int sampledTextureCount, boolean uniformBufferEnabled, boolean depthTestEnabled,
             boolean depthWriteEnabled) {
         int vertexLayoutCount = vertexStrides != null ? vertexStrides.length : 0;
         int attributeCount = attributeLocations != null ? attributeLocations.length : 0;
@@ -110,7 +110,7 @@ final class DesktopCVulkan {
         Address offsets = addressOf(attributeOffsets, attributeCount);
         return requireHandle(fdxDesktopVulkanCreateRenderPipeline(context, shaderModule, primitiveTopology,
                 strides, stepModes, vertexLayoutCount, bindings, locations, formats, offsets, attributeCount,
-                sampledTextureCount, bool(pbrUniformsEnabled), bool(depthTestEnabled), bool(depthWriteEnabled)),
+                sampledTextureCount, bool(uniformBufferEnabled), bool(depthTestEnabled), bool(depthWriteEnabled)),
                 "Could not create desktop C Vulkan render pipeline");
     }
 
@@ -145,7 +145,12 @@ final class DesktopCVulkan {
     }
 
     static void bindUniforms(long context, long pipeline, ByteBuffer data, int byteCount) {
-        fdxDesktopVulkanBindUniforms(context, pipeline, data, byteCount);
+        if (data == null || byteCount <= 0 || byteCount > data.remaining()) {
+            throw new FdxException("Desktop C Vulkan uniform upload exceeds the ByteBuffer data");
+        }
+        if (fdxDesktopVulkanBindUniforms(context, pipeline, data, byteCount) == 0) {
+            throw new FdxException("Desktop C Vulkan could not bind the uniform buffer");
+        }
     }
 
     static void draw(long context, int vertexCount, int instanceCount, int firstVertex, int firstInstance) {
@@ -255,7 +260,7 @@ final class DesktopCVulkan {
     private static native long fdxDesktopVulkanCreateRenderPipeline(long context, long shaderModule,
             int primitiveTopology, Address vertexStrides, Address vertexStepModes, int vertexLayoutCount,
             Address attributeBindings, Address attributeLocations, Address attributeFormats,
-            Address attributeOffsets, int attributeCount, int sampledTextureCount, int pbrUniformsEnabled,
+            Address attributeOffsets, int attributeCount, int sampledTextureCount, int uniformBufferEnabled,
             int depthTestEnabled, int depthWriteEnabled);
 
     @Import(name = "fdx_desktop_vulkan_begin_render_pass")
@@ -281,7 +286,8 @@ final class DesktopCVulkan {
     private static native void fdxDesktopVulkanBindTextures(long context, long pipeline, Address textures, int count);
 
     @Import(name = "fdx_desktop_vulkan_bind_uniforms")
-    private static native void fdxDesktopVulkanBindUniforms(long context, long pipeline, ByteBuffer data, int byteCount);
+    private static native int fdxDesktopVulkanBindUniforms(long context, long pipeline, ByteBuffer data,
+            int byteCount);
 
     @Import(name = "fdx_desktop_vulkan_draw")
     private static native void fdxDesktopVulkanDraw(long context, int vertexCount, int instanceCount,

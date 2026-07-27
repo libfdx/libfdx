@@ -507,7 +507,7 @@ int64_t libfdx_ios_metal_create_render_pipeline(
         const int32_t* attribute_offsets,
         int32_t attribute_count,
         int32_t sampled_texture_count,
-        int32_t pbr_uniforms_enabled,
+        int32_t uniform_buffer_enabled,
         int32_t depth_test_enabled,
         int32_t depth_write_enabled) {
     IosMetalContext* context = from_handle<IosMetalContext>(context_handle);
@@ -515,7 +515,7 @@ int64_t libfdx_ios_metal_create_render_pipeline(
     if (context == nullptr || shaderModule == nullptr || shaderModule->library == nil) {
         return 0;
     }
-    (void)pbr_uniforms_enabled;
+    (void)uniform_buffer_enabled;
     id<MTLFunction> vertexFunction = [shaderModule->library newFunctionWithName:@"vertexMain"];
     id<MTLFunction> fragmentFunction = [shaderModule->library newFunctionWithName:@"fragmentMain"];
     if (vertexFunction == nil || fragmentFunction == nil) {

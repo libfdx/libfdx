@@ -458,14 +458,30 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             frameId++;
 
             if (graphics == null || graphics.beginFrame()) {
+                Throwable frameFailure = null;
                 try {
                     listener.render();
                     if (graphics != null) {
                         listener.onFrameEnd();
                     }
-                } finally {
+                }
+                catch (RuntimeException | Error failure) {
+                    frameFailure = failure;
+                    throw failure;
+                }
+                finally {
                     if (graphics != null) {
-                        graphics.endFrame();
+                        try {
+                            graphics.endFrame();
+                        }
+                        catch (RuntimeException | Error cleanupFailure) {
+                            if (frameFailure != null) {
+                                frameFailure.addSuppressed(cleanupFailure);
+                            }
+                            else {
+                                throw cleanupFailure;
+                            }
+                        }
                     }
                 }
             }

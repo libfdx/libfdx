@@ -23,7 +23,8 @@ enum fdx_shaderc_target {
 enum fdx_shaderc_stage {
     FDX_SHADERC_STAGE_MODULE = 0,
     FDX_SHADERC_STAGE_VERTEX = 1,
-    FDX_SHADERC_STAGE_FRAGMENT = 2
+    FDX_SHADERC_STAGE_FRAGMENT = 2,
+    FDX_SHADERC_STAGE_COMPUTE = 3
 };
 
 enum fdx_shaderc_output_kind {
@@ -72,6 +73,14 @@ FDX_SHADERC_API const uint8_t* fdx_shaderc_result_output(void* handle);
 FDX_SHADERC_API int32_t fdx_shaderc_result_output_size(void* handle);
 
 FDX_SHADERC_API const char* fdx_shaderc_result_diagnostics(void* handle);
+
+FDX_SHADERC_API const uint8_t* fdx_shaderc_result_reflection(void* handle);
+
+FDX_SHADERC_API int32_t fdx_shaderc_result_reflection_size(void* handle);
+
+FDX_SHADERC_API const uint8_t* fdx_shaderc_result_target_interface(void* handle);
+
+FDX_SHADERC_API int32_t fdx_shaderc_result_target_interface_size(void* handle);
 
 FDX_SHADERC_API void fdx_shaderc_result_free(void* handle);
 

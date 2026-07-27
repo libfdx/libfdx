@@ -1272,12 +1272,216 @@ public final class UiG2DRenderer implements UiRenderer {
     }
 
     private void drawLine(UiRoot root, float x1, float y1, float x2, float y2, UiColor color, float alpha) {
-        if (color == null || alpha <= 0.0f) {
+        drawLine(root, x1, y1, x2, y2, 1.0f, color, alpha);
+    }
+
+    private void drawLine(UiRoot root, float x1, float y1, float x2, float y2, float width,
+            UiColor color, float alpha) {
+        if (color == null || alpha <= 0.0f || width <= 0.0f) {
             return;
+        }
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float length = (float)Math.sqrt(dx * dx + dy * dy);
+        if (length <= 0.0001f) {
+            float radius = width * 0.5f;
+            drawRect(root, x1 - radius, y1 - radius, width, width,
+                    color.red(), color.green(), color.blue(), color.alpha() * alpha);
+            return;
+        }
+        float scale = root.effectiveUiScale();
+        int bands = Math.max(1, (int)Math.ceil(width * scale));
+        float step = 1.0f / scale;
+        float normalX = -dy / length;
+        float normalY = dx / length;
+        float center = (bands - 1) * 0.5f;
+        float finalAlpha = color.alpha() * alpha;
+        for (int i = 0; i < bands; i++) {
+            float offset = (i - center) * step;
+            emitClippedLine(root,
+                    x1 + normalX * offset, y1 + normalY * offset,
+                    x2 + normalX * offset, y2 + normalY * offset,
+                    color.red(), color.green(), color.blue(), finalAlpha);
+        }
+    }
+
+    private void drawPath(UiRoot root, UiPath path, float width, UiColor color, float alpha) {
+        if (path == null || path.isEmpty() || color == null || width <= 0.0f || alpha <= 0.0f) {
+            return;
+        }
+        int coordinateIndex = 0;
+        float currentX = 0.0f;
+        float currentY = 0.0f;
+        float subpathX = 0.0f;
+        float subpathY = 0.0f;
+        boolean hasCurrent = false;
+        for (int commandIndex = 0; commandIndex < path.commandCount(); commandIndex++) {
+            byte command = path.command(commandIndex);
+            if (command == UiPath.MOVE_TO) {
+                currentX = path.coordinate(coordinateIndex++);
+                currentY = path.coordinate(coordinateIndex++);
+                subpathX = currentX;
+                subpathY = currentY;
+                hasCurrent = true;
+            } else if (command == UiPath.LINE_TO) {
+                float x = path.coordinate(coordinateIndex++);
+                float y = path.coordinate(coordinateIndex++);
+                if (hasCurrent) {
+                    drawLine(root, currentX, currentY, x, y, width, color, alpha);
+                }
+                currentX = x;
+                currentY = y;
+            } else if (command == UiPath.QUADRATIC_TO) {
+                float controlX = path.coordinate(coordinateIndex++);
+                float controlY = path.coordinate(coordinateIndex++);
+                float x = path.coordinate(coordinateIndex++);
+                float y = path.coordinate(coordinateIndex++);
+                int segments = curveSegments(
+                        distance(currentX, currentY, controlX, controlY)
+                                + distance(controlX, controlY, x, y));
+                float previousX = currentX;
+                float previousY = currentY;
+                for (int segment = 1; segment <= segments; segment++) {
+                    float t = segment / (float)segments;
+                    float inverse = 1.0f - t;
+                    float nextX = inverse * inverse * currentX
+                            + 2.0f * inverse * t * controlX + t * t * x;
+                    float nextY = inverse * inverse * currentY
+                            + 2.0f * inverse * t * controlY + t * t * y;
+                    drawLine(root, previousX, previousY, nextX, nextY, width, color, alpha);
+                    previousX = nextX;
+                    previousY = nextY;
+                }
+                currentX = x;
+                currentY = y;
+            } else if (command == UiPath.CUBIC_TO) {
+                float control1X = path.coordinate(coordinateIndex++);
+                float control1Y = path.coordinate(coordinateIndex++);
+                float control2X = path.coordinate(coordinateIndex++);
+                float control2Y = path.coordinate(coordinateIndex++);
+                float x = path.coordinate(coordinateIndex++);
+                float y = path.coordinate(coordinateIndex++);
+                int segments = curveSegments(
+                        distance(currentX, currentY, control1X, control1Y)
+                                + distance(control1X, control1Y, control2X, control2Y)
+                                + distance(control2X, control2Y, x, y));
+                float previousX = currentX;
+                float previousY = currentY;
+                for (int segment = 1; segment <= segments; segment++) {
+                    float t = segment / (float)segments;
+                    float inverse = 1.0f - t;
+                    float inverseSquared = inverse * inverse;
+                    float tSquared = t * t;
+                    float nextX = inverseSquared * inverse * currentX
+                            + 3.0f * inverseSquared * t * control1X
+                            + 3.0f * inverse * tSquared * control2X
+                            + tSquared * t * x;
+                    float nextY = inverseSquared * inverse * currentY
+                            + 3.0f * inverseSquared * t * control1Y
+                            + 3.0f * inverse * tSquared * control2Y
+                            + tSquared * t * y;
+                    drawLine(root, previousX, previousY, nextX, nextY, width, color, alpha);
+                    previousX = nextX;
+                    previousY = nextY;
+                }
+                currentX = x;
+                currentY = y;
+            } else if (command == UiPath.CLOSE && hasCurrent) {
+                drawLine(root, currentX, currentY, subpathX, subpathY, width, color, alpha);
+                currentX = subpathX;
+                currentY = subpathY;
+            }
+        }
+    }
+
+    private void emitClippedLine(UiRoot root, float x1, float y1, float x2, float y2,
+            float red, float green, float blue, float alpha) {
+        UiRect clip = currentClip;
+        if (clip != null) {
+            if (clip.width() <= 0.0f || clip.height() <= 0.0f) {
+                return;
+            }
+            int code1 = lineOutCode(x1, y1, clip);
+            int code2 = lineOutCode(x2, y2, clip);
+            boolean accepted = false;
+            for (int iteration = 0; iteration < 8; iteration++) {
+                if ((code1 | code2) == 0) {
+                    accepted = true;
+                    break;
+                }
+                if ((code1 & code2) != 0) {
+                    break;
+                }
+                int outside = code1 != 0 ? code1 : code2;
+                float x;
+                float y;
+                if ((outside & 8) != 0) {
+                    if (Float.compare(y2, y1) == 0) {
+                        break;
+                    }
+                    y = clip.bottom();
+                    x = x1 + (x2 - x1) * (y - y1) / (y2 - y1);
+                } else if ((outside & 4) != 0) {
+                    if (Float.compare(y2, y1) == 0) {
+                        break;
+                    }
+                    y = clip.y();
+                    x = x1 + (x2 - x1) * (y - y1) / (y2 - y1);
+                } else if ((outside & 2) != 0) {
+                    if (Float.compare(x2, x1) == 0) {
+                        break;
+                    }
+                    x = clip.right();
+                    y = y1 + (y2 - y1) * (x - x1) / (x2 - x1);
+                } else {
+                    if (Float.compare(x2, x1) == 0) {
+                        break;
+                    }
+                    x = clip.x();
+                    y = y1 + (y2 - y1) * (x - x1) / (x2 - x1);
+                }
+                if (outside == code1) {
+                    x1 = x;
+                    y1 = y;
+                    code1 = lineOutCode(x1, y1, clip);
+                } else {
+                    x2 = x;
+                    y2 = y;
+                    code2 = lineOutCode(x2, y2, clip);
+                }
+            }
+            if (!accepted) {
+                return;
+            }
         }
         shapes.line(ndcX(root, x1), ndcY(root, y1, 0.0f),
                 ndcX(root, x2), ndcY(root, y2, 0.0f),
-                color.red(), color.green(), color.blue(), color.alpha() * alpha);
+                red, green, blue, alpha);
+    }
+
+    private int lineOutCode(float x, float y, UiRect clip) {
+        int code = 0;
+        if (x < clip.x()) {
+            code |= 1;
+        } else if (x > clip.right()) {
+            code |= 2;
+        }
+        if (y < clip.y()) {
+            code |= 4;
+        } else if (y > clip.bottom()) {
+            code |= 8;
+        }
+        return code;
+    }
+
+    private int curveSegments(float controlLength) {
+        return Math.max(4, Math.min(64, (int)Math.ceil(controlLength / 10.0f)));
+    }
+
+    private float distance(float x1, float y1, float x2, float y2) {
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        return (float)Math.sqrt(dx * dx + dy * dy);
     }
 
     private boolean usesInternalBackground(UiNode node) {
@@ -1310,7 +1514,8 @@ public final class UiG2DRenderer implements UiRenderer {
     private UiRect nodeClip(UiNode node, UiRect inheritedClip) {
         UiRect clip = inheritedClip;
         if (node.type() == UiNodeType.SCROLL || node.type() == UiNodeType.TEXT_FIELD
-                || node.type() == UiNodeType.TEXT_AREA || node.type() == UiNodeType.TABS) {
+                || node.type() == UiNodeType.TEXT_AREA || node.type() == UiNodeType.TABS
+                || node.modifier().clipsToBounds()) {
             clip = intersect(node, clip, node.bounds());
         }
         return clip;
@@ -1318,7 +1523,9 @@ public final class UiG2DRenderer implements UiRenderer {
 
     private UiRect intersect(UiNode node, UiRect clip, UiRect rect) {
         if (rect == null || rect.width() <= 0.0f || rect.height() <= 0.0f) {
-            return null;
+            float x = rect != null ? rect.x() : 0.0f;
+            float y = rect != null ? rect.y() : 0.0f;
+            return node.rendererRect(2, x, y, 0.0f, 0.0f);
         }
         if (clip == null) {
             return rect;
@@ -1328,7 +1535,7 @@ public final class UiG2DRenderer implements UiRenderer {
         float right = Math.min(clip.right(), rect.right());
         float bottom = Math.min(clip.bottom(), rect.bottom());
         if (right <= x || bottom <= y) {
-            return null;
+            return node.rendererRect(2, x, y, 0.0f, 0.0f);
         }
         return node.rendererRect(2, x, y, right - x, bottom - y);
     }
@@ -1986,6 +2193,16 @@ public final class UiG2DRenderer implements UiRenderer {
         @Override
         public void image(TextureRegion region, float x, float y, float width, float height, UiColor color) {
             queueCustomImage(node, region, x, y, width, height, color, alpha);
+        }
+
+        @Override
+        public void line(float x1, float y1, float x2, float y2, float width, UiColor color) {
+            drawLine(root, x1, y1, x2, y2, width, color, alpha);
+        }
+
+        @Override
+        public void path(UiPath path, float width, UiColor color) {
+            drawPath(root, path, width, color, alpha);
         }
 
         @Override

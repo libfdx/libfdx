@@ -1,8 +1,10 @@
 package io.github.libfdx.graphics.gl;
 
 import io.github.libfdx.core.ProviderId;
-import io.github.libfdx.graphics.ShaderLanguage;
-import io.github.libfdx.graphics.ShaderModule;
+import io.github.libfdx.graphics.shader.ShaderLanguage;
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
+import io.github.libfdx.graphics.shader.target.ShaderTranslatedInterface;
 
 /**
  * Represents a GL shader module handle.
@@ -14,14 +16,28 @@ final class GLShaderModuleHandle implements ShaderModule {
     private final GLApi gl;
     private final GLResourceDomain resourceDomain;
     private final int program;
+    private final ShaderReflection reflection;
+    private final ShaderTranslatedInterface translatedInterface;
     private int pipelineReferences;
     private boolean disposed;
 
     GLShaderModuleHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain, int program) {
+        this(providerId, gl, resourceDomain, program, ShaderReflection.empty(), null);
+    }
+
+    GLShaderModuleHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain, int program,
+            ShaderReflection reflection) {
+        this(providerId, gl, resourceDomain, program, reflection, null);
+    }
+
+    GLShaderModuleHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain, int program,
+            ShaderReflection reflection, ShaderTranslatedInterface translatedInterface) {
         this.providerId = providerId;
         this.gl = gl;
         this.resourceDomain = resourceDomain;
         this.program = program;
+        this.reflection = reflection != null ? reflection : ShaderReflection.empty();
+        this.translatedInterface = translatedInterface;
     }
 
     int program() {
@@ -30,6 +46,10 @@ final class GLShaderModuleHandle implements ShaderModule {
 
     GLResourceDomain resourceDomain() {
         return resourceDomain;
+    }
+
+    ShaderTranslatedInterface translatedInterface() {
+        return translatedInterface;
     }
 
     void retainForPipeline() {
@@ -52,6 +72,11 @@ final class GLShaderModuleHandle implements ShaderModule {
     @Override
     public ShaderLanguage language() {
         return ShaderLanguage.GLSL;
+    }
+
+    @Override
+    public ShaderReflection reflection() {
+        return reflection;
     }
 
     /**

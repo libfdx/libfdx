@@ -335,7 +335,7 @@ typedef struct VkPhysicalDeviceProperties {
     uint32_t deviceType;
     char deviceName[256];
     uint8_t pipelineCacheUUID[VK_UUID_SIZE];
-    uint8_t limitsAndSparseProperties[2048];
+    alignas(VkDeviceSize) uint8_t limitsAndSparseProperties[2048];
 } VkPhysicalDeviceProperties;
 
 typedef struct VkPhysicalDeviceFeatures {

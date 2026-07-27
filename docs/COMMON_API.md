@@ -132,8 +132,10 @@ work until it is submitted or abandoned. Later CPU rewrites or resource
 disposal must not mutate already recorded commands. Immediate execution on one
 provider is not evidence that delayed-submission providers are safe.
 
-Public shader authoring is WGSL. Translation happens during setup or shader
-module creation, never per frame.
+WGSL is the public portable shader-language boundary. Applications may author
+it directly or compile typed shader graphs to canonical WGSL. Translation and
+graph compilation happen during setup or shader-module creation, never per
+frame.
 
 ## User-Owned High-Level Features
 

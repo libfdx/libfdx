@@ -28,6 +28,14 @@ int32_t fdx_desktop_shaderc_result_output_size(void* handle);
 
 char* fdx_desktop_shaderc_result_diagnostics(void* handle);
 
+uint8_t* fdx_desktop_shaderc_result_reflection(void* handle);
+
+int32_t fdx_desktop_shaderc_result_reflection_size(void* handle);
+
+uint8_t* fdx_desktop_shaderc_result_target_interface(void* handle);
+
+int32_t fdx_desktop_shaderc_result_target_interface_size(void* handle);
+
 void fdx_desktop_shaderc_result_free(void* handle);
 
 #ifdef __cplusplus

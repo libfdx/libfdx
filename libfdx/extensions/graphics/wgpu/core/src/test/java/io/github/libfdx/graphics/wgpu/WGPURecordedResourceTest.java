@@ -1,8 +1,9 @@
 package io.github.libfdx.graphics.wgpu;
 
+import com.github.xpenatan.webgpu.WGPUBindGroupLayout;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.BufferUsage;
-import io.github.libfdx.graphics.ShaderLanguage;
+import io.github.libfdx.graphics.shader.ShaderLanguage;
 import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.TextureUsage;
@@ -170,8 +171,10 @@ final class WGPURecordedResourceTest {
     @Test
     void replacingRecordedTextureRetiresOnlyItsOldAllocation() {
         WGPUResourceDomain domain = new WGPUResourceDomain();
-        WGPUTextureAllocation oldAllocation = new WGPUTextureAllocation(domain, null, null, null);
-        WGPUTextureAllocation newAllocation = new WGPUTextureAllocation(domain, null, null, null);
+        WGPUTextureAllocation oldAllocation =
+                new WGPUTextureAllocation(domain, null, null, null, null);
+        WGPUTextureAllocation newAllocation =
+                new WGPUTextureAllocation(domain, null, null, null, null);
         WGPUTextureHandle handle = texture(domain, oldAllocation);
         WGPURecordedResources first = new WGPURecordedResources();
         WGPURecordedResources second = new WGPURecordedResources();
@@ -194,8 +197,9 @@ final class WGPURecordedResourceTest {
     @Test
     void pipelineDisposalWaitsForEveryRecordingContext() {
         WGPUResourceDomain domain = new WGPUResourceDomain();
-        WGPURenderPipelineHandle pipeline = new WGPURenderPipelineHandle(domain, null, null, null, null,
-                0, 0, 0);
+        WGPURenderPipelineHandle pipeline = new WGPURenderPipelineHandle(
+                domain, null, null, null, new WGPUBindGroupLayout[0],
+                0, -1, 0, null, null);
         WGPURecordedResources first = new WGPURecordedResources();
         WGPURecordedResources second = new WGPURecordedResources();
         first.mark(pipeline);
@@ -215,10 +219,12 @@ final class WGPURecordedResourceTest {
         WGPUResourceDomain firstDomain = new WGPUResourceDomain();
         WGPUResourceDomain secondDomain = new WGPUResourceDomain();
         WGPUTextureHandle texture = texture(firstDomain,
-                new WGPUTextureAllocation(firstDomain, null, null, null));
+                new WGPUTextureAllocation(
+                        firstDomain, null, null, null, null));
         WGPUShaderModuleHandle shader = new WGPUShaderModuleHandle(firstDomain, null, ShaderLanguage.WGSL);
-        WGPURenderPipelineHandle pipeline = new WGPURenderPipelineHandle(firstDomain, null, null, null, null,
-                0, 0, 0);
+        WGPURenderPipelineHandle pipeline = new WGPURenderPipelineHandle(
+                firstDomain, null, null, null,
+                new WGPUBindGroupLayout[0], 0, -1, 0, null, null);
 
         assertSame(texture, WGPUResources.requireTexture(texture, firstDomain, "Texture"));
         assertSame(shader, WGPUResources.requireShaderModule(shader, firstDomain, "Shader"));
@@ -242,7 +248,7 @@ final class WGPURecordedResourceTest {
     }
 
     private static WGPUTextureHandle texture(WGPUResourceDomain domain, WGPUTextureAllocation allocation) {
-        return new WGPUTextureHandle(domain, allocation, "texture", 2, 2, 1, TextureFormat.RGBA8_UNORM,
+        return new WGPUTextureHandle(domain, allocation, "texture", 2, 2, 1, 1, TextureFormat.RGBA8_UNORM,
                 TextureUsage.SAMPLED, TextureFilter.LINEAR, TextureWrap.CLAMP_TO_EDGE, TextureWrap.CLAMP_TO_EDGE);
     }
 

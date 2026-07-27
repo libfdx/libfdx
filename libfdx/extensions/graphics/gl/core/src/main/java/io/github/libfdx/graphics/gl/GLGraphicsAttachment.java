@@ -10,6 +10,7 @@ import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.RenderPass;
+import io.github.libfdx.graphics.RenderPassCompatibility;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.TextureView;
@@ -382,6 +383,7 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
                 throw new FdxException("Cannot begin render pass outside a frame");
             }
             ensurePreviousPassEnded();
+            RenderPassCompatibility validated = descriptor.validate(device.capabilities());
             GLTextureViewHandle attachment = GLResources.requireTextureView(descriptor.colorAttachment(),
                     resourceDomain, GLGraphicsAttachment.this, "Color attachment");
             boolean textureBacked = attachment.textureBacked();
@@ -413,7 +415,11 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
                 }
             }
             GLRenderPass renderPass = nextRenderPass();
-            renderPass.begin(textureBacked ? attachment.textureHandle() : null, textureBacked, width, height);
+            int passWidth = textureBacked ? attachment.width() : width;
+            int passHeight = textureBacked ? attachment.height() : height;
+            renderPass.begin(textureBacked ? attachment.textureHandle() : null, textureBacked,
+                    width, height, RenderPassCompatibility.of(
+                            validated.targetLayout(), passWidth, passHeight));
             renderPassCount++;
             return renderPass;
         }

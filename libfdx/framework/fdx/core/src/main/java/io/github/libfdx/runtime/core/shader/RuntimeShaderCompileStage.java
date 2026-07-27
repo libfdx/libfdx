@@ -8,5 +8,6 @@ package io.github.libfdx.runtime.core.shader;
 public enum RuntimeShaderCompileStage {
     MODULE,
     VERTEX,
-    FRAGMENT
+    FRAGMENT,
+    COMPUTE
 }

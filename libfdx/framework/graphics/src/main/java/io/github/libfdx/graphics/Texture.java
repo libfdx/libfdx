@@ -38,6 +38,15 @@ public interface Texture extends ProviderHandle, Disposable {
     TextureUsage usage();
 
     /**
+     * Returns the texture sample count.
+     *
+     * @return the sample count
+     */
+    default int sampleCount() {
+        return 1;
+    }
+
+    /**
      * Returns the default texture view.
      *
      * @return the default texture view

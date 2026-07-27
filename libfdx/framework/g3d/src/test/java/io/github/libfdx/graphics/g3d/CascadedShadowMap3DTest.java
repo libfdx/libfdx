@@ -12,11 +12,15 @@ import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.Mesh;
 import io.github.libfdx.graphics.RenderPass;
+import io.github.libfdx.graphics.RenderPassCompatibility;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
-import io.github.libfdx.graphics.ShaderLanguage;
-import io.github.libfdx.graphics.ShaderModule;
-import io.github.libfdx.graphics.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.RenderTargetLayout;
+import io.github.libfdx.graphics.shader.ShaderLanguage;
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.shader.runtime.ShaderParameterBlock;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameterHandle;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.TextureFormat;
@@ -28,6 +32,7 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -82,6 +87,86 @@ final class CascadedShadowMap3DTest {
         assertEquals(initialDrawCalls + 2_000, pass.drawCalls);
         assertTrue(allocated <= 1_024L, "Expected no post-warm-up CPU projection churn, allocated " + allocated
                 + " bytes");
+        provider.dispose();
+        renderable.meshPart().mesh().dispose();
+    }
+
+    @Test
+    void graphPbrAllocatesNoPerDrawObjectsAfterWarmup() {
+        FakeGraphicsContext graphics =
+                new FakeGraphicsContext(ProviderId.of("gl"));
+        Renderable3D renderable = renderable(graphics);
+        Camera camera = new Camera()
+                .projection(CameraProjection.PERSPECTIVE)
+                .viewport(64.0f, 64.0f)
+                .nearFar(0.1f, 48.0f)
+                .position(0.0f, 0.0f, 3.0f)
+                .direction(0.0f, 0.0f, -1.0f);
+        Environment3D environment = new Environment3D()
+                .add(new DirectionalLight()
+                        .direction(-0.5f, -1.0f, -0.25f));
+        AllocationRenderPass pass =
+                new AllocationRenderPass();
+        RenderContext3D context = new RenderContext3D(
+                graphics, camera, environment, null, pass);
+        PbrShaderProvider provider = new PbrShaderProvider(
+                graphics, new PbrShaderConfig());
+        Shader3D shader = provider.shader(renderable, context);
+
+        for (int i = 0; i < 2_000; i++) {
+            shader.begin(context);
+            shader.render(renderable);
+            shader.end();
+        }
+
+        java.lang.management.ThreadMXBean platformBean =
+                ManagementFactory.getThreadMXBean();
+        assumeTrue(platformBean instanceof ThreadMXBean);
+        ThreadMXBean bean = (ThreadMXBean)platformBean;
+        assumeTrue(bean.isThreadAllocatedMemorySupported());
+        if (!bean.isThreadAllocatedMemoryEnabled()) {
+            bean.setThreadAllocatedMemoryEnabled(true);
+        }
+        long threadId = Thread.currentThread().threadId();
+        long lifecycleBefore =
+                bean.getThreadAllocatedBytes(threadId);
+        long lifecycleStart = System.nanoTime();
+        for (int i = 0; i < 2_000; i++) {
+            shader.begin(context);
+            shader.end();
+        }
+        long lifecycleNanos =
+                System.nanoTime() - lifecycleStart;
+        long lifecycleAllocated =
+                bean.getThreadAllocatedBytes(threadId)
+                        - lifecycleBefore;
+        shader.begin(context);
+        long before = bean.getThreadAllocatedBytes(threadId);
+        int initialDrawCalls = pass.drawCalls;
+        long drawStart = System.nanoTime();
+        for (int i = 0; i < 2_000; i++) {
+            shader.render(renderable);
+        }
+        long drawNanos = System.nanoTime() - drawStart;
+        long allocated =
+                bean.getThreadAllocatedBytes(threadId) - before;
+        shader.end();
+
+        assertEquals(initialDrawCalls + 2_000,
+                pass.drawCalls);
+        assertTrue(allocated <= 4_096L,
+                "Expected no post-warm-up graph PBR churn, allocated "
+                        + allocated + " render bytes and "
+                        + lifecycleAllocated + " lifecycle bytes");
+        assertTrue(lifecycleAllocated <= 4_096L,
+                "Expected no post-warm-up graph PBR lifecycle churn, allocated "
+                        + lifecycleAllocated + " bytes");
+        System.out.printf(java.util.Locale.ROOT,
+                "SHADER_GRAPH_PERF pbr_draws=%d draw_ns_per_op=%.3f "
+                        + "draw_bytes=%d lifecycle_ns_per_op=%.3f "
+                        + "lifecycle_bytes=%d%n",
+                2_000, drawNanos / 2_000.0, allocated,
+                lifecycleNanos / 2_000.0, lifecycleAllocated);
         provider.dispose();
         renderable.meshPart().mesh().dispose();
     }
@@ -196,6 +281,7 @@ final class CascadedShadowMap3DTest {
         assertTrue(pass.shadowMatrices[2]);
         assertTrue(pass.shadowMatrices[3]);
         assertEquals(1, pass.drawCalls);
+        assertTrue(graphics.device().graphPbrModuleCreated);
 
         provider.dispose();
         singleShadow.dispose();
@@ -330,6 +416,7 @@ final class CascadedShadowMap3DTest {
 
     private static final class FakeGraphicsDevice implements GraphicsDevice {
         private static final ProviderId PROVIDER_ID = ProviderId.of("test-device");
+        private boolean graphPbrModuleCreated;
 
         @Override
         public Buffer createBuffer(BufferDescriptor descriptor) {
@@ -351,6 +438,10 @@ final class CascadedShadowMap3DTest {
 
         @Override
         public ShaderModule createShaderModule(ShaderModuleDescriptor descriptor) {
+            if (descriptor.wgslSource().contains(
+                    "fdx_graph_libfdx_standard_pbr_surface")) {
+                graphPbrModuleCreated = true;
+            }
             return new FakeShaderModule(descriptor.language());
         }
 
@@ -548,6 +639,11 @@ final class CascadedShadowMap3DTest {
         }
 
         @Override
+        public RenderTargetLayout targetLayout() {
+            return descriptor.renderTargetLayout();
+        }
+
+        @Override
         public void dispose() {
             disposed = true;
         }
@@ -581,6 +677,14 @@ final class CascadedShadowMap3DTest {
         private int drawCalls;
 
         @Override
+        public RenderPassCompatibility compatibility() {
+            return RenderPassCompatibility.of(
+                    RenderTargetLayout.color(
+                            TextureFormat.RGBA8_UNORM),
+                    64, 64);
+        }
+
+        @Override
         public void setPipeline(RenderPipeline pipeline) {
             FakeRenderPipeline fake = pipeline.as();
             assertNotNull(fake.descriptor());
@@ -602,7 +706,35 @@ final class CascadedShadowMap3DTest {
         }
 
         @Override
+        public void setTextureBinding(int group, int binding, Texture texture) {
+            if (group == 0 && (binding & 1) == 0) {
+                setTexture(binding / 2, texture);
+            }
+        }
+
+        @Override
+        public void setTextureSamplerBinding(int group, int binding, Texture texture) {
+        }
+
+        @Override
+        public void setParameterBlock(int group, int binding, ShaderParameterBlock block) {
+            ByteBuffer data = block.readOnlyData().order(ByteOrder.nativeOrder());
+            shadowParams = readFloat4(block, data, "shadowParams");
+            shadowCascadeSplits = readFloat4(block, data, "shadowCascadeSplits");
+            shadowBiases = readFloat4(block, data, "shadowBiases");
+            shadowCameraPosition = readFloat4(block, data, "shadowCameraPosition");
+            shadowCameraDirection = readFloat4(block, data, "shadowCameraDirection");
+            for (int i = 0; i < shadowMatrices.length; i++) {
+                shadowMatrices[i] = block.layout().findHandle("shadowViewProjection" + i) != null;
+            }
+        }
+
+        @Override
         public void setUniform1i(String name, int value) {
+        }
+
+        @Override
+        public void setUniform1i(ShaderParameterHandle parameter, int value) {
         }
 
         @Override
@@ -610,7 +742,15 @@ final class CascadedShadowMap3DTest {
         }
 
         @Override
+        public void setUniform1f(ShaderParameterHandle parameter, float value) {
+        }
+
+        @Override
         public void setUniform3f(String name, float x, float y, float z) {
+        }
+
+        @Override
+        public void setUniform3f(ShaderParameterHandle parameter, float x, float y, float z) {
         }
 
         @Override
@@ -633,6 +773,25 @@ final class CascadedShadowMap3DTest {
         }
 
         @Override
+        public void setUniform4f(ShaderParameterHandle parameter, float x, float y, float z, float w) {
+            if ("shadowParams".equals(parameter.path())) {
+                shadowParams = new float[] { x, y, z, w };
+            }
+            else if ("shadowCascadeSplits".equals(parameter.path())) {
+                shadowCascadeSplits = new float[] { x, y, z, w };
+            }
+            else if ("shadowBiases".equals(parameter.path())) {
+                shadowBiases = new float[] { x, y, z, w };
+            }
+            else if ("shadowCameraPosition".equals(parameter.path())) {
+                shadowCameraPosition = new float[] { x, y, z, w };
+            }
+            else if ("shadowCameraDirection".equals(parameter.path())) {
+                shadowCameraDirection = new float[] { x, y, z, w };
+            }
+        }
+
+        @Override
         public void setUniformMatrix4(String name, float[] values) {
             if ("u_shadowViewProjection".equals(name) || "u_shadowViewProjection0".equals(name)) {
                 shadowMatrices[0] = true;
@@ -646,6 +805,27 @@ final class CascadedShadowMap3DTest {
             else if ("u_shadowViewProjection3".equals(name)) {
                 shadowMatrices[3] = true;
             }
+        }
+
+        @Override
+        public void setUniformMatrix4(ShaderParameterHandle parameter, float[] values) {
+            for (int i = 0; i < shadowMatrices.length; i++) {
+                if (("shadowViewProjection" + i).equals(parameter.path())) {
+                    shadowMatrices[i] = true;
+                    return;
+                }
+            }
+        }
+
+        private static float[] readFloat4(ShaderParameterBlock block, ByteBuffer data, String path) {
+            ShaderParameterHandle handle = block.layout().requireHandle(path);
+            int offset = handle.byteOffsetInt();
+            return new float[] {
+                    data.getFloat(offset),
+                    data.getFloat(offset + Float.BYTES),
+                    data.getFloat(offset + 2 * Float.BYTES),
+                    data.getFloat(offset + 3 * Float.BYTES)
+            };
         }
 
         @Override
@@ -672,6 +852,70 @@ final class CascadedShadowMap3DTest {
         @SuppressWarnings("unchecked")
         public <T> T as() {
             return (T)this;
+        }
+    }
+
+    private static final class AllocationRenderPass
+            implements RenderPass {
+        private static final ProviderId PROVIDER_ID =
+                ProviderId.of("allocation-pass");
+        private static final RenderPassCompatibility COMPATIBILITY =
+                RenderPassCompatibility.of(
+                        RenderTargetLayout.color(
+                                TextureFormat.RGBA8_UNORM),
+                        64, 64);
+        private int drawCalls;
+
+        @Override
+        public RenderPassCompatibility compatibility() {
+            return COMPATIBILITY;
+        }
+
+        @Override
+        public void setPipeline(RenderPipeline pipeline) {
+        }
+
+        @Override
+        public void setVertexBuffer(Buffer buffer) {
+        }
+
+        @Override
+        public void setTexture(int slot, Texture texture) {
+        }
+
+        @Override
+        public void setParameterBlock(int group, int binding,
+                ShaderParameterBlock block) {
+        }
+
+        @Override
+        public void setTextureBinding(int group, int binding,
+                Texture texture) {
+        }
+
+        @Override
+        public void setTextureSamplerBinding(int group,
+                int binding, Texture texture) {
+        }
+
+        @Override
+        public void draw(int vertexCount, int instanceCount,
+                int firstVertex, int firstInstance) {
+            drawCalls++;
+        }
+
+        @Override
+        public void end() {
+        }
+
+        @Override
+        public ProviderId providerId() {
+            return PROVIDER_ID;
+        }
+
+        @Override
+        public <T> T as() {
+            return null;
         }
     }
 }

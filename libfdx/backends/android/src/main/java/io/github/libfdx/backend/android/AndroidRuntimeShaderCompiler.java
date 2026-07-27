@@ -1,17 +1,14 @@
 package io.github.libfdx.backend.android;
 
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileDiagnostic;
-import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileOutputKind;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileRequest;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileResult;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileStage;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileTarget;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompiler;
+import io.github.libfdx.runtime.core.shader.internal.NativeRuntimeShaderResultEnvelope;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 
 /**
  * Android runtime shader compiler backed by the fdx native library.
@@ -39,39 +36,14 @@ final class AndroidRuntimeShaderCompiler implements RuntimeShaderCompiler {
                 return failure("Could not load Android runtime fdx native library: "
                         + AndroidRuntimeCoreNative.failureMessage());
             }
-            String encoded = compileNative(request.source(), nativeTarget(request.target()),
+            String encoded = compileNative(request.source().getBytes(StandardCharsets.UTF_8),
+                    nativeTarget(request.target()),
                     nativeStage(request.stage()), request.entryPoint(), request.glslProfile(),
                     request.glslEsProfile());
-            return decodeBase64(encoded);
+            return NativeRuntimeShaderResultEnvelope.decodeBase64(encoded);
         } catch (UnsatisfiedLinkError error) {
             return failure("Could not run Android runtime shader compiler: " + error.getMessage());
         }
-    }
-
-    private static RuntimeShaderCompileResult decodeBase64(String encoded) {
-        if (encoded == null || encoded.length() == 0) {
-            return failure("Native shader compiler returned no result");
-        }
-        byte[] bytes = Base64.getDecoder().decode(encoded);
-        ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
-        int status = buffer.getInt();
-        RuntimeShaderCompileOutputKind kind = outputKind(buffer.getInt());
-        int outputSize = buffer.getInt();
-        int diagnosticSize = buffer.getInt();
-        byte[] output = new byte[Math.max(0, outputSize)];
-        buffer.get(output);
-        byte[] diagnostics = new byte[Math.max(0, diagnosticSize)];
-        buffer.get(diagnostics);
-        if (status != 0) {
-            return failure(new String(diagnostics, StandardCharsets.UTF_8));
-        }
-        if (kind == RuntimeShaderCompileOutputKind.TEXT) {
-            return RuntimeShaderCompileResult.text(new String(output, StandardCharsets.UTF_8));
-        }
-        if (kind == RuntimeShaderCompileOutputKind.SPIRV) {
-            return RuntimeShaderCompileResult.spirv(output);
-        }
-        return failure("Native shader compiler returned no output");
     }
 
     private static RuntimeShaderCompileResult failure(String message) {
@@ -110,20 +82,13 @@ final class AndroidRuntimeShaderCompiler implements RuntimeShaderCompiler {
         if (stage == RuntimeShaderCompileStage.FRAGMENT) {
             return 2;
         }
+        if (stage == RuntimeShaderCompileStage.COMPUTE) {
+            return 3;
+        }
         return 0;
     }
 
-    private static RuntimeShaderCompileOutputKind outputKind(int value) {
-        if (value == 1) {
-            return RuntimeShaderCompileOutputKind.TEXT;
-        }
-        if (value == 2) {
-            return RuntimeShaderCompileOutputKind.SPIRV;
-        }
-        return RuntimeShaderCompileOutputKind.NONE;
-    }
-
-    private static native String compileNative(String source, int target, int stage, String entryPoint,
+    private static native String compileNative(byte[] source, int target, int stage, String entryPoint,
             String glslProfile, String glslEsProfile);
 
     private static native boolean isAvailableNative();

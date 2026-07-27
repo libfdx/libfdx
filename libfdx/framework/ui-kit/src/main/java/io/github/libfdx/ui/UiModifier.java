@@ -8,7 +8,7 @@ package io.github.libfdx.ui;
 public final class UiModifier {
     private static final UiModifier NONE = new UiModifier(false, false, Float.NaN, Float.NaN, Float.NaN, Float.NaN,
             Float.NaN, Float.NaN, UiInsets.ZERO, UiInsets.ZERO, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
-            0.0f, UiAlign.START, true, false, null, null, null, null, null, null, null, null, null);
+            0.0f, UiAlign.START, true, false, false, null, null, null, null, null, null, null, null, null);
 
     private final boolean fillWidth;
     private final boolean fillHeight;
@@ -31,6 +31,7 @@ public final class UiModifier {
     private final UiAlign align;
     private final boolean enabled;
     private final boolean focusable;
+    private final boolean clipToBounds;
     private final String style;
     private final UiStyle inlineStyle;
     private final String transitionState;
@@ -44,7 +45,8 @@ public final class UiModifier {
     private UiModifier(boolean fillWidth, boolean fillHeight, float width, float height, float minWidth,
             float minHeight, float maxWidth, float maxHeight, UiInsets padding, UiInsets margin, float gap,
             float weight, float alpha, float offsetX, float offsetY, float scaleX, float scaleY, float rotation,
-            UiAlign align, boolean enabled, boolean focusable, String style, String transitionState,
+            UiAlign align, boolean enabled, boolean focusable, boolean clipToBounds, String style,
+            String transitionState,
             UiTransition transition, String semanticLabel, String validationId, UiAnimationSpec contentSizeAnimation,
             UiAnimationSpec placementAnimation, String tooltipTarget, UiStyle inlineStyle) {
         this.fillWidth = fillWidth;
@@ -68,6 +70,7 @@ public final class UiModifier {
         this.align = align != null ? align : UiAlign.START;
         this.enabled = enabled;
         this.focusable = focusable;
+        this.clipToBounds = clipToBounds;
         this.style = style;
         this.inlineStyle = inlineStyle;
         this.transitionState = transitionState;
@@ -397,6 +400,31 @@ public final class UiModifier {
     }
 
     /**
+     * Enables clipping of this node's content and descendants to its bounds.
+     *
+     * @return this UI modifier for chaining
+     */
+    public UiModifier clip() {
+        return clip(true);
+    }
+
+    /**
+     * Sets whether this node clips its content and descendants to its bounds.
+     *
+     * @param clipToBounds true to clip to this node's bounds
+     * @return this UI modifier for chaining
+     */
+    public UiModifier clip(boolean clipToBounds) {
+        if (this.clipToBounds == clipToBounds) {
+            return this;
+        }
+        return new UiModifier(fillWidth, fillHeight, width, height, minWidth, minHeight, maxWidth, maxHeight,
+                padding, margin, gap, weight, alpha, offsetX, offsetY, scaleX, scaleY, rotation, align, enabled,
+                focusable, clipToBounds, style, transitionState, transition, semanticLabel, validationId,
+                contentSizeAnimation, placementAnimation, tooltipTarget, inlineStyle);
+    }
+
+    /**
      * Sets the style and returns this UI modifier.
      *
      * @param style the style
@@ -703,6 +731,15 @@ public final class UiModifier {
     }
 
     /**
+     * Returns whether content and descendants are clipped to this node's bounds.
+     *
+     * @return true when clipping to bounds is enabled
+     */
+    public boolean clipsToBounds() {
+        return clipToBounds;
+    }
+
+    /**
      * Returns the style.
      *
      * @return the style
@@ -835,8 +872,8 @@ public final class UiModifier {
         }
         return new UiModifier(fillWidth, fillHeight, width, height, minWidth, minHeight, maxWidth, maxHeight,
                 padding, margin, gap, weight, alpha, offsetX, offsetY, scaleX, scaleY, rotation, align, enabled,
-                focusable, style, transitionState, transition, semanticLabel, validationId, contentSizeAnimation,
-                placementAnimation, tooltipTarget, inlineStyle);
+                focusable, clipToBounds, style, transitionState, transition, semanticLabel, validationId,
+                contentSizeAnimation, placementAnimation, tooltipTarget, inlineStyle);
     }
 
     private UiModifier copyStyle(String style, UiStyle inlineStyle) {
@@ -845,7 +882,7 @@ public final class UiModifier {
         }
         return new UiModifier(fillWidth, fillHeight, width, height, minWidth, minHeight, maxWidth, maxHeight,
                 padding, margin, gap, weight, alpha, offsetX, offsetY, scaleX, scaleY, rotation, align, enabled,
-                focusable, style, transitionState, transition, semanticLabel, validationId, contentSizeAnimation,
-                placementAnimation, tooltipTarget, inlineStyle);
+                focusable, clipToBounds, style, transitionState, transition, semanticLabel, validationId,
+                contentSizeAnimation, placementAnimation, tooltipTarget, inlineStyle);
     }
 }

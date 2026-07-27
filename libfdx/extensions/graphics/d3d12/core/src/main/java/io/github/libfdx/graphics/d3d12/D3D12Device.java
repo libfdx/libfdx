@@ -4,27 +4,52 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
+import io.github.libfdx.graphics.GraphicsCapabilities;
 import io.github.libfdx.graphics.GraphicsDevice;
+import io.github.libfdx.graphics.GraphicsFeature;
+import io.github.libfdx.graphics.GraphicsLimits;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
-import io.github.libfdx.graphics.ShaderBinding;
-import io.github.libfdx.graphics.ShaderBindingType;
-import io.github.libfdx.graphics.ShaderLanguage;
-import io.github.libfdx.graphics.ShaderModule;
-import io.github.libfdx.graphics.ShaderModuleDescriptor;
-import io.github.libfdx.graphics.ShaderModuleDescriptors;
-import io.github.libfdx.graphics.ShaderReflection;
-import io.github.libfdx.graphics.ShaderTarget;
+import io.github.libfdx.graphics.shader.ShaderLanguage;
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptors;
+import io.github.libfdx.graphics.shader.ShaderProfile;
+import io.github.libfdx.graphics.shader.target.ShaderTarget;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
+import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.VertexAttribute;
 import io.github.libfdx.graphics.VertexLayout;
+import io.github.libfdx.graphics.internal.ShaderRenderBindings;
 
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 
 final class D3D12Device implements GraphicsDevice {
+    private static final GraphicsCapabilities CAPABILITIES = GraphicsCapabilities.builder()
+            .profile(ShaderProfile.PORTABLE_WEBGL2)
+            .profile(ShaderProfile.PORTABLE_WEBGPU)
+            .profile(ShaderProfile.NATIVE)
+            .feature(GraphicsFeature.INDEXED_DRAW)
+            .feature(GraphicsFeature.INSTANCED_DRAW)
+            .feature(GraphicsFeature.DEPTH_STENCIL_ATTACHMENTS)
+            .colorFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
+                    TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB)
+            .depthStencilFormats(TextureFormat.DEPTH24_STENCIL8, TextureFormat.DEPTH32_FLOAT)
+            .sampleCounts(1)
+            .limits(GraphicsLimits.builder()
+                    .maxBindGroups(2)
+                    .maxBindingsPerGroup(32)
+                    .maxUniformBuffersPerStage(1)
+                    .maxSampledTexturesPerStage(16)
+                    .maxSamplersPerStage(16)
+                    .maxColorAttachments(1)
+                    .maxVertexBuffers(4)
+                    .maxVertexAttributes(16)
+                    .maxUniformBufferBindingSize(64L * 1024L)
+                    .build())
+            .build();
     private final D3D12Context context;
 
     D3D12Device(D3D12Context context) {
@@ -60,6 +85,7 @@ final class D3D12Device implements GraphicsDevice {
         if (descriptor == null) {
             throw new FdxException("TextureDescriptor cannot be null");
         }
+        descriptor.validate(capabilities());
         context.requireUsable("create a texture");
         long handle = D3D12Native.createTexture(context.nativeHandle(), descriptor.width(), descriptor.height(),
                 descriptor.format().ordinal(), descriptor.usage().ordinal(), descriptor.filter().ordinal(),
@@ -90,12 +116,15 @@ final class D3D12Device implements GraphicsDevice {
         context.requireUsable("create a shader module");
         ShaderModuleDescriptor ready = ShaderModuleDescriptors.requireTarget(descriptor,
                 ShaderTarget.DIRECTX_HLSL, "Direct3D 12");
+        if (ready.targetArtifact() != null) {
+            shaderTargetSupport().require(ready.targetArtifact());
+        }
         if (!ready.hasSource(ShaderLanguage.HLSL)) {
             throw new FdxException("Direct3D 12 requires HLSL shader modules");
         }
         long handle = D3D12Native.createShader(context.nativeHandle(), ready.hlslVertexSource(),
                 ready.hlslFragmentSource(), ready.vertexEntryPoint(), ready.fragmentEntryPoint(), ready.label());
-        return new D3D12Shader(context, handle);
+        return new D3D12Shader(context, handle, ready.reflection());
     }
 
     @Override
@@ -105,8 +134,12 @@ final class D3D12Device implements GraphicsDevice {
         }
         context.requireUsable("create a render pipeline");
         D3D12Shader shader = context.requireShader(descriptor.shaderModule(), "Render pipeline shader module");
-        PipelineBindings bindings = PipelineBindings.from(descriptor.shaderReflection(),
-                descriptor.sampledTextureCount());
+        descriptor.validate(capabilities());
+        if (descriptor.renderTargetLayout().colorAttachmentCount() != 1) {
+            throw new FdxException("Direct3D 12 currently requires exactly one color attachment");
+        }
+        ShaderRenderBindings resources = ShaderRenderBindings.from(descriptor);
+        PipelineBindings bindings = PipelineBindings.from(resources);
         VertexInputs inputs = VertexInputs.from(descriptor.vertexLayouts());
         long handle = D3D12Native.createPipeline(context.nativeHandle(), shader.nativeHandle(),
                 descriptor.colorFormat().ordinal(), descriptor.primitiveTopology().ordinal(),
@@ -116,12 +149,18 @@ final class D3D12Device implements GraphicsDevice {
                 inputs.locations, inputs.formats, inputs.offsets, inputs.slots,
                 bindings.textureGroups, bindings.textureBindings,
                 bindings.samplerGroups, bindings.samplerBindings);
-        return new D3D12Pipeline(context, handle, descriptor.sampledTextureCount(), bindings.uniformGroup >= 0);
+        return new D3D12Pipeline(context, handle, descriptor.sampledTextureCount(), resources,
+                descriptor.renderTargetLayout());
     }
 
     @Override
     public ProviderId providerId() {
         return D3D12Provider.ID;
+    }
+
+    @Override
+    public GraphicsCapabilities capabilities() {
+        return CAPABILITIES;
     }
 
     @Override
@@ -195,56 +234,28 @@ final class D3D12Device implements GraphicsDevice {
             this.samplerBindings = samplerBindings;
         }
 
-        static PipelineBindings from(ShaderReflection reflection, int sampledTextureCount) {
-            ArrayList<Integer> textureGroups = new ArrayList<Integer>();
-            ArrayList<Integer> textureBindings = new ArrayList<Integer>();
-            ArrayList<Integer> samplerGroups = new ArrayList<Integer>();
-            ArrayList<Integer> samplerBindings = new ArrayList<Integer>();
-            int uniformGroup = -1;
-            int uniformBinding = -1;
-            ShaderBinding[] bindings = reflection != null ? reflection.bindings() : new ShaderBinding[0];
-            for (int i = 0; i < bindings.length; i++) {
-                ShaderBinding binding = bindings[i];
-                if (binding.type() == ShaderBindingType.UNIFORM_BUFFER && "uniforms".equals(binding.name())) {
-                    if (uniformGroup >= 0) {
-                        throw new FdxException("Direct3D 12 supports one reflected uniforms buffer per pipeline");
-                    }
-                    uniformGroup = binding.group();
-                    uniformBinding = binding.binding();
-                } else if (binding.type() == ShaderBindingType.TEXTURE) {
-                    textureGroups.add(binding.group());
-                    textureBindings.add(binding.binding());
-                } else if (binding.type() == ShaderBindingType.SAMPLER) {
-                    samplerGroups.add(binding.group());
-                    samplerBindings.add(binding.binding());
-                } else if (binding.type() == ShaderBindingType.STORAGE_BUFFER
-                        || binding.type() == ShaderBindingType.STORAGE_TEXTURE) {
-                    throw new FdxException("Direct3D 12 storage bindings are not supported by the graphics contract");
+        static PipelineBindings from(ShaderRenderBindings resources) {
+            int count = resources.sampledTextureCount();
+            int[] textureGroups = new int[count];
+            int[] textureBindings = new int[count];
+            int[] samplerGroups = new int[count];
+            int[] samplerBindings = new int[count];
+            for (int slot = 0; slot < count; slot++) {
+                if (resources.reflected()) {
+                    textureGroups[slot] = resources.texture(slot).group();
+                    textureBindings[slot] = resources.texture(slot).binding();
+                    samplerGroups[slot] = resources.sampler(slot).group();
+                    samplerBindings[slot] = resources.sampler(slot).binding();
+                }
+                else {
+                    textureGroups[slot] = 0;
+                    textureBindings[slot] = slot * 2;
+                    samplerGroups[slot] = 0;
+                    samplerBindings[slot] = slot * 2 + 1;
                 }
             }
-            if (sampledTextureCount > 0 && textureGroups.isEmpty() && samplerGroups.isEmpty()) {
-                for (int slot = 0; slot < sampledTextureCount; slot++) {
-                    textureGroups.add(0);
-                    textureBindings.add(slot * 2);
-                    samplerGroups.add(0);
-                    samplerBindings.add(slot * 2 + 1);
-                }
-            }
-            if (textureGroups.size() != sampledTextureCount || samplerGroups.size() != sampledTextureCount) {
-                throw new FdxException("Direct3D 12 pipeline declares " + sampledTextureCount
-                        + " sampled textures but reflection contains " + textureGroups.size()
-                        + " textures and " + samplerGroups.size() + " samplers");
-            }
-            return new PipelineBindings(uniformGroup, uniformBinding,
-                    ints(textureGroups), ints(textureBindings), ints(samplerGroups), ints(samplerBindings));
-        }
-
-        private static int[] ints(ArrayList<Integer> values) {
-            int[] result = new int[values.size()];
-            for (int i = 0; i < values.size(); i++) {
-                result[i] = values.get(i);
-            }
-            return result;
+            return new PipelineBindings(resources.uniformGroup(), resources.uniformBinding(),
+                    textureGroups, textureBindings, samplerGroups, samplerBindings);
         }
     }
 }

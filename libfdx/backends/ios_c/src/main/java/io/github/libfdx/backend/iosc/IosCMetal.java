@@ -76,7 +76,7 @@ final class IosCMetal {
 
     static long createRenderPipeline(long context, long shaderModule, int primitiveTopology, int[] vertexStrides,
             int[] vertexStepModes, int[] attributeBindings, int[] attributeLocations, int[] attributeFormats,
-            int[] attributeOffsets, int sampledTextureCount, boolean pbrUniformsEnabled, boolean depthTestEnabled,
+            int[] attributeOffsets, int sampledTextureCount, boolean uniformBufferEnabled, boolean depthTestEnabled,
             boolean depthWriteEnabled) {
         int vertexLayoutCount = vertexStrides != null ? vertexStrides.length : 0;
         int attributeCount = attributeLocations != null ? attributeLocations.length : 0;
@@ -85,7 +85,7 @@ final class IosCMetal {
                 vertexLayoutCount, addressOf(attributeBindings, attributeCount),
                 addressOf(attributeLocations, attributeCount), addressOf(attributeFormats, attributeCount),
                 addressOf(attributeOffsets, attributeCount), attributeCount, sampledTextureCount,
-                bool(pbrUniformsEnabled), bool(depthTestEnabled), bool(depthWriteEnabled)),
+                bool(uniformBufferEnabled), bool(depthTestEnabled), bool(depthWriteEnabled)),
                 "Could not create iOS C Metal render pipeline");
     }
 
@@ -218,7 +218,7 @@ final class IosCMetal {
     private static native long libfdxIosMetalCreateRenderPipeline(long context, long shaderModule,
             int primitiveTopology, Address vertexStrides, Address vertexStepModes, int vertexLayoutCount,
             Address attributeBindings, Address attributeLocations, Address attributeFormats, Address attributeOffsets,
-            int attributeCount, int sampledTextureCount, int pbrUniformsEnabled, int depthTestEnabled,
+            int attributeCount, int sampledTextureCount, int uniformBufferEnabled, int depthTestEnabled,
             int depthWriteEnabled);
 
     @Import(name = "libfdx_ios_metal_begin_render_pass")

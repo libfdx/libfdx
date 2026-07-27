@@ -52,7 +52,10 @@ public interface Batch3D extends Disposable {
     Batch3D environment(Environment3D environment);
 
     /**
-     * Sets the shader provider and returns this batch3 d.
+     * Sets the borrowed shader provider and returns this batch3 d.
+     *
+     * <p>The provider remains application-owned. Implementations may reject
+     * replacement during an active drawing operation.</p>
      *
      * @param shaderProvider the shader provider
      * @return this batch3 d for chaining

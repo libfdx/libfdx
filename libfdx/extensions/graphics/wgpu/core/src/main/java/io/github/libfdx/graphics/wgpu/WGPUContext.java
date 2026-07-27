@@ -80,7 +80,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     private static final long INIT_TIMEOUT_NANOS = 10L * 1000L * 1000L * 1000L;
     private static final long READBACK_TIMEOUT_NANOS = 10L * 1000L * 1000L * 1000L;
     private static final int COPY_BYTES_PER_ROW_ALIGNMENT = 256;
-    static final WGPUTextureFormat DEPTH_FORMAT = WGPUTextureFormat.Depth24Plus;
+    static final WGPUTextureFormat DEPTH_FORMAT = WGPUTextureFormat.Depth32Float;
 
     private final WGPUConfiguration configuration;
     private final WGPUInstance instance;
@@ -485,7 +485,8 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     }
 
     private void createDepthResources(int width, int height) {
-        OffscreenDepthResources resources = createDepthResources("libfdx depth texture", width, height);
+        OffscreenDepthResources resources = createDepthResources(
+                "libfdx depth texture", width, height, 1);
         depthTexture = resources.texture;
         depthTextureView = resources.view;
     }
@@ -520,7 +521,8 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         cleanup.throwIfFailed();
     }
 
-    private OffscreenDepthResources createDepthResources(String label, int width, int height) {
+    private OffscreenDepthResources createDepthResources(
+            String label, int width, int height, int sampleCount) {
         WGPUTextureDescriptor textureDescriptor = WGPUTextureDescriptor.obtain();
         textureDescriptor.setNextInChain(WGPUChainedStruct.NULL);
         textureDescriptor.setLabel(label);
@@ -531,7 +533,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         textureDescriptor.getSize().setDepthOrArrayLayers(1);
         textureDescriptor.setFormat(DEPTH_FORMAT);
         textureDescriptor.setMipLevelCount(1);
-        textureDescriptor.setSampleCount(1);
+        textureDescriptor.setSampleCount(sampleCount);
         textureDescriptor.setViewFormats(WGPUVectorTextureFormat.NULL);
 
         WGPUTexture texture = new WGPUTexture();
@@ -552,7 +554,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         viewDescriptor.setUsage(WGPUTextureUsage.RenderAttachment);
 
             texture.createView(viewDescriptor, view);
-            return new OffscreenDepthResources(width, height, texture, view);
+            return new OffscreenDepthResources(width, height, sampleCount, texture, view);
         }
         catch (RuntimeException | Error failure) {
             rollbackTexture(texture, view, true, failure);
@@ -891,8 +893,12 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     }
 
     private ByteBuffer mapReadbackBuffer(WGPUBuffer readbackBuffer, int readbackSize) {
+        return mapReadbackBuffer(readbackBuffer, 0, readbackSize);
+    }
+
+    ByteBuffer mapReadbackBuffer(WGPUBuffer readbackBuffer, int offset, int readbackSize) {
         final MapState state = new MapState();
-        readbackBuffer.mapAsync(WGPUMapMode.Read, 0, readbackSize, WGPUCallbackMode.AllowProcessEvents,
+        readbackBuffer.mapAsync(WGPUMapMode.Read, offset, readbackSize, WGPUCallbackMode.AllowProcessEvents,
                 new WGPUBufferMapCallback() {
                     @Override
                     protected void onCallback(WGPUMapAsyncStatus status, String message) {
@@ -907,7 +913,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             throw new FdxException("Could not map WGPU readback buffer: " + state.status + message);
         }
         ByteBuffer pixels = ByteBuffer.allocateDirect(readbackSize).order(ByteOrder.nativeOrder());
-        readbackBuffer.getConstMappedRange(0, readbackSize, pixels);
+        readbackBuffer.getConstMappedRange(offset, readbackSize, pixels);
         readbackBuffer.unmap();
         pixels.position(0);
         pixels.limit(readbackSize);
@@ -999,27 +1005,38 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     }
 
     WGPUTextureView depthTextureView(int attachmentWidth, int attachmentHeight) {
+        return depthTextureView(attachmentWidth, attachmentHeight, 1);
+    }
+
+    WGPUTextureView depthTextureView(int attachmentWidth, int attachmentHeight,
+            int sampleCount) {
         if (attachmentWidth <= 0 || attachmentHeight <= 0
-                || (attachmentWidth == width && attachmentHeight == height)) {
+                || (attachmentWidth == width && attachmentHeight == height
+                && sampleCount == 1)) {
             return depthTextureView;
         }
         for (int i = 0; i < offscreenDepthResources.size(); i++) {
             OffscreenDepthResources resources = offscreenDepthResources.get(i);
-            if (resources.width == attachmentWidth && resources.height == attachmentHeight) {
+            if (resources.width == attachmentWidth
+                    && resources.height == attachmentHeight
+                    && resources.sampleCount == sampleCount) {
                 return resources.view;
             }
         }
         OffscreenDepthResources resources = createDepthResources("libfdx offscreen depth texture",
-                attachmentWidth, attachmentHeight);
+                attachmentWidth, attachmentHeight, sampleCount);
         offscreenDepthResources.add(resources);
         return resources.view;
     }
 
     WGPUTextureBindGroupResource textureBindGroup(WGPURenderPipelineHandle pipeline,
-            WGPUTextureAllocation[] allocations, int count) {
+            WGPUTextureAllocation[] allocations, int count,
+            WGPUSamplerAllocation[] samplerAllocations,
+            WGPUTextureAllocation[] samplerTextureAllocations, int samplerCount) {
         for (int i = 0; i < textureBindGroups.size(); i++) {
             WGPUTextureBindGroupResource existing = textureBindGroups.get(i);
-            if (existing.matches(pipeline, allocations, count)) {
+            if (existing.matches(pipeline, allocations, count,
+                    samplerAllocations, samplerTextureAllocations, samplerCount)) {
                 markRecordedResource(existing);
                 return existing;
             }
@@ -1030,14 +1047,23 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             WGPUTextureAllocation allocation = allocations[slot];
             WGPUBindGroupEntry textureEntry = WGPUBindGroupEntry.obtain();
             textureEntry.setNextInChain(WGPUChainedStruct.NULL);
-            textureEntry.setBinding(slot * 2);
+            textureEntry.setBinding(pipeline.resourceBindings().reflected()
+                    ? pipeline.resourceBindings().texture(slot).binding() : slot * 2);
             textureEntry.setTextureView(allocation.nativeView());
             entries.push_back(textureEntry);
 
+        }
+        for (int slot = 0; slot < samplerCount; slot++) {
             WGPUBindGroupEntry samplerEntry = WGPUBindGroupEntry.obtain();
             samplerEntry.setNextInChain(WGPUChainedStruct.NULL);
-            samplerEntry.setBinding(slot * 2 + 1);
-            samplerEntry.setSampler(allocation.nativeSampler());
+            samplerEntry.setBinding(pipeline.resourceBindings().reflected()
+                    ? pipeline.resourceBindings().sampler(slot).binding() : slot * 2 + 1);
+            WGPUSamplerAllocation samplerAllocation = samplerAllocations[slot];
+            WGPUTextureAllocation samplerTextureAllocation =
+                    samplerTextureAllocations[slot];
+            samplerEntry.setSampler(samplerAllocation != null
+                    ? samplerAllocation.nativeSampler()
+                    : samplerTextureAllocation.nativeSampler());
             entries.push_back(samplerEntry);
         }
 
@@ -1053,7 +1079,9 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             if (!bindGroup.isValid()) {
                 throw new FdxException("Could not create WGPU texture bind group");
             }
-            resource = new WGPUTextureBindGroupResource(this, pipeline, allocations, count, bindGroup);
+            resource = new WGPUTextureBindGroupResource(this, pipeline,
+                    allocations, count, samplerAllocations,
+                    samplerTextureAllocations, samplerCount, bindGroup);
             textureBindGroups.add(resource);
             resource.attach();
             markRecordedResource(resource);
@@ -1111,9 +1139,11 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         recordedResources.mark(resource);
     }
 
-    int bindUniforms(WGPURenderPassEncoder pass, WGPURenderPipelineHandle pipeline, ByteBuffer data,
-            int allocationIndex) {
-        return uniformArena.bind(pass, pipeline, data, allocationIndex);
+    int bindUniforms(WGPURenderPassEncoder pass,
+            WGPURenderPipelineHandle pipeline, int uniformIndex,
+            ByteBuffer data, int allocationIndex) {
+        return uniformArena.bind(pass, pipeline, uniformIndex, data,
+                allocationIndex);
     }
 
     void releaseUniformBindGroups(WGPUBindGroupLayout layout) {
@@ -1504,12 +1534,15 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     private static final class OffscreenDepthResources {
         private final int width;
         private final int height;
+        private final int sampleCount;
         private final WGPUTexture texture;
         private final WGPUTextureView view;
 
-        OffscreenDepthResources(int width, int height, WGPUTexture texture, WGPUTextureView view) {
+        OffscreenDepthResources(int width, int height, int sampleCount,
+                WGPUTexture texture, WGPUTextureView view) {
             this.width = width;
             this.height = height;
+            this.sampleCount = sampleCount;
             this.texture = texture;
             this.view = view;
         }

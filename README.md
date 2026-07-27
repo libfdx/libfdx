@@ -72,6 +72,9 @@ Hosted tools and demos:
 
 - [Contributing](CONTRIBUTING.md): checkout setup and validation.
 - [Shaders](docs/SHADERS.md): WGSL authoring and provider translation.
+- [Shader graph sample](samples/graphics/shader-graph/): code-authored and
+  serialized graphs, batch integration, provider targets, and optional UI Kit
+  editing.
 - [UI Kit](docs/UI_KIT.md): UI ownership, composition, state, and rendering.
 - [Gradle plugin](libfdx/tools/gradle-plugin/README.md): project-generation DSL.
 - [Scenario validator](libfdx/extensions/scenario_validator/README.md): runtime

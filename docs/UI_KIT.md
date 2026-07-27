@@ -121,6 +121,50 @@ Applying a named style later replaces it. Built-in control rendering uses each
 style's background, foreground, text, padding, state variants, and minimum
 size, so a theme does not need renderer-specific color constants.
 
+### Custom Surfaces
+
+`UiScope.custom(...)` supports retained, provider-neutral custom surfaces.
+`UiCustomContext` can install measurement, drawing, and input callbacks without
+introducing a dependency on a platform UI system:
+
+```java
+private final UiPath connection = new UiPath();
+
+ui.custom("node-canvas",
+    Ui.modifier().fill().focusable(true).clip(),
+    custom -> {
+        custom.draw((draw, bounds) -> {
+            connection.clear()
+                .moveTo(bounds.x() + 40, bounds.y() + 80)
+                .cubicTo(
+                    bounds.x() + 140, bounds.y() + 80,
+                    bounds.right() - 140, bounds.bottom() - 80,
+                    bounds.right() - 40, bounds.bottom() - 80);
+            draw.path(connection, 3, UiColor.rgba8888(0x7dd3fcff));
+        });
+        custom.input(canvasInput);
+    });
+```
+
+`UiDrawContext` draws rectangles, images, text, lines, and retained `UiPath`
+line/quadratic/cubic segments in UI-root coordinates. `UiModifier.clip()`
+clips drawing, descendants, and hit testing to the node bounds. Build and retain
+paths outside the draw callback when practical; a pre-sized or warmed path can
+be cleared and rebuilt without steady-state allocation.
+
+Interactive surfaces implement `UiSurfaceInput`. A pointer callback returns
+`CAPTURE` to keep receiving that pointer outside the node, `RELEASE` to end
+capture, `HANDLED`, or `IGNORED`. Pointer-up ends capture automatically, and
+node removal/root disposal delivers `CANCEL`. A focusable surface receives
+key-down, text-input, and focus-change callbacks. `UiPointerEvent` is reused by
+the root and is valid only during its callback; handlers must copy any values
+they need later rather than retaining the event object.
+
+The optional shader-graph editor is one consumer of custom surfaces. UI Kit
+provides node-canvas editing convenience only; graph documents, compilation,
+runtime loading, and direct Java authoring remain headless. See
+[Shaders](SHADERS.md#shader-graph-boundary) for that ownership boundary.
+
 ## Widgets
 
 Containers and text can be combined with buttons, checkboxes, toggle switches,

@@ -12,14 +12,28 @@ import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
-import io.github.libfdx.graphics.ShaderAttribute;
-import io.github.libfdx.graphics.ShaderBinding;
-import io.github.libfdx.graphics.ShaderBindingType;
-import io.github.libfdx.graphics.ShaderModule;
-import io.github.libfdx.graphics.ShaderModuleDescriptor;
-import io.github.libfdx.graphics.ShaderReflection;
+import io.github.libfdx.graphics.shader.reflection.ShaderBinding;
+import io.github.libfdx.graphics.shader.reflection.ShaderBuiltinUsage;
+import io.github.libfdx.graphics.shader.reflection.ShaderEntryPoint;
+import io.github.libfdx.graphics.shader.reflection.ShaderInterpolation;
+import io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling;
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameter;
+import io.github.libfdx.graphics.shader.runtime.ShaderParameterBlock;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameterHandle;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameterLayout;
+import io.github.libfdx.graphics.shader.ShaderProfile;
+import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceAccess;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceKind;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceUse;
+import io.github.libfdx.graphics.shader.reflection.ShaderScalarType;
+import io.github.libfdx.graphics.shader.ShaderStage;
+import io.github.libfdx.graphics.shader.reflection.ShaderStageVariable;
+import io.github.libfdx.graphics.shader.reflection.ShaderStageVisibility;
+import io.github.libfdx.graphics.shader.reflection.ShaderValueType;
 import io.github.libfdx.graphics.StoreOp;
-import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
 import io.github.libfdx.math.Matrix4;
 
@@ -101,20 +115,57 @@ public final class OutlineRenderer3D implements Disposable {
                 return input.color;
             }
             """;
-    private static final ShaderReflection REFLECTION = ShaderReflection.of(new ShaderBinding[] {
-            ShaderBinding.of(0, 0, "uniforms", ShaderBindingType.UNIFORM_BUFFER)
-    }, new ShaderAttribute[] {
-            ShaderAttribute.of(0, "position", VertexFormat.FLOAT32X3),
-            ShaderAttribute.of(1, "normal", VertexFormat.FLOAT32X3),
-            ShaderAttribute.of(2, "uv", VertexFormat.FLOAT32X2),
-            ShaderAttribute.of(3, "color", VertexFormat.FLOAT32X4),
-            ShaderAttribute.of(4, "pbr", VertexFormat.FLOAT32X3),
-            ShaderAttribute.of(5, "emissive", VertexFormat.FLOAT32X3)
-    });
+    private static final ShaderValueType MATRIX4 = ShaderValueType
+            .matrix(ShaderScalarType.F32, 4, 4, 16)
+            .named("mat4x4<f32>");
+    private static final ShaderValueType FLOAT4 = ShaderValueType
+            .vector(ShaderScalarType.F32, 4)
+            .named("vec4<f32>");
+    private static final ShaderValueType FLOAT4_ARRAY = ShaderValueType
+            .array(FLOAT4, 4, 16)
+            .named("array<vec4<f32>, 4>");
+    private static final ShaderParameterLayout UNIFORM_LAYOUT =
+            ShaderParameterLayout.of(976, 16,
+                    parameter("model", MATRIX4, 0, 64),
+                    parameter("viewProjection", MATRIX4, 64, 64),
+                    parameter("cameraPosition", FLOAT4, 128, 16),
+                    parameter("cameraDirection", FLOAT4, 144, 16),
+                    parameter("ambientColor", FLOAT4, 160, 16),
+                    parameter("lightDirection", FLOAT4, 176, 16),
+                    parameter("lightColorIntensity", FLOAT4, 192, 16),
+                    parameter("textureFlags", FLOAT4, 208, 16),
+                    parameter("emissiveFlags", FLOAT4, 224, 16),
+                    parameter("fogColor", FLOAT4, 240, 16),
+                    parameter("fogParams", FLOAT4, 256, 16),
+                    parameter("pointLightCount", FLOAT4, 272, 16),
+                    parameter("pointLightPositions", FLOAT4_ARRAY, 288, 64),
+                    parameter("pointLightColors", FLOAT4_ARRAY, 352, 64),
+                    parameter("spotLightCount", FLOAT4, 416, 16),
+                    parameter("spotLightPositions", FLOAT4_ARRAY, 432, 64),
+                    parameter("spotLightDirections", FLOAT4_ARRAY, 496, 64),
+                    parameter("spotLightColors", FLOAT4_ARRAY, 560, 64),
+                    parameter("spotLightCones", FLOAT4_ARRAY, 624, 64),
+                    parameter("shadowViewProjection0", MATRIX4, 688, 64),
+                    parameter("shadowViewProjection1", MATRIX4, 752, 64),
+                    parameter("shadowViewProjection2", MATRIX4, 816, 64),
+                    parameter("shadowViewProjection3", MATRIX4, 880, 64),
+                    parameter("shadowParams", FLOAT4, 944, 16),
+                    parameter("shadowCascadeSplits", FLOAT4, 960, 16));
+    private static final ShaderParameterHandle MODEL =
+            UNIFORM_LAYOUT.requireHandle("model");
+    private static final ShaderParameterHandle VIEW_PROJECTION =
+            UNIFORM_LAYOUT.requireHandle("viewProjection");
+    private static final ShaderParameterHandle AMBIENT_COLOR =
+            UNIFORM_LAYOUT.requireHandle("ambientColor");
+    private static final ShaderParameterHandle FOG_PARAMS =
+            UNIFORM_LAYOUT.requireHandle("fogParams");
+    private static final ShaderReflection REFLECTION = reflection();
 
     private final GraphicsContext graphics;
     private final DefaultRenderQueue3D queue = new DefaultRenderQueue3D();
     private final ShaderModule shader;
+    private final ShaderParameterBlock uniformBlock =
+            ShaderParameterBlock.allocate(UNIFORM_LAYOUT);
     private final Map<VertexLayout, RenderPipeline[]> pipelines =
             new IdentityHashMap<VertexLayout, RenderPipeline[]>();
     private final RenderPassDescriptor renderPassDescriptor =
@@ -334,10 +385,13 @@ public final class OutlineRenderer3D implements Disposable {
         pass.setVertexBuffer(mesh.vertexBuffer());
         renderable.worldTransform().copyValues(modelMatrix, 0);
         camera.combined().copyValues(viewProjectionMatrix, 0);
-        pass.setUniformMatrix4("u_model", modelMatrix);
-        pass.setUniformMatrix4("u_viewProjection", viewProjectionMatrix);
-        pass.setUniform4f("u_ambientColor", red, green, blue, alpha);
-        pass.setUniform4f("u_fogParams", outlineWidth, 0.0f, 0.0f, 0.0f);
+        uniformBlock.setFloatMatrix(MODEL, modelMatrix, 0);
+        uniformBlock.setFloatMatrix(VIEW_PROJECTION,
+                viewProjectionMatrix, 0);
+        uniformBlock.setFloat4(AMBIENT_COLOR, red, green, blue, alpha);
+        uniformBlock.setFloat4(FOG_PARAMS, outlineWidth, 0.0f, 0.0f,
+                0.0f);
+        pass.setParameterBlock(0, 0, uniformBlock);
         int indexCount = meshPart.indexCount() > 0 ? meshPart.indexCount() : mesh.indexCount();
         if (indexCount > 0) {
             pass.setIndexBuffer(mesh.indexBuffer());
@@ -346,6 +400,65 @@ public final class OutlineRenderer3D implements Disposable {
         }
         int vertexCount = meshPart.vertexCount() > 0 ? meshPart.vertexCount() : mesh.vertexCount();
         pass.draw(vertexCount, 1, meshPart.firstVertex(), 0);
+    }
+
+    private static ShaderParameter parameter(String name,
+            ShaderValueType type, long offset, long size) {
+        return ShaderParameter.of(name, type, offset, size, 16);
+    }
+
+    private static ShaderReflection reflection() {
+        ShaderValueType float2 =
+                ShaderValueType.vector(ShaderScalarType.F32, 2);
+        ShaderValueType float3 =
+                ShaderValueType.vector(ShaderScalarType.F32, 3);
+        ShaderValueType float4 =
+                ShaderValueType.vector(ShaderScalarType.F32, 4);
+        ShaderStageVariable outputColor = variable(
+                "<retval>.color", "color", 0, float4);
+        ShaderStageVariable fragmentColor = variable(
+                "input.color", "color", 0, float4);
+        ShaderBinding uniforms = ShaderBinding.builder(0, 0,
+                        "uniforms", ShaderResourceKind.UNIFORM_BUFFER)
+                .visibility(ShaderStageVisibility.VERTEX)
+                .access(ShaderResourceAccess.READ)
+                .buffer(976, 976, 16, UNIFORM_LAYOUT)
+                .build();
+        return ShaderReflection.complete(ShaderProfile.PORTABLE_WEBGPU,
+                new ShaderEntryPoint[] {
+                        ShaderEntryPoint.builder("vertexMain",
+                                        ShaderStage.VERTEX)
+                                .builtins(ShaderBuiltinUsage.POSITION, -1)
+                                .inputs(
+                                        variable("input.position", "position",
+                                                0, float3),
+                                        variable("input.normal", "normal", 1,
+                                                float3),
+                                        variable("input.uv", "uv", 2, float2),
+                                        variable("input.color", "color", 3,
+                                                float4),
+                                        variable("input.pbr", "pbr", 4,
+                                                float3),
+                                        variable("input.emissive", "emissive",
+                                                5, float3))
+                                .outputs(outputColor)
+                                .resources(ShaderResourceUse.of(0, 0, 976))
+                                .build(),
+                        ShaderEntryPoint.builder("fragmentMain",
+                                        ShaderStage.FRAGMENT)
+                                .builtins(ShaderBuiltinUsage.POSITION, -1)
+                                .inputs(fragmentColor)
+                                .outputs(variable("<retval>", "", 0, float4))
+                                .build()
+                },
+                new ShaderBinding[] { uniforms }, new String[0]);
+    }
+
+    private static ShaderStageVariable variable(String name,
+            String variableName, int location, ShaderValueType type) {
+        return ShaderStageVariable.of(name, variableName, location, -1, -1,
+                type, ShaderInterpolation.PERSPECTIVE,
+                ShaderInterpolationSampling.CENTER);
     }
 
     private RenderPipeline pipeline(VertexLayout vertexLayout, PrimitiveTopology topology) {

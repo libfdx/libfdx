@@ -37,11 +37,13 @@ final class GLTextureViewHandle implements TextureView {
         return textureHandle != null;
     }
 
-    int width() {
+    @Override
+    public int width() {
         return textureHandle != null ? textureHandle.width() : 0;
     }
 
-    int height() {
+    @Override
+    public int height() {
         return textureHandle != null ? textureHandle.height() : 0;
     }
 

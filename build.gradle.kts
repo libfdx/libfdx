@@ -55,6 +55,11 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:extensions:graphics:wgpu:platform:desktop_ffm",
     ":libfdx:extensions:graphics:wgpu:platform:android_jni",
     ":libfdx:extensions:graphics:wgpu:platform:web",
+    ":libfdx:extensions:graphics:shader-graph:core",
+    ":libfdx:extensions:graphics:shader-graph:runtime",
+    ":libfdx:extensions:graphics:shader-graph:g2d",
+    ":libfdx:extensions:graphics:shader-graph:g3d",
+    ":libfdx:extensions:graphics:shader-graph:ui-kit",
     ":libfdx:extensions:net:webrtc:core",
     ":libfdx:extensions:net:webrtc:signaling_server",
     ":libfdx:extensions:net:webrtc:platform:desktop_jni",
@@ -161,6 +166,21 @@ subprojects {
             configureJava25()
             archiveName("sample_ecs_platformer_desktop")
             implementationProject(":samples:2d:ecs-platformer:core")
+            implementationLibfdx(":libfdx:framework:application", "application")
+            implementationLibfdx(":libfdx:framework:display", "display")
+            implementationLibfdx(":libfdx:extensions:graphics:d3d12:core", "d3d12_core")
+            implementationLibfdx(":libfdx:extensions:graphics:wgpu:core", "wgpu_core")
+            implementationLibfdx(":libfdx:backends:desktop", "backend_desktop")
+            runtimeOnlyLibfdx(":libfdx:extensions:graphics:gl:platform:desktop", "gl_desktop")
+            runtimeOnlyLibfdx(":libfdx:extensions:graphics:vulkan:platform:desktop", "vulkan_desktop")
+            runtimeOnlyLibfdx(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm", "wgpu_desktop_ffm")
+        }
+
+        ":samples:graphics:shader-graph:platform:desktop" -> pluginManager.withPlugin("io.github.libfdx") {
+            configureJava25()
+            archiveName("sample_shader_graph_desktop")
+            implementationProject(":samples:graphics:shader-graph:core")
+            implementationProject(":samples:graphics:shader-graph:editor")
             implementationLibfdx(":libfdx:framework:application", "application")
             implementationLibfdx(":libfdx:framework:display", "display")
             implementationLibfdx(":libfdx:extensions:graphics:d3d12:core", "d3d12_core")

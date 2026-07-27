@@ -96,6 +96,20 @@ if(LIBFDX_ENABLE_SHADER_COMPILER)
         fdx_natives::tint_api_helpers
         fdx_natives::tint_lang_core_ir_transform
         fdx_natives::tint_lang_glsl_writer_helpers)
+
+    if(NOT ANDROID)
+        add_executable(fdx_shaderc_reflect
+            fdx_shaderc_reflect.cpp
+            "${LIBFDX_SHADERC_SOURCE_DIR}/libfdx_shaderc.cpp")
+        target_include_directories(fdx_shaderc_reflect PRIVATE "${LIBFDX_SHADERC_SOURCE_DIR}")
+        target_compile_definitions(fdx_shaderc_reflect PRIVATE
+            LIBFDX_SHADERC_REFLECT_ALL_FEATURES=1)
+        target_link_libraries(fdx_shaderc_reflect PRIVATE
+            fdx_natives::tint
+            fdx_natives::tint_api_helpers
+            fdx_natives::tint_lang_core_ir_transform
+            fdx_natives::tint_lang_glsl_writer_helpers)
+    endif()
 endif()
 
 if(MSVC)

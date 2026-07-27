@@ -141,6 +141,7 @@ struct Context {
     VkQueue presentQueue = VK_NULL_HANDLE;
     uint32_t graphicsQueueFamily = UINT32_MAX;
     uint32_t presentQueueFamily = UINT32_MAX;
+    VkDeviceSize maxUniformBufferRange = 0;
     VkFormat surfaceFormat = VK_FORMAT_R8G8B8A8_UNORM;
     VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     VkExtent2D extent = {1, 1};
@@ -176,7 +177,6 @@ jlong handle(void* pointer) {
     return static_cast<jlong>(reinterpret_cast<intptr_t>(pointer));
 }
 
-constexpr int PBR_UNIFORM_BYTE_COUNT = 5088;
 constexpr int MAX_FRAME_DESCRIPTOR_SETS = 1024;
 constexpr int MAX_FRAME_SAMPLED_IMAGES = 4096;
 constexpr int MAX_FRAME_UNIFORM_BUFFERS = 1024;
@@ -1047,6 +1047,7 @@ void createDevice(Context* context) {
     std::vector<const char*> extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(context->physicalDevice, &properties);
+    context->maxUniformBufferRange = properties.limits.maxUniformBufferRange;
     bool deviceIsVulkan11 = VK_VERSION_MAJOR(properties.apiVersion) > 1
             || (VK_VERSION_MAJOR(properties.apiVersion) == 1 && VK_VERSION_MINOR(properties.apiVersion) >= 1);
     if (!deviceIsVulkan11) {
@@ -2183,19 +2184,24 @@ void bindUniformDescriptor(Context* context, Pipeline* pipeline, const void* sou
     if (!pipeline->uniformBufferEnabled) {
         return;
     }
-    if (size != PBR_UNIFORM_BYTE_COUNT) {
-        throw std::runtime_error("Android Vulkan uniform upload has an unexpected size");
+    if (size <= 0) {
+        throw std::runtime_error("Android Vulkan uniform uploads require a positive size");
     }
-    TransientBuffer uniformBuffer = createHostVisibleBuffer(context, PBR_UNIFORM_BYTE_COUNT,
+    if (context->maxUniformBufferRange > 0
+            && static_cast<uint64_t>(size) > context->maxUniformBufferRange) {
+        throw std::runtime_error("Android Vulkan uniform upload exceeds maxUniformBufferRange");
+    }
+    VkDeviceSize byteCount = static_cast<VkDeviceSize>(size);
+    TransientBuffer uniformBuffer = createHostVisibleBuffer(context, byteCount,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, "Could not create Android Vulkan uniform buffer");
     try {
-        copyToHostVisibleBuffer(context, &uniformBuffer, source, PBR_UNIFORM_BYTE_COUNT);
+        copyToHostVisibleBuffer(context, &uniformBuffer, source, byteCount);
         VkDescriptorSet descriptorSet = allocateDescriptorSet(context, pipeline->uniformDescriptorSetLayout);
 
         VkDescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = uniformBuffer.buffer;
         bufferInfo.offset = 0;
-        bufferInfo.range = PBR_UNIFORM_BYTE_COUNT;
+        bufferInfo.range = byteCount;
 
         VkWriteDescriptorSet descriptorWrite{};
         descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -2527,14 +2533,14 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createRenderPipeline(J
         jlong contextHandle, jlong shaderModuleHandle, jint colorFormat, jint primitiveTopology,
         jintArray vertexStridesArray, jintArray vertexStepModesArray, jintArray attributeBindingsArray,
         jintArray attributeLocationsArray, jintArray attributeFormatsArray, jintArray attributeOffsetsArray,
-        jint sampledTextureCountValue, jboolean pbrUniformsEnabled, jboolean depthTestEnabled,
+        jint sampledTextureCountValue, jboolean uniformBufferEnabled, jboolean depthTestEnabled,
         jboolean depthWriteEnabled) {
     Context* context = ptr<Context>(contextHandle);
     ShaderModule* shaderModule = ptr<ShaderModule>(shaderModuleHandle);
     Pipeline* pipeline = new Pipeline();
     pipeline->context = context;
     pipeline->sampledTextureCount = static_cast<int>(sampledTextureCountValue);
-    pipeline->uniformBufferEnabled = pbrUniformsEnabled == JNI_TRUE;
+    pipeline->uniformBufferEnabled = uniformBufferEnabled == JNI_TRUE;
     pipeline->uniformDescriptorSetIndex = pipeline->sampledTextureCount > 0 ? 1 : 0;
 
     try {
@@ -2923,6 +2929,10 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_bindUniforms(JNIEnv* e
         void* source = env->GetDirectBufferAddress(data);
         if (source == nullptr) {
             throw std::runtime_error("Android Vulkan uniform uploads require a direct ByteBuffer");
+        }
+        jlong capacity = env->GetDirectBufferCapacity(data);
+        if (size <= 0 || capacity < 0 || static_cast<jlong>(size) > capacity) {
+            throw std::runtime_error("Android Vulkan uniform upload exceeds the direct ByteBuffer capacity");
         }
         bindUniformDescriptor(context, pipeline, source, static_cast<int>(size));
     } catch (const std::exception& error) {

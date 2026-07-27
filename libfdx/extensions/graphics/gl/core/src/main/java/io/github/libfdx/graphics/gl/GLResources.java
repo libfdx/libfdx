@@ -3,7 +3,7 @@ package io.github.libfdx.graphics.gl;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.RenderPipeline;
-import io.github.libfdx.graphics.ShaderModule;
+import io.github.libfdx.graphics.shader.ShaderModule;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureView;
 

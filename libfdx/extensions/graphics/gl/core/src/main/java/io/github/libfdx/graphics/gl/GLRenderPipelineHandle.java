@@ -3,7 +3,14 @@ package io.github.libfdx.graphics.gl;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.RenderPipeline;
+import io.github.libfdx.graphics.RenderTargetLayout;
+import io.github.libfdx.graphics.shader.reflection.ShaderBinding;
+import io.github.libfdx.graphics.shader.target.ShaderBindingRemap;
+import io.github.libfdx.graphics.shader.target.ShaderTargetBinding;
 import io.github.libfdx.graphics.VertexLayout;
+import io.github.libfdx.graphics.internal.ShaderRenderBindings;
+
+import java.util.ArrayList;
 
 /**
  * Represents a GL render pipeline handle.
@@ -11,8 +18,6 @@ import io.github.libfdx.graphics.VertexLayout;
  * @author xpenatan
  */
 final class GLRenderPipelineHandle implements RenderPipeline {
-    static final int PBR_UNIFORM_BYTE_COUNT = 5328;
-
     private final ProviderId providerId;
     private final GLApi gl;
     private final GLResourceDomain resourceDomain;
@@ -22,13 +27,17 @@ final class GLRenderPipelineHandle implements RenderPipeline {
     private final int sampledTextureCount;
     private final boolean depthTestEnabled;
     private final boolean depthWriteEnabled;
-    private final int pbrUniformBuffer;
+    private final int uniformBuffer;
+    private final ShaderRenderBindings resourceBindings;
+    private final RenderTargetLayout targetLayout;
+    private final String[][] textureUniformNames;
     private boolean disposed;
 
     GLRenderPipelineHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain,
             GLShaderModuleHandle shaderModule, PrimitiveTopology primitiveTopology,
             VertexLayout[] vertexLayouts, int sampledTextureCount, boolean depthTestEnabled,
-            boolean depthWriteEnabled, int pbrUniformBuffer) {
+            boolean depthWriteEnabled, int uniformBuffer, ShaderRenderBindings resourceBindings,
+            RenderTargetLayout targetLayout) {
         this.providerId = providerId;
         this.gl = gl;
         this.resourceDomain = resourceDomain;
@@ -38,7 +47,10 @@ final class GLRenderPipelineHandle implements RenderPipeline {
         this.sampledTextureCount = sampledTextureCount;
         this.depthTestEnabled = depthTestEnabled;
         this.depthWriteEnabled = depthWriteEnabled;
-        this.pbrUniformBuffer = pbrUniformBuffer;
+        this.uniformBuffer = uniformBuffer;
+        this.resourceBindings = resourceBindings;
+        this.targetLayout = targetLayout;
+        textureUniformNames = textureUniformNames(shaderModule, resourceBindings);
         shaderModule.retainForPipeline();
     }
 
@@ -82,12 +94,25 @@ final class GLRenderPipelineHandle implements RenderPipeline {
         return depthWriteEnabled;
     }
 
-    int pbrUniformBuffer() {
-        return pbrUniformBuffer;
+    int uniformBuffer() {
+        return uniformBuffer;
     }
 
-    boolean pbrUniformBufferEnabled() {
-        return pbrUniformBuffer != 0;
+    boolean uniformBufferEnabled() {
+        return uniformBuffer != 0;
+    }
+
+    ShaderRenderBindings resourceBindings() {
+        return resourceBindings;
+    }
+
+    String[] textureUniformNames(int slot) {
+        return textureUniformNames[slot];
+    }
+
+    @Override
+    public RenderTargetLayout targetLayout() {
+        return targetLayout;
     }
 
     /**
@@ -120,9 +145,9 @@ final class GLRenderPipelineHandle implements RenderPipeline {
         if (disposed) {
             return;
         }
-        if (pbrUniformBuffer != 0) {
+        if (uniformBuffer != 0) {
             if (resourceDomain.makeAnyContextCurrent()) {
-                gl.deleteBuffer(pbrUniformBuffer);
+                gl.deleteBuffer(uniformBuffer);
             }
         }
         disposed = true;
@@ -137,5 +162,36 @@ final class GLRenderPipelineHandle implements RenderPipeline {
     @Override
     public boolean isDisposed() {
         return disposed;
+    }
+
+    private static String[][] textureUniformNames(GLShaderModuleHandle module,
+            ShaderRenderBindings bindings) {
+        String[][] result = new String[bindings.sampledTextureCount()][];
+        for (int slot = 0; slot < result.length; slot++) {
+            ArrayList<String> names = new ArrayList<String>();
+            addTargetNames(module, bindings.texture(slot), names);
+            addTargetNames(module, bindings.sampler(slot), names);
+            result[slot] = names.toArray(new String[0]);
+        }
+        return result;
+    }
+
+    private static void addTargetNames(GLShaderModuleHandle module, ShaderBinding binding,
+            ArrayList<String> names) {
+        if (binding == null || module.translatedInterface() == null) {
+            return;
+        }
+        for (ShaderBindingRemap remap : module.translatedInterface().bindings()) {
+            if (remap.sourceGroup() != binding.group()
+                    || remap.sourceBinding() != binding.binding()) {
+                continue;
+            }
+            for (ShaderTargetBinding target : remap.targets()) {
+                String name = target.name();
+                if (!name.isEmpty() && !names.contains(name)) {
+                    names.add(name);
+                }
+            }
+        }
     }
 }

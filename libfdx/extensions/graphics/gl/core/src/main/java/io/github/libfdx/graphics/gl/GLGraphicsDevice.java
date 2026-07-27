@@ -5,20 +5,26 @@ import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
 import io.github.libfdx.graphics.BufferUsage;
+import io.github.libfdx.graphics.GraphicsCapabilities;
 import io.github.libfdx.graphics.GraphicsDevice;
+import io.github.libfdx.graphics.GraphicsFeature;
+import io.github.libfdx.graphics.GraphicsLimits;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
-import io.github.libfdx.graphics.ShaderBinding;
-import io.github.libfdx.graphics.ShaderBindingType;
-import io.github.libfdx.graphics.ShaderLanguage;
-import io.github.libfdx.graphics.ShaderModule;
-import io.github.libfdx.graphics.ShaderModuleDescriptor;
-import io.github.libfdx.graphics.ShaderModuleDescriptors;
-import io.github.libfdx.graphics.ShaderTarget;
+import io.github.libfdx.graphics.shader.reflection.ShaderBinding;
+import io.github.libfdx.graphics.shader.target.ShaderBindingRemap;
+import io.github.libfdx.graphics.shader.ShaderLanguage;
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptors;
+import io.github.libfdx.graphics.shader.ShaderProfile;
+import io.github.libfdx.graphics.shader.target.ShaderTargetBinding;
+import io.github.libfdx.graphics.shader.target.ShaderTarget;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.TextureUsage;
+import io.github.libfdx.graphics.internal.ShaderRenderBindings;
 
 import java.nio.ByteBuffer;
 
@@ -28,6 +34,28 @@ import java.nio.ByteBuffer;
  * @author xpenatan
  */
 final class GLGraphicsDevice implements GraphicsDevice {
+    private static final GraphicsCapabilities CAPABILITIES = GraphicsCapabilities.builder()
+            .profile(ShaderProfile.PORTABLE_WEBGL2)
+            .profile(ShaderProfile.PORTABLE_WEBGPU)
+            .feature(GraphicsFeature.INDEXED_DRAW)
+            .feature(GraphicsFeature.INSTANCED_DRAW)
+            .feature(GraphicsFeature.DEPTH_STENCIL_ATTACHMENTS)
+            .colorFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
+                    TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB)
+            .depthStencilFormats(TextureFormat.DEPTH24_STENCIL8, TextureFormat.DEPTH32_FLOAT)
+            .sampleCounts(1)
+            .limits(GraphicsLimits.builder()
+                    .maxBindGroups(2)
+                    .maxBindingsPerGroup(32)
+                    .maxUniformBuffersPerStage(1)
+                    .maxSampledTexturesPerStage(16)
+                    .maxSamplersPerStage(16)
+                    .maxColorAttachments(1)
+                    .maxVertexBuffers(4)
+                    .maxVertexAttributes(16)
+                    .maxUniformBufferBindingSize(64L * 1024L)
+                    .build())
+            .build();
     private final ProviderId providerId;
     private final GLApi gl;
     private final GLResourceDomain resourceDomain;
@@ -114,6 +142,7 @@ final class GLGraphicsDevice implements GraphicsDevice {
         if (descriptor == null) {
             throw new FdxException("TextureDescriptor cannot be null");
         }
+        descriptor.validate(capabilities());
         if (!descriptor.usage().sampled() && !descriptor.usage().renderAttachment()) {
             throw new FdxException("GL texture usage must allow sampling or render attachment binding");
         }
@@ -171,6 +200,9 @@ final class GLGraphicsDevice implements GraphicsDevice {
             throw new FdxException("ShaderModuleDescriptor cannot be null");
         }
         descriptor = ShaderModuleDescriptors.requireTarget(descriptor, ShaderTarget.forProvider(providerId), "GL");
+        if (descriptor.targetArtifact() != null) {
+            shaderTargetSupport().require(descriptor.targetArtifact());
+        }
         if (!descriptor.hasSource(ShaderLanguage.GLSL)) {
             throw new FdxException("GL currently supports GLSL shader modules only");
         }
@@ -184,7 +216,9 @@ final class GLGraphicsDevice implements GraphicsDevice {
             fragmentShader = compileShader(GLShaderType.FRAGMENT, descriptor.glslFragmentSource(),
                     descriptor.label() + " fragment");
             program = linkProgram(vertexShader, fragmentShader, descriptor.label());
-            GLShaderModuleHandle handle = new GLShaderModuleHandle(providerId, gl, resourceDomain, program);
+            GLShaderModuleHandle handle = new GLShaderModuleHandle(providerId, gl, resourceDomain, program,
+                    descriptor.reflection(), descriptor.targetArtifact() != null
+                    ? descriptor.targetArtifact().translatedInterface() : null);
             gl.deleteShader(vertexShader);
             vertexShader = 0;
             gl.deleteShader(fragmentShader);
@@ -210,15 +244,22 @@ final class GLGraphicsDevice implements GraphicsDevice {
         }
         GLShaderModuleHandle shaderModule = GLResources.requireShaderModule(descriptor.shaderModule(), resourceDomain,
                 "Render pipeline shader module");
+        descriptor.validate(capabilities());
+        if (descriptor.renderTargetLayout().colorAttachmentCount() != 1) {
+            throw new FdxException("GL currently requires exactly one color attachment");
+        }
+        ShaderRenderBindings resourceBindings = ShaderRenderBindings.from(descriptor);
         attachment.makeCurrent();
-        int pbrUniformBuffer = createPbrUniformBuffer(descriptor);
+        bindUniformBlock(shaderModule, resourceBindings);
+        int uniformBuffer = createUniformBuffer(resourceBindings);
         try {
             return new GLRenderPipelineHandle(providerId, gl, resourceDomain, shaderModule,
                     descriptor.primitiveTopology(), descriptor.vertexLayouts(), descriptor.sampledTextureCount(),
-                    descriptor.depthTestEnabled(), descriptor.depthWriteEnabled(), pbrUniformBuffer);
+                    descriptor.depthTestEnabled(), descriptor.depthWriteEnabled(), uniformBuffer,
+                    resourceBindings, descriptor.renderTargetLayout());
         }
         catch (RuntimeException | Error failure) {
-            rollbackGeneratedBuffer(pbrUniformBuffer, failure);
+            rollbackGeneratedBuffer(uniformBuffer, failure);
             throw failure;
         }
     }
@@ -250,8 +291,6 @@ final class GLGraphicsDevice implements GraphicsDevice {
                 String log = gl.programInfoLog(program);
                 throw new FdxException("Could not link GL shader module " + label + ": " + log);
             }
-            bindUniformBlock(program, "v_uniforms_block_ubo", 0);
-            bindUniformBlock(program, "f_uniforms_block_ubo", 0);
             return program;
         }
         catch (RuntimeException | Error failure) {
@@ -260,14 +299,14 @@ final class GLGraphicsDevice implements GraphicsDevice {
         }
     }
 
-    private int createPbrUniformBuffer(RenderPipelineDescriptor descriptor) {
-        if (!usesPbrUniformBlock(descriptor)) {
+    private int createUniformBuffer(ShaderRenderBindings bindings) {
+        if (!bindings.hasUniformBuffer()) {
             return 0;
         }
         int buffer = gl.genBuffer();
         try {
             gl.bindUniformBuffer(buffer);
-            gl.uniformBufferData(GLRenderPipelineHandle.PBR_UNIFORM_BYTE_COUNT);
+            gl.uniformBufferData(bindings.uniformByteCount());
             gl.bindUniformBuffer(0);
             return buffer;
         }
@@ -364,18 +403,36 @@ final class GLGraphicsDevice implements GraphicsDevice {
         }
     }
 
-    private boolean usesPbrUniformBlock(RenderPipelineDescriptor descriptor) {
-        ShaderBinding[] bindings = descriptor.shaderReflection().bindings();
-        for (int i = 0; i < bindings.length; i++) {
-            ShaderBinding binding = bindings[i];
-            if ((binding.group() == 0 || binding.group() == 1)
-                    && binding.binding() == 0
-                    && binding.type() == ShaderBindingType.UNIFORM_BUFFER
-                    && "uniforms".equals(binding.name())) {
-                return true;
+    private void bindUniformBlock(GLShaderModuleHandle module, ShaderRenderBindings bindings) {
+        if (!bindings.hasUniformBuffer()) {
+            return;
+        }
+        ShaderBinding uniform = bindings.uniformBuffer();
+        boolean mapped = false;
+        if (module.translatedInterface() != null) {
+            for (ShaderBindingRemap remap : module.translatedInterface().bindings()) {
+                if (remap.sourceGroup() != uniform.group()
+                        || remap.sourceBinding() != uniform.binding()) {
+                    continue;
+                }
+                for (ShaderTargetBinding target : remap.targets()) {
+                    if (!target.name().isEmpty()) {
+                        bindUniformBlock(module.program(), target.name(), 0);
+                        mapped = true;
+                    }
+                }
             }
         }
-        return false;
+        if (!mapped) {
+            bindUniformBlock(module.program(), uniform.name(), 0);
+            bindUniformBlock(module.program(), "v_" + uniform.name() + "_block_ubo", 0);
+            bindUniformBlock(module.program(), "f_" + uniform.name() + "_block_ubo", 0);
+        }
+    }
+
+    @Override
+    public GraphicsCapabilities capabilities() {
+        return CAPABILITIES;
     }
 
     private String normalizeGlslSource(String source) {

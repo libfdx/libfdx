@@ -2,9 +2,12 @@ package io.github.libfdx.tests;
 
 import io.github.libfdx.application.ApplicationListener;
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.graphics.GraphicsCapabilities;
+import io.github.libfdx.graphics.GraphicsFeature;
 import io.github.libfdx.tests.graphics.Billboard3DTest;
 import io.github.libfdx.tests.graphics.CameraControllersShowcaseTest;
 import io.github.libfdx.tests.graphics.CircleTest;
+import io.github.libfdx.tests.graphics.ComputeBufferTest;
 import io.github.libfdx.tests.graphics.DepthPreserveTest;
 import io.github.libfdx.tests.graphics.DynamicTextureTest;
 import io.github.libfdx.tests.graphics.Fog2DTest;
@@ -22,9 +25,14 @@ import io.github.libfdx.tests.graphics.PointLight3DTest;
 import io.github.libfdx.tests.graphics.ReadbackTest;
 import io.github.libfdx.tests.graphics.RecordedResourceRewriteTest;
 import io.github.libfdx.tests.graphics.RenderTargetChainTest;
+import io.github.libfdx.tests.graphics.RenderTargetCompatibilityTest;
 import io.github.libfdx.tests.graphics.ScissorViewportTest;
 import io.github.libfdx.tests.graphics.ShadowMap3DTest;
 import io.github.libfdx.tests.graphics.ShaderRuntimeTest;
+import io.github.libfdx.tests.graphics.ShaderGraphProgramTest;
+import io.github.libfdx.tests.graphics.ShaderGraphComputeTest;
+import io.github.libfdx.tests.graphics.ShaderGraphEditorVisualTest;
+import io.github.libfdx.tests.graphics.ShaderGraphTechniqueTest;
 import io.github.libfdx.tests.graphics.ShaderSceneTest;
 import io.github.libfdx.tests.graphics.Skybox3DTest;
 import io.github.libfdx.tests.graphics.SkinnedModelBatchTest;
@@ -35,6 +43,7 @@ import io.github.libfdx.tests.graphics.SpriteBatchTest;
 import io.github.libfdx.tests.graphics.TextureTest;
 import io.github.libfdx.tests.graphics.TileMapRuntimeTest;
 import io.github.libfdx.tests.graphics.TriangleTest;
+import io.github.libfdx.tests.graphics.UiCustomSurfaceVisualTest;
 import io.github.libfdx.tests.ui.UiKitTest;
 
 import java.util.Locale;
@@ -72,15 +81,17 @@ public final class TestSelector {
         private final int defaultWidth;
         private final int defaultHeight;
         private final TestFactory factory;
+        private final GraphicsFeature[] requiredFeatures;
 
         private TestDescriptor(String name, String displayName, String category, int defaultWidth, int defaultHeight,
-                TestFactory factory) {
+                TestFactory factory, GraphicsFeature[] requiredFeatures) {
             this.name = name;
             this.displayName = displayName;
             this.category = category;
             this.defaultWidth = defaultWidth;
             this.defaultHeight = defaultHeight;
             this.factory = factory;
+            this.requiredFeatures = requiredFeatures.clone();
         }
 
         /**
@@ -128,6 +139,45 @@ public final class TestSelector {
             return defaultHeight;
         }
 
+        /**
+         * Returns whether the supplied graphics capabilities can run this test.
+         *
+         * @param capabilities the graphics capabilities
+         * @return true when every required feature is supported
+         */
+        public boolean supports(GraphicsCapabilities capabilities) {
+            if (capabilities == null) {
+                return false;
+            }
+            for (int i = 0; i < requiredFeatures.length; i++) {
+                if (!capabilities.supports(requiredFeatures[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /**
+         * Returns a comma-separated description of unsupported required features.
+         *
+         * @param capabilities the graphics capabilities
+         * @return unsupported feature names, or an empty string
+         */
+        public String unsupportedFeatures(GraphicsCapabilities capabilities) {
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < requiredFeatures.length; i++) {
+                GraphicsFeature feature = requiredFeatures[i];
+                if (capabilities != null && capabilities.supports(feature)) {
+                    continue;
+                }
+                if (builder.length() > 0) {
+                    builder.append(", ");
+                }
+                builder.append(feature.name());
+            }
+            return builder.toString();
+        }
+
         ApplicationListener create(long exitAfterFrames) {
             return factory.create(exitAfterFrames);
         }
@@ -157,18 +207,26 @@ public final class TestSelector {
     private static final String CASCADE_SHADOW_MAP_3D = "cascade-shadow-map-3d";
     private static final String CAMERA_CONTROLLERS = "camera-controllers";
     private static final String READBACK = "readback";
+    private static final String COMPUTE_BUFFER = "compute-buffer";
     private static final String STORAGE_RUNTIME = "storage-runtime";
     private static final String SHADER_RUNTIME = "shader-runtime";
+    private static final String SHADER_GRAPH_PROGRAM = "shader-graph-program";
+    private static final String SHADER_GRAPH_SPRITE = "shader-graph-sprite";
+    private static final String SHADER_GRAPH_COMPUTE = "shader-graph-compute";
+    private static final String SHADER_GRAPH_TECHNIQUE = "shader-graph-technique";
     private static final String SHADER_SCENE = "shader-scene";
     private static final String MESH_BASIC = "mesh-basic";
     private static final String INSTANCING_BASIC = "instancing-basic";
     private static final String SCISSOR_VIEWPORT = "scissor-viewport";
     private static final String RENDER_TARGET_CHAIN = "render-target-chain";
+    private static final String RENDER_TARGET_COMPATIBILITY = "render-target-compatibility";
     private static final String RECORDED_RESOURCE_REWRITE = "recorded-resource-rewrite";
     private static final String DYNAMIC_TEXTURE = "dynamic-texture";
     private static final String DEPTH_PRESERVE = "depth-preserve";
     private static final String SPRITE_BATCH_STRESS = "sprite-batch-stress";
     private static final String UI = "ui";
+    private static final String UI_CUSTOM_SURFACE = "ui-custom-surface";
+    private static final String SHADER_GRAPH_EDITOR = "shader-graph-editor";
     public static final String SELECTOR_NAME = "selector";
     public static final String AUTO_TEST_NAME = "auto";
     public static final String DEFAULT_TEST_NAME = UI;
@@ -201,6 +259,13 @@ public final class TestSelector {
                 @Override
                 public ApplicationListener create(long exitAfterFrames) {
                     return new SpriteBatchTest(exitAfterFrames);
+                }
+            }),
+            descriptor(SHADER_GRAPH_SPRITE, "Shader graph sprite batch",
+                    "Graphics 2D", 640, 480, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new SpriteBatchTest(exitAfterFrames, true);
                 }
             }),
             descriptor(OUTLINE_2D, "Outline 2D", "Graphics 2D", 640, 480, new TestFactory() {
@@ -317,6 +382,24 @@ public final class TestSelector {
                     return new ReadbackTest(exitAfterFrames);
                 }
             }),
+            descriptor(COMPUTE_BUFFER, "Compute buffer", "Graphics", 640, 480,
+                    new TestFactory() {
+                        @Override
+                        public ApplicationListener create(long exitAfterFrames) {
+                            return new ComputeBufferTest(exitAfterFrames);
+                        }
+                    }, GraphicsFeature.COMPUTE),
+            descriptor(RENDER_TARGET_COMPATIBILITY, "Render target compatibility",
+                     "Graphics", 640, 480, new TestFactory() {
+                         @Override
+                         public ApplicationListener create(long exitAfterFrames) {
+                             return new RenderTargetCompatibilityTest(exitAfterFrames);
+                         }
+                     }, GraphicsFeature.MULTIPLE_COLOR_ATTACHMENTS,
+                     GraphicsFeature.EXPLICIT_DEPTH_STENCIL_ATTACHMENTS,
+                     GraphicsFeature.MULTISAMPLE,
+                     GraphicsFeature.RESOLVE_ATTACHMENTS,
+                     GraphicsFeature.COMPLETE_RENDER_PIPELINE_STATE),
             descriptor(STORAGE_RUNTIME, "Storage runtime", "Runtime", 640, 480, new TestFactory() {
                 @Override
                 public ApplicationListener create(long exitAfterFrames) {
@@ -329,6 +412,31 @@ public final class TestSelector {
                     return new ShaderRuntimeTest(exitAfterFrames);
                 }
             }),
+            descriptor(SHADER_GRAPH_PROGRAM, "Shader graph program",
+                    "Graphics", 640, 480, new TestFactory() {
+                        @Override
+                        public ApplicationListener create(long exitAfterFrames) {
+                            return new ShaderGraphProgramTest(exitAfterFrames);
+                        }
+                    }),
+            descriptor(SHADER_GRAPH_COMPUTE, "Shader graph compute",
+                    "Graphics", 640, 480, new TestFactory() {
+                        @Override
+                        public ApplicationListener create(long exitAfterFrames) {
+                            return new ShaderGraphComputeTest(exitAfterFrames);
+                        }
+                    }, GraphicsFeature.COMPUTE,
+                    GraphicsFeature.STORAGE_BUFFERS,
+                    GraphicsFeature.STORAGE_TEXTURES,
+                    GraphicsFeature.ATOMICS),
+            descriptor(SHADER_GRAPH_TECHNIQUE, "Shader graph technique",
+                    "Graphics", 640, 480, new TestFactory() {
+                        @Override
+                        public ApplicationListener create(long exitAfterFrames) {
+                            return new ShaderGraphTechniqueTest(exitAfterFrames);
+                        }
+                    }, GraphicsFeature.EXPLICIT_DEPTH_STENCIL_ATTACHMENTS,
+                    GraphicsFeature.COMPLETE_RENDER_PIPELINE_STATE),
             descriptor(SHADER_SCENE, "Shader scene", "Graphics", 640, 480, new TestFactory() {
                 @Override
                 public ApplicationListener create(long exitAfterFrames) {
@@ -388,6 +496,18 @@ public final class TestSelector {
                 @Override
                 public ApplicationListener create(long exitAfterFrames) {
                     return new UiKitTest(exitAfterFrames);
+                }
+            }),
+            descriptor(UI_CUSTOM_SURFACE, "UI custom surface", "UI", 960, 600, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new UiCustomSurfaceVisualTest(exitAfterFrames);
+                }
+            }),
+            descriptor(SHADER_GRAPH_EDITOR, "Shader graph editor", "UI", 1440, 900, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new ShaderGraphEditorVisualTest(exitAfterFrames);
                 }
             })
     };
@@ -510,7 +630,8 @@ public final class TestSelector {
     }
 
     private static TestDescriptor descriptor(String name, String displayName, String category, int defaultWidth,
-            int defaultHeight, TestFactory factory) {
-        return new TestDescriptor(name, displayName, category, defaultWidth, defaultHeight, factory);
+            int defaultHeight, TestFactory factory, GraphicsFeature... requiredFeatures) {
+        return new TestDescriptor(name, displayName, category, defaultWidth, defaultHeight, factory,
+                requiredFeatures);
     }
 }

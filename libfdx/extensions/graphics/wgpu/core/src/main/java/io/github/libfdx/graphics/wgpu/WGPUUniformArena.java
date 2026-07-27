@@ -12,6 +12,7 @@ import com.github.xpenatan.webgpu.WGPULimits;
 import com.github.xpenatan.webgpu.WGPURenderPassEncoder;
 import com.github.xpenatan.webgpu.WGPUVectorBindGroupEntry;
 import com.github.xpenatan.webgpu.WGPUVectorInt;
+import io.github.libfdx.core.FdxException;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -19,49 +20,56 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 
 /**
- * Reuses dynamically offset uniform buffers and bind groups across submitted frames.
+ * Reuses dynamically offset uniform buffers and bind groups across submitted
+ * frames, partitioned by reflected binding size.
  */
 final class WGPUUniformArena {
     private static final int SLOTS_PER_CHUNK = 64;
 
     private final WGPUContext context;
-    private final int stride;
-    private final ArrayList<Chunk> chunks = new ArrayList<Chunk>();
+    private final int alignment;
+    private final ArrayList<SizeClass> sizes = new ArrayList<SizeClass>();
     private final WGPUVectorInt dynamicOffsets = new WGPUVectorInt();
-    private int allocationCursor;
     private boolean disposed;
 
     WGPUUniformArena(WGPUContext context) {
         this.context = context;
         WGPULimits limits = WGPULimits.obtain();
         context.nativeDevice().getLimits(limits);
-        int alignment = Math.max(256, limits.getMinUniformBufferOffsetAlignment());
-        stride = align(WGPURenderPass.PBR_UNIFORM_BYTE_COUNT, alignment);
+        alignment = Math.max(256, limits.getMinUniformBufferOffsetAlignment());
     }
 
     void beginFrame() {
-        allocationCursor = 0;
+        for (int i = 0; i < sizes.size(); i++) {
+            sizes.get(i).allocationCursor = 0;
+        }
     }
 
-    int bind(WGPURenderPassEncoder pass, WGPURenderPipelineHandle pipeline, ByteBuffer data,
-            int allocationIndex) {
+    int bind(WGPURenderPassEncoder pass, WGPURenderPipelineHandle pipeline,
+            int uniformIndex, ByteBuffer data, int allocationIndex) {
+        int byteCount = pipeline.resourceBindings().uniformByteCount(uniformIndex);
+        if (byteCount <= 0 || data == null || data.capacity() < byteCount) {
+            throw new FdxException("WGPU uniform upload does not match the reflected binding size");
+        }
+        SizeClass size = sizeClass(byteCount);
         boolean upload = allocationIndex < 0;
         if (upload) {
-            allocationIndex = allocationCursor++;
+            allocationIndex = size.allocationCursor++;
         }
         int chunkIndex = allocationIndex / SLOTS_PER_CHUNK;
         int slot = allocationIndex % SLOTS_PER_CHUNK;
-        Chunk chunk = chunk(chunkIndex);
-        int offset = slot * stride;
+        Chunk chunk = size.chunk(chunkIndex);
+        int offset = slot * size.stride;
         if (upload) {
             data.position(0);
-            data.limit(WGPURenderPass.PBR_UNIFORM_BYTE_COUNT);
-            context.nativeQueue().writeBuffer(chunk.buffer, offset, data, WGPURenderPass.PBR_UNIFORM_BYTE_COUNT);
+            data.limit(byteCount);
+            context.nativeQueue().writeBuffer(chunk.buffer, offset, data, byteCount);
         }
-        WGPUBindGroup bindGroup = chunk.bindGroup(pipeline.uniformBindGroupLayout());
+        WGPUBindGroup bindGroup = chunk.bindGroup(pipeline, uniformIndex);
         dynamicOffsets.clear();
         dynamicOffsets.push_back(offset);
-        pass.setBindGroup(pipeline.uniformBindGroupIndex(), bindGroup, dynamicOffsets);
+        pass.setBindGroup(pipeline.uniformBindGroupIndex(uniformIndex),
+                bindGroup, dynamicOffsets);
         return allocationIndex;
     }
 
@@ -70,9 +78,12 @@ final class WGPUUniformArena {
             return;
         }
         WGPUCleanup cleanup = new WGPUCleanup();
-        for (int i = 0; i < chunks.size(); i++) {
-            WGPUBindGroup bindGroup = chunks.get(i).bindGroups.remove(layout);
-            releaseBindGroup(bindGroup, cleanup);
+        for (int i = 0; i < sizes.size(); i++) {
+            SizeClass size = sizes.get(i);
+            for (int j = 0; j < size.chunks.size(); j++) {
+                WGPUBindGroup bindGroup = size.chunks.get(j).bindGroups.remove(layout);
+                releaseBindGroup(bindGroup, cleanup);
+            }
         }
         cleanup.throwIfFailed();
     }
@@ -83,22 +94,27 @@ final class WGPUUniformArena {
         }
         disposed = true;
         WGPUCleanup cleanup = new WGPUCleanup();
-        for (int i = 0; i < chunks.size(); i++) {
-            chunks.get(i).dispose(cleanup);
+        for (int i = 0; i < sizes.size(); i++) {
+            sizes.get(i).dispose(cleanup);
         }
-        chunks.clear();
+        sizes.clear();
         cleanup.run(dynamicOffsets::dispose);
         cleanup.throwIfFailed();
     }
 
-    private Chunk chunk(int index) {
-        while (chunks.size() <= index) {
-            chunks.add(new Chunk(chunks.size()));
+    private SizeClass sizeClass(int byteCount) {
+        for (int i = 0; i < sizes.size(); i++) {
+            SizeClass size = sizes.get(i);
+            if (size.byteCount == byteCount) {
+                return size;
+            }
         }
-        return chunks.get(index);
+        SizeClass created = new SizeClass(byteCount);
+        sizes.add(created);
+        return created;
     }
 
-    private int align(int value, int alignment) {
+    private int align(int value) {
         return ((value + alignment - 1) / alignment) * alignment;
     }
 
@@ -114,16 +130,44 @@ final class WGPUUniformArena {
         cleanup.run(bindGroup::dispose);
     }
 
+    private final class SizeClass {
+        final int byteCount;
+        final int stride;
+        final ArrayList<Chunk> chunks = new ArrayList<Chunk>();
+        int allocationCursor;
+
+        SizeClass(int byteCount) {
+            this.byteCount = byteCount;
+            stride = align(byteCount);
+        }
+
+        Chunk chunk(int index) {
+            while (chunks.size() <= index) {
+                chunks.add(new Chunk(this, chunks.size()));
+            }
+            return chunks.get(index);
+        }
+
+        void dispose(WGPUCleanup cleanup) {
+            for (int i = 0; i < chunks.size(); i++) {
+                chunks.get(i).dispose(cleanup);
+            }
+            chunks.clear();
+        }
+    }
+
     private final class Chunk {
+        private final SizeClass size;
         private final WGPUBuffer buffer;
         private final Map<WGPUBindGroupLayout, WGPUBindGroup> bindGroups =
                 new IdentityHashMap<WGPUBindGroupLayout, WGPUBindGroup>();
 
-        Chunk(int index) {
+        Chunk(SizeClass size, int index) {
+            this.size = size;
             WGPUBufferDescriptor descriptor = WGPUBufferDescriptor.obtain();
             descriptor.setNextInChain(WGPUChainedStruct.NULL);
-            descriptor.setLabel("libfdx uniform arena " + index);
-            descriptor.setSize(stride * SLOTS_PER_CHUNK);
+            descriptor.setLabel("libfdx uniform arena " + size.byteCount + " bytes " + index);
+            descriptor.setSize(size.stride * SLOTS_PER_CHUNK);
             descriptor.setUsage(WGPUBufferUsage.CopyDst.or(WGPUBufferUsage.Uniform));
             descriptor.setMappedAtCreation(false);
             WGPUBuffer created = new WGPUBuffer();
@@ -143,7 +187,10 @@ final class WGPUUniformArena {
             }
         }
 
-        WGPUBindGroup bindGroup(WGPUBindGroupLayout layout) {
+        WGPUBindGroup bindGroup(WGPURenderPipelineHandle pipeline,
+                int uniformIndex) {
+            WGPUBindGroupLayout layout =
+                    pipeline.uniformBindGroupLayout(uniformIndex);
             WGPUBindGroup bindGroup = bindGroups.get(layout);
             if (bindGroup != null) {
                 return bindGroup;
@@ -151,15 +198,16 @@ final class WGPUUniformArena {
             WGPUVectorBindGroupEntry entries = WGPUVectorBindGroupEntry.obtain();
             WGPUBindGroupEntry uniformEntry = WGPUBindGroupEntry.obtain();
             uniformEntry.setNextInChain(WGPUChainedStruct.NULL);
-            uniformEntry.setBinding(0);
+            uniformEntry.setBinding(pipeline.resourceBindings()
+                    .uniformBuffer(uniformIndex).binding());
             uniformEntry.setBuffer(buffer);
             uniformEntry.setOffset(0);
-            uniformEntry.setSize(WGPURenderPass.PBR_UNIFORM_BYTE_COUNT);
+            uniformEntry.setSize(size.byteCount);
             entries.push_back(uniformEntry);
 
             WGPUBindGroupDescriptor descriptor = WGPUBindGroupDescriptor.obtain();
             descriptor.setNextInChain(WGPUChainedStruct.NULL);
-            descriptor.setLabel("libfdx uniform arena bind group");
+            descriptor.setLabel("libfdx reflected uniform bind group");
             descriptor.setLayout(layout);
             descriptor.setEntries(entries);
             WGPUBindGroup created = new WGPUBindGroup();

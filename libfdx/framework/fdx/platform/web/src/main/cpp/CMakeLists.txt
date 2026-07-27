@@ -52,7 +52,7 @@ if(LIBFDX_ENABLE_SHADER_COMPILER)
         "${LIBFDX_SHADERC_SOURCE_DIR}/libfdx_shaderc.cpp")
 
     set(LIBFDX_WEB_EXPORTED_FUNCTIONS
-        "${LIBFDX_WEB_EXPORTED_FUNCTIONS},'_fdx_shaderc_compile_wgsl_handle','_fdx_shaderc_result_status','_fdx_shaderc_result_output_kind','_fdx_shaderc_result_output','_fdx_shaderc_result_output_size','_fdx_shaderc_result_diagnostics','_fdx_shaderc_result_free'")
+        "${LIBFDX_WEB_EXPORTED_FUNCTIONS},'_fdx_shaderc_compile_wgsl_handle','_fdx_shaderc_result_status','_fdx_shaderc_result_output_kind','_fdx_shaderc_result_output','_fdx_shaderc_result_output_size','_fdx_shaderc_result_diagnostics','_fdx_shaderc_result_reflection','_fdx_shaderc_result_reflection_size','_fdx_shaderc_result_target_interface','_fdx_shaderc_result_target_interface_size','_fdx_shaderc_result_free'")
     set(LIBFDX_WEB_EXPORTED_RUNTIME_METHODS
         "${LIBFDX_WEB_EXPORTED_RUNTIME_METHODS},'cwrap','lengthBytesUTF8','stringToUTF8','UTF8ToString'")
 endif()

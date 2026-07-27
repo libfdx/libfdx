@@ -38,8 +38,9 @@ public final class AutoTestApplication extends ApplicationAdapter {
          *
          * @param totalTests the total tests
          * @param failedTests the failed tests
+         * @param skippedTests the tests skipped for unavailable provider features
          */
-        void completed(int totalTests, int failedTests);
+        void completed(int totalTests, int failedTests, int skippedTests);
     }
 
     private static final String FREETYPE_FONT_ASSET = "font/freetype/lsans.ttf";
@@ -47,6 +48,7 @@ public final class AutoTestApplication extends ApplicationAdapter {
     private static final int DEFAULT_STABLE_FRAMES_REQUIRED = 10;
     private static final float DEFAULT_SPIKE_THRESHOLD_SECONDS = 0.10f;
     private static final float DEFAULT_LOAD_TIMEOUT_SECONDS = 15.0f;
+    private static final long MANAGED_TEST_FRAME_LIMIT = -1L;
 
     private final CompletionHandler completionHandler;
     private final boolean failOnComplete;
@@ -61,6 +63,7 @@ public final class AutoTestApplication extends ApplicationAdapter {
     private ApplicationListener currentTest;
     private int currentIndex = -1;
     private int completedTests;
+    private int skippedTests;
     private float testTimerSeconds;
     private float loadWaitSeconds;
     private float testDurationSeconds;
@@ -274,11 +277,20 @@ public final class AutoTestApplication extends ApplicationAdapter {
 
     private void nextTest() {
         currentIndex++;
+        while (currentIndex < tests.length && !tests[currentIndex].supports(graphics.device().capabilities())) {
+            TestSelector.TestDescriptor skipped = tests[currentIndex];
+            skippedTests++;
+            completedTests++;
+            System.out.println("[info] Auto test " + (currentIndex + 1) + "/" + tests.length + ": "
+                    + skipped.name() + " skipped; provider " + graphics.providerId().value()
+                    + " does not support " + skipped.unsupportedFeatures(graphics.device().capabilities()));
+            currentIndex++;
+        }
         if (currentIndex >= tests.length) {
             completed = true;
             printSummary();
             if (completionHandler != null) {
-                completionHandler.completed(tests.length, failures.size());
+                completionHandler.completed(tests.length, failures.size(), skippedTests);
             } else {
                 application.requestExit();
             }
@@ -297,7 +309,7 @@ public final class AutoTestApplication extends ApplicationAdapter {
         testTimerSeconds = 0.0f;
         System.out.println("[info] Auto test " + (currentIndex + 1) + "/" + tests.length + ": " + descriptor.name());
         try {
-            currentTest = descriptor.create(0L);
+            currentTest = descriptor.create(MANAGED_TEST_FRAME_LIMIT);
             currentTest.create(fdx);
             currentTest.resize(display.width(), display.height());
         } catch (Throwable error) {
@@ -387,9 +399,10 @@ public final class AutoTestApplication extends ApplicationAdapter {
         }
         summaryPrinted = true;
         int failed = completedFailureCount();
-        int passed = completedTests - failed;
+        int passed = completedTests - failed - skippedTests;
         if (completed) {
-            System.out.println("[info] Auto test runner complete: " + passed + " / " + tests.length + " passed.");
+            System.out.println("[info] Auto test runner complete: " + passed + " passed, "
+                    + skippedTests + " skipped, " + failed + " failed.");
         } else {
             System.out.println("[error] Auto test runner stopped: " + completedTests + " / " + tests.length
                     + " completed, " + passed + " passed, " + failures.size() + " failures observed.");
@@ -443,7 +456,8 @@ public final class AutoTestApplication extends ApplicationAdapter {
 
     private String primaryStatus() {
         if (completed) {
-            return "Auto complete: " + (completedTests - completedFailureCount()) + " / " + tests.length
+            return "Auto complete: " + (completedTests - completedFailureCount() - skippedTests)
+                    + " / " + tests.length
                     + " passed";
         }
         if (tests == null || currentIndex < 0 || currentIndex >= tests.length) {
@@ -455,7 +469,8 @@ public final class AutoTestApplication extends ApplicationAdapter {
 
     private String secondaryStatus() {
         if (completed) {
-            return failures.size() == 0 ? "No failures" : failures.size() + " failures";
+            String skipped = skippedTests == 1 ? "1 skipped" : skippedTests + " skipped";
+            return failures.size() == 0 ? "No failures, " + skipped : failures.size() + " failures, " + skipped;
         }
         if (!currentTestLoaded) {
             return "Waiting for stable frames";

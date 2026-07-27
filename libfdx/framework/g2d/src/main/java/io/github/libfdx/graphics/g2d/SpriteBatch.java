@@ -4,21 +4,25 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
 import io.github.libfdx.graphics.GraphicsContext;
+import io.github.libfdx.graphics.GraphicsFeature;
 import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.RenderPass;
+import io.github.libfdx.graphics.RenderPassCompatibility;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
-import io.github.libfdx.graphics.ShaderModule;
-import io.github.libfdx.graphics.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.shader.runtime.ResolvedShaderPass;
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.shader.ShaderProfile;
+import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
+import io.github.libfdx.graphics.shader.runtime.ShaderRequest;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceKind;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Texture;
-import io.github.libfdx.graphics.VertexAttribute;
-import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
-import io.github.libfdx.graphics.VertexStepMode;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -37,18 +41,13 @@ public final class SpriteBatch implements Batch2D {
     private static final int INDICES_PER_SPRITE = 6;
     private static final int BYTES_PER_INDEX = 2;
     private static final int MAX_INDEXED_SPRITES = 65535 / INDEXED_VERTICES_PER_SPRITE;
-    private static final int DEFAULT_MAX_SPRITES = 1024;
-    private static final VertexLayout SPRITE_VERTEX_LAYOUT = VertexLayout.of(
-            BYTES_PER_VERTEX,
-            VertexAttribute.of(0, VertexFormat.FLOAT32X2, 0),
-            VertexAttribute.of(1, VertexFormat.FLOAT32X2, 8),
-            VertexAttribute.of(2, VertexFormat.FLOAT32X4, 16));
+    private static final int DEFAULT_MAX_SPRITES = SpriteBatchConfig.DEFAULT_MAX_SPRITES;
+    private static final VertexLayout SPRITE_VERTEX_LAYOUT =
+            SpriteShaderAbi.ORDINARY.vertexLayouts()[0];
     private static final int WHITE_FLOATS_PER_VERTEX = 4;
     private static final int WHITE_BYTES_PER_VERTEX = WHITE_FLOATS_PER_VERTEX * 4;
-    private static final VertexLayout WHITE_SPRITE_VERTEX_LAYOUT = VertexLayout.of(
-            WHITE_BYTES_PER_VERTEX,
-            VertexAttribute.of(0, VertexFormat.FLOAT32X2, 0),
-            VertexAttribute.of(1, VertexFormat.FLOAT32X2, 8));
+    private static final VertexLayout WHITE_SPRITE_VERTEX_LAYOUT =
+            SpriteShaderAbi.WHITE.vertexLayouts()[0];
     private static final int INSTANCED_INDEXED_QUAD_VERTICES = 4;
     private static final int INSTANCED_NON_INDEXED_QUAD_VERTICES = 6;
     private static final int INSTANCED_INDICES = 6;
@@ -58,21 +57,12 @@ public final class SpriteBatch implements Batch2D {
     private static final int INSTANCED_CENTER_BYTES_PER_SPRITE = INSTANCED_CENTER_FLOATS_PER_SPRITE * 4;
     private static final int INSTANCE_FLOATS_PER_SPRITE = 14;
     private static final int INSTANCE_BYTES_PER_SPRITE = INSTANCE_FLOATS_PER_SPRITE * 4;
-    private static final VertexLayout INSTANCED_QUAD_VERTEX_LAYOUT = VertexLayout.of(
-            INSTANCED_QUAD_BYTES_PER_VERTEX,
-            VertexStepMode.VERTEX,
-            VertexAttribute.of(0, VertexFormat.FLOAT32X2, 0),
-            VertexAttribute.of(1, VertexFormat.FLOAT32X2, 8),
-            VertexAttribute.of(2, VertexFormat.FLOAT32X4, 16));
-    private static final VertexLayout INSTANCED_CENTER_VERTEX_LAYOUT = VertexLayout.instance(
-            INSTANCED_CENTER_BYTES_PER_SPRITE,
-            VertexAttribute.of(3, VertexFormat.FLOAT32X2, 0));
-    private static final VertexLayout INSTANCED_SPRITE_VERTEX_LAYOUT = VertexLayout.instance(
-            INSTANCE_BYTES_PER_SPRITE,
-            VertexAttribute.of(0, VertexFormat.FLOAT32X4, 0),
-            VertexAttribute.of(1, VertexFormat.FLOAT32X4, 16),
-            VertexAttribute.of(2, VertexFormat.FLOAT32X4, 32),
-            VertexAttribute.of(3, VertexFormat.FLOAT32X2, 48));
+    private static final VertexLayout INSTANCED_QUAD_VERTEX_LAYOUT =
+            SpriteShaderAbi.COMPACT_INSTANCED.vertexLayouts()[0];
+    private static final VertexLayout INSTANCED_CENTER_VERTEX_LAYOUT =
+            SpriteShaderAbi.COMPACT_INSTANCED.vertexLayouts()[1];
+    private static final VertexLayout INSTANCED_SPRITE_VERTEX_LAYOUT =
+            SpriteShaderAbi.PACKED_INSTANCED.vertexLayouts()[0];
     private static final String SPRITE_SHADER_SOURCE = """
             struct VertexInput {
                 @location(0) position : vec2f,
@@ -190,18 +180,25 @@ public final class SpriteBatch implements Batch2D {
             """;
 
     private final GraphicsContext graphics;
+    private final ShaderProvider shaderProvider;
+    private final ShaderProfile shaderProfile;
+    private final SpriteShaderAbi ordinaryAbi;
+    private final SpriteShaderAbi whiteAbi;
+    private final SpriteShaderAbi packedAbi;
+    private final SpriteShaderAbi compactAbi;
     private final ShaderModule shader;
-    private final RenderPipeline pipeline;
+    private RenderPipeline pipeline;
     private final ShaderModule whiteShader;
-    private final RenderPipeline whitePipeline;
+    private RenderPipeline whitePipeline;
     private final boolean heapUploadBuffers;
     private final boolean indexed;
     private final ShaderModule instancedShader;
-    private final RenderPipeline instancedPipeline;
+    private RenderPipeline instancedPipeline;
     private final ShaderModule compactInstancedShader;
-    private final RenderPipeline compactInstancedPipeline;
+    private RenderPipeline compactInstancedPipeline;
     private final boolean instanced;
     private final boolean instancedIndexed;
+    private final boolean packedInstancesIndexed;
     private final int instancedQuadVertexCount;
     private final RenderPassDescriptor renderPassDescriptor =
             new RenderPassDescriptor().label("sprite batch pass");
@@ -244,6 +241,8 @@ public final class SpriteBatch implements Batch2D {
     private boolean ownsPass;
     private boolean drawing;
     private boolean disposed;
+    private long shaderProviderRevision = -1;
+    private RenderPassCompatibility shaderCompatibility;
     private boolean batchUsesColor = true;
     private float red = 1.0f;
     private float green = 1.0f;
@@ -291,7 +290,7 @@ public final class SpriteBatch implements Batch2D {
      * @param graphicsSystem the graphics system
      */
     public SpriteBatch(GraphicsContext graphicsSystem) {
-        this(graphicsSystem, DEFAULT_MAX_SPRITES);
+        this(graphicsSystem, new SpriteBatchConfig());
     }
 
     /**
@@ -301,73 +300,158 @@ public final class SpriteBatch implements Batch2D {
      * @param initialMaxSprites the initial max sprites
      */
     public SpriteBatch(GraphicsContext graphicsSystem, int initialMaxSprites) {
+        this(graphicsSystem, new SpriteBatchConfig()
+                .initialMaxSprites(initialMaxSprites));
+    }
+
+    /**
+     * Creates a configured sprite batch.
+     *
+     * <p>The configured shader provider is borrowed. The batch owns only the
+     * built-in modules it creates when no provider is supplied.</p>
+     *
+     * @param graphicsSystem the graphics system
+     * @param config construction settings
+     */
+    public SpriteBatch(GraphicsContext graphicsSystem,
+            SpriteBatchConfig config) {
         if (graphicsSystem == null) {
             throw new FdxException("GraphicsContext cannot be null");
         }
+        if (config == null) {
+            throw new FdxException("SpriteBatchConfig cannot be null");
+        }
+        int initialMaxSprites = config.initialMaxSprites();
         if (initialMaxSprites <= 0) {
             throw new FdxException("SpriteBatch initial sprite count must be greater than zero");
         }
         graphics = graphicsSystem;
+        shaderProvider = config.shaderProvider();
         heapUploadBuffers = usesHeapUploadBuffers(graphicsSystem);
-        indexed = supportsIndexedSprites(graphics);
-        instanced = supportsInstancedSprites(graphics);
-        instancedIndexed = instanced && supportsIndexedInstancedSprites(graphics);
+        if (shaderProvider != null) {
+            if (!shaderProvider.supportsPassResolution()) {
+                throw new FdxException(
+                        "SpriteBatch shader provider does not support common pass resolution");
+            }
+            SpriteSelection selection = negotiateProvider(
+                    RenderPassCompatibility.layout(
+                            io.github.libfdx.graphics.RenderTargetLayout
+                                    .color(graphics.surfaceFormat())));
+            shaderProfile = selection.profile;
+            ordinaryAbi = selection.ordinary;
+            whiteAbi = selection.white;
+            packedAbi = selection.packed;
+            compactAbi = selection.compact;
+            instanced = packedAbi != null;
+            indexed = ordinaryAbi != null && ordinaryAbi.indexed();
+            instancedIndexed = compactAbi != null
+                    && compactAbi.indexed();
+            packedInstancesIndexed = packedAbi != null
+                    && packedAbi.indexed();
+        } else {
+            shaderProfile = null;
+            ordinaryAbi = null;
+            whiteAbi = null;
+            packedAbi = null;
+            compactAbi = null;
+            indexed = supportsIndexedSprites(graphics);
+            instanced = supportsInstancedSprites(graphics);
+            instancedIndexed = instanced
+                    && supportsIndexedInstancedSprites(graphics);
+            packedInstancesIndexed = false;
+        }
         instancedQuadVertexCount = instancedIndexed ? INSTANCED_INDEXED_QUAD_VERTICES : INSTANCED_NON_INDEXED_QUAD_VERTICES;
         vertices = new float[initialMaxSprites * VERTICES_PER_SPRITE * FLOATS_PER_VERTEX];
         instances = new float[initialMaxSprites * INSTANCE_FLOATS_PER_SPRITE];
         compactInstances = new float[initialMaxSprites * INSTANCED_CENTER_FLOATS_PER_SPRITE];
-        shader = graphics.device().createShaderModule(shaderDescriptor("sprite batch", SPRITE_SHADER_SOURCE));
-        pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
-                .shader(shader, graphics.surfaceFormat())
-                .label("sprite batch")
-                .primitiveTopology(PrimitiveTopology.TRIANGLE_LIST)
-                .vertexEntryPoint("vertexMain")
-                .fragmentEntryPoint("fragmentMain")
-                .vertexLayout(SPRITE_VERTEX_LAYOUT)
-                .sampledTextureCount(1));
-        if (supportsWhitePipeline(graphics)) {
-            whiteShader = graphics.device().createShaderModule(shaderDescriptor("white sprite batch",
-                    WHITE_SPRITE_SHADER_SOURCE));
-            whitePipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
-                    .shader(whiteShader, graphics.surfaceFormat())
-                    .label("white sprite batch")
-                    .primitiveTopology(PrimitiveTopology.TRIANGLE_LIST)
-                    .vertexEntryPoint("vertexMain")
-                    .fragmentEntryPoint("fragmentMain")
-                    .vertexLayout(WHITE_SPRITE_VERTEX_LAYOUT)
-                    .sampledTextureCount(1));
+        if (shaderProvider == null) {
+            shader = graphics.device().createShaderModule(
+                    shaderDescriptor("sprite batch", SPRITE_SHADER_SOURCE));
+            pipeline = graphics.device().createRenderPipeline(
+                    RenderPipelineDescriptor
+                            .shader(shader, graphics.surfaceFormat())
+                            .label("sprite batch")
+                            .primitiveTopology(PrimitiveTopology.TRIANGLE_LIST)
+                            .vertexEntryPoint("vertexMain")
+                            .fragmentEntryPoint("fragmentMain")
+                            .vertexLayout(SPRITE_VERTEX_LAYOUT)
+                            .sampledTextureCount(1));
+            if (supportsWhitePipeline(graphics)) {
+                whiteShader = graphics.device().createShaderModule(
+                        shaderDescriptor("white sprite batch",
+                                WHITE_SPRITE_SHADER_SOURCE));
+                whitePipeline = graphics.device().createRenderPipeline(
+                        RenderPipelineDescriptor
+                                .shader(whiteShader,
+                                        graphics.surfaceFormat())
+                                .label("white sprite batch")
+                                .primitiveTopology(
+                                        PrimitiveTopology.TRIANGLE_LIST)
+                                .vertexEntryPoint("vertexMain")
+                                .fragmentEntryPoint("fragmentMain")
+                                .vertexLayout(
+                                        WHITE_SPRITE_VERTEX_LAYOUT)
+                                .sampledTextureCount(1));
+            } else {
+                whiteShader = null;
+                whitePipeline = null;
+            }
         } else {
+            shader = null;
             whiteShader = null;
+            pipeline = null;
             whitePipeline = null;
         }
         if (instanced) {
-            instancedShader = graphics.device().createShaderModule(shaderDescriptor("instanced sprite batch",
-                    INSTANCED_SPRITE_SHADER_SOURCE));
-            instancedPipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
-                    .shader(instancedShader, graphics.surfaceFormat())
-                    .label("instanced sprite batch")
-                    .primitiveTopology(PrimitiveTopology.TRIANGLE_LIST)
-                    .vertexEntryPoint("vertexMain")
-                    .fragmentEntryPoint("fragmentMain")
-                    .vertexLayout(INSTANCED_SPRITE_VERTEX_LAYOUT)
-                    .sampledTextureCount(1));
+            if (shaderProvider == null) {
+                instancedShader = graphics.device().createShaderModule(
+                        shaderDescriptor("instanced sprite batch",
+                                INSTANCED_SPRITE_SHADER_SOURCE));
+                instancedPipeline = graphics.device().createRenderPipeline(
+                        RenderPipelineDescriptor
+                                .shader(instancedShader,
+                                        graphics.surfaceFormat())
+                                .label("instanced sprite batch")
+                                .primitiveTopology(
+                                        PrimitiveTopology.TRIANGLE_LIST)
+                                .vertexEntryPoint("vertexMain")
+                                .fragmentEntryPoint("fragmentMain")
+                                .vertexLayout(
+                                        INSTANCED_SPRITE_VERTEX_LAYOUT)
+                                .sampledTextureCount(1));
+            } else {
+                instancedShader = null;
+                instancedPipeline = null;
+            }
             instanceBuffers = ensureBufferSlots(instanceBuffers, 0);
             instanceBuffers[0] = ensureBuffer(instanceBuffers[0],
                     initialMaxSprites * INSTANCE_BYTES_PER_SPRITE, "sprite batch instances");
-            compactInstancedShader = graphics.device().createShaderModule(shaderDescriptor("compact instanced sprite "
-                    + "batch", COMPACT_INSTANCED_SPRITE_SHADER_SOURCE));
-            compactInstancedPipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
-                    .shader(compactInstancedShader, graphics.surfaceFormat())
-                    .label("compact instanced sprite batch")
-                    .primitiveTopology(PrimitiveTopology.TRIANGLE_LIST)
-                    .vertexEntryPoint("vertexMain")
-                    .fragmentEntryPoint("fragmentMain")
-                    .vertexLayouts(INSTANCED_QUAD_VERTEX_LAYOUT, INSTANCED_CENTER_VERTEX_LAYOUT)
-                    .sampledTextureCount(1));
+            if (shaderProvider == null) {
+                compactInstancedShader = graphics.device()
+                        .createShaderModule(shaderDescriptor(
+                                "compact instanced sprite batch",
+                                COMPACT_INSTANCED_SPRITE_SHADER_SOURCE));
+                compactInstancedPipeline = graphics.device()
+                        .createRenderPipeline(RenderPipelineDescriptor
+                                .shader(compactInstancedShader,
+                                        graphics.surfaceFormat())
+                                .label("compact instanced sprite batch")
+                                .primitiveTopology(
+                                        PrimitiveTopology.TRIANGLE_LIST)
+                                .vertexEntryPoint("vertexMain")
+                                .fragmentEntryPoint("fragmentMain")
+                                .vertexLayouts(
+                                        INSTANCED_QUAD_VERTEX_LAYOUT,
+                                        INSTANCED_CENTER_VERTEX_LAYOUT)
+                                .sampledTextureCount(1));
+            } else {
+                compactInstancedShader = null;
+                compactInstancedPipeline = null;
+            }
             compactInstanceBuffers = ensureBufferSlots(compactInstanceBuffers, 0);
             compactInstanceBuffers[0] = ensureBuffer(compactInstanceBuffers[0],
                     initialMaxSprites * INSTANCED_CENTER_BYTES_PER_SPRITE, "sprite batch compact instances");
-            if (instancedIndexed) {
+            if (instancedIndexed || packedInstancesIndexed) {
                 ensureInstancedIndexBuffer();
             }
         } else {
@@ -375,6 +459,11 @@ public final class SpriteBatch implements Batch2D {
             instancedPipeline = null;
             compactInstancedShader = null;
             compactInstancedPipeline = null;
+        }
+        if (shaderProvider != null) {
+            refreshProviderPipelines(RenderPassCompatibility.layout(
+                    io.github.libfdx.graphics.RenderTargetLayout
+                            .color(graphics.surfaceFormat())));
         }
         int initialByteCount = initialMaxSprites * VERTICES_PER_SPRITE * BYTES_PER_VERTEX;
         ensureVertexBuffer(0, initialByteCount);
@@ -401,6 +490,7 @@ public final class SpriteBatch implements Batch2D {
     public void begin(LoadOp loadOp) {
         ensureNotDisposed();
         GraphicsFrame frame = graphics.currentFrame();
+        refreshProviderPipelines(frame.compatibility());
         pass = frame.commandEncoder().beginRenderPass(renderPassDescriptor
                 .colorAttachment(frame.colorAttachment())
                 .colorLoadOp(loadOp != null ? loadOp : LoadOp.load())
@@ -421,6 +511,7 @@ public final class SpriteBatch implements Batch2D {
         if (pass == null) {
             throw new FdxException("RenderPass cannot be null");
         }
+        refreshProviderPipelines(pass.compatibility());
         this.pass = pass;
         resetFlushBufferSlots();
         ownsPass = false;
@@ -905,6 +996,7 @@ public final class SpriteBatch implements Batch2D {
     }
 
     private void flush() {
+        ensureProviderRevision();
         if (vertexCount == 0 && instanceCount == 0 && compactInstanceCount == 0) {
             return;
         }
@@ -958,7 +1050,13 @@ public final class SpriteBatch implements Batch2D {
         pass.setPipeline(instancedPipeline);
         pass.setTexture(0, currentTexture);
         pass.setVertexBuffer(activeInstanceBuffer);
-        pass.draw(VERTICES_PER_SPRITE, instanceCount, 0, 0);
+        if (packedInstancesIndexed) {
+            ensureInstancedIndexBuffer();
+            pass.setIndexBuffer(instancedIndexBuffer);
+            pass.drawIndexed(INSTANCED_INDICES, instanceCount, 0, 0, 0);
+        } else {
+            pass.draw(VERTICES_PER_SPRITE, instanceCount, 0, 0);
+        }
         instanceFloatCount = 0;
         instanceCount = 0;
     }
@@ -1170,24 +1268,221 @@ public final class SpriteBatch implements Batch2D {
         return ShaderModuleDescriptor.wgsl(label, source);
     }
 
+    private SpriteSelection negotiateProvider(
+            RenderPassCompatibility compatibility) {
+        ShaderProfile[] profiles = {
+                ShaderProfile.PORTABLE_WEBGPU,
+                ShaderProfile.PORTABLE_WEBGL2,
+                ShaderProfile.NATIVE
+        };
+        boolean indexedDraw = graphics.device().capabilities()
+                .supports(GraphicsFeature.INDEXED_DRAW);
+        boolean instancedDraw = graphics.device().capabilities()
+                .supports(GraphicsFeature.INSTANCED_DRAW);
+        for (ShaderProfile profile : profiles) {
+            if (!graphics.device().capabilities().supports(profile)) {
+                continue;
+            }
+            if (instancedDraw && indexedDraw
+                    && supportsAbi(SpriteShaderAbi.PACKED_INSTANCED_INDEXED,
+                            profile, compatibility)
+                    && supportsAbi(SpriteShaderAbi.COMPACT_INSTANCED_INDEXED,
+                            profile, compatibility)) {
+                return new SpriteSelection(profile, null, null,
+                        SpriteShaderAbi.PACKED_INSTANCED_INDEXED,
+                        SpriteShaderAbi.COMPACT_INSTANCED_INDEXED);
+            }
+            if (instancedDraw
+                    && supportsAbi(SpriteShaderAbi.PACKED_INSTANCED,
+                            profile, compatibility)
+                    && supportsAbi(SpriteShaderAbi.COMPACT_INSTANCED,
+                            profile, compatibility)) {
+                return new SpriteSelection(profile, null, null,
+                        SpriteShaderAbi.PACKED_INSTANCED,
+                        SpriteShaderAbi.COMPACT_INSTANCED);
+            }
+            if (indexedDraw
+                    && supportsAbi(SpriteShaderAbi.ORDINARY_INDEXED,
+                            profile, compatibility)) {
+                SpriteShaderAbi white = supportsAbi(
+                        SpriteShaderAbi.WHITE_INDEXED, profile,
+                        compatibility)
+                        ? SpriteShaderAbi.WHITE_INDEXED : null;
+                return new SpriteSelection(profile,
+                        SpriteShaderAbi.ORDINARY_INDEXED, white,
+                        null, null);
+            }
+            if (supportsAbi(SpriteShaderAbi.ORDINARY, profile,
+                    compatibility)) {
+                SpriteShaderAbi white = supportsAbi(
+                        SpriteShaderAbi.WHITE, profile, compatibility)
+                        ? SpriteShaderAbi.WHITE : null;
+                return new SpriteSelection(profile,
+                        SpriteShaderAbi.ORDINARY, white, null, null);
+            }
+        }
+        throw new FdxException(
+                "SpriteBatch shader provider supports no compatible sprite geometry ABI");
+    }
+
+    private boolean supportsAbi(SpriteShaderAbi abi,
+            ShaderProfile profile,
+            RenderPassCompatibility compatibility) {
+        return shaderProvider.supports(request(abi, profile,
+                compatibility));
+    }
+
+    private ShaderRequest request(SpriteShaderAbi abi,
+            ShaderProfile profile,
+            RenderPassCompatibility compatibility) {
+        return ShaderRequest.builder(abi.passId())
+                .profile(profile)
+                .renderPass(compatibility)
+                .topology(PrimitiveTopology.TRIANGLE_LIST)
+                .vertexLayouts(abi.vertexLayouts())
+                .build();
+    }
+
+    private void refreshProviderPipelines(
+            RenderPassCompatibility compatibility) {
+        if (shaderProvider == null) {
+            return;
+        }
+        if (compatibility == null) {
+            throw new FdxException(
+                    "SpriteBatch graph provider requires exact render-pass compatibility");
+        }
+        long currentRevision = shaderProvider.revision();
+        if (shaderCompatibility != null
+                && shaderCompatibility.equals(compatibility)
+                && shaderProviderRevision == currentRevision) {
+            return;
+        }
+        if (hasPendingContent()) {
+            throw new FdxException(
+                    "SpriteBatch shader provider changed while draw data was pending");
+        }
+        for (int attempt = 0; attempt < 3; attempt++) {
+            long before = shaderProvider.revision();
+            RenderPipeline nextOrdinary = null;
+            RenderPipeline nextWhite = null;
+            RenderPipeline nextPacked = null;
+            RenderPipeline nextCompact = null;
+            if (ordinaryAbi != null) {
+                nextOrdinary = resolveAbi(ordinaryAbi, compatibility)
+                        .pipeline();
+            }
+            if (whiteAbi != null) {
+                nextWhite = resolveAbi(whiteAbi, compatibility)
+                        .pipeline();
+            }
+            if (packedAbi != null) {
+                nextPacked = resolveAbi(packedAbi, compatibility)
+                        .pipeline();
+            }
+            if (compactAbi != null) {
+                nextCompact = resolveAbi(compactAbi, compatibility)
+                        .pipeline();
+            }
+            long after = shaderProvider.revision();
+            if (before == after) {
+                pipeline = nextOrdinary;
+                whitePipeline = nextWhite;
+                instancedPipeline = nextPacked;
+                compactInstancedPipeline = nextCompact;
+                shaderProviderRevision = after;
+                shaderCompatibility = compatibility;
+                return;
+            }
+        }
+        throw new FdxException(
+                "SpriteBatch shader provider changed repeatedly during pass resolution");
+    }
+
+    private ResolvedShaderPass resolveAbi(SpriteShaderAbi abi,
+            RenderPassCompatibility compatibility) {
+        ShaderRequest request = request(abi, shaderProfile,
+                compatibility);
+        if (!shaderProvider.supports(request)) {
+            throw new FdxException("SpriteBatch shader provider revision "
+                    + shaderProvider.revision()
+                    + " no longer supports selected ABI " + abi);
+        }
+        ResolvedShaderPass resolved = shaderProvider.resolve(request);
+        if (!abi.passId().equals(resolved.passId())) {
+            throw new FdxException(
+                    "SpriteBatch shader provider returned the wrong pass for "
+                            + abi);
+        }
+        var layout = resolved.resourceLayout();
+        var texture = layout.find(0, 0);
+        var sampler = layout.find(0, 1);
+        if (texture == null
+                || texture.resourceKind()
+                        != ShaderResourceKind.SAMPLED_TEXTURE
+                || sampler == null
+                || sampler.resourceKind() != ShaderResourceKind.SAMPLER) {
+            throw new FdxException("SpriteBatch shader pass " + abi
+                    + " must declare a sampled texture at 0:0 and sampler at 0:1");
+        }
+        return resolved;
+    }
+
+    private void ensureProviderRevision() {
+        if (shaderProvider == null
+                || shaderProvider.revision()
+                        == shaderProviderRevision) {
+            return;
+        }
+        if (hasPendingContent()) {
+            throw new FdxException(
+                    "SpriteBatch shader provider changed while draw data was pending");
+        }
+        RenderPassCompatibility compatibility = pass != null
+                ? pass.compatibility() : shaderCompatibility;
+        refreshProviderPipelines(compatibility);
+    }
+
+    private boolean hasPendingContent() {
+        return vertexCount > 0 || instanceCount > 0
+                || compactInstanceCount > 0;
+    }
+
     private boolean supportsIndexedSprites(GraphicsContext graphics) {
-        String provider = graphics.providerId().value();
-        return "gl".equals(provider) || "vulkan".equals(provider) || "wgpu".equals(provider)
-                || "webgl".equals(provider) || "metal".equals(provider);
+        return graphics.device().capabilities()
+                .supports(GraphicsFeature.INDEXED_DRAW);
     }
 
     private boolean supportsInstancedSprites(GraphicsContext graphics) {
-        String provider = graphics.providerId().value();
-        return "gl".equals(provider) || "vulkan".equals(provider) || "wgpu".equals(provider);
+        return graphics.device().capabilities()
+                .supports(GraphicsFeature.INSTANCED_DRAW);
     }
 
     private boolean supportsIndexedInstancedSprites(GraphicsContext graphics) {
-        String provider = graphics.providerId().value();
-        return "gl".equals(provider) || "vulkan".equals(provider) || "wgpu".equals(provider);
+        return supportsIndexedSprites(graphics)
+                && supportsInstancedSprites(graphics);
     }
 
     private boolean supportsWhitePipeline(GraphicsContext graphics) {
         return !"vulkan".equals(graphics.providerId().value());
+    }
+
+    private static final class SpriteSelection {
+        final ShaderProfile profile;
+        final SpriteShaderAbi ordinary;
+        final SpriteShaderAbi white;
+        final SpriteShaderAbi packed;
+        final SpriteShaderAbi compact;
+
+        SpriteSelection(ShaderProfile profile,
+                SpriteShaderAbi ordinary, SpriteShaderAbi white,
+                SpriteShaderAbi packed, SpriteShaderAbi compact) {
+            this.profile = profile;
+            this.ordinary = ordinary;
+            this.white = white;
+            this.packed = packed;
+            this.compact = compact;
+        }
     }
 
     private void ensureUploadBuffer(int byteCount) {
@@ -1265,6 +1560,7 @@ public final class SpriteBatch implements Batch2D {
         if (!drawing) {
             throw new FdxException("SpriteBatch.begin must be called before drawing");
         }
+        ensureProviderRevision();
     }
 
     private void ensureNotDisposed() {
@@ -1301,26 +1597,32 @@ public final class SpriteBatch implements Batch2D {
             instancedIndexBuffer.dispose();
             instancedIndexBuffer = null;
         }
-        if (compactInstancedPipeline != null) {
+        if (shaderProvider == null
+                && compactInstancedPipeline != null) {
             compactInstancedPipeline.dispose();
         }
-        if (compactInstancedShader != null) {
+        if (shaderProvider == null
+                && compactInstancedShader != null) {
             compactInstancedShader.dispose();
         }
-        if (instancedPipeline != null) {
+        if (shaderProvider == null && instancedPipeline != null) {
             instancedPipeline.dispose();
         }
-        if (instancedShader != null) {
+        if (shaderProvider == null && instancedShader != null) {
             instancedShader.dispose();
         }
-        if (whitePipeline != null) {
+        if (shaderProvider == null && whitePipeline != null) {
             whitePipeline.dispose();
         }
-        if (whiteShader != null) {
+        if (shaderProvider == null && whiteShader != null) {
             whiteShader.dispose();
         }
-        pipeline.dispose();
-        shader.dispose();
+        if (shaderProvider == null && pipeline != null) {
+            pipeline.dispose();
+        }
+        if (shaderProvider == null && shader != null) {
+            shader.dispose();
+        }
     }
 
     /**

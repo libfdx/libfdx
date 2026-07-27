@@ -105,6 +105,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     private int compositionListCount;
     private final UiInputHandler inputHandler = new UiInputHandler(this);
     private final HitResult hitResult = new HitResult();
+    private final UiPointerEvent surfacePointerEvent = new UiPointerEvent();
     private UiTheme theme = UiTheme.dark();
     private UiRenderer renderer;
     private Input input;
@@ -113,6 +114,13 @@ public final class UiRoot implements Disposable, UiStateListener {
     private UiNode hoveredNode;
     private UiNode pressedNode;
     private UiNode focusedNode;
+    private UiNode capturedSurfaceNode;
+    private int capturedSurfacePointerId;
+    private PointerType capturedSurfacePointerType = PointerType.MOUSE;
+    private MouseButton capturedSurfaceButton = MouseButton.UNKNOWN;
+    private long capturedSurfaceTimeNanos;
+    private float capturedSurfaceX;
+    private float capturedSurfaceY;
     private UiNode tooltipHoverNode;
     private float tooltipHoverStartSeconds;
     private float tooltipWakeSeconds = -1.0f;
@@ -631,6 +639,8 @@ public final class UiRoot implements Disposable, UiStateListener {
             return;
         }
         disposed = true;
+        cancelSurfaceCapture();
+        notifySurfaceFocus(focusedNode, false);
         for (int i = 0; i < observedStateValues.size(); i++) {
             observedStateValues.get(i).removeListener(this);
         }
@@ -785,10 +795,14 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (pressedNode == node) {
             pressedNode = null;
         }
+        if (capturedSurfaceNode == node) {
+            cancelSurfaceCapture();
+        }
         if (focusedNode == node) {
             if (input != null && requestsPlatformTextInput(focusedNode)) {
                 input.hideTextInput();
             }
+            notifySurfaceFocus(focusedNode, false);
             focusedNode.focused(false);
             focusedNode = null;
         }
@@ -897,6 +911,13 @@ public final class UiRoot implements Disposable, UiStateListener {
         ensureComposed();
         float x = uiX(event.x());
         float y = uiY(event.y());
+        if (ownsSurfaceCapture(event)) {
+            HitResult hit = hitTestResult(x, y);
+            setHovered(hit.node);
+            UiPointerResult result = dispatchSurfacePointer(capturedSurfaceNode, UiPointerPhase.MOVE, event, x, y);
+            applySurfacePointerResult(capturedSurfaceNode, event, x, y, result);
+            return true;
+        }
         if (activeWindowState != null) {
             updateActiveWindowPointer(x, y);
             return true;
@@ -935,6 +956,11 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         HitResult hit = hitTestResult(x, y);
         setHovered(hit.node);
+        if (surfaceInput(hit.node) != null) {
+            UiPointerResult result = dispatchSurfacePointer(hit.node, UiPointerPhase.MOVE, event, x, y);
+            applySurfacePointerResult(hit.node, event, x, y, result);
+            return true;
+        }
         return hit.handled();
     }
 
@@ -949,6 +975,24 @@ public final class UiRoot implements Disposable, UiStateListener {
         setHovered(hit.node);
         clearPendingScrollBodyGesture();
         clearPendingTextInputTapGesture();
+        if (capturedSurfaceNode != null) {
+            cancelSurfaceCapture();
+        }
+        if (surfaceInput(hit.node) != null) {
+            pressedNode = hit.node;
+            bringWindowToFront(windowState(findAncestorOrSelf(pressedNode, UiNodeType.WINDOW)));
+            pressedNode.pressed(true);
+            if (isFocusable(pressedNode)) {
+                setFocused(pressedNode);
+            }
+            UiPointerResult result = dispatchSurfacePointer(pressedNode, UiPointerPhase.DOWN, event, x, y);
+            applySurfacePointerResult(pressedNode, event, x, y, result);
+            if (result != UiPointerResult.IGNORED) {
+                return true;
+            }
+            pressedNode.pressed(false);
+            pressedNode = null;
+        }
         if (hit.node != null && hit.node.type() == UiNodeType.TEXT_AREA
                 && beginScrollPointer(hit.node, x, y, false)) {
             pressedNode = null;
@@ -1009,6 +1053,17 @@ public final class UiRoot implements Disposable, UiStateListener {
         float x = uiX(event.x());
         float y = uiY(event.y());
         HitResult hit = hitTestResult(x, y);
+        if (ownsSurfaceCapture(event)) {
+            UiNode captured = capturedSurfaceNode;
+            dispatchSurfacePointer(captured, UiPointerPhase.UP, event, x, y);
+            releaseSurfaceCapture(captured);
+            if (pressedNode != null) {
+                pressedNode.pressed(false);
+            }
+            pressedNode = null;
+            setHovered(hit.node);
+            return true;
+        }
         boolean handled = false;
         UiNode completedTextTapNode = null;
         if (activeScrollNode != null) {
@@ -1052,7 +1107,13 @@ public final class UiRoot implements Disposable, UiStateListener {
                 handled = true;
             } else if (pressedNode == hit.node) {
                 updateSliderFromPointer(pressedNode, x);
-                if (!handled && isTabs(pressedNode)) {
+                if (!handled && surfaceInput(pressedNode) != null) {
+                    UiPointerResult result = dispatchSurfacePointer(
+                            pressedNode, UiPointerPhase.UP, event, x, y);
+                    applySurfacePointerResult(pressedNode, event, x, y, result);
+                    releaseSurfaceCapture(pressedNode);
+                    handled = true;
+                } else if (!handled && isTabs(pressedNode)) {
                     selectTabFromPointer(pressedNode, x, y);
                     handled = true;
                 } else if (!handled && pressedNode.activatable()) {
@@ -1080,6 +1141,13 @@ public final class UiRoot implements Disposable, UiStateListener {
         float x = uiX(event.x());
         float y = uiY(event.y());
         HitResult hit = hitTestResult(x, y);
+        if (surfaceInput(hit.node) != null) {
+            UiPointerResult result = dispatchSurfacePointer(hit.node, UiPointerPhase.SCROLL, event, x, y);
+            applySurfacePointerResult(hit.node, event, x, y, result);
+            if (result != UiPointerResult.IGNORED) {
+                return true;
+            }
+        }
         UiNode scroll = scrollTarget(hit.node);
         if (scroll != null && scroll.scrollState() != null) {
             scroll.scrollState().scrollBy(event.scrollX() * 24.0f, event.scrollY() * 24.0f);
@@ -1099,6 +1167,10 @@ public final class UiRoot implements Disposable, UiStateListener {
                 return focusNext(-1);
             }
             return false;
+        }
+        UiSurfaceInput focusedSurfaceInput = surfaceInput(focusedNode);
+        if (focusedSurfaceInput != null && focusedSurfaceInput.keyDown(event)) {
+            return true;
         }
         if (handleTabsKey(focusedNode, event.key())) {
             return true;
@@ -1289,6 +1361,10 @@ public final class UiRoot implements Disposable, UiStateListener {
 
     boolean handleTextInput(TextInputEvent event) {
         ensureComposed();
+        UiSurfaceInput focusedSurfaceInput = surfaceInput(focusedNode);
+        if (focusedSurfaceInput != null && focusedSurfaceInput.textInput(event)) {
+            return true;
+        }
         if (focusedNode != null && isTextInput(focusedNode)
                 && focusedNode.descriptor() instanceof UiTextFieldModel) {
             ((UiTextFieldModel) focusedNode.descriptor()).insert(event.text());
@@ -2230,7 +2306,8 @@ public final class UiRoot implements Disposable, UiStateListener {
 
     private boolean clipsHitToBounds(UiNode node) {
         UiNodeType type = node.type();
-        return type == UiNodeType.ROOT
+        return node.modifier().clipsToBounds()
+                || type == UiNodeType.ROOT
                 || type == UiNodeType.SCROLL
                 || type == UiNodeType.TEXT_AREA
                 || type == UiNodeType.WINDOW
@@ -2323,7 +2400,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         return node.activatable() || node.modifier().focusable() || node.type() == UiNodeType.SCROLL
                 || node.type() == UiNodeType.SLIDER || node.type() == UiNodeType.TABS || isTextInput(node)
-                || node.type() == UiNodeType.WINDOW || hasTooltipTarget(node);
+                || node.type() == UiNodeType.WINDOW || hasTooltipTarget(node) || surfaceInput(node) != null;
     }
 
     private boolean blocksInput(UiNode node) {
@@ -2339,6 +2416,112 @@ public final class UiRoot implements Disposable, UiStateListener {
 
     private boolean isFocusable(UiNode node) {
         return node != null && node.modifier().enabled() && node.modifier().focusable();
+    }
+
+    private UiSurfaceInput surfaceInput(UiNode node) {
+        if (node == null || node.type() != UiNodeType.CUSTOM || node.customContext() == null) {
+            return null;
+        }
+        return node.customContext().surfaceInput();
+    }
+
+    private UiPointerResult dispatchSurfacePointer(UiNode node, UiPointerPhase phase, PointerEvent event,
+            float x, float y) {
+        UiSurfaceInput surface = surfaceInput(node);
+        if (surface == null || event == null) {
+            return UiPointerResult.IGNORED;
+        }
+        boolean captured = capturedSurfaceNode == node
+                && capturedSurfacePointerId == event.pointerId()
+                && capturedSurfacePointerType == event.type();
+        UiPointerResult result = surface.pointer(surfacePointerEvent.configure(
+                phase, event.timeNanos(), event.pointerId(), event.type(), event.button(),
+                x, y, event.scrollX(), event.scrollY(), node.bounds(), captured, node.focused()));
+        if (captured) {
+            rememberCapturedSurfaceEvent(event, x, y);
+        }
+        return result != null ? result : UiPointerResult.IGNORED;
+    }
+
+    private void applySurfacePointerResult(UiNode node, PointerEvent event, float x, float y,
+            UiPointerResult result) {
+        UiPointerResult actual = result != null ? result : UiPointerResult.IGNORED;
+        if (actual == UiPointerResult.CAPTURE) {
+            captureSurfacePointer(node, event, x, y);
+        } else if (actual == UiPointerResult.RELEASE) {
+            releaseSurfaceCapture(node);
+        }
+    }
+
+    private void captureSurfacePointer(UiNode node, PointerEvent event, float x, float y) {
+        if (node == null || event == null || surfaceInput(node) == null) {
+            return;
+        }
+        if (capturedSurfaceNode != null && capturedSurfaceNode != node) {
+            cancelSurfaceCapture();
+        }
+        capturedSurfaceNode = node;
+        capturedSurfacePointerId = event.pointerId();
+        capturedSurfacePointerType = event.type();
+        capturedSurfaceButton = event.button();
+        rememberCapturedSurfaceEvent(event, x, y);
+    }
+
+    private void rememberCapturedSurfaceEvent(PointerEvent event, float x, float y) {
+        capturedSurfaceTimeNanos = event.timeNanos();
+        capturedSurfaceButton = event.button();
+        capturedSurfaceX = x;
+        capturedSurfaceY = y;
+    }
+
+    private boolean ownsSurfaceCapture(PointerEvent event) {
+        if (capturedSurfaceNode == null || event == null) {
+            return false;
+        }
+        if (surfaceInput(capturedSurfaceNode) == null || !capturedSurfaceNode.modifier().enabled()) {
+            cancelSurfaceCapture();
+            return false;
+        }
+        return capturedSurfacePointerId == event.pointerId() && capturedSurfacePointerType == event.type();
+    }
+
+    private void releaseSurfaceCapture(UiNode node) {
+        if (capturedSurfaceNode != node) {
+            return;
+        }
+        capturedSurfaceNode = null;
+        capturedSurfacePointerId = 0;
+        capturedSurfacePointerType = PointerType.MOUSE;
+        capturedSurfaceButton = MouseButton.UNKNOWN;
+        capturedSurfaceTimeNanos = 0L;
+        capturedSurfaceX = 0.0f;
+        capturedSurfaceY = 0.0f;
+    }
+
+    private void cancelSurfaceCapture() {
+        UiNode captured = capturedSurfaceNode;
+        if (captured == null) {
+            return;
+        }
+        UiSurfaceInput surface = surfaceInput(captured);
+        if (surface != null) {
+            surface.pointer(surfacePointerEvent.configure(
+                    UiPointerPhase.CANCEL, capturedSurfaceTimeNanos, capturedSurfacePointerId,
+                    capturedSurfacePointerType, capturedSurfaceButton, capturedSurfaceX, capturedSurfaceY,
+                    0.0f, 0.0f, captured.bounds(), true, captured.focused()));
+        }
+        if (pressedNode == captured) {
+            captured.pressed(false);
+            pressedNode = null;
+        }
+        releaseSurfaceCapture(captured);
+    }
+
+    private void notifySurfaceFocus(UiNode node, boolean focused) {
+        UiSurfaceInput surface = surfaceInput(node);
+        if (surface != null) {
+            surface.focusChanged(focused);
+        }
     }
 
     private boolean isSlider(UiNode node) {
@@ -2530,11 +2713,13 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         UiNode previous = focusedNode;
         if (focusedNode != null) {
+            notifySurfaceFocus(focusedNode, false);
             focusedNode.focused(false);
         }
         focusedNode = node;
         if (focusedNode != null) {
             focusedNode.focused(true);
+            notifySurfaceFocus(focusedNode, true);
         }
         updatePlatformTextInput(previous, focusedNode);
     }

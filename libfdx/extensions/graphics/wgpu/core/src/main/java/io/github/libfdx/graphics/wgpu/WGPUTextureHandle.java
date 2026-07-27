@@ -25,6 +25,7 @@ final class WGPUTextureHandle implements Texture {
     private final int width;
     private final int height;
     private final int mipLevelCount;
+    private final int sampleCount;
     private final TextureFormat format;
     private final TextureUsage usage;
     private final TextureFilter filter;
@@ -33,7 +34,7 @@ final class WGPUTextureHandle implements Texture {
     private boolean disposed;
 
     WGPUTextureHandle(WGPUResourceDomain resourceDomain, WGPUTextureAllocation allocation, String label, int width,
-            int height, int mipLevelCount, TextureFormat format, TextureUsage usage, TextureFilter filter,
+            int height, int mipLevelCount, int sampleCount, TextureFormat format, TextureUsage usage, TextureFilter filter,
             TextureWrap wrapS, TextureWrap wrapT) {
         if (resourceDomain == null || allocation == null || allocation.resourceDomain() != resourceDomain) {
             throw new FdxException("WGPU texture allocation is incompatible with its resource domain");
@@ -44,6 +45,7 @@ final class WGPUTextureHandle implements Texture {
         this.width = width;
         this.height = height;
         this.mipLevelCount = Math.max(1, mipLevelCount);
+        this.sampleCount = sampleCount;
         this.format = format != null ? format : TextureFormat.RGBA8_UNORM;
         this.usage = usage != null ? usage : TextureUsage.SAMPLED;
         this.filter = filter != null ? filter : TextureFilter.LINEAR;
@@ -58,6 +60,10 @@ final class WGPUTextureHandle implements Texture {
 
     WGPUTextureView nativeView() {
         return allocation.nativeView();
+    }
+
+    WGPUTextureView nativeStorageView() {
+        return allocation.nativeStorageView();
     }
 
     WGPUSampler nativeSampler() {
@@ -139,6 +145,11 @@ final class WGPUTextureHandle implements Texture {
     @Override
     public TextureUsage usage() {
         return usage;
+    }
+
+    @Override
+    public int sampleCount() {
+        return sampleCount;
     }
 
     /**

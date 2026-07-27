@@ -10,6 +10,7 @@ import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.camera.controller.OrbitCameraController3D;
 import io.github.libfdx.graphics.GraphicsContext;
+import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.Mesh;
 import io.github.libfdx.graphics.g3d.AnimationClip;
@@ -23,10 +24,12 @@ import io.github.libfdx.graphics.g3d.Material;
 import io.github.libfdx.graphics.g3d.MeshPart;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
+import io.github.libfdx.graphics.g3d.ModelBatchConfig;
 import io.github.libfdx.graphics.g3d.ModelNode;
 import io.github.libfdx.graphics.g3d.ModelNodePart;
 import io.github.libfdx.graphics.g3d.PbrMaterial;
 import io.github.libfdx.graphics.g3d.Skeleton;
+import io.github.libfdx.graphics.g3d.ShaderGraphPbrTestSupport;
 import io.github.libfdx.graphics.g3d.Skin;
 import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
@@ -61,6 +64,7 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
     private TestFpsLogger fpsLogger;
     private GraphicsContext graphics;
     private ModelBatch batch;
+    private ShaderProvider graphShaderProvider;
     private Camera camera;
     private OrbitCameraController3D cameraInput;
     private Model model;
@@ -93,7 +97,13 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
         graphics = fdx.graphics().main();
         logger = fdx.logger();
         fpsLogger = TestFpsLogger.create(logger, "SkinnedModelBatchTest");
-        batch = new ModelBatch(graphics);
+        if (Boolean.getBoolean("libfdx.test.shaderGraphPbr")) {
+            graphShaderProvider = ShaderGraphPbrTestSupport.provider(graphics);
+            batch = new ModelBatch(graphics, new ModelBatchConfig()
+                    .shaderProvider(graphShaderProvider));
+        } else {
+            batch = new ModelBatch(graphics);
+        }
         batch.environment(new Environment3D()
                 .ambientColor(new Color(0.42f, 0.42f, 0.45f, 1.0f))
                 .add(new DirectionalLight().direction(-0.35f, -0.75f, -1.0f).intensity(1.35f)));
@@ -125,8 +135,19 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
         camera.viewport(framebufferWidth(), framebufferHeight());
         cameraInput.update(deltaSeconds);
         batch.begin(LoadOp.clear(0.035f, 0.04f, 0.055f, 1.0f), camera);
-        batch.render(instance);
-        batch.end();
+        try {
+            batch.render(instance);
+        } catch (RuntimeException failure) {
+            failure.printStackTrace(System.err);
+            throw failure;
+        } finally {
+            try {
+                batch.end();
+            } catch (RuntimeException failure) {
+                failure.printStackTrace(System.err);
+                throw failure;
+            }
+        }
         if (capturePath != null && capturePath.length() > 0 && !captured && renderedFrames >= captureFrame) {
             captureFrame(capturePath);
             captured = true;
@@ -147,6 +168,8 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
             batch.dispose();
             batch = null;
         }
+        ShaderGraphPbrTestSupport.dispose(graphShaderProvider);
+        graphShaderProvider = null;
         if (model != null) {
             model.dispose();
             model = null;
@@ -324,7 +347,10 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
     private void captureFrame(String path) {
         try {
             ByteBuffer pixels = FramebufferCapture.readPixelsRgba8(graphics);
-            FramebufferCapture.writePpm(path, framebufferWidth(), framebufferHeight(), pixels);
+            int width = framebufferWidth();
+            int height = framebufferHeight();
+            FramebufferCapture.validateSceneFrame(width, height, pixels);
+            FramebufferCapture.writePpm(path, width, height, pixels);
             logger.info("SkinnedModelBatchTest captured framebuffer to " + path);
         }
         catch (Exception e) {

@@ -10,15 +10,16 @@ import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
-import io.github.libfdx.graphics.ShaderBinding;
-import io.github.libfdx.graphics.ShaderBindingType;
-import io.github.libfdx.graphics.ShaderAttribute;
-import io.github.libfdx.graphics.ShaderReflection;
+import io.github.libfdx.graphics.RenderTargetLayout;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.TextureFormat;
+import io.github.libfdx.graphics.VertexAttribute;
+import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
+import io.github.libfdx.graphics.internal.BuiltInPbrShaderManifest;
+import io.github.libfdx.graphics.internal.ShaderRenderBindings;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationHandler;
@@ -273,6 +274,44 @@ final class GLResourceOwnershipTest {
     }
 
     @Test
+    void pipelineSwitchAndPassEndDisableSharedVertexArrayAttributes() {
+        FakeGL fakeGl = new FakeGL();
+        GLGraphicsAttachment attachment = attachment(fakeGl, new FakeSurface());
+        GLShaderModuleHandle shader = shader(attachment, fakeGl, 275);
+        GLRenderPipelineHandle widePipeline = pipelineWithLayouts(attachment, fakeGl, shader,
+                VertexLayout.of(96,
+                        VertexAttribute.of(0, VertexFormat.FLOAT32X2, 0),
+                        VertexAttribute.of(1, VertexFormat.FLOAT32X4, 8),
+                        VertexAttribute.of(2, VertexFormat.FLOAT32X4, 24),
+                        VertexAttribute.of(3, VertexFormat.FLOAT32X4, 40),
+                        VertexAttribute.of(4, VertexFormat.FLOAT32X4, 56),
+                        VertexAttribute.of(5, VertexFormat.FLOAT32X4, 72)));
+        GLRenderPipelineHandle narrowPipeline = pipelineWithLayouts(attachment, fakeGl, shader,
+                VertexLayout.of(24,
+                        VertexAttribute.of(0, VertexFormat.FLOAT32X2, 0),
+                        VertexAttribute.of(1, VertexFormat.FLOAT32X4, 8)));
+        Buffer buffer = attachment.device().createBuffer(BufferDescriptor.vertex("vertex-state", 96));
+        RenderPass pass = beginSurfacePass(attachment);
+        pass.setPipeline(widePipeline);
+        pass.setVertexBuffer(buffer);
+
+        fakeGl.resetCalls();
+        pass.setPipeline(narrowPipeline);
+        assertEquals(6, fakeGl.calls("disableVertexAttribArray"));
+
+        fakeGl.resetCalls();
+        pass.end();
+        assertEquals(2, fakeGl.calls("disableVertexAttribArray"));
+        attachment.endFrame();
+
+        buffer.dispose();
+        narrowPipeline.dispose();
+        widePipeline.dispose();
+        shader.dispose();
+        attachment.dispose();
+    }
+
+    @Test
     void passRejectsRenderTargetDisposedAfterBeginBeforeCallingGl() {
         FakeGL fakeGl = new FakeGL();
         GLGraphicsAttachment attachment = attachment(fakeGl, new FakeSurface());
@@ -420,9 +459,7 @@ final class GLResourceOwnershipTest {
         GLShaderModuleHandle shader = shader(attachment, fakeGl, 401);
         RenderPipelineDescriptor descriptor = RenderPipelineDescriptor
                 .shader(shader, TextureFormat.RGBA8_UNORM)
-                .shaderReflection(ShaderReflection.of(new ShaderBinding[] {
-                        ShaderBinding.of(0, 0, "uniforms", ShaderBindingType.UNIFORM_BUFFER)
-                }, new ShaderAttribute[0]));
+                .shaderReflection(BuiltInPbrShaderManifest.staticReflection());
         fakeGl.resetCalls();
         fakeGl.failOn("uniformBufferData", 1);
 
@@ -471,8 +508,24 @@ final class GLResourceOwnershipTest {
 
     private static GLRenderPipelineHandle pipeline(GLGraphicsAttachment attachment, FakeGL fakeGl,
             GLShaderModuleHandle shader, int sampledTextureCount) {
+        RenderPipelineDescriptor descriptor = RenderPipelineDescriptor
+                .shader(shader, TextureFormat.RGBA8_UNORM)
+                .sampledTextureCount(sampledTextureCount);
         return new GLRenderPipelineHandle(PROVIDER_ID, fakeGl.api(), attachment.resourceDomain(), shader,
-                PrimitiveTopology.TRIANGLE_LIST, new VertexLayout[0], sampledTextureCount, false, true, 0);
+                PrimitiveTopology.TRIANGLE_LIST, new VertexLayout[0], sampledTextureCount,
+                false, true, 0, ShaderRenderBindings.from(descriptor),
+                RenderTargetLayout.color(TextureFormat.RGBA8_UNORM));
+    }
+
+    private static GLRenderPipelineHandle pipelineWithLayouts(GLGraphicsAttachment attachment, FakeGL fakeGl,
+            GLShaderModuleHandle shader, VertexLayout... vertexLayouts) {
+        RenderPipelineDescriptor descriptor = RenderPipelineDescriptor
+                .shader(shader, TextureFormat.RGBA8_UNORM)
+                .vertexLayouts(vertexLayouts);
+        return new GLRenderPipelineHandle(PROVIDER_ID, fakeGl.api(), attachment.resourceDomain(), shader,
+                PrimitiveTopology.TRIANGLE_LIST, vertexLayouts, 0,
+                false, true, 0, ShaderRenderBindings.from(descriptor),
+                RenderTargetLayout.color(TextureFormat.RGBA8_UNORM));
     }
 
     private static final class FakeSurface implements GLSurface {

@@ -1,5 +1,7 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.graphics.shader.reflection.ShaderInterpolation;
+import io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.Buffer;
@@ -14,12 +16,25 @@ import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
-import io.github.libfdx.graphics.ShaderAttribute;
-import io.github.libfdx.graphics.ShaderBinding;
-import io.github.libfdx.graphics.ShaderBindingType;
-import io.github.libfdx.graphics.ShaderModule;
-import io.github.libfdx.graphics.ShaderModuleDescriptor;
-import io.github.libfdx.graphics.ShaderReflection;
+import io.github.libfdx.graphics.shader.reflection.ShaderBinding;
+import io.github.libfdx.graphics.shader.reflection.ShaderBuiltinUsage;
+import io.github.libfdx.graphics.shader.reflection.ShaderEntryPoint;
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameter;
+import io.github.libfdx.graphics.shader.runtime.ShaderParameterBlock;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameterHandle;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameterLayout;
+import io.github.libfdx.graphics.shader.ShaderProfile;
+import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceAccess;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceKind;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceUse;
+import io.github.libfdx.graphics.shader.reflection.ShaderScalarType;
+import io.github.libfdx.graphics.shader.ShaderStage;
+import io.github.libfdx.graphics.shader.reflection.ShaderStageVariable;
+import io.github.libfdx.graphics.shader.reflection.ShaderStageVisibility;
+import io.github.libfdx.graphics.shader.reflection.ShaderValueType;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
@@ -145,14 +160,18 @@ public final class DirectionalShadowMap3D implements Disposable {
             throw new FdxException("ModelInstance array cannot be null");
         }
         RenderPass pass = beginPass(light);
-        batch.begin(pass, camera);
-        for (int i = 0; i < instances.length; i++) {
-            if (instances[i] != null) {
-                batch.render(instances[i]);
+        try {
+            batch.begin(pass, camera);
+            for (int i = 0; i < instances.length; i++) {
+                if (instances[i] != null) {
+                    batch.render(instances[i]);
+                }
             }
+            batch.end();
         }
-        batch.end();
-        pass.end();
+        finally {
+            pass.end();
+        }
     }
 
     /**
@@ -167,24 +186,29 @@ public final class DirectionalShadowMap3D implements Disposable {
             throw new FdxException("ModelInstance iterable cannot be null");
         }
         RenderPass pass = beginPass(light);
-        batch.begin(pass, camera);
-        if (instances instanceof List<?>) {
-            List<?> values = (List<?>) instances;
-            for (int i = 0; i < values.size(); i++) {
-                ModelInstance instance = (ModelInstance) values.get(i);
-                if (instance != null) {
-                    batch.render(instance);
+        try {
+            batch.begin(pass, camera);
+            if (instances instanceof List<?>) {
+                List<?> values = (List<?>) instances;
+                for (int i = 0; i < values.size(); i++) {
+                    ModelInstance instance = (ModelInstance) values.get(i);
+                    if (instance != null) {
+                        batch.render(instance);
+                    }
                 }
             }
-        } else {
-            for (ModelInstance instance : instances) {
-                if (instance != null) {
-                    batch.render(instance);
+            else {
+                for (ModelInstance instance : instances) {
+                    if (instance != null) {
+                        batch.render(instance);
+                    }
                 }
             }
+            batch.end();
         }
-        batch.end();
-        pass.end();
+        finally {
+            pass.end();
+        }
     }
 
     /**
@@ -376,15 +400,24 @@ public final class DirectionalShadowMap3D implements Disposable {
                             1.0);
                 }
                 """;
-        private static final ShaderReflection REFLECTION = ShaderReflection.of(new ShaderBinding[] {
-                ShaderBinding.of(0, 0, "uniforms", ShaderBindingType.UNIFORM_BUFFER)
-        }, new ShaderAttribute[] {
-                ShaderAttribute.of(0, "position", VertexFormat.FLOAT32X3)
-        });
+        private static final ShaderValueType MATRIX4 = ShaderValueType
+                .matrix(ShaderScalarType.F32, 4, 4, 16)
+                .named("mat4x4<f32>");
+        private static final ShaderParameterLayout UNIFORM_LAYOUT =
+                ShaderParameterLayout.of(128, 16,
+                        ShaderParameter.of("model", MATRIX4, 0, 64, 16),
+                        ShaderParameter.of("viewProjection", MATRIX4, 64, 64, 16));
+        private static final ShaderParameterHandle MODEL =
+                UNIFORM_LAYOUT.requireHandle("model");
+        private static final ShaderParameterHandle VIEW_PROJECTION =
+                UNIFORM_LAYOUT.requireHandle("viewProjection");
+        private static final ShaderReflection REFLECTION = reflection();
         private final GraphicsContext graphics;
         private final ShaderModule shaderModule;
         private final Map<VertexLayout, RenderPipeline[]> pipelines =
                 new IdentityHashMap<VertexLayout, RenderPipeline[]>();
+        private final ShaderParameterBlock uniformBlock =
+                ShaderParameterBlock.allocate(UNIFORM_LAYOUT);
         private final float[] modelMatrix = new float[Matrix4.VALUE_COUNT];
         private final float[] viewProjectionMatrix = new float[Matrix4.VALUE_COUNT];
         private RenderContext3D context;
@@ -430,8 +463,10 @@ public final class DirectionalShadowMap3D implements Disposable {
             pass.setVertexBuffer(mesh.vertexBuffer());
             renderable.worldTransform().copyValues(modelMatrix, 0);
             context.camera().combined().copyValues(viewProjectionMatrix, 0);
-            pass.setUniformMatrix4("u_model", modelMatrix);
-            pass.setUniformMatrix4("u_viewProjection", viewProjectionMatrix);
+            uniformBlock.setFloatMatrix(MODEL, modelMatrix, 0);
+            uniformBlock.setFloatMatrix(VIEW_PROJECTION,
+                    viewProjectionMatrix, 0);
+            pass.setParameterBlock(0, 0, uniformBlock);
             int indexCount = meshPart.indexCount() > 0 ? meshPart.indexCount() : mesh.indexCount();
             if (indexCount > 0) {
                 pass.setIndexBuffer(mesh.indexBuffer());
@@ -440,6 +475,54 @@ public final class DirectionalShadowMap3D implements Disposable {
             }
             int vertexCount = meshPart.vertexCount() > 0 ? meshPart.vertexCount() : mesh.vertexCount();
             pass.draw(vertexCount, 1, meshPart.firstVertex(), 0);
+        }
+
+        private static ShaderReflection reflection() {
+            ShaderValueType f32 =
+                    ShaderValueType.scalar(ShaderScalarType.F32);
+            ShaderValueType float3 =
+                    ShaderValueType.vector(ShaderScalarType.F32, 3);
+            ShaderValueType float4 =
+                    ShaderValueType.vector(ShaderScalarType.F32, 4);
+            ShaderStageVariable vertexPosition = ShaderStageVariable.of(
+                    "input.position", "position", 0, -1, -1, float3,
+                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolation.PERSPECTIVE,
+                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling.CENTER);
+            ShaderStageVariable vertexDepth = ShaderStageVariable.of(
+                    "<retval>.depth", "depth", 0, -1, -1, f32,
+                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolation.PERSPECTIVE,
+                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling.CENTER);
+            ShaderStageVariable fragmentDepth = ShaderStageVariable.of(
+                    "input.depth", "depth", 0, -1, -1, f32,
+                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolation.PERSPECTIVE,
+                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling.CENTER);
+            ShaderStageVariable fragmentColor = ShaderStageVariable.of(
+                    "<retval>", "", 0, -1, -1, float4,
+                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolation.PERSPECTIVE,
+                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling.CENTER);
+            ShaderBinding uniforms = ShaderBinding.builder(0, 0,
+                            "uniforms", ShaderResourceKind.UNIFORM_BUFFER)
+                    .visibility(ShaderStageVisibility.VERTEX)
+                    .access(ShaderResourceAccess.READ)
+                    .buffer(128, 128, 16, UNIFORM_LAYOUT)
+                    .build();
+            return ShaderReflection.complete(ShaderProfile.PORTABLE_WEBGPU,
+                    new ShaderEntryPoint[] {
+                            ShaderEntryPoint.builder("vertexMain",
+                                            ShaderStage.VERTEX)
+                                    .builtins(ShaderBuiltinUsage.POSITION, -1)
+                                    .inputs(vertexPosition)
+                                    .outputs(vertexDepth)
+                                    .resources(ShaderResourceUse.of(0, 0, 128))
+                                    .build(),
+                            ShaderEntryPoint.builder("fragmentMain",
+                                            ShaderStage.FRAGMENT)
+                                    .builtins(ShaderBuiltinUsage.POSITION, -1)
+                                    .inputs(fragmentDepth)
+                                    .outputs(fragmentColor)
+                                    .build()
+                    },
+                    new ShaderBinding[] { uniforms }, new String[0]);
         }
 
         @Override

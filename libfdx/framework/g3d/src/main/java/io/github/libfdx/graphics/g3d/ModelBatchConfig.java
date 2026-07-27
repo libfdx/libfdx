@@ -1,5 +1,7 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
+
 /**
  * Stores configuration values for a model batch.
  *
@@ -11,6 +13,7 @@ public final class ModelBatchConfig {
     private boolean instancingEnabled = true;
     private boolean gpuSkinningEnabled = true;
     private ShaderProvider3D shaderProvider;
+    private ShaderProvider commonShaderProvider;
 
     /**
      * Sets the max lights and returns this model batch config.
@@ -57,13 +60,30 @@ public final class ModelBatchConfig {
     }
 
     /**
-     * Sets the shader provider and returns this model batch config.
+     * Sets the borrowed shader provider and returns this model batch config.
+     *
+     * <p>A {@link ModelBatch} created from this configuration does not dispose
+     * the provider.</p>
      *
      * @param shaderProvider the shader provider
      * @return this model batch config for chaining
      */
     public ModelBatchConfig shaderProvider(ShaderProvider3D shaderProvider) {
         this.shaderProvider = shaderProvider;
+        commonShaderProvider = null;
+        return this;
+    }
+
+    /**
+     * Sets the borrowed common shader provider and clears the configured
+     * domain-specific provider. The last provider setter wins.
+     *
+     * @param shaderProvider common shader provider
+     * @return this model batch config for chaining
+     */
+    public ModelBatchConfig shaderProvider(ShaderProvider shaderProvider) {
+        commonShaderProvider = shaderProvider;
+        this.shaderProvider = null;
         return this;
     }
 
@@ -110,5 +130,14 @@ public final class ModelBatchConfig {
      */
     public ShaderProvider3D shaderProvider() {
         return shaderProvider;
+    }
+
+    /**
+     * Returns the configured common shader provider.
+     *
+     * @return common provider, or {@code null}
+     */
+    public ShaderProvider commonShaderProvider() {
+        return commonShaderProvider;
     }
 }

@@ -5,6 +5,8 @@ import com.github.xpenatan.webgpu.WGPUBindGroupLayout;
 import com.github.xpenatan.webgpu.WGPURenderPipeline;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.RenderPipeline;
+import io.github.libfdx.graphics.RenderTargetLayout;
+import io.github.libfdx.graphics.internal.ShaderRenderBindings;
 
 import java.util.ArrayList;
 
@@ -17,24 +19,31 @@ final class WGPURenderPipelineHandle extends WGPURecordedResource implements Ren
     private final WGPURenderPipeline nativePipeline;
     private final WGPUPipelineLayout nativeLayout;
     private final WGPUBindGroupLayout textureBindGroupLayout;
-    private final WGPUBindGroupLayout uniformBindGroupLayout;
+    private final WGPUBindGroupLayout[] uniformBindGroupLayouts;
     private final int sampledTextureCount;
-    private final int uniformBindGroupIndex;
+    private final int textureBindGroupIndex;
     private final int vertexBufferCount;
+    private final ShaderRenderBindings resourceBindings;
+    private final RenderTargetLayout targetLayout;
     private ArrayList<WGPUTextureBindGroupResource> textureBindGroups;
 
     WGPURenderPipelineHandle(WGPUResourceDomain resourceDomain, WGPURenderPipeline nativePipeline,
             WGPUPipelineLayout nativeLayout,
-            WGPUBindGroupLayout textureBindGroupLayout, WGPUBindGroupLayout uniformBindGroupLayout,
-            int sampledTextureCount, int uniformBindGroupIndex, int vertexBufferCount) {
+            WGPUBindGroupLayout textureBindGroupLayout,
+            WGPUBindGroupLayout[] uniformBindGroupLayouts,
+            int sampledTextureCount, int textureBindGroupIndex,
+            int vertexBufferCount, ShaderRenderBindings resourceBindings,
+            RenderTargetLayout targetLayout) {
         super(resourceDomain);
         this.nativePipeline = nativePipeline;
         this.nativeLayout = nativeLayout;
         this.textureBindGroupLayout = textureBindGroupLayout;
-        this.uniformBindGroupLayout = uniformBindGroupLayout;
+        this.uniformBindGroupLayouts = uniformBindGroupLayouts;
         this.sampledTextureCount = sampledTextureCount;
-        this.uniformBindGroupIndex = uniformBindGroupIndex;
+        this.textureBindGroupIndex = textureBindGroupIndex;
         this.vertexBufferCount = vertexBufferCount;
+        this.resourceBindings = resourceBindings;
+        this.targetLayout = targetLayout;
     }
 
     WGPURenderPipeline nativePipeline() {
@@ -45,20 +54,33 @@ final class WGPURenderPipelineHandle extends WGPURecordedResource implements Ren
         return textureBindGroupLayout;
     }
 
-    WGPUBindGroupLayout uniformBindGroupLayout() {
-        return uniformBindGroupLayout;
+    WGPUBindGroupLayout uniformBindGroupLayout(int index) {
+        return uniformBindGroupLayouts[index];
     }
 
     int sampledTextureCount() {
         return sampledTextureCount;
     }
 
-    int uniformBindGroupIndex() {
-        return uniformBindGroupIndex;
+    int textureBindGroupIndex() {
+        return textureBindGroupIndex;
+    }
+
+    int uniformBindGroupIndex(int index) {
+        return resourceBindings.uniformSetIndex(index);
     }
 
     int vertexBufferCount() {
         return vertexBufferCount;
+    }
+
+    ShaderRenderBindings resourceBindings() {
+        return resourceBindings;
+    }
+
+    @Override
+    public RenderTargetLayout targetLayout() {
+        return targetLayout;
     }
 
     void addTextureBindGroup(WGPUTextureBindGroupResource bindGroup) {
@@ -135,8 +157,10 @@ final class WGPURenderPipelineHandle extends WGPURecordedResource implements Ren
     @Override
     protected void releaseNative() {
         WGPUCleanup cleanup = new WGPUCleanup();
-        if (uniformBindGroupLayout != null) {
-            cleanup.run(() -> resourceDomain().releaseUniformBindGroups(uniformBindGroupLayout));
+        for (WGPUBindGroupLayout layout : uniformBindGroupLayouts) {
+            if (layout != null) {
+                cleanup.run(() -> resourceDomain().releaseUniformBindGroups(layout));
+            }
         }
         if (nativePipeline != null) {
             cleanup.run(() -> {
@@ -162,13 +186,15 @@ final class WGPURenderPipelineHandle extends WGPURecordedResource implements Ren
             });
             cleanup.run(textureBindGroupLayout::dispose);
         }
-        if (uniformBindGroupLayout != null) {
-            cleanup.run(() -> {
-                if (uniformBindGroupLayout.isValid()) {
-                    uniformBindGroupLayout.release();
-                }
-            });
-            cleanup.run(uniformBindGroupLayout::dispose);
+        for (WGPUBindGroupLayout layout : uniformBindGroupLayouts) {
+            if (layout != null) {
+                cleanup.run(() -> {
+                    if (layout.isValid()) {
+                        layout.release();
+                    }
+                });
+                cleanup.run(layout::dispose);
+            }
         }
         cleanup.throwIfFailed();
     }

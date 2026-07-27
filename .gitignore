@@ -36,6 +36,12 @@ target/
 build/
 **/webapp/assets
 
+# The shader target API is source, despite its package directory name.
+!libfdx/framework/graphics/src/main/java/io/github/libfdx/graphics/shader/target/
+!libfdx/framework/graphics/src/main/java/io/github/libfdx/graphics/shader/target/**
+!libfdx/framework/graphics/src/test/java/io/github/libfdx/graphics/shader/target/
+!libfdx/framework/graphics/src/test/java/io/github/libfdx/graphics/shader/target/**
+
 *.a
 *.dll
 *.dll.mdb

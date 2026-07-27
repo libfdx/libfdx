@@ -2,8 +2,10 @@ package io.github.libfdx.graphics.wgpu;
 
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.Buffer;
+import io.github.libfdx.graphics.ComputePipeline;
 import io.github.libfdx.graphics.RenderPipeline;
-import io.github.libfdx.graphics.ShaderModule;
+import io.github.libfdx.graphics.Sampler;
+import io.github.libfdx.graphics.shader.ShaderModule;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureView;
 
@@ -38,6 +40,19 @@ final class WGPUResources {
         return handle;
     }
 
+    static WGPUSamplerHandle requireSampler(Sampler value, WGPUResourceDomain domain, String name) {
+        if (value == null) {
+            throw new FdxException(name + " cannot be null");
+        }
+        if (!(value instanceof WGPUSamplerHandle handle) || handle.resourceDomain() != domain) {
+            throw incompatible(name);
+        }
+        if (handle.isDisposed()) {
+            throw disposed(name);
+        }
+        return handle;
+    }
+
     static WGPUShaderModuleHandle requireShaderModule(ShaderModule value, WGPUResourceDomain domain, String name) {
         if (value == null) {
             throw new FdxException(name + " cannot be null");
@@ -59,6 +74,21 @@ final class WGPUResources {
             throw incompatible(name);
         }
         requireUsable(handle, domain, name);
+        return handle;
+    }
+
+    static WGPUComputePipelineHandle requireComputePipeline(
+            ComputePipeline value, WGPUResourceDomain domain, String name) {
+        if (value == null) {
+            throw new FdxException(name + " cannot be null");
+        }
+        if (!(value instanceof WGPUComputePipelineHandle handle)
+                || handle.resourceDomain() != domain) {
+            throw incompatible(name);
+        }
+        if (handle.isDisposed()) {
+            throw disposed(name);
+        }
         return handle;
     }
 

@@ -681,6 +681,16 @@ final class DesktopCGLApi implements GLApi {
     }
 
     /**
+     * Runs the disable vertex attrib array step.
+     *
+     * @param index the index
+     */
+    @Override
+    public void disableVertexAttribArray(int index) {
+        DesktopCOpenGL.glDisableVertexAttribArray(index);
+    }
+
+    /**
      * Runs the vertex attrib pointer step.
      *
      * @param index the index

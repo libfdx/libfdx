@@ -13,6 +13,7 @@ public final class TextureDescriptor {
     private int height;
     private TextureFormat format = TextureFormat.RGBA8_UNORM;
     private TextureUsage usage = TextureUsage.SAMPLED;
+    private int sampleCount = 1;
     private TextureFilter filter = TextureFilter.LINEAR;
     private TextureWrap wrapS = TextureWrap.CLAMP_TO_EDGE;
     private TextureWrap wrapT = TextureWrap.CLAMP_TO_EDGE;
@@ -144,6 +145,29 @@ public final class TextureDescriptor {
     }
 
     /**
+     * Returns the texture sample count.
+     *
+     * @return the sample count
+     */
+    public int sampleCount() {
+        return sampleCount;
+    }
+
+    /**
+     * Sets the texture sample count.
+     *
+     * @param value positive power-of-two sample count
+     * @return this descriptor
+     */
+    public TextureDescriptor sampleCount(int value) {
+        if (value <= 0 || (value & (value - 1)) != 0) {
+            throw new FdxException("Texture sample count must be a positive power of two");
+        }
+        sampleCount = value;
+        return this;
+    }
+
+    /**
      * Returns the sampled texture filter.
      *
      * @return the sampled texture filter
@@ -202,5 +226,44 @@ public final class TextureDescriptor {
         this.wrapS = wrapS != null ? wrapS : TextureWrap.CLAMP_TO_EDGE;
         this.wrapT = wrapT != null ? wrapT : TextureWrap.CLAMP_TO_EDGE;
         return this;
+    }
+
+    /**
+     * Validates format, usage, and sample-count requirements before a provider
+     * allocates a native texture.
+     *
+     * @param capabilities device capabilities
+     */
+    public void validate(GraphicsCapabilities capabilities) {
+        if (capabilities == null) {
+            throw new FdxException("Graphics capabilities cannot be null");
+        }
+        if (width <= 0 || height <= 0) {
+            throw new FdxException("Texture size must be set before creation");
+        }
+        if (format.isDepthStencil()) {
+            if (!capabilities.supportsDepthStencilFormat(format)) {
+                throw new FdxException("Graphics device does not support depth/stencil format "
+                        + format);
+            }
+        } else if (!capabilities.supportsColorFormat(format)) {
+            throw new FdxException("Graphics device does not support texture format " + format);
+        }
+        if (!capabilities.supportsSampleCount(format, sampleCount)) {
+            throw new FdxException("Graphics device does not support sample count "
+                    + sampleCount + " for texture format " + format);
+        }
+        if (sampleCount > 1 && !usage.renderAttachment()) {
+            throw new FdxException("Multisampled textures must allow render attachment use");
+        }
+        if (usage.storage()) {
+            capabilities.require(GraphicsFeature.STORAGE_TEXTURES);
+            if (format.isDepthStencil()) {
+                throw new FdxException("Depth/stencil textures cannot use storage bindings");
+            }
+            if (sampleCount > 1) {
+                throw new FdxException("Multisampled textures cannot use storage bindings");
+            }
+        }
     }
 }

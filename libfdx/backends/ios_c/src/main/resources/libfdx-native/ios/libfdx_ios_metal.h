@@ -35,7 +35,7 @@ int64_t libfdx_ios_metal_create_render_pipeline(
         const int32_t* attribute_offsets,
         int32_t attribute_count,
         int32_t sampled_texture_count,
-        int32_t pbr_uniforms_enabled,
+        int32_t uniform_buffer_enabled,
         int32_t depth_test_enabled,
         int32_t depth_write_enabled);
 void libfdx_ios_metal_begin_render_pass(

@@ -2,6 +2,8 @@ package io.github.libfdx.graphics;
 
 import io.github.libfdx.core.FdxException;
 
+import java.util.Objects;
+
 /**
  * Represents a vertex attribute.
  *
@@ -64,5 +66,17 @@ public final class VertexAttribute {
      */
     public int offset() {
         return offset;
+    }
+
+    @Override
+    public boolean equals(Object object) {
+        return object instanceof VertexAttribute other
+                && location == other.location && format == other.format
+                && offset == other.offset;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(location, format, offset);
     }
 }

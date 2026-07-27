@@ -3,8 +3,9 @@ package io.github.libfdx.graphics.wgpu;
 import com.github.xpenatan.webgpu.WGPUShaderModule;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
-import io.github.libfdx.graphics.ShaderLanguage;
-import io.github.libfdx.graphics.ShaderModule;
+import io.github.libfdx.graphics.shader.ShaderLanguage;
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
 
 /**
  * Represents a WGPU shader module handle.
@@ -15,15 +16,22 @@ final class WGPUShaderModuleHandle implements ShaderModule {
     private final WGPUResourceDomain resourceDomain;
     private final WGPUShaderModule nativeModule;
     private final ShaderLanguage language;
+    private final ShaderReflection reflection;
     private boolean disposed;
 
     WGPUShaderModuleHandle(WGPUResourceDomain resourceDomain, WGPUShaderModule nativeModule, ShaderLanguage language) {
+        this(resourceDomain, nativeModule, language, ShaderReflection.empty());
+    }
+
+    WGPUShaderModuleHandle(WGPUResourceDomain resourceDomain, WGPUShaderModule nativeModule, ShaderLanguage language,
+            ShaderReflection reflection) {
         if (resourceDomain == null) {
             throw new FdxException("WGPU shader resource domain cannot be null");
         }
         this.resourceDomain = resourceDomain;
         this.nativeModule = nativeModule;
         this.language = language;
+        this.reflection = reflection != null ? reflection : ShaderReflection.empty();
     }
 
     WGPUShaderModule nativeModule() {
@@ -42,6 +50,11 @@ final class WGPUShaderModuleHandle implements ShaderModule {
     @Override
     public ShaderLanguage language() {
         return language;
+    }
+
+    @Override
+    public ShaderReflection reflection() {
+        return reflection;
     }
 
     /**

@@ -7,6 +7,8 @@ import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileResult;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileStage;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileTarget;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompiler;
+import io.github.libfdx.runtime.core.shader.RuntimeShaderReflection;
+import io.github.libfdx.runtime.core.shader.RuntimeShaderTargetInterface;
 import java.nio.charset.StandardCharsets;
 import org.teavm.interop.Address;
 import org.teavm.interop.Import;
@@ -47,16 +49,33 @@ final class DesktopCRuntimeShaderCompiler implements RuntimeShaderCompiler {
                 return failure("Native shader compiler returned a negative output size");
             }
             Address outputAddress = fdxDesktopShadercResultOutput(handle);
-            byte[] output = copyBytes(outputAddress, outputSize);
+            byte[] output = copyBytes(outputAddress, outputSize, "output");
             if (status != 0) {
                 return failure(cString(fdxDesktopShadercResultDiagnostics(handle), MAX_DIAGNOSTIC_BYTES));
             }
+            int reflectionSize = fdxDesktopShadercResultReflectionSize(handle);
+            if (reflectionSize <= 0) {
+                return failure("Native shader compiler returned no reflection");
+            }
+            byte[] reflectionBytes = copyBytes(fdxDesktopShadercResultReflection(handle), reflectionSize,
+                    "reflection");
+            RuntimeShaderReflection reflection = RuntimeShaderReflection.fromBytes(reflectionBytes);
+            int targetInterfaceSize = fdxDesktopShadercResultTargetInterfaceSize(handle);
+            if (targetInterfaceSize < 0) {
+                return failure("Native shader compiler returned a negative target-interface size");
+            }
+            RuntimeShaderTargetInterface targetInterface = targetInterfaceSize > 0
+                    ? RuntimeShaderTargetInterface.fromBytes(copyBytes(
+                            fdxDesktopShadercResultTargetInterface(handle), targetInterfaceSize,
+                            "target interface"))
+                    : null;
             RuntimeShaderCompileOutputKind outputKind = outputKind(kind);
             if (outputKind == RuntimeShaderCompileOutputKind.TEXT) {
-                return RuntimeShaderCompileResult.text(new String(output, StandardCharsets.UTF_8));
+                return RuntimeShaderCompileResult.text(new String(output, StandardCharsets.UTF_8),
+                        reflection, targetInterface);
             }
             if (outputKind == RuntimeShaderCompileOutputKind.SPIRV) {
-                return RuntimeShaderCompileResult.spirv(output);
+                return RuntimeShaderCompileResult.spirv(output, reflection, targetInterface);
             }
             return failure("Native shader compiler returned no output");
         } catch (Throwable error) {
@@ -75,12 +94,12 @@ final class DesktopCRuntimeShaderCompiler implements RuntimeShaderCompiler {
         return message.length() > 0 ? message : "Desktop C runtime shader compiler is unavailable";
     }
 
-    private static byte[] copyBytes(Address address, int length) {
+    private static byte[] copyBytes(Address address, int length, String label) {
         if (length == 0) {
             return new byte[0];
         }
         if (isNull(address)) {
-            throw new IllegalStateException("Native shader compiler returned a null output pointer");
+            throw new IllegalStateException("Native shader compiler returned a null " + label + " pointer");
         }
         byte[] bytes = new byte[length];
         for (int i = 0; i < length; i++) {
@@ -100,7 +119,7 @@ final class DesktopCRuntimeShaderCompiler implements RuntimeShaderCompiler {
         if (length == maximumBytes) {
             return "Native shader compiler diagnostic exceeded " + maximumBytes + " bytes";
         }
-        return new String(copyBytes(address, length), StandardCharsets.UTF_8);
+        return new String(copyBytes(address, length, "diagnostic"), StandardCharsets.UTF_8);
     }
 
     private static boolean isNull(Address address) {
@@ -143,6 +162,9 @@ final class DesktopCRuntimeShaderCompiler implements RuntimeShaderCompiler {
         if (stage == RuntimeShaderCompileStage.FRAGMENT) {
             return 2;
         }
+        if (stage == RuntimeShaderCompileStage.COMPUTE) {
+            return 3;
+        }
         return 0;
     }
 
@@ -180,6 +202,18 @@ final class DesktopCRuntimeShaderCompiler implements RuntimeShaderCompiler {
 
     @Import(name = "fdx_desktop_shaderc_result_diagnostics")
     private static native Address fdxDesktopShadercResultDiagnostics(Address handle);
+
+    @Import(name = "fdx_desktop_shaderc_result_reflection")
+    private static native Address fdxDesktopShadercResultReflection(Address handle);
+
+    @Import(name = "fdx_desktop_shaderc_result_reflection_size")
+    private static native int fdxDesktopShadercResultReflectionSize(Address handle);
+
+    @Import(name = "fdx_desktop_shaderc_result_target_interface")
+    private static native Address fdxDesktopShadercResultTargetInterface(Address handle);
+
+    @Import(name = "fdx_desktop_shaderc_result_target_interface_size")
+    private static native int fdxDesktopShadercResultTargetInterfaceSize(Address handle);
 
     @Import(name = "fdx_desktop_shaderc_result_free")
     private static native void fdxDesktopShadercResultFree(Address handle);

@@ -32,6 +32,10 @@ IntResultFn output_kind_fn = nullptr;
 OutputFn output_fn = nullptr;
 IntResultFn output_size_fn = nullptr;
 DiagnosticFn diagnostics_fn = nullptr;
+OutputFn reflection_fn = nullptr;
+IntResultFn reflection_size_fn = nullptr;
+OutputFn target_interface_fn = nullptr;
+IntResultFn target_interface_size_fn = nullptr;
 FreeFn free_fn = nullptr;
 
 #if defined(_WIN32)
@@ -119,6 +123,10 @@ void load_api() {
             || !require_symbol(output_fn, "fdx_shaderc_result_output")
             || !require_symbol(output_size_fn, "fdx_shaderc_result_output_size")
             || !require_symbol(diagnostics_fn, "fdx_shaderc_result_diagnostics")
+            || !require_symbol(reflection_fn, "fdx_shaderc_result_reflection")
+            || !require_symbol(reflection_size_fn, "fdx_shaderc_result_reflection_size")
+            || !require_symbol(target_interface_fn, "fdx_shaderc_result_target_interface")
+            || !require_symbol(target_interface_size_fn, "fdx_shaderc_result_target_interface_size")
             || !require_symbol(free_fn, "fdx_shaderc_result_free")) {
         return;
     }
@@ -129,6 +137,8 @@ bool ensure_api() {
     std::call_once(load_once, load_api);
     return compile_fn != nullptr && status_fn != nullptr && output_kind_fn != nullptr
             && output_fn != nullptr && output_size_fn != nullptr && diagnostics_fn != nullptr
+            && reflection_fn != nullptr && reflection_size_fn != nullptr
+            && target_interface_fn != nullptr && target_interface_size_fn != nullptr
             && free_fn != nullptr;
 }
 
@@ -176,6 +186,23 @@ extern "C" int32_t fdx_desktop_shaderc_result_output_size(void* handle) {
 extern "C" char* fdx_desktop_shaderc_result_diagnostics(void* handle) {
     return ensure_api() && handle != nullptr ? const_cast<char*>(diagnostics_fn(handle))
             : const_cast<char*>(failure_message.c_str());
+}
+
+extern "C" uint8_t* fdx_desktop_shaderc_result_reflection(void* handle) {
+    return ensure_api() && handle != nullptr ? const_cast<uint8_t*>(reflection_fn(handle)) : nullptr;
+}
+
+extern "C" int32_t fdx_desktop_shaderc_result_reflection_size(void* handle) {
+    return ensure_api() && handle != nullptr ? reflection_size_fn(handle) : 0;
+}
+
+extern "C" uint8_t* fdx_desktop_shaderc_result_target_interface(void* handle) {
+    return ensure_api() && handle != nullptr
+            ? const_cast<uint8_t*>(target_interface_fn(handle)) : nullptr;
+}
+
+extern "C" int32_t fdx_desktop_shaderc_result_target_interface_size(void* handle) {
+    return ensure_api() && handle != nullptr ? target_interface_size_fn(handle) : 0;
 }
 
 extern "C" void fdx_desktop_shaderc_result_free(void* handle) {

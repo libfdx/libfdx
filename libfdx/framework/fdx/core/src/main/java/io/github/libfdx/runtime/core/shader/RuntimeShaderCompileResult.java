@@ -15,13 +15,18 @@ public final class RuntimeShaderCompileResult {
     private final RuntimeShaderCompileOutputKind outputKind;
     private final byte[] output;
     private final RuntimeShaderCompileDiagnostic[] diagnostics;
+    private final RuntimeShaderReflection reflection;
+    private final RuntimeShaderTargetInterface targetInterface;
 
     private RuntimeShaderCompileResult(boolean success, RuntimeShaderCompileOutputKind outputKind, byte[] output,
-            RuntimeShaderCompileDiagnostic[] diagnostics) {
+            RuntimeShaderCompileDiagnostic[] diagnostics, RuntimeShaderReflection reflection,
+            RuntimeShaderTargetInterface targetInterface) {
         this.success = success;
         this.outputKind = outputKind != null ? outputKind : RuntimeShaderCompileOutputKind.NONE;
         this.output = output != null ? output.clone() : new byte[0];
         this.diagnostics = diagnostics != null ? diagnostics.clone() : EMPTY_DIAGNOSTICS;
+        this.reflection = reflection;
+        this.targetInterface = targetInterface;
     }
 
     /**
@@ -31,8 +36,33 @@ public final class RuntimeShaderCompileResult {
      * @return a new result
      */
     public static RuntimeShaderCompileResult text(String text) {
+        return text(text, null);
+    }
+
+    /**
+     * Creates a text result with compiler reflection.
+     *
+     * @param text the text
+     * @param reflection the compiler reflection
+     * @return a new result
+     */
+    public static RuntimeShaderCompileResult text(String text, RuntimeShaderReflection reflection) {
+        return text(text, reflection, null);
+    }
+
+    /**
+     * Creates a text result with compiler reflection and translated target-interface metadata.
+     *
+     * @param text the text
+     * @param reflection the compiler reflection
+     * @param targetInterface the translated target interface
+     * @return a new result
+     */
+    public static RuntimeShaderCompileResult text(String text, RuntimeShaderReflection reflection,
+            RuntimeShaderTargetInterface targetInterface) {
         return new RuntimeShaderCompileResult(true, RuntimeShaderCompileOutputKind.TEXT,
-                text != null ? text.getBytes(StandardCharsets.UTF_8) : new byte[0], EMPTY_DIAGNOSTICS);
+                text != null ? text.getBytes(StandardCharsets.UTF_8) : new byte[0],
+                EMPTY_DIAGNOSTICS, reflection, targetInterface);
     }
 
     /**
@@ -42,8 +72,32 @@ public final class RuntimeShaderCompileResult {
      * @return a new result
      */
     public static RuntimeShaderCompileResult spirv(byte[] output) {
+        return spirv(output, null);
+    }
+
+    /**
+     * Creates a SPIR-V result with compiler reflection.
+     *
+     * @param output the output
+     * @param reflection the compiler reflection
+     * @return a new result
+     */
+    public static RuntimeShaderCompileResult spirv(byte[] output, RuntimeShaderReflection reflection) {
+        return spirv(output, reflection, null);
+    }
+
+    /**
+     * Creates a SPIR-V result with compiler reflection and translated target-interface metadata.
+     *
+     * @param output the output
+     * @param reflection the compiler reflection
+     * @param targetInterface the translated target interface
+     * @return a new result
+     */
+    public static RuntimeShaderCompileResult spirv(byte[] output, RuntimeShaderReflection reflection,
+            RuntimeShaderTargetInterface targetInterface) {
         return new RuntimeShaderCompileResult(true, RuntimeShaderCompileOutputKind.SPIRV, output,
-                EMPTY_DIAGNOSTICS);
+                EMPTY_DIAGNOSTICS, reflection, targetInterface);
     }
 
     /**
@@ -53,7 +107,8 @@ public final class RuntimeShaderCompileResult {
      * @return a new result
      */
     public static RuntimeShaderCompileResult failure(RuntimeShaderCompileDiagnostic[] diagnostics) {
-        return new RuntimeShaderCompileResult(false, RuntimeShaderCompileOutputKind.NONE, new byte[0], diagnostics);
+        return new RuntimeShaderCompileResult(false, RuntimeShaderCompileOutputKind.NONE, new byte[0], diagnostics,
+                null, null);
     }
 
     /**
@@ -99,5 +154,41 @@ public final class RuntimeShaderCompileResult {
      */
     public RuntimeShaderCompileDiagnostic[] diagnostics() {
         return diagnostics.clone();
+    }
+
+    /**
+     * Returns whether this result contains compiler reflection.
+     *
+     * @return true when reflection is available
+     */
+    public boolean hasReflection() {
+        return reflection != null;
+    }
+
+    /**
+     * Returns compiler reflection when available.
+     *
+     * @return the reflection, or null when this result has no reflection
+     */
+    public RuntimeShaderReflection reflection() {
+        return reflection;
+    }
+
+    /**
+     * Returns whether this result contains translated target-interface metadata.
+     *
+     * @return true when target metadata is available
+     */
+    public boolean hasTargetInterface() {
+        return targetInterface != null;
+    }
+
+    /**
+     * Returns the translated target interface when available.
+     *
+     * @return the target interface, or null
+     */
+    public RuntimeShaderTargetInterface targetInterface() {
+        return targetInterface;
     }
 }

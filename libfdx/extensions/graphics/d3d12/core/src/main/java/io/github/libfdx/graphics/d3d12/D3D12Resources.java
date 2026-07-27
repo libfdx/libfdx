@@ -7,8 +7,11 @@ import io.github.libfdx.graphics.CommandEncoder;
 import io.github.libfdx.graphics.FrameBuffer;
 import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.RenderPipeline;
-import io.github.libfdx.graphics.ShaderLanguage;
-import io.github.libfdx.graphics.ShaderModule;
+import io.github.libfdx.graphics.RenderTargetLayout;
+import io.github.libfdx.graphics.internal.ShaderRenderBindings;
+import io.github.libfdx.graphics.shader.ShaderLanguage;
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureFormat;
@@ -276,11 +279,13 @@ final class D3D12TextureView implements TextureView {
         return texture != null ? texture.nativeHandle() : 0L;
     }
 
-    int width() {
+    @Override
+    public int width() {
         return texture != null ? texture.width() : context.width();
     }
 
-    int height() {
+    @Override
+    public int height() {
         return texture != null ? texture.height() : context.height();
     }
 
@@ -302,13 +307,21 @@ final class D3D12TextureView implements TextureView {
 }
 
 final class D3D12Shader extends D3D12Resource implements ShaderModule {
-    D3D12Shader(D3D12Context context, long nativeHandle) {
+    private final ShaderReflection reflection;
+
+    D3D12Shader(D3D12Context context, long nativeHandle, ShaderReflection reflection) {
         super(context, nativeHandle);
+        this.reflection = reflection != null ? reflection : ShaderReflection.empty();
     }
 
     @Override
     public ShaderLanguage language() {
         return ShaderLanguage.HLSL;
+    }
+
+    @Override
+    public ShaderReflection reflection() {
+        return reflection;
     }
 
     @Override
@@ -340,13 +353,15 @@ final class D3D12Shader extends D3D12Resource implements ShaderModule {
 
 final class D3D12Pipeline extends D3D12Resource implements RenderPipeline {
     private final int sampledTextureCount;
-    private final boolean uniformBufferEnabled;
+    private final ShaderRenderBindings resourceBindings;
+    private final RenderTargetLayout targetLayout;
 
     D3D12Pipeline(D3D12Context context, long nativeHandle, int sampledTextureCount,
-            boolean uniformBufferEnabled) {
+            ShaderRenderBindings resourceBindings, RenderTargetLayout targetLayout) {
         super(context, nativeHandle);
         this.sampledTextureCount = sampledTextureCount;
-        this.uniformBufferEnabled = uniformBufferEnabled;
+        this.resourceBindings = resourceBindings;
+        this.targetLayout = targetLayout;
     }
 
     int sampledTextureCount() {
@@ -354,7 +369,16 @@ final class D3D12Pipeline extends D3D12Resource implements RenderPipeline {
     }
 
     boolean uniformBufferEnabled() {
-        return uniformBufferEnabled;
+        return resourceBindings.hasUniformBuffer();
+    }
+
+    ShaderRenderBindings resourceBindings() {
+        return resourceBindings;
+    }
+
+    @Override
+    public RenderTargetLayout targetLayout() {
+        return targetLayout;
     }
 
     @Override

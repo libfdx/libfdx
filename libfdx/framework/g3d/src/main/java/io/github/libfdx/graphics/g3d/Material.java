@@ -33,4 +33,13 @@ public interface Material {
      * @return the shader provider
      */
     ShaderProvider3D shaderProvider();
+
+    /**
+     * Returns optional provider-neutral shader values/resources.
+     *
+     * @return material binding, or {@code null}
+     */
+    default ShaderMaterialBinding shaderBinding() {
+        return null;
+    }
 }

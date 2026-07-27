@@ -316,9 +316,10 @@ public final class TestChooserApplication extends ApplicationAdapter {
         currentTestName = TestSelector.AUTO_TEST_NAME;
         currentTest = new AutoTestApplication(new AutoTestApplication.CompletionHandler() {
             @Override
-            public void completed(int totalTests, int failedTests) {
+            public void completed(int totalTests, int failedTests, int skippedTests) {
                 pendingReturnToList = true;
-                pendingReturnStatus = "Auto complete: " + (totalTests - failedTests) + " / " + totalTests + " passed";
+                pendingReturnStatus = "Auto complete: " + (totalTests - failedTests - skippedTests)
+                        + " passed, " + skippedTests + " skipped, " + failedTests + " failed";
             }
         }, false);
         try {

@@ -259,6 +259,9 @@ final class IosCOpenGLES {
     @Import(name = "glEnableVertexAttribArray")
     static native void glEnableVertexAttribArray(int index);
 
+    @Import(name = "glDisableVertexAttribArray")
+    static native void glDisableVertexAttribArray(int index);
+
     @Import(name = "glVertexAttribPointer")
     static native void glVertexAttribPointer(int index, int size, int type, boolean normalized, int stride, int offset);
 

@@ -14,6 +14,7 @@
 #endif
 
 #include <cstdio>
+#include <cstddef>
 #include <cstdlib>
 
 #include <algorithm>
@@ -532,6 +533,7 @@ struct Context {
     VkQueue presentQueue = VK_NULL_HANDLE;
     uint32_t graphicsQueueFamily = UINT32_MAX;
     uint32_t presentQueueFamily = UINT32_MAX;
+    VkDeviceSize maxUniformBufferRange = 0;
     VkFormat surfaceFormat = VK_FORMAT_R8G8B8A8_UNORM;
     VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     VkExtent2D extent = {1, 1};
@@ -564,12 +566,10 @@ int64_t handle(void* pointer) {
     return static_cast<int64_t>(reinterpret_cast<intptr_t>(pointer));
 }
 
-constexpr int PBR_UNIFORM_BYTE_COUNT = 224;
-constexpr int PBR_TEXTURE_DESCRIPTOR_COUNT = 5;
 constexpr int MAX_FRAME_DESCRIPTOR_SETS = 1024;
 constexpr int MAX_FRAME_SAMPLED_IMAGES = 4096;
 constexpr int MAX_FRAME_UNIFORM_BUFFERS = 1024;
-constexpr int MAX_TEXTURE_DESCRIPTOR_SLOTS = 8;
+constexpr int MAX_TEXTURE_DESCRIPTOR_SLOTS = 16;
 constexpr VkFormat DEPTH_FORMAT = VK_FORMAT_D32_SFLOAT;
 constexpr uint64_t FRAME_FENCE_TIMEOUT_NS = 33000000ULL;
 constexpr uint64_t FRAME_ACQUIRE_TIMEOUT_NS = 33000000ULL;
@@ -578,6 +578,26 @@ constexpr uint64_t SINGLE_COMMAND_TIMEOUT_NS = 250000000ULL;
 
 uint32_t findMemoryType(Context* context, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 void destroyRetiredResources(Context* context, FrameSync& frame);
+
+VkDeviceSize physicalDeviceMaxUniformBufferRange(const VkPhysicalDeviceProperties& properties) {
+#if defined(LIBFDX_USE_SYSTEM_VULKAN_SDK)
+    return properties.limits.maxUniformBufferRange;
+#else
+    // The minimal ABI header stores VkPhysicalDeviceLimits and
+    // VkPhysicalDeviceSparseProperties in one opaque byte array. Vulkan fixes
+    // maxUniformBufferRange as the seventh uint32_t in VkPhysicalDeviceLimits.
+    static_assert(offsetof(VkPhysicalDeviceProperties, limitsAndSparseProperties)
+            % alignof(VkDeviceSize) == 0);
+    constexpr size_t byteOffset = 6 * sizeof(uint32_t);
+    static_assert(byteOffset + sizeof(uint32_t)
+            <= sizeof(properties.limitsAndSparseProperties));
+    uint32_t maxUniformBufferRange = 0;
+    std::memcpy(&maxUniformBufferRange,
+            properties.limitsAndSparseProperties + byteOffset,
+            sizeof(maxUniformBufferRange));
+    return static_cast<VkDeviceSize>(maxUniformBufferRange);
+#endif
+}
 
 void check(VkResult result, const char* message) {
     if (result != VK_SUCCESS) {
@@ -1406,6 +1426,7 @@ void createDevice(Context* context) {
     std::vector<const char*> extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(context->physicalDevice, &properties);
+    context->maxUniformBufferRange = physicalDeviceMaxUniformBufferRange(properties);
     bool deviceIsVulkan11 = VK_VERSION_MAJOR(properties.apiVersion) > 1
             || (VK_VERSION_MAJOR(properties.apiVersion) == 1 && VK_VERSION_MINOR(properties.apiVersion) >= 1);
     if (!deviceIsVulkan11) {
@@ -2401,19 +2422,24 @@ void bindUniformDescriptor(Context* context, Pipeline* pipeline, const void* sou
     if (!pipeline->uniformBufferEnabled) {
         return;
     }
-    if (size != PBR_UNIFORM_BYTE_COUNT) {
-        throw std::runtime_error("desktop C Vulkan PBR uniform upload has an unexpected size");
+    if (size <= 0) {
+        throw std::runtime_error("desktop C Vulkan uniform uploads require a positive size");
     }
-    TransientBuffer uniformBuffer = createHostVisibleBuffer(context, PBR_UNIFORM_BYTE_COUNT,
+    if (context->maxUniformBufferRange > 0
+            && static_cast<uint64_t>(size) > context->maxUniformBufferRange) {
+        throw std::runtime_error("desktop C Vulkan uniform upload exceeds maxUniformBufferRange");
+    }
+    VkDeviceSize byteCount = static_cast<VkDeviceSize>(size);
+    TransientBuffer uniformBuffer = createHostVisibleBuffer(context, byteCount,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, "Could not create desktop C Vulkan uniform buffer");
     try {
-        copyToHostVisibleBuffer(context, &uniformBuffer, source, PBR_UNIFORM_BYTE_COUNT);
+        copyToHostVisibleBuffer(context, &uniformBuffer, source, byteCount);
         VkDescriptorSet descriptorSet = allocateDescriptorSet(context, pipeline->uniformDescriptorSetLayout);
 
         VkDescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = uniformBuffer.buffer;
         bufferInfo.offset = 0;
-        bufferInfo.range = PBR_UNIFORM_BYTE_COUNT;
+        bufferInfo.range = byteCount;
 
         VkWriteDescriptorSet descriptorWrite{};
         descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -2723,22 +2749,18 @@ extern "C" int64_t fdx_desktop_vulkan_create_render_pipeline(int64_t contextHand
         int32_t vertexLayoutCount, const int32_t* attributeBindingsData,
         const int32_t* attributeLocationsData, const int32_t* attributeFormatsData,
         const int32_t* attributeOffsetsData, int32_t attributeCount, int32_t sampledTextureCountValue,
-        int32_t pbrUniformsEnabled, int32_t depthTestEnabled, int32_t depthWriteEnabled) {
+        int32_t uniformBufferEnabled, int32_t depthTestEnabled, int32_t depthWriteEnabled) {
     Context* context = ptr<Context>(contextHandle);
     ShaderModule* shaderModule = ptr<ShaderModule>(shaderModuleHandle);
     Pipeline* pipeline = new Pipeline();
     pipeline->context = context;
     pipeline->sampledTextureCount = static_cast<int>(sampledTextureCountValue);
-    pipeline->uniformBufferEnabled = pbrUniformsEnabled != 0;
+    pipeline->uniformBufferEnabled = uniformBufferEnabled != 0;
     pipeline->uniformDescriptorSetIndex = pipeline->sampledTextureCount > 0 ? 1 : 0;
 
     try {
         if (pipeline->sampledTextureCount < 0 || pipeline->sampledTextureCount > MAX_TEXTURE_DESCRIPTOR_SLOTS) {
             throw std::runtime_error("desktop C Vulkan sampled texture count exceeds the descriptor slot limit");
-        }
-        if (pipeline->uniformBufferEnabled
-                && pipeline->sampledTextureCount != PBR_TEXTURE_DESCRIPTOR_COUNT) {
-            throw std::runtime_error("desktop C Vulkan PBR uniform pipelines must declare five sampled textures");
         }
         VkPipelineShaderStageCreateInfo shaderStages[2]{};
         shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -3079,7 +3101,7 @@ extern "C" void fdx_desktop_vulkan_bind_textures(int64_t contextHandle, int64_t 
     }
 }
 
-extern "C" void fdx_desktop_vulkan_bind_uniforms(int64_t contextHandle, int64_t pipelineHandle,
+extern "C" int32_t fdx_desktop_vulkan_bind_uniforms(int64_t contextHandle, int64_t pipelineHandle,
         void* data, int32_t size) {
     Context* context = ptr<Context>(contextHandle);
     Pipeline* pipeline = ptr<Pipeline>(pipelineHandle);
@@ -3091,8 +3113,10 @@ extern "C" void fdx_desktop_vulkan_bind_uniforms(int64_t contextHandle, int64_t 
             throw std::runtime_error("desktop C Vulkan uniform uploads require a direct ByteBuffer");
         }
         bindUniformDescriptor(context, pipeline, data, static_cast<int>(size));
+        return 1;
     } catch (const std::exception& error) {
         logNativeError("Could not bind desktop C Vulkan uniforms", error);
+        return 0;
     }
 }
 

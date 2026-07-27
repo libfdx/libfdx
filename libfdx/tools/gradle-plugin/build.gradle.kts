@@ -1,5 +1,6 @@
 import org.gradle.api.publish.tasks.GenerateModuleMetadata
 import org.gradle.api.tasks.testing.Test
+import org.gradle.jvm.tasks.Jar
 
 plugins {
     id("maven-publish")
@@ -61,11 +62,18 @@ dependencies {
 
 // Project generation must use the writer from this checkout. The included plugin build
 // compiles against libFDX artifacts at the same selected publication version, but that
-// dependency must not hide local desktop-C generator fixes until after publication.
+// dependency must not hide local desktop-C generator or shader-validation API changes
+// until after publication.
 sourceSets {
     main {
         java.srcDir("../../backends/desktop_c/src/main/java")
+        java.srcDir("../../framework/graphics/src/main/java")
         java.include("io/github/libfdx/backend/desktopc/NativeProjectWriter.java")
+        java.include("io/github/libfdx/graphics/shader/ShaderProfile.java")
+        java.include("io/github/libfdx/graphics/shader/ShaderProfileValidator.java")
+        java.include("io/github/libfdx/graphics/shader/ShaderValidationDiagnostic.java")
+        java.include("io/github/libfdx/graphics/shader/ShaderValidationResult.java")
+        java.include("io/github/libfdx/graphics/shader/ShaderValidationSeverity.java")
     }
 }
 
@@ -75,6 +83,10 @@ tasks.withType<Test>().configureEach {
 
 tasks.withType<GenerateModuleMetadata>().configureEach {
     enabled = false
+}
+
+tasks.withType<Jar>().configureEach {
+    manifest.attributes["Implementation-Version"] = libfdxSelectedVersion
 }
 
 val moduleName = "gradle-plugin"

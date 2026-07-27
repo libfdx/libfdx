@@ -100,8 +100,27 @@ uses typed `as()` access only inside the owning resource lifetime. Matching
 provider IDs alone do not prove that two resources share a compatible native
 device or resource domain.
 
-Shader source is authored in WGSL. Providers either consume WGSL or translate
-it while creating shader modules; see [Shaders](SHADERS.md).
+WGSL is the portable shader-language boundary. Applications may author it
+directly or compile typed shader graphs to canonical WGSL; providers either
+consume WGSL or translate it while creating shader modules. See
+[Shaders](SHADERS.md).
+
+The shader-graph core and runtime are provider-neutral layers above common
+graphics. They compile semantic graphs to canonical WGSL and complete
+interfaces, then resolve one technique pass through the common
+`ShaderProvider` contract. Graphics providers consume ordinary shader
+artifacts and do not depend on graph classes. Standard G2D/G3D techniques may
+use this headless runtime; the standard G3D PBR implementation does so.
+
+One versioned `.fdxgraph` owns required semantics plus optional editor state and
+an optional compiled cache. Runtime loading selects an exact embedded entry or
+compiles the semantics in memory; no dedicated build/package module or
+companion shader artifacts are required.
+
+The optional UI Kit editor depends on graph core and UI Kit only. Neither graph
+core, runtime, standard PBR, nor providers depend on the editor. Frame/pass
+scheduling remains in renderers and render graphs rather than shader nodes or
+techniques.
 
 ## Runtime And Resource Ownership
 

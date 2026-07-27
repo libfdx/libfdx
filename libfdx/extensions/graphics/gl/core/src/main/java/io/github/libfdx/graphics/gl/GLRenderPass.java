@@ -5,7 +5,11 @@ import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferUsage;
 import io.github.libfdx.graphics.RenderPass;
+import io.github.libfdx.graphics.RenderPassCompatibility;
 import io.github.libfdx.graphics.RenderPipeline;
+import io.github.libfdx.graphics.Sampler;
+import io.github.libfdx.graphics.shader.runtime.ShaderParameterBlock;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameterHandle;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.VertexAttribute;
 import io.github.libfdx.graphics.VertexLayout;
@@ -13,7 +17,6 @@ import io.github.libfdx.graphics.VertexStepMode;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.FloatBuffer;
 import java.util.Arrays;
 
 /**
@@ -22,52 +25,7 @@ import java.util.Arrays;
  * @author xpenatan
  */
 final class GLRenderPass implements RenderPass {
-    private static final int MATRIX_FLOAT_COUNT = 16;
-    private static final int MODEL_OFFSET = 0;
-    private static final int VIEW_PROJECTION_OFFSET = 16;
-    private static final int CAMERA_POSITION_OFFSET = 32;
-    private static final int CAMERA_DIRECTION_OFFSET = 36;
-    private static final int AMBIENT_COLOR_OFFSET = 40;
-    private static final int LIGHT_DIRECTION_OFFSET = 44;
-    private static final int LIGHT_COLOR_INTENSITY_OFFSET = 48;
-    private static final int FILL_LIGHT_DIRECTION_OFFSET = 52;
-    private static final int FILL_LIGHT_COLOR_INTENSITY_OFFSET = 56;
-    private static final int POST_PROCESSING_OFFSET = 60;
-    private static final int TEXTURE_FLAGS_OFFSET = 64;
-    private static final int EMISSIVE_FLAGS_OFFSET = 68;
-    private static final int FOG_COLOR_OFFSET = 72;
-    private static final int FOG_PARAMS_OFFSET = 76;
-    private static final int SKY_ZENITH_COLOR_OFFSET = 80;
-    private static final int SKY_HORIZON_COLOR_OFFSET = 84;
-    private static final int SKY_NADIR_COLOR_OFFSET = 88;
-    private static final int SKY_SUN_COLOR_OFFSET = 92;
-    private static final int SKY_SUN_DIRECTION_OFFSET = 96;
-    private static final int SKY_PARAMS_OFFSET = 100;
-    private static final int MAX_POINT_LIGHTS = 4;
-    private static final int POINT_LIGHT_COUNT_OFFSET = 104;
-    private static final int POINT_LIGHT_POSITIONS_OFFSET = POINT_LIGHT_COUNT_OFFSET + 4;
-    private static final int POINT_LIGHT_COLORS_OFFSET = POINT_LIGHT_POSITIONS_OFFSET + MAX_POINT_LIGHTS * 4;
-    private static final int MAX_SPOT_LIGHTS = 4;
-    private static final int SPOT_LIGHT_COUNT_OFFSET = POINT_LIGHT_COLORS_OFFSET + MAX_POINT_LIGHTS * 4;
-    private static final int SPOT_LIGHT_POSITIONS_OFFSET = SPOT_LIGHT_COUNT_OFFSET + 4;
-    private static final int SPOT_LIGHT_DIRECTIONS_OFFSET = SPOT_LIGHT_POSITIONS_OFFSET + MAX_SPOT_LIGHTS * 4;
-    private static final int SPOT_LIGHT_COLORS_OFFSET = SPOT_LIGHT_DIRECTIONS_OFFSET + MAX_SPOT_LIGHTS * 4;
-    private static final int SPOT_LIGHT_CONES_OFFSET = SPOT_LIGHT_COLORS_OFFSET + MAX_SPOT_LIGHTS * 4;
-    private static final int MAX_SHADOW_CASCADES = 4;
-    private static final int SHADOW_VIEW_PROJECTIONS_OFFSET = SPOT_LIGHT_CONES_OFFSET + MAX_SPOT_LIGHTS * 4;
-    private static final int SHADOW_PARAMS_OFFSET = SHADOW_VIEW_PROJECTIONS_OFFSET
-            + MAX_SHADOW_CASCADES * MATRIX_FLOAT_COUNT;
-    private static final int SHADOW_CASCADE_SPLITS_OFFSET = SHADOW_PARAMS_OFFSET + 4;
-    private static final int SHADOW_BIASES_OFFSET = SHADOW_CASCADE_SPLITS_OFFSET + 4;
-    private static final int SHADOW_CAMERA_POSITION_OFFSET = SHADOW_BIASES_OFFSET + 4;
-    private static final int SHADOW_CAMERA_DIRECTION_OFFSET = SHADOW_CAMERA_POSITION_OFFSET + 4;
-    private static final int SHADOW_CAMERA_UP_OFFSET = SHADOW_CAMERA_DIRECTION_OFFSET + 4;
-    private static final int SHADOW_CAMERA_PARAMS_OFFSET = SHADOW_CAMERA_UP_OFFSET + 4;
-    private static final int SHADOW_FILTER_PARAMS_OFFSET = SHADOW_CAMERA_PARAMS_OFFSET + 4;
-    private static final int SKINNING_PARAMS_OFFSET = SHADOW_FILTER_PARAMS_OFFSET + 4;
-    private static final int MAX_BONES = 64;
-    private static final int BONE_MATRICES_OFFSET = SKINNING_PARAMS_OFFSET + 4;
-    private static final int PBR_UNIFORM_BINDING = 0;
+    private static final int UNIFORM_BINDING = 0;
 
     private final ProviderId providerId;
     private final GLApi gl;
@@ -75,14 +33,17 @@ final class GLRenderPass implements RenderPass {
     private GLTextureHandle renderTarget;
     private GLRenderPipelineHandle pipeline;
     private GLBufferHandle[] vertexBuffers = new GLBufferHandle[2];
+    private boolean[] enabledVertexAttributes = new boolean[16];
     private GLTextureHandle[] textures = new GLTextureHandle[0];
     private GLBufferHandle indexBuffer;
-    private ByteBuffer pbrUniformBytes;
-    private FloatBuffer pbrUniformFloats;
+    private ByteBuffer uniformBytes;
+    private ShaderParameterBlock compatibilityUniformBlock;
     private boolean restoreDefaultFramebuffer;
+    private RenderPassCompatibility compatibility;
     private int restoreWidth;
     private int restoreHeight;
-    private boolean pbrUniformDataDirty;
+    private boolean uniformDataDirty;
+    private boolean hasUniformData;
     private boolean ended = true;
 
     GLRenderPass(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain) {
@@ -91,7 +52,8 @@ final class GLRenderPass implements RenderPass {
         this.resourceDomain = resourceDomain;
     }
 
-    void begin(GLTextureHandle renderTarget, boolean restoreDefaultFramebuffer, int restoreWidth, int restoreHeight) {
+    void begin(GLTextureHandle renderTarget, boolean restoreDefaultFramebuffer, int restoreWidth,
+            int restoreHeight, RenderPassCompatibility compatibility) {
         if (!ended) {
             throw new FdxException("Cannot reuse an active GL render pass");
         }
@@ -99,16 +61,24 @@ final class GLRenderPass implements RenderPass {
         this.restoreDefaultFramebuffer = restoreDefaultFramebuffer;
         this.restoreWidth = restoreWidth;
         this.restoreHeight = restoreHeight;
+        this.compatibility = compatibility;
         pipeline = null;
         Arrays.fill(vertexBuffers, null);
         Arrays.fill(textures, null);
         indexBuffer = null;
-        pbrUniformDataDirty = false;
+        uniformDataDirty = false;
+        hasUniformData = false;
         ended = false;
     }
 
     boolean isEnded() {
         return ended;
+    }
+
+    @Override
+    public RenderPassCompatibility compatibility() {
+        ensureOpen();
+        return compatibility;
     }
 
     /**
@@ -119,7 +89,13 @@ final class GLRenderPass implements RenderPass {
     @Override
     public void setPipeline(RenderPipeline pipeline) {
         ensureOpen();
-        this.pipeline = GLResources.requirePipeline(pipeline, resourceDomain, "Render pipeline");
+        GLRenderPipelineHandle nextPipeline =
+                GLResources.requirePipeline(pipeline, resourceDomain, "Render pipeline");
+        if (!compatibility.isCompatible(nextPipeline.targetLayout())) {
+            throw new FdxException("GL render pipeline target layout is incompatible with the active pass");
+        }
+        resetVertexAttributes();
+        this.pipeline = nextPipeline;
         ensureTextureSlots(this.pipeline.sampledTextureCount());
         gl.useProgram(this.pipeline.program());
         gl.enableDepthTest(this.pipeline.depthTestEnabled());
@@ -131,9 +107,10 @@ final class GLRenderPass implements RenderPass {
         if (this.pipeline.sampledTextureCount() > 0) {
             setTextureUniform(0);
         }
-        if (this.pipeline.pbrUniformBufferEnabled()) {
-            resetPbrUniformData();
-            gl.bindUniformBufferBase(PBR_UNIFORM_BINDING, this.pipeline.pbrUniformBuffer());
+        compatibilityUniformBlock = null;
+        ensureUniformCapacity();
+        if (this.pipeline.uniformBufferEnabled()) {
+            gl.bindUniformBufferBase(UNIFORM_BINDING, this.pipeline.uniformBuffer());
         }
         applyVertexLayouts();
     }
@@ -211,6 +188,43 @@ final class GLRenderPass implements RenderPass {
         setTextureUniform(slot);
     }
 
+    @Override
+    public void setTextureBinding(int group, int binding, Texture texture) {
+        requirePipeline();
+        int slot = pipeline.resourceBindings().textureSlot(group, binding);
+        if (slot < 0) {
+            throw new FdxException("Texture binding is not declared by the active GL pipeline: "
+                    + group + ':' + binding);
+        }
+        setTexture(slot, texture);
+    }
+
+    @Override
+    public void setTextureSamplerBinding(int group, int binding, Texture texture) {
+        requirePipeline();
+        int slot = pipeline.resourceBindings().samplerSlot(group, binding);
+        if (slot < 0) {
+            throw new FdxException("Sampler binding is not declared by the active GL pipeline: "
+                    + group + ':' + binding);
+        }
+        setTexture(slot, texture);
+    }
+
+    @Override
+    public void setSamplerBinding(int group, int binding, Sampler sampler) {
+        throw new FdxException("Separate sampler objects are not supported by the GL provider");
+    }
+
+    @Override
+    public void setParameterBlock(int group, int binding, ShaderParameterBlock block) {
+        requirePipeline();
+        pipeline.resourceBindings().requireParameterBlock(group, binding, block);
+        ensureUniformCapacity();
+        block.copyTo(uniformBytes, 0);
+        hasUniformData = true;
+        uniformDataDirty = true;
+    }
+
     /**
      * Sets the scissor.
      *
@@ -254,11 +268,24 @@ final class GLRenderPass implements RenderPass {
      */
     @Override
     public void setUniform1i(String name, int value) {
-        setPbrUniform1i(name, value);
         int location = uniformLocation(name);
         if (location >= 0) {
             gl.uniform1i(location, value);
         }
+    }
+
+    @Override
+    public void setUniform1i(ShaderParameterHandle parameter, int value) {
+        ShaderParameterBlock block = compatibilityUniformBlock();
+        switch (parameter.valueType().scalarType()) {
+            case F32 -> block.setFloat(parameter, value);
+            case I32 -> block.setInt(parameter, value);
+            case U32 -> block.setUnsignedInt(parameter, value);
+            case BOOL -> block.setBoolean(parameter, value != 0);
+            default -> throw new FdxException("Uniform handle is not integer-compatible: "
+                    + parameter.path());
+        }
+        snapshotCompatibilityBlock();
     }
 
     /**
@@ -269,11 +296,16 @@ final class GLRenderPass implements RenderPass {
      */
     @Override
     public void setUniform1f(String name, float value) {
-        setPbrUniform1f(name, value);
         int location = uniformLocation(name);
         if (location >= 0) {
             gl.uniform1f(location, value);
         }
+    }
+
+    @Override
+    public void setUniform1f(ShaderParameterHandle parameter, float value) {
+        compatibilityUniformBlock().setFloat(parameter, value);
+        snapshotCompatibilityBlock();
     }
 
     /**
@@ -286,11 +318,19 @@ final class GLRenderPass implements RenderPass {
      */
     @Override
     public void setUniform3f(String name, float x, float y, float z) {
-        setPbrUniform3f(name, x, y, z);
         int location = uniformLocation(name);
         if (location >= 0) {
             gl.uniform3f(location, x, y, z);
         }
+    }
+
+    @Override
+    public void setUniform3f(ShaderParameterHandle parameter, float x, float y, float z) {
+        ShaderParameterBlock block = compatibilityUniformBlock();
+        block.setFloat(parameter.component(0), x);
+        block.setFloat(parameter.component(1), y);
+        block.setFloat(parameter.component(2), z);
+        snapshotCompatibilityBlock();
     }
 
     /**
@@ -304,11 +344,16 @@ final class GLRenderPass implements RenderPass {
      */
     @Override
     public void setUniform4f(String name, float x, float y, float z, float w) {
-        setPbrUniform4f(name, x, y, z, w);
         int location = uniformLocation(name);
         if (location >= 0) {
             gl.uniform4f(location, x, y, z, w);
         }
+    }
+
+    @Override
+    public void setUniform4f(ShaderParameterHandle parameter, float x, float y, float z, float w) {
+        compatibilityUniformBlock().setFloat4(parameter, x, y, z, w);
+        snapshotCompatibilityBlock();
     }
 
     /**
@@ -319,14 +364,19 @@ final class GLRenderPass implements RenderPass {
      */
     @Override
     public void setUniformMatrix4(String name, float[] values) {
-        if (values == null || values.length < MATRIX_FLOAT_COUNT) {
+        if (values == null || values.length < 16) {
             throw new FdxException("Matrix uniform requires 16 float values");
         }
-        setPbrUniformMatrix4(name, values);
         int location = uniformLocation(name);
         if (location >= 0) {
             gl.uniformMatrix4fv(location, false, values);
         }
+    }
+
+    @Override
+    public void setUniformMatrix4(ShaderParameterHandle parameter, float[] values) {
+        compatibilityUniformBlock().setFloatMatrix(parameter, values, 0);
+        snapshotCompatibilityBlock();
     }
 
     /**
@@ -347,7 +397,7 @@ final class GLRenderPass implements RenderPass {
         if (firstInstance != 0) {
             throw new FdxException("GL draw currently supports firstInstance=0 only");
         }
-        applyPbrUniformBuffer();
+        applyUniformBuffer();
         if (instanceCount <= 1) {
             gl.drawArrays(pipeline.primitiveTopology(), firstVertex, vertexCount);
             return;
@@ -377,7 +427,7 @@ final class GLRenderPass implements RenderPass {
         if (firstInstance != 0) {
             throw new FdxException("GL drawIndexed currently supports firstInstance=0 only");
         }
-        applyPbrUniformBuffer();
+        applyUniformBuffer();
         int offsetBytes = firstIndex * 2;
         if (instanceCount <= 1) {
             gl.drawElementsBaseVertex(pipeline.primitiveTopology(), indexCount, offsetBytes, baseVertex);
@@ -397,6 +447,7 @@ final class GLRenderPass implements RenderPass {
         }
         ended = true;
         gl.enableScissorTest(false);
+        resetVertexAttributes();
         gl.useProgram(0);
         gl.bindArrayBuffer(0);
         gl.bindElementArrayBuffer(0);
@@ -410,311 +461,61 @@ final class GLRenderPass implements RenderPass {
         Arrays.fill(textures, null);
         indexBuffer = null;
         renderTarget = null;
+        compatibility = null;
     }
 
-    private void applyPbrUniformBuffer() {
-        if (pipeline == null || !pipeline.pbrUniformBufferEnabled()) {
+    private void applyUniformBuffer() {
+        if (pipeline == null || !pipeline.uniformBufferEnabled()) {
             return;
         }
-        gl.bindUniformBufferBase(PBR_UNIFORM_BINDING, pipeline.pbrUniformBuffer());
-        if (!pbrUniformDataDirty || pbrUniformBytes == null) {
+        if (!hasUniformData) {
+            throw new FdxException("GL uniform parameter block must be bound before drawing");
+        }
+        gl.bindUniformBufferBase(UNIFORM_BINDING, pipeline.uniformBuffer());
+        if (!uniformDataDirty || uniformBytes == null) {
             return;
         }
-        pbrUniformBytes.position(0);
-        pbrUniformBytes.limit(GLRenderPipelineHandle.PBR_UNIFORM_BYTE_COUNT);
-        gl.bindUniformBuffer(pipeline.pbrUniformBuffer());
-        gl.uniformBufferSubData(pbrUniformBytes);
+        uniformBytes.position(0);
+        uniformBytes.limit(pipeline.resourceBindings().uniformByteCount());
+        gl.bindUniformBuffer(pipeline.uniformBuffer());
+        gl.uniformBufferSubData(uniformBytes);
         gl.bindUniformBuffer(0);
-        pbrUniformDataDirty = false;
+        uniformDataDirty = false;
     }
 
-    private void setPbrUniform1i(String name, int value) {
-        if (!usesPbrUniformBuffer()) {
+    private ShaderParameterBlock compatibilityUniformBlock() {
+        requirePipeline();
+        if (!pipeline.resourceBindings().hasUniformBuffer()) {
+            throw new FdxException("Active GL pipeline has no reflected uniform buffer");
+        }
+        if (compatibilityUniformBlock == null) {
+            compatibilityUniformBlock = ShaderParameterBlock.allocate(
+                    pipeline.resourceBindings().uniformBuffer().bufferLayout());
+        }
+        return compatibilityUniformBlock;
+    }
+
+    private void snapshotCompatibilityBlock() {
+        setParameterBlock(pipeline.resourceBindings().uniformGroup(),
+                pipeline.resourceBindings().uniformBinding(), compatibilityUniformBlock);
+    }
+
+    private void ensureUniformCapacity() {
+        if (pipeline == null || !pipeline.resourceBindings().hasUniformBuffer()) {
             return;
         }
-        if ("u_hasBaseColorTexture".equals(name)) {
-            setPbrUniformFloat(TEXTURE_FLAGS_OFFSET, value);
-        } else if ("u_hasMetallicRoughnessTexture".equals(name)) {
-            setPbrUniformFloat(TEXTURE_FLAGS_OFFSET + 1, value);
-        } else if ("u_hasNormalTexture".equals(name)) {
-            setPbrUniformFloat(TEXTURE_FLAGS_OFFSET + 2, value);
-        } else if ("u_hasOcclusionTexture".equals(name)) {
-            setPbrUniformFloat(TEXTURE_FLAGS_OFFSET + 3, value);
-        } else if ("u_hasEmissiveTexture".equals(name)) {
-            setPbrUniformFloat(EMISSIVE_FLAGS_OFFSET, value);
+        int size = pipeline.resourceBindings().uniformByteCount();
+        if (uniformBytes == null || uniformBytes.capacity() < size) {
+            uniformBytes = ByteBuffer.allocateDirect(size).order(ByteOrder.nativeOrder());
         }
     }
 
-    private void setPbrUniform1f(String name, float value) {
-        if (!usesPbrUniformBuffer()) {
-            return;
+    private void requirePipeline() {
+        ensureOpen();
+        if (pipeline == null) {
+            throw new FdxException("Render pipeline must be set before binding resources");
         }
-        if ("u_lightIntensity".equals(name)) {
-            setPbrUniformFloat(LIGHT_COLOR_INTENSITY_OFFSET + 3, value);
-        } else if ("u_fillLightIntensity".equals(name)) {
-            setPbrUniformFloat(FILL_LIGHT_COLOR_INTENSITY_OFFSET + 3, value);
-        } else if ("u_pointLightCount".equals(name)) {
-            setPbrUniformFloat(POINT_LIGHT_COUNT_OFFSET, value);
-        } else if ("u_spotLightCount".equals(name)) {
-            setPbrUniformFloat(SPOT_LIGHT_COUNT_OFFSET, value);
-        }
-    }
-
-    private void setPbrUniform3f(String name, float x, float y, float z) {
-        if (!usesPbrUniformBuffer()) {
-            return;
-        }
-        if ("u_cameraPosition".equals(name)) {
-            setPbrUniform4f(CAMERA_POSITION_OFFSET, x, y, z, 1.0f);
-        } else if ("u_cameraDirection".equals(name)) {
-            setPbrUniform4f(CAMERA_DIRECTION_OFFSET, x, y, z, 0.0f);
-        } else if ("u_ambientColor".equals(name)) {
-            setPbrUniform4f(AMBIENT_COLOR_OFFSET, x, y, z, 1.0f);
-        } else if ("u_lightDirection".equals(name)) {
-            setPbrUniform4f(LIGHT_DIRECTION_OFFSET, x, y, z, 0.0f);
-        } else if ("u_lightColor".equals(name)) {
-            setPbrUniform4f(LIGHT_COLOR_INTENSITY_OFFSET, x, y, z,
-                    pbrUniformFloats.get(LIGHT_COLOR_INTENSITY_OFFSET + 3));
-        } else if ("u_fillLightDirection".equals(name)) {
-            setPbrUniform4f(FILL_LIGHT_DIRECTION_OFFSET, x, y, z, 0.0f);
-        } else if ("u_fillLightColor".equals(name)) {
-            setPbrUniform4f(FILL_LIGHT_COLOR_INTENSITY_OFFSET, x, y, z,
-                    pbrUniformFloats.get(FILL_LIGHT_COLOR_INTENSITY_OFFSET + 3));
-        } else if ("u_fogColor".equals(name)) {
-            setPbrUniform4f(FOG_COLOR_OFFSET, x, y, z, 1.0f);
-        } else if ("u_skyZenithColor".equals(name)) {
-            setPbrUniform4f(SKY_ZENITH_COLOR_OFFSET, x, y, z, 1.0f);
-        } else if ("u_skyHorizonColor".equals(name)) {
-            setPbrUniform4f(SKY_HORIZON_COLOR_OFFSET, x, y, z, 1.0f);
-        } else if ("u_skyNadirColor".equals(name)) {
-            setPbrUniform4f(SKY_NADIR_COLOR_OFFSET, x, y, z, 1.0f);
-        } else if ("u_skySunColor".equals(name)) {
-            setPbrUniform4f(SKY_SUN_COLOR_OFFSET, x, y, z,
-                    pbrUniformFloats.get(SKY_SUN_COLOR_OFFSET + 3));
-        } else if ("u_skySunDirection".equals(name)) {
-            setPbrUniform4f(SKY_SUN_DIRECTION_OFFSET, x, y, z, 0.0f);
-        }
-    }
-
-    private void setPbrUniform4f(String name, float x, float y, float z, float w) {
-        if (!usesPbrUniformBuffer()) {
-            return;
-        }
-        if ("u_cameraPosition".equals(name)) {
-            setPbrUniform4f(CAMERA_POSITION_OFFSET, x, y, z, w);
-        } else if ("u_cameraDirection".equals(name)) {
-            setPbrUniform4f(CAMERA_DIRECTION_OFFSET, x, y, z, w);
-        } else if ("u_ambientColor".equals(name)) {
-            setPbrUniform4f(AMBIENT_COLOR_OFFSET, x, y, z, w);
-        } else if ("u_lightDirection".equals(name)) {
-            setPbrUniform4f(LIGHT_DIRECTION_OFFSET, x, y, z, w);
-        } else if ("u_lightColor".equals(name)) {
-            setPbrUniform4f(LIGHT_COLOR_INTENSITY_OFFSET, x, y, z, w);
-        } else if ("u_fillLightDirection".equals(name)) {
-            setPbrUniform4f(FILL_LIGHT_DIRECTION_OFFSET, x, y, z, w);
-        } else if ("u_fillLightColor".equals(name)) {
-            setPbrUniform4f(FILL_LIGHT_COLOR_INTENSITY_OFFSET, x, y, z, w);
-        } else if ("u_postProcessing".equals(name)) {
-            setPbrUniform4f(POST_PROCESSING_OFFSET, x, y, z, w);
-        } else if ("u_fogColor".equals(name)) {
-            setPbrUniform4f(FOG_COLOR_OFFSET, x, y, z, w);
-        } else if ("u_fogParams".equals(name)) {
-            setPbrUniform4f(FOG_PARAMS_OFFSET, x, y, z, w);
-        } else if ("u_skyZenithColor".equals(name)) {
-            setPbrUniform4f(SKY_ZENITH_COLOR_OFFSET, x, y, z, w);
-        } else if ("u_skyHorizonColor".equals(name)) {
-            setPbrUniform4f(SKY_HORIZON_COLOR_OFFSET, x, y, z, w);
-        } else if ("u_skyNadirColor".equals(name)) {
-            setPbrUniform4f(SKY_NADIR_COLOR_OFFSET, x, y, z, w);
-        } else if ("u_skySunColor".equals(name)) {
-            setPbrUniform4f(SKY_SUN_COLOR_OFFSET, x, y, z, w);
-        } else if ("u_skySunDirection".equals(name)) {
-            setPbrUniform4f(SKY_SUN_DIRECTION_OFFSET, x, y, z, w);
-        } else if ("u_skyParams".equals(name)) {
-            setPbrUniform4f(SKY_PARAMS_OFFSET, x, y, z, w);
-        } else {
-            int positionIndex = pointLightIndex(name, "PositionRange");
-            if (positionIndex >= 0) {
-                setPbrUniform4f(POINT_LIGHT_POSITIONS_OFFSET + positionIndex * 4, x, y, z, w);
-                return;
-            }
-            int colorIndex = pointLightIndex(name, "ColorIntensity");
-            if (colorIndex >= 0) {
-                setPbrUniform4f(POINT_LIGHT_COLORS_OFFSET + colorIndex * 4, x, y, z, w);
-                return;
-            }
-            int spotPositionIndex = spotLightIndex(name, "PositionRange");
-            if (spotPositionIndex >= 0) {
-                setPbrUniform4f(SPOT_LIGHT_POSITIONS_OFFSET + spotPositionIndex * 4, x, y, z, w);
-                return;
-            }
-            int spotDirectionIndex = spotLightIndex(name, "DirectionInner");
-            if (spotDirectionIndex >= 0) {
-                setPbrUniform4f(SPOT_LIGHT_DIRECTIONS_OFFSET + spotDirectionIndex * 4, x, y, z, w);
-                return;
-            }
-            int spotColorIndex = spotLightIndex(name, "ColorIntensity");
-            if (spotColorIndex >= 0) {
-                setPbrUniform4f(SPOT_LIGHT_COLORS_OFFSET + spotColorIndex * 4, x, y, z, w);
-                return;
-            }
-            int spotConeIndex = spotLightIndex(name, "Cone");
-            if (spotConeIndex >= 0) {
-                setPbrUniform4f(SPOT_LIGHT_CONES_OFFSET + spotConeIndex * 4, x, y, z, w);
-                return;
-            }
-            if ("u_shadowParams".equals(name)) {
-                setPbrUniform4f(SHADOW_PARAMS_OFFSET, x, y, z, w);
-            }
-            else if ("u_shadowCascadeSplits".equals(name)) {
-                setPbrUniform4f(SHADOW_CASCADE_SPLITS_OFFSET, x, y, z, w);
-            }
-            else if ("u_shadowBiases".equals(name)) {
-                setPbrUniform4f(SHADOW_BIASES_OFFSET, x, y, z, w);
-            }
-            else if ("u_shadowCameraPosition".equals(name)) {
-                setPbrUniform4f(SHADOW_CAMERA_POSITION_OFFSET, x, y, z, w);
-            }
-            else if ("u_shadowCameraDirection".equals(name)) {
-                setPbrUniform4f(SHADOW_CAMERA_DIRECTION_OFFSET, x, y, z, w);
-            }
-            else if ("u_shadowCameraUp".equals(name)) {
-                setPbrUniform4f(SHADOW_CAMERA_UP_OFFSET, x, y, z, w);
-            }
-            else if ("u_shadowCameraParams".equals(name)) {
-                setPbrUniform4f(SHADOW_CAMERA_PARAMS_OFFSET, x, y, z, w);
-            }
-            else if ("u_shadowFilterParams".equals(name)) {
-                setPbrUniform4f(SHADOW_FILTER_PARAMS_OFFSET, x, y, z, w);
-            }
-            else if ("u_skinningParams".equals(name)) {
-                setPbrUniform4f(SKINNING_PARAMS_OFFSET, x, y, z, w);
-            }
-        }
-    }
-
-    private void setPbrUniformMatrix4(String name, float[] values) {
-        if (!usesPbrUniformBuffer()) {
-            return;
-        }
-        if ("u_model".equals(name)) {
-            setPbrUniformMatrix(MODEL_OFFSET, values);
-        } else if ("u_viewProjection".equals(name)) {
-            setPbrUniformMatrix(VIEW_PROJECTION_OFFSET, values);
-        } else {
-            int shadowIndex = shadowViewProjectionIndex(name);
-            if (shadowIndex >= 0) {
-                setPbrUniformMatrix(SHADOW_VIEW_PROJECTIONS_OFFSET + shadowIndex * MATRIX_FLOAT_COUNT, values);
-                return;
-            }
-            int boneIndex = boneMatrixIndex(name);
-            if (boneIndex >= 0) {
-                setPbrUniformMatrix(BONE_MATRICES_OFFSET + boneIndex * MATRIX_FLOAT_COUNT, values);
-            }
-        }
-    }
-
-    private void setPbrUniformMatrix(int offset, float[] values) {
-        ensurePbrUniformData();
-        for (int i = 0; i < MATRIX_FLOAT_COUNT; i++) {
-            pbrUniformFloats.put(offset + i, values[i]);
-        }
-        pbrUniformDataDirty = true;
-    }
-
-    private void setPbrUniform4f(int offset, float x, float y, float z, float w) {
-        ensurePbrUniformData();
-        pbrUniformFloats.put(offset, x);
-        pbrUniformFloats.put(offset + 1, y);
-        pbrUniformFloats.put(offset + 2, z);
-        pbrUniformFloats.put(offset + 3, w);
-        pbrUniformDataDirty = true;
-    }
-
-    private void setPbrUniformFloat(int offset, float value) {
-        ensurePbrUniformData();
-        pbrUniformFloats.put(offset, value);
-        pbrUniformDataDirty = true;
-    }
-
-    private int pointLightIndex(String name, String suffix) {
-        return lightIndex(name, "u_pointLight", suffix, MAX_POINT_LIGHTS);
-    }
-
-    private int spotLightIndex(String name, String suffix) {
-        return lightIndex(name, "u_spotLight", suffix, MAX_SPOT_LIGHTS);
-    }
-
-    private int boneMatrixIndex(String name) {
-        if (name == null || !name.startsWith("u_bone")) {
-            return -1;
-        }
-        int index = 0;
-        for (int i = 6; i < name.length(); i++) {
-            char ch = name.charAt(i);
-            if (ch < '0' || ch > '9') {
-                return -1;
-            }
-            index = index * 10 + ch - '0';
-        }
-        return index >= 0 && index < MAX_BONES ? index : -1;
-    }
-
-    private int shadowViewProjectionIndex(String name) {
-        if ("u_shadowViewProjection".equals(name)) {
-            return 0;
-        }
-        if (name == null || !name.startsWith("u_shadowViewProjection")) {
-            return -1;
-        }
-        int suffixOffset = "u_shadowViewProjection".length();
-        if (name.length() != suffixOffset + 1) {
-            return -1;
-        }
-        int index = name.charAt(suffixOffset) - '0';
-        return index >= 0 && index < MAX_SHADOW_CASCADES ? index : -1;
-    }
-
-    private int lightIndex(String name, String prefix, String suffix, int maxLights) {
-        if (name == null || suffix == null || !name.startsWith(prefix) || !name.endsWith(suffix)) {
-            return -1;
-        }
-        int digitOffset = prefix.length();
-        int digitEnd = name.length() - suffix.length();
-        if (digitEnd != digitOffset + 1) {
-            return -1;
-        }
-        int index = name.charAt(digitOffset) - '0';
-        return index >= 0 && index < maxLights ? index : -1;
-    }
-
-    private boolean usesPbrUniformBuffer() {
-        return pipeline != null && pipeline.pbrUniformBufferEnabled();
-    }
-
-    private void resetPbrUniformData() {
-        ensurePbrUniformData();
-        for (int i = 0; i < GLRenderPipelineHandle.PBR_UNIFORM_BYTE_COUNT / 4; i++) {
-            pbrUniformFloats.put(i, 0.0f);
-        }
-        pbrUniformFloats.put(MODEL_OFFSET, 1.0f);
-        pbrUniformFloats.put(MODEL_OFFSET + 5, 1.0f);
-        pbrUniformFloats.put(MODEL_OFFSET + 10, 1.0f);
-        pbrUniformFloats.put(MODEL_OFFSET + 15, 1.0f);
-        pbrUniformFloats.put(VIEW_PROJECTION_OFFSET, 1.0f);
-        pbrUniformFloats.put(VIEW_PROJECTION_OFFSET + 5, 1.0f);
-        pbrUniformFloats.put(VIEW_PROJECTION_OFFSET + 10, 1.0f);
-        pbrUniformFloats.put(VIEW_PROJECTION_OFFSET + 15, 1.0f);
-        pbrUniformDataDirty = true;
-    }
-
-    private void ensurePbrUniformData() {
-        if (pbrUniformBytes != null) {
-            return;
-        }
-        pbrUniformBytes = ByteBuffer.allocateDirect(GLRenderPipelineHandle.PBR_UNIFORM_BYTE_COUNT)
-                .order(ByteOrder.nativeOrder());
-        pbrUniformFloats = pbrUniformBytes.asFloatBuffer();
+        GLResources.requireUsable(pipeline, resourceDomain, "Render pipeline");
     }
 
     private void applyVertexLayouts() {
@@ -739,10 +540,35 @@ final class GLRenderPass implements RenderPass {
         int divisor = layout.stepMode() == VertexStepMode.INSTANCE ? 1 : 0;
         for (int i = 0; i < attributes.length; i++) {
             VertexAttribute attribute = attributes[i];
-            gl.enableVertexAttribArray(attribute.location());
-            gl.vertexAttribPointer(attribute.location(), attribute.format(), layout.arrayStride(), attribute.offset());
-            gl.vertexAttribDivisor(attribute.location(), divisor);
+            int location = attribute.location();
+            ensureVertexAttributeSlot(location);
+            if (!enabledVertexAttributes[location]) {
+                gl.enableVertexAttribArray(location);
+                enabledVertexAttributes[location] = true;
+            }
+            gl.vertexAttribPointer(location, attribute.format(), layout.arrayStride(), attribute.offset());
+            gl.vertexAttribDivisor(location, divisor);
         }
+    }
+
+    private void resetVertexAttributes() {
+        for (int location = 0; location < enabledVertexAttributes.length; location++) {
+            if (enabledVertexAttributes[location]) {
+                gl.disableVertexAttribArray(location);
+                enabledVertexAttributes[location] = false;
+            }
+        }
+    }
+
+    private void ensureVertexAttributeSlot(int location) {
+        if (location < enabledVertexAttributes.length) {
+            return;
+        }
+        int next = enabledVertexAttributes.length;
+        while (next <= location) {
+            next *= 2;
+        }
+        enabledVertexAttributes = Arrays.copyOf(enabledVertexAttributes, next);
     }
 
     private void ensureVertexBufferSlot(int slot) {
@@ -817,6 +643,13 @@ final class GLRenderPass implements RenderPass {
         int tintTextureLocation = gl.uniformLocation(pipeline.program(), "f_u_texture_u_sampler");
         if (tintTextureLocation >= 0) {
             gl.uniform1i(tintTextureLocation, slot);
+        }
+        String[] names = pipeline.textureUniformNames(slot);
+        for (String name : names) {
+            int location = gl.uniformLocation(pipeline.program(), name);
+            if (location >= 0) {
+                gl.uniform1i(location, slot);
+            }
         }
     }
 

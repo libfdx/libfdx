@@ -406,7 +406,12 @@ fun registerRuntimeFdxDesktopNativeTasks(
         dependsOn(configureTask)
         val cmakeBuildDir = runtimeFdxCmakeBuildDir(platform)
         val outputFile = runtimeFdxDesktopOutput(platform, classifier, libraryFileName)
+        inputs.dir(runtimeFdxNativeDir)
+        inputs.dir(runtimeFdxShaderCompilerDir)
+        inputs.dir(runtimeFdxPrebuiltRoot.map { it.dir(prebuiltClassifier) })
         outputs.file(outputFile)
+        val reflectCliFileName = if (platform == "windows") "fdx_shaderc_reflect.exe" else "fdx_shaderc_reflect"
+        outputs.file(runtimeFdxDesktopOutput(platform, classifier, reflectCliFileName))
         commandLine(
             executableCommand("cmake"),
             "--build",
@@ -439,6 +444,19 @@ val buildRuntimeFdxMacosNative = registerRuntimeFdxDesktopNativeTasks(
     libraryFileName = "libfdx.dylib",
     expectedHost = "macos",
 )
+
+tasks.register("build_runtime_fdx_host_reflect_cli") {
+    group = "runtime fdx native"
+    description = "Builds the current-host WGSL-to-FDXI reflection command-line tool."
+    dependsOn(
+        when (runtimeFdxHostOs()) {
+            "windows" -> buildRuntimeFdxWindowsNative
+            "linux" -> buildRuntimeFdxLinuxNative
+            "macos" -> buildRuntimeFdxMacosNative
+            else -> throw GradleException("Unsupported host OS ${runtimeFdxHostOs()}.")
+        },
+    )
+}
 
 fun registerPrebuiltAlias(name: String, target: TaskProvider<out Task>) {
     tasks.register(name) {
@@ -486,6 +504,10 @@ val buildRuntimeFdxWebNative = tasks.register<Exec>("build_runtime_fdx_web_nativ
     group = "runtime fdx native"
     description = "Builds runtime fdx web native artifacts."
     dependsOn(configureRuntimeFdxWebNative)
+    inputs.dir(runtimeFdxNativeDir)
+    inputs.dir(runtimeFdxShaderCompilerDir)
+    inputs.dir(runtimeFdxWebCmakeDir)
+    inputs.dir(runtimeFdxPrebuiltRoot.map { it.dir(runtimeFdxPrebuiltClassifier("web")) })
     outputs.file(runtimeFdxWebOutput("fdx.js"))
     outputs.file(runtimeFdxWebOutput("fdx.wasm"))
     doFirst {
@@ -547,6 +569,10 @@ fun registerRuntimeFdxAndroidNativeTasks(abi: String): TaskProvider<Exec> {
         group = "runtime fdx native"
         description = "Builds runtime fdx Android native library for $abi."
         dependsOn(configureTask)
+        inputs.dir(runtimeFdxNativeDir)
+        inputs.dir(runtimeFdxShaderCompilerDir)
+        inputs.dir(runtimeFdxAndroidCmakeDir)
+        inputs.dir(runtimeFdxPrebuiltRoot.map { it.dir(prebuiltClassifier) })
         outputs.file(runtimeFdxAndroidOutput(abi))
         doFirst {
             val sdkDir = androidSdkDir()

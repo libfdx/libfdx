@@ -69,7 +69,7 @@ final class AndroidVulkanNative {
 
     static native long createRenderPipeline(long context, long shaderModule, int colorFormat, int primitiveTopology,
             int[] vertexStrides, int[] vertexStepModes, int[] attributeBindings, int[] attributeLocations,
-            int[] attributeFormats, int[] attributeOffsets, int sampledTextureCount, boolean pbrUniformsEnabled,
+            int[] attributeFormats, int[] attributeOffsets, int sampledTextureCount, boolean uniformBufferEnabled,
             boolean depthTestEnabled, boolean depthWriteEnabled);
 
     static native void beginRenderPass(long context, long colorTexture, int colorFormat, int width, int height,

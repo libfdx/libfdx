@@ -10,6 +10,8 @@ import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassDescriptor;
+import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
+import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.TextureView;
 
@@ -31,9 +33,17 @@ public final class ModelBatch implements Batch3D {
             .label("model batch target pass")
             .depthClear(1.0f);
     private final RenderContext3D context;
-    private final boolean ownsDefaultShaderProvider;
+    private ShaderProvider3D ownedShaderProvider;
+    private Disposable[] retiredOwnedProviders = new Disposable[2];
+    private int retiredOwnedProviderCount;
     private Environment3D environment = defaultEnvironment;
     private ShaderProvider3D shaderProvider;
+    private ShaderProvider commonShaderProvider;
+    private long commonShaderRevision = -1;
+    private ShaderMaterialBinding[] pendingMaterialBindings =
+            new ShaderMaterialBinding[8];
+    private long[] pendingMaterialRevisions = new long[8];
+    private int pendingMaterialBindingCount;
     private RenderPass pass;
     private boolean ownsPass;
     private boolean drawing;
@@ -58,20 +68,22 @@ public final class ModelBatch implements Batch3D {
         if (graphics == null) {
             throw new FdxException("GraphicsContext cannot be null");
         }
-        context = new RenderContext3D(graphics, null, null, null, null);
+        context = new RenderContext3D(graphics, null, null, null, null,
+                ShaderPassId.FORWARD);
         if (config == null) {
             throw new FdxException("ModelBatchConfig cannot be null");
         }
         this.graphics = graphics;
         if (config.shaderProvider() != null) {
             shaderProvider = config.shaderProvider();
-            ownsDefaultShaderProvider = false;
-        }
-        else {
-            shaderProvider = new PbrShaderProvider(graphics, new PbrShaderConfig()
+        } else if (config.commonShaderProvider() != null) {
+            configureCommonProvider(config.commonShaderProvider(),
+                    config.maxLights(), config.maxBones());
+        } else {
+            ownedShaderProvider = new PbrShaderProvider(graphics, new PbrShaderConfig()
                     .maxLights(config.maxLights())
                     .maxBones(config.maxBones()));
-            ownsDefaultShaderProvider = true;
+            shaderProvider = ownedShaderProvider;
         }
     }
 
@@ -86,6 +98,16 @@ public final class ModelBatch implements Batch3D {
     }
 
     /**
+     * Begins an explicit shader-technique pass on the current frame.
+     *
+     * @param camera camera
+     * @param shaderPassId requested pass
+     */
+    public void begin(Camera camera, ShaderPassId shaderPassId) {
+        begin(LoadOp.load(), camera, shaderPassId);
+    }
+
+    /**
      * Begins the operation.
      *
      * @param loadOp the load op
@@ -93,8 +115,21 @@ public final class ModelBatch implements Batch3D {
      */
     @Override
     public void begin(LoadOp loadOp, Camera camera) {
+        begin(loadOp, camera, ShaderPassId.FORWARD);
+    }
+
+    /**
+     * Begins an explicit shader-technique pass on the current frame.
+     *
+     * @param loadOp color load operation
+     * @param camera camera
+     * @param shaderPassId requested pass
+     */
+    public void begin(LoadOp loadOp, Camera camera,
+            ShaderPassId shaderPassId) {
         ensureNotDisposed();
         ensureCamera(camera);
+        ensureShaderPass(shaderPassId);
         GraphicsFrame frame = graphics.currentFrame();
         framePassDescriptor
                 .colorAttachment(frame.colorAttachment())
@@ -102,7 +137,9 @@ public final class ModelBatch implements Batch3D {
                 .colorStoreOp(StoreOp.store());
         pass = frame.commandEncoder().beginRenderPass(framePassDescriptor);
         ownsPass = true;
-        context.reset(camera, environment, null, pass);
+        context.reset(camera, environment, null, pass,
+                shaderPassId);
+        snapshotCommonProvider();
         drawing = true;
     }
 
@@ -114,14 +151,29 @@ public final class ModelBatch implements Batch3D {
      */
     @Override
     public void begin(RenderPass pass, Camera camera) {
+        begin(pass, camera, ShaderPassId.FORWARD);
+    }
+
+    /**
+     * Begins an explicit shader-technique pass in an external render pass.
+     *
+     * @param pass active render pass
+     * @param camera camera
+     * @param shaderPassId requested pass
+     */
+    public void begin(RenderPass pass, Camera camera,
+            ShaderPassId shaderPassId) {
         ensureNotDisposed();
         ensureCamera(camera);
+        ensureShaderPass(shaderPassId);
         if (pass == null) {
             throw new FdxException("RenderPass cannot be null");
         }
         this.pass = pass;
         ownsPass = false;
-        context.reset(camera, environment, null, pass);
+        context.reset(camera, environment, null, pass,
+                shaderPassId);
+        snapshotCommonProvider();
         drawing = true;
     }
 
@@ -133,8 +185,21 @@ public final class ModelBatch implements Batch3D {
      */
     @Override
     public void begin(RenderTarget3D target, Camera camera) {
+        begin(target, camera, ShaderPassId.FORWARD);
+    }
+
+    /**
+     * Begins an explicit shader-technique pass in a model render target.
+     *
+     * @param target render target
+     * @param camera camera
+     * @param shaderPassId requested pass
+     */
+    public void begin(RenderTarget3D target, Camera camera,
+            ShaderPassId shaderPassId) {
         ensureNotDisposed();
         ensureCamera(camera);
+        ensureShaderPass(shaderPassId);
         if (target == null) {
             throw new FdxException("RenderTarget3D cannot be null");
         }
@@ -155,7 +220,9 @@ public final class ModelBatch implements Batch3D {
                 .colorStoreOp(StoreOp.store());
         pass = frame.commandEncoder().beginRenderPass(targetPassDescriptor);
         ownsPass = true;
-        context.reset(camera, environment, target, pass);
+        context.reset(camera, environment, target, pass,
+                shaderPassId);
+        snapshotCommonProvider();
         drawing = true;
     }
 
@@ -172,17 +239,50 @@ public final class ModelBatch implements Batch3D {
     }
 
     /**
-     * Sets the shader provider and returns this model batch.
+     * Sets the borrowed shader provider and returns this model batch.
+     *
+     * <p>The provider is not disposed by this batch. It may be replaced only
+     * outside a {@link #begin} / {@link #end} drawing operation.</p>
      *
      * @param shaderProvider the shader provider
      * @return this model batch for chaining
      */
     @Override
     public ModelBatch shaderProvider(ShaderProvider3D shaderProvider) {
+        ensureNotDisposed();
         if (shaderProvider == null) {
             throw new FdxException("ShaderProvider3D cannot be null");
         }
+        if (drawing) {
+            throw new FdxException("ShaderProvider3D cannot be replaced while ModelBatch is drawing");
+        }
+        retireOwnedShaderProvider();
+        commonShaderProvider = null;
+        commonShaderRevision = -1;
         this.shaderProvider = shaderProvider;
+        return this;
+    }
+
+    /**
+     * Sets a borrowed common shader provider and installs an internal G3D
+     * adapter. The provider itself is never disposed by this batch.
+     *
+     * @param shaderProvider common shader provider
+     * @return this model batch for chaining
+     */
+    public ModelBatch shaderProvider(ShaderProvider shaderProvider) {
+        ensureNotDisposed();
+        if (shaderProvider == null) {
+            throw new FdxException("ShaderProvider cannot be null");
+        }
+        if (drawing) {
+            throw new FdxException(
+                    "ShaderProvider cannot be replaced while ModelBatch is drawing");
+        }
+        retireOwnedShaderProvider();
+        PbrShaderConfig defaults = new PbrShaderConfig();
+        configureCommonProvider(shaderProvider,
+                defaults.maxLights(), defaults.maxBones());
         return this;
     }
 
@@ -197,7 +297,11 @@ public final class ModelBatch implements Batch3D {
         if (instance == null) {
             throw new FdxException("ModelInstance cannot be null");
         }
+        int first = queue.size();
         instance.collectRenderables(queue);
+        for (int i = first; i < queue.size(); i++) {
+            captureMaterialBinding(queue.get(i).material());
+        }
     }
 
     /**
@@ -212,6 +316,7 @@ public final class ModelBatch implements Batch3D {
             throw new FdxException("Renderable3D cannot be null");
         }
         queue.add(renderable);
+        captureMaterialBinding(renderable.material());
     }
 
     /**
@@ -246,6 +351,7 @@ public final class ModelBatch implements Batch3D {
         if (queue.size() == 0) {
             return;
         }
+        validatePendingMaterialBindings();
         queue.sort(context.camera());
         Shader3D activeShader = null;
         for (int i = 0; i < queue.size(); i++) {
@@ -265,6 +371,7 @@ public final class ModelBatch implements Batch3D {
             activeShader.end();
         }
         queue.clear();
+        pendingMaterialBindingCount = 0;
     }
 
     /**
@@ -289,17 +396,140 @@ public final class ModelBatch implements Batch3D {
         }
     }
 
+    private void ensureShaderPass(ShaderPassId shaderPassId) {
+        if (shaderPassId == null) {
+            throw new FdxException("ShaderPassId cannot be null");
+        }
+    }
+
+    private void configureCommonProvider(ShaderProvider provider,
+            int maxLights, int maxBones) {
+        if (provider == null || !provider.supportsPassResolution()) {
+            throw new FdxException(
+                    "ModelBatch common shader provider must support pass resolution");
+        }
+        commonShaderProvider = provider;
+        ownedShaderProvider = PbrShaderProvider.common(graphics,
+                new PbrShaderConfig().maxLights(maxLights)
+                        .maxBones(maxBones),
+                provider);
+        shaderProvider = ownedShaderProvider;
+        commonShaderRevision = provider.revision();
+    }
+
+    private void snapshotCommonProvider() {
+        if (commonShaderProvider != null) {
+            commonShaderRevision =
+                    commonShaderProvider.revision();
+        }
+    }
+
+    private void ensureCommonProviderStable() {
+        if (commonShaderProvider == null) {
+            return;
+        }
+        long revision = commonShaderProvider.revision();
+        if (revision == commonShaderRevision) {
+            return;
+        }
+        if (queue.size() > 0) {
+            throw new FdxException(
+                    "ModelBatch shader provider changed while renderables were pending");
+        }
+        commonShaderRevision = revision;
+    }
+
+    private void captureMaterialBinding(Material material) {
+        ShaderMaterialBinding binding = material != null
+                ? material.shaderBinding() : null;
+        if (binding == null) {
+            return;
+        }
+        for (int i = 0; i < pendingMaterialBindingCount; i++) {
+            if (pendingMaterialBindings[i] == binding) {
+                if (pendingMaterialRevisions[i]
+                        != binding.revision()) {
+                    throw new FdxException(
+                            "Shader material changed while renderables were pending");
+                }
+                return;
+            }
+        }
+        if (pendingMaterialBindingCount
+                == pendingMaterialBindings.length) {
+            ShaderMaterialBinding[] largerBindings =
+                    new ShaderMaterialBinding[
+                            pendingMaterialBindings.length * 2];
+            long[] largerRevisions = new long[
+                    pendingMaterialRevisions.length * 2];
+            System.arraycopy(pendingMaterialBindings, 0,
+                    largerBindings, 0,
+                    pendingMaterialBindings.length);
+            System.arraycopy(pendingMaterialRevisions, 0,
+                    largerRevisions, 0,
+                    pendingMaterialRevisions.length);
+            pendingMaterialBindings = largerBindings;
+            pendingMaterialRevisions = largerRevisions;
+        }
+        pendingMaterialBindings[pendingMaterialBindingCount] =
+                binding;
+        pendingMaterialRevisions[pendingMaterialBindingCount] =
+                binding.revision();
+        pendingMaterialBindingCount++;
+    }
+
+    private void validatePendingMaterialBindings() {
+        for (int i = 0; i < pendingMaterialBindingCount; i++) {
+            if (pendingMaterialBindings[i].revision()
+                    != pendingMaterialRevisions[i]) {
+                throw new FdxException(
+                        "Shader material changed while renderables were pending");
+            }
+        }
+    }
+
     private void ensureDrawing() {
         ensureNotDisposed();
         if (!drawing || pass == null || context.pass() == null) {
             throw new FdxException("ModelBatch.begin() must be called before rendering");
         }
+        ensureCommonProviderStable();
     }
 
     private void ensureNotDisposed() {
         if (disposed) {
             throw new FdxException("ModelBatch has been disposed");
         }
+    }
+
+    private void retireOwnedShaderProvider() {
+        if (!(ownedShaderProvider instanceof Disposable disposable)) {
+            ownedShaderProvider = null;
+            return;
+        }
+        if (retiredOwnedProviderCount
+                == retiredOwnedProviders.length) {
+            Disposable[] larger = new Disposable[
+                    retiredOwnedProviders.length * 2];
+            System.arraycopy(retiredOwnedProviders, 0, larger, 0,
+                    retiredOwnedProviders.length);
+            retiredOwnedProviders = larger;
+        }
+        retiredOwnedProviders[retiredOwnedProviderCount++] =
+                disposable;
+        ownedShaderProvider = null;
+    }
+
+    private void disposeOwnedShaderProviders() {
+        if (ownedShaderProvider instanceof Disposable disposable) {
+            disposable.dispose();
+        }
+        ownedShaderProvider = null;
+        for (int i = 0; i < retiredOwnedProviderCount; i++) {
+            retiredOwnedProviders[i].dispose();
+            retiredOwnedProviders[i] = null;
+        }
+        retiredOwnedProviderCount = 0;
     }
 
     /**
@@ -311,9 +541,7 @@ public final class ModelBatch implements Batch3D {
             return;
         }
         disposed = true;
-        if (ownsDefaultShaderProvider && shaderProvider instanceof Disposable) {
-            ((Disposable)shaderProvider).dispose();
-        }
+        disposeOwnedShaderProviders();
     }
 
     /**

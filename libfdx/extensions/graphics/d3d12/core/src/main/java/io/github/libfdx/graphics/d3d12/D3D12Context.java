@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.d3d12;
 
+import io.github.libfdx.graphics.shader.ShaderModule;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.GraphicsAttachment;
@@ -101,7 +102,7 @@ final class D3D12Context implements GraphicsAttachment {
         return texture;
     }
 
-    D3D12Shader requireShader(io.github.libfdx.graphics.ShaderModule value, String name) {
+    D3D12Shader requireShader(io.github.libfdx.graphics.shader.ShaderModule value, String name) {
         if (!(value instanceof D3D12Shader shader) || shader.context() != this || shader.isDisposed()) {
             throw new FdxException(name + " does not belong to this Direct3D 12 context");
         }

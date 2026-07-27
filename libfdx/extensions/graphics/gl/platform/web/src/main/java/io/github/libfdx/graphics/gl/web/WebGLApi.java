@@ -802,6 +802,16 @@ final class WebGLApi implements GLApi {
     }
 
     /**
+     * Runs the disable vertex attrib array step.
+     *
+     * @param index the index
+     */
+    @Override
+    public void disableVertexAttribArray(int index) {
+        gl.disableVertexAttribArray(index);
+    }
+
+    /**
      * Runs the vertex attrib pointer step.
      *
      * @param index the index

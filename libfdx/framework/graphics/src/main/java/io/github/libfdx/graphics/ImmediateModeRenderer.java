@@ -1,5 +1,26 @@
 package io.github.libfdx.graphics;
 
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.shader.ShaderProfile;
+import io.github.libfdx.graphics.shader.ShaderStage;
+import io.github.libfdx.graphics.shader.reflection.ShaderBinding;
+import io.github.libfdx.graphics.shader.reflection.ShaderBuiltinUsage;
+import io.github.libfdx.graphics.shader.reflection.ShaderEntryPoint;
+import io.github.libfdx.graphics.shader.reflection.ShaderInterpolation;
+import io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameter;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameterHandle;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameterLayout;
+import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceAccess;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceKind;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceUse;
+import io.github.libfdx.graphics.shader.reflection.ShaderScalarType;
+import io.github.libfdx.graphics.shader.reflection.ShaderStageVariable;
+import io.github.libfdx.graphics.shader.reflection.ShaderStageVisibility;
+import io.github.libfdx.graphics.shader.reflection.ShaderValueType;
+import io.github.libfdx.graphics.shader.runtime.ShaderParameterBlock;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 
@@ -24,12 +45,18 @@ public final class ImmediateModeRenderer implements Disposable {
     private static final VertexLayout VERTEX_LAYOUT = VertexLayout.of(BYTES_PER_VERTEX,
             VertexAttribute.of(0, VertexFormat.FLOAT32X3, 0),
             VertexAttribute.of(1, VertexFormat.FLOAT32X4, 12));
-    private static final ShaderReflection REFLECTION = ShaderReflection.of(new ShaderBinding[] {
-            ShaderBinding.of(0, 0, "uniforms", ShaderBindingType.UNIFORM_BUFFER)
-    }, new ShaderAttribute[] {
-            ShaderAttribute.of(0, "position", VertexFormat.FLOAT32X3),
-            ShaderAttribute.of(1, "color", VertexFormat.FLOAT32X4)
-    });
+    private static final ShaderValueType MATRIX4 = ShaderValueType
+            .matrix(ShaderScalarType.F32, 4, 4, 16)
+            .named("mat4x4<f32>");
+    private static final ShaderParameterLayout UNIFORM_LAYOUT =
+            ShaderParameterLayout.of(128, 16,
+                    ShaderParameter.of("model", MATRIX4, 0, 64, 16),
+                    ShaderParameter.of("viewProjection", MATRIX4, 64, 64, 16));
+    private static final ShaderParameterHandle MODEL =
+            UNIFORM_LAYOUT.requireHandle("model");
+    private static final ShaderParameterHandle VIEW_PROJECTION =
+            UNIFORM_LAYOUT.requireHandle("viewProjection");
+    private static final ShaderReflection REFLECTION = reflection();
     private static final String SHADER = ""
             + "struct CameraUniforms {\n"
             + "    model: mat4x4<f32>,\n"
@@ -65,6 +92,8 @@ public final class ImmediateModeRenderer implements Disposable {
             .colorLoadOp(LoadOp.load())
             .colorStoreOp(StoreOp.store())
             .depthEnabled(true);
+    private final ShaderParameterBlock uniformBlock =
+            ShaderParameterBlock.allocate(UNIFORM_LAYOUT);
     private ShaderModule shader;
     private RenderPipeline line2DPipeline;
     private RenderPipeline line3DPipeline;
@@ -247,16 +276,72 @@ public final class ImmediateModeRenderer implements Disposable {
         RenderPassDescriptor descriptor = line2D ? line2DRenderPassDescriptor : line3DRenderPassDescriptor;
         RenderPass pass = frame.commandEncoder().beginRenderPass(descriptor
                 .colorAttachment(frame.colorAttachment()));
-        if (width > 0 && height > 0) {
-            pass.setViewport(x, y, width, height);
-            pass.setScissor(x, y, width, height);
+        try {
+            if (width > 0 && height > 0) {
+                pass.setViewport(x, y, width, height);
+                pass.setScissor(x, y, width, height);
+            }
+            pass.setPipeline(line2D ? line2DPipeline : line3DPipeline);
+            uniformBlock.setFloatMatrix(MODEL, IDENTITY_MATRIX, 0);
+            uniformBlock.setFloatMatrix(VIEW_PROJECTION,
+                    line2D ? IDENTITY_MATRIX : viewProjection, 0);
+            pass.setParameterBlock(0, 0, uniformBlock);
+            pass.setVertexBuffer(vertexBuffer);
+            pass.draw(vertexCount, 1, 0, 0);
         }
-        pass.setPipeline(line2D ? line2DPipeline : line3DPipeline);
-        pass.setUniformMatrix4("u_model", IDENTITY_MATRIX);
-        pass.setUniformMatrix4("u_viewProjection", line2D ? IDENTITY_MATRIX : viewProjection);
-        pass.setVertexBuffer(vertexBuffer);
-        pass.draw(vertexCount, 1, 0, 0);
-        pass.end();
+        finally {
+            pass.end();
+        }
+    }
+
+    private static ShaderReflection reflection() {
+        ShaderValueType float3 =
+                ShaderValueType.vector(ShaderScalarType.F32, 3);
+        ShaderValueType float4 =
+                ShaderValueType.vector(ShaderScalarType.F32, 4);
+        ShaderStageVariable vertexPosition = ShaderStageVariable.of(
+                "input.position", "position", 0, -1, -1, float3,
+                ShaderInterpolation.PERSPECTIVE,
+                ShaderInterpolationSampling.CENTER);
+        ShaderStageVariable vertexColor = ShaderStageVariable.of(
+                "input.color", "color", 1, -1, -1, float4,
+                ShaderInterpolation.PERSPECTIVE,
+                ShaderInterpolationSampling.CENTER);
+        ShaderStageVariable outputColor = ShaderStageVariable.of(
+                "<retval>.color", "color", 0, -1, -1, float4,
+                ShaderInterpolation.PERSPECTIVE,
+                ShaderInterpolationSampling.CENTER);
+        ShaderStageVariable fragmentColor = ShaderStageVariable.of(
+                "input.color", "color", 0, -1, -1, float4,
+                ShaderInterpolation.PERSPECTIVE,
+                ShaderInterpolationSampling.CENTER);
+        ShaderStageVariable renderTarget = ShaderStageVariable.of(
+                "<retval>", "", 0, -1, -1, float4,
+                ShaderInterpolation.PERSPECTIVE,
+                ShaderInterpolationSampling.CENTER);
+        ShaderBinding uniforms = ShaderBinding.builder(0, 0,
+                        "uniforms", ShaderResourceKind.UNIFORM_BUFFER)
+                .visibility(ShaderStageVisibility.VERTEX)
+                .access(ShaderResourceAccess.READ)
+                .buffer(128, 128, 16, UNIFORM_LAYOUT)
+                .build();
+        return ShaderReflection.complete(ShaderProfile.PORTABLE_WEBGPU,
+                new ShaderEntryPoint[] {
+                        ShaderEntryPoint.builder("vertexMain",
+                                        ShaderStage.VERTEX)
+                                .builtins(ShaderBuiltinUsage.POSITION, -1)
+                                .inputs(vertexPosition, vertexColor)
+                                .outputs(outputColor)
+                                .resources(ShaderResourceUse.of(0, 0, 128))
+                                .build(),
+                        ShaderEntryPoint.builder("fragmentMain",
+                                        ShaderStage.FRAGMENT)
+                                .builtins(ShaderBuiltinUsage.POSITION, -1)
+                                .inputs(fragmentColor)
+                                .outputs(renderTarget)
+                                .build()
+                },
+                new ShaderBinding[] { uniforms }, new String[0]);
     }
 
     /**

@@ -42,4 +42,13 @@ public interface GraphicsFrame extends ProviderHandle {
      * @return the height
      */
     int height();
+
+    /**
+     * Returns exact compatibility metadata for the frame's render target.
+     *
+     * @return render-pass compatibility
+     */
+    default RenderPassCompatibility compatibility() {
+        return frameBuffer().compatibility();
+    }
 }

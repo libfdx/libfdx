@@ -500,6 +500,13 @@ public interface GLApi {
     void enableVertexAttribArray(int index);
 
     /**
+     * Runs the disable vertex attrib array step.
+     *
+     * @param index the index
+     */
+    void disableVertexAttribArray(int index);
+
+    /**
      * Runs the vertex attrib pointer step.
      *
      * @param index the index

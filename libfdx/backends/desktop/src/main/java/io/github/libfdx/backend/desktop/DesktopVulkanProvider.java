@@ -14,21 +14,29 @@ import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.GraphicsEnvironment;
 import io.github.libfdx.graphics.GraphicsFrame;
+import io.github.libfdx.graphics.GraphicsCapabilities;
+import io.github.libfdx.graphics.GraphicsFeature;
+import io.github.libfdx.graphics.GraphicsLimits;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.NativeWindow;
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.RenderPass;
+import io.github.libfdx.graphics.RenderPassCompatibility;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
-import io.github.libfdx.graphics.ShaderBinding;
-import io.github.libfdx.graphics.ShaderBindingType;
-import io.github.libfdx.graphics.ShaderLanguage;
-import io.github.libfdx.graphics.ShaderModule;
-import io.github.libfdx.graphics.ShaderModuleDescriptor;
-import io.github.libfdx.graphics.ShaderModuleDescriptors;
-import io.github.libfdx.graphics.ShaderTarget;
+import io.github.libfdx.graphics.RenderTargetLayout;
+import io.github.libfdx.graphics.shader.ShaderLanguage;
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameterHandle;
+import io.github.libfdx.graphics.shader.runtime.ShaderParameterBlock;
+import io.github.libfdx.graphics.shader.ShaderProfile;
+import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptors;
+import io.github.libfdx.graphics.shader.target.ShaderTarget;
 import io.github.libfdx.graphics.StoreOp;
+import io.github.libfdx.graphics.Sampler;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.TextureFilter;
@@ -40,8 +48,10 @@ import io.github.libfdx.graphics.VertexAttribute;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
 import io.github.libfdx.graphics.VertexStepMode;
+import io.github.libfdx.graphics.internal.ShaderRenderBindings;
 import io.github.libfdx.graphics.vulkan.VulkanConfiguration;
 import io.github.libfdx.graphics.vulkan.VulkanProvider;
+import io.github.libfdx.graphics.vulkan.internal.VulkanShaderLayoutValidator;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFWVulkan;
 import org.lwjgl.system.MemoryStack;
@@ -119,7 +129,6 @@ import org.lwjgl.vulkan.VkWriteDescriptorSet;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.LongBuffer;
 import java.util.ArrayList;
@@ -382,7 +391,30 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
     private static final int MAX_TEXTURE_DESCRIPTOR_SETS = 4096;
     private static final int MAX_TEXTURE_DESCRIPTOR_SLOTS = 16;
     private static final int MAX_UNIFORM_DESCRIPTOR_SETS = 4096;
-    private static final int PBR_UNIFORM_BYTE_COUNT = 5328;
+    private static final int MAX_UNIFORM_BYTE_COUNT = 64 * 1024;
+    private static final GraphicsCapabilities CAPABILITIES = GraphicsCapabilities.builder()
+            .profile(ShaderProfile.PORTABLE_WEBGL2)
+            .profile(ShaderProfile.PORTABLE_WEBGPU)
+            .profile(ShaderProfile.NATIVE)
+            .feature(GraphicsFeature.INDEXED_DRAW)
+            .feature(GraphicsFeature.INSTANCED_DRAW)
+            .feature(GraphicsFeature.DEPTH_STENCIL_ATTACHMENTS)
+            .colorFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
+                    TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB)
+            .depthStencilFormats(TextureFormat.DEPTH32_FLOAT)
+            .sampleCounts(1)
+            .limits(GraphicsLimits.builder()
+                    .maxBindGroups(2)
+                    .maxBindingsPerGroup(32)
+                    .maxUniformBuffersPerStage(1)
+                    .maxSampledTexturesPerStage(MAX_TEXTURE_DESCRIPTOR_SLOTS)
+                    .maxSamplersPerStage(MAX_TEXTURE_DESCRIPTOR_SLOTS)
+                    .maxColorAttachments(1)
+                    .maxVertexBuffers(4)
+                    .maxVertexAttributes(16)
+                    .maxUniformBufferBindingSize(MAX_UNIFORM_BYTE_COUNT)
+                    .build())
+            .build();
     private static final int DEPTH_FORMAT = VK_FORMAT_D32_SFLOAT;
     private static final long FRAME_FENCE_TIMEOUT_NS = 33_000_000L;
     private static final long SWAPCHAIN_ACQUIRE_TIMEOUT_NS = 33_000_000L;
@@ -495,20 +527,6 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
     public DesktopVulkanProvider framesInFlight(int framesInFlight) {
         configuration.framesInFlight(framesInFlight);
         return this;
-    }
-
-    private static boolean usesPbrUniformBlock(RenderPipelineDescriptor descriptor) {
-        ShaderBinding[] bindings = descriptor.shaderReflection().bindings();
-        for (int i = 0; i < bindings.length; i++) {
-            ShaderBinding binding = bindings[i];
-            if ((binding.group() == 0 || binding.group() == 1)
-                    && binding.binding() == 0
-                    && binding.type() == ShaderBindingType.UNIFORM_BUFFER
-                    && "uniforms".equals(binding.name())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static void waitForAllFences(VkDevice device, long[] fences, long timeoutNs, String operation) {
@@ -2105,9 +2123,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
-        long uniformDescriptorSet(ByteBuffer bytes) {
+        long uniformDescriptorSet(ByteBuffer bytes, int byteCount) {
+            if (byteCount <= 0 || byteCount > MAX_UNIFORM_BYTE_COUNT) {
+                throw new FdxException("Vulkan uniform binding size is out of range: " + byteCount);
+            }
             VulkanUniformAllocation allocation = obtainUniformAllocation();
-            allocation.write(bytes, PBR_UNIFORM_BYTE_COUNT);
+            allocation.write(bytes, byteCount);
             if (uniformAllocationsInFlight != null && currentFrameSlot >= 0
                     && currentFrameSlot < uniformAllocationsInFlight.length) {
                 uniformAllocationsInFlight[currentFrameSlot].add(allocation);
@@ -2120,7 +2141,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             if (last >= 0) {
                 return availableUniformAllocations.remove(last);
             }
-            return createUniformAllocation(PBR_UNIFORM_BYTE_COUNT);
+            return createUniformAllocation(MAX_UNIFORM_BYTE_COUNT);
         }
 
         private VulkanUniformAllocation createUniformAllocation(int byteCount) {
@@ -2837,6 +2858,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 throw new FdxException("TextureDescriptor cannot be null");
             }
             context.requireDeviceUsable("create a texture");
+            descriptor.validate(capabilities());
             if (descriptor.format() != TextureFormat.RGBA8_UNORM
                     && descriptor.format() != TextureFormat.RGBA8_UNORM_SRGB
                     && descriptor.format() != TextureFormat.BGRA8_UNORM
@@ -3292,12 +3314,17 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
             context.requireDeviceUsable("create a shader module");
             descriptor = ShaderModuleDescriptors.requireTarget(descriptor, ShaderTarget.VULKAN_SPIRV, "Vulkan");
+            if (descriptor.targetArtifact() != null) {
+                shaderTargetSupport().require(descriptor.targetArtifact());
+                VulkanShaderLayoutValidator.requireArtifact(
+                        descriptor.targetArtifact());
+            }
             if (!descriptor.hasSource(ShaderLanguage.SPIRV)) {
                 throw new FdxException("Vulkan requires SPIR-V shader modules");
             }
             long vertexModule = createShaderModule(descriptor.spirvVertexWords(), descriptor.label() + " vertex");
             long fragmentModule = createShaderModule(descriptor.spirvFragmentWords(), descriptor.label() + " fragment");
-            return new VulkanShaderModuleHandle(context, vertexModule, fragmentModule);
+            return new VulkanShaderModuleHandle(context, vertexModule, fragmentModule, descriptor.reflection());
         }
 
         private long createShaderModule(int[] words, String label) {
@@ -3328,6 +3355,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             context.requireDeviceUsable("create a render pipeline");
             VulkanShaderModuleHandle shaderModule = VulkanResources.requireShaderModule(descriptor.shaderModule(),
                     context.resourceDomain(), "Render pipeline shader module");
+            descriptor.validate(capabilities());
+            if (descriptor.renderTargetLayout().colorAttachmentCount() != 1) {
+                throw new FdxException("Desktop Vulkan currently requires exactly one color attachment");
+            }
+            ShaderRenderBindings resourceBindings = ShaderRenderBindings.from(descriptor);
+            VulkanShaderLayoutValidator.requireRenderLayout(resourceBindings);
             toNativeFormat(descriptor.colorFormat());
             if (descriptor.sampledTextureCount() > MAX_TEXTURE_DESCRIPTOR_SLOTS) {
                 throw new FdxException("Vulkan sampled texture count exceeds the descriptor slot limit: "
@@ -3393,8 +3426,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
 
                 VkPipelineLayoutCreateInfo pipelineLayoutInfo = VkPipelineLayoutCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO);
-                boolean uniformBufferEnabled = usesPbrUniformBlock(descriptor);
-                int uniformDescriptorSetIndex = descriptor.sampledTextureCount() > 0 ? 1 : 0;
+                boolean uniformBufferEnabled = resourceBindings.hasUniformBuffer();
+                int uniformDescriptorSetIndex = resourceBindings.uniformSetIndex();
                 if (descriptor.sampledTextureCount() > 0 && uniformBufferEnabled) {
                     pipelineLayoutInfo.pSetLayouts(stack.longs(context.textureDescriptorSetLayout(),
                             context.uniformDescriptorSetLayout()));
@@ -3435,7 +3468,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                         context.resourceDomain(), pPipeline.get(0), pipelineLayout);
                 return new VulkanRenderPipelineHandle(context, allocation, descriptor.primitiveTopology(),
                         descriptor.sampledTextureCount(),
-                        uniformBufferEnabled, uniformDescriptorSetIndex);
+                        resourceBindings, uniformDescriptorSetIndex,
+                        descriptor.renderTargetLayout());
             }
         }
 
@@ -3529,6 +3563,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return ID;
         }
 
+        @Override
+        public GraphicsCapabilities capabilities() {
+            return CAPABILITIES;
+        }
+
         /**
          * Returns the provider-specific representation requested by the caller.
          *
@@ -3572,13 +3611,15 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 throw new FdxException("Cannot begin Vulkan render pass outside a frame");
             }
             ensurePreviousPassEnded();
+            RenderPassCompatibility compatibility = descriptor.validate(
+                    context.graphicsDevice.capabilities());
             VulkanTextureViewHandle attachment = VulkanResources.requireTextureView(descriptor.colorAttachment(),
                     context, "Color attachment");
             LoadOp loadOp = descriptor.colorLoadOp();
             StoreOp storeOp = descriptor.colorStoreOp();
             return beginRenderPass(attachment, loadOp.isClear(), loadOp.red(), loadOp.green(), loadOp.blue(),
                     loadOp.alpha(), storeOp.isStore(), descriptor.depthClearEnabled(),
-                    descriptor.depthClearValue());
+                    descriptor.depthClearValue(), compatibility);
         }
 
         RenderPass beginClearPass(float red, float green, float blue, float alpha) {
@@ -3586,12 +3627,14 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 throw new FdxException("Cannot clear outside a Vulkan frame");
             }
             ensurePreviousPassEnded();
-            return beginRenderPass(context.colorAttachment, true, red, green, blue, alpha, true, false, 1.0f);
+            return beginRenderPass(context.colorAttachment, true, red, green, blue, alpha, true, false, 1.0f,
+                    RenderPassCompatibility.of(RenderTargetLayout.color(
+                            context.colorAttachment.format()), context.width(), context.height()));
         }
 
         private RenderPass beginRenderPass(VulkanTextureViewHandle attachment, boolean clear,
                 float red, float green, float blue, float alpha, boolean store, boolean depthClear,
-                float depthClearValue) {
+                float depthClearValue, RenderPassCompatibility compatibility) {
             boolean textureBacked = attachment.textureBacked();
             VulkanTextureAllocation renderTargetAllocation = textureBacked ? attachment.texture.allocation() : null;
             if (renderTargetAllocation != null) {
@@ -3639,7 +3682,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 vkCmdSetScissor(context.commandBuffer(), 0, scissor);
             }
             VulkanRenderPass pooledPass = nextRenderPass();
-            pooledPass.begin(textureBacked ? attachment : null, renderTargetAllocation, passHeight);
+            pooledPass.begin(textureBacked ? attachment : null, renderTargetAllocation, passHeight,
+                    RenderPassCompatibility.of(compatibility.targetLayout(), passWidth, passHeight));
             renderPassCount++;
             return pooledPass;
         }
@@ -3704,60 +3748,15 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
      * @author xpenatan
      */
     private static final class VulkanRenderPass implements RenderPass {
-        private static final int MATRIX_FLOAT_COUNT = 16;
-        private static final int MODEL_OFFSET = 0;
-        private static final int VIEW_PROJECTION_OFFSET = 16;
-        private static final int CAMERA_POSITION_OFFSET = 32;
-        private static final int CAMERA_DIRECTION_OFFSET = 36;
-        private static final int AMBIENT_COLOR_OFFSET = 40;
-        private static final int LIGHT_DIRECTION_OFFSET = 44;
-        private static final int LIGHT_COLOR_INTENSITY_OFFSET = 48;
-        private static final int FILL_LIGHT_DIRECTION_OFFSET = 52;
-        private static final int FILL_LIGHT_COLOR_INTENSITY_OFFSET = 56;
-        private static final int POST_PROCESSING_OFFSET = 60;
-        private static final int TEXTURE_FLAGS_OFFSET = 64;
-        private static final int EMISSIVE_FLAGS_OFFSET = 68;
-        private static final int FOG_COLOR_OFFSET = 72;
-        private static final int FOG_PARAMS_OFFSET = 76;
-        private static final int SKY_ZENITH_COLOR_OFFSET = 80;
-        private static final int SKY_HORIZON_COLOR_OFFSET = 84;
-        private static final int SKY_NADIR_COLOR_OFFSET = 88;
-        private static final int SKY_SUN_COLOR_OFFSET = 92;
-        private static final int SKY_SUN_DIRECTION_OFFSET = 96;
-        private static final int SKY_PARAMS_OFFSET = 100;
-        private static final int MAX_POINT_LIGHTS = 4;
-        private static final int POINT_LIGHT_COUNT_OFFSET = 104;
-        private static final int POINT_LIGHT_POSITIONS_OFFSET = POINT_LIGHT_COUNT_OFFSET + 4;
-        private static final int POINT_LIGHT_COLORS_OFFSET = POINT_LIGHT_POSITIONS_OFFSET + MAX_POINT_LIGHTS * 4;
-        private static final int MAX_SPOT_LIGHTS = 4;
-        private static final int SPOT_LIGHT_COUNT_OFFSET = POINT_LIGHT_COLORS_OFFSET + MAX_POINT_LIGHTS * 4;
-        private static final int SPOT_LIGHT_POSITIONS_OFFSET = SPOT_LIGHT_COUNT_OFFSET + 4;
-        private static final int SPOT_LIGHT_DIRECTIONS_OFFSET = SPOT_LIGHT_POSITIONS_OFFSET + MAX_SPOT_LIGHTS * 4;
-        private static final int SPOT_LIGHT_COLORS_OFFSET = SPOT_LIGHT_DIRECTIONS_OFFSET + MAX_SPOT_LIGHTS * 4;
-        private static final int SPOT_LIGHT_CONES_OFFSET = SPOT_LIGHT_COLORS_OFFSET + MAX_SPOT_LIGHTS * 4;
-        private static final int MAX_SHADOW_CASCADES = 4;
-        private static final int SHADOW_VIEW_PROJECTIONS_OFFSET = SPOT_LIGHT_CONES_OFFSET + MAX_SPOT_LIGHTS * 4;
-        private static final int SHADOW_PARAMS_OFFSET = SHADOW_VIEW_PROJECTIONS_OFFSET
-                + MAX_SHADOW_CASCADES * MATRIX_FLOAT_COUNT;
-        private static final int SHADOW_CASCADE_SPLITS_OFFSET = SHADOW_PARAMS_OFFSET + 4;
-        private static final int SHADOW_BIASES_OFFSET = SHADOW_CASCADE_SPLITS_OFFSET + 4;
-        private static final int SHADOW_CAMERA_POSITION_OFFSET = SHADOW_BIASES_OFFSET + 4;
-        private static final int SHADOW_CAMERA_DIRECTION_OFFSET = SHADOW_CAMERA_POSITION_OFFSET + 4;
-        private static final int SHADOW_CAMERA_UP_OFFSET = SHADOW_CAMERA_DIRECTION_OFFSET + 4;
-        private static final int SHADOW_CAMERA_PARAMS_OFFSET = SHADOW_CAMERA_UP_OFFSET + 4;
-        private static final int SHADOW_FILTER_PARAMS_OFFSET = SHADOW_CAMERA_PARAMS_OFFSET + 4;
-        private static final int SKINNING_PARAMS_OFFSET = SHADOW_FILTER_PARAMS_OFFSET + 4;
-        private static final int MAX_BONES = 64;
-        private static final int BONE_MATRICES_OFFSET = SKINNING_PARAMS_OFFSET + 4;
-
         private final VulkanContext context;
         private VulkanTextureViewHandle colorAttachment;
         private VulkanTextureAllocation renderTargetAllocation;
         private int renderTargetHeight;
-        private final ByteBuffer uniformBytes = ByteBuffer.allocateDirect(PBR_UNIFORM_BYTE_COUNT)
+        private final ByteBuffer uniformBytes = ByteBuffer.allocateDirect(MAX_UNIFORM_BYTE_COUNT)
                 .order(ByteOrder.nativeOrder());
-        private final FloatBuffer uniformFloats = uniformBytes.asFloatBuffer();
+        private ShaderParameterBlock compatibilityUniformBlock;
         private VulkanRenderPipelineHandle pipeline;
+        private RenderPassCompatibility compatibility;
         private VulkanBufferHandle vertexBuffer;
         private VulkanBufferHandle indexBuffer;
         private VulkanTextureHandle[] textures = new VulkanTextureHandle[0];
@@ -3771,13 +3770,14 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
 
         void begin(VulkanTextureViewHandle colorAttachment, VulkanTextureAllocation renderTargetAllocation,
-                int renderTargetHeight) {
+                int renderTargetHeight, RenderPassCompatibility compatibility) {
             if (!ended) {
                 throw new FdxException("Cannot reuse an active Vulkan render pass");
             }
             this.colorAttachment = colorAttachment;
             this.renderTargetAllocation = renderTargetAllocation;
             this.renderTargetHeight = renderTargetHeight;
+            this.compatibility = compatibility;
             pipeline = null;
             vertexBuffer = null;
             indexBuffer = null;
@@ -3785,12 +3785,18 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             uniformDescriptorSet = VK_NULL_HANDLE;
             uniformDataDirty = false;
             hasUniformData = false;
-            resetUniformData();
+            compatibilityUniformBlock = null;
             ended = false;
         }
 
         boolean isEnded() {
             return ended;
+        }
+
+        @Override
+        public RenderPassCompatibility compatibility() {
+            ensureOpen();
+            return compatibility;
         }
 
         /**
@@ -3802,10 +3808,17 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         public void setPipeline(RenderPipeline pipeline) {
             ensureOpen();
             this.pipeline = VulkanResources.requirePipeline(pipeline, context.resourceDomain(), "Render pipeline");
+            if (!compatibility.isCompatible(this.pipeline.targetLayout())) {
+                this.pipeline = null;
+                throw new FdxException(
+                        "Desktop Vulkan render pipeline target layout is incompatible with the active pass");
+            }
             context.markRecordedResource(this.pipeline.allocation());
             prepareTextureSlots(this.pipeline.sampledTextureCount());
             uniformDescriptorSet = VK_NULL_HANDLE;
             uniformDataDirty = true;
+            hasUniformData = false;
+            compatibilityUniformBlock = null;
             vkCmdBindPipeline(context.commandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, this.pipeline.pipeline());
         }
 
@@ -3885,6 +3898,42 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             textures[slot] = vulkanTexture;
         }
 
+        @Override
+        public void setTextureBinding(int group, int binding, Texture texture) {
+            requirePipeline();
+            int slot = pipeline.resourceBindings().textureSlot(group, binding);
+            if (slot < 0) {
+                throw new FdxException("Texture binding is not declared by the active Vulkan pipeline: "
+                        + group + ':' + binding);
+            }
+            setTexture(slot, texture);
+        }
+
+        @Override
+        public void setTextureSamplerBinding(int group, int binding, Texture texture) {
+            requirePipeline();
+            int slot = pipeline.resourceBindings().samplerSlot(group, binding);
+            if (slot < 0) {
+                throw new FdxException("Sampler binding is not declared by the active Vulkan pipeline: "
+                        + group + ':' + binding);
+            }
+            setTexture(slot, texture);
+        }
+
+        @Override
+        public void setSamplerBinding(int group, int binding, Sampler sampler) {
+            throw new FdxException("Separate sampler objects are not supported by this Vulkan render path");
+        }
+
+        @Override
+        public void setParameterBlock(int group, int binding, ShaderParameterBlock block) {
+            requirePipeline();
+            pipeline.resourceBindings().requireParameterBlock(group, binding, block);
+            block.copyTo(uniformBytes, 0);
+            markUniformDirty();
+            uniformDescriptorSet = VK_NULL_HANDLE;
+        }
+
         /**
          * Sets the scissor.
          *
@@ -3941,21 +3990,21 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
          */
         @Override
         public void setUniform1i(String name, int value) {
-            if ("u_hasBaseColorTexture".equals(name)) {
-                setUniformFloat(TEXTURE_FLAGS_OFFSET, value);
+            throw namedUniformUnsupported(name);
+        }
+
+        @Override
+        public void setUniform1i(ShaderParameterHandle parameter, int value) {
+            ShaderParameterBlock block = compatibilityUniformBlock();
+            switch (parameter.valueType().scalarType()) {
+                case F32 -> block.setFloat(parameter, value);
+                case I32 -> block.setInt(parameter, value);
+                case U32 -> block.setUnsignedInt(parameter, value);
+                case BOOL -> block.setBoolean(parameter, value != 0);
+                default -> throw new FdxException("Uniform handle is not integer-compatible: "
+                        + parameter.path());
             }
-            else if ("u_hasMetallicRoughnessTexture".equals(name)) {
-                setUniformFloat(TEXTURE_FLAGS_OFFSET + 1, value);
-            }
-            else if ("u_hasNormalTexture".equals(name)) {
-                setUniformFloat(TEXTURE_FLAGS_OFFSET + 2, value);
-            }
-            else if ("u_hasOcclusionTexture".equals(name)) {
-                setUniformFloat(TEXTURE_FLAGS_OFFSET + 3, value);
-            }
-            else if ("u_hasEmissiveTexture".equals(name)) {
-                setUniformFloat(EMISSIVE_FLAGS_OFFSET, value);
-            }
+            snapshotCompatibilityBlock();
         }
 
         /**
@@ -3966,18 +4015,13 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
          */
         @Override
         public void setUniform1f(String name, float value) {
-            if ("u_lightIntensity".equals(name)) {
-                setUniformFloat(LIGHT_COLOR_INTENSITY_OFFSET + 3, value);
-            }
-            else if ("u_fillLightIntensity".equals(name)) {
-                setUniformFloat(FILL_LIGHT_COLOR_INTENSITY_OFFSET + 3, value);
-            }
-            else if ("u_pointLightCount".equals(name)) {
-                setUniformFloat(POINT_LIGHT_COUNT_OFFSET, value);
-            }
-            else if ("u_spotLightCount".equals(name)) {
-                setUniformFloat(SPOT_LIGHT_COUNT_OFFSET, value);
-            }
+            throw namedUniformUnsupported(name);
+        }
+
+        @Override
+        public void setUniform1f(ShaderParameterHandle parameter, float value) {
+            compatibilityUniformBlock().setFloat(parameter, value);
+            snapshotCompatibilityBlock();
         }
 
         /**
@@ -3990,48 +4034,16 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
          */
         @Override
         public void setUniform3f(String name, float x, float y, float z) {
-            if ("u_cameraPosition".equals(name)) {
-                setUniform4f(CAMERA_POSITION_OFFSET, x, y, z, 1.0f);
-            }
-            else if ("u_cameraDirection".equals(name)) {
-                setUniform4f(CAMERA_DIRECTION_OFFSET, x, y, z, 0.0f);
-            }
-            else if ("u_ambientColor".equals(name)) {
-                setUniform4f(AMBIENT_COLOR_OFFSET, x, y, z, 1.0f);
-            }
-            else if ("u_lightDirection".equals(name)) {
-                setUniform4f(LIGHT_DIRECTION_OFFSET, x, y, z, 0.0f);
-            }
-            else if ("u_lightColor".equals(name)) {
-                setUniform4f(LIGHT_COLOR_INTENSITY_OFFSET, x, y, z,
-                        uniformFloats.get(LIGHT_COLOR_INTENSITY_OFFSET + 3));
-            }
-            else if ("u_fillLightDirection".equals(name)) {
-                setUniform4f(FILL_LIGHT_DIRECTION_OFFSET, x, y, z, 0.0f);
-            }
-            else if ("u_fillLightColor".equals(name)) {
-                setUniform4f(FILL_LIGHT_COLOR_INTENSITY_OFFSET, x, y, z,
-                        uniformFloats.get(FILL_LIGHT_COLOR_INTENSITY_OFFSET + 3));
-            }
-            else if ("u_fogColor".equals(name)) {
-                setUniform4f(FOG_COLOR_OFFSET, x, y, z, 1.0f);
-            }
-            else if ("u_skyZenithColor".equals(name)) {
-                setUniform4f(SKY_ZENITH_COLOR_OFFSET, x, y, z, 1.0f);
-            }
-            else if ("u_skyHorizonColor".equals(name)) {
-                setUniform4f(SKY_HORIZON_COLOR_OFFSET, x, y, z, 1.0f);
-            }
-            else if ("u_skyNadirColor".equals(name)) {
-                setUniform4f(SKY_NADIR_COLOR_OFFSET, x, y, z, 1.0f);
-            }
-            else if ("u_skySunColor".equals(name)) {
-                setUniform4f(SKY_SUN_COLOR_OFFSET, x, y, z,
-                        uniformFloats.get(SKY_SUN_COLOR_OFFSET + 3));
-            }
-            else if ("u_skySunDirection".equals(name)) {
-                setUniform4f(SKY_SUN_DIRECTION_OFFSET, x, y, z, 0.0f);
-            }
+            throw namedUniformUnsupported(name);
+        }
+
+        @Override
+        public void setUniform3f(ShaderParameterHandle parameter, float x, float y, float z) {
+            ShaderParameterBlock block = compatibilityUniformBlock();
+            block.setFloat(parameter.component(0), x);
+            block.setFloat(parameter.component(1), y);
+            block.setFloat(parameter.component(2), z);
+            snapshotCompatibilityBlock();
         }
 
         /**
@@ -4045,113 +4057,13 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
          */
         @Override
         public void setUniform4f(String name, float x, float y, float z, float w) {
-            if ("u_cameraPosition".equals(name)) {
-                setUniform4f(CAMERA_POSITION_OFFSET, x, y, z, w);
-            }
-            else if ("u_cameraDirection".equals(name)) {
-                setUniform4f(CAMERA_DIRECTION_OFFSET, x, y, z, w);
-            }
-            else if ("u_ambientColor".equals(name)) {
-                setUniform4f(AMBIENT_COLOR_OFFSET, x, y, z, w);
-            }
-            else if ("u_lightDirection".equals(name)) {
-                setUniform4f(LIGHT_DIRECTION_OFFSET, x, y, z, w);
-            }
-            else if ("u_lightColor".equals(name)) {
-                setUniform4f(LIGHT_COLOR_INTENSITY_OFFSET, x, y, z, w);
-            }
-            else if ("u_fillLightDirection".equals(name)) {
-                setUniform4f(FILL_LIGHT_DIRECTION_OFFSET, x, y, z, w);
-            }
-            else if ("u_fillLightColor".equals(name)) {
-                setUniform4f(FILL_LIGHT_COLOR_INTENSITY_OFFSET, x, y, z, w);
-            }
-            else if ("u_postProcessing".equals(name)) {
-                setUniform4f(POST_PROCESSING_OFFSET, x, y, z, w);
-            }
-            else if ("u_fogColor".equals(name)) {
-                setUniform4f(FOG_COLOR_OFFSET, x, y, z, w);
-            }
-            else if ("u_fogParams".equals(name)) {
-                setUniform4f(FOG_PARAMS_OFFSET, x, y, z, w);
-            }
-            else if ("u_skyZenithColor".equals(name)) {
-                setUniform4f(SKY_ZENITH_COLOR_OFFSET, x, y, z, w);
-            }
-            else if ("u_skyHorizonColor".equals(name)) {
-                setUniform4f(SKY_HORIZON_COLOR_OFFSET, x, y, z, w);
-            }
-            else if ("u_skyNadirColor".equals(name)) {
-                setUniform4f(SKY_NADIR_COLOR_OFFSET, x, y, z, w);
-            }
-            else if ("u_skySunColor".equals(name)) {
-                setUniform4f(SKY_SUN_COLOR_OFFSET, x, y, z, w);
-            }
-            else if ("u_skySunDirection".equals(name)) {
-                setUniform4f(SKY_SUN_DIRECTION_OFFSET, x, y, z, w);
-            }
-            else if ("u_skyParams".equals(name)) {
-                setUniform4f(SKY_PARAMS_OFFSET, x, y, z, w);
-            }
-            else {
-                int positionIndex = pointLightIndex(name, "PositionRange");
-                if (positionIndex >= 0) {
-                    setUniform4f(POINT_LIGHT_POSITIONS_OFFSET + positionIndex * 4, x, y, z, w);
-                    return;
-                }
-                int colorIndex = pointLightIndex(name, "ColorIntensity");
-                if (colorIndex >= 0) {
-                    setUniform4f(POINT_LIGHT_COLORS_OFFSET + colorIndex * 4, x, y, z, w);
-                    return;
-                }
-                int spotPositionIndex = spotLightIndex(name, "PositionRange");
-                if (spotPositionIndex >= 0) {
-                    setUniform4f(SPOT_LIGHT_POSITIONS_OFFSET + spotPositionIndex * 4, x, y, z, w);
-                    return;
-                }
-                int spotDirectionIndex = spotLightIndex(name, "DirectionInner");
-                if (spotDirectionIndex >= 0) {
-                    setUniform4f(SPOT_LIGHT_DIRECTIONS_OFFSET + spotDirectionIndex * 4, x, y, z, w);
-                    return;
-                }
-                int spotColorIndex = spotLightIndex(name, "ColorIntensity");
-                if (spotColorIndex >= 0) {
-                    setUniform4f(SPOT_LIGHT_COLORS_OFFSET + spotColorIndex * 4, x, y, z, w);
-                    return;
-                }
-                int spotConeIndex = spotLightIndex(name, "Cone");
-                if (spotConeIndex >= 0) {
-                    setUniform4f(SPOT_LIGHT_CONES_OFFSET + spotConeIndex * 4, x, y, z, w);
-                    return;
-                }
-                if ("u_shadowParams".equals(name)) {
-                    setUniform4f(SHADOW_PARAMS_OFFSET, x, y, z, w);
-                }
-                else if ("u_shadowCascadeSplits".equals(name)) {
-                    setUniform4f(SHADOW_CASCADE_SPLITS_OFFSET, x, y, z, w);
-                }
-                else if ("u_shadowBiases".equals(name)) {
-                    setUniform4f(SHADOW_BIASES_OFFSET, x, y, z, w);
-                }
-                else if ("u_shadowCameraPosition".equals(name)) {
-                    setUniform4f(SHADOW_CAMERA_POSITION_OFFSET, x, y, z, w);
-                }
-                else if ("u_shadowCameraDirection".equals(name)) {
-                    setUniform4f(SHADOW_CAMERA_DIRECTION_OFFSET, x, y, z, w);
-                }
-                else if ("u_shadowCameraUp".equals(name)) {
-                    setUniform4f(SHADOW_CAMERA_UP_OFFSET, x, y, z, w);
-                }
-                else if ("u_shadowCameraParams".equals(name)) {
-                    setUniform4f(SHADOW_CAMERA_PARAMS_OFFSET, x, y, z, w);
-                }
-                else if ("u_shadowFilterParams".equals(name)) {
-                    setUniform4f(SHADOW_FILTER_PARAMS_OFFSET, x, y, z, w);
-                }
-                else if ("u_skinningParams".equals(name)) {
-                    setUniform4f(SKINNING_PARAMS_OFFSET, x, y, z, w);
-                }
-            }
+            throw namedUniformUnsupported(name);
+        }
+
+        @Override
+        public void setUniform4f(ShaderParameterHandle parameter, float x, float y, float z, float w) {
+            compatibilityUniformBlock().setFloat4(parameter, x, y, z, w);
+            snapshotCompatibilityBlock();
         }
 
         /**
@@ -4162,27 +4074,13 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
          */
         @Override
         public void setUniformMatrix4(String name, float[] values) {
-            ensureOpen();
-            if (values == null || values.length < MATRIX_FLOAT_COUNT) {
-                throw new FdxException("Matrix uniform requires 16 float values");
-            }
-            if ("u_model".equals(name)) {
-                setUniformMatrix(MODEL_OFFSET, values);
-            }
-            else if ("u_viewProjection".equals(name)) {
-                setUniformMatrix(VIEW_PROJECTION_OFFSET, values);
-            }
-            else {
-                int shadowIndex = shadowViewProjectionIndex(name);
-                if (shadowIndex >= 0) {
-                    setUniformMatrix(SHADOW_VIEW_PROJECTIONS_OFFSET + shadowIndex * MATRIX_FLOAT_COUNT, values);
-                    return;
-                }
-                int boneIndex = boneMatrixIndex(name);
-                if (boneIndex >= 0) {
-                    setUniformMatrix(BONE_MATRICES_OFFSET + boneIndex * MATRIX_FLOAT_COUNT, values);
-                }
-            }
+            throw namedUniformUnsupported(name);
+        }
+
+        @Override
+        public void setUniformMatrix4(ShaderParameterHandle parameter, float[] values) {
+            compatibilityUniformBlock().setFloatMatrix(parameter, values, 0);
+            snapshotCompatibilityBlock();
         }
 
         /**
@@ -4239,6 +4137,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             Arrays.fill(textures, null);
             colorAttachment = null;
             renderTargetAllocation = null;
+            compatibility = null;
         }
 
         private void ensureOpen() {
@@ -4301,10 +4200,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 return;
             }
             if (!hasUniformData) {
-                throw new FdxException("Vulkan PBR uniforms must be set before drawing");
+                throw new FdxException("Vulkan uniform parameter block must be bound before drawing");
             }
             if (uniformDescriptorSet == VK_NULL_HANDLE || uniformDataDirty) {
-                uniformDescriptorSet = context.uniformDescriptorSet(uniformBytes);
+                uniformDescriptorSet = context.uniformDescriptorSet(uniformBytes,
+                        pipeline.resourceBindings().uniformByteCount());
                 uniformDataDirty = false;
             }
             try (MemoryStack stack = stackPush()) {
@@ -4314,97 +4214,40 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
-        private void setUniformMatrix(int offset, float[] values) {
-            ensureOpen();
-            for (int i = 0; i < MATRIX_FLOAT_COUNT; i++) {
-                uniformFloats.put(offset + i, values[i]);
-            }
-            markUniformDirty();
-        }
-
-        private void setUniform4f(int offset, float x, float y, float z, float w) {
-            ensureOpen();
-            uniformFloats.put(offset, x);
-            uniformFloats.put(offset + 1, y);
-            uniformFloats.put(offset + 2, z);
-            uniformFloats.put(offset + 3, w);
-            markUniformDirty();
-        }
-
-        private void setUniformFloat(int offset, float value) {
-            ensureOpen();
-            uniformFloats.put(offset, value);
-            markUniformDirty();
-        }
-
-        private int pointLightIndex(String name, String suffix) {
-            return lightIndex(name, "u_pointLight", suffix, MAX_POINT_LIGHTS);
-        }
-
-        private int spotLightIndex(String name, String suffix) {
-            return lightIndex(name, "u_spotLight", suffix, MAX_SPOT_LIGHTS);
-        }
-
-        private int boneMatrixIndex(String name) {
-            if (name == null || !name.startsWith("u_bone")) {
-                return -1;
-            }
-            int index = 0;
-            for (int i = 6; i < name.length(); i++) {
-                char ch = name.charAt(i);
-                if (ch < '0' || ch > '9') {
-                    return -1;
-                }
-                index = index * 10 + ch - '0';
-            }
-            return index >= 0 && index < MAX_BONES ? index : -1;
-        }
-
-        private int shadowViewProjectionIndex(String name) {
-            if ("u_shadowViewProjection".equals(name)) {
-                return 0;
-            }
-            if (name == null || !name.startsWith("u_shadowViewProjection")) {
-                return -1;
-            }
-            int suffixOffset = "u_shadowViewProjection".length();
-            if (name.length() != suffixOffset + 1) {
-                return -1;
-            }
-            int index = name.charAt(suffixOffset) - '0';
-            return index >= 0 && index < MAX_SHADOW_CASCADES ? index : -1;
-        }
-
-        private int lightIndex(String name, String prefix, String suffix, int maxLights) {
-            if (name == null || suffix == null || !name.startsWith(prefix) || !name.endsWith(suffix)) {
-                return -1;
-            }
-            int digitOffset = prefix.length();
-            int digitEnd = name.length() - suffix.length();
-            if (digitEnd != digitOffset + 1) {
-                return -1;
-            }
-            int index = name.charAt(digitOffset) - '0';
-            return index >= 0 && index < maxLights ? index : -1;
-        }
-
         private void markUniformDirty() {
             hasUniformData = true;
             uniformDataDirty = true;
         }
 
-        private void resetUniformData() {
-            for (int i = 0; i < PBR_UNIFORM_BYTE_COUNT / 4; i++) {
-                uniformFloats.put(i, 0.0f);
+        private void requirePipeline() {
+            ensureOpen();
+            if (pipeline == null) {
+                throw new FdxException("Render pipeline must be set before binding resources");
             }
-            uniformFloats.put(MODEL_OFFSET, 1.0f);
-            uniformFloats.put(MODEL_OFFSET + 5, 1.0f);
-            uniformFloats.put(MODEL_OFFSET + 10, 1.0f);
-            uniformFloats.put(MODEL_OFFSET + 15, 1.0f);
-            uniformFloats.put(VIEW_PROJECTION_OFFSET, 1.0f);
-            uniformFloats.put(VIEW_PROJECTION_OFFSET + 5, 1.0f);
-            uniformFloats.put(VIEW_PROJECTION_OFFSET + 10, 1.0f);
-            uniformFloats.put(VIEW_PROJECTION_OFFSET + 15, 1.0f);
+            VulkanResources.requirePipeline(pipeline, context.resourceDomain(), "Render pipeline");
+        }
+
+        private ShaderParameterBlock compatibilityUniformBlock() {
+            requirePipeline();
+            if (!pipeline.resourceBindings().hasUniformBuffer()) {
+                throw new FdxException("Active Vulkan pipeline has no reflected uniform buffer");
+            }
+            if (compatibilityUniformBlock == null) {
+                compatibilityUniformBlock = ShaderParameterBlock.allocate(
+                        pipeline.resourceBindings().uniformBuffer().bufferLayout());
+            }
+            return compatibilityUniformBlock;
+        }
+
+        private void snapshotCompatibilityBlock() {
+            setParameterBlock(pipeline.resourceBindings().uniformGroup(),
+                    pipeline.resourceBindings().uniformBinding(), compatibilityUniformBlock);
+        }
+
+        private FdxException namedUniformUnsupported(String name) {
+            ensureOpen();
+            return new FdxException("Vulkan named uniform '" + name
+                    + "' is not portable; bind a reflected ShaderParameterBlock");
         }
 
         /**
@@ -5264,11 +5107,13 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return texture != null;
         }
 
-        int width() {
+        @Override
+        public int width() {
             return texture != null ? texture.width() : context.width();
         }
 
-        int height() {
+        @Override
+        public int height() {
             return texture != null ? texture.height() : context.height();
         }
 
@@ -5411,12 +5256,15 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         private final VulkanResourceDomain resourceDomain;
         private final long vertexModule;
         private final long fragmentModule;
+        private final ShaderReflection reflection;
         private boolean disposed;
 
-        VulkanShaderModuleHandle(VulkanContext context, long vertexModule, long fragmentModule) {
+        VulkanShaderModuleHandle(VulkanContext context, long vertexModule, long fragmentModule,
+                ShaderReflection reflection) {
             resourceDomain = context.resourceDomain();
             this.vertexModule = vertexModule;
             this.fragmentModule = fragmentModule;
+            this.reflection = reflection != null ? reflection : ShaderReflection.empty();
         }
 
         long vertexModule() {
@@ -5435,6 +5283,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         @Override
         public ShaderLanguage language() {
             return ShaderLanguage.SPIRV;
+        }
+
+        @Override
+        public ShaderReflection reflection() {
+            return reflection;
         }
 
         /**
@@ -5534,19 +5387,22 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         private final VulkanRenderPipelineAllocation allocation;
         private final PrimitiveTopology primitiveTopology;
         private final int sampledTextureCount;
-        private final boolean uniformBufferEnabled;
+        private final ShaderRenderBindings resourceBindings;
         private final int uniformDescriptorSetIndex;
+        private final RenderTargetLayout targetLayout;
         private boolean disposed;
 
         VulkanRenderPipelineHandle(VulkanContext context, VulkanRenderPipelineAllocation allocation,
                 PrimitiveTopology primitiveTopology, int sampledTextureCount,
-                boolean uniformBufferEnabled, int uniformDescriptorSetIndex) {
+                ShaderRenderBindings resourceBindings, int uniformDescriptorSetIndex,
+                RenderTargetLayout targetLayout) {
             this.context = context;
             this.allocation = allocation;
             this.primitiveTopology = primitiveTopology;
             this.sampledTextureCount = sampledTextureCount;
-            this.uniformBufferEnabled = uniformBufferEnabled;
+            this.resourceBindings = resourceBindings;
             this.uniformDescriptorSetIndex = uniformDescriptorSetIndex;
+            this.targetLayout = targetLayout;
         }
 
         long pipeline() {
@@ -5566,7 +5422,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
 
         boolean uniformBufferEnabled() {
-            return uniformBufferEnabled;
+            return resourceBindings.hasUniformBuffer();
+        }
+
+        ShaderRenderBindings resourceBindings() {
+            return resourceBindings;
         }
 
         int uniformDescriptorSetIndex() {
@@ -5575,6 +5435,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
 
         PrimitiveTopology primitiveTopology() {
             return primitiveTopology;
+        }
+
+        @Override
+        public RenderTargetLayout targetLayout() {
+            return targetLayout;
         }
 
         /**

@@ -12,14 +12,17 @@ import java.util.ArrayList;
 final class WGPUTextureAllocation extends WGPURecordedResource {
     private final WGPUTexture nativeTexture;
     private final WGPUTextureView nativeView;
+    private final WGPUTextureView nativeStorageView;
     private final WGPUSampler nativeSampler;
     private ArrayList<WGPUTextureBindGroupResource> textureBindGroups;
 
-    WGPUTextureAllocation(WGPUResourceDomain resourceDomain, WGPUTexture nativeTexture, WGPUTextureView nativeView,
-            WGPUSampler nativeSampler) {
+    WGPUTextureAllocation(WGPUResourceDomain resourceDomain,
+            WGPUTexture nativeTexture, WGPUTextureView nativeView,
+            WGPUTextureView nativeStorageView, WGPUSampler nativeSampler) {
         super(resourceDomain);
         this.nativeTexture = nativeTexture;
         this.nativeView = nativeView;
+        this.nativeStorageView = nativeStorageView;
         this.nativeSampler = nativeSampler;
     }
 
@@ -29,6 +32,10 @@ final class WGPUTextureAllocation extends WGPURecordedResource {
 
     WGPUTextureView nativeView() {
         return nativeView;
+    }
+
+    WGPUTextureView nativeStorageView() {
+        return nativeStorageView != null ? nativeStorageView : nativeView;
     }
 
     WGPUSampler nativeSampler() {
@@ -84,6 +91,14 @@ final class WGPUTextureAllocation extends WGPURecordedResource {
                 }
             });
             cleanup.run(nativeView::dispose);
+        }
+        if (nativeStorageView != null) {
+            cleanup.run(() -> {
+                if (nativeStorageView.isValid()) {
+                    nativeStorageView.release();
+                }
+            });
+            cleanup.run(nativeStorageView::dispose);
         }
         if (nativeTexture != null) {
             cleanup.run(() -> {
