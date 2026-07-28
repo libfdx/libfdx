@@ -60,7 +60,7 @@ public final class ProjectGenerationSettings {
                         continue;
                     }
                     String key = line.substring(0, separator).trim();
-                    if (!key.equals("fdxVersion") && !key.equals("fdxSnapshotVersion")) {
+                    if (!key.equals("libfdxRelease") && !key.equals("libfdxSnapshot")) {
                         continue;
                     }
                     String version = line.substring(separator + 1).trim();
@@ -71,7 +71,7 @@ public final class ProjectGenerationSettings {
                     if (version.length() == 0) {
                         throw new IllegalStateException("Empty [versions]." + key + " in " + resourceName);
                     }
-                    if (key.equals("fdxVersion")) {
+                    if (key.equals("libfdxRelease")) {
                         baseVersion = version;
                     } else {
                         snapshotVersion = version;
@@ -83,7 +83,7 @@ public final class ProjectGenerationSettings {
                             : snapshotVersion;
                 }
             }
-            throw new IllegalStateException("Missing [versions].fdxSnapshotVersion in " + resourceName);
+            throw new IllegalStateException("Missing [versions].libfdxSnapshot in " + resourceName);
         } catch (IOException e) {
             throw new IllegalStateException("Could not read libFDX TOML resource: " + resourceName, e);
         }
