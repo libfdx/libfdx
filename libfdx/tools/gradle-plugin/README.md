@@ -41,9 +41,11 @@ created for the current project rather than relying on a copied catalog:
 
 Target blocks configure generation and launch behavior; they do not add
 backend or provider artifacts. Desktop JVM packaging uses the configured
-runtime classpath. When one project declares several TeaVM C families, request
-tasks from only one native family in a Gradle invocation so the requested
-target determines TeaVM configuration.
+runtime classpath. Desktop C generation copies the configured asset roots into
+the release `assets` directory, and its run tasks use that release as their
+working directory. When one project declares several TeaVM C families, request
+tasks from only one native family in a Gradle invocation so the requested target
+determines TeaVM configuration.
 
 iOS targets generate an Xcode handoff project. `gles` selects an
 OpenGLES/GLKit project and `metal` selects Metal/MetalKit; building or running

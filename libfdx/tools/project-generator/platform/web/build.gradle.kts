@@ -34,11 +34,17 @@ dependencies {
 
 val jsWebappDir = layout.buildDirectory.dir("dist/web-js/webapp")
 val wasmWebappDir = layout.buildDirectory.dir("dist/web-wasm/webapp")
+val webGpuWasmWebappDir = layout.buildDirectory.dir("dist/webgpu-wasm/webapp")
 val builderClasspath = sourceSets["main"].runtimeClasspath
 val webPort = providers.gradleProperty("libfdx.web.port").map(String::toInt).orElse(8080)
+val generatorWebAssets = listOf(
+    project(":libfdx:tools:project-generator:ui")
+        .layout.projectDirectory.dir("src/main/resources").asFile
+)
 
 fun registerWebBuild(taskName: String, descriptionText: String, target: String, mainClassName: String,
-        title: String, outputPath: Provider<Directory>, optimization: String) {
+        title: String, outputPath: Provider<Directory>, optimization: String,
+        mainClassArgs: List<String> = emptyList()) {
     tasks.register(taskName) {
         group = "application"
         description = descriptionText
@@ -47,9 +53,19 @@ fun registerWebBuild(taskName: String, descriptionText: String, target: String, 
         }
         dependsOn(builderClasspath)
         inputs.files(builderClasspath)
+        inputs.property("mainClassArgs", mainClassArgs)
         outputs.dir(outputPath)
         doLast {
-            runWebBuilder(builderClasspath, target, mainClassName, title, outputPath.get().asFile, optimization)
+            runWebBuilder(
+                builderClasspath,
+                target,
+                mainClassName,
+                title,
+                outputPath.get().asFile,
+                optimization,
+                generatorWebAssets,
+                mainClassArgs
+            )
         }
     }
 }
@@ -83,6 +99,15 @@ registerWebBuild("project_generator_webgl_wasm_build",
         wasmWebappDir,
         "AGGRESSIVE")
 
+registerWebBuild("project_generator_webgpu_wasm_build",
+        "Builds the libfdx project generator WebGPU Wasm web application.",
+        "wasm",
+        "io.github.libfdx.tools.project.generator.web.ProjectGeneratorWebWasmLauncher",
+        "libfdx Project Generator - WebGPU Wasm",
+        webGpuWasmWebappDir,
+        "AGGRESSIVE",
+        listOf("--graphics=webgpu"))
+
 tasks.register("project_generator_webgpu_js_build") {
     group = "application"
     description = "Builds the libfdx project generator WebGPU JavaScript web application."
@@ -101,8 +126,12 @@ registerWebRun("project_generator_webgpu_js_run",
         "Builds and serves the libfdx project generator WebGPU JavaScript web application.",
         "project_generator_webgpu_js_build", jsWebappDir, "/?graphics=webgpu")
 
+registerWebRun("project_generator_webgpu_wasm_run",
+        "Builds and serves the libfdx project generator WebGPU Wasm web application.",
+        "project_generator_webgpu_wasm_build", webGpuWasmWebappDir, "/")
+
 fun runWebBuilder(classpath: FileCollection, target: String, mainClassName: String, title: String, outputDir: File,
-        optimization: String, assets: List<File> = emptyList()) {
+        optimization: String, assets: List<File> = emptyList(), mainClassArgs: List<String> = emptyList()) {
     withBuilderClassLoader(classpath) { classLoader ->
         val builderClass = classLoader.loadClass("io.github.libfdx.backend.web.WebBuilder")
         var builder = builderClass.getMethod(if (target == "wasm") "wasm" else "javascript").invoke(null)
@@ -114,6 +143,14 @@ fun runWebBuilder(classpath: FileCollection, target: String, mainClassName: Stri
         builder = invokeBuilder(builder, "title", listOf(String::class.java), listOf(title))
         builder = invokeBuilder(builder, "canvasId", listOf(String::class.java), listOf("libfdx-canvas"))
         builder = invokeBuilder(builder, "size", listOf(Integer.TYPE, Integer.TYPE), listOf(0, 0))
+        if (mainClassArgs.isNotEmpty()) {
+            builder = invokeBuilder(
+                builder,
+                "mainClassArgs",
+                listOf(Array<String>::class.java),
+                listOf<Any>(mainClassArgs.toTypedArray())
+            )
+        }
         val optimizationClass = classLoader.loadClass("io.github.libfdx.backend.cshared.TeaVMOptimization")
         builder = invokeBuilder(builder, "optimization", listOf(optimizationClass), listOf(enumValue(optimizationClass, optimization)))
         if (assets.isNotEmpty()) {

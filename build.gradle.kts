@@ -1,5 +1,3 @@
-import org.gradle.api.plugins.BasePluginExtension
-import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 
 plugins {
@@ -13,6 +11,7 @@ val libfdxRepositoryConsumersIncluded = gradle.extensions.extraProperties
 val libfdxGroup = libs.versions.libfdxGroup.get()
 val libfdxVersion = libs.versions.libfdxRelease.get()
 val libfdxSnapshotVersion = libs.versions.libfdxSnapshot.get()
+gradle.extensions.extraProperties.set("libfdxDependencyVersion", libfdxSnapshotVersion)
 
 val libfdxPublishableProjectPaths = listOf(
     ":libfdx:framework:math",
@@ -123,111 +122,6 @@ allprojects {
     }
 }
 
-subprojects {
-    fun configureJava25() {
-        extensions.configure(JavaPluginExtension::class.java) {
-            sourceCompatibility = JavaVersion.toVersion(25)
-            targetCompatibility = JavaVersion.toVersion(25)
-        }
-    }
-
-    fun implementationProject(projectPath: String) {
-        dependencies.add("implementation", rootProject.project(projectPath))
-    }
-
-    fun runtimeOnlyProject(projectPath: String) {
-        dependencies.add("runtimeOnly", rootProject.project(projectPath))
-    }
-
-    fun implementationLibfdx(projectPath: String, artifactId: String) {
-        if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-            dependencies.add("implementation", "${libfdxGroup}:$artifactId:${libfdxSnapshotVersion}")
-        } else {
-            implementationProject(projectPath)
-        }
-    }
-
-    fun runtimeOnlyLibfdx(projectPath: String, artifactId: String) {
-        if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-            dependencies.add("runtimeOnly", "${libfdxGroup}:$artifactId:${libfdxSnapshotVersion}")
-        } else {
-            runtimeOnlyProject(projectPath)
-        }
-    }
-
-    fun archiveName(name: String) {
-        extensions.configure(BasePluginExtension::class.java) {
-            archivesName.set(name)
-        }
-    }
-
-    when (path) {
-        ":samples:2d:ecs-platformer:platform:desktop" -> pluginManager.withPlugin("io.github.libfdx") {
-            configureJava25()
-            archiveName("sample_ecs_platformer_desktop")
-            implementationProject(":samples:2d:ecs-platformer:core")
-            implementationLibfdx(":libfdx:framework:application", "application")
-            implementationLibfdx(":libfdx:framework:display", "display")
-            implementationLibfdx(":libfdx:extensions:graphics:d3d12:core", "d3d12_core")
-            implementationLibfdx(":libfdx:extensions:graphics:wgpu:core", "wgpu_core")
-            implementationLibfdx(":libfdx:backends:desktop", "backend_desktop")
-            runtimeOnlyLibfdx(":libfdx:extensions:graphics:gl:platform:desktop", "gl_desktop")
-            runtimeOnlyLibfdx(":libfdx:extensions:graphics:vulkan:platform:desktop", "vulkan_desktop")
-            runtimeOnlyLibfdx(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm", "wgpu_desktop_ffm")
-        }
-
-        ":samples:graphics:shader-graph:platform:desktop" -> pluginManager.withPlugin("io.github.libfdx") {
-            configureJava25()
-            archiveName("sample_shader_graph_desktop")
-            implementationProject(":samples:graphics:shader-graph:core")
-            implementationProject(":samples:graphics:shader-graph:editor")
-            implementationLibfdx(":libfdx:framework:application", "application")
-            implementationLibfdx(":libfdx:framework:display", "display")
-            implementationLibfdx(":libfdx:extensions:graphics:d3d12:core", "d3d12_core")
-            implementationLibfdx(":libfdx:extensions:graphics:wgpu:core", "wgpu_core")
-            implementationLibfdx(":libfdx:backends:desktop", "backend_desktop")
-            runtimeOnlyLibfdx(":libfdx:extensions:graphics:gl:platform:desktop", "gl_desktop")
-            runtimeOnlyLibfdx(":libfdx:extensions:graphics:vulkan:platform:desktop", "vulkan_desktop")
-            runtimeOnlyLibfdx(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm", "wgpu_desktop_ffm")
-        }
-
-        ":samples:2d:ecs-platformer:platform:web" -> pluginManager.withPlugin("io.github.libfdx") {
-            configureJava25()
-            archiveName("sample_ecs_platformer_web")
-            implementationProject(":samples:2d:ecs-platformer:core")
-            dependencies.add("implementation", libs.teavm.jso)
-            dependencies.add("implementation", libs.teavm.jso.apis)
-            dependencies.add("implementation", libs.teavm.jso.impl)
-            implementationLibfdx(":libfdx:backends:web", "backend_web")
-            implementationLibfdx(":libfdx:extensions:graphics:gl:platform:web", "gl_web")
-            implementationLibfdx(":libfdx:extensions:graphics:wgpu:platform:web", "wgpu_web")
-        }
-
-        ":samples:2d:ecs-platformer:platform:desktop_c" -> pluginManager.withPlugin("io.github.libfdx") {
-            configureJava25()
-            archiveName("sample_ecs_platformer_desktop_c")
-            implementationProject(":samples:2d:ecs-platformer:core")
-            implementationLibfdx(":libfdx:backends:desktop_c", "backend_desktop_c")
-            runtimeOnlyLibfdx(":libfdx:extensions:graphics:gl:platform:desktop_c", "gl_desktop_c")
-        }
-
-        ":samples:2d:ecs-platformer:platform:ios_c" -> pluginManager.withPlugin("io.github.libfdx") {
-            configureJava25()
-            archiveName("sample_ecs_platformer_ios_c")
-            implementationProject(":samples:2d:ecs-platformer:core")
-            implementationLibfdx(":libfdx:backends:ios_c", "backend_ios_c")
-        }
-
-        ":samples:2d:ecs-platformer:platform:android" -> pluginManager.withPlugin("com.android.application") {
-            archiveName("sample_ecs_platformer_android")
-            implementationProject(":samples:2d:ecs-platformer:core")
-            implementationLibfdx(":libfdx:backends:android", "backend_android")
-            implementationLibfdx(":libfdx:extensions:graphics:wgpu:platform:android_jni", "wgpu_android_jni")
-            implementationLibfdx(":libfdx:extensions:graphics:vulkan:platform:android_jni", "vulkan_android_jni")
-        }
-    }
-}
-
 fun runtimeFdxHostNativeTaskPath(): String {
     val os = System.getProperty("os.name").lowercase()
     return when {
@@ -331,21 +225,9 @@ if (libfdxRepositoryConsumersIncluded) {
         into(pagesStagingDir)
     pagesWebapp(
         projectPath = ":libfdx:tools:project-generator:platform:web",
-        buildTaskName = "project_generator_webgl_js_build",
-        webappPath = "dist/web-js/webapp",
-        pagesPath = "project-generator/webgl-js"
-    )
-    pagesWebapp(
-        projectPath = ":libfdx:tools:project-generator:platform:web",
-        buildTaskName = "project_generator_webgl_wasm_build",
-        webappPath = "dist/web-wasm/webapp",
-        pagesPath = "project-generator/webgl-wasm"
-    )
-    pagesWebapp(
-        projectPath = ":libfdx:tools:project-generator:platform:web",
-        buildTaskName = "project_generator_webgpu_js_build",
-        webappPath = "dist/web-js/webapp",
-        pagesPath = "project-generator/webgpu-js"
+        buildTaskName = "project_generator_webgpu_wasm_build",
+        webappPath = "dist/webgpu-wasm/webapp",
+        pagesPath = "project-generator"
     )
     pagesWebapp(
         projectPath = ":tests:platform:web",
@@ -409,15 +291,6 @@ if (libfdxRepositoryConsumersIncluded) {
     )
         doLast {
             val root = pagesStagingDir.get().asFile
-        writeSelectorPage(
-            root.resolve("project-generator/index.html"),
-            "Project Generator",
-            listOf(
-                "WebGL JS" to "webgl-js/",
-                "WebGL Wasm" to "webgl-wasm/",
-                "WebGPU JS" to "webgpu-js/?graphics=webgpu"
-            )
-        )
         writeSelectorPage(
             root.resolve("tests/index.html"),
             "Tests",

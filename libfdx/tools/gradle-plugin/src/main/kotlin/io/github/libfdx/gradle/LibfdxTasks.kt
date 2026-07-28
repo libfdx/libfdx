@@ -471,6 +471,10 @@ abstract class LibfdxDesktopCProjectTask : DefaultTask() {
     @get:Classpath
     abstract val nativeResourceClasspath: ConfigurableFileCollection
 
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val assets: ConfigurableFileCollection
+
     @TaskAction
     fun writeProject() {
         NativeProjectWriter.write(
@@ -484,6 +488,7 @@ abstract class LibfdxDesktopCProjectTask : DefaultTask() {
                 .nativeResourceClasspath(nativeResourceClasspath.files.map { it.toPath() })
                 .build()
         )
+        copyAssetRoots(assets.files, File(releaseDir.get().asFile, "assets"))
     }
 }
 
@@ -1202,7 +1207,7 @@ abstract class LibfdxDesktopCRunTask : DefaultTask() {
         }
         val command = mutableListOf(executable.absolutePath)
         command.addAll(runArgs.get())
-        val workingDirectory = project.rootDir
+        val workingDirectory = releaseDir.get().asFile
         val processCommand = if(isWindows() && openConsole.get()) {
             windowsPowerShellStartCommand(executable, runArgs.get(), workingDirectory)
         }
@@ -1249,6 +1254,20 @@ private fun copyDirectoryContents(sourceRoot: File, outputRoot: File) {
             Files.createDirectories(output.parent)
             Files.copy(source.toPath(), output, StandardCopyOption.REPLACE_EXISTING)
         }
+}
+
+private fun copyAssetRoots(assetRoots: Iterable<File>, outputRoot: File) {
+    deleteDirectory(outputRoot)
+    Files.createDirectories(outputRoot.toPath())
+    assetRoots.forEach { asset ->
+        when {
+            asset.isDirectory -> copyDirectoryContents(asset, outputRoot)
+            asset.isFile -> {
+                val output = File(outputRoot, asset.name)
+                Files.copy(asset.toPath(), output.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
+    }
 }
 
 private fun windowsPowerShellStartCommand(executable: File, args: List<String>, workingDirectory: File): List<String> {

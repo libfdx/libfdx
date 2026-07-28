@@ -11,14 +11,18 @@ base {
     archivesName.set("sample_shader_graph_editor")
 }
 
+val sampleProjectPath = project.path.substringBeforeLast(":editor")
+val libfdxDependencyVersion =
+    gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
+
 dependencies {
-    api(project(":samples:graphics:shader-graph:core"))
+    api(project("$sampleProjectPath:core"))
     if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-        implementation("${libs.versions.libfdxGroup.get()}:application:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:files:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:graphics:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:shader_graph_ui_kit:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:ui_kit:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:application:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:files:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:graphics:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:shader_graph_ui_kit:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:ui_kit:$libfdxDependencyVersion")
     } else {
         implementation(project(":libfdx:framework:application"))
         implementation(project(":libfdx:framework:files"))

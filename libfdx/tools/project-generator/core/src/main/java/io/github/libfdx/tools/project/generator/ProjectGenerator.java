@@ -1,365 +1,395 @@
 package io.github.libfdx.tools.project.generator;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 /**
- * Represents a project generator.
+ * Copies a bundled repository sample into a standalone, version-pinned Gradle project.
  *
  * @author xpenatan
  */
 public final class ProjectGenerator {
-    private final TemplateRenderer renderer = new TemplateRenderer();
+    private static final String STARTER_SAMPLE_ID = "base/starter-project";
+    private static final String STARTER_SOURCE_PACKAGE = "io.github.libfdx.samples.starter";
+
+    private final List<ProjectSample> samples;
+    private final Map<String, ProjectSample> samplesById;
 
     /**
-     * Runs the generate step.
+     * Creates a generator backed by the samples embedded at build time.
+     */
+    public ProjectGenerator() {
+        ProjectSample[] bundled = BundledSampleCatalogData.samples();
+        ArrayList<ProjectSample> available = new ArrayList<ProjectSample>(bundled.length);
+        LinkedHashMap<String, ProjectSample> byId = new LinkedHashMap<String, ProjectSample>();
+        for (int i = 0; i < bundled.length; i++) {
+            ProjectSample sample = bundled[i];
+            available.add(sample);
+            if (byId.put(sample.id(), sample) != null) {
+                throw new IllegalStateException("Duplicate bundled sample identifier: " + sample.id());
+            }
+        }
+        samples = Collections.unmodifiableList(available);
+        samplesById = Collections.unmodifiableMap(byId);
+    }
+
+    /**
+     * Returns the repository samples embedded in this generator build.
      *
-     * @param settings the settings
-     * @return the generate
+     * @return the bundled samples
+     */
+    public List<ProjectSample> samples() {
+        return samples;
+    }
+
+    /**
+     * Returns the exact libFDX dependency version selected when this generator was built.
+     *
+     * @return the libFDX version
+     */
+    public String libfdxVersion() {
+        return BundledSampleCatalogData.LIBFDX_VERSION;
+    }
+
+    /**
+     * Returns the generator dependency channel: snapshot, release, or custom.
+     *
+     * @return the channel
+     */
+    public String channel() {
+        return BundledSampleCatalogData.CHANNEL;
+    }
+
+    /**
+     * Generates a standalone project by copying the selected bundled sample.
+     *
+     * @param settings the generation settings
+     * @return the generation result
      */
     public ProjectGenerationResult generate(ProjectGenerationSettings settings) {
-        ProjectGenerationSettings resolved = settings != null ? settings : ProjectGenerationSettings.builder().build();
+        ProjectGenerationSettings resolved =
+                settings != null ? settings : ProjectGenerationSettings.builder().build();
         ProjectValidationResult validation = ProjectValidationResult.validate(resolved);
         if (!validation.valid()) {
-            throw new ProjectGenerationException(validation.joinedErrors());
+            throw new IllegalArgumentException(validation.joinedErrors());
         }
-
-        Map<String, String> values = placeholders(resolved);
-        ArrayList<GeneratedFile> files = new ArrayList<GeneratedFile>();
-        addText(files, "settings.gradle.kts", settingsGradle(), values);
-        addText(files, "build.gradle.kts", rootBuildGradle(), values);
-        addText(files, "gradle.properties", gradleProperties(), values);
-        addText(files, "README.md", readme(), values);
-        addText(files, "fdx-project.json", projectManifest(), values);
-        addText(files, "scenes/main.fdxscene", defaultScene(), values);
-        addText(files, "assets/.gitkeep", "", values);
-        addText(files, "core/build.gradle.kts", coreBuildGradle(), values);
-        addText(files, "core/src/main/java/{{packagePath}}/{{applicationClassName}}.java",
-                applicationJava(), values);
-        if (resolved.desktopPlatform()) {
-            addText(files, "platform/desktop/build.gradle.kts", desktopBuildGradle(), values);
-            addText(files,
-                    "platform/desktop/src/main/java/{{desktopPackagePath}}/{{desktopLauncherClassName}}.java",
-                    desktopLauncherJava(), values);
+        ProjectSample sample = samplesById.get(resolved.sampleId());
+        if (sample == null) {
+            throw new IllegalArgumentException("Unknown bundled sample '" + resolved.sampleId()
+                    + "'. Available samples: " + availableSampleIds());
         }
-        return new ProjectGenerationResult(resolved, new GeneratedProject(resolved.projectName(), files));
+        validatePlatforms(sample, resolved.platforms());
+
+        LinkedHashMap<String, GeneratedFile> files = unpackSample(sample);
+        files = selectPlatforms(files, resolved.platforms());
+        if (STARTER_SAMPLE_ID.equals(sample.id())) {
+            files = rewritePackage(files, resolved.packageName());
+        }
+        addEnvelope(files, resolved, sample);
+        return new ProjectGenerationResult(resolved,
+                new GeneratedProject(resolved.projectName(), new ArrayList<GeneratedFile>(files.values())));
     }
 
-    private void addText(List<GeneratedFile> files, String path, String template, Map<String, String> values) {
-        files.add(GeneratedFile.text(renderer.render(path, values), renderer.render(template, values)));
+    private LinkedHashMap<String, GeneratedFile> unpackSample(ProjectSample sample) {
+        LinkedHashMap<String, GeneratedFile> files = new LinkedHashMap<String, GeneratedFile>();
+        byte[] archive = BundledSampleCatalogData.archive(sample.id());
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(archive))) {
+            ZipEntry entry = zip.getNextEntry();
+            while (entry != null) {
+                if (!entry.isDirectory()) {
+                    String path = normalizedArchivePath(entry.getName());
+                    byte[] content = readEntry(zip);
+                    GeneratedFile generated = isText(path)
+                            ? GeneratedFile.text(path, new String(content, StandardCharsets.UTF_8))
+                            : GeneratedFile.binary(path, content);
+                    if (files.put(path, generated) != null) {
+                        throw new IllegalStateException("Bundled sample contains duplicate path: " + path);
+                    }
+                }
+                zip.closeEntry();
+                entry = zip.getNextEntry();
+            }
+        } catch (IOException error) {
+            throw new IllegalStateException("Could not read bundled sample '" + sample.id() + "'.", error);
+        }
+        return files;
     }
 
-    private Map<String, String> placeholders(ProjectGenerationSettings settings) {
-        LinkedHashMap<String, String> values = new LinkedHashMap<String, String>();
-        values.put("projectName", settings.projectName());
-        values.put("packageName", settings.packageName());
-        values.put("packagePath", settings.packagePath());
-        values.put("applicationClassName", settings.applicationClassName());
-        values.put("desktopPackageName", settings.desktopPackageName());
-        values.put("desktopPackagePath", settings.desktopPackagePath());
-        values.put("desktopLauncherClassName", settings.desktopLauncherClassName());
-        values.put("libfdxVersion", settings.libfdxVersion());
-        return values;
+    private void addEnvelope(Map<String, GeneratedFile> files, ProjectGenerationSettings settings,
+            ProjectSample sample) {
+        addGenerated(files, GeneratedFile.text("settings.gradle.kts", settingsGradle(settings, files)));
+        addGenerated(files, GeneratedFile.text("build.gradle.kts", rootBuildGradle()));
+        addGenerated(files, GeneratedFile.text("gradle.properties", gradleProperties()));
+        addGenerated(files, GeneratedFile.text("gradle/libs.versions.toml",
+                BundledSampleCatalogData.versionCatalog()));
+        if (!files.containsKey(".gitignore")) {
+            addGenerated(files, GeneratedFile.text(".gitignore", gitignore()));
+        }
+        addGenerated(files, GeneratedFile.text("PROJECT_GENERATOR.md", generatorReadme(settings, sample, files)));
     }
 
-    private static String settingsGradle() {
-        return "pluginManagement {\n"
-                + "    repositories {\n"
-                + "        gradlePluginPortal()\n"
-                + "        mavenCentral()\n"
-                + "        maven {\n"
-                + "            url = uri(\"https://central.sonatype.com/repository/maven-snapshots/\")\n"
-                + "        }\n"
-                + "    }\n"
-                + "    plugins {\n"
-                + "        id(\"io.github.libfdx\") version providers.gradleProperty(\"libfdxVersion\")\n"
-                + "            .orElse(\"{{libfdxVersion}}\")\n"
-                + "            .get()\n"
-                + "    }\n"
-                + "}\n"
-                + "\n"
-                + "rootProject.name = \"{{projectName}}\"\n"
-                + "\n"
-                + "include(\":core\")\n"
-                + "include(\":platform:desktop\")\n";
+    private String settingsGradle(ProjectGenerationSettings settings, Map<String, GeneratedFile> files) {
+        StringBuilder text = new StringBuilder();
+        text.append("pluginManagement {\n");
+        text.append("    val libfdxVersion = providers.gradleProperty(\"libfdxVersion\").get()\n");
+        text.append("    plugins {\n");
+        text.append("        id(\"io.github.libfdx\") version libfdxVersion\n");
+        text.append("    }\n");
+        text.append("    repositories {\n");
+        text.append("        google()\n");
+        text.append("        mavenCentral()\n");
+        text.append("        maven {\n");
+        text.append("            url = uri(\"https://central.sonatype.com/repository/maven-snapshots/\")\n");
+        text.append("        }\n");
+        text.append("        gradlePluginPortal()\n");
+        text.append("    }\n");
+        text.append("}\n");
+        text.append("\n");
+        text.append("rootProject.name = \"").append(kotlinString(settings.projectName())).append("\"\n");
+        appendModule(text, files, "core");
+        appendModule(text, files, "editor");
+        ProjectPlatform[] platforms = ProjectPlatform.values();
+        for (int i = 0; i < platforms.length; i++) {
+            appendModule(text, files, "platform/" + platforms[i].directory());
+        }
+        appendModule(text, files, "platform/plugin");
+        return text.toString();
     }
 
-    private static String rootBuildGradle() {
+    private void appendModule(StringBuilder text, Map<String, GeneratedFile> files, String directory) {
+        if (files.containsKey(directory + "/build.gradle.kts")) {
+            text.append("include(\":").append(directory.replace('/', ':')).append("\")\n");
+        }
+    }
+
+    private String rootBuildGradle() {
         return "plugins {\n"
-                + "    id(\"base\")\n"
+                + "    base\n"
                 + "}\n"
                 + "\n"
-                + "extra[\"libfdxVersion\"] = providers.gradleProperty(\"libfdxVersion\")\n"
-                + "    .orElse(\"{{libfdxVersion}}\")\n"
-                + "    .get()\n"
+                + "val libfdxVersion = providers.gradleProperty(\"libfdxVersion\").get()\n"
+                + "gradle.extensions.extraProperties.set(\"libfdxUsePublishedLibfdx\", true)\n"
+                + "gradle.extensions.extraProperties.set(\"libfdxDependencyVersion\", libfdxVersion)\n"
                 + "\n"
                 + "allprojects {\n"
-                + "    group = \"{{packageName}}\"\n"
-                + "    version = \"0.1.0\"\n"
-                + "\n"
                 + "    repositories {\n"
+                + "        google()\n"
                 + "        mavenCentral()\n"
                 + "        maven {\n"
                 + "            url = uri(\"https://central.sonatype.com/repository/maven-snapshots/\")\n"
                 + "        }\n"
                 + "    }\n"
-                + "}\n";
-    }
-
-    private static String gradleProperties() {
-        return "org.gradle.jvmargs=-Xmx2g\n";
-    }
-
-    private static String readme() {
-        return "# {{projectName}}\n"
-                + "\n"
-                + "Generated libfdx project.\n"
-                + "\n"
-                + "Run the desktop GL target:\n"
-                + "\n"
-                + "```powershell\n"
-                + ".\\gradlew.bat :platform:desktop:run_gl\n"
-                + "```\n"
-                + "\n"
-                + "Build the desktop editor project bundle:\n"
-                + "\n"
-                + "```powershell\n"
-                + ".\\gradlew.bat :core:libfdx_ecs_project_bundle\n"
-                + "```\n"
-                + "\n"
-                + "If this project does not include a Gradle wrapper yet, run the same task with your local `gradle` command.\n";
-    }
-
-    private static String projectManifest() {
-        return "{\n"
-                + "  \"format\": \"libfdx.ecs.project\",\n"
-                + "  \"formatVersion\": 1,\n"
-                + "  \"id\": \"{{packageName}}\",\n"
-                + "  \"entryClass\": \"{{packageName}}.{{applicationClassName}}\",\n"
-                + "  \"defaultScene\": \"scenes/main.fdxscene\",\n"
-                + "  \"assetsDirectory\": \"assets\",\n"
-                + "  \"gradleRoot\": \".\",\n"
-                + "  \"gradleProject\": \":core\",\n"
-                + "  \"desktopBundleTask\": \"libfdx_ecs_project_bundle\"\n"
-                + "}\n";
-    }
-
-    private static String defaultScene() {
-        return "{\n"
-                + "  \"format\": \"libfdx.ecs.scene\",\n"
-                + "  \"version\": 1,\n"
-                + "  \"project\": \"{{packageName}}\",\n"
-                + "  \"scene\": \"main\",\n"
-                + "  \"entities\": []\n"
-                + "}\n";
-    }
-
-    private static String coreBuildGradle() {
-        return "plugins {\n"
-                + "    id(\"java-library\")\n"
-                + "    id(\"io.github.libfdx\")\n"
-                + "}\n"
-                + "\n"
-                + "java {\n"
-                + "    sourceCompatibility = JavaVersion.toVersion(25)\n"
-                + "    targetCompatibility = JavaVersion.toVersion(25)\n"
-                + "}\n"
-                + "\n"
-                + "val libfdxVersion = rootProject.extra[\"libfdxVersion\"] as String\n"
-                + "\n"
-                + "dependencies {\n"
-                + "    implementation(\"io.github.libfdx:fdx:$libfdxVersion\")\n"
-                + "    implementation(\"io.github.libfdx:application:$libfdxVersion\")\n"
-                + "    implementation(\"io.github.libfdx:display:$libfdxVersion\")\n"
-                + "    implementation(\"io.github.libfdx:files:$libfdxVersion\")\n"
-                + "    implementation(\"io.github.libfdx:input:$libfdxVersion\")\n"
-                + "    implementation(\"io.github.libfdx:graphics:$libfdxVersion\")\n"
-                + "    implementation(\"io.github.libfdx:g2d:$libfdxVersion\")\n"
-                + "    implementation(\"io.github.libfdx:ecs:$libfdxVersion\")\n"
-                + "    implementation(\"io.github.libfdx:ecs_tooling:$libfdxVersion\")\n"
-                + "}\n"
-                + "\n"
-                + "libfdx {\n"
-                + "    ecsProject {\n"
-                + "        projectId.set(\"{{packageName}}\")\n"
-                + "        entryClass.set(\"{{packageName}}.{{applicationClassName}}\")\n"
-                + "        projectRoot.set(rootProject.layout.projectDirectory)\n"
-                + "        libfdxAbi.set(libfdxVersion)\n"
+                + "    configurations.configureEach {\n"
+                + "        resolutionStrategy.cacheChangingModulesFor(0, \"seconds\")\n"
                 + "    }\n"
                 + "}\n";
     }
 
-    private static String desktopBuildGradle() {
-        return "import org.gradle.jvm.toolchain.JavaLanguageVersion\n"
-                + "\n"
-                + "plugins {\n"
-                + "    id(\"java\")\n"
-                + "}\n"
-                + "\n"
-                + "java {\n"
-                + "    sourceCompatibility = JavaVersion.toVersion(25)\n"
-                + "    targetCompatibility = JavaVersion.toVersion(25)\n"
-                + "}\n"
-                + "\n"
-                + "val libfdxVersion = rootProject.extra[\"libfdxVersion\"] as String\n"
-                + "\n"
-                + "dependencies {\n"
-                + "    implementation(project(\":core\"))\n"
-                + "    implementation(\"io.github.libfdx:backend_desktop:$libfdxVersion\")\n"
-                + "    runtimeOnly(\"io.github.libfdx:gl_desktop:$libfdxVersion\")\n"
-                + "}\n"
-                + "\n"
-                + "val desktopMainClass = \"{{desktopPackageName}}.{{desktopLauncherClassName}}\"\n"
-                + "\n"
-                + "fun JavaExec.configureDesktopRun() {\n"
-                + "    group = \"application\"\n"
-                + "    description = \"Runs the desktop GL target.\"\n"
-                + "    classpath = sourceSets[\"main\"].runtimeClasspath\n"
-                + "    mainClass.set(desktopMainClass)\n"
-                + "    workingDir = rootProject.projectDir\n"
-                + "    javaLauncher.set(javaToolchains.launcherFor {\n"
-                + "        languageVersion.set(JavaLanguageVersion.of(25))\n"
-                + "    })\n"
-                + "    jvmArgs(\"-Dorg.lwjgl.system.stackSize=1024\")\n"
-                + "    jvmArgs(\"--enable-native-access=ALL-UNNAMED\")\n"
-                + "}\n"
-                + "\n"
-                + "tasks.register<JavaExec>(\"run_gl\") {\n"
-                + "    configureDesktopRun()\n"
-                + "}\n";
+    private String gradleProperties() {
+        return "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8\n"
+                + "org.gradle.configuration-cache=true\n"
+                + "libfdxVersion=" + libfdxVersion() + "\n"
+                + "libfdxGeneratorChannel=" + channel() + "\n"
+                + "android.useAndroidX=true\n"
+                + "androidCompileSdk=36\n"
+                + "androidMinSdk=23\n"
+                + "androidTargetSdk=36\n";
     }
 
-    private static String applicationJava() {
-        return "package {{packageName}};\n"
-                + "\n"
-                + "import io.github.libfdx.Fdx;\n"
-                + "import io.github.libfdx.ecs.World;\n"
-                + "import io.github.libfdx.ecs.component.Component;\n"
-                + "import io.github.libfdx.ecs.tooling.EcsProject;\n"
-                + "import io.github.libfdx.ecs.tooling.EcsProjectRuntime;\n"
-                + "import io.github.libfdx.ecs.tooling.EcsRenderContext;\n"
-                + "import io.github.libfdx.ecs.tooling.schema.EcsComponentDescriptor;\n"
-                + "import io.github.libfdx.ecs.tooling.schema.EcsEntityAdapter;\n"
-                + "import io.github.libfdx.ecs.tooling.schema.EcsProjectSchema;\n"
-                + "import io.github.libfdx.graphics.LoadOp;\n"
-                + "import io.github.libfdx.graphics.g2d.ShapeRenderer2D;\n"
-                + "\n"
-                + "public final class {{applicationClassName}} extends EcsProject {\n"
-                + "    private static final EcsEntityAdapter ENTITIES = new EntityAdapter();\n"
-                + "    private static final EcsProjectSchema SCHEMA = EcsProjectSchema.builder(ENTITIES)\n"
-                + "            .component(EcsComponentDescriptor.builder(\n"
-                + "                    \"{{packageName}}.entity-metadata\", \"Entity Metadata\",\n"
-                + "                    EntityMetadata.class, EntityMetadata::new)\n"
-                + "                    .transientComponent()\n"
-                + "                    .build())\n"
-                + "            .build();\n"
-                + "\n"
-                + "    public {{applicationClassName}}() {\n"
-                + "        super(\"{{packageName}}\", \"{{projectName}}\", \"assets\", \"scenes/main.fdxscene\");\n"
-                + "    }\n"
-                + "\n"
-                + "    @Override\n"
-                + "    public EcsProjectSchema schema() {\n"
-                + "        return SCHEMA;\n"
-                + "    }\n"
-                + "\n"
-                + "    @Override\n"
-                + "    public EcsProjectRuntime createRuntime() {\n"
-                + "        return new Runtime();\n"
-                + "    }\n"
-                + "\n"
-                + "    private static final class EntityMetadata implements Component {\n"
-                + "        long id;\n"
-                + "        String name = \"Entity\";\n"
-                + "        long parentId;\n"
-                + "    }\n"
-                + "\n"
-                + "    private static final class EntityAdapter implements EcsEntityAdapter {\n"
-                + "        public int create(World world, long id, String name) {\n"
-                + "            int entity = world.createEntity();\n"
-                + "            EntityMetadata metadata = new EntityMetadata();\n"
-                + "            metadata.id = id;\n"
-                + "            metadata.name = name;\n"
-                + "            world.add(entity, metadata);\n"
-                + "            return entity;\n"
-                + "        }\n"
-                + "\n"
-                + "        public long persistentId(World world, int entity) {\n"
-                + "            return world.require(entity, EntityMetadata.class).id;\n"
-                + "        }\n"
-                + "\n"
-                + "        public String name(World world, int entity) {\n"
-                + "            return world.require(entity, EntityMetadata.class).name;\n"
-                + "        }\n"
-                + "\n"
-                + "        public void name(World world, int entity, String name) {\n"
-                + "            world.require(entity, EntityMetadata.class).name = name;\n"
-                + "        }\n"
-                + "\n"
-                + "        public long parentId(World world, int entity) {\n"
-                + "            return world.require(entity, EntityMetadata.class).parentId;\n"
-                + "        }\n"
-                + "\n"
-                + "        public void parentId(World world, int entity, long parentId) {\n"
-                + "            world.require(entity, EntityMetadata.class).parentId = parentId;\n"
-                + "        }\n"
-                + "    }\n"
-                + "\n"
-                + "    private static final class Runtime implements EcsProjectRuntime {\n"
-                + "        private final World world = new World();\n"
-                + "        private ShapeRenderer2D shapes;\n"
-                + "\n"
-                + "        public void create(Fdx fdx) {\n"
-                + "            shapes = new ShapeRenderer2D(fdx.graphics().main());\n"
-                + "        }\n"
-                + "\n"
-                + "        public World world() {\n"
-                + "            return world;\n"
-                + "        }\n"
-                + "\n"
-                + "        public void render(EcsRenderContext context) {\n"
-                + "            shapes.begin(LoadOp.clear(0.10f, 0.12f, 0.16f, 1.0f));\n"
-                + "            shapes.filledTriangle(0.0f, 0.60f, -0.62f, -0.48f, 0.62f, -0.48f,\n"
-                + "                    0.35f, 0.68f, 0.95f, 1.0f);\n"
-                + "            shapes.end();\n"
-                + "        }\n"
-                + "\n"
-                + "        public void dispose() {\n"
-                + "            if (shapes != null) {\n"
-                + "                shapes.dispose();\n"
-                + "                shapes = null;\n"
-                + "            }\n"
-                + "        }\n"
-                + "    }\n"
-                + "}\n";
+    private String gitignore() {
+        return ".gradle/\n"
+                + "**/build/\n"
+                + ".idea/\n"
+                + "*.iml\n"
+                + "local.properties\n";
     }
 
-    private static String desktopLauncherJava() {
-        return "package {{desktopPackageName}};\n"
-                + "\n"
-                + "import io.github.libfdx.backend.desktop.DesktopApplicationBackend;\n"
-                + "import io.github.libfdx.backend.desktop.DesktopApplicationConfig;\n"
-                + "import io.github.libfdx.backend.desktop.DesktopOpenGLProvider;\n"
-                + "import io.github.libfdx.ecs.tooling.EcsProjectApplication;\n"
-                + "import {{packageName}}.{{applicationClassName}};\n"
-                + "\n"
-                + "public final class {{desktopLauncherClassName}} {\n"
-                + "    private {{desktopLauncherClassName}}() {\n"
-                + "    }\n"
-                + "\n"
-                + "    public static void main(String[] args) {\n"
-                + "        DesktopApplicationConfig config = new DesktopApplicationConfig()\n"
-                + "                .title(\"{{projectName}}\")\n"
-                + "                .size(960, 540)\n"
-                + "                .vSync(true)\n"
-                + "                .foregroundFps(60)\n"
-                + "                .graphics(new DesktopOpenGLProvider());\n"
-                + "\n"
-                + "        new DesktopApplicationBackend().start(\n"
-                + "                config, new EcsProjectApplication(new {{applicationClassName}}()));\n"
-                + "    }\n"
-                + "}\n";
+    private String generatorReadme(ProjectGenerationSettings settings, ProjectSample sample,
+            Map<String, GeneratedFile> files) {
+        StringBuilder text = new StringBuilder();
+        text.append("# Generated from ").append(sample.displayName()).append("\n\n");
+        text.append("This project copies the `").append(sample.id())
+                .append("` sample bundled in the libFDX project generator. ")
+                .append("Its Java code, assets, scenes, and sample-owned Gradle files come from that sample; ")
+                .append("the root Gradle envelope pins them to libFDX `").append(libfdxVersion()).append("` (")
+                .append(channel()).append(").\n\n");
+        text.append("The generated root project is `").append(settings.projectName()).append("`. ")
+                .append("To inspect available application tasks, run:\n\n");
+        text.append("```powershell\n");
+        text.append("./gradlew tasks --group application\n");
+        text.append("```\n\n");
+        text.append("Included modules:\n\n");
+        if (files.containsKey("core/build.gradle.kts")) {
+            text.append("- `:core`\n");
+        }
+        if (files.containsKey("editor/build.gradle.kts")) {
+            text.append("- `:editor`\n");
+        }
+        ProjectPlatform[] platforms = ProjectPlatform.values();
+        for (int i = 0; i < platforms.length; i++) {
+            String module = "platform/" + platforms[i].directory();
+            if (files.containsKey(module + "/build.gradle.kts")) {
+                text.append("- `:").append(module.replace('/', ':')).append("` (")
+                        .append(platforms[i].displayName()).append(")\n");
+            }
+        }
+        if (files.containsKey("platform/plugin/build.gradle.kts")) {
+            text.append("- `:platform:plugin` (build tasks for the selected platforms)\n");
+        }
+        if (STARTER_SAMPLE_ID.equals(sample.id())) {
+            text.append("\nJava package: `").append(settings.packageName()).append("`\n");
+        }
+        text.append("\nOnly the selected platform modules were exported.\n");
+        return text.toString();
+    }
+
+    private void validatePlatforms(ProjectSample sample, Set<ProjectPlatform> platforms) {
+        for (ProjectPlatform platform : platforms) {
+            if (!sample.supports(platform)) {
+                throw new IllegalArgumentException("'" + sample.displayName() + "' does not provide "
+                        + platform.displayName() + ". Available platforms: " + platformNames(sample.platforms()));
+            }
+        }
+    }
+
+    private String platformNames(List<ProjectPlatform> platforms) {
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < platforms.size(); i++) {
+            if (i > 0) {
+                text.append(", ");
+            }
+            text.append(platforms.get(i).displayName());
+        }
+        return text.toString();
+    }
+
+    private LinkedHashMap<String, GeneratedFile> selectPlatforms(
+            LinkedHashMap<String, GeneratedFile> source, Set<ProjectPlatform> selected) {
+        boolean keepPlugin = source.containsKey("platform/plugin/build.gradle.kts")
+                && needsBuildPlugin(source, selected);
+        LinkedHashMap<String, GeneratedFile> filtered = new LinkedHashMap<String, GeneratedFile>();
+        for (Map.Entry<String, GeneratedFile> entry : source.entrySet()) {
+            String path = entry.getKey();
+            if (path.startsWith("platform/")) {
+                int directoryEnd = path.indexOf('/', "platform/".length());
+                String directory = directoryEnd >= 0
+                        ? path.substring("platform/".length(), directoryEnd)
+                        : path.substring("platform/".length());
+                if ("plugin".equals(directory)) {
+                    if (!keepPlugin) {
+                        continue;
+                    }
+                } else {
+                    ProjectPlatform platform = ProjectPlatform.fromDirectory(directory);
+                    if (platform != null && !selected.contains(platform)) {
+                        continue;
+                    }
+                }
+            }
+            filtered.put(path, entry.getValue());
+        }
+        return filtered;
+    }
+
+    private boolean needsBuildPlugin(Map<String, GeneratedFile> files, Set<ProjectPlatform> selected) {
+        for (ProjectPlatform platform : selected) {
+            if (platform != ProjectPlatform.ANDROID
+                    && files.containsKey("platform/" + platform.directory() + "/build.gradle.kts")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private LinkedHashMap<String, GeneratedFile> rewritePackage(
+            LinkedHashMap<String, GeneratedFile> source, String packageName) {
+        String sourcePath = STARTER_SOURCE_PACKAGE.replace('.', '/');
+        String targetPath = packageName.replace('.', '/');
+        LinkedHashMap<String, GeneratedFile> rewritten = new LinkedHashMap<String, GeneratedFile>();
+        for (GeneratedFile file : source.values()) {
+            String path = file.path().replace("/" + sourcePath + "/", "/" + targetPath + "/");
+            GeneratedFile replacement = file.isText()
+                    ? GeneratedFile.text(path,
+                            file.textContent().replace(STARTER_SOURCE_PACKAGE, packageName))
+                    : GeneratedFile.binary(path, file.binaryContent());
+            if (rewritten.put(path, replacement) != null) {
+                throw new IllegalStateException("Package rewrite produced duplicate path: " + path);
+            }
+        }
+        return rewritten;
+    }
+
+    private String availableSampleIds() {
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < samples.size(); i++) {
+            if (i > 0) {
+                text.append(", ");
+            }
+            text.append(samples.get(i).id());
+        }
+        return text.toString();
+    }
+
+    private static void addGenerated(Map<String, GeneratedFile> files, GeneratedFile file) {
+        if (files.containsKey(file.path())) {
+            throw new IllegalStateException("Bundled sample conflicts with generated project file: " + file.path());
+        }
+        files.put(file.path(), file);
+    }
+
+    private static String normalizedArchivePath(String value) {
+        String path = value != null ? value.replace('\\', '/') : "";
+        while (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        if (path.length() == 0 || path.equals("..") || path.startsWith("../") || path.contains("/../")) {
+            throw new IllegalStateException("Unsafe bundled sample path: " + value);
+        }
+        return path;
+    }
+
+    private static byte[] readEntry(ZipInputStream zip) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        byte[] buffer = new byte[16 * 1024];
+        int read;
+        while ((read = zip.read(buffer)) != -1) {
+            bytes.write(buffer, 0, read);
+        }
+        return bytes.toByteArray();
+    }
+
+    private static boolean isText(String path) {
+        String lower = path.toLowerCase();
+        return lower.endsWith(".java")
+                || lower.endsWith(".kt")
+                || lower.endsWith(".kts")
+                || lower.endsWith(".md")
+                || lower.endsWith(".txt")
+                || lower.endsWith(".xml")
+                || lower.endsWith(".json")
+                || lower.endsWith(".properties")
+                || lower.endsWith(".toml")
+                || lower.endsWith(".fnt")
+                || lower.endsWith(".fdxscene")
+                || lower.endsWith(".fdxgraph")
+                || lower.endsWith(".gitignore")
+                || lower.endsWith(".gitattributes");
+    }
+
+    private static String kotlinString(String value) {
+        String text = value != null ? value : "";
+        return text.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("$", "\\$");
     }
 }

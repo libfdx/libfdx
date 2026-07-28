@@ -25,6 +25,10 @@ import java.util.List;
 public final class UiG2DRenderer implements UiRenderer {
     private static final int FALLBACK_GLYPH_COLUMNS = 5;
     private static final int FALLBACK_GLYPH_ROWS = 7;
+    private static final int CONTROL_ANTIALIAS_SAMPLES = 4;
+    private static final int CONTROL_ANTIALIAS_SAMPLE_COUNT =
+            CONTROL_ANTIALIAS_SAMPLES * CONTROL_ANTIALIAS_SAMPLES;
+    private static final float PIXEL_HALF_DIAGONAL = 0.70710677f;
     private static final long FALLBACK_GLYPH_SPACE = 0L;
     private static final long FALLBACK_GLYPH_NEWLINE = Long.MIN_VALUE;
     private static final long UNKNOWN_FALLBACK_GLYPH = rows(31, 17, 1, 6, 4, 0, 4);
@@ -1204,16 +1208,10 @@ public final class UiG2DRenderer implements UiRenderer {
             return;
         }
         float radius = Math.min(rect.width(), rect.height()) * 0.5f;
-        if (rect.width() > radius * 2.0f) {
-            drawRect(root, rect.x() + radius, rect.y(), rect.width() - radius * 2.0f, rect.height(),
-                    red, green, blue, alpha);
-        }
-        drawFilledCircle(root, rect.x() + radius, rect.y() + rect.height() * 0.5f,
-                radius, red, green, blue, alpha);
-        if (rect.width() > radius * 2.0f) {
-            drawFilledCircle(root, rect.right() - radius, rect.y() + rect.height() * 0.5f,
-                    radius, red, green, blue, alpha);
-        }
+        drawAntialiasedCapsule(root,
+                rect.x() + radius, rect.right() - radius,
+                rect.y() + rect.height() * 0.5f, radius,
+                red, green, blue, alpha);
     }
 
     private void drawFilledCircle(UiRoot root, float centerX, float centerY, float radius,
@@ -1230,16 +1228,97 @@ public final class UiG2DRenderer implements UiRenderer {
         if (radius <= 0.0f || alpha <= 0.0f) {
             return;
         }
-        int bands = Math.max(4, (int) Math.ceil(radius * 2.0f));
-        float bandHeight = radius * 2.0f / bands;
-        float radiusSquared = radius * radius;
-        for (int i = 0; i < bands; i++) {
-            float y = centerY - radius + i * bandHeight;
-            float sampleY = y + bandHeight * 0.5f - centerY;
-            float halfWidth = (float) Math.sqrt(Math.max(0.0f, radiusSquared - sampleY * sampleY));
-            drawRect(root, centerX - halfWidth, y, halfWidth * 2.0f, bandHeight + 0.02f,
-                    red, green, blue, alpha);
+        drawAntialiasedCapsule(root, centerX, centerX, centerY, radius,
+                red, green, blue, alpha);
+    }
+
+    private void drawAntialiasedCapsule(UiRoot root,
+            float startCenterX, float endCenterX, float centerY, float radius,
+            float red, float green, float blue, float alpha) {
+        if (root == null || radius <= 0.0f || alpha <= 0.0f) {
+            return;
         }
+        // Resolve coverage in display pixels because the common UI render target is single-sampled.
+        float scale = Math.max(0.25f, root.effectiveUiScale());
+        float startCenterPixel = Math.min(startCenterX, endCenterX) * scale;
+        float endCenterPixel = Math.max(startCenterX, endCenterX) * scale;
+        float centerPixelY = centerY * scale;
+        float radiusPixels = radius * scale;
+        int firstPixelX = Math.max(0, (int) Math.floor(startCenterPixel - radiusPixels));
+        int lastPixelX = Math.min((int) Math.ceil(root.renderWidth()),
+                (int) Math.ceil(endCenterPixel + radiusPixels));
+        int firstPixelY = Math.max(0, (int) Math.floor(centerPixelY - radiusPixels));
+        int lastPixelY = Math.min((int) Math.ceil(root.renderHeight()),
+                (int) Math.ceil(centerPixelY + radiusPixels));
+        if (currentClip != null) {
+            firstPixelX = Math.max(firstPixelX, (int) Math.floor(currentClip.x() * scale));
+            lastPixelX = Math.min(lastPixelX, (int) Math.ceil(currentClip.right() * scale));
+            firstPixelY = Math.max(firstPixelY, (int) Math.floor(currentClip.y() * scale));
+            lastPixelY = Math.min(lastPixelY, (int) Math.ceil(currentClip.bottom() * scale));
+        }
+        if (lastPixelX <= firstPixelX || lastPixelY <= firstPixelY) {
+            return;
+        }
+        float inverseScale = 1.0f / scale;
+        float pixelSize = inverseScale;
+        for (int pixelY = firstPixelY; pixelY < lastPixelY; pixelY++) {
+            int runCoverage = 0;
+            int runStart = firstPixelX;
+            for (int pixelX = firstPixelX; pixelX <= lastPixelX; pixelX++) {
+                int coverage = pixelX < lastPixelX
+                        ? capsuleCoverage(pixelX, pixelY, startCenterPixel, endCenterPixel,
+                                centerPixelY, radiusPixels)
+                        : -1;
+                if (coverage == runCoverage) {
+                    continue;
+                }
+                if (runCoverage > 0) {
+                    drawRect(root,
+                            runStart * inverseScale, pixelY * inverseScale,
+                            (pixelX - runStart) * inverseScale, pixelSize,
+                            red, green, blue,
+                            alpha * runCoverage / CONTROL_ANTIALIAS_SAMPLE_COUNT);
+                }
+                runCoverage = coverage;
+                runStart = pixelX;
+            }
+        }
+    }
+
+    private int capsuleCoverage(int pixelX, int pixelY,
+            float startCenterX, float endCenterX, float centerY, float radius) {
+        float sampleCenterX = pixelX + 0.5f;
+        float sampleCenterY = pixelY + 0.5f;
+        float closestCenterX = Math.max(startCenterX, Math.min(endCenterX, sampleCenterX));
+        float centerDistanceX = sampleCenterX - closestCenterX;
+        float centerDistanceY = sampleCenterY - centerY;
+        float centerDistanceSquared =
+                centerDistanceX * centerDistanceX + centerDistanceY * centerDistanceY;
+        float innerRadius = Math.max(0.0f, radius - PIXEL_HALF_DIAGONAL);
+        if (centerDistanceSquared <= innerRadius * innerRadius) {
+            return CONTROL_ANTIALIAS_SAMPLE_COUNT;
+        }
+        float outerRadius = radius + PIXEL_HALF_DIAGONAL;
+        if (centerDistanceSquared >= outerRadius * outerRadius) {
+            return 0;
+        }
+        int covered = 0;
+        float radiusSquared = radius * radius;
+        float sampleStep = 1.0f / CONTROL_ANTIALIAS_SAMPLES;
+        float firstSampleOffset = sampleStep * 0.5f;
+        for (int sampleY = 0; sampleY < CONTROL_ANTIALIAS_SAMPLES; sampleY++) {
+            float y = pixelY + firstSampleOffset + sampleY * sampleStep;
+            float distanceY = y - centerY;
+            for (int sampleX = 0; sampleX < CONTROL_ANTIALIAS_SAMPLES; sampleX++) {
+                float x = pixelX + firstSampleOffset + sampleX * sampleStep;
+                float closestX = Math.max(startCenterX, Math.min(endCenterX, x));
+                float distanceX = x - closestX;
+                if (distanceX * distanceX + distanceY * distanceY <= radiusSquared) {
+                    covered++;
+                }
+            }
+        }
+        return covered;
     }
 
     private void drawFilledTriangle(UiRoot root,

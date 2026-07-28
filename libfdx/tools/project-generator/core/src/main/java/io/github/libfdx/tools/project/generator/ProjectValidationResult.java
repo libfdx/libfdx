@@ -10,15 +10,6 @@ import java.util.List;
  * @author xpenatan
  */
 public final class ProjectValidationResult {
-    private static final String[] JAVA_KEYWORDS = {
-            "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const",
-            "continue", "default", "do", "double", "else", "enum", "extends", "final", "finally", "float",
-            "for", "goto", "if", "implements", "import", "instanceof", "int", "interface", "long", "native",
-            "new", "package", "private", "protected", "public", "return", "short", "static", "strictfp",
-            "super", "switch", "synchronized", "this", "throw", "throws", "transient", "try", "void",
-            "volatile", "while"
-    };
-
     private final List<String> errors;
 
     private ProjectValidationResult(List<String> errors) {
@@ -26,45 +17,43 @@ public final class ProjectValidationResult {
     }
 
     /**
-     * Creates a project validation result.
+     * Validates the settings independent of a particular bundled-sample catalog.
      *
      * @param settings the settings
-     * @return a new project validation result
+     * @return the validation result
      */
     public static ProjectValidationResult validate(ProjectGenerationSettings settings) {
         ArrayList<String> errors = new ArrayList<String>();
+        if (settings == null) {
+            errors.add("Project generation settings cannot be null.");
+            return new ProjectValidationResult(errors);
+        }
         if (!safeProjectName(settings.projectName())) {
             errors.add("Project name must start with a letter or digit and contain only letters, digits, '-' or '_'.");
         }
-        if (!validPackageName(settings.packageName())) {
-            errors.add("Package name must contain valid Java package segments.");
+        if (!safePackageName(settings.packageName())) {
+            errors.add("Package name must contain valid Java identifiers separated by dots.");
         }
-        if (!validJavaIdentifier(settings.applicationClassName())) {
-            errors.add("ECS project class name must be a valid Java class identifier.");
+        if (settings.sampleId() == null || settings.sampleId().trim().length() == 0) {
+            errors.add("A starting point must be selected.");
         }
-        if (!validJavaIdentifier(settings.desktopLauncherClassName())) {
-            errors.add("Desktop launcher class name must be a valid Java class identifier.");
-        }
-        if (settings.libfdxVersion().trim().length() == 0) {
-            errors.add("libfdx version cannot be empty.");
-        }
-        if (!settings.desktopPlatform()) {
-            errors.add("At least one generated platform must be selected.");
+        if (settings.platforms().isEmpty()) {
+            errors.add("Select at least one platform.");
         }
         return new ProjectValidationResult(errors);
     }
 
     /**
-     * Returns the valid.
+     * Returns whether validation succeeded.
      *
-     * @return true if valid succeeds or is active; false otherwise
+     * @return true when no errors were found
      */
     public boolean valid() {
         return errors.isEmpty();
     }
 
     /**
-     * Returns the errors.
+     * Returns the validation errors.
      *
      * @return the errors
      */
@@ -73,7 +62,7 @@ public final class ProjectValidationResult {
     }
 
     /**
-     * Returns the joined errors.
+     * Returns the errors separated by newlines.
      *
      * @return the joined errors
      */
@@ -101,37 +90,44 @@ public final class ProjectValidationResult {
         return true;
     }
 
-    private static boolean validPackageName(String value) {
+    private static boolean safePackageName(String value) {
         if (value == null || value.length() == 0 || value.startsWith(".") || value.endsWith(".")) {
             return false;
         }
-        String[] segments = value.split("\\.");
-        for (int i = 0; i < segments.length; i++) {
-            if (!validJavaIdentifier(segments[i])) {
+        String[] segments = value.split("\\.", -1);
+        for (int segmentIndex = 0; segmentIndex < segments.length; segmentIndex++) {
+            String segment = segments[segmentIndex];
+            if (segment.length() == 0 || !Character.isJavaIdentifierStart(segment.charAt(0))
+                    || javaKeyword(segment)) {
                 return false;
+            }
+            for (int characterIndex = 1; characterIndex < segment.length(); characterIndex++) {
+                if (!Character.isJavaIdentifierPart(segment.charAt(characterIndex))) {
+                    return false;
+                }
             }
         }
         return true;
     }
 
-    private static boolean validJavaIdentifier(String value) {
-        if (value == null || value.length() == 0 || !Character.isJavaIdentifierStart(value.charAt(0))) {
-            return false;
-        }
-        for (int i = 1; i < value.length(); i++) {
-            if (!Character.isJavaIdentifierPart(value.charAt(i))) {
-                return false;
-            }
-        }
-        return !isKeyword(value);
-    }
-
-    private static boolean isKeyword(String value) {
-        for (int i = 0; i < JAVA_KEYWORDS.length; i++) {
-            if (JAVA_KEYWORDS[i].equals(value)) {
-                return true;
-            }
-        }
-        return false;
+    private static boolean javaKeyword(String value) {
+        return "abstract".equals(value) || "assert".equals(value) || "boolean".equals(value)
+                || "break".equals(value) || "byte".equals(value) || "case".equals(value)
+                || "catch".equals(value) || "char".equals(value) || "class".equals(value)
+                || "const".equals(value) || "continue".equals(value) || "default".equals(value)
+                || "do".equals(value) || "double".equals(value) || "else".equals(value)
+                || "enum".equals(value) || "extends".equals(value) || "final".equals(value)
+                || "finally".equals(value) || "float".equals(value) || "for".equals(value)
+                || "goto".equals(value) || "if".equals(value) || "implements".equals(value)
+                || "import".equals(value) || "instanceof".equals(value) || "int".equals(value)
+                || "interface".equals(value) || "long".equals(value) || "native".equals(value)
+                || "new".equals(value) || "package".equals(value) || "private".equals(value)
+                || "protected".equals(value) || "public".equals(value) || "return".equals(value)
+                || "short".equals(value) || "static".equals(value) || "strictfp".equals(value)
+                || "super".equals(value) || "switch".equals(value) || "synchronized".equals(value)
+                || "this".equals(value) || "throw".equals(value) || "throws".equals(value)
+                || "transient".equals(value) || "try".equals(value) || "void".equals(value)
+                || "volatile".equals(value) || "while".equals(value) || "true".equals(value)
+                || "false".equals(value) || "null".equals(value) || "_".equals(value);
     }
 }

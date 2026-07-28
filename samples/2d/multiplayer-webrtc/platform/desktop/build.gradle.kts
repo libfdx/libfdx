@@ -33,18 +33,23 @@ base {
     archivesName.set("sample_multiplayer_2d_webrtc_desktop")
 }
 
+val sampleProjectPath = project.path.substringBefore(":platform:")
+val sampleRoot = layout.projectDirectory.dir("../..").asFile
+val libfdxDependencyVersion =
+    gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
+
 dependencies {
-    implementation(project(":samples:2d:multiplayer-webrtc:core"))
+    implementation(project("$sampleProjectPath:core"))
     if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-        implementation("${libs.versions.libfdxGroup.get()}:application:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:display:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:backend_desktop:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:webrtc_desktop_jni:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:d3d12_core:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:wgpu_core:${libs.versions.libfdxSnapshot.get()}")
-        glRuntimeClasspath("${libs.versions.libfdxGroup.get()}:gl_desktop:${libs.versions.libfdxSnapshot.get()}")
-        vulkanRuntimeClasspath("${libs.versions.libfdxGroup.get()}:vulkan_desktop:${libs.versions.libfdxSnapshot.get()}")
-        wgpuRuntimeClasspath("${libs.versions.libfdxGroup.get()}:wgpu_desktop_ffm:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:application:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:display:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:backend_desktop:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:webrtc_desktop_jni:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:d3d12_core:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:wgpu_core:$libfdxDependencyVersion")
+        glRuntimeClasspath("${libs.versions.libfdxGroup.get()}:gl_desktop:$libfdxDependencyVersion")
+        vulkanRuntimeClasspath("${libs.versions.libfdxGroup.get()}:vulkan_desktop:$libfdxDependencyVersion")
+        wgpuRuntimeClasspath("${libs.versions.libfdxGroup.get()}:wgpu_desktop_ffm:$libfdxDependencyVersion")
     } else {
         implementation(project(":libfdx:framework:application"))
         implementation(project(":libfdx:framework:display"))
@@ -69,7 +74,7 @@ fun JavaExec.configureMultiplayerRun(graphics: String, label: String) {
         else -> wgpuRuntimeClasspath
     }
     mainClass.set(sampleMainClass)
-    workingDir = rootProject.projectDir
+    workingDir = sampleRoot
     javaLauncher.set(javaToolchains.launcherFor {
         languageVersion.set(JavaLanguageVersion.of(25))
     })

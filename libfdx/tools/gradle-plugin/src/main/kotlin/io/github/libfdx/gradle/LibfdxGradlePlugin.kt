@@ -810,6 +810,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
             buildType.set(extension.desktopC.buildType)
             showConsole.set(extension.desktopC.showConsole)
             nativeResourceClasspath.from(runtimeClasspath)
+            assets.from(extension.assets)
         }
         val buildDebug = project.tasks.register<LibfdxNativeBuildTask>(
             internalTaskName("libfdx_desktop_c_build_debug", hasTargets)

@@ -4,6 +4,7 @@ import io.github.libfdx.tools.project.generator.GeneratedProject;
 import io.github.libfdx.tools.project.generator.ProjectGenerationResult;
 import io.github.libfdx.tools.project.generator.ProjectGenerationSettings;
 import io.github.libfdx.tools.project.generator.ProjectGenerator;
+import io.github.libfdx.tools.project.generator.ProjectPlatform;
 import java.io.ByteArrayInputStream;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -28,9 +29,8 @@ public final class WebProjectArchiveSmokeTest {
     public static void main(String[] args) throws Exception {
         ProjectGenerationResult generation = new ProjectGenerator().generate(ProjectGenerationSettings.builder()
                 .projectName("web-smoke-game")
-                .packageName("com.example.websmoke")
-                .applicationClassName("WebSmokeApplication")
-                .desktopLauncherClassName("WebSmokeDesktopLauncher")
+                .sampleId("2d/ecs-platformer")
+                .platforms(ProjectPlatform.WEB)
                 .build());
         GeneratedProject project = generation.project();
         byte[] archive = WebProjectArchive.zip(project);
@@ -38,11 +38,18 @@ public final class WebProjectArchiveSmokeTest {
 
         Set<String> entries = entries(archive);
         require(entries.contains("settings.gradle.kts"), "Missing settings.gradle.kts in ZIP.");
-        require(entries.contains("core/src/main/java/com/example/websmoke/WebSmokeApplication.java"),
+        require(entries.contains(
+                "core/src/main/java/io/github/libfdx/samples/ecs/platformer/EcsPlatformerApplication.java"),
                 "Missing generated application in ZIP.");
         require(entries.contains(
-                "platform/desktop/src/main/java/com/example/websmoke/desktop/WebSmokeDesktopLauncher.java"),
-                "Missing generated desktop launcher in ZIP.");
+                "platform/web/src/main/java/io/github/libfdx/samples/ecs/platformer/web/"
+                        + "EcsPlatformerWebJsLauncher.java"),
+                "Missing selected web launcher in ZIP.");
+        require(!entries.contains("platform/desktop/build.gradle.kts"),
+                "Unselected desktop platform was included in ZIP.");
+        require(entries.contains("assets/kenney/pixel-platformer/Tilemap/tilemap_packed.png"),
+                "Missing bundled sample asset in ZIP.");
+        require(entries.contains("PROJECT_GENERATOR.md"), "Missing generator provenance in ZIP.");
         require(entries.size() == project.fileCount(), "ZIP entry count did not match generated file count.");
     }
 

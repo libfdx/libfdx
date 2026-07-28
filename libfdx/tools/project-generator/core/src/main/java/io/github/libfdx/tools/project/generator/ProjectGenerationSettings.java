@@ -1,105 +1,44 @@
 package io.github.libfdx.tools.project.generator;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Set;
 
 /**
- * Represents a project generation settings.
+ * Selects the starting point, package, and platforms used for generation.
  *
  * @author xpenatan
  */
 public final class ProjectGenerationSettings {
     public static final String DEFAULT_PROJECT_NAME = "libfdx-game";
     public static final String DEFAULT_PACKAGE_NAME = "com.example.game";
-    public static final String DEFAULT_APPLICATION_CLASS_NAME = "GameProject";
-    public static final String DEFAULT_DESKTOP_LAUNCHER_CLASS_NAME = "DesktopLauncher";
-    public static final String DEFAULT_LIBFDX_VERSION = loadDefaultLibfdxVersion();
+    public static final String DEFAULT_SAMPLE_ID = "base/starter-project";
 
     private final String projectName;
     private final String packageName;
-    private final String applicationClassName;
-    private final String desktopLauncherClassName;
-    private final String libfdxVersion;
-    private final boolean desktopPlatform;
+    private final String sampleId;
+    private final Set<ProjectPlatform> platforms;
 
     private ProjectGenerationSettings(Builder builder) {
         projectName = clean(builder.projectName, DEFAULT_PROJECT_NAME);
         packageName = clean(builder.packageName, DEFAULT_PACKAGE_NAME);
-        applicationClassName = clean(builder.applicationClassName, DEFAULT_APPLICATION_CLASS_NAME);
-        desktopLauncherClassName = clean(builder.desktopLauncherClassName, DEFAULT_DESKTOP_LAUNCHER_CLASS_NAME);
-        libfdxVersion = clean(builder.libfdxVersion, DEFAULT_LIBFDX_VERSION);
-        desktopPlatform = builder.desktopPlatform;
-    }
-
-    private static String loadDefaultLibfdxVersion() {
-        String resourceName = "/io/github/libfdx/tools/project/generator/libs.versions.toml";
-        try (InputStream stream = ProjectGenerationSettings.class.getResourceAsStream(resourceName)) {
-            if (stream == null) {
-                throw new IllegalStateException("Missing libFDX TOML resource: " + resourceName);
-            }
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-                boolean inVersionsSection = false;
-                String baseVersion = null;
-                String snapshotVersion = null;
-                String rawLine;
-                while ((rawLine = reader.readLine()) != null) {
-                    int commentIndex = rawLine.indexOf('#');
-                    String line = (commentIndex < 0 ? rawLine : rawLine.substring(0, commentIndex)).trim();
-                    if (line.length() == 0) {
-                        continue;
-                    }
-                    if (line.startsWith("[") && line.endsWith("]")) {
-                        inVersionsSection = line.equals("[versions]");
-                        continue;
-                    }
-                    int separator = line.indexOf('=');
-                    if (!inVersionsSection || separator < 0) {
-                        continue;
-                    }
-                    String key = line.substring(0, separator).trim();
-                    if (!key.equals("libfdxRelease") && !key.equals("libfdxSnapshot")) {
-                        continue;
-                    }
-                    String version = line.substring(separator + 1).trim();
-                    if (version.length() >= 2 && ((version.startsWith("\"") && version.endsWith("\""))
-                            || (version.startsWith("'") && version.endsWith("'")))) {
-                        version = version.substring(1, version.length() - 1);
-                    }
-                    if (version.length() == 0) {
-                        throw new IllegalStateException("Empty [versions]." + key + " in " + resourceName);
-                    }
-                    if (key.equals("libfdxRelease")) {
-                        baseVersion = version;
-                    } else {
-                        snapshotVersion = version;
-                    }
-                }
-                if (snapshotVersion != null) {
-                    return snapshotVersion.startsWith("-") && baseVersion != null
-                            ? baseVersion + snapshotVersion
-                            : snapshotVersion;
-                }
-            }
-            throw new IllegalStateException("Missing [versions].libfdxSnapshot in " + resourceName);
-        } catch (IOException e) {
-            throw new IllegalStateException("Could not read libFDX TOML resource: " + resourceName, e);
-        }
+        sampleId = clean(builder.sampleId, DEFAULT_SAMPLE_ID);
+        EnumSet<ProjectPlatform> selected = EnumSet.noneOf(ProjectPlatform.class);
+        selected.addAll(builder.platforms);
+        platforms = Collections.unmodifiableSet(selected);
     }
 
     /**
-     * Returns the builder.
+     * Returns a new settings builder.
      *
-     * @return the created value
+     * @return the builder
      */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Returns the project name.
+     * Returns the generated Gradle root-project name.
      *
      * @return the project name
      */
@@ -108,7 +47,7 @@ public final class ProjectGenerationSettings {
     }
 
     /**
-     * Returns the package name.
+     * Returns the Java package used by customizable starting points.
      *
      * @return the package name
      */
@@ -117,66 +56,31 @@ public final class ProjectGenerationSettings {
     }
 
     /**
-     * Returns the package path.
+     * Returns the stable identifier of the bundled sample to copy.
      *
-     * @return the package path
+     * @return the sample identifier
      */
-    public String packagePath() {
-        return packageName.replace('.', '/');
+    public String sampleId() {
+        return sampleId;
     }
 
     /**
-     * Returns the application class name.
+     * Returns the platform modules to include.
      *
-     * @return the application class name
+     * @return the selected platforms
      */
-    public String applicationClassName() {
-        return applicationClassName;
+    public Set<ProjectPlatform> platforms() {
+        return platforms;
     }
 
     /**
-     * Returns the desktop package name.
+     * Returns whether a platform is selected.
      *
-     * @return the desktop package name
+     * @param platform the platform
+     * @return true when selected
      */
-    public String desktopPackageName() {
-        return packageName + ".desktop";
-    }
-
-    /**
-     * Returns the desktop package path.
-     *
-     * @return the desktop package path
-     */
-    public String desktopPackagePath() {
-        return desktopPackageName().replace('.', '/');
-    }
-
-    /**
-     * Returns the desktop launcher class name.
-     *
-     * @return the desktop launcher class name
-     */
-    public String desktopLauncherClassName() {
-        return desktopLauncherClassName;
-    }
-
-    /**
-     * Returns the libfdx version.
-     *
-     * @return the libfdx version
-     */
-    public String libfdxVersion() {
-        return libfdxVersion;
-    }
-
-    /**
-     * Returns the desktop platform.
-     *
-     * @return true if desktop platform succeeds or is active; false otherwise
-     */
-    public boolean desktopPlatform() {
-        return desktopPlatform;
+    public boolean includes(ProjectPlatform platform) {
+        return platforms.contains(platform);
     }
 
     private static String clean(String value, String fallback) {
@@ -185,23 +89,21 @@ public final class ProjectGenerationSettings {
     }
 
     /**
-     * Builds value instances and related output.
+     * Builds project-generation settings.
      *
      * @author xpenatan
      */
     public static final class Builder {
         private String projectName = DEFAULT_PROJECT_NAME;
         private String packageName = DEFAULT_PACKAGE_NAME;
-        private String applicationClassName = DEFAULT_APPLICATION_CLASS_NAME;
-        private String desktopLauncherClassName = DEFAULT_DESKTOP_LAUNCHER_CLASS_NAME;
-        private String libfdxVersion = DEFAULT_LIBFDX_VERSION;
-        private boolean desktopPlatform = true;
+        private String sampleId = DEFAULT_SAMPLE_ID;
+        private final EnumSet<ProjectPlatform> platforms = EnumSet.of(ProjectPlatform.DESKTOP);
 
         private Builder() {
         }
 
         /**
-         * Sets the project name and returns this builder.
+         * Sets the generated Gradle root-project name.
          *
          * @param projectName the project name
          * @return this builder for chaining
@@ -212,7 +114,7 @@ public final class ProjectGenerationSettings {
         }
 
         /**
-         * Sets the package name and returns this builder.
+         * Sets the Java package for customizable starting points.
          *
          * @param packageName the package name
          * @return this builder for chaining
@@ -223,53 +125,56 @@ public final class ProjectGenerationSettings {
         }
 
         /**
-         * Sets the application class name and returns this builder.
+         * Selects the bundled repository sample to copy.
          *
-         * @param applicationClassName the application class name
+         * @param sampleId the stable sample identifier
          * @return this builder for chaining
          */
-        public Builder applicationClassName(String applicationClassName) {
-            this.applicationClassName = applicationClassName;
+        public Builder sampleId(String sampleId) {
+            this.sampleId = sampleId;
             return this;
         }
 
         /**
-         * Sets the desktop launcher class name and returns this builder.
+         * Replaces the selected platforms.
          *
-         * @param desktopLauncherClassName the desktop launcher class name
+         * @param selectedPlatforms the platforms to include
          * @return this builder for chaining
          */
-        public Builder desktopLauncherClassName(String desktopLauncherClassName) {
-            this.desktopLauncherClassName = desktopLauncherClassName;
+        public Builder platforms(ProjectPlatform... selectedPlatforms) {
+            platforms.clear();
+            if (selectedPlatforms != null) {
+                for (int i = 0; i < selectedPlatforms.length; i++) {
+                    if (selectedPlatforms[i] != null) {
+                        platforms.add(selectedPlatforms[i]);
+                    }
+                }
+            }
             return this;
         }
 
         /**
-         * Sets the libfdx version and returns this builder.
+         * Selects or clears one platform.
          *
-         * @param libfdxVersion the libfdx version
+         * @param platform the platform
+         * @param selected whether it is selected
          * @return this builder for chaining
          */
-        public Builder libfdxVersion(String libfdxVersion) {
-            this.libfdxVersion = libfdxVersion;
+        public Builder platform(ProjectPlatform platform, boolean selected) {
+            if (platform != null) {
+                if (selected) {
+                    platforms.add(platform);
+                } else {
+                    platforms.remove(platform);
+                }
+            }
             return this;
         }
 
         /**
-         * Sets the desktop platform and returns this builder.
+         * Creates the immutable settings.
          *
-         * @param desktopPlatform the desktop platform
-         * @return this builder for chaining
-         */
-        public Builder desktopPlatform(boolean desktopPlatform) {
-            this.desktopPlatform = desktopPlatform;
-            return this;
-        }
-
-        /**
-         * Returns the build.
-         *
-         * @return the created value
+         * @return the settings
          */
         public ProjectGenerationSettings build() {
             return new ProjectGenerationSettings(this);

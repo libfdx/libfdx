@@ -3,7 +3,6 @@ package io.github.libfdx.tools.project.generator.desktop;
 import io.github.libfdx.backend.desktop.DesktopApplicationBackend;
 import io.github.libfdx.backend.desktop.DesktopApplicationConfig;
 import io.github.libfdx.backend.desktop.DesktopOpenGLProvider;
-import io.github.libfdx.tools.project.generator.ui.ProjectGeneratorApplication;
 
 /**
  * Launches the project generator desktop entry point.
@@ -22,13 +21,13 @@ public final class ProjectGeneratorDesktopLauncher {
     public static void main(String[] args) {
         DesktopApplicationConfig config = new DesktopApplicationConfig()
                 .title("libfdx Project Generator")
-                .size(980, 680)
+                .size(980, 760)
                 .visible(visible(args))
                 .vSync(true)
                 .foregroundFps(60)
                 .graphics(new DesktopOpenGLProvider());
 
-        new DesktopApplicationBackend().start(config, new ProjectGeneratorApplication(
+        new DesktopApplicationBackend().start(config, new ProjectGeneratorDesktopApplication(
                 new DesktopProjectExportTarget(outputDirectory(args)), exitAfterFrames(args)));
     }
 

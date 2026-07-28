@@ -13,7 +13,7 @@ import io.github.libfdx.graphics.g2d.TextureRegion;
 import io.github.libfdx.samples.ecs.platformer.PlatformerConstants;
 
 public final class PlatformerTextures {
-    private static final String ASSET_ROOT = "samples/ecs-platformer/kenney/pixel-platformer/";
+    private static final String ASSET_ROOT = "kenney/pixel-platformer/";
 
     private final Texture[] textures;
     private final TextureRegion[] regions;

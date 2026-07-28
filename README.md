@@ -65,7 +65,9 @@ checked-out framework code should enable local dependency mode; see
 
 Hosted tools and demos:
 
-- [Project Generator](https://libfdx.github.io/project-generator/)
+- [Project Generator](https://libfdx.github.io/project-generator/): copies a
+  bundled sample into a standalone project pinned to the generator's libFDX
+  version.
 - [Tests](https://libfdx.github.io/tests/)
 
 ## Guides
@@ -77,6 +79,8 @@ Hosted tools and demos:
   editing.
 - [UI Kit](docs/UI_KIT.md): UI ownership, composition, state, and rendering.
 - [Gradle plugin](libfdx/tools/gradle-plugin/README.md): project-generation DSL.
+- [Project generator](libfdx/tools/project-generator/README.md): bundled-sample
+  generation and snapshot/release version pinning.
 - [Scenario validator](libfdx/extensions/scenario_validator/README.md): runtime
   validation flows.
 - [2D samples](samples/2d/) and [benchmarks](benchmark/README.md): executable

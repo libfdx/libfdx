@@ -13,16 +13,19 @@ base {
     archivesName.set("sample_multiplayer_2d_webrtc_core")
 }
 
+val libfdxDependencyVersion =
+    gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
+
 dependencies {
     if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-        api("${libs.versions.libfdxGroup.get()}:application:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:graphics:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:g2d:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:ui_kit:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:net:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:webrtc_core:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:scenario_validator:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:scenario_validator_ui_kit:${libs.versions.libfdxSnapshot.get()}")
+        api("${libs.versions.libfdxGroup.get()}:application:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:graphics:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:g2d:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:ui_kit:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:net:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:webrtc_core:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:scenario_validator:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:scenario_validator_ui_kit:$libfdxDependencyVersion")
     } else {
         api(project(":libfdx:framework:application"))
         implementation(project(":libfdx:framework:graphics"))

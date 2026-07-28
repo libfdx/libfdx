@@ -35,18 +35,22 @@ base {
     archivesName.set("sample_2d_sprite_movement_desktop")
 }
 
-dependencies {
-    implementation(project(":samples:2d:sprite-movement:core"))
-    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-        implementation("${libs.versions.libfdxGroup.get()}:application:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:display:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:d3d12_core:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:wgpu_core:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:backend_desktop:${libs.versions.libfdxSnapshot.get()}")
+val sampleProjectPath = project.path.substringBefore(":platform:")
+val libfdxDependencyVersion =
+    gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
 
-        glRuntimeClasspath("${libs.versions.libfdxGroup.get()}:gl_desktop:${libs.versions.libfdxSnapshot.get()}")
-        vulkanRuntimeClasspath("${libs.versions.libfdxGroup.get()}:vulkan_desktop:${libs.versions.libfdxSnapshot.get()}")
-        wgpuRuntimeClasspath("${libs.versions.libfdxGroup.get()}:wgpu_desktop_ffm:${libs.versions.libfdxSnapshot.get()}")
+dependencies {
+    implementation(project("$sampleProjectPath:core"))
+    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
+        implementation("${libs.versions.libfdxGroup.get()}:application:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:display:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:d3d12_core:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:wgpu_core:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:backend_desktop:$libfdxDependencyVersion")
+
+        glRuntimeClasspath("${libs.versions.libfdxGroup.get()}:gl_desktop:$libfdxDependencyVersion")
+        vulkanRuntimeClasspath("${libs.versions.libfdxGroup.get()}:vulkan_desktop:$libfdxDependencyVersion")
+        wgpuRuntimeClasspath("${libs.versions.libfdxGroup.get()}:wgpu_desktop_ffm:$libfdxDependencyVersion")
     } else {
         implementation(project(":libfdx:framework:application"))
         implementation(project(":libfdx:framework:display"))
@@ -61,7 +65,7 @@ dependencies {
 }
 
 val sampleMainClass = "io.github.libfdx.samples.g2d.spritemovement.desktop.SpriteMovementDesktopLauncher"
-val sampleRoot = rootProject.file("samples/2d/sprite-movement")
+val sampleRoot = layout.projectDirectory.dir("../..").asFile
 
 fun registerGraphicsRun(
     taskName: String,

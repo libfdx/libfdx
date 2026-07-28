@@ -20,7 +20,7 @@ The core module keeps gameplay explicit and organized under
 - rendering uses `SpriteBatch` with Kenney texture regions only.
 
 The sample includes the CC0 Pixel Platformer asset pack from Kenney under
-`assets/samples/ecs-platformer/kenney/pixel-platformer`. `PlatformerTextures`
+`assets/kenney/pixel-platformer`. `PlatformerTextures`
 loads the three packed Kenney sheets directly once during application startup:
 tiles, background tiles, and characters. The sample does not package or load
 individual sprite PNGs from the Kenney archive; every visual is a
