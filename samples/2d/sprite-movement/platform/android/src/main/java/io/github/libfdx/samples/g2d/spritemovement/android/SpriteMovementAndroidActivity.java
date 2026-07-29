@@ -5,7 +5,7 @@ import io.github.libfdx.backend.android.AndroidApplicationActivity;
 import io.github.libfdx.backend.android.AndroidApplicationConfig;
 import io.github.libfdx.backend.android.AndroidGlesProvider;
 import io.github.libfdx.backend.android.AndroidVulkanProvider;
-import io.github.libfdx.ecs.tooling.EcsProjectApplication;
+import io.github.libfdx.ecs.EcsApplication;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.wgpu.WGPUProvider;
 import io.github.libfdx.samples.g2d.spritemovement.SpriteMovementProject;
@@ -33,7 +33,7 @@ public class SpriteMovementAndroidActivity extends AndroidApplicationActivity {
 
     @Override
     protected ApplicationListener createApplicationListener() {
-        return new EcsProjectApplication(new SpriteMovementProject());
+        return new EcsApplication(new SpriteMovementProject());
     }
 
     private GraphicsAttachmentProvider graphicsProvider() {

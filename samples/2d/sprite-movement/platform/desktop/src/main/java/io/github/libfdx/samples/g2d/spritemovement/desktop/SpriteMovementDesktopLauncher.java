@@ -7,7 +7,7 @@ import io.github.libfdx.backend.desktop.DesktopVulkanProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.d3d12.D3D12Provider;
 import io.github.libfdx.graphics.wgpu.WGPUProvider;
-import io.github.libfdx.ecs.tooling.EcsProjectApplication;
+import io.github.libfdx.ecs.EcsApplication;
 import io.github.libfdx.samples.g2d.spritemovement.SpriteMovementProject;
 import java.io.IOException;
 import java.io.InputStream;
@@ -43,7 +43,7 @@ public final class SpriteMovementDesktopLauncher {
                 .graphics(graphicsProvider(graphics));
 
         new DesktopApplicationBackend().start(
-                config, new EcsProjectApplication(new SpriteMovementProject(exitAfterFrames(args))));
+                config, new EcsApplication(new SpriteMovementProject(exitAfterFrames(args))));
     }
 
     private static GraphicsAttachmentProvider graphicsProvider(String graphics) {

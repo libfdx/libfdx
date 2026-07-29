@@ -96,7 +96,7 @@ libfdx {
         projectId.set("com.example.game")
         entryClass.set("com.example.game.GameProject")
         projectRoot.set(rootProject.layout.projectDirectory)
-        toolingAbi.set(1)
+        projectAbi.set(6)
         libfdxAbi.set(libfdxVersion)
     }
 }
@@ -108,14 +108,22 @@ and desktop bundle task relative to that same root.
 
 The `libfdx_ecs_project_bundle` task compiles the main source set and writes a
 deterministic `.fdxproject` archive under `build/fdx-project` by default. The
-archive contains project classes, explicitly allowed dependency JARs, assets,
-scenes, ABI metadata, and content hashes. Bundle creation rejects unsafe paths,
-duplicates, manifest/configuration mismatches, and dependencies containing
-protected framework/editor packages.
+archive contains project classes, explicitly allowed dependency JARs under
+`lib/`, assets, scenes, project ABI 6 metadata, the exact libFDX ABI, and
+content hashes. Bundle creation rejects unsafe paths, duplicates,
+manifest/configuration mismatches, and dependencies containing protected
+framework/editor packages.
+
+`fdx-project.json` uses project-manifest `formatVersion` 2. The distinct
+`META-INF/fdx-bundle.json` outer archive metadata also currently uses
+`formatVersion` 2; the two schemas are versioned independently.
 
 Use `allowedDependencies(...)` only for project libraries that the host is
 expected to load. Normal platform launchers remain statically linked and do not
-load the editor bundle.
+load the editor bundle. Dynamic hosts parent-load ECS core and the optional
+scene/schema contract when used, instantiate the configured `EcsProject` entry
+class, create a world, and call its single `initialize(Fdx, World)` method. A
+project or libFDX ABI mismatch is rejected before attachment.
 
 ## Bitmap Fonts
 

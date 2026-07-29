@@ -39,7 +39,8 @@ class EcsProjectBundleTest {
             assertTrue(names.contains("scenes/main.fdxscene"))
             assertTrue(names.contains("lib/helper.jar"))
             val metadata = zip.text("META-INF/fdx-bundle.json")
-            assertTrue(metadata.contains("\"toolingAbi\": 1"))
+            assertTrue(metadata.contains("\"formatVersion\": 2"))
+            assertTrue(metadata.contains("\"projectAbi\": 6"))
             assertTrue(metadata.contains("\"libfdxAbi\": \"1.2.3\""))
             val hashes = zip.text("META-INF/fdx-hashes.sha256")
             assertTrue(hashes.contains("  fdx-project.json\n"))
@@ -56,6 +57,18 @@ class EcsProjectBundleTest {
         }
 
         assertTrue(error.message!!.contains("field 'id'"))
+    }
+
+    @Test
+    fun rejectsBlankProjectName() {
+        val input = fixture(projectName = "   ", directoryName = "blank-name")
+
+        val error = assertThrows(GradleException::class.java) {
+            writeEcsProjectBundle(input.spec(temporaryDirectory.resolve("blank-name.fdxproject").toFile()))
+        }
+
+        assertTrue(error.message!!.contains("field 'name'"))
+        assertTrue(error.message!!.contains("must not be blank"))
     }
 
     @Test
@@ -83,6 +96,7 @@ class EcsProjectBundleTest {
 
     private fun fixture(
         projectId: String = "com.example.game",
+        projectName: String = "Example Game",
         directoryName: String = "project"
     ): Fixture {
         val root = temporaryDirectory.resolve(directoryName)
@@ -101,8 +115,9 @@ class EcsProjectBundleTest {
             """
             {
               "format": "libfdx.ecs.project",
-              "formatVersion": 1,
+              "formatVersion": 2,
               "id": "$projectId",
+              "name": "$projectName",
               "entryClass": "com.example.GameProject",
               "defaultScene": "scenes/main.fdxscene",
               "assetsDirectory": "assets",
@@ -146,7 +161,7 @@ class EcsProjectBundleTest {
                 scenes.toFile(),
                 setOf(classes.toFile()),
                 dependencies,
-                1,
+                6,
                 "1.2.3",
                 ".",
                 ":core",

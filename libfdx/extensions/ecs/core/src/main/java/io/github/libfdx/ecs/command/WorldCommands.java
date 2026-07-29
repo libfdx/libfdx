@@ -1,6 +1,7 @@
 package io.github.libfdx.ecs.command;
 
 import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.ecs.World;
 import io.github.libfdx.ecs.component.Component;
 import io.github.libfdx.ecs.manager.Manager;
@@ -9,6 +10,7 @@ import io.github.libfdx.ecs.system.System;
 public final class WorldCommands {
     private final World world;
     private final Array<Command> commands = new Array<>();
+    private final ObjectMap<Class<? extends Manager>, Manager> pendingManagers = new ObjectMap<>();
 
     public WorldCommands(World world) {
         this.world = world;
@@ -48,11 +50,24 @@ public final class WorldCommands {
         commands.add(target -> target.applyRemove(entity, type));
     }
 
-    public <T extends Manager> T addManager(T manager) {
+    public <M extends Manager, T extends M> T addManager(T manager, Class<M> type) {
         if (manager == null) {
             throw new IllegalArgumentException("manager cannot be null.");
         }
-        commands.add(target -> target.applyAddManager(manager));
+        if (type == null) {
+            throw new IllegalArgumentException("manager type cannot be null.");
+        }
+        if (!type.isInstance(manager)) {
+            throw new IllegalArgumentException("Manager is not an instance of " + type.getName() + ".");
+        }
+        if (world.getManager(type) != null || pendingManagers.containsKey(type)) {
+            return null;
+        }
+        pendingManagers.put(type, manager);
+        commands.add(target -> {
+            target.applyAddManager(type, manager);
+            pendingManagers.remove(type);
+        });
         return manager;
     }
 
@@ -94,6 +109,7 @@ public final class WorldCommands {
     }
 
     public void discard() {
+        pendingManagers.clear();
         commands.clear();
     }
 

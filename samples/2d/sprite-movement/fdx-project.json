@@ -1,7 +1,8 @@
 {
   "format": "libfdx.ecs.project",
-  "formatVersion": 1,
+  "formatVersion": 2,
   "id": "io.github.libfdx.samples.g2d.spritemovement",
+  "name": "libFDX 2D Sprite Movement",
   "entryClass": "io.github.libfdx.samples.g2d.spritemovement.SpriteMovementProject",
   "defaultScene": "scenes/main.fdxscene",
   "assetsDirectory": "assets",

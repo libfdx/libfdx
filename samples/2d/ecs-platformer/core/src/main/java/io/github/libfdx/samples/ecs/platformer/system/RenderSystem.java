@@ -3,7 +3,13 @@ package io.github.libfdx.samples.ecs.platformer.system;
 import io.github.libfdx.ecs.World;
 import io.github.libfdx.ecs.component.ComponentMapper;
 import io.github.libfdx.ecs.entity.EntityList;
+import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.LoadOp;
+import io.github.libfdx.graphics.RenderPass;
+import io.github.libfdx.graphics.RenderPassDescriptor;
+import io.github.libfdx.graphics.StoreOp;
+import io.github.libfdx.graphics.TextureView;
+import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.graphics.g2d.SpriteBatch;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 import io.github.libfdx.samples.ecs.platformer.PlatformerConstants;
@@ -13,9 +19,14 @@ import io.github.libfdx.samples.ecs.platformer.component.LevelStateComponent;
 import io.github.libfdx.samples.ecs.platformer.component.PositionComponent;
 import io.github.libfdx.samples.ecs.platformer.component.RenderSpriteComponent;
 
-public final class RenderSystem extends BaseGameSystem {
+public final class RenderSystem implements io.github.libfdx.ecs.system.RenderSystem {
+    private static final LoadOp CLEAR_COLOR = LoadOp.clear(0.0f, 0.0f, 0.0f, 1.0f);
+
     private final SpriteBatch batch;
     private final TextureRegion[] regions;
+    private final RenderPassDescriptor renderPassDescriptor =
+            new RenderPassDescriptor().label("ECS platformer");
+    private boolean enabled = true;
     private ComponentMapper<LevelStateComponent> states;
     private ComponentMapper<PositionComponent> positions;
     private ComponentMapper<BoundsComponent> bounds;
@@ -29,7 +40,7 @@ public final class RenderSystem extends BaseGameSystem {
     }
 
     @Override
-    protected void attach(World world) {
+    public void onAttach(World world) {
         states = world.mapper(LevelStateComponent.class);
         positions = world.mapper(PositionComponent.class);
         bounds = world.mapper(BoundsComponent.class);
@@ -39,23 +50,63 @@ public final class RenderSystem extends BaseGameSystem {
     }
 
     @Override
-    public void update() {
+    public void render(
+            GraphicsFrame frame,
+            TextureView colorTarget,
+            TextureView depthTarget,
+            int width,
+            int height,
+            Camera camera) {
         if (batch == null || regions == null) {
             return;
         }
         LevelStateComponent state = firstState();
         float cameraX = state != null ? state.cameraX : 0.0f;
-        batch.begin(LoadOp.clear(0.0f, 0.0f, 0.0f, 1.0f));
-        drawLayer(PlatformerConstants.LAYER_BACKGROUND, cameraX);
-        drawLayer(PlatformerConstants.LAYER_DECORATION, cameraX);
-        drawLayer(PlatformerConstants.LAYER_PLATFORM, cameraX);
-        drawLayer(PlatformerConstants.LAYER_ITEM, cameraX);
-        drawLayer(PlatformerConstants.LAYER_HAZARD, cameraX);
-        drawLayer(PlatformerConstants.LAYER_GOAL, cameraX);
-        drawLayer(PlatformerConstants.LAYER_ENEMY, cameraX);
-        drawLayer(PlatformerConstants.LAYER_PLAYER, cameraX);
-        drawHud(state);
-        batch.end();
+        batch.viewport(width, height);
+        RenderPass pass = frame.commandEncoder().beginRenderPass(renderPassDescriptor
+                .colorAttachment(colorTarget)
+                .colorLoadOp(CLEAR_COLOR)
+                .colorStoreOp(StoreOp.store()));
+        boolean batchBegun = false;
+        Throwable renderFailure = null;
+        try {
+            batch.begin(pass);
+            batchBegun = true;
+            drawLayer(PlatformerConstants.LAYER_BACKGROUND, cameraX);
+            drawLayer(PlatformerConstants.LAYER_DECORATION, cameraX);
+            drawLayer(PlatformerConstants.LAYER_PLATFORM, cameraX);
+            drawLayer(PlatformerConstants.LAYER_ITEM, cameraX);
+            drawLayer(PlatformerConstants.LAYER_HAZARD, cameraX);
+            drawLayer(PlatformerConstants.LAYER_GOAL, cameraX);
+            drawLayer(PlatformerConstants.LAYER_ENEMY, cameraX);
+            drawLayer(PlatformerConstants.LAYER_PLAYER, cameraX);
+            drawHud(state);
+        } catch (RuntimeException | Error failure) {
+            renderFailure = failure;
+            throw failure;
+        } finally {
+            finishRender(pass, batchBegun, renderFailure);
+        }
+    }
+
+    @Override
+    public void onDetach(World world) {
+        states = null;
+        positions = null;
+        bounds = null;
+        sprites = null;
+        collectibles = null;
+        renderables = null;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    @Override
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
 
     private void drawLayer(int layer, float cameraX) {
@@ -104,5 +155,43 @@ public final class RenderSystem extends BaseGameSystem {
 
     private LevelStateComponent firstState() {
         return states.size() > 0 ? states.componentAt(0) : null;
+    }
+
+    private void finishRender(RenderPass pass, boolean batchBegun, Throwable renderFailure) {
+        Throwable failure = renderFailure;
+        if (batchBegun) {
+            try {
+                batch.end();
+            } catch (RuntimeException | Error batchFailure) {
+                failure = aggregateFailure(failure, batchFailure);
+            }
+        }
+        try {
+            pass.end();
+        } catch (RuntimeException | Error passFailure) {
+            failure = aggregateFailure(failure, passFailure);
+        }
+        if (renderFailure == null) {
+            rethrowFailure(failure);
+        }
+    }
+
+    private static Throwable aggregateFailure(Throwable failure, Throwable next) {
+        if (failure == null) {
+            return next;
+        }
+        if (failure != next) {
+            failure.addSuppressed(next);
+        }
+        return failure;
+    }
+
+    private static void rethrowFailure(Throwable failure) {
+        if (failure instanceof RuntimeException runtimeFailure) {
+            throw runtimeFailure;
+        }
+        if (failure instanceof Error error) {
+            throw error;
+        }
     }
 }

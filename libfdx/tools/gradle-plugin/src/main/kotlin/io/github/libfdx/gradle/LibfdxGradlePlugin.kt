@@ -480,7 +480,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
             scenesDirectory.set(extension.scenesDirectory)
             projectClasses.from(extension.projectClasses)
             allowedDependencies.from(extension.allowedDependencies)
-            toolingAbi.set(extension.toolingAbi)
+            projectAbi.set(extension.projectAbi)
             libfdxAbi.set(extension.libfdxAbi)
             gradleRoot.set(extension.gradleRoot)
             gradleProject.set(extension.gradleProject)

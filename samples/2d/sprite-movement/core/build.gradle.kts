@@ -22,7 +22,6 @@ dependencies {
     if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
         api("${libs.versions.libfdxGroup.get()}:application:$libfdxDependencyVersion")
         api("${libs.versions.libfdxGroup.get()}:ecs:$libfdxDependencyVersion")
-        api("${libs.versions.libfdxGroup.get()}:ecs_tooling:$libfdxDependencyVersion")
         implementation("${libs.versions.libfdxGroup.get()}:asset_loaders:$libfdxDependencyVersion")
         implementation("${libs.versions.libfdxGroup.get()}:camera:$libfdxDependencyVersion")
         implementation("${libs.versions.libfdxGroup.get()}:collections:$libfdxDependencyVersion")
@@ -35,7 +34,6 @@ dependencies {
     } else {
         api(project(":libfdx:framework:application"))
         api(project(":libfdx:extensions:ecs:core"))
-        api(project(":libfdx:extensions:ecs:tooling"))
         implementation(project(":libfdx:framework:assets:loaders"))
         implementation(project(":libfdx:framework:camera"))
         implementation(project(":libfdx:framework:collections"))

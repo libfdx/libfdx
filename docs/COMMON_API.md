@@ -56,8 +56,10 @@ Ownership is visible at creation time or documented by the returning method.
   imply transfer by itself.
 
 The backend owns runtime roots exposed through `Fdx`. Application code owns
-objects it creates, including asset managers, batches, UI roots, scenes, ECS
-worlds, and game systems. These do not become global runtime services.
+objects it creates, including asset managers, batches, UI roots, scenes, and
+game systems. An ECS host owns every `World` it creates and the project
+instance attached to that world. These objects do not become global runtime
+services.
 
 ## Nullability And Lookup
 
@@ -77,6 +79,12 @@ undocumented sentinel objects or silently manufacture fallback values.
 The backend creates platform/provider services, constructs `Fdx`, waits for
 required asynchronous setup, calls `ApplicationListener.create(Fdx)` once, and
 then forwards application lifecycle events.
+
+The core `EcsApplication` adapter is the ordinary standalone consumer of an
+`EcsProject`. It creates a world, invokes the project's single
+`initialize(Fdx, World)` method, and then drives the world's update, game
+render, and UI render phases before teardown. External hosts follow the same
+ownership boundary for independently created Edit, Play, or reloaded worlds.
 
 `render()` is the normal per-frame callback. Timing and frame identity come
 from `fdx.app()`. `onFrameEnd()` is reserved for work that must happen after
@@ -149,8 +157,38 @@ rather than discovering a backend, provider, global scene, or global world.
 - Cameras are user-owned values passed to renderers rather than global runtime
   services.
 - UI retains composition/input/layout state inside an application-owned root.
-- ECS owns its world, components, systems, commands, and events without
-  depending on `Fdx` or a renderer.
+- An ECS `World` owns its components, systems, commands, events, and managers
+  and remains usable without a running `Fdx` instance or renderer.
+  `EcsProject` is the optional host entry contract and receives `Fdx` plus a
+  host-created world exactly once for initialization.
+- Every ECS world owns one intrinsic, non-removable `SceneManager`, available
+  through `World.scenes()` even when scene persistence is unused. It owns stable
+  entity IDs, names, hierarchy, scene documents and serialization, plus the
+  descriptor and preset catalog used to describe persistent project data.
+- ECS `System` defines lifecycle and enablement only. `UpdateSystem`,
+  `RenderSystem`, and `UiRenderSystem` opt into the corresponding world phase;
+  a system implementing more than one phase participates in each one in
+  registration order.
+- Core `CameraManager` retains user-owned portable `Camera` values; it does not
+  create, render, or dispose them. `World.render(...)` and
+  `World.renderUi(...)` use a non-null host camera override when supplied and
+  otherwise resolve the manager's game or UI camera respectively.
+- Render hosts pass the borrowed graphics frame, color/depth targets,
+  dimensions, and optional camera override directly to the world. The world
+  dispatches enabled phase systems without retaining those frame-owned values;
+  there is no render manager, render context, or editor-purpose contract.
+- Scene persistence is reflection-free and belongs to ECS core. Entity-only
+  scenes and core component data work with the manager's default catalog.
+  Projects configure `world.scenes()` only to add their component descriptors
+  and presets. Every custom component must be declared persistent or explicitly
+  transient; saving fails instead of silently omitting an undeclared type.
+- Scene serialization produces and consumes data; choosing files, reading,
+  writing, autosaving, and editor-specific policy remain host responsibilities.
+  A standalone application and an editor use the same world-owned manager.
+- Hosts tear down a project by clearing and flushing its world. Systems and
+  removable managers release the resources they own from their detach callbacks;
+  the world resets its intrinsic scene state to its core defaults. A borrowed
+  camera or frame target is never disposed by the world or manager retaining it.
 - Scenario validation drives public input, time, event, probe, and capture
   boundaries without replacing normal runtime behavior.
 

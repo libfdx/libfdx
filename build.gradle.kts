@@ -62,7 +62,6 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:framework:g3d",
     ":libfdx:framework:ui-kit",
     ":libfdx:extensions:ecs:core",
-    ":libfdx:extensions:ecs:tooling",
     ":libfdx:extensions:scenario_validator:core",
     ":libfdx:extensions:scenario_validator:ui-kit",
     ":libfdx:extensions:physics:box2d:core",

@@ -2,7 +2,7 @@ package io.github.libfdx.samples.g2d.spritemovement.component;
 
 import io.github.libfdx.ecs.component.Component;
 import io.github.libfdx.samples.g2d.spritemovement.SpriteMovementProject;
-import io.github.libfdx.samples.g2d.spritemovement.scene.SpriteMovementSceneSchema;
+import io.github.libfdx.samples.g2d.spritemovement.scene.SpriteMovementScenes;
 
 /** Editable 2D sprite data. Asset paths are relative to the project's assets directory. */
 public final class Sprite2DComponent implements Component {
@@ -18,7 +18,7 @@ public final class Sprite2DComponent implements Component {
     }
 
     public Sprite2DComponent(String assetPath, float width, float height) {
-        this.assetPath = SpriteMovementSceneSchema.normalizeAsset(assetPath);
+        this.assetPath = SpriteMovementScenes.normalizeAsset(assetPath);
         this.width = positive(width);
         this.height = positive(height);
     }

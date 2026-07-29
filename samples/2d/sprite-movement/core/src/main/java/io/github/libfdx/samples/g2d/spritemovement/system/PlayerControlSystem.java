@@ -4,13 +4,13 @@ import io.github.libfdx.ecs.World;
 import io.github.libfdx.ecs.component.ComponentMapper;
 import io.github.libfdx.ecs.component.TransformComponent;
 import io.github.libfdx.ecs.entity.EntityList;
-import io.github.libfdx.ecs.system.System;
+import io.github.libfdx.ecs.system.UpdateSystem;
 import io.github.libfdx.ecs.transform.Transform;
 import io.github.libfdx.samples.g2d.spritemovement.component.PlayerControlComponent;
 import io.github.libfdx.samples.g2d.spritemovement.input.MovementInput;
 
 /** Ordinary libFDX ECS system; it has no engine/editor dependency. */
-public final class PlayerControlSystem implements System {
+public final class PlayerControlSystem implements UpdateSystem {
     private static final float DIAGONAL = 0.70710677f;
 
     private final MovementInput input;

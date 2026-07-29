@@ -28,9 +28,9 @@ import org.gradle.api.tasks.TaskAction
 
 internal const val ECS_PROJECT_BUNDLE_TASK = "libfdx_ecs_project_bundle"
 internal const val ECS_PROJECT_FORMAT = "libfdx.ecs.project"
-internal const val ECS_PROJECT_FORMAT_VERSION = 1
+internal const val ECS_PROJECT_FORMAT_VERSION = 2
 internal const val ECS_BUNDLE_FORMAT = "libfdx.ecs.project-bundle"
-internal const val ECS_BUNDLE_FORMAT_VERSION = 1
+internal const val ECS_BUNDLE_FORMAT_VERSION = 2
 
 abstract class LibfdxEcsProjectBundleTask : DefaultTask() {
     @get:Input
@@ -59,7 +59,7 @@ abstract class LibfdxEcsProjectBundleTask : DefaultTask() {
     abstract val allowedDependencies: ConfigurableFileCollection
 
     @get:Input
-    abstract val toolingAbi: Property<Int>
+    abstract val projectAbi: Property<Int>
 
     @get:Input
     abstract val libfdxAbi: Property<String>
@@ -87,7 +87,7 @@ abstract class LibfdxEcsProjectBundleTask : DefaultTask() {
                 scenesDirectory.get().asFile,
                 projectClasses.files,
                 allowedDependencies.files,
-                toolingAbi.get(),
+                projectAbi.get(),
                 libfdxAbi.get(),
                 gradleRoot.get(),
                 gradleProject.get(),
@@ -106,7 +106,7 @@ internal data class EcsProjectBundleSpec(
     val scenesDirectory: File,
     val projectClasses: Set<File>,
     val allowedDependencies: Set<File>,
-    val toolingAbi: Int,
+    val projectAbi: Int,
     val libfdxAbi: String,
     val gradleRoot: String,
     val gradleProject: String,
@@ -156,8 +156,8 @@ private fun validateSpec(spec: EcsProjectBundleSpec) {
     requireValue(spec.libfdxAbi, "libfdxAbi")
     requireValue(spec.gradleRoot, "gradleRoot")
     requireValue(spec.gradleProject, "gradleProject")
-    if (spec.toolingAbi < 1) {
-        throw GradleException("toolingAbi must be at least 1.")
+    if (spec.projectAbi < 1) {
+        throw GradleException("projectAbi must be at least 1.")
     }
     if (!spec.projectManifest.isFile) {
         throw GradleException("Missing checked-in project manifest: ${spec.projectManifest}")
@@ -177,6 +177,7 @@ private fun parseAndValidateManifest(spec: EcsProjectBundleSpec, bytes: ByteArra
     manifest.requireEquals("format", ECS_PROJECT_FORMAT)
     manifest.requireNumber("formatVersion", ECS_PROJECT_FORMAT_VERSION)
     manifest.requireEquals("id", spec.projectId)
+    manifest.requireNonBlankString("name")
     manifest.requireEquals("entryClass", spec.entryClass)
     manifest.requireEquals("gradleRoot", spec.gradleRoot.replace('\\', '/'))
     manifest.requireEquals("gradleProject", spec.gradleProject)
@@ -293,7 +294,7 @@ private fun bundleMetadata(spec: EcsProjectBundleSpec, libraries: List<String>):
         append("  \"formatVersion\": ").append(ECS_BUNDLE_FORMAT_VERSION).append(",\n")
         append("  \"projectId\": \"").append(jsonEscape(spec.projectId)).append("\",\n")
         append("  \"entryClass\": \"").append(jsonEscape(spec.entryClass)).append("\",\n")
-        append("  \"toolingAbi\": ").append(spec.toolingAbi).append(",\n")
+        append("  \"projectAbi\": ").append(spec.projectAbi).append(",\n")
         append("  \"libfdxAbi\": \"").append(jsonEscape(spec.libfdxAbi)).append("\",\n")
         append("  \"classesDirectory\": \"classes\",\n")
         append("  \"libraries\": [")
@@ -342,6 +343,14 @@ private class ManifestMap(private val values: Map<*, *>) {
     fun requiredString(name: String): String {
         return values[name] as? String
             ?: throw GradleException("fdx-project.json field '$name' must be a string.")
+    }
+
+    fun requireNonBlankString(name: String): String {
+        val value = requiredString(name)
+        if (value.isBlank()) {
+            throw GradleException("fdx-project.json field '$name' must not be blank.")
+        }
+        return value
     }
 
     fun requireEquals(name: String, expected: String) {

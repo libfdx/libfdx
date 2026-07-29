@@ -151,7 +151,7 @@ open class LibfdxEcsProjectExtension @Inject constructor(
         .convention(projectRoot.dir("scenes"))
     val projectClasses: ConfigurableFileCollection = project.files()
     val allowedDependencies: ConfigurableFileCollection = project.files()
-    val toolingAbi: Property<Int> = objects.property(Int::class.javaObjectType).convention(1)
+    val projectAbi: Property<Int> = objects.property(Int::class.javaObjectType).convention(6)
     val libfdxAbi: Property<String> = objects.property(String::class.java)
         .convention(project.provider { project.version.toString() })
     val gradleRoot: Property<String> = objects.property(String::class.java).convention(projectRoot.map { root ->

@@ -3,7 +3,7 @@ package io.github.libfdx.samples.g2d.spritemovement.iosc;
 import io.github.libfdx.backend.iosc.IosCApplicationBackend;
 import io.github.libfdx.backend.iosc.IosCApplicationConfig;
 import io.github.libfdx.backend.iosc.IosCOpenGLESProvider;
-import io.github.libfdx.ecs.tooling.EcsProjectApplication;
+import io.github.libfdx.ecs.EcsApplication;
 import io.github.libfdx.samples.g2d.spritemovement.SpriteMovementProject;
 
 /**
@@ -27,7 +27,7 @@ public final class SpriteMovementIosCLauncher {
                 .graphics(new IosCOpenGLESProvider());
 
         new IosCApplicationBackend().start(
-                config, new EcsProjectApplication(new SpriteMovementProject(exitAfterFrames(args))));
+                config, new EcsApplication(new SpriteMovementProject(exitAfterFrames(args))));
     }
 
     private static long exitAfterFrames(String[] args) {

@@ -2,7 +2,7 @@ package io.github.libfdx.samples.g2d.spritemovement.web;
 
 import io.github.libfdx.backend.web.WebApplicationBackend;
 import io.github.libfdx.backend.web.WebApplicationConfig;
-import io.github.libfdx.ecs.tooling.EcsProjectApplication;
+import io.github.libfdx.ecs.EcsApplication;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.samples.g2d.spritemovement.SpriteMovementProject;
 import org.teavm.jso.JSBody;
@@ -27,7 +27,7 @@ final class SpriteMovementWebLauncherSupport {
                 .graphics(graphics);
 
         new WebApplicationBackend().start(config,
-                new EcsProjectApplication(new SpriteMovementProject()));
+                new EcsApplication(new SpriteMovementProject()));
     }
 
     private static String graphics(String[] args) {

@@ -7,6 +7,7 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.Logger;
 import io.github.libfdx.ecs.World;
 import io.github.libfdx.graphics.GraphicsContext;
+import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.g2d.SpriteBatch;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 import io.github.libfdx.samples.ecs.platformer.input.BackendPlatformerInput;
@@ -70,6 +71,14 @@ public final class EcsPlatformerApplication extends ApplicationAdapter {
             return;
         }
         world.update(application.deltaTime());
+        GraphicsFrame frame = graphics.currentFrame();
+        world.render(
+                frame,
+                frame.colorAttachment(),
+                null,
+                frame.width(),
+                frame.height(),
+                null);
         if (capturePath != null && capturePath.length() > 0 && !captured && renderedFrames >= captureFrame) {
             captureFrame(capturePath);
             captured = true;

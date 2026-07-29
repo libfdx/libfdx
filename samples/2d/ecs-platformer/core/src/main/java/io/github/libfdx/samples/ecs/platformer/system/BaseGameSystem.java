@@ -2,9 +2,9 @@ package io.github.libfdx.samples.ecs.platformer.system;
 
 import io.github.libfdx.ecs.World;
 import io.github.libfdx.samples.ecs.platformer.PlatformerConstants;
-import io.github.libfdx.ecs.system.System;
+import io.github.libfdx.ecs.system.UpdateSystem;
 
-abstract class BaseGameSystem implements System {
+abstract class BaseGameSystem implements UpdateSystem {
     protected World world;
     private boolean enabled = true;
 
