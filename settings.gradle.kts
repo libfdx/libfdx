@@ -153,7 +153,6 @@ if (libfdxRepositoryConsumersIncluded) {
     include(":tests:platform:android")
     include(":tests:platform:web")
     include(":tests:platform:psp")
-    include(":tests:platform:plugin")
     include(":benchmark:core")
     include(":benchmark:platform:desktop")
     include(":benchmark:platform:desktop_c")

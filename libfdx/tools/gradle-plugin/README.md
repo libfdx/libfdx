@@ -42,11 +42,13 @@ copied catalog:
 
 Target blocks configure generation and launch behavior; they do not add
 backend or provider artifacts. Desktop JVM packaging uses the configured
-runtime classpath. Desktop C generation copies the configured asset roots into
-the release `assets` directory, and its run tasks use that release as their
-working directory. When one project declares several TeaVM C families, request
-tasks from only one native family in a Gradle invocation so the requested target
-determines TeaVM configuration.
+runtime classpath. A desktop JVM target can override `mainClass`; the family can
+also set `minHeapSize` and `maxHeapSize` for every generated run task. Desktop C
+generation copies the configured asset roots into the release `assets`
+directory, and its run tasks use that release as their working directory. When
+one project declares several TeaVM C families, request tasks from only one
+native family in a Gradle invocation so the requested target determines TeaVM
+configuration.
 
 iOS targets generate an Xcode handoff project. `gles` selects an
 OpenGLES/GLKit project and `metal` selects Metal/MetalKit; building or running
@@ -78,7 +80,9 @@ libfdx {
 configured ADB executable to launch the activity. Set `variantName` when the
 application uses another installable variant. String and boolean system
 properties can be forwarded as Android intent extras with
-`forwardStringSystemProperty` and `forwardBooleanSystemProperty`.
+`forwardStringSystemProperty` and `forwardBooleanSystemProperty`. Use
+`forwardStringSystemPropertyPrefix` when a test or application owns a namespace
+of string extras.
 
 ## ECS Project Bundles
 

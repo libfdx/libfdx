@@ -1,6 +1,7 @@
 
 plugins {
     alias(libs.plugins.android.application)
+    id("io.github.libfdx")
 }
 
 val androidCompileSdkVersion = providers.gradleProperty("androidCompileSdk").get().toInt()
@@ -32,8 +33,6 @@ android {
     }
 }
 
-val adbExecutable = androidComponents.sdkComponents.adb
-
 dependencies {
     implementation(project(":tests:core"))
     if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
@@ -51,62 +50,27 @@ base {
     archivesName.set("tests_android")
 }
 
-tasks.register<Exec>("test_android_gles_run") {
-    group = "application"
-    description = "Installs and launches the Android GLES graphics test app."
-    dependsOn("installDebug")
-    doFirst {
-        commandLine(mutableListOf(adbExecutable.get().asFile.absolutePath, "shell", "am", "start", "-n",
-                "io.github.libfdx.tests.android/io.github.libfdx.tests.android.AndroidGlesTestActivity").apply {
-            System.getProperties().stringPropertyNames()
-                    .filter { it.startsWith("libfdx.test.") || it.startsWith("libfdx.validation.") }
-                    .sorted()
-                    .forEach { key ->
-                        val value = System.getProperty(key)
-                        if (!value.isNullOrBlank()) {
-                            addAll(listOf("--es", key, value))
-                        }
-                    }
-        })
-    }
-}
+libfdx {
+    android {
+        applicationId.set("io.github.libfdx.tests.android")
+        adbExecutable.set(androidComponents.sdkComponents.adb)
+        forwardStringSystemPropertyPrefix("libfdx.test.")
+        forwardStringSystemPropertyPrefix("libfdx.validation.")
 
-tasks.register<Exec>("test_android_wgpu_jni_run") {
-    group = "application"
-    description = "Installs and launches the Android WGPU JNI graphics test app."
-    dependsOn("installDebug")
-    doFirst {
-        commandLine(mutableListOf(adbExecutable.get().asFile.absolutePath, "shell", "am", "start", "-n",
-                "io.github.libfdx.tests.android/io.github.libfdx.tests.android.AndroidWgpuTestActivity").apply {
-            System.getProperties().stringPropertyNames()
-                    .filter { it.startsWith("libfdx.test.") || it.startsWith("libfdx.validation.") }
-                    .sorted()
-                    .forEach { key ->
-                        val value = System.getProperty(key)
-                        if (!value.isNullOrBlank()) {
-                            addAll(listOf("--es", key, value))
-                        }
-                    }
-        })
-    }
-}
-
-tasks.register<Exec>("test_android_vulkan_run") {
-    group = "application"
-    description = "Installs and launches the Android Vulkan graphics test app."
-    dependsOn("installDebug")
-    doFirst {
-        commandLine(mutableListOf(adbExecutable.get().asFile.absolutePath, "shell", "am", "start", "-n",
-                "io.github.libfdx.tests.android/io.github.libfdx.tests.android.AndroidVulkanTestActivity").apply {
-            System.getProperties().stringPropertyNames()
-                    .filter { it.startsWith("libfdx.test.") || it.startsWith("libfdx.validation.") }
-                    .sorted()
-                    .forEach { key ->
-                        val value = System.getProperty(key)
-                        if (!value.isNullOrBlank()) {
-                            addAll(listOf("--es", key, value))
-                        }
-                    }
-        })
+        target("gles") {
+            displayName.set("Android GLES graphics tests")
+            activity.set("io.github.libfdx.tests.android.AndroidGlesTestActivity")
+            runDescription.set("Installs and launches the Android GLES graphics test app.")
+        }
+        target("wgpu_jni") {
+            displayName.set("Android WGPU JNI graphics tests")
+            activity.set("io.github.libfdx.tests.android.AndroidWgpuTestActivity")
+            runDescription.set("Installs and launches the Android WGPU JNI graphics test app.")
+        }
+        target("vulkan") {
+            displayName.set("Android Vulkan graphics tests")
+            activity.set("io.github.libfdx.tests.android.AndroidVulkanTestActivity")
+            runDescription.set("Installs and launches the Android Vulkan graphics test app.")
+        }
     }
 }

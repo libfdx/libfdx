@@ -184,6 +184,8 @@ open class LibfdxAndroidExtension @Inject constructor(
     val variantName: Property<String> = objects.property(String::class.java).convention("debug")
     val forwardedStringSystemProperties: SetProperty<String> = objects.setProperty(String::class.java)
         .convention(emptySet())
+    val forwardedStringSystemPropertyPrefixes: SetProperty<String> = objects.setProperty(String::class.java)
+        .convention(emptySet())
     val forwardedBooleanSystemProperties: SetProperty<String> = objects.setProperty(String::class.java)
         .convention(emptySet())
     val targets: NamedDomainObjectContainer<LibfdxAndroidTargetExtension> =
@@ -197,6 +199,10 @@ open class LibfdxAndroidExtension @Inject constructor(
 
     fun forwardStringSystemProperty(name: String) {
         forwardedStringSystemProperties.add(name)
+    }
+
+    fun forwardStringSystemPropertyPrefix(prefix: String) {
+        forwardedStringSystemPropertyPrefixes.add(prefix)
     }
 
     fun forwardBooleanSystemProperty(name: String) {
@@ -228,6 +234,8 @@ open class LibfdxDesktopJvmExtension @Inject constructor(
         .convention(project.rootProject.layout.projectDirectory)
     val javaLanguageVersion: Property<Int> = objects.property(Int::class.javaObjectType).convention(25)
     val enableNativeAccess: Property<Boolean> = objects.property(Boolean::class.java).convention(true)
+    val minHeapSize: Property<String> = objects.property(String::class.java)
+    val maxHeapSize: Property<String> = objects.property(String::class.java)
     val runtimeClasspath: ConfigurableFileCollection = project.files()
     val launchPropertiesResourceName: Property<String> = objects.property(String::class.java)
         .convention("libfdx-desktop-launch.properties")
@@ -287,6 +295,7 @@ open class LibfdxDesktopJvmTargetExtension @Inject constructor(
     objects: ObjectFactory
 ) : Named {
     val displayName: Property<String> = objects.property(String::class.java).convention(targetName)
+    val mainClass: Property<String> = objects.property(String::class.java)
     val runtimeClasspath: ConfigurableFileCollection = project.files()
     val buildDescription: Property<String> = objects.property(String::class.java)
     val runDescription: Property<String> = objects.property(String::class.java)

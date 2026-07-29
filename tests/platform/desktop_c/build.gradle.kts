@@ -1,13 +1,11 @@
-
 plugins {
-    id("java")
+    id("io.github.libfdx")
 }
 
 java {
     sourceCompatibility = JavaVersion.toVersion(25)
     targetCompatibility = JavaVersion.toVersion(25)
 }
-
 
 base {
     archivesName.set("tests_desktop_c")
@@ -26,74 +24,23 @@ dependencies {
     }
 }
 
-tasks.register("test_desktop_c_opengl_generate_debug") {
-    group = "application"
-    description = "Generates the desktop_c OpenGL graphics test Debug project."
-    dependsOn(":tests:platform:plugin:libfdx_desktop_c_opengl_generate_debug")
-}
+libfdx {
+    assets(rootProject.layout.projectDirectory.dir("tests/assets"))
 
-tasks.register("test_desktop_c_opengl_generate_release") {
-    group = "application"
-    description = "Generates the desktop_c OpenGL graphics test Release project."
-    dependsOn(":tests:platform:plugin:libfdx_desktop_c_opengl_generate_release")
-}
+    desktopC {
+        minHeapSize.set(64)
+        maxHeapSize.set(1024)
+        obfuscated.set(false)
 
-tasks.register("test_desktop_c_opengl_build_debug") {
-    group = "application"
-    description = "Builds the desktop_c OpenGL graphics test Debug executable."
-    dependsOn(":tests:platform:plugin:libfdx_desktop_c_opengl_build_debug")
-}
-
-tasks.register("test_desktop_c_opengl_build_release") {
-    group = "application"
-    description = "Builds the desktop_c OpenGL graphics test Release executable."
-    dependsOn(":tests:platform:plugin:libfdx_desktop_c_opengl_build_release")
-}
-
-tasks.register("test_desktop_c_opengl_run_debug") {
-    group = "application"
-    description = "Runs the desktop_c OpenGL graphics test Debug executable."
-    dependsOn(":tests:platform:plugin:libfdx_desktop_c_opengl_run_debug")
-}
-
-tasks.register("test_desktop_c_opengl_run_release") {
-    group = "application"
-    description = "Runs the desktop_c OpenGL graphics test Release executable."
-    dependsOn(":tests:platform:plugin:libfdx_desktop_c_opengl_run_release")
-}
-
-tasks.register("test_desktop_c_vulkan_generate_debug") {
-    group = "application"
-    description = "Generates the desktop_c Vulkan graphics test Debug project."
-    dependsOn(":tests:platform:plugin:libfdx_desktop_c_vulkan_generate_debug")
-}
-
-tasks.register("test_desktop_c_vulkan_generate_release") {
-    group = "application"
-    description = "Generates the desktop_c Vulkan graphics test Release project."
-    dependsOn(":tests:platform:plugin:libfdx_desktop_c_vulkan_generate_release")
-}
-
-tasks.register("test_desktop_c_vulkan_build_debug") {
-    group = "application"
-    description = "Builds the desktop_c Vulkan graphics test Debug executable."
-    dependsOn(":tests:platform:plugin:libfdx_desktop_c_vulkan_build_debug")
-}
-
-tasks.register("test_desktop_c_vulkan_build_release") {
-    group = "application"
-    description = "Builds the desktop_c Vulkan graphics test Release executable."
-    dependsOn(":tests:platform:plugin:libfdx_desktop_c_vulkan_build_release")
-}
-
-tasks.register("test_desktop_c_vulkan_run_debug") {
-    group = "application"
-    description = "Runs the desktop_c Vulkan graphics test Debug executable."
-    dependsOn(":tests:platform:plugin:libfdx_desktop_c_vulkan_run_debug")
-}
-
-tasks.register("test_desktop_c_vulkan_run_release") {
-    group = "application"
-    description = "Runs the desktop_c Vulkan graphics test Release executable."
-    dependsOn(":tests:platform:plugin:libfdx_desktop_c_vulkan_run_release")
+        target("opengl") {
+            displayName.set("desktop C OpenGL graphics tests")
+            mainClass.set("io.github.libfdx.tests.desktopc.DesktopCOpenGLTestLauncher")
+            targetFileName.set("libfdx-tests-opengl-desktop-c")
+        }
+        target("vulkan") {
+            displayName.set("desktop C Vulkan graphics tests")
+            mainClass.set("io.github.libfdx.tests.desktopc.DesktopCVulkanTestLauncher")
+            targetFileName.set("libfdx-tests-vulkan-desktop-c")
+        }
+    }
 }

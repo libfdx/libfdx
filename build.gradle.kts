@@ -267,24 +267,21 @@ if (libfdxRepositoryConsumersIncluded) {
     )
     pagesWebapp(
         projectPath = ":tests:platform:web",
-        buildTaskName = "test_webgl_js_build",
+        buildTaskName = "libfdx_web_js_webgl_build",
         webappPath = "dist/web-js/webapp",
-        pagesPath = "tests/webgl-js",
-        outputProjectPath = ":tests:platform:plugin"
+        pagesPath = "tests/webgl-js"
     )
     pagesWebapp(
         projectPath = ":tests:platform:web",
-        buildTaskName = "test_webgl_wasm_build",
+        buildTaskName = "libfdx_web_wasm_webgl_build",
         webappPath = "dist/web-wasm/webapp",
-        pagesPath = "tests/webgl-wasm",
-        outputProjectPath = ":tests:platform:plugin"
+        pagesPath = "tests/webgl-wasm"
     )
     pagesWebapp(
         projectPath = ":tests:platform:web",
-        buildTaskName = "test_webgpu_js_build",
+        buildTaskName = "libfdx_web_js_webgpu_build",
         webappPath = "dist/web-js/webapp",
-        pagesPath = "tests/webgpu-js",
-        outputProjectPath = ":tests:platform:plugin"
+        pagesPath = "tests/webgpu-js"
     )
     pagesWebapp(
         projectPath = ":samples:2d:sprite-movement:platform:web",

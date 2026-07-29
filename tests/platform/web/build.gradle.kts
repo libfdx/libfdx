@@ -1,13 +1,11 @@
-
 plugins {
-    id("java")
+    id("io.github.libfdx")
 }
 
 java {
     sourceCompatibility = JavaVersion.toVersion(25)
     targetCompatibility = JavaVersion.toVersion(25)
 }
-
 
 base {
     archivesName.set("tests_web")
@@ -29,38 +27,36 @@ dependencies {
     }
 }
 
-tasks.register("test_webgl_js_build") {
-    group = "application"
-    description = "Builds the WebGL JavaScript test web application."
-    dependsOn(":tests:platform:plugin:libfdx_web_js_webgl_build")
-}
+libfdx {
+    assets(rootProject.layout.projectDirectory.dir("tests/assets"))
 
-tasks.register("test_webgl_js_run") {
-    group = "application"
-    description = "Builds and serves the WebGL JavaScript test web application."
-    dependsOn(":tests:platform:plugin:libfdx_web_js_webgl_run")
-}
+    js {
+        mainClass.set("io.github.libfdx.tests.web.WebTestJsLauncher")
+        htmlTitle.set("libfdx Tests - WebGL JS")
+        canvasId.set("libfdx-canvas")
+        htmlWidth.set(0)
+        htmlHeight.set(0)
 
-tasks.register("test_webgpu_js_build") {
-    group = "application"
-    description = "Builds the WebGPU JavaScript test web application."
-    dependsOn(":tests:platform:plugin:libfdx_web_js_webgpu_build")
-}
+        target("webgl") {
+            buildDescription.set("Builds the WebGL JavaScript test web application.")
+            runDescription.set("Builds and serves the WebGL JavaScript test web application.")
+        }
+        target("webgpu") {
+            defaultPath.set("/?graphics=webgpu")
+            buildDescription.set("Builds the WebGPU JavaScript test web application.")
+            runDescription.set("Builds and serves the WebGPU JavaScript test web application.")
+        }
+    }
+    wasm {
+        mainClass.set("io.github.libfdx.tests.web.WebTestWasmLauncher")
+        htmlTitle.set("libfdx Tests - WebGL Wasm")
+        canvasId.set("libfdx-canvas")
+        htmlWidth.set(0)
+        htmlHeight.set(0)
 
-tasks.register("test_webgpu_js_run") {
-    group = "application"
-    description = "Builds and serves the WebGPU JavaScript test web application."
-    dependsOn(":tests:platform:plugin:libfdx_web_js_webgpu_run")
-}
-
-tasks.register("test_webgl_wasm_build") {
-    group = "application"
-    description = "Builds the WebGL Wasm test web application."
-    dependsOn(":tests:platform:plugin:libfdx_web_wasm_webgl_build")
-}
-
-tasks.register("test_webgl_wasm_run") {
-    group = "application"
-    description = "Builds and serves the WebGL Wasm test web application."
-    dependsOn(":tests:platform:plugin:libfdx_web_wasm_webgl_run")
+        target("webgl") {
+            buildDescription.set("Builds the WebGL Wasm test web application.")
+            runDescription.set("Builds and serves the WebGL Wasm test web application.")
+        }
+    }
 }

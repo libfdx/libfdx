@@ -688,6 +688,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
                 target?.runtimeClasspath ?: project.files(),
                 applicationRuntimeClasspath
             )
+            val targetMainClass = target?.mainClass?.orElse(desktopJvm.mainClass) ?: desktopJvm.mainClass
             val launchProperties = desktopJvm.launchProperties.get() + (target?.launchProperties?.get() ?: emptyMap())
             val displayName = target?.displayName?.get() ?: "libfdx desktop JVM"
             val launchDefaults = project.layout.buildDirectory.file(
@@ -725,7 +726,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
                 isZip64 = true
                 manifest {
                     val manifestAttributes = linkedMapOf<String, String>(
-                        "Main-Class" to desktopJvm.mainClass.get(),
+                        "Main-Class" to targetMainClass.get(),
                         "Multi-Release" to "true"
                     )
                     if(desktopJvm.enableNativeAccess.get()) {
@@ -752,11 +753,17 @@ class LibfdxGradlePlugin : Plugin<Project> {
                 )?.get() ?: "Runs the $displayName desktop JVM application."
                 dependsOn(buildTask)
                 classpath = releaseClasspath
-                mainClass.set(desktopJvm.mainClass)
+                mainClass.set(targetMainClass)
                 workingDir = desktopJvm.workingDir.get().asFile
                 javaLauncher.set(toolchains.launcherFor {
                     languageVersion.set(JavaLanguageVersion.of(desktopJvm.javaLanguageVersion.get()))
                 })
+                if(desktopJvm.minHeapSize.isPresent) {
+                    minHeapSize = desktopJvm.minHeapSize.get()
+                }
+                if(desktopJvm.maxHeapSize.isPresent) {
+                    maxHeapSize = desktopJvm.maxHeapSize.get()
+                }
                 jvmArgs(desktopJvm.jvmArgs.get())
                 if(desktopJvm.enableNativeAccess.get()
                     && desktopJvm.jvmArgs.get().none { it.startsWith("--enable-native-access") }) {
@@ -785,6 +792,20 @@ class LibfdxGradlePlugin : Plugin<Project> {
             configuredSystemProperty(project, name)?.takeIf { value -> value.isNotBlank() }?.let { value ->
                 stringExtras[name] = value
             }
+        }
+        val stringPrefixes = android.forwardedStringSystemPropertyPrefixes.get()
+        if(stringPrefixes.isNotEmpty()) {
+            val names = linkedSetOf<String>()
+            names.addAll(project.gradle.startParameter.systemPropertiesArgs.keys)
+            names.addAll(System.getProperties().stringPropertyNames())
+            names.asSequence()
+                .filter { name -> stringPrefixes.any { prefix -> name.startsWith(prefix) } }
+                .sorted()
+                .forEach { name ->
+                    configuredSystemProperty(project, name)?.takeIf { value -> value.isNotBlank() }?.let { value ->
+                        stringExtras[name] = value
+                    }
+                }
         }
         val booleanExtras = linkedMapOf<String, String>()
         android.forwardedBooleanSystemProperties.get().forEach { name ->

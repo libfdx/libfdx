@@ -54,7 +54,7 @@ Useful starting points are:
 
 ```powershell
 ./gradlew check
-./gradlew :tests:platform:desktop:test_desktop_gl_run
+./gradlew :tests:platform:desktop:libfdx_desktop_jvm_gl_run
 ./gradlew libfdx_build_native_artifacts
 ./gradlew tasks --all
 ```

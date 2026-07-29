@@ -1,13 +1,13 @@
+import org.teavm.gradle.api.OptimizationLevel
 
 plugins {
-    id("java")
+    id("io.github.libfdx")
 }
 
 java {
     sourceCompatibility = JavaVersion.toVersion(25)
     targetCompatibility = JavaVersion.toVersion(25)
 }
-
 
 base {
     archivesName.set("tests_psp")
@@ -26,20 +26,28 @@ dependencies {
     }
 }
 
-tasks.register("test_psp_generate") {
-    group = "application"
-    description = "Generates the libfdx PSP shared test selector TeaVM C project."
-    dependsOn(":tests:platform:plugin:libfdx_psp_test_generate")
-}
+libfdx {
+    assets(rootProject.layout.projectDirectory.dir("tests/assets"))
 
-tasks.register("test_psp_build") {
-    group = "application"
-    description = "Generates and builds the libfdx PSP shared test selector EBOOT project."
-    dependsOn(":tests:platform:plugin:libfdx_psp_test_build")
-}
+    bitmapFont("psp_test_bitmap") {
+        sourceFile.set(rootProject.layout.projectDirectory.file("tests/assets/font/freetype/lsans.ttf"))
+        outputDir.set(rootProject.layout.projectDirectory.dir("tests/assets"))
+        assetPath.set("font/bitmap")
+        size.set(24)
+        padding.set(2)
+        maxTextureSize.set(512)
+    }
 
-tasks.register("test_psp_ppsspp_capture") {
-    group = "application"
-    description = "Builds the libfdx PSP shared test selector and captures a PPSSPP emulator frame."
-    dependsOn(":tests:platform:plugin:libfdx_psp_test_ppsspp_capture")
+    psp {
+        optimization.set(OptimizationLevel.BALANCED)
+        debugInformation.set(true)
+        debugMemory.set(false)
+        maxHeapSize.set(32)
+
+        target("test") {
+            displayName.set("libfdx PSP shared test selector")
+            mainClass.set("io.github.libfdx.tests.psp.PspTestSelectorLauncher")
+            targetFileName.set("libfdx-tests-psp")
+        }
+    }
 }
