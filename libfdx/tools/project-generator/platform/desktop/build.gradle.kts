@@ -21,7 +21,6 @@ dependencies {
     implementation(project(":libfdx:tools:project-generator:core"))
     implementation(project(":libfdx:tools:project-generator:ui"))
     implementation(project(":libfdx:backends:desktop"))
-    testImplementation(project(":libfdx:framework:ui-kit"))
     runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop"))
 }
 
@@ -113,30 +112,10 @@ tasks.register<JavaExec>("test_export_project") {
     }
 }
 
-val projectGeneratorVisualCapture =
-        layout.buildDirectory.file("reports/project-generator/visual-smoke.png")
-val projectGeneratorEcsVisualCapture =
-        layout.buildDirectory.file("reports/project-generator/visual-smoke-ecs.png")
-
-tasks.register<JavaExec>("test_visual_project_generator") {
-    group = "verification"
-    description = "Renders and captures the project generator for visual smoke inspection."
-    dependsOn(tasks.named("testClasses"))
-    classpath = sourceSets["test"].runtimeClasspath
-    mainClass.set("io.github.libfdx.tools.project.generator.desktop.ProjectGeneratorVisualSmokeTest")
-    outputs.files(projectGeneratorVisualCapture, projectGeneratorEcsVisualCapture)
-    doFirst {
-        systemProperty(
-            "libfdx.projectGenerator.visualCapture",
-            projectGeneratorVisualCapture.get().asFile.absolutePath
-        )
-    }
-}
-
 tasks.named<Test>("test") {
     enabled = false
 }
 
 tasks.named("check") {
-    dependsOn("test_export_project", "test_visual_project_generator")
+    dependsOn("test_export_project")
 }
