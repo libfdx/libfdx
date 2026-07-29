@@ -162,7 +162,6 @@ public final class ProjectGenerator {
         for (int i = 0; i < platforms.length; i++) {
             appendModule(text, files, "platform/" + platforms[i].directory());
         }
-        appendModule(text, files, "platform/plugin");
         return text.toString();
     }
 
@@ -224,9 +223,9 @@ public final class ProjectGenerator {
                 .append("the root Gradle envelope pins them to libFDX `").append(libfdxVersion()).append("` (")
                 .append(channel()).append(").\n\n");
         text.append("The generated root project is `").append(settings.projectName()).append("`. ")
-                .append("To inspect available application tasks, run:\n\n");
+                .append("To inspect available libFDX platform tasks, run:\n\n");
         text.append("```powershell\n");
-        text.append("./gradlew tasks --group application\n");
+        text.append("./gradlew tasks --group libfdx\n");
         text.append("```\n\n");
         text.append("Included modules:\n\n");
         if (files.containsKey("core/build.gradle.kts")) {
@@ -242,9 +241,6 @@ public final class ProjectGenerator {
                 text.append("- `:").append(module.replace('/', ':')).append("` (")
                         .append(platforms[i].displayName()).append(")\n");
             }
-        }
-        if (files.containsKey("platform/plugin/build.gradle.kts")) {
-            text.append("- `:platform:plugin` (build tasks for the selected platforms)\n");
         }
         if (STARTER_SAMPLE_ID.equals(sample.id())) {
             text.append("\nJava package: `").append(settings.packageName()).append("`\n");
@@ -275,8 +271,6 @@ public final class ProjectGenerator {
 
     private LinkedHashMap<String, GeneratedFile> selectPlatforms(
             LinkedHashMap<String, GeneratedFile> source, Set<ProjectPlatform> selected) {
-        boolean keepPlugin = source.containsKey("platform/plugin/build.gradle.kts")
-                && needsBuildPlugin(source, selected);
         LinkedHashMap<String, GeneratedFile> filtered = new LinkedHashMap<String, GeneratedFile>();
         for (Map.Entry<String, GeneratedFile> entry : source.entrySet()) {
             String path = entry.getKey();
@@ -286,29 +280,16 @@ public final class ProjectGenerator {
                         ? path.substring("platform/".length(), directoryEnd)
                         : path.substring("platform/".length());
                 if ("plugin".equals(directory)) {
-                    if (!keepPlugin) {
-                        continue;
-                    }
-                } else {
-                    ProjectPlatform platform = ProjectPlatform.fromDirectory(directory);
-                    if (platform != null && !selected.contains(platform)) {
-                        continue;
-                    }
+                    continue;
+                }
+                ProjectPlatform platform = ProjectPlatform.fromDirectory(directory);
+                if (platform != null && !selected.contains(platform)) {
+                    continue;
                 }
             }
             filtered.put(path, entry.getValue());
         }
         return filtered;
-    }
-
-    private boolean needsBuildPlugin(Map<String, GeneratedFile> files, Set<ProjectPlatform> selected) {
-        for (ProjectPlatform platform : selected) {
-            if (platform != ProjectPlatform.ANDROID
-                    && files.containsKey("platform/" + platform.directory() + "/build.gradle.kts")) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private LinkedHashMap<String, GeneratedFile> rewritePackage(

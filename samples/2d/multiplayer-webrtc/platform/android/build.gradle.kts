@@ -1,6 +1,7 @@
 
 plugins {
     alias(libs.plugins.android.application)
+    id("io.github.libfdx")
 }
 
 val sampleProjectPath = project.path.substringBefore(":platform:")
@@ -29,8 +30,6 @@ android {
     }
 }
 
-val adbExecutable = androidComponents.sdkComponents.adb
-
 dependencies {
     implementation(project("$sampleProjectPath:core"))
     if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
@@ -50,55 +49,32 @@ base {
     archivesName.set("sample_multiplayer_2d_webrtc_android")
 }
 
-fun androidStartCommand(activity: String): List<String> {
-    val command = mutableListOf(
-            adbExecutable.get().asFile.absolutePath,
-            "shell",
-            "am",
-            "start",
-            "-n",
-            "io.github.libfdx.samples.multiplayer.webrtc.android/$activity")
-    fun stringExtra(name: String) {
-        System.getProperty(name)?.takeIf { it.isNotBlank() }?.let {
-            command.add("--es")
-            command.add(name)
-            command.add(it)
-        }
-    }
-    fun booleanExtra(name: String) {
-        System.getProperty(name)?.takeIf { it.isNotBlank() }?.let {
-            command.add("--ez")
-            command.add(name)
-            command.add(it)
-        }
-    }
-    stringExtra("libfdx.sample.signalingUrl")
-    stringExtra("libfdx.sample.playerName")
-    stringExtra("libfdx.sample.hostRoomId")
-    stringExtra("libfdx.sample.autoJoinRoom")
-    stringExtra("libfdx.sample.exitAfterFrames")
-    stringExtra("libfdx.validation.scenario")
-    booleanExtra("libfdx.sample.autoHost")
-    booleanExtra("libfdx.sample.validate")
-    return command
-}
+libfdx {
+    android {
+        applicationId.set("io.github.libfdx.samples.multiplayer.webrtc.android")
+        adbExecutable.set(androidComponents.sdkComponents.adb)
+        forwardStringSystemProperty("libfdx.sample.signalingUrl")
+        forwardStringSystemProperty("libfdx.sample.playerName")
+        forwardStringSystemProperty("libfdx.sample.hostRoomId")
+        forwardStringSystemProperty("libfdx.sample.autoJoinRoom")
+        forwardStringSystemProperty("libfdx.sample.exitAfterFrames")
+        forwardStringSystemProperty("libfdx.validation.scenario")
+        forwardBooleanSystemProperty("libfdx.sample.autoHost")
+        forwardBooleanSystemProperty("libfdx.sample.validate")
 
-tasks.register<Exec>("multiplayer_2d_webrtc_android_wgpu_jni_run") {
-    group = "application"
-    description = "Installs and launches the Android WGPU JNI WebRTC multiplayer 2D sample."
-    dependsOn("installDebug")
-    doFirst {
-        commandLine(androidStartCommand(
-                "io.github.libfdx.samples.multiplayer.webrtc.android.MultiplayerWebRtcAndroidWgpuActivity"))
-    }
-}
-
-tasks.register<Exec>("multiplayer_2d_webrtc_android_vulkan_run") {
-    group = "application"
-    description = "Installs and launches the Android Vulkan WebRTC multiplayer 2D sample."
-    dependsOn("installDebug")
-    doFirst {
-        commandLine(androidStartCommand(
-                "io.github.libfdx.samples.multiplayer.webrtc.android.MultiplayerWebRtcAndroidVulkanActivity"))
+        target("wgpu_jni") {
+            displayName.set("WebRTC multiplayer 2D WGPU JNI sample")
+            activity.set(
+                "io.github.libfdx.samples.multiplayer.webrtc.android.MultiplayerWebRtcAndroidWgpuActivity"
+            )
+            runDescription.set("Installs and launches the Android WGPU JNI WebRTC multiplayer 2D sample.")
+        }
+        target("vulkan") {
+            displayName.set("WebRTC multiplayer 2D Vulkan sample")
+            activity.set(
+                "io.github.libfdx.samples.multiplayer.webrtc.android.MultiplayerWebRtcAndroidVulkanActivity"
+            )
+            runDescription.set("Installs and launches the Android Vulkan WebRTC multiplayer 2D sample.")
+        }
     }
 }

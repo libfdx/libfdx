@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    id("io.github.libfdx")
 }
 
 val sampleProjectPath = project.path.substringBefore(":platform:")
@@ -48,5 +49,35 @@ dependencies {
         implementation(project(":libfdx:backends:android"))
         implementation(project(":libfdx:extensions:graphics:wgpu:platform:android_jni"))
         implementation(project(":libfdx:extensions:graphics:vulkan:platform:android_jni"))
+    }
+}
+
+libfdx {
+    android {
+        applicationId.set("io.github.libfdx.samples.ecs.platformer.android")
+        adbExecutable.set(androidComponents.sdkComponents.adb)
+
+        target("gles") {
+            displayName.set("ECS platformer GLES sample")
+            activity.set("io.github.libfdx.samples.ecs.platformer.android.EcsPlatformerAndroidGlesActivity")
+            runDescription.set("Installs and launches the Android GLES ECS platformer sample.")
+        }
+        target("wgpu_jni") {
+            displayName.set("ECS platformer WGPU JNI sample")
+            activity.set("io.github.libfdx.samples.ecs.platformer.android.EcsPlatformerAndroidWgpuActivity")
+            runDescription.set("Installs and launches the Android WGPU JNI ECS platformer sample.")
+        }
+        target("vulkan") {
+            displayName.set("ECS platformer Vulkan sample")
+            activity.set("io.github.libfdx.samples.ecs.platformer.android.EcsPlatformerAndroidVulkanActivity")
+            runDescription.set("Installs and launches the Android Vulkan ECS platformer sample.")
+        }
+        target("vulkan_fallback") {
+            displayName.set("ECS platformer Vulkan fallback sample")
+            activity.set(
+                "io.github.libfdx.samples.ecs.platformer.android.EcsPlatformerAndroidVulkanFallbackActivity"
+            )
+            runDescription.set("Installs and launches the Android Vulkan fallback ECS platformer sample.")
+        }
     }
 }

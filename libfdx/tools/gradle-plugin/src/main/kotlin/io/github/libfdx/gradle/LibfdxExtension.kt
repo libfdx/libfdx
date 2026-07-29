@@ -19,18 +19,21 @@ import org.teavm.gradle.api.OptimizationLevel
 import org.teavm.gradle.api.SourceFilePolicy
 import org.teavm.gradle.api.TeaVMConfiguration
 import org.teavm.gradle.api.TeaVMCConfiguration
+import org.teavm.gradle.api.TeaVMExtension
 import org.teavm.gradle.api.TeaVMJSConfiguration
 import org.teavm.gradle.api.TeaVMWasmGCConfiguration
 import javax.inject.Inject
 
 open class LibfdxExtension @Inject constructor(
     private val objects: ObjectFactory,
-    private val project: Project,
-    private val jsConfig: TeaVMJSConfiguration,
-    private val wasmConfig: TeaVMWasmGCConfiguration,
-    internal val cConfig: TeaVMCConfiguration
+    private val project: Project
 ) {
     internal val declaredTargets = linkedSetOf<LibfdxTarget>()
+    private val teavm: TeaVMExtension by lazy {
+        project.extensions.getByType(TeaVMExtension::class.java)
+    }
+    internal val cConfig: TeaVMCConfiguration
+        get() = teavm.getC()
 
     val assets: ConfigurableFileCollection = project.files()
     val bitmapFonts: NamedDomainObjectContainer<LibfdxBitmapFontExtension> =
@@ -43,11 +46,11 @@ open class LibfdxExtension @Inject constructor(
         objects.newInstance(LibfdxEcsProjectExtension::class.java, project, objects)
 
     val js: LibfdxJsExtension by lazy {
-        objects.newInstance(LibfdxJsExtension::class.java, project, jsConfig)
+        objects.newInstance(LibfdxJsExtension::class.java, project, teavm.getJs())
     }
 
     val wasm: LibfdxWasmExtension by lazy {
-        objects.newInstance(LibfdxWasmExtension::class.java, project, wasmConfig)
+        objects.newInstance(LibfdxWasmExtension::class.java, project, teavm.getWasmGC())
     }
 
     val desktopC: LibfdxDesktopCExtension by lazy {
@@ -56,6 +59,10 @@ open class LibfdxExtension @Inject constructor(
 
     val desktopJvm: LibfdxDesktopJvmExtension by lazy {
         objects.newInstance(LibfdxDesktopJvmExtension::class.java, project, objects)
+    }
+
+    val android: LibfdxAndroidExtension by lazy {
+        objects.newInstance(LibfdxAndroidExtension::class.java, objects)
     }
 
     val psp: LibfdxPspExtension by lazy {
@@ -105,6 +112,11 @@ open class LibfdxExtension @Inject constructor(
     fun desktopJvm(action: Action<in LibfdxDesktopJvmExtension>) {
         declaredTargets.add(LibfdxTarget.DESKTOP_JVM)
         action.execute(desktopJvm)
+    }
+
+    fun android(action: Action<in LibfdxAndroidExtension>) {
+        declaredTargets.add(LibfdxTarget.ANDROID)
+        action.execute(android)
     }
 
     fun psp(action: Action<in LibfdxPspExtension>) {
@@ -161,6 +173,47 @@ open class LibfdxEcsProjectExtension @Inject constructor(
 
     fun allowedDependencies(vararg paths: Any) {
         allowedDependencies.from(*paths)
+    }
+}
+
+open class LibfdxAndroidExtension @Inject constructor(
+    objects: ObjectFactory
+) {
+    val applicationId: Property<String> = objects.property(String::class.java)
+    val adbExecutable: RegularFileProperty = objects.fileProperty()
+    val variantName: Property<String> = objects.property(String::class.java).convention("debug")
+    val forwardedStringSystemProperties: SetProperty<String> = objects.setProperty(String::class.java)
+        .convention(emptySet())
+    val forwardedBooleanSystemProperties: SetProperty<String> = objects.setProperty(String::class.java)
+        .convention(emptySet())
+    val targets: NamedDomainObjectContainer<LibfdxAndroidTargetExtension> =
+        objects.domainObjectContainer(LibfdxAndroidTargetExtension::class.java) { name ->
+            objects.newInstance(LibfdxAndroidTargetExtension::class.java, name, objects)
+        }
+
+    fun target(name: String, action: Action<in LibfdxAndroidTargetExtension>) {
+        targets.create(name, action)
+    }
+
+    fun forwardStringSystemProperty(name: String) {
+        forwardedStringSystemProperties.add(name)
+    }
+
+    fun forwardBooleanSystemProperty(name: String) {
+        forwardedBooleanSystemProperties.add(name)
+    }
+}
+
+open class LibfdxAndroidTargetExtension @Inject constructor(
+    private val targetName: String,
+    objects: ObjectFactory
+) : Named {
+    val displayName: Property<String> = objects.property(String::class.java).convention(targetName)
+    val activity: Property<String> = objects.property(String::class.java)
+    val runDescription: Property<String> = objects.property(String::class.java)
+
+    override fun getName(): String {
+        return targetName
     }
 }
 
@@ -682,6 +735,7 @@ internal enum class LibfdxTarget {
     JS,
     WASM,
     DESKTOP_JVM,
+    ANDROID,
     DESKTOP_C,
     IOS_C,
     PSP

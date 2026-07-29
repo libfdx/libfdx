@@ -51,15 +51,18 @@ public final class ProjectGeneratorSmokeTest {
                 "default project logo was not preserved as binary");
         require(starterProject.containsFile("platform/desktop/build.gradle.kts"),
                 "default desktop platform missing");
-        require(starterProject.containsFile("platform/plugin/build.gradle.kts"),
-                "default desktop build support missing");
+        require(starterProject.file("platform/desktop/build.gradle.kts").textContent()
+                        .contains("id(\"io.github.libfdx\")"),
+                "default desktop platform does not apply the libFDX plugin");
+        require(!starterProject.containsFile("platform/plugin/build.gradle.kts"),
+                "obsolete shared build-support module was exported");
         require(!starterProject.containsFile("platform/android/build.gradle.kts"),
                 "unselected Android platform was exported");
         require(!starterProject.containsFile("platform/web/build.gradle.kts"),
                 "unselected web platform was exported");
-        require(starterProject.file("settings.gradle.kts").textContent()
+        require(!starterProject.file("settings.gradle.kts").textContent()
                         .contains("include(\":platform:plugin\")"),
-                "desktop build-support module was not included");
+                "obsolete shared build-support module was included");
 
         GeneratedProject androidOnly = generator.generate(ProjectGenerationSettings.builder()
                 .projectName("android-game")
@@ -67,6 +70,9 @@ public final class ProjectGeneratorSmokeTest {
                 .build()).project();
         require(androidOnly.containsFile("platform/android/build.gradle.kts"),
                 "selected Android platform missing");
+        require(androidOnly.file("platform/android/build.gradle.kts").textContent()
+                        .contains("id(\"io.github.libfdx\")"),
+                "selected Android platform does not apply the libFDX plugin");
         require(!androidOnly.containsFile("platform/desktop/build.gradle.kts"),
                 "unselected desktop platform was exported");
         require(!androidOnly.containsFile("platform/plugin/build.gradle.kts"),

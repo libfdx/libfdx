@@ -1,6 +1,6 @@
 
 plugins {
-    id("java")
+    id("io.github.libfdx")
 }
 
 java {
@@ -14,6 +14,7 @@ base {
 }
 
 val sampleProjectPath = project.path.substringBefore(":platform:")
+val sampleRoot = layout.projectDirectory.dir("../..")
 val libfdxDependencyVersion =
     gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
 
@@ -28,38 +29,17 @@ dependencies {
     }
 }
 
-tasks.register("sprite_movement_desktop_c_opengl_generate_debug") {
-    group = "application"
-    description = "Generates the 2D Sprite Movement desktop_c OpenGL Debug project."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_desktop_c_opengl_generate_debug")
-}
+libfdx {
+    assets(
+        sampleRoot.dir("assets"),
+        sampleRoot.dir("scenes")
+    )
 
-tasks.register("sprite_movement_desktop_c_opengl_generate_release") {
-    group = "application"
-    description = "Generates the 2D Sprite Movement desktop_c OpenGL Release project."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_desktop_c_opengl_generate_release")
-}
-
-tasks.register("sprite_movement_desktop_c_opengl_build_debug") {
-    group = "application"
-    description = "Builds the 2D Sprite Movement desktop_c OpenGL Debug executable."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_desktop_c_opengl_build_debug")
-}
-
-tasks.register("sprite_movement_desktop_c_opengl_build_release") {
-    group = "application"
-    description = "Builds the 2D Sprite Movement desktop_c OpenGL Release executable."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_desktop_c_opengl_build_release")
-}
-
-tasks.register("sprite_movement_desktop_c_opengl_run_debug") {
-    group = "application"
-    description = "Runs the 2D Sprite Movement desktop_c OpenGL Debug executable."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_desktop_c_opengl_run_debug")
-}
-
-tasks.register("sprite_movement_desktop_c_opengl_run_release") {
-    group = "application"
-    description = "Runs the 2D Sprite Movement desktop_c OpenGL Release executable."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_desktop_c_opengl_run_release")
+    desktopC {
+        target("opengl") {
+            displayName.set("2D Sprite Movement desktop_c GL sample")
+            mainClass.set("io.github.libfdx.samples.g2d.spritemovement.desktopc.SpriteMovementDesktopCLauncher")
+            targetFileName.set("libfdx-sprite-movement-gl-desktop-c")
+        }
+    }
 }

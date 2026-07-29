@@ -15,7 +15,6 @@ import org.gradle.api.plugins.JavaPlugin
 import org.gradle.api.provider.MapProperty
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.TaskProvider
-import org.gradle.api.tasks.diagnostics.TaskReportTask
 import org.gradle.api.tasks.JavaExec
 import org.gradle.jvm.tasks.Jar
 import org.gradle.jvm.toolchain.JavaLanguageVersion
@@ -25,7 +24,6 @@ import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.register
 import org.teavm.gradle.TeaVMPlugin
 import org.teavm.gradle.api.OptimizationLevel
-import org.teavm.gradle.api.TeaVMExtension
 import org.teavm.gradle.api.TeaVMCConfiguration
 import org.teavm.gradle.tasks.GenerateCTask
 
@@ -36,24 +34,35 @@ internal fun prioritizedDesktopJvmClasspath(
 
 class LibfdxGradlePlugin : Plugin<Project> {
     override fun apply(project: Project) {
-        project.pluginManager.apply(JavaPlugin::class.java)
-        project.pluginManager.apply(TeaVMPlugin::class.java)
-        hideTeaVMTasks(project)
-        hideTeaVMTasksFromTaskReport(project)
-
-        val teavm = project.extensions.getByType<TeaVMExtension>()
+        val androidApplicationProject = project.pluginManager.hasPlugin(ANDROID_APPLICATION_PLUGIN_ID)
+        if(!androidApplicationProject) {
+            project.pluginManager.apply(JavaPlugin::class.java)
+            project.pluginManager.apply(TeaVMPlugin::class.java)
+            hideTeaVMTasks(project)
+        }
         val extension = project.extensions.create<LibfdxExtension>(
             "libfdx",
-            project,
-            teavm.getJs(),
-            teavm.getWasmGC(),
-            teavm.getC()
+            project
         )
+        if(androidApplicationProject) {
+            project.afterEvaluate {
+                if(extension.isDeclared(LibfdxTarget.ANDROID)) {
+                    registerAndroidTasks(project, extension)
+                }
+            }
+            return
+        }
+
         extension.ecsProject.projectClasses.from(
             project.extensions.getByType<SourceSetContainer>().getByName("main").output
         )
 
         project.afterEvaluate {
+            if(extension.isDeclared(LibfdxTarget.ANDROID)) {
+                throw GradleException(
+                    "The libfdx android target requires com.android.application to be applied before io.github.libfdx."
+                )
+            }
             registerBitmapFontTasks(project, extension)
             registerShaderTasks(project, extension)
             val requestedTasks = requestedTaskNames(project)
@@ -758,6 +767,52 @@ class LibfdxGradlePlugin : Plugin<Project> {
         }
     }
 
+    private fun registerAndroidTasks(project: Project, extension: LibfdxExtension) {
+        val android = extension.android
+        if(!android.applicationId.isPresent) {
+            throw GradleException("libfdx android must declare applicationId.")
+        }
+        if(!android.adbExecutable.isPresent) {
+            throw GradleException("libfdx android must declare adbExecutable.")
+        }
+        val variantName = android.variantName.get()
+        if(variantName.isBlank()) {
+            throw GradleException("libfdx android variantName must not be blank.")
+        }
+        val installTaskName = "install${variantName.replaceFirstChar { character -> character.uppercase() }}"
+        val stringExtras = linkedMapOf<String, String>()
+        android.forwardedStringSystemProperties.get().forEach { name ->
+            configuredSystemProperty(project, name)?.takeIf { value -> value.isNotBlank() }?.let { value ->
+                stringExtras[name] = value
+            }
+        }
+        val booleanExtras = linkedMapOf<String, String>()
+        android.forwardedBooleanSystemProperties.get().forEach { name ->
+            configuredSystemProperty(project, name)?.takeIf { value -> value.isNotBlank() }?.let { value ->
+                booleanExtras[name] = value
+            }
+        }
+        android.targets.forEach { target ->
+            if(!target.activity.isPresent) {
+                throw GradleException("libfdx android target '${target.name}' must declare activity.")
+            }
+            val taskBaseName = targetTaskBase("libfdx_android", target.name)
+            val displayName = target.displayName.get()
+            project.tasks.register<LibfdxAndroidRunTask>("${taskBaseName}_run") {
+                group = TASK_GROUP
+                description = target.runDescription.orElse(
+                    "Installs and launches the $displayName Android application."
+                ).get()
+                dependsOn(installTaskName)
+                adbExecutable.set(android.adbExecutable)
+                applicationId.set(android.applicationId)
+                activity.set(target.activity)
+                this.stringExtras.set(stringExtras)
+                this.booleanExtras.set(booleanExtras)
+            }
+        }
+    }
+
     private fun configureDesktopJvmSystemProperties(
         project: Project,
         task: JavaExec,
@@ -1028,19 +1083,6 @@ class LibfdxGradlePlugin : Plugin<Project> {
                 || name.contains("teavm", ignoreCase = true)
     }
 
-    private fun hideTeaVMTasksFromTaskReport(project: Project) {
-        project.tasks.withType(TaskReportTask::class.java).configureEach {
-            doFirst {
-                displayGroups = project.tasks
-                    .mapNotNull { task -> task.group }
-                    .filterNot { group -> group.equals("teavm", ignoreCase = true) }
-                    .distinct()
-                    .sorted()
-                setShowDetail(false)
-            }
-        }
-    }
-
     private fun safeTaskName(name: String): String {
         val builder = StringBuilder()
         for(character in name) {
@@ -1064,6 +1106,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
 
     internal companion object {
         const val TASK_GROUP = "libfdx"
+        private const val ANDROID_APPLICATION_PLUGIN_ID = "com.android.application"
         private val TEAVM_TASK_NAMES = setOf(
             TeaVMPlugin.BUILD_WASM_GC_TASK_NAME,
             TeaVMPlugin.C_TASK_NAME,

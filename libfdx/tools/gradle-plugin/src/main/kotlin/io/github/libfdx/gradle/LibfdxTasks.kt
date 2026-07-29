@@ -23,6 +23,7 @@ import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Classpath
 import org.gradle.api.tasks.Input
@@ -37,6 +38,7 @@ import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.work.DisableCachingByDefault
+import org.gradle.process.ExecOperations
 import java.io.File
 import java.lang.reflect.InvocationTargetException
 import java.net.InetSocketAddress
@@ -48,6 +50,69 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.CountDownLatch
 import java.util.zip.ZipInputStream
+import javax.inject.Inject
+
+internal fun androidStartCommand(
+    adbExecutable: String,
+    applicationId: String,
+    activity: String,
+    stringExtras: Map<String, String>,
+    booleanExtras: Map<String, String>
+): List<String> {
+    val command = mutableListOf(
+        adbExecutable,
+        "shell",
+        "am",
+        "start",
+        "-n",
+        "$applicationId/$activity"
+    )
+    stringExtras.forEach { (name, value) ->
+        command.add("--es")
+        command.add(name)
+        command.add(value)
+    }
+    booleanExtras.forEach { (name, value) ->
+        command.add("--ez")
+        command.add(name)
+        command.add(value)
+    }
+    return command
+}
+
+@DisableCachingByDefault(because = "Installs and launches an Android application on a connected device")
+abstract class LibfdxAndroidRunTask @Inject constructor(
+    private val execOperations: ExecOperations
+) : DefaultTask() {
+    @get:Internal
+    abstract val adbExecutable: RegularFileProperty
+
+    @get:Input
+    abstract val applicationId: Property<String>
+
+    @get:Input
+    abstract val activity: Property<String>
+
+    @get:Input
+    abstract val stringExtras: MapProperty<String, String>
+
+    @get:Input
+    abstract val booleanExtras: MapProperty<String, String>
+
+    @TaskAction
+    fun launch() {
+        val command = androidStartCommand(
+            adbExecutable.get().asFile.absolutePath,
+            applicationId.get(),
+            activity.get(),
+            stringExtras.get(),
+            booleanExtras.get()
+        )
+        execOperations.exec {
+            commandLine(command)
+        }.assertNormalExitValue()
+    }
+}
 
 abstract class LibfdxBitmapFontTask : DefaultTask() {
     @get:Input

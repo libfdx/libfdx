@@ -1,6 +1,7 @@
 
 plugins {
     alias(libs.plugins.android.application)
+    id("io.github.libfdx")
 }
 
 val sampleProjectPath = project.path.substringBefore(":platform:")
@@ -37,8 +38,6 @@ android {
     }
 }
 
-val adbExecutable = androidComponents.sdkComponents.adb
-
 dependencies {
     implementation(project("$sampleProjectPath:core"))
     if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
@@ -56,46 +55,38 @@ base {
     archivesName.set("sample_2d_sprite_movement_android")
 }
 
-tasks.register<Exec>("sprite_movement_android_gles_run") {
-    group = "application"
-    description = "Installs and launches the Android GLES 2D Sprite Movement sample."
-    dependsOn("installDebug")
-    doFirst {
-        commandLine(adbExecutable.get().asFile.absolutePath, "shell", "am", "start", "-n",
-                "io.github.libfdx.samples.g2d.spritemovement.android/" +
-                        "io.github.libfdx.samples.g2d.spritemovement.android.SpriteMovementAndroidGlesActivity")
-    }
-}
+libfdx {
+    android {
+        applicationId.set("io.github.libfdx.samples.g2d.spritemovement.android")
+        adbExecutable.set(androidComponents.sdkComponents.adb)
 
-tasks.register<Exec>("sprite_movement_android_wgpu_jni_run") {
-    group = "application"
-    description = "Installs and launches the Android WGPU JNI 2D Sprite Movement sample."
-    dependsOn("installDebug")
-    doFirst {
-        commandLine(adbExecutable.get().asFile.absolutePath, "shell", "am", "start", "-n",
-                "io.github.libfdx.samples.g2d.spritemovement.android/" +
-                        "io.github.libfdx.samples.g2d.spritemovement.android.SpriteMovementAndroidWgpuActivity")
-    }
-}
-
-tasks.register<Exec>("sprite_movement_android_vulkan_run") {
-    group = "application"
-    description = "Installs and launches the Android Vulkan 2D Sprite Movement sample."
-    dependsOn("installDebug")
-    doFirst {
-        commandLine(adbExecutable.get().asFile.absolutePath, "shell", "am", "start", "-n",
-                "io.github.libfdx.samples.g2d.spritemovement.android/" +
-                        "io.github.libfdx.samples.g2d.spritemovement.android.SpriteMovementAndroidVulkanActivity")
-    }
-}
-
-tasks.register<Exec>("sprite_movement_android_vulkan_fallback_run") {
-    group = "application"
-    description = "Installs and launches the Android Vulkan fallback 2D Sprite Movement sample."
-    dependsOn("installDebug")
-    doFirst {
-        commandLine(adbExecutable.get().asFile.absolutePath, "shell", "am", "start", "-n",
-                "io.github.libfdx.samples.g2d.spritemovement.android/" +
-                        "io.github.libfdx.samples.g2d.spritemovement.android.SpriteMovementAndroidVulkanFallbackActivity")
+        target("gles") {
+            displayName.set("2D Sprite Movement GLES sample")
+            activity.set(
+                "io.github.libfdx.samples.g2d.spritemovement.android.SpriteMovementAndroidGlesActivity"
+            )
+            runDescription.set("Installs and launches the Android GLES 2D Sprite Movement sample.")
+        }
+        target("wgpu_jni") {
+            displayName.set("2D Sprite Movement WGPU JNI sample")
+            activity.set(
+                "io.github.libfdx.samples.g2d.spritemovement.android.SpriteMovementAndroidWgpuActivity"
+            )
+            runDescription.set("Installs and launches the Android WGPU JNI 2D Sprite Movement sample.")
+        }
+        target("vulkan") {
+            displayName.set("2D Sprite Movement Vulkan sample")
+            activity.set(
+                "io.github.libfdx.samples.g2d.spritemovement.android.SpriteMovementAndroidVulkanActivity"
+            )
+            runDescription.set("Installs and launches the Android Vulkan 2D Sprite Movement sample.")
+        }
+        target("vulkan_fallback") {
+            displayName.set("2D Sprite Movement Vulkan fallback sample")
+            activity.set(
+                "io.github.libfdx.samples.g2d.spritemovement.android.SpriteMovementAndroidVulkanFallbackActivity"
+            )
+            runDescription.set("Installs and launches the Android Vulkan fallback 2D Sprite Movement sample.")
+        }
     }
 }

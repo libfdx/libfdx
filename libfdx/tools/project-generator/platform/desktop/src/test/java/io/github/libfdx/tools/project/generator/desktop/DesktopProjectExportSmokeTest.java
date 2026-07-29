@@ -50,7 +50,7 @@ public final class DesktopProjectExportSmokeTest {
                 "core/src/main/java/io/github/libfdx/samples/g2d/spritemovement/SpriteMovementProject.java"),
                 "class SpriteMovementProject");
         requireFile(spriteDestination.resolve("platform/desktop/build.gradle.kts"),
-                "sprite_movement_desktop_gl_run");
+                "desktopJvm {");
         requireFile(spriteDestination.resolve(
                 "platform/desktop/src/main/java/io/github/libfdx/samples/g2d/spritemovement/desktop/"
                         + "SpriteMovementDesktopLauncher.java"),
@@ -93,18 +93,17 @@ public final class DesktopProjectExportSmokeTest {
         }
 
         exportStarterVariant(generator, destination.resolve("starter-web-only"),
-                "starter-web-only", "org.example.webgame", ProjectPlatform.WEB, true);
+                "starter-web-only", "org.example.webgame", ProjectPlatform.WEB);
         exportStarterVariant(generator, destination.resolve("starter-android-only"),
-                "starter-android-only", "org.example.androidgame", ProjectPlatform.ANDROID, false);
+                "starter-android-only", "org.example.androidgame", ProjectPlatform.ANDROID);
         exportStarterVariant(generator, destination.resolve("starter-desktop-c-only"),
-                "starter-desktop-c-only", "org.example.desktopcgame", ProjectPlatform.DESKTOP_C, true);
+                "starter-desktop-c-only", "org.example.desktopcgame", ProjectPlatform.DESKTOP_C);
         exportStarterVariant(generator, destination.resolve("starter-ios-c-only"),
-                "starter-ios-c-only", "org.example.ioscgame", ProjectPlatform.IOS_C, true);
+                "starter-ios-c-only", "org.example.ioscgame", ProjectPlatform.IOS_C);
     }
 
     private static void exportStarterVariant(ProjectGenerator generator, Path destination,
-            String projectName, String packageName, ProjectPlatform platform,
-            boolean expectsBuildSupport) throws IOException {
+            String projectName, String packageName, ProjectPlatform platform) throws IOException {
         GeneratedProject project = generator.generate(ProjectGenerationSettings.builder()
                 .projectName(projectName)
                 .packageName(packageName)
@@ -126,7 +125,7 @@ public final class DesktopProjectExportSmokeTest {
                         "Unselected " + candidate.displayName() + " platform was exported");
             }
         }
-        require(Files.exists(destination.resolve("platform/plugin")) == expectsBuildSupport,
+        require(!Files.exists(destination.resolve("platform/plugin")),
                 "Unexpected shared build-support module for " + platform.displayName());
     }
 

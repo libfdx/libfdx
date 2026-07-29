@@ -1,5 +1,5 @@
 plugins {
-    id("java")
+    id("io.github.libfdx")
 }
 
 java {
@@ -12,6 +12,7 @@ base {
 }
 
 val sampleProjectPath = project.path.substringBefore(":platform:")
+val sampleRoot = layout.projectDirectory.dir("../..")
 val libfdxDependencyVersion =
     gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
 
@@ -26,38 +27,14 @@ dependencies {
     }
 }
 
-tasks.register("starter_project_desktop_c_opengl_generate_debug") {
-    group = "application"
-    description = "Generates the Starter Project desktop C OpenGL Debug project."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_desktop_c_opengl_generate_debug")
-}
+libfdx {
+    assets(sampleRoot.dir("assets"))
 
-tasks.register("starter_project_desktop_c_opengl_generate_release") {
-    group = "application"
-    description = "Generates the Starter Project desktop C OpenGL Release project."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_desktop_c_opengl_generate_release")
-}
-
-tasks.register("starter_project_desktop_c_opengl_build_debug") {
-    group = "application"
-    description = "Builds the Starter Project desktop C OpenGL Debug executable."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_desktop_c_opengl_build_debug")
-}
-
-tasks.register("starter_project_desktop_c_opengl_build_release") {
-    group = "application"
-    description = "Builds the Starter Project desktop C OpenGL Release executable."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_desktop_c_opengl_build_release")
-}
-
-tasks.register("starter_project_desktop_c_opengl_run_debug") {
-    group = "application"
-    description = "Runs the Starter Project desktop C OpenGL Debug executable."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_desktop_c_opengl_run_debug")
-}
-
-tasks.register("starter_project_desktop_c_opengl_run_release") {
-    group = "application"
-    description = "Runs the Starter Project desktop C OpenGL Release executable."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_desktop_c_opengl_run_release")
+    desktopC {
+        target("opengl") {
+            displayName.set("Starter Project desktop C OpenGL sample")
+            mainClass.set("io.github.libfdx.samples.starter.desktopc.StarterProjectDesktopCLauncher")
+            targetFileName.set("libfdx-starter-project-gl-desktop-c")
+        }
+    }
 }

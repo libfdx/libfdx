@@ -18,5 +18,5 @@ arrow keys.
 Run the desktop GL variant from the repository root:
 
 ```powershell
-.\gradlew.bat :samples:2d:sprite-movement:platform:desktop:sprite_movement_desktop_gl_run
+.\gradlew.bat :samples:2d:sprite-movement:platform:desktop:libfdx_desktop_jvm_gl_run
 ```

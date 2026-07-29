@@ -65,8 +65,8 @@ root files:
 - `PROJECT_GENERATOR.md` with sample and dependency provenance.
 
 `:core`, optional `:editor`, and the selected platform modules are included.
-The support `:platform:plugin` module is included only when one of the selected
-platforms uses its shared application-task configuration.
+Each launcher module applies `io.github.libfdx` directly and owns the plugin
+target configuration for that platform.
 
 Sample Gradle files must own their dependencies and derive their sample root
 and sibling project paths from their own project location. Repository-root

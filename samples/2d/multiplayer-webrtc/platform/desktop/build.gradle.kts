@@ -1,8 +1,7 @@
 import org.gradle.api.attributes.java.TargetJvmVersion
-import org.gradle.jvm.toolchain.JavaLanguageVersion
 
 plugins {
-    id("java")
+    id("io.github.libfdx")
 }
 
 java {
@@ -11,17 +10,17 @@ java {
 }
 
 
-val glRuntimeClasspath by configurations.creating {
+val glRuntimeClasspath = configurations.create("glRuntimeClasspath") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
 
-val vulkanRuntimeClasspath by configurations.creating {
+val vulkanRuntimeClasspath = configurations.create("vulkanRuntimeClasspath") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
 
-val wgpuRuntimeClasspath by configurations.creating {
+val wgpuRuntimeClasspath = configurations.create("wgpuRuntimeClasspath") {
     isCanBeConsumed = false
     isCanBeResolved = true
     attributes {
@@ -34,7 +33,7 @@ base {
 }
 
 val sampleProjectPath = project.path.substringBefore(":platform:")
-val sampleRoot = layout.projectDirectory.dir("../..").asFile
+val sampleRoot = layout.projectDirectory.dir("../..")
 val libfdxDependencyVersion =
     gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
 
@@ -63,66 +62,45 @@ dependencies {
     }
 }
 
-val sampleMainClass = "io.github.libfdx.samples.multiplayer.webrtc.desktop.MultiplayerWebRtcDesktopLauncher"
+libfdx {
+    desktopJvm {
+        mainClass.set("io.github.libfdx.samples.multiplayer.webrtc.desktop.MultiplayerWebRtcDesktopLauncher")
+        workingDir.set(sampleRoot)
+        forwardSystemProperty("libfdx.sample.signalingUrl")
+        forwardSystemProperty("libfdx.sample.autoHost")
+        forwardSystemProperty("libfdx.sample.autoJoinRoom")
+        forwardSystemProperty("libfdx.sample.playerName")
+        forwardSystemProperty("libfdx.sample.hostRoomId")
+        forwardSystemProperty("libfdx.sample.exitAfterFrames")
+        forwardSystemProperty("libfdx.sample.validate")
+        forwardSystemProperty("libfdx.validation.scenario")
 
-fun JavaExec.configureMultiplayerRun(graphics: String, label: String) {
-    group = "application"
-    classpath = sourceSets["main"].runtimeClasspath + when (graphics) {
-        "gl" -> glRuntimeClasspath
-        "vulkan" -> vulkanRuntimeClasspath
-        "d3d12" -> files()
-        else -> wgpuRuntimeClasspath
+        target("gl") {
+            displayName.set("GL")
+            runtimeClasspath(glRuntimeClasspath)
+            systemProperty("libfdx.sample.graphics", "gl")
+            systemProperty("libfdx.sample.graphicsLabel", "GL")
+            runDescription.set("Runs the WebRTC multiplayer 2D desktop sample with GL.")
+        }
+        target("wgpu") {
+            displayName.set("WGPU")
+            runtimeClasspath(wgpuRuntimeClasspath)
+            systemProperty("libfdx.sample.graphics", "wgpu")
+            systemProperty("libfdx.sample.graphicsLabel", "WGPU")
+            runDescription.set("Runs the WebRTC multiplayer 2D desktop sample with WGPU.")
+        }
+        target("vulkan") {
+            displayName.set("Vulkan")
+            runtimeClasspath(vulkanRuntimeClasspath)
+            systemProperty("libfdx.sample.graphics", "vulkan")
+            systemProperty("libfdx.sample.graphicsLabel", "Vulkan")
+            runDescription.set("Runs the WebRTC multiplayer 2D desktop sample with Vulkan.")
+        }
+        target("d3d12") {
+            displayName.set("Direct3D 12")
+            systemProperty("libfdx.sample.graphics", "d3d12")
+            systemProperty("libfdx.sample.graphicsLabel", "Direct3D 12")
+            runDescription.set("Runs the WebRTC multiplayer 2D desktop sample with Direct3D 12 on Windows.")
+        }
     }
-    mainClass.set(sampleMainClass)
-    workingDir = sampleRoot
-    javaLauncher.set(javaToolchains.launcherFor {
-        languageVersion.set(JavaLanguageVersion.of(25))
-    })
-    jvmArgs("-Dorg.lwjgl.system.stackSize=1024", "--enable-native-access=ALL-UNNAMED")
-    systemProperty("libfdx.sample.graphics", graphics)
-    systemProperty("libfdx.sample.graphicsLabel", label)
-    System.getProperty("libfdx.sample.signalingUrl")?.takeIf { it.isNotBlank() }?.let {
-        systemProperty("libfdx.sample.signalingUrl", it)
-    }
-    System.getProperty("libfdx.sample.autoHost")?.takeIf { it.isNotBlank() }?.let {
-        systemProperty("libfdx.sample.autoHost", it)
-    }
-    System.getProperty("libfdx.sample.autoJoinRoom")?.takeIf { it.isNotBlank() }?.let {
-        systemProperty("libfdx.sample.autoJoinRoom", it)
-    }
-    System.getProperty("libfdx.sample.playerName")?.takeIf { it.isNotBlank() }?.let {
-        systemProperty("libfdx.sample.playerName", it)
-    }
-    System.getProperty("libfdx.sample.hostRoomId")?.takeIf { it.isNotBlank() }?.let {
-        systemProperty("libfdx.sample.hostRoomId", it)
-    }
-    System.getProperty("libfdx.sample.exitAfterFrames")?.takeIf { it.isNotBlank() }?.let {
-        systemProperty("libfdx.sample.exitAfterFrames", it)
-    }
-    System.getProperty("libfdx.sample.validate")?.takeIf { it.isNotBlank() }?.let {
-        systemProperty("libfdx.sample.validate", it)
-    }
-    System.getProperty("libfdx.validation.scenario")?.takeIf { it.isNotBlank() }?.let {
-        systemProperty("libfdx.validation.scenario", it)
-    }
-}
-
-tasks.register<JavaExec>("multiplayer_2d_webrtc_desktop_gl_run") {
-    description = "Runs the WebRTC multiplayer 2D desktop sample with GL."
-    configureMultiplayerRun("gl", "GL")
-}
-
-tasks.register<JavaExec>("multiplayer_2d_webrtc_desktop_wgpu_run") {
-    description = "Runs the WebRTC multiplayer 2D desktop sample with WGPU."
-    configureMultiplayerRun("wgpu", "WGPU")
-}
-
-tasks.register<JavaExec>("multiplayer_2d_webrtc_desktop_vulkan_run") {
-    description = "Runs the WebRTC multiplayer 2D desktop sample with Vulkan."
-    configureMultiplayerRun("vulkan", "Vulkan")
-}
-
-tasks.register<JavaExec>("multiplayer_2d_webrtc_desktop_d3d12_run") {
-    description = "Runs the WebRTC multiplayer 2D desktop sample with Direct3D 12 on Windows."
-    configureMultiplayerRun("d3d12", "Direct3D 12")
 }

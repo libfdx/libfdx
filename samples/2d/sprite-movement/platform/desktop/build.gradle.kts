@@ -1,9 +1,8 @@
 
 import org.gradle.api.attributes.java.TargetJvmVersion
-import org.gradle.jvm.toolchain.JavaLanguageVersion
 
 plugins {
-    id("java")
+    id("io.github.libfdx")
 }
 
 
@@ -13,17 +12,17 @@ java {
     targetCompatibility = JavaVersion.toVersion(25)
 }
 
-val glRuntimeClasspath by configurations.creating {
+val glRuntimeClasspath = configurations.create("glRuntimeClasspath") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
 
-val vulkanRuntimeClasspath by configurations.creating {
+val vulkanRuntimeClasspath = configurations.create("vulkanRuntimeClasspath") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
 
-val wgpuRuntimeClasspath by configurations.creating {
+val wgpuRuntimeClasspath = configurations.create("wgpuRuntimeClasspath") {
     isCanBeConsumed = false
     isCanBeResolved = true
     attributes {
@@ -36,6 +35,7 @@ base {
 }
 
 val sampleProjectPath = project.path.substringBefore(":platform:")
+val sampleRoot = layout.projectDirectory.dir("../..")
 val libfdxDependencyVersion =
     gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
 
@@ -64,35 +64,56 @@ dependencies {
     }
 }
 
-val sampleMainClass = "io.github.libfdx.samples.g2d.spritemovement.desktop.SpriteMovementDesktopLauncher"
-val sampleRoot = layout.projectDirectory.dir("../..").asFile
+libfdx {
+    assets(
+        sampleRoot.dir("assets"),
+        sampleRoot.dir("scenes")
+    )
 
-fun registerGraphicsRun(
-    taskName: String,
-    graphics: String,
-    graphicsLabel: String,
-    providerClasspath: FileCollection
-) = tasks.register<JavaExec>(taskName) {
-    group = "application"
-    description = "Runs the 2D Sprite Movement desktop sample with $graphicsLabel."
-    classpath = sourceSets["main"].runtimeClasspath + providerClasspath
-    mainClass.set(sampleMainClass)
-    workingDir = sampleRoot
-    javaLauncher.set(javaToolchains.launcherFor {
-        languageVersion.set(JavaLanguageVersion.of(25))
-    })
-    jvmArgs("-Dorg.lwjgl.system.stackSize=1024", "--enable-native-access=ALL-UNNAMED")
-    systemProperty("libfdx.sample.graphics", graphics)
-    systemProperty("libfdx.sample.graphicsLabel", graphicsLabel)
-    System.getProperty("libfdx.sample.exitAfterFrames")?.takeIf { it.isNotBlank() }?.let { frames ->
-        systemProperty("libfdx.sample.exitAfterFrames", frames)
-    }
-    System.getProperty("libfdx.sample.maximized")?.takeIf { it.isNotBlank() }?.let { maximized ->
-        systemProperty("libfdx.sample.maximized", maximized)
+    desktopJvm {
+        mainClass.set("io.github.libfdx.samples.g2d.spritemovement.desktop.SpriteMovementDesktopLauncher")
+        workingDir.set(sampleRoot)
+        forwardSystemProperty("libfdx.sample.exitAfterFrames")
+        forwardSystemProperty("libfdx.sample.maximized")
+
+        target("gl") {
+            displayName.set("GL")
+            runtimeClasspath(glRuntimeClasspath)
+            systemProperty("libfdx.sample.graphics", "gl")
+            systemProperty("libfdx.sample.graphicsLabel", "GL")
+            launchProperty("graphics", "gl")
+            launchProperty("graphicsLabel", "GL")
+            buildDescription.set("Builds the 2D Sprite Movement desktop GL release jar.")
+            runDescription.set("Runs the 2D Sprite Movement desktop sample with GL.")
+        }
+        target("wgpu") {
+            displayName.set("WGPU")
+            runtimeClasspath(wgpuRuntimeClasspath)
+            systemProperty("libfdx.sample.graphics", "wgpu")
+            systemProperty("libfdx.sample.graphicsLabel", "WGPU")
+            launchProperty("graphics", "wgpu")
+            launchProperty("graphicsLabel", "WGPU")
+            buildDescription.set("Builds the 2D Sprite Movement desktop WGPU release jar.")
+            runDescription.set("Runs the 2D Sprite Movement desktop sample with WGPU.")
+        }
+        target("vulkan") {
+            displayName.set("Vulkan")
+            runtimeClasspath(vulkanRuntimeClasspath)
+            systemProperty("libfdx.sample.graphics", "vulkan")
+            systemProperty("libfdx.sample.graphicsLabel", "Vulkan")
+            launchProperty("graphics", "vulkan")
+            launchProperty("graphicsLabel", "Vulkan")
+            buildDescription.set("Builds the 2D Sprite Movement desktop Vulkan release jar.")
+            runDescription.set("Runs the 2D Sprite Movement desktop sample with Vulkan.")
+        }
+        target("d3d12") {
+            displayName.set("Direct3D 12")
+            systemProperty("libfdx.sample.graphics", "d3d12")
+            systemProperty("libfdx.sample.graphicsLabel", "Direct3D 12")
+            launchProperty("graphics", "d3d12")
+            launchProperty("graphicsLabel", "Direct3D 12")
+            buildDescription.set("Builds the 2D Sprite Movement desktop Direct3D 12 release jar.")
+            runDescription.set("Runs the 2D Sprite Movement desktop sample with Direct3D 12 on Windows.")
+        }
     }
 }
-
-registerGraphicsRun("sprite_movement_desktop_gl_run", "gl", "GL", glRuntimeClasspath)
-registerGraphicsRun("sprite_movement_desktop_wgpu_run", "wgpu", "WGPU", wgpuRuntimeClasspath)
-registerGraphicsRun("sprite_movement_desktop_vulkan_run", "vulkan", "Vulkan", vulkanRuntimeClasspath)
-registerGraphicsRun("sprite_movement_desktop_d3d12_run", "d3d12", "Direct3D 12", files())

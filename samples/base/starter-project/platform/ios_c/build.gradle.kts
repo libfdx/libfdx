@@ -1,5 +1,5 @@
 plugins {
-    id("java")
+    id("io.github.libfdx")
 }
 
 java {
@@ -12,6 +12,7 @@ base {
 }
 
 val sampleProjectPath = project.path.substringBefore(":platform:")
+val sampleRoot = layout.projectDirectory.dir("../..")
 val libfdxDependencyVersion =
     gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
 
@@ -24,14 +25,23 @@ dependencies {
     }
 }
 
-tasks.register("starter_project_ios_c_gles_generate") {
-    group = "application"
-    description = "Generates the Starter Project iOS C GLES TeaVM and Xcode project."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_ios_c_gles_generate")
-}
+libfdx {
+    assets(sampleRoot.dir("assets"))
 
-tasks.register("starter_project_ios_c_metal_generate") {
-    group = "application"
-    description = "Generates the Starter Project iOS C Metal TeaVM and Xcode project."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_ios_c_metal_generate")
+    iosC {
+        bundleIdentifier.set("io.github.libfdx.samples.starter.iosc")
+
+        target("gles") {
+            displayName.set("Starter Project iOS C OpenGL ES sample")
+            mainClass.set("io.github.libfdx.samples.starter.iosc.StarterProjectIosCLauncher")
+            targetFileName.set("libfdx-starter-project-gles-ios-c")
+            graphicsApi.set("gles")
+        }
+        target("metal") {
+            displayName.set("Starter Project iOS C Metal sample")
+            mainClass.set("io.github.libfdx.samples.starter.iosc.StarterProjectIosCMetalLauncher")
+            targetFileName.set("libfdx-starter-project-metal-ios-c")
+            graphicsApi.set("metal")
+        }
+    }
 }

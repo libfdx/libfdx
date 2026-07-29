@@ -28,13 +28,13 @@ individual sprite PNGs from the Kenney archive; every visual is a
 `TextureFilter.NEAREST` so Kenney's pixel art remains sharp when scaled by the
 sample renderer.
 
-The sample keeps the full platform module matrix. Desktop, web, desktop C, and
-iOS C modules apply the libFDX Gradle plugin directly, keep only plugin target
-and asset configuration in their build files, use the plugin-generated
-`libfdx_*` tasks, and own their launcher classes. The root build convention
-supplies their sample classpaths and selects published or local libFDX
-dependencies according to `development.usePublishedLibfdx`. Android remains a
-normal Android module for manifest, activity, and asset wiring.
+The sample keeps the full platform module matrix. Every launcher module applies
+the libFDX Gradle plugin directly, keeps its plugin target configuration beside
+the platform launcher, and uses plugin-generated `libfdx_*` tasks. Android
+continues to own its manifest, activities, assets, and Android packaging while
+the plugin owns its install-and-launch tasks. Each platform module selects
+published or local libFDX dependencies according to
+`development.usePublishedLibfdx`.
 
 Run the desktop sample from the repository root:
 

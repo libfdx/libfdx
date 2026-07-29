@@ -42,7 +42,7 @@ easyPublishing {
     )
 
     pomName.set("libFDX Gradle plugin")
-    pomDescription.set("Gradle plugin for building libFDX web, desktop_c, PSP, and asset tasks.")
+    pomDescription.set("Gradle plugin for launching and building libFDX platform targets and generated assets.")
     projectUrl.set("https://github.com/libfdx/libfdx")
     developerId.set("Xpe")
     developerName.set("Natan")

@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    id("io.github.libfdx")
 }
 
 val sampleProjectPath = project.path.substringBefore(":platform:")
@@ -34,8 +35,6 @@ android {
     }
 }
 
-val adbExecutable = androidComponents.sdkComponents.adb
-
 dependencies {
     implementation(project("$sampleProjectPath:core"))
     if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
@@ -53,43 +52,32 @@ base {
     archivesName.set("sample_base_starter_project_android")
 }
 
-fun registerAndroidRun(
-    taskName: String,
-    descriptionText: String,
-    activity: String
-) = tasks.register<Exec>(taskName) {
-    group = "application"
-    description = descriptionText
-    dependsOn("installDebug")
-    doFirst {
-        commandLine(
-            adbExecutable.get().asFile.absolutePath,
-            "shell",
-            "am",
-            "start",
-            "-n",
-            "io.github.libfdx.samples.starter.android/$activity"
-        )
+libfdx {
+    android {
+        applicationId.set("io.github.libfdx.samples.starter.android")
+        adbExecutable.set(androidComponents.sdkComponents.adb)
+
+        target("gles") {
+            displayName.set("Starter Project OpenGL ES sample")
+            activity.set("io.github.libfdx.samples.starter.android.StarterProjectAndroidGlesActivity")
+            runDescription.set("Installs and launches the Android OpenGL ES Starter Project sample.")
+        }
+        target("wgpu_jni") {
+            displayName.set("Starter Project WGPU JNI sample")
+            activity.set("io.github.libfdx.samples.starter.android.StarterProjectAndroidWgpuActivity")
+            runDescription.set("Installs and launches the Android WGPU JNI Starter Project sample.")
+        }
+        target("vulkan") {
+            displayName.set("Starter Project Vulkan sample")
+            activity.set("io.github.libfdx.samples.starter.android.StarterProjectAndroidVulkanActivity")
+            runDescription.set("Installs and launches the Android Vulkan Starter Project sample.")
+        }
+        target("vulkan_fallback") {
+            displayName.set("Starter Project Vulkan fallback sample")
+            activity.set("io.github.libfdx.samples.starter.android.StarterProjectAndroidVulkanFallbackActivity")
+            runDescription.set(
+                "Installs and launches the Android Vulkan-to-OpenGL fallback Starter Project sample."
+            )
+        }
     }
 }
-
-registerAndroidRun(
-    "starter_project_android_gles_run",
-    "Installs and launches the Android OpenGL ES Starter Project sample.",
-    "io.github.libfdx.samples.starter.android.StarterProjectAndroidGlesActivity"
-)
-registerAndroidRun(
-    "starter_project_android_wgpu_jni_run",
-    "Installs and launches the Android WGPU JNI Starter Project sample.",
-    "io.github.libfdx.samples.starter.android.StarterProjectAndroidWgpuActivity"
-)
-registerAndroidRun(
-    "starter_project_android_vulkan_run",
-    "Installs and launches the Android Vulkan Starter Project sample.",
-    "io.github.libfdx.samples.starter.android.StarterProjectAndroidVulkanActivity"
-)
-registerAndroidRun(
-    "starter_project_android_vulkan_fallback_run",
-    "Installs and launches the Android Vulkan-to-OpenGL fallback Starter Project sample.",
-    "io.github.libfdx.samples.starter.android.StarterProjectAndroidVulkanFallbackActivity"
-)

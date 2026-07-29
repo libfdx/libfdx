@@ -31,9 +31,10 @@ libfdx {
 }
 ```
 
-Available families are `desktopJvm`, `js`, `wasm`, `desktopC`, `psp`, and
-`iosC`. Named targets produce named build/run/generate tasks. Inspect the tasks
-created for the current project rather than relying on a copied catalog:
+Available families are `desktopJvm`, `android`, `js`, `wasm`, `desktopC`,
+`psp`, and `iosC`. Named targets produce named build/run/generate tasks.
+Inspect the tasks created for the current project rather than relying on a
+copied catalog:
 
 ```powershell
 ./gradlew tasks --group libfdx
@@ -50,6 +51,34 @@ determines TeaVM configuration.
 iOS targets generate an Xcode handoff project. `gles` selects an
 OpenGLES/GLKit project and `metal` selects Metal/MetalKit; building or running
 the generated project requires macOS and Xcode.
+
+Android application projects apply the Android application plugin before
+`io.github.libfdx`. The Android DSL creates launcher tasks and leaves the
+manifest, source sets, packaging, and dependencies with the Android project:
+
+```kotlin
+plugins {
+    id("com.android.application")
+    id("io.github.libfdx") version libfdxVersion
+}
+
+libfdx {
+    android {
+        applicationId.set("com.example.game")
+        adbExecutable.set(androidComponents.sdkComponents.adb)
+
+        target("gles") {
+            activity.set("com.example.game.GlesActivity")
+        }
+    }
+}
+```
+
+`libfdx_android_gles_run` depends on `installDebug` by default, then uses the
+configured ADB executable to launch the activity. Set `variantName` when the
+application uses another installable variant. String and boolean system
+properties can be forwarded as Android intent extras with
+`forwardStringSystemProperty` and `forwardBooleanSystemProperty`.
 
 ## ECS Project Bundles
 

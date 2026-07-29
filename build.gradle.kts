@@ -288,24 +288,21 @@ if (libfdxRepositoryConsumersIncluded) {
     )
     pagesWebapp(
         projectPath = ":samples:2d:sprite-movement:platform:web",
-        buildTaskName = "sprite_movement_webgl_js_build",
+        buildTaskName = "libfdx_web_js_webgl_build",
         webappPath = "dist/web-js/webapp",
-        pagesPath = "samples/2d/sprite-movement/webgl-js",
-        outputProjectPath = ":samples:2d:sprite-movement:platform:plugin"
+        pagesPath = "samples/2d/sprite-movement/webgl-js"
     )
     pagesWebapp(
         projectPath = ":samples:2d:sprite-movement:platform:web",
-        buildTaskName = "sprite_movement_webgl_wasm_build",
+        buildTaskName = "libfdx_web_wasm_webgl_build",
         webappPath = "dist/web-wasm/webapp",
-        pagesPath = "samples/2d/sprite-movement/webgl-wasm",
-        outputProjectPath = ":samples:2d:sprite-movement:platform:plugin"
+        pagesPath = "samples/2d/sprite-movement/webgl-wasm"
     )
     pagesWebapp(
         projectPath = ":samples:2d:sprite-movement:platform:web",
-        buildTaskName = "sprite_movement_webgpu_js_build",
+        buildTaskName = "libfdx_web_js_webgpu_build",
         webappPath = "dist/web-js/webapp",
-        pagesPath = "samples/2d/sprite-movement/webgpu-js",
-        outputProjectPath = ":samples:2d:sprite-movement:platform:plugin"
+        pagesPath = "samples/2d/sprite-movement/webgpu-js"
     )
     pagesWebapp(
         projectPath = ":samples:2d:ecs-platformer:platform:web",

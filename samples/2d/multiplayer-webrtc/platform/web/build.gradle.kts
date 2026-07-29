@@ -1,6 +1,6 @@
 
 plugins {
-    id("java")
+    id("io.github.libfdx")
 }
 
 java {
@@ -35,26 +35,36 @@ dependencies {
     }
 }
 
-tasks.register("multiplayer_2d_webrtc_webgl_js_build") {
-    group = "application"
-    description = "Builds the WebRTC multiplayer 2D WebGL JavaScript web application."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_web_js_webgl_build")
-}
+libfdx {
+    js {
+        mainClass.set("io.github.libfdx.samples.multiplayer.webrtc.web.MultiplayerWebRtcWebJsLauncher")
+        htmlTitle.set("libfdx WebRTC Multiplayer 2D")
+        canvasId.set("libfdx-canvas")
+        htmlWidth.set(0)
+        htmlHeight.set(0)
 
-tasks.register("multiplayer_2d_webrtc_webgl_js_run") {
-    group = "application"
-    description = "Builds and serves the WebRTC multiplayer 2D WebGL JavaScript web application."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_web_js_webgl_run")
-}
+        target("webgl") {
+            defaultPath.set("/?graphics=webgl")
+            buildDescription.set("Builds the WebRTC multiplayer 2D WebGL JavaScript web application.")
+            runDescription.set("Builds and serves the WebRTC multiplayer 2D WebGL JavaScript web application.")
+        }
+        target("webgpu") {
+            defaultPath.set("/?graphics=webgpu")
+            buildDescription.set("Builds the WebRTC multiplayer 2D WebGPU JavaScript web application.")
+            runDescription.set("Builds and serves the WebRTC multiplayer 2D WebGPU JavaScript web application.")
+        }
+    }
+    wasm {
+        mainClass.set("io.github.libfdx.samples.multiplayer.webrtc.web.MultiplayerWebRtcWebWasmLauncher")
+        htmlTitle.set("libfdx WebRTC Multiplayer 2D")
+        canvasId.set("libfdx-canvas")
+        htmlWidth.set(0)
+        htmlHeight.set(0)
 
-tasks.register("multiplayer_2d_webrtc_webgpu_js_build") {
-    group = "application"
-    description = "Builds the WebRTC multiplayer 2D WebGPU JavaScript web application."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_web_js_webgpu_build")
-}
-
-tasks.register("multiplayer_2d_webrtc_webgpu_js_run") {
-    group = "application"
-    description = "Builds and serves the WebRTC multiplayer 2D WebGPU JavaScript web application."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_web_js_webgpu_run")
+        target("webgl") {
+            defaultPath.set("/?graphics=webgl")
+            buildDescription.set("Builds the WebRTC multiplayer 2D WebGL Wasm web application.")
+            runDescription.set("Builds and serves the WebRTC multiplayer 2D WebGL Wasm web application.")
+        }
+    }
 }

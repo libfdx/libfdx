@@ -1,8 +1,7 @@
 import org.gradle.api.attributes.java.TargetJvmVersion
-import org.gradle.jvm.toolchain.JavaLanguageVersion
 
 plugins {
-    id("java")
+    id("io.github.libfdx")
 }
 
 java {
@@ -33,6 +32,7 @@ base {
 }
 
 val sampleProjectPath = project.path.substringBefore(":platform:")
+val sampleRoot = layout.projectDirectory.dir("../..")
 val libfdxDependencyVersion =
     gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
 
@@ -61,35 +61,53 @@ dependencies {
     }
 }
 
-val sampleMainClass = "io.github.libfdx.samples.starter.desktop.StarterProjectDesktopLauncher"
-val sampleRoot = layout.projectDirectory.dir("../..").asFile
+libfdx {
+    assets(sampleRoot.dir("assets"))
 
-fun registerGraphicsRun(
-    taskName: String,
-    graphics: String,
-    graphicsLabel: String,
-    providerClasspath: FileCollection
-) = tasks.register<JavaExec>(taskName) {
-    group = "application"
-    description = "Runs the Starter Project desktop sample with $graphicsLabel."
-    classpath = sourceSets["main"].runtimeClasspath + providerClasspath
-    mainClass.set(sampleMainClass)
-    workingDir = sampleRoot
-    javaLauncher.set(javaToolchains.launcherFor {
-        languageVersion.set(JavaLanguageVersion.of(25))
-    })
-    jvmArgs("-Dorg.lwjgl.system.stackSize=1024", "--enable-native-access=ALL-UNNAMED")
-    systemProperty("libfdx.sample.graphics", graphics)
-    systemProperty("libfdx.sample.graphicsLabel", graphicsLabel)
-    System.getProperty("libfdx.sample.exitAfterFrames")?.takeIf { it.isNotBlank() }?.let { frames ->
-        systemProperty("libfdx.sample.exitAfterFrames", frames)
-    }
-    System.getProperty("libfdx.sample.maximized")?.takeIf { it.isNotBlank() }?.let { maximized ->
-        systemProperty("libfdx.sample.maximized", maximized)
+    desktopJvm {
+        mainClass.set("io.github.libfdx.samples.starter.desktop.StarterProjectDesktopLauncher")
+        workingDir.set(sampleRoot)
+        forwardSystemProperty("libfdx.sample.exitAfterFrames")
+        forwardSystemProperty("libfdx.sample.maximized")
+
+        target("gl") {
+            displayName.set("GL")
+            runtimeClasspath(glRuntimeClasspath)
+            systemProperty("libfdx.sample.graphics", "gl")
+            systemProperty("libfdx.sample.graphicsLabel", "GL")
+            launchProperty("graphics", "gl")
+            launchProperty("graphicsLabel", "GL")
+            buildDescription.set("Builds the Starter Project desktop GL release jar.")
+            runDescription.set("Runs the Starter Project desktop sample with GL.")
+        }
+        target("wgpu") {
+            displayName.set("WGPU")
+            runtimeClasspath(wgpuRuntimeClasspath)
+            systemProperty("libfdx.sample.graphics", "wgpu")
+            systemProperty("libfdx.sample.graphicsLabel", "WGPU")
+            launchProperty("graphics", "wgpu")
+            launchProperty("graphicsLabel", "WGPU")
+            buildDescription.set("Builds the Starter Project desktop WGPU release jar.")
+            runDescription.set("Runs the Starter Project desktop sample with WGPU.")
+        }
+        target("vulkan") {
+            displayName.set("Vulkan")
+            runtimeClasspath(vulkanRuntimeClasspath)
+            systemProperty("libfdx.sample.graphics", "vulkan")
+            systemProperty("libfdx.sample.graphicsLabel", "Vulkan")
+            launchProperty("graphics", "vulkan")
+            launchProperty("graphicsLabel", "Vulkan")
+            buildDescription.set("Builds the Starter Project desktop Vulkan release jar.")
+            runDescription.set("Runs the Starter Project desktop sample with Vulkan.")
+        }
+        target("d3d12") {
+            displayName.set("Direct3D 12")
+            systemProperty("libfdx.sample.graphics", "d3d12")
+            systemProperty("libfdx.sample.graphicsLabel", "Direct3D 12")
+            launchProperty("graphics", "d3d12")
+            launchProperty("graphicsLabel", "Direct3D 12")
+            buildDescription.set("Builds the Starter Project desktop Direct3D 12 release jar.")
+            runDescription.set("Runs the Starter Project desktop sample with Direct3D 12 on Windows.")
+        }
     }
 }
-
-registerGraphicsRun("starter_project_desktop_gl_run", "gl", "GL", glRuntimeClasspath)
-registerGraphicsRun("starter_project_desktop_wgpu_run", "wgpu", "WGPU", wgpuRuntimeClasspath)
-registerGraphicsRun("starter_project_desktop_vulkan_run", "vulkan", "Vulkan", vulkanRuntimeClasspath)
-registerGraphicsRun("starter_project_desktop_d3d12_run", "d3d12", "Direct3D 12", files())

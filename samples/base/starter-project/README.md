@@ -18,7 +18,7 @@ The repository includes launchers for:
 For a quick desktop run from the libFDX repository:
 
 ```powershell
-./gradlew :samples:base:starter-project:platform:desktop:starter_project_desktop_gl_run
+./gradlew :samples:base:starter-project:platform:desktop:libfdx_desktop_jvm_gl_run
 ```
 
 Set `-Dlibfdx.sample.exitAfterFrames=120` when a bounded desktop smoke run is

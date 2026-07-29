@@ -1,5 +1,5 @@
 plugins {
-    id("java")
+    id("io.github.libfdx")
 }
 
 java {
@@ -12,6 +12,7 @@ base {
 }
 
 val sampleProjectPath = project.path.substringBefore(":platform:")
+val sampleRoot = layout.projectDirectory.dir("../..")
 val libfdxDependencyVersion =
     gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
 
@@ -31,38 +32,36 @@ dependencies {
     }
 }
 
-tasks.register("starter_project_webgl_js_build") {
-    group = "application"
-    description = "Builds the Starter Project WebGL JavaScript web application."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_web_js_webgl_build")
-}
+libfdx {
+    assets(sampleRoot.dir("assets"))
 
-tasks.register("starter_project_webgl_js_run") {
-    group = "application"
-    description = "Builds and serves the Starter Project WebGL JavaScript web application."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_web_js_webgl_run")
-}
+    js {
+        mainClass.set("io.github.libfdx.samples.starter.web.StarterProjectWebJsLauncher")
+        htmlTitle.set("libFDX Starter Project - Web")
+        canvasId.set("libfdx-canvas")
+        htmlWidth.set(0)
+        htmlHeight.set(0)
 
-tasks.register("starter_project_webgpu_js_build") {
-    group = "application"
-    description = "Builds the Starter Project WebGPU JavaScript web application."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_web_js_webgpu_build")
-}
+        target("webgl") {
+            buildDescription.set("Builds the Starter Project WebGL JavaScript web application.")
+            runDescription.set("Builds and serves the Starter Project WebGL JavaScript web application.")
+        }
+        target("webgpu") {
+            defaultPath.set("/?graphics=webgpu")
+            buildDescription.set("Builds the Starter Project WebGPU JavaScript web application.")
+            runDescription.set("Builds and serves the Starter Project WebGPU JavaScript web application.")
+        }
+    }
+    wasm {
+        mainClass.set("io.github.libfdx.samples.starter.web.StarterProjectWebWasmLauncher")
+        htmlTitle.set("libFDX Starter Project - WebAssembly")
+        canvasId.set("libfdx-canvas")
+        htmlWidth.set(0)
+        htmlHeight.set(0)
 
-tasks.register("starter_project_webgpu_js_run") {
-    group = "application"
-    description = "Builds and serves the Starter Project WebGPU JavaScript web application."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_web_js_webgpu_run")
-}
-
-tasks.register("starter_project_webgl_wasm_build") {
-    group = "application"
-    description = "Builds the Starter Project WebGL WebAssembly web application."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_web_wasm_webgl_build")
-}
-
-tasks.register("starter_project_webgl_wasm_run") {
-    group = "application"
-    description = "Builds and serves the Starter Project WebGL WebAssembly web application."
-    dependsOn("$sampleProjectPath:platform:plugin:libfdx_web_wasm_webgl_run")
+        target("webgl") {
+            buildDescription.set("Builds the Starter Project WebGL WebAssembly web application.")
+            runDescription.set("Builds and serves the Starter Project WebGL WebAssembly web application.")
+        }
+    }
 }
