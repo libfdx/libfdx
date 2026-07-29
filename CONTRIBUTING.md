@@ -126,6 +126,12 @@ These EasyPublishing tasks prepare `build/snapshot-deploy` and
 dependency-mode default. Use `publishSnapshot` or `publishRelease` only through
 the appropriate release workflow.
 
+The Box2D, Box3D, Jolt, and ImGui extension modules may use snapshot binding
+APIs during libFDX snapshot development. Before preparing or publishing a
+libFDX release, change all four external versions in
+`gradle/libs.versions.toml` to published non-snapshot versions. The
+`verify_external_extension_release_versions` task enforces this release gate.
+
 ## Reporting Results
 
 Report what changed, the exact validation commands and results, targets not run

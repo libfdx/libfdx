@@ -13,6 +13,32 @@ val libfdxVersion = libs.versions.libfdxRelease.get()
 val libfdxSnapshotVersion = libs.versions.libfdxSnapshot.get()
 gradle.extensions.extraProperties.set("libfdxDependencyVersion", libfdxSnapshotVersion)
 
+val externalExtensionVersions = linkedMapOf(
+    "jBox2D" to libs.versions.jbox2d.get(),
+    "jBox3D" to libs.versions.jbox3d.get(),
+    "jJolt" to libs.versions.jjolt.get(),
+    "jImGui" to libs.versions.jimgui.get(),
+)
+
+val verifyExternalExtensionReleaseVersions =
+    tasks.register("verify_external_extension_release_versions") {
+        group = "verification"
+        description = "Rejects libFDX releases that depend on snapshot external extension APIs."
+        doLast {
+            val snapshots = externalExtensionVersions.filterValues { version ->
+                version.contains("SNAPSHOT", ignoreCase = true)
+            }
+            if (snapshots.isNotEmpty()) {
+                val dependencies = snapshots.entries.joinToString { (name, version) ->
+                    "$name=$version"
+                }
+                throw GradleException(
+                    "Cannot release libFDX while external extension APIs use snapshots: $dependencies"
+                )
+            }
+        }
+    }
+
 val libfdxPublishableProjectPaths = listOf(
     ":libfdx:framework:math",
     ":libfdx:framework:json",
@@ -39,6 +65,10 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:extensions:ecs:tooling",
     ":libfdx:extensions:scenario_validator:core",
     ":libfdx:extensions:scenario_validator:ui-kit",
+    ":libfdx:extensions:physics:box2d:core",
+    ":libfdx:extensions:physics:box3d:core",
+    ":libfdx:extensions:physics:jolt:core",
+    ":libfdx:extensions:ui:imgui:core",
     ":libfdx:tools:font",
     ":libfdx:extensions:graphics:gl:core",
     ":libfdx:extensions:graphics:gl:platform:desktop",
@@ -103,6 +133,12 @@ easyPublishing {
     nestedBuild("gradle-plugin") {
         directory.set(layout.projectDirectory.dir("libfdx/tools/gradle-plugin"))
     }
+}
+
+tasks.matching { task ->
+    task.name == "prepareRelease" || task.name == "publishRelease"
+}.configureEach {
+    dependsOn(verifyExternalExtensionReleaseVersions)
 }
 
 allprojects {

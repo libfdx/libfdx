@@ -5,6 +5,10 @@ libfdxSnapshot = "-SNAPSHOT"
 
 easyPublishing = "0.1.2"
 androidGradlePlugin = "9.1.1"
+jbox2d = "-SNAPSHOT"
+jbox3d = "-SNAPSHOT"
+jimgui = "-SNAPSHOT"
+jjolt = "-SNAPSHOT"
 jwebgpu = "0.3.4"
 jmultiplatform = "0.1.3"
 junitJupiter = "5.13.4"
@@ -22,6 +26,10 @@ android-library = { id = "com.android.library", version.ref = "androidGradlePlug
 easyPublishing = { id = "com.github.xpenatan.easy-publishing", version.ref = "easyPublishing" }
 
 [libraries]
+jbox2d-core = { module = "com.github.xpenatan.jBox2D:core", version.ref = "jbox2d" }
+jbox3d-core = { module = "com.github.xpenatan.jBox3D:core", version.ref = "jbox3d" }
+jimgui-core = { module = "com.github.xpenatan.jImGui:imgui-core", version.ref = "jimgui" }
+jjolt-core = { module = "com.github.xpenatan.jJolt:core", version.ref = "jjolt" }
 jwebgpu-android = { module = "com.github.xpenatan.jWebGPU:webgpu-android-wgpu", version.ref = "jwebgpu" }
 jwebgpu-core = { module = "com.github.xpenatan.jWebGPU:webgpu-core", version.ref = "jwebgpu" }
 jwebgpu-ffm = { module = "com.github.xpenatan.jWebGPU:webgpu-desktop-ffm", version.ref = "jwebgpu" }

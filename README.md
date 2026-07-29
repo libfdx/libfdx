@@ -83,6 +83,10 @@ Hosted tools and demos:
   generation and snapshot/release version pinning.
 - [Scenario validator](libfdx/extensions/scenario_validator/README.md): runtime
   validation flows.
+- [Physics extensions](libfdx/extensions/physics/README.md): libFDX adapters
+  for jBox2D, jBox3D, and jJolt.
+- [UI extensions](libfdx/extensions/ui/README.md): the jImGui renderer and
+  platform integration.
 - [2D samples](samples/2d/) and [benchmarks](benchmark/README.md): executable
   examples and performance entry points.
 
