@@ -26,7 +26,7 @@ libFDX separates four responsibilities:
 4. **Launchers** select the backend/provider stack for one application.
 
 The backend passes a typed `Fdx` runtime root to application code. User-owned
-objects such as asset managers, batches, UI roots, and ECS worlds remain
+objects such as asset managers, batches, UI roots, and game worlds remain
 explicit rather than becoming global services.
 
 ```java
@@ -59,10 +59,6 @@ Windows:
 .\gradlew.bat :samples:2d:sprite-movement:platform:desktop:libfdx_desktop_jvm_gl_run
 ```
 
-A clean checkout uses configured published artifacts. Contributors changing
-checked-out framework code should enable local dependency mode; see
-[Contributing](CONTRIBUTING.md).
-
 Hosted tools and demos:
 
 - [Project Generator](https://libfdx.github.io/project-generator/): copies a
@@ -72,7 +68,6 @@ Hosted tools and demos:
 
 ## Guides
 
-- [Contributing](CONTRIBUTING.md): checkout setup and validation.
 - [Shaders](docs/SHADERS.md): WGSL authoring and provider translation.
 - [Shader graph sample](samples/graphics/shader-graph/): code-authored and
   serialized graphs, batch integration, provider targets, and optional UI Kit

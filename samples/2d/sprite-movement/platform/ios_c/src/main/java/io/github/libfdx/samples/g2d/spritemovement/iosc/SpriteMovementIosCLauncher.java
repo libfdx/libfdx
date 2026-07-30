@@ -3,8 +3,7 @@ package io.github.libfdx.samples.g2d.spritemovement.iosc;
 import io.github.libfdx.backend.iosc.IosCApplicationBackend;
 import io.github.libfdx.backend.iosc.IosCApplicationConfig;
 import io.github.libfdx.backend.iosc.IosCOpenGLESProvider;
-import io.github.libfdx.ecs.EcsApplication;
-import io.github.libfdx.samples.g2d.spritemovement.SpriteMovementProject;
+import io.github.libfdx.samples.g2d.spritemovement.SpriteMovementApplication;
 
 /**
  * Launches the 2D Sprite Movement iOS C entry point.
@@ -27,7 +26,7 @@ public final class SpriteMovementIosCLauncher {
                 .graphics(new IosCOpenGLESProvider());
 
         new IosCApplicationBackend().start(
-                config, new EcsApplication(new SpriteMovementProject(exitAfterFrames(args))));
+                config, new SpriteMovementApplication(exitAfterFrames(args)));
     }
 
     private static long exitAfterFrames(String[] args) {

@@ -1,6 +1,5 @@
 package io.github.libfdx.gradle
 
-import io.github.libfdx.tools.font.BitmapFontSpec
 import org.gradle.api.Action
 import org.gradle.api.Named
 import org.gradle.api.NamedDomainObjectContainer
@@ -42,8 +41,6 @@ open class LibfdxExtension @Inject constructor(
         }
     val shaders: LibfdxShadersExtension =
         objects.newInstance(LibfdxShadersExtension::class.java, project, objects)
-    val ecsProject: LibfdxEcsProjectExtension =
-        objects.newInstance(LibfdxEcsProjectExtension::class.java, project, objects)
 
     val js: LibfdxJsExtension by lazy {
         objects.newInstance(LibfdxJsExtension::class.java, project, teavm.getJs())
@@ -89,11 +86,6 @@ open class LibfdxExtension @Inject constructor(
         action.execute(shaders)
     }
 
-    fun ecsProject(action: Action<in LibfdxEcsProjectExtension>) {
-        ecsProject.enabled.set(true)
-        action.execute(ecsProject)
-    }
-
     fun js(action: Action<in LibfdxJsExtension>) {
         declaredTargets.add(LibfdxTarget.JS)
         action.execute(js)
@@ -131,48 +123,6 @@ open class LibfdxExtension @Inject constructor(
 
     internal fun isDeclared(target: LibfdxTarget): Boolean {
         return declaredTargets.contains(target)
-    }
-}
-
-open class LibfdxEcsProjectExtension @Inject constructor(
-    project: Project,
-    objects: ObjectFactory
-) {
-    internal val enabled: Property<Boolean> = objects.property(Boolean::class.java).convention(false)
-    val projectId: Property<String> = objects.property(String::class.java)
-    val entryClass: Property<String> = objects.property(String::class.java)
-    val projectRoot: DirectoryProperty = objects.directoryProperty()
-        .convention(project.rootProject.layout.projectDirectory)
-    val projectManifest: RegularFileProperty = objects.fileProperty()
-        .convention(projectRoot.file("fdx-project.json"))
-    val assetsDirectory: DirectoryProperty = objects.directoryProperty()
-        .convention(projectRoot.dir("assets"))
-    val scenesDirectory: DirectoryProperty = objects.directoryProperty()
-        .convention(projectRoot.dir("scenes"))
-    val projectClasses: ConfigurableFileCollection = project.files()
-    val allowedDependencies: ConfigurableFileCollection = project.files()
-    val projectAbi: Property<Int> = objects.property(Int::class.javaObjectType).convention(6)
-    val libfdxAbi: Property<String> = objects.property(String::class.java)
-        .convention(project.provider { project.version.toString() })
-    val gradleRoot: Property<String> = objects.property(String::class.java).convention(projectRoot.map { root ->
-        val relative = root.asFile.toPath().toAbsolutePath().normalize()
-            .relativize(project.rootProject.projectDir.toPath().toAbsolutePath().normalize())
-            .toString()
-            .replace('\\', '/')
-        relative.ifEmpty { "." }
-    })
-    val gradleProject: Property<String> = objects.property(String::class.java).convention(project.path)
-    val desktopBundleTask: Property<String> = objects.property(String::class.java)
-        .convention(ECS_PROJECT_BUNDLE_TASK)
-    val outputFile: RegularFileProperty = objects.fileProperty()
-        .convention(project.layout.buildDirectory.file(projectId.map { id -> "fdx-project/$id.fdxproject" }))
-
-    fun projectClasses(vararg paths: Any) {
-        projectClasses.from(*paths)
-    }
-
-    fun allowedDependencies(vararg paths: Any) {
-        allowedDependencies.from(*paths)
     }
 }
 
@@ -358,7 +308,7 @@ open class LibfdxBitmapFontExtension @Inject constructor(
     val sourceFile: RegularFileProperty = objects.fileProperty()
     val outputDir: DirectoryProperty = objects.directoryProperty()
     val assetPath: Property<String> = objects.property(String::class.java)
-        .convention(BitmapFontSpec.DEFAULT_ASSET_PATH)
+        .convention(DEFAULT_BITMAP_FONT_ASSET_PATH)
     val size: Property<Int> = objects.property(Int::class.javaObjectType).convention(24)
     val padding: Property<Int> = objects.property(Int::class.javaObjectType).convention(2)
     val maxTextureSize: Property<Int> = objects.property(Int::class.javaObjectType).convention(512)

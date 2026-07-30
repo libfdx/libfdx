@@ -10,17 +10,6 @@ plugins {
 }
 
 
-val libfdxGradlePluginDependencyArtifacts = listOf(
-    "tools_font",
-    "graphics",
-    "net",
-    "backend_web",
-    "backend_desktop_c",
-    "backend_ios_c",
-    "backend_psp"
-)
-
-extra["libfdxGradlePluginDependencyArtifacts"] = libfdxGradlePluginDependencyArtifacts
 val libfdxReleaseRequested = extensions.extraProperties.get("easyPublishing.releaseRequested") as Boolean
 val libfdxSelectedVersion = if (libfdxReleaseRequested) libs.versions.libfdxRelease.get() else libs.versions.libfdxSnapshot.get()
 
@@ -53,28 +42,8 @@ easyPublishing {
 
 dependencies {
     implementation(libs.teavm.gradle.plugin)
-    libfdxGradlePluginDependencyArtifacts.forEach { artifact ->
-        implementation("${libs.versions.libfdxGroup.get()}:$artifact:$libfdxSelectedVersion")
-    }
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
-}
-
-// Project generation must use the writer from this checkout. The included plugin build
-// compiles against libFDX artifacts at the same selected publication version, but that
-// dependency must not hide local desktop-C generator or shader-validation API changes
-// until after publication.
-sourceSets {
-    main {
-        java.srcDir("../../backends/desktop_c/src/main/java")
-        java.srcDir("../../framework/graphics/src/main/java")
-        java.include("io/github/libfdx/backend/desktopc/NativeProjectWriter.java")
-        java.include("io/github/libfdx/graphics/shader/ShaderProfile.java")
-        java.include("io/github/libfdx/graphics/shader/ShaderProfileValidator.java")
-        java.include("io/github/libfdx/graphics/shader/ShaderValidationDiagnostic.java")
-        java.include("io/github/libfdx/graphics/shader/ShaderValidationResult.java")
-        java.include("io/github/libfdx/graphics/shader/ShaderValidationSeverity.java")
-    }
 }
 
 tasks.withType<Test>().configureEach {

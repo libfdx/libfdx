@@ -16,7 +16,6 @@ junitPlatform = "1.13.4"
 javaWebsocket = "1.5.7"
 lwjgl = "3.4.1"
 teavm = "0.15.0"
-usePublishedLibfdx = "true"
 webrtcAndroid = "137.7151.05"
 webrtcJava = "0.14.0"
 

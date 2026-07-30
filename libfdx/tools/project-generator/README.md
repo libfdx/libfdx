@@ -111,7 +111,7 @@ Deployment is owned by the
 [`Pages` workflow](https://github.com/libfdx/libfdx.github.io/actions/workflows/pages.yml)
 in the `libfdx.github.io` repository. Run that workflow manually and set
 `libfdx_ref` to the libFDX branch, tag, or commit to build. A branch or commit
-embeds the snapshot dependency version. A tag matching the checked-out
+embeds the snapshot dependency version. A tag matching the repository
 `libfdxRelease` value, with or without a leading `v`, embeds the release
 version.
 

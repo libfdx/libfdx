@@ -87,9 +87,7 @@ non-pass result.
 
 Scenario construction and failure reporting may allocate. Enabling validation
 must not add steady-state allocation to normal input, update, layout,
-rendering, networking, or ECS paths.
+rendering, networking, or game-loop paths.
 
-Visual validation procedure and contributor commands are in
-[Contributing](../../../CONTRIBUTING.md#visual-and-graphics-changes). Exact
-declarations remain in source/Javadocs, and executable behavior remains in the
-scenario-validator tests.
+Exact declarations remain in source/Javadocs, and executable behavior remains
+in the scenario-validator tests.

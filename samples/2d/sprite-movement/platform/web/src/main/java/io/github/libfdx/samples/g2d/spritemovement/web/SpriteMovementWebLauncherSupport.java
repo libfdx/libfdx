@@ -2,9 +2,8 @@ package io.github.libfdx.samples.g2d.spritemovement.web;
 
 import io.github.libfdx.backend.web.WebApplicationBackend;
 import io.github.libfdx.backend.web.WebApplicationConfig;
-import io.github.libfdx.ecs.EcsApplication;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
-import io.github.libfdx.samples.g2d.spritemovement.SpriteMovementProject;
+import io.github.libfdx.samples.g2d.spritemovement.SpriteMovementApplication;
 import org.teavm.jso.JSBody;
 
 /**
@@ -26,8 +25,7 @@ final class SpriteMovementWebLauncherSupport {
                 .canvasId(CANVAS_ID)
                 .graphics(graphics);
 
-        new WebApplicationBackend().start(config,
-                new EcsApplication(new SpriteMovementProject()));
+        new WebApplicationBackend().start(config, new SpriteMovementApplication());
     }
 
     private static String graphics(String[] args) {

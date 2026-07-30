@@ -5,9 +5,6 @@ plugins {
     alias(libs.plugins.easyPublishing)
 }
 
-val libfdxRepositoryConsumersIncluded = gradle.extensions.extraProperties
-    .get("libfdxRepositoryConsumersIncluded") as Boolean
-
 val libfdxGroup = libs.versions.libfdxGroup.get()
 val libfdxVersion = libs.versions.libfdxRelease.get()
 val libfdxSnapshotVersion = libs.versions.libfdxSnapshot.get()
@@ -61,7 +58,6 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:framework:g2d",
     ":libfdx:framework:g3d",
     ":libfdx:framework:ui-kit",
-    ":libfdx:extensions:ecs:core",
     ":libfdx:extensions:scenario_validator:core",
     ":libfdx:extensions:scenario_validator:ui-kit",
     ":libfdx:extensions:physics:box2d:core",
@@ -69,6 +65,7 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:extensions:physics:jolt:core",
     ":libfdx:extensions:ui:imgui:core",
     ":libfdx:tools:font",
+    ":libfdx:tools:shader",
     ":libfdx:extensions:graphics:gl:core",
     ":libfdx:extensions:graphics:gl:platform:desktop",
     ":libfdx:extensions:graphics:gl:platform:desktop_c",
@@ -233,31 +230,30 @@ tasks.register("printFdxVersion") {
     }
 }
 
-if (libfdxRepositoryConsumersIncluded) {
-    tasks.register("benchmark_desktop") {
-        group = "benchmark"
-        description = "Runs the full desktop JVM benchmark suite and generates Markdown reports."
-        dependsOn(":benchmark:platform:desktop:benchmark_desktop")
-    }
+tasks.register("benchmark_desktop") {
+    group = "benchmark"
+    description = "Runs the full desktop JVM benchmark suite and generates Markdown reports."
+    dependsOn(":benchmark:platform:desktop:benchmark_desktop")
+}
 
-    tasks.register("benchmark_desktop_c_debug") {
-        group = "benchmark"
-        description = "Runs the full desktop_c Debug benchmark suite and generates Markdown reports."
-        dependsOn(":benchmark:platform:desktop_c:benchmark_desktop_c_debug")
-    }
+tasks.register("benchmark_desktop_c_debug") {
+    group = "benchmark"
+    description = "Runs the full desktop_c Debug benchmark suite and generates Markdown reports."
+    dependsOn(":benchmark:platform:desktop_c:benchmark_desktop_c_debug")
+}
 
-    tasks.register("benchmark_desktop_c_release") {
-        group = "benchmark"
-        description = "Runs the full desktop_c Release benchmark suite and generates Markdown reports."
-        dependsOn(":benchmark:platform:desktop_c:benchmark_desktop_c_release")
-    }
+tasks.register("benchmark_desktop_c_release") {
+    group = "benchmark"
+    description = "Runs the full desktop_c Release benchmark suite and generates Markdown reports."
+    dependsOn(":benchmark:platform:desktop_c:benchmark_desktop_c_release")
+}
 
-    val pagesStagingDir = layout.buildDirectory.dir("pages")
+val pagesStagingDir = layout.buildDirectory.dir("pages")
 
-    tasks.register<Sync>("stage_pages") {
-        group = "publishing"
-        description = "Builds and stages hosted web outputs under build/pages."
-        into(pagesStagingDir)
+tasks.register<Sync>("stage_pages") {
+    group = "publishing"
+    description = "Builds and stages hosted web outputs under build/pages."
+    into(pagesStagingDir)
     pagesWebapp(
         projectPath = ":libfdx:tools:project-generator:platform:web",
         buildTaskName = "project_generator_webgpu_wasm_build",
@@ -301,25 +297,25 @@ if (libfdxRepositoryConsumersIncluded) {
         pagesPath = "samples/2d/sprite-movement/webgpu-js"
     )
     pagesWebapp(
-        projectPath = ":samples:2d:ecs-platformer:platform:web",
+        projectPath = ":samples:2d:platformer:platform:web",
         buildTaskName = "libfdx_web_js_webgl_build",
         webappPath = "dist/web-js/webapp",
-        pagesPath = "samples/2d/ecs-platformer/webgl-js"
+        pagesPath = "samples/2d/platformer/webgl-js"
     )
     pagesWebapp(
-        projectPath = ":samples:2d:ecs-platformer:platform:web",
+        projectPath = ":samples:2d:platformer:platform:web",
         buildTaskName = "libfdx_web_wasm_webgl_build",
         webappPath = "dist/web-wasm/webapp",
-        pagesPath = "samples/2d/ecs-platformer/webgl-wasm"
+        pagesPath = "samples/2d/platformer/webgl-wasm"
     )
     pagesWebapp(
-        projectPath = ":samples:2d:ecs-platformer:platform:web",
+        projectPath = ":samples:2d:platformer:platform:web",
         buildTaskName = "libfdx_web_js_webgpu_build",
         webappPath = "dist/web-js/webapp",
-        pagesPath = "samples/2d/ecs-platformer/webgpu-js"
+        pagesPath = "samples/2d/platformer/webgpu-js"
     )
-        doLast {
-            val root = pagesStagingDir.get().asFile
+    doLast {
+        val root = pagesStagingDir.get().asFile
         writeSelectorPage(
             root.resolve("tests/index.html"),
             "Tests",
@@ -334,7 +330,7 @@ if (libfdxRepositoryConsumersIncluded) {
             "2D Samples",
             listOf(
                 "Sprite Movement" to "sprite-movement/",
-                "ECS Platformer" to "ecs-platformer/"
+                "Platformer" to "platformer/"
             )
         )
         writeSelectorPage(
@@ -347,15 +343,30 @@ if (libfdxRepositoryConsumersIncluded) {
             )
         )
         writeSelectorPage(
-            root.resolve("samples/2d/ecs-platformer/index.html"),
-            "ECS Platformer",
+            root.resolve("samples/2d/platformer/index.html"),
+            "Platformer",
             listOf(
                 "WebGL JS" to "webgl-js/",
                 "WebGL Wasm" to "webgl-wasm/",
                 "WebGPU JS" to "webgpu-js/?graphics=webgpu"
             )
         )
-        }
+        writeRedirectPage(
+            root.resolve("samples/2d/ecs-platformer/index.html"),
+            "../platformer/"
+        )
+        writeRedirectPage(
+            root.resolve("samples/2d/ecs-platformer/webgl-js/index.html"),
+            "../../platformer/webgl-js/"
+        )
+        writeRedirectPage(
+            root.resolve("samples/2d/ecs-platformer/webgl-wasm/index.html"),
+            "../../platformer/webgl-wasm/"
+        )
+        writeRedirectPage(
+            root.resolve("samples/2d/ecs-platformer/webgpu-js/index.html"),
+            "../../platformer/webgpu-js/?graphics=webgpu"
+        )
     }
 }
 
@@ -412,6 +423,32 @@ fun writeSelectorPage(output: File, title: String, links: List<Pair<String, Stri
         $linkHtml
               </nav>
             </main>
+          </body>
+        </html>
+        """.trimIndent(),
+        Charsets.UTF_8
+    )
+}
+
+fun writeRedirectPage(output: File, target: String) {
+    output.parentFile.mkdirs()
+    val scriptTarget = if ('?' in target) {
+        """"$target" + location.hash"""
+    } else {
+        """"$target" + location.search + location.hash"""
+    }
+    output.writeText(
+        """
+        <!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta http-equiv="refresh" content="0; url=$target">
+            <title>Platformer moved</title>
+            <script>location.replace($scriptTarget);</script>
+          </head>
+          <body>
+            <p>This sample moved to <a href="$target">Platformer</a>.</p>
           </body>
         </html>
         """.trimIndent(),

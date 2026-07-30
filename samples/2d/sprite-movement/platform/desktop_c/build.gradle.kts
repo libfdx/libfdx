@@ -30,10 +30,7 @@ dependencies {
 }
 
 libfdx {
-    assets(
-        sampleRoot.dir("assets"),
-        sampleRoot.dir("scenes")
-    )
+    assets(sampleRoot.dir("assets"))
 
     desktopC {
         target("opengl") {

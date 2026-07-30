@@ -3,8 +3,7 @@ package io.github.libfdx.samples.g2d.spritemovement.desktopc;
 import io.github.libfdx.backend.desktopc.DesktopCApplicationBackend;
 import io.github.libfdx.backend.desktopc.DesktopCApplicationConfig;
 import io.github.libfdx.backend.desktopc.DesktopCOpenGLProvider;
-import io.github.libfdx.ecs.EcsApplication;
-import io.github.libfdx.samples.g2d.spritemovement.SpriteMovementProject;
+import io.github.libfdx.samples.g2d.spritemovement.SpriteMovementApplication;
 
 /**
  * Launches the 2D Sprite Movement desktop C entry point.
@@ -29,7 +28,7 @@ public final class SpriteMovementDesktopCLauncher {
                 .graphics(new DesktopCOpenGLProvider());
 
         new DesktopCApplicationBackend().start(
-                config, new EcsApplication(new SpriteMovementProject(exitAfterFrames(args))));
+                config, new SpriteMovementApplication(exitAfterFrames(args)));
     }
 
     private static long exitAfterFrames(String[] args) {

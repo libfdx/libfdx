@@ -28,16 +28,7 @@ The backend constructs the typed `Fdx` root and passes it to
 `ApplicationListener.create(Fdx)`. `Fdx` contains backend-owned runtime roots
 such as application, displays, graphics, input, files, storage, networking, and
 logging. Application-owned objects—including asset managers, batches, UI roots,
-scenes, ECS worlds, and game systems—are constructed explicitly.
-
-The standard ECS application adapter and external ECS hosts create each
-`World`; project code receives that world through the core `EcsProject`
-initialization contract and configures it with components, managers, phase
-systems, scene descriptors, and initial state. Every world owns an intrinsic
-`SceneManager` that remains available even when the project does not persist
-scenes. The world dispatches its registered update, game render, and UI render
-phases when the host calls them. Project entry objects do not own or expose the
-host world.
+scenes, game worlds, and systems—are constructed explicitly.
 
 ## Repository Ownership
 
@@ -88,36 +79,12 @@ Source data and provider resources remain separate ownership domains. For
 example, decoded image data is not a texture; a loader that creates a GPU
 resource belongs in a module that already depends on graphics.
 
-Optional features such as ECS and scenario validation are user-created and do
-not become backend services. The ECS extension has a published core module
-containing its runtime, project-entry, application-adapter, world phase, and
-camera contracts, together with reflection-free scene description and
-deterministic persistence. This shared core is the parent-loaded attachment
-boundary for standalone applications and external hosts. Every `World`
-constructs one non-removable `SceneManager`; there is no separate ECS scene or
-tooling artifact.
-
-The checked-in `fdx-project.json` manifest and the generated
-`META-INF/fdx-bundle.json` archive metadata are independently versioned. The
-current project-manifest format is version 2, and the current outer bundle
-metadata format is also version 2; changing one schema does not implicitly
-change the other. Dynamically loaded projects use project ABI 6.
-
-An optional core feature may depend on the portable framework contracts its
-public API requires. ECS core receives the backend-owned `Fdx` root only while
-a host initializes an `EcsProject`, and exposes provider-neutral graphics,
-camera, application, scene-description, and scene-persistence contracts without
-depending on a graphics provider, backend implementation, or editor. `System`
-owns lifecycle and enablement only; `UpdateSystem`, `RenderSystem`, and
-`UiRenderSystem` opt a system into the corresponding `World` phase.
-World-level camera selection remains in the separate core `CameraManager`.
-`SceneManager` owns stable entity identity, names, hierarchy, scene documents,
-serialization, and the component descriptor and preset catalog. File selection
-and file I/O remain host responsibilities. The world alone constructs the
-manager and synchronizes it with entity lifecycle changes; project and host code
-accesses scene state only through `World.scenes()`. A complete world clear also
-releases class-keyed component caches so a dynamically loaded project can be
-detached without the world retaining its classes.
+Optional application features and external engines do not become backend
+services. They may depend on the portable framework contracts their APIs
+require, but libFDX does not depend back on them. In particular, ECS project,
+world, scene, and editor contracts are owned by fdx-engine rather than a libFDX
+extension. libFDX supplies the portable application, graphics, camera, input,
+file, JSON, math, and collection contracts that such an engine may compose.
 
 ## Backends And Providers
 
@@ -170,14 +137,15 @@ active frame and never survive it. Complete lifecycle and failure rules are in
 
 ## Build And Publication
 
-The repository supports published dependencies for clean-checkout consumers
-and checked-out projects for local framework development. Composite and
-publication builds may configure a reduced project graph. Exact selection,
-versions, included builds, publications, artifacts, and task names are defined
-by `gradle/libs.versions.toml`, `settings.gradle.kts`, and the relevant Gradle build files.
+The `io.github.libfdx` Gradle plugin owns build DSL and Gradle task wiring. Font
+generation, shader validation, web application generation, and native project
+generation remain owned by their tool or backend modules. Those modules expose
+command-line entry points that plugin tasks invoke without moving their
+implementation classes into the plugin.
 
-Contributor setup is documented in [Contributing](../CONTRIBUTING.md). Do not
-copy the live Gradle project or artifact catalog into this document.
+Framework, backend, tool, and Gradle plugin modules are published as separate
+artifacts. Exact versions, project topology, publication coordinates, and task
+names are defined by Gradle source.
 
 Public packages start with `io.github.libfdx`. The module owning a concept owns
 its package placement. Exact package names and declarations remain in Java

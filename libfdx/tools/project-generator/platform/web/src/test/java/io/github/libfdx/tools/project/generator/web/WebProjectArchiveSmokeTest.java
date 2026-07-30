@@ -29,7 +29,7 @@ public final class WebProjectArchiveSmokeTest {
     public static void main(String[] args) throws Exception {
         ProjectGenerationResult generation = new ProjectGenerator().generate(ProjectGenerationSettings.builder()
                 .projectName("web-smoke-game")
-                .sampleId("2d/ecs-platformer")
+                .sampleId("2d/platformer")
                 .platforms(ProjectPlatform.WEB)
                 .build());
         GeneratedProject project = generation.project();
@@ -39,11 +39,11 @@ public final class WebProjectArchiveSmokeTest {
         Set<String> entries = entries(archive);
         require(entries.contains("settings.gradle.kts"), "Missing settings.gradle.kts in ZIP.");
         require(entries.contains(
-                "core/src/main/java/io/github/libfdx/samples/ecs/platformer/EcsPlatformerApplication.java"),
+                "core/src/main/java/io/github/libfdx/samples/g2d/platformer/PlatformerApplication.java"),
                 "Missing generated application in ZIP.");
         require(entries.contains(
-                "platform/web/src/main/java/io/github/libfdx/samples/ecs/platformer/web/"
-                        + "EcsPlatformerWebJsLauncher.java"),
+                "platform/web/src/main/java/io/github/libfdx/samples/g2d/platformer/web/"
+                        + "PlatformerWebJsLauncher.java"),
                 "Missing selected web launcher in ZIP.");
         require(!entries.contains("platform/desktop/build.gradle.kts"),
                 "Unselected desktop platform was included in ZIP.");

@@ -28,10 +28,7 @@ dependencies {
 }
 
 libfdx {
-    assets(
-        sampleRoot.dir("assets"),
-        sampleRoot.dir("scenes")
-    )
+    assets(sampleRoot.dir("assets"))
 
     iosC {
         bundleIdentifier.set("io.github.libfdx.samples.g2d.spritemovement.iosc")

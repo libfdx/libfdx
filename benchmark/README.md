@@ -1,9 +1,8 @@
 # libFDX Benchmarks
 
-Benchmarks live in the repository so they can run against checked-out framework
-changes. `core` owns benchmark cases/results; platform modules own launchers and
-generated reports. The plugin module validates generated native benchmark
-tasks.
+Benchmarks exercise the current framework sources. `core` owns benchmark
+cases/results; platform modules own launchers and generated reports. The plugin
+module validates generated native benchmark tasks.
 
 Establish correctness before using benchmark results as evidence. Compare
 providers with the same scene, workload, duration, visibility, and frame-limit

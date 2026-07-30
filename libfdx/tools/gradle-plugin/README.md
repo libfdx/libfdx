@@ -5,8 +5,10 @@ is build-time integration only: application code continues to use portable
 libFDX APIs, and launcher projects declare their backend/provider dependencies
 explicitly.
 
-Repository contributors should enable the local dependency mode described in
-[Contributing](../../../CONTRIBUTING.md).
+The plugin owns Gradle DSL and task wiring. Font generation, shader validation,
+web application generation, and native project generation remain in their
+owning tool or backend modules; plugin tasks delegate to those modules'
+command-line entry points.
 
 ## Platform Targets
 
@@ -83,47 +85,6 @@ properties can be forwarded as Android intent extras with
 `forwardStringSystemProperty` and `forwardBooleanSystemProperty`. Use
 `forwardStringSystemPropertyPrefix` when a test or application owns a namespace
 of string extras.
-
-## ECS Project Bundles
-
-Apply `ecsProject` to a portable game-core project when a desktop tool must load
-that project. This does not add an editor, desktop backend, or UI implementation
-dependency to game code.
-
-```kotlin
-libfdx {
-    ecsProject {
-        projectId.set("com.example.game")
-        entryClass.set("com.example.game.GameProject")
-        projectRoot.set(rootProject.layout.projectDirectory)
-        projectAbi.set(6)
-        libfdxAbi.set(libfdxVersion)
-    }
-}
-```
-
-The project root owns `fdx-project.json`, `assets/`, and `scenes/`. Its manifest
-identifies the project, entry class, default scene, asset path, Gradle project,
-and desktop bundle task relative to that same root.
-
-The `libfdx_ecs_project_bundle` task compiles the main source set and writes a
-deterministic `.fdxproject` archive under `build/fdx-project` by default. The
-archive contains project classes, explicitly allowed dependency JARs under
-`lib/`, assets, scenes, project ABI 6 metadata, the exact libFDX ABI, and
-content hashes. Bundle creation rejects unsafe paths, duplicates,
-manifest/configuration mismatches, and dependencies containing protected
-framework/editor packages.
-
-`fdx-project.json` uses project-manifest `formatVersion` 2. The distinct
-`META-INF/fdx-bundle.json` outer archive metadata also currently uses
-`formatVersion` 2; the two schemas are versioned independently.
-
-Use `allowedDependencies(...)` only for project libraries that the host is
-expected to load. Normal platform launchers remain statically linked and do not
-load the editor bundle. Dynamic hosts parent-load ECS core and the optional
-scene/schema contract when used, instantiate the configured `EcsProject` entry
-class, create a world, and call its single `initialize(Fdx, World)` method. A
-project or libFDX ABI mismatch is rejected before attachment.
 
 ## Bitmap Fonts
 

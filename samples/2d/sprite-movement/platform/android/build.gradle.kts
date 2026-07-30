@@ -33,7 +33,6 @@ android {
     sourceSets {
         getByName("main") {
             assets.directories.add(sampleRoot.dir("assets").asFile.absolutePath)
-            assets.directories.add(sampleRoot.dir("scenes").asFile.absolutePath)
         }
     }
 }

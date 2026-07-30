@@ -254,7 +254,5 @@ shader-creation path. Renderer shader changes require a rendered scenario, not
 only successful compilation. Compare affected providers under the same scene,
 viewport, assets, input, and frame conditions.
 
-See [Contributing](../CONTRIBUTING.md#visual-and-graphics-changes) for the visual
-validation protocol and the
-[Gradle plugin](../libfdx/tools/gradle-plugin/README.md#shaders) for project
-configuration.
+Project configuration is described in the
+[Gradle plugin](../libfdx/tools/gradle-plugin/README.md#shaders).

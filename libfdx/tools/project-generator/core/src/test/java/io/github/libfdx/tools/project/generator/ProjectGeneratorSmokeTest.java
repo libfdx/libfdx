@@ -24,7 +24,7 @@ public final class ProjectGeneratorSmokeTest {
                 "Starter Project is not first in the catalog");
         require(containsSample(samples, "base/starter-project"), "Starter Project sample missing");
         require(containsSample(samples, "2d/sprite-movement"), "Sprite Movement sample missing");
-        require(containsSample(samples, "2d/ecs-platformer"), "ECS Platformer sample missing");
+        require(containsSample(samples, "2d/platformer"), "Platformer sample missing");
         require(containsSample(samples, "2d/multiplayer-webrtc"), "WebRTC sample missing");
         require(containsSample(samples, "graphics/shader-graph"), "Shader Graph sample missing");
         require(generator.libfdxVersion().length() > 0, "Bundled libFDX version is empty");
@@ -100,7 +100,7 @@ public final class ProjectGeneratorSmokeTest {
         require(project.containsFile("gradle/libs.versions.toml"), "version catalog missing");
         require(project.containsFile("PROJECT_GENERATOR.md"), "generator provenance missing");
         require(project.containsFile(
-                "core/src/main/java/io/github/libfdx/samples/g2d/spritemovement/SpriteMovementProject.java"),
+                "core/src/main/java/io/github/libfdx/samples/g2d/spritemovement/SpriteMovementApplication.java"),
                 "bundled sample application source missing");
         require(project.containsFile(
                 "platform/desktop/src/main/java/io/github/libfdx/samples/g2d/spritemovement/desktop/"
@@ -120,6 +120,8 @@ public final class ProjectGeneratorSmokeTest {
         require(project.file("build.gradle.kts").textContent()
                         .contains("libfdxDependencyVersion"),
                 "standalone version bridge missing");
+        require(!project.containsFile("fdx-project.json"),
+                "ordinary libFDX sample unexpectedly contains an engine project manifest");
         require(project.file("core/build.gradle.kts").textContent()
                         .contains("$libfdxDependencyVersion"),
                 "sample dependencies are not driven by the generator version");
@@ -128,11 +130,18 @@ public final class ProjectGeneratorSmokeTest {
 
         GeneratedProject platformer = generator.generate(ProjectGenerationSettings.builder()
                 .projectName("platformer")
-                .sampleId("2d/ecs-platformer")
+                .sampleId("2d/platformer")
                 .build()).project();
         require(platformer.containsFile(
                 "assets/kenney/pixel-platformer/Tilemap/tilemap_packed.png"),
                 "sample-owned platformer assets were not bundled");
+        GeneratedProject legacyPlatformer = generator.generate(ProjectGenerationSettings.builder()
+                .projectName("legacy-platformer")
+                .sampleId("2d/ecs-platformer")
+                .build()).project();
+        require(legacyPlatformer.containsFile(
+                "assets/kenney/pixel-platformer/Tilemap/tilemap_packed.png"),
+                "legacy platformer sample identifier did not resolve to the renamed sample");
 
         ProjectValidationResult validation = ProjectValidationResult.validate(ProjectGenerationSettings.builder()
                 .projectName("bad name")

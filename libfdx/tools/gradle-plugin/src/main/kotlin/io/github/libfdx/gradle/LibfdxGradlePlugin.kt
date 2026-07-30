@@ -1,9 +1,11 @@
 package io.github.libfdx.gradle
 
-import io.github.libfdx.backend.web.TeaVMAssetProperties
-import io.github.libfdx.backend.web.WebAsset
-import io.github.libfdx.backend.web.WebAssets
 import org.gradle.api.Action
+import org.gradle.api.artifacts.Configuration
+import org.gradle.api.attributes.Bundling
+import org.gradle.api.attributes.Category
+import org.gradle.api.attributes.LibraryElements
+import org.gradle.api.attributes.Usage
 import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.file.FileCollection
 import org.gradle.api.GradleException
@@ -32,6 +34,15 @@ internal fun prioritizedDesktopJvmClasspath(
     applicationRuntimeClasspath: FileCollection
 ): FileCollection = targetRuntimeClasspath + applicationRuntimeClasspath
 
+private data class LibfdxToolClasspaths(
+    val bitmapFont: Configuration,
+    val shader: Configuration,
+    val web: Configuration,
+    val desktopC: Configuration,
+    val psp: Configuration,
+    val iosC: Configuration
+)
+
 class LibfdxGradlePlugin : Plugin<Project> {
     override fun apply(project: Project) {
         val androidApplicationProject = project.pluginManager.hasPlugin(ANDROID_APPLICATION_PLUGIN_ID)
@@ -53,9 +64,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
             return
         }
 
-        extension.ecsProject.projectClasses.from(
-            project.extensions.getByType<SourceSetContainer>().getByName("main").output
-        )
+        val toolClasspaths = createToolClasspaths(project)
 
         project.afterEvaluate {
             if(extension.isDeclared(LibfdxTarget.ANDROID)) {
@@ -63,12 +72,12 @@ class LibfdxGradlePlugin : Plugin<Project> {
                     "The libfdx android target requires com.android.application to be applied before io.github.libfdx."
                 )
             }
-            registerBitmapFontTasks(project, extension)
-            registerShaderTasks(project, extension)
+            registerBitmapFontTasks(project, extension, toolClasspaths.bitmapFont)
+            registerShaderTasks(project, extension, toolClasspaths.shader)
             val requestedTasks = requestedTaskNames(project)
             val nativeTarget = selectedNativeTarget(extension, requestedTasks)
             configureTargets(project, extension, nativeTarget, requestedTasks)
-            registerTasks(project, extension)
+            registerTasks(project, extension, toolClasspaths)
             project.gradle.taskGraph.whenReady(object : Action<TaskExecutionGraph> {
                 override fun execute(graph: TaskExecutionGraph) {
                     val taskGraphTasks = graph.allTasks
@@ -89,6 +98,100 @@ class LibfdxGradlePlugin : Plugin<Project> {
                 }
             })
         }
+    }
+
+    private fun createToolClasspaths(project: Project): LibfdxToolClasspaths {
+        return LibfdxToolClasspaths(
+            createToolClasspath(
+                project,
+                "libfdxBitmapFontToolClasspath",
+                ":libfdx:tools:font",
+                "tools_font"
+            ),
+            createToolClasspath(
+                project,
+                "libfdxShaderToolClasspath",
+                ":libfdx:tools:shader",
+                "tools_shader"
+            ),
+            createToolClasspath(
+                project,
+                "libfdxWebToolClasspath",
+                ":libfdx:backends:web",
+                "backend_web"
+            ),
+            createToolClasspath(
+                project,
+                "libfdxDesktopCToolClasspath",
+                ":libfdx:backends:desktop_c",
+                "backend_desktop_c"
+            ),
+            createToolClasspath(
+                project,
+                "libfdxPspToolClasspath",
+                ":libfdx:backends:psp",
+                "backend_psp"
+            ),
+            createToolClasspath(
+                project,
+                "libfdxIosCToolClasspath",
+                ":libfdx:backends:ios_c",
+                "backend_ios_c"
+            )
+        )
+    }
+
+    private fun createToolClasspath(
+        project: Project,
+        configurationName: String,
+        localProjectPath: String,
+        artifactId: String
+    ): Configuration {
+        val configuration = project.configurations.create(configurationName) {
+            description = "Runtime classpath for the libFDX $artifactId build tool."
+            isCanBeConsumed = false
+            isCanBeResolved = true
+            attributes {
+                attribute(
+                    Usage.USAGE_ATTRIBUTE,
+                    project.objects.named(Usage::class.java, Usage.JAVA_RUNTIME)
+                )
+                attribute(
+                    Category.CATEGORY_ATTRIBUTE,
+                    project.objects.named(Category::class.java, Category.LIBRARY)
+                )
+                attribute(
+                    LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE,
+                    project.objects.named(LibraryElements::class.java, LibraryElements.JAR)
+                )
+                attribute(
+                    Bundling.BUNDLING_ATTRIBUTE,
+                    project.objects.named(Bundling::class.java, Bundling.EXTERNAL)
+                )
+            }
+        }
+        val localProject = project.rootProject.findProject(localProjectPath)
+        if(localProject != null) {
+            project.dependencies.add(
+                configurationName,
+                project.dependencies.project(mapOf("path" to localProject.path))
+            )
+        }
+        else {
+            configuration.defaultDependencies {
+                val version = project.providers.gradleProperty(TOOLING_VERSION_PROPERTY)
+                    .orNull
+                    ?.trim()
+                    ?.takeIf(String::isNotEmpty)
+                    ?: LibfdxGradlePlugin::class.java.`package`.implementationVersion
+                    ?: throw GradleException(
+                        "Cannot determine the libFDX tooling version. "
+                                + "Set -P$TOOLING_VERSION_PROPERTY=<version> when using an unpackaged plugin."
+                    )
+                add(project.dependencies.create("$LIBFDX_GROUP:$artifactId:$version"))
+            }
+        }
+        return configuration
     }
 
     private fun configureTargets(
@@ -314,7 +417,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
     }
 
     private fun configureWebAssets(extension: LibfdxExtension) {
-        val entries = WebAssets.collect(extension.assets.files.map { it.toPath() })
+        val entries = collectLibfdxWebAssets(extension.assets.files)
         if(extension.isDeclared(LibfdxTarget.JS)) {
             configureWebAssetProperties(extension.js.teavmConfig.properties, entries)
         }
@@ -323,11 +426,14 @@ class LibfdxGradlePlugin : Plugin<Project> {
         }
     }
 
-    private fun configureWebAssetProperties(properties: MapProperty<String, String>, entries: List<WebAsset>) {
-        properties.put(TeaVMAssetProperties.COUNT_PROPERTY, entries.size.toString())
+    private fun configureWebAssetProperties(
+        properties: MapProperty<String, String>,
+        entries: List<LibfdxWebAsset>
+    ) {
+        properties.put(WEB_ASSET_COUNT_PROPERTY, entries.size.toString())
         entries.forEachIndexed { index, entry ->
-            properties.put("${TeaVMAssetProperties.ENTRY_PROPERTY_PREFIX}$index.path", entry.path)
-            properties.put("${TeaVMAssetProperties.ENTRY_PROPERTY_PREFIX}$index.size", entry.size.toString())
+            properties.put("$WEB_ASSET_ENTRY_PROPERTY_PREFIX$index.path", entry.path)
+            properties.put("$WEB_ASSET_ENTRY_PROPERTY_PREFIX$index.size", entry.size.toString())
         }
     }
 
@@ -441,55 +547,39 @@ class LibfdxGradlePlugin : Plugin<Project> {
         (cConfig.obfuscated as org.gradle.api.provider.Property<Boolean>).set(iosC.obfuscated)
     }
 
-    private fun registerTasks(project: Project, extension: LibfdxExtension) {
-        if(extension.ecsProject.enabled.get()) {
-            registerEcsProjectBundleTask(project, extension.ecsProject)
-        }
+    private fun registerTasks(
+        project: Project,
+        extension: LibfdxExtension,
+        toolClasspaths: LibfdxToolClasspaths
+    ) {
         if(extension.isDeclared(LibfdxTarget.JS)) {
-            registerJsTasks(project, extension)
+            registerJsTasks(project, extension, toolClasspaths.web)
         }
         if(extension.isDeclared(LibfdxTarget.WASM)) {
-            registerWasmTasks(project, extension)
+            registerWasmTasks(project, extension, toolClasspaths.web)
         }
         if(extension.isDeclared(LibfdxTarget.DESKTOP_JVM)) {
             registerDesktopJvmTasks(project, extension)
         }
         if(extension.isDeclared(LibfdxTarget.DESKTOP_C)) {
             registerDesktopCTargetTasks(project, extension)
-            registerDesktopCTasks(project, extension)
+            registerDesktopCTasks(project, extension, toolClasspaths.desktopC)
         }
         if(extension.isDeclared(LibfdxTarget.PSP)) {
             registerPspTargetTasks(project, extension)
-            registerPspTasks(project, extension)
+            registerPspTasks(project, extension, toolClasspaths.psp)
         }
         if(extension.isDeclared(LibfdxTarget.IOS_C)) {
             registerIosCTargetTasks(project, extension)
-            registerIosCTasks(project, extension)
+            registerIosCTasks(project, extension, toolClasspaths.iosC)
         }
     }
 
-    private fun registerEcsProjectBundleTask(project: Project, extension: LibfdxEcsProjectExtension) {
-        project.tasks.register<LibfdxEcsProjectBundleTask>(ECS_PROJECT_BUNDLE_TASK) {
-            group = TASK_GROUP
-            description = "Builds the portable ECS project bundle consumed by the desktop editor."
-            dependsOn(JavaPlugin.CLASSES_TASK_NAME)
-            projectId.set(extension.projectId)
-            entryClass.set(extension.entryClass)
-            projectManifest.set(extension.projectManifest)
-            assetsDirectory.set(extension.assetsDirectory)
-            scenesDirectory.set(extension.scenesDirectory)
-            projectClasses.from(extension.projectClasses)
-            allowedDependencies.from(extension.allowedDependencies)
-            projectAbi.set(extension.projectAbi)
-            libfdxAbi.set(extension.libfdxAbi)
-            gradleRoot.set(extension.gradleRoot)
-            gradleProject.set(extension.gradleProject)
-            desktopBundleTask.set(extension.desktopBundleTask)
-            outputFile.set(extension.outputFile)
-        }
-    }
-
-    private fun registerBitmapFontTasks(project: Project, extension: LibfdxExtension) {
+    private fun registerBitmapFontTasks(
+        project: Project,
+        extension: LibfdxExtension,
+        toolClasspath: FileCollection
+    ) {
         val fontTasks = mutableListOf<TaskProvider<LibfdxBitmapFontTask>>()
         extension.bitmapFonts.forEach { bitmapFont ->
             val safeName = safeTaskName(bitmapFont.name)
@@ -505,6 +595,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
                 maxTextureSize.set(bitmapFont.maxTextureSize)
                 characters.set(bitmapFont.characters)
                 outputDir.set(bitmapFont.outputDir.orElse(defaultOutput))
+                this.toolClasspath.from(toolClasspath)
             })
         }
         project.tasks.register("libfdx_generate_bitmap_fonts") {
@@ -513,20 +604,30 @@ class LibfdxGradlePlugin : Plugin<Project> {
         }
     }
 
-    private fun registerShaderTasks(project: Project, extension: LibfdxExtension) {
+    private fun registerShaderTasks(
+        project: Project,
+        extension: LibfdxExtension,
+        toolClasspath: FileCollection
+    ) {
         val validate = project.tasks.register<LibfdxValidateShadersTask>("libfdx_validate_shaders") {
             group = TASK_GROUP
             description = "Validate libfdx WGSL shader profiles under src/main/fdx-shaders."
             sourceDir.set(extension.shaders.sourceDir)
+            shaderSources.from(extension.shaders.sourceDir)
             defaultProfile.set(extension.shaders.defaultProfile)
             reportFile.set(extension.shaders.reportFile)
+            this.toolClasspath.from(toolClasspath)
         }
         project.tasks.named("check").configure {
             dependsOn(validate)
         }
     }
 
-    private fun registerJsTasks(project: Project, extension: LibfdxExtension) {
+    private fun registerJsTasks(
+        project: Project,
+        extension: LibfdxExtension,
+        toolClasspath: FileCollection
+    ) {
         val runtimeClasspath = project.extensions.getByType<SourceSetContainer>().getByName("main").runtimeClasspath
         val runtimeFdxWeb = project.takeIf { usesLocalLibfdxRuntime(it) }
             ?.rootProject
@@ -553,6 +654,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
             assets.from(extension.assets)
             this.runtimeClasspath.from(runtimeClasspath)
             runtimeFdxWebResourcesDir?.let { this.runtimeClasspath.from(it) }
+            this.toolClasspath.from(toolClasspath)
         }
         if(!hasTargets) {
             val build = project.tasks.register("libfdx_web_js_build") {
@@ -572,7 +674,11 @@ class LibfdxGradlePlugin : Plugin<Project> {
         registerWebTargets(project, extension.js, "libfdx_web_js", prepare)
     }
 
-    private fun registerWasmTasks(project: Project, extension: LibfdxExtension) {
+    private fun registerWasmTasks(
+        project: Project,
+        extension: LibfdxExtension,
+        toolClasspath: FileCollection
+    ) {
         val runtimeClasspath = project.extensions.getByType<SourceSetContainer>().getByName("main").runtimeClasspath
         val runtimeFdxWeb = project.takeIf { usesLocalLibfdxRuntime(it) }
             ?.rootProject
@@ -599,6 +705,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
             assets.from(extension.assets)
             this.runtimeClasspath.from(runtimeClasspath)
             runtimeFdxWebResourcesDir?.let { this.runtimeClasspath.from(it) }
+            this.toolClasspath.from(toolClasspath)
         }
         if(!hasTargets) {
             val build = project.tasks.register("libfdx_web_wasm_build") {
@@ -869,7 +976,11 @@ class LibfdxGradlePlugin : Plugin<Project> {
         return project.gradle.startParameter.systemPropertiesArgs[name] ?: System.getProperty(name)
     }
 
-    private fun registerDesktopCTasks(project: Project, extension: LibfdxExtension) {
+    private fun registerDesktopCTasks(
+        project: Project,
+        extension: LibfdxExtension,
+        toolClasspath: FileCollection
+    ) {
         val sourceSets = project.extensions.getByType<SourceSetContainer>()
         val runtimeClasspath = sourceSets.getByName("main").runtimeClasspath
         val hasTargets = extension.desktopC.targets.isNotEmpty()
@@ -887,6 +998,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
             showConsole.set(extension.desktopC.showConsole)
             nativeResourceClasspath.from(runtimeClasspath)
             assets.from(extension.assets)
+            this.toolClasspath.from(toolClasspath)
         }
         val buildDebug = project.tasks.register<LibfdxNativeBuildTask>(
             internalTaskName("libfdx_desktop_c_build_debug", hasTargets)
@@ -978,7 +1090,11 @@ class LibfdxGradlePlugin : Plugin<Project> {
         }
     }
 
-    private fun registerPspTasks(project: Project, extension: LibfdxExtension) {
+    private fun registerPspTasks(
+        project: Project,
+        extension: LibfdxExtension,
+        toolClasspath: FileCollection
+    ) {
         val sourceSets = project.extensions.getByType<SourceSetContainer>()
         val runtimeClasspath = sourceSets.getByName("main").runtimeClasspath
         val hasTargets = extension.psp.targets.isNotEmpty()
@@ -995,6 +1111,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
             debugMemory.set(extension.psp.debugMemory)
             nativeResourceClasspath.from(runtimeClasspath)
             assets.from(extension.assets)
+            this.toolClasspath.from(toolClasspath)
         }
         val build = project.tasks.register<LibfdxNativeBuildTask>(internalTaskName("libfdx_psp_build", hasTargets)) {
             group = if(hasTargets) null else TASK_GROUP
@@ -1023,7 +1140,11 @@ class LibfdxGradlePlugin : Plugin<Project> {
         }
     }
 
-    private fun registerIosCTasks(project: Project, extension: LibfdxExtension) {
+    private fun registerIosCTasks(
+        project: Project,
+        extension: LibfdxExtension,
+        toolClasspath: FileCollection
+    ) {
         val sourceSets = project.extensions.getByType<SourceSetContainer>()
         val runtimeClasspath = sourceSets.getByName("main").runtimeClasspath
         val hasTargets = extension.iosC.targets.isNotEmpty()
@@ -1042,6 +1163,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
             graphicsApi.set(extension.iosC.graphicsApi)
             nativeResourceClasspath.from(runtimeClasspath)
             assets.from(extension.assets)
+            this.toolClasspath.from(toolClasspath)
         }
     }
 
@@ -1127,6 +1249,8 @@ class LibfdxGradlePlugin : Plugin<Project> {
 
     internal companion object {
         const val TASK_GROUP = "libfdx"
+        private const val LIBFDX_GROUP = "io.github.libfdx"
+        private const val TOOLING_VERSION_PROPERTY = "libfdx.tooling.version"
         private const val ANDROID_APPLICATION_PLUGIN_ID = "com.android.application"
         private val TEAVM_TASK_NAMES = setOf(
             TeaVMPlugin.BUILD_WASM_GC_TASK_NAME,

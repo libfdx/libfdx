@@ -16,7 +16,6 @@ Use the narrowest authoritative source:
   direction.
 - [Common API](docs/COMMON_API.md) defines cross-cutting lifecycle, ownership,
   portability, and performance rules.
-- [Contributing](CONTRIBUTING.md) covers checkout setup and validation.
 - Focused guidance stays beside its owner or in a small domain guide, such as
   [Shaders](docs/SHADERS.md), [UI Kit](docs/UI_KIT.md), the
   [Gradle plugin](libfdx/tools/gradle-plugin/README.md), and the
@@ -52,7 +51,7 @@ Do not manually duplicate inventories that can be read from source or Gradle.
 - Public ownership, disposal, nullability, callback/thread, and frame-lifetime
   behavior must be clear at the API boundary.
 - Prefer primitives and reusable storage in frame, render, input/UI, upload,
-  ECS, and network loops. Do not add steady-state allocation without a measured
+  game, and network loops. Do not add steady-state allocation without a measured
   reason.
 
 Use the architecture and common API documents for the complete durable rules.

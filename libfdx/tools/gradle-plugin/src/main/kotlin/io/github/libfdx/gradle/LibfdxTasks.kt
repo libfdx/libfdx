@@ -2,23 +2,7 @@ package io.github.libfdx.gradle
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
-import io.github.libfdx.backend.desktopc.NativeProject
-import io.github.libfdx.backend.desktopc.NativeProjectWriter
-import io.github.libfdx.backend.iosc.IosCGraphicsApi
-import io.github.libfdx.backend.iosc.IosCProject
-import io.github.libfdx.backend.iosc.IosCProjectWriter
-import io.github.libfdx.backend.psp.PspProject
-import io.github.libfdx.backend.psp.PspProjectWriter
-import io.github.libfdx.backend.web.WebApp
-import io.github.libfdx.backend.web.WebAppWriter
-import io.github.libfdx.graphics.shader.ShaderProfile
-import io.github.libfdx.graphics.shader.ShaderProfileValidator
-import io.github.libfdx.graphics.shader.ShaderValidationDiagnostic
-import io.github.libfdx.graphics.shader.ShaderValidationSeverity
-import io.github.libfdx.tools.font.BitmapFontGenerator
-import io.github.libfdx.tools.font.BitmapFontSpec
 import org.gradle.api.DefaultTask
-import org.gradle.api.GradleException
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
@@ -40,13 +24,9 @@ import org.gradle.api.tasks.TaskAction
 import org.gradle.work.DisableCachingByDefault
 import org.gradle.process.ExecOperations
 import java.io.File
-import java.lang.reflect.InvocationTargetException
 import java.net.InetSocketAddress
 import java.net.URI
-import java.net.URL
-import java.net.URLClassLoader
 import java.nio.file.Files
-import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.CountDownLatch
 import java.util.zip.ZipInputStream
@@ -114,7 +94,9 @@ abstract class LibfdxAndroidRunTask @Inject constructor(
     }
 }
 
-abstract class LibfdxBitmapFontTask : DefaultTask() {
+abstract class LibfdxBitmapFontTask @Inject constructor(
+    private val execOperations: ExecOperations
+) : DefaultTask() {
     @get:Input
     abstract val fontName: Property<String>
 
@@ -140,25 +122,28 @@ abstract class LibfdxBitmapFontTask : DefaultTask() {
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
+    @get:Classpath
+    abstract val toolClasspath: ConfigurableFileCollection
+
     @TaskAction
     fun generate() {
-        val result = BitmapFontGenerator.generate(
-            BitmapFontSpec.builder()
-                .sourceFile(sourceFile.get().asFile.toPath())
-                .outputDirectory(outputDir.get().asFile.toPath())
-                .name(fontName.get())
-                .assetPath(assetPath.get())
-                .size(size.get())
-                .padding(padding.get())
-                .maxTextureSize(maxTextureSize.get())
-                .characters(characters.get())
-                .build()
-        )
-        logger.lifecycle("Generated libfdx bitmap font ${result.assetFontPath()}")
+        val request = LibfdxToolRequest().apply {
+            value("sourceFile", sourceFile.get().asFile.toPath())
+            value("outputDirectory", outputDir.get().asFile.toPath())
+            value("name", fontName.get())
+            value("assetPath", assetPath.get())
+            value("size", size.get())
+            value("padding", padding.get())
+            value("maxTextureSize", maxTextureSize.get())
+            value("characters", characters.get())
+        }.write(File(temporaryDir, "bitmap-font.properties"))
+        executeLibfdxTool(execOperations, toolClasspath, BITMAP_FONT_TOOL_CLASS, request)
     }
 }
 
-abstract class LibfdxWebAppTask : DefaultTask() {
+abstract class LibfdxWebAppTask @Inject constructor(
+    private val execOperations: ExecOperations
+) : DefaultTask() {
     @get:OutputDirectory
     abstract val webappDir: DirectoryProperty
 
@@ -193,122 +178,31 @@ abstract class LibfdxWebAppTask : DefaultTask() {
     @get:Classpath
     abstract val runtimeClasspath: ConfigurableFileCollection
 
+    @get:Classpath
+    abstract val toolClasspath: ConfigurableFileCollection
+
     @TaskAction
     fun writeWebApp() {
-        val webappDirectory = webappDir.get().asFile.toPath()
-        val assetPaths = assets.files.map { it.toPath() }
-        val runtimeClasspathPaths = runtimeClasspath.files.map { it.toPath() }
-        if(writeWebAppWithRuntimeClasspathWriter(webappDirectory, assetPaths, runtimeClasspathPaths)) {
-            return
-        }
-        WebAppWriter.write(
-            WebApp.builder()
-                .webappDirectory(webappDirectory)
-                .title(title.get())
-                .width(width.get())
-                .height(height.get())
-                .canvasId(canvasId.get())
-                .entryPointName(entryPointName.get())
-                .mainClassArgs(mainClassArgs.get())
-                .targetFileName(targetFileName.get())
-                .wasm(wasm.get())
-                .assets(assetPaths)
-                .runtimeClasspath(runtimeClasspathPaths)
-                .build()
-        )
-    }
-
-    private fun writeWebAppWithRuntimeClasspathWriter(
-        webappDirectory: Path,
-        assetPaths: List<Path>,
-        runtimeClasspathPaths: List<Path>
-    ): Boolean {
-        val urls = runtimeClasspathPaths
-            .filter { Files.exists(it) }
-            .map { it.toUri().toURL() }
-            .toTypedArray()
-        if(urls.isEmpty()) {
-            return false
-        }
-        val loader = BackendWebClassLoader(urls, WebAppWriter::class.java.classLoader)
-        try {
-            val appClass = try {
-                loader.loadClass(WEB_APP_CLASS_NAME)
-            }
-            catch(_: ClassNotFoundException) {
-                return false
-            }
-            val writerClass = loader.loadClass(WEB_APP_WRITER_CLASS_NAME)
-            val builder = appClass.getMethod("builder").invoke(null)
-            invokeBuilder(builder, "webappDirectory", Path::class.java, webappDirectory)
-            invokeBuilder(builder, "title", String::class.java, title.get())
-            invokeBuilder(builder, "width", Integer.TYPE, width.get())
-            invokeBuilder(builder, "height", Integer.TYPE, height.get())
-            invokeBuilder(builder, "canvasId", String::class.java, canvasId.get())
-            invokeBuilder(builder, "entryPointName", String::class.java, entryPointName.get())
-            invokeBuilder(builder, "mainClassArgs", String::class.java, mainClassArgs.get())
-            invokeBuilder(builder, "targetFileName", String::class.java, targetFileName.get())
-            invokeBuilder(builder, "wasm", java.lang.Boolean.TYPE, wasm.get())
-            invokeBuilder(builder, "assets", Collection::class.java, assetPaths)
-            invokeBuilder(builder, "runtimeClasspath", Collection::class.java, runtimeClasspathPaths)
-            val app = builder.javaClass.getMethod("build").invoke(builder)
-            writerClass.getMethod("write", appClass).invoke(null, app)
-            return true
-        }
-        catch(error: InvocationTargetException) {
-            val cause = error.targetException
-            when(cause) {
-                is RuntimeException -> throw cause
-                is Error -> throw cause
-                else -> throw GradleException("libFDX web app generation failed", cause)
-            }
-        }
-        finally {
-            loader.close()
-        }
-    }
-
-    private fun invokeBuilder(builder: Any, name: String, parameterType: Class<*>, value: Any) {
-        builder.javaClass.getMethod(name, parameterType).invoke(builder, value)
-    }
-
-    private companion object {
-        const val WEB_APP_CLASS_NAME = "io.github.libfdx.backend.web.WebApp"
-        const val WEB_APP_WRITER_CLASS_NAME = "io.github.libfdx.backend.web.WebAppWriter"
+        val request = LibfdxToolRequest().apply {
+            value("webappDirectory", webappDir.get().asFile.toPath())
+            value("title", title.get())
+            value("width", width.get())
+            value("height", height.get())
+            value("canvasId", canvasId.get())
+            value("entryPointName", entryPointName.get())
+            value("mainClassArgs", mainClassArgs.get())
+            value("targetFileName", targetFileName.get())
+            value("wasm", wasm.get())
+            paths("assets", assets.files.map(File::toPath))
+            paths("runtimeClasspath", runtimeClasspath.files.map(File::toPath))
+        }.write(File(temporaryDir, "web-app.properties"))
+        executeLibfdxTool(execOperations, toolClasspath, WEB_APP_TOOL_CLASS, request)
     }
 }
 
-private class BackendWebClassLoader(urls: Array<URL>, parent: ClassLoader) : URLClassLoader(urls, parent) {
-    override fun loadClass(name: String, resolve: Boolean): Class<*> {
-        synchronized(getClassLoadingLock(name)) {
-            if(name.startsWith(WEB_BACKEND_PACKAGE)) {
-                val loaded = findLoadedClass(name)
-                if(loaded != null) {
-                    if(resolve) {
-                        resolveClass(loaded)
-                    }
-                    return loaded
-                }
-                try {
-                    val found = findClass(name)
-                    if(resolve) {
-                        resolveClass(found)
-                    }
-                    return found
-                }
-                catch(_: ClassNotFoundException) {
-                }
-            }
-            return super.loadClass(name, resolve)
-        }
-    }
-
-    private companion object {
-        const val WEB_BACKEND_PACKAGE = "io.github.libfdx.backend.web."
-    }
-}
-
-abstract class LibfdxValidateShadersTask : DefaultTask() {
+abstract class LibfdxValidateShadersTask @Inject constructor(
+    private val execOperations: ExecOperations
+) : DefaultTask() {
     @get:Internal
     abstract val sourceDir: DirectoryProperty
 
@@ -316,124 +210,27 @@ abstract class LibfdxValidateShadersTask : DefaultTask() {
     val sourceDirPath: String
         get() = sourceDir.get().asFile.absolutePath
 
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val shaderSources: ConfigurableFileCollection
+
     @get:Input
     abstract val defaultProfile: Property<String>
 
     @get:OutputFile
     abstract val reportFile: RegularFileProperty
 
+    @get:Classpath
+    abstract val toolClasspath: ConfigurableFileCollection
+
     @TaskAction
     fun validate() {
-        val root = sourceDir.get().asFile.toPath()
-        val profile = profileFromId(defaultProfile.get(), ShaderProfile.PORTABLE_WEBGPU)
-        val entries = validateDirectory(root, profile)
-        val output = reportFile.get().asFile
-        output.parentFile.mkdirs()
-        output.writeText(toMarkdown(root, entries), Charsets.UTF_8)
-        if(errorCount(entries) != 0) {
-            throw GradleException("libFDX shader validation failed. See ${output.absolutePath}")
-        }
-        logger.lifecycle("Validated ${entries.size} libfdx shader source file(s): ${output.absolutePath}")
-    }
-
-    private fun validateDirectory(sourceDirectory: Path, defaultProfile: ShaderProfile): List<ShaderValidationEntry> {
-        if(!Files.isDirectory(sourceDirectory)) {
-            return emptyList()
-        }
-        return Files.walk(sourceDirectory).use { stream ->
-            stream.filter(Files::isRegularFile)
-                .filter { it.fileName.toString().endsWith(".wgsl") }
-                .sorted()
-                .map { validateFile(it, defaultProfile) }
-                .toList()
-        }
-    }
-
-    private fun validateFile(path: Path, defaultProfile: ShaderProfile): ShaderValidationEntry {
-        val source = Files.readString(path)
-        val profile = profileFromSource(source, defaultProfile)
-        val result = ShaderProfileValidator.validateWgsl(profile, source)
-        return ShaderValidationEntry(path, profile.id(), result.diagnostics())
-    }
-
-    private fun profileFromSource(source: String?, defaultProfile: ShaderProfile): ShaderProfile {
-        if(source.isNullOrEmpty()) {
-            return defaultProfile
-        }
-        source.lineSequence().take(32).forEach { line ->
-            var trimmed = line.trim()
-            if(trimmed.startsWith("//")) {
-                trimmed = trimmed.substring(2).trim()
-            }
-            if(trimmed.startsWith(PROFILE_PREFIX)) {
-                var value = trimmed.substring(PROFILE_PREFIX.length).trim()
-                if(value.startsWith("=")) {
-                    value = value.substring(1).trim()
-                }
-                return profileFromId(value, defaultProfile)
-            }
-        }
-        return defaultProfile
-    }
-
-    private fun profileFromId(id: String?, fallback: ShaderProfile): ShaderProfile {
-        return ShaderProfile.fromId(id, fallback)
-    }
-
-    private fun toMarkdown(root: Path, entries: List<ShaderValidationEntry>): String {
-        return buildString {
-            val errors = errorCount(entries)
-            append("# libFDX Shader Validation\n\n")
-            append("status: ").append(if(errors == 0) "PASS" else "FAIL").append('\n')
-            append("shaders: ").append(entries.size).append('\n')
-            append("errors: ").append(errors).append("\n\n")
-            entries.forEach { entry ->
-                append("## ").append(relative(root, entry.path)).append('\n')
-                append("profile: ").append(entry.profileId).append('\n')
-                if(entry.diagnostics.isEmpty()) {
-                    append("result: PASS\n\n")
-                }
-                else {
-                    append("result: FAIL\n")
-                    entry.diagnostics.forEach { diagnostic ->
-                        append("- ")
-                            .append(diagnostic.severity())
-                            .append(' ')
-                            .append(diagnostic.code())
-                            .append(": ")
-                            .append(diagnostic.message())
-                            .append('\n')
-                    }
-                    append('\n')
-                }
-            }
-        }
-    }
-
-    private fun relative(root: Path, path: Path): String {
-        return try {
-            root.toAbsolutePath().normalize().relativize(path.toAbsolutePath().normalize()).toString()
-                .replace('\\', '/')
-        }
-        catch(_: IllegalArgumentException) {
-            path.toString().replace('\\', '/')
-        }
-    }
-
-    private fun errorCount(entries: List<ShaderValidationEntry>): Int {
-        return entries.sumOf { entry ->
-            entry.diagnostics.count { it.severity() == ShaderValidationSeverity.ERROR }
-        }
-    }
-
-    private data class ShaderValidationEntry(
-        val path: Path,
-        val profileId: String,
-        val diagnostics: Array<ShaderValidationDiagnostic>
-    )
-
-    private companion object {
-        const val PROFILE_PREFIX = "@fdx.profile"
+        val request = LibfdxToolRequest().apply {
+            value("sourceDirectory", sourceDir.get().asFile.toPath())
+            value("defaultProfile", defaultProfile.get())
+            value("reportFile", reportFile.get().asFile.toPath())
+        }.write(File(temporaryDir, "shader-validation.properties"))
+        executeLibfdxTool(execOperations, toolClasspath, SHADER_VALIDATION_TOOL_CLASS, request)
     }
 }
 
@@ -513,7 +310,9 @@ abstract class LibfdxRunWebTask : DefaultTask() {
     }
 }
 
-abstract class LibfdxDesktopCProjectTask : DefaultTask() {
+abstract class LibfdxDesktopCProjectTask @Inject constructor(
+    private val execOperations: ExecOperations
+) : DefaultTask() {
     @get:OutputDirectory
     abstract val buildRoot: DirectoryProperty
 
@@ -540,24 +339,28 @@ abstract class LibfdxDesktopCProjectTask : DefaultTask() {
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val assets: ConfigurableFileCollection
 
+    @get:Classpath
+    abstract val toolClasspath: ConfigurableFileCollection
+
     @TaskAction
     fun writeProject() {
-        NativeProjectWriter.write(
-            NativeProject.builder()
-                .buildRoot(buildRoot.get().asFile.toPath())
-                .generatedSourcesDirectory(generatedSourcesDir.get().asFile.toPath())
-                .releaseDirectory(releaseDir.get().asFile.toPath())
-                .projectName(projectName.get())
-                .buildType(buildType.get())
-                .showConsole(showConsole.get())
-                .nativeResourceClasspath(nativeResourceClasspath.files.map { it.toPath() })
-                .build()
-        )
+        val request = LibfdxToolRequest().apply {
+            value("buildRoot", buildRoot.get().asFile.toPath())
+            value("generatedSourcesDirectory", generatedSourcesDir.get().asFile.toPath())
+            value("releaseDirectory", releaseDir.get().asFile.toPath())
+            value("projectName", projectName.get())
+            value("buildType", buildType.get())
+            value("showConsole", showConsole.get())
+            paths("nativeResourceClasspath", nativeResourceClasspath.files.map(File::toPath))
+        }.write(File(temporaryDir, "desktop-c-project.properties"))
+        executeLibfdxTool(execOperations, toolClasspath, DESKTOP_C_PROJECT_TOOL_CLASS, request)
         copyAssetRoots(assets.files, File(releaseDir.get().asFile, "assets"))
     }
 }
 
-abstract class LibfdxPspProjectTask : DefaultTask() {
+abstract class LibfdxPspProjectTask @Inject constructor(
+    private val execOperations: ExecOperations
+) : DefaultTask() {
     @get:OutputDirectory
     abstract val buildRoot: DirectoryProperty
 
@@ -581,23 +384,27 @@ abstract class LibfdxPspProjectTask : DefaultTask() {
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val assets: ConfigurableFileCollection
 
+    @get:Classpath
+    abstract val toolClasspath: ConfigurableFileCollection
+
     @TaskAction
     fun writeProject() {
-        PspProjectWriter.write(
-            PspProject.builder()
-                .buildRoot(buildRoot.get().asFile.toPath())
-                .generatedSourcesDirectory(generatedSourcesDir.get().asFile.toPath())
-                .releaseDirectory(releaseDir.get().asFile.toPath())
-                .projectName(projectName.get())
-                .debugMemory(debugMemory.get())
-                .nativeResourceClasspath(nativeResourceClasspath.files.map { it.toPath() })
-                .assets(assets.files.map { it.toPath() })
-                .build()
-        )
+        val request = LibfdxToolRequest().apply {
+            value("buildRoot", buildRoot.get().asFile.toPath())
+            value("generatedSourcesDirectory", generatedSourcesDir.get().asFile.toPath())
+            value("releaseDirectory", releaseDir.get().asFile.toPath())
+            value("projectName", projectName.get())
+            value("debugMemory", debugMemory.get())
+            paths("nativeResourceClasspath", nativeResourceClasspath.files.map(File::toPath))
+            paths("assets", assets.files.map(File::toPath))
+        }.write(File(temporaryDir, "psp-project.properties"))
+        executeLibfdxTool(execOperations, toolClasspath, PSP_PROJECT_TOOL_CLASS, request)
     }
 }
 
-abstract class LibfdxIosCProjectTask : DefaultTask() {
+abstract class LibfdxIosCProjectTask @Inject constructor(
+    private val execOperations: ExecOperations
+) : DefaultTask() {
     @get:OutputDirectory
     abstract val buildRoot: DirectoryProperty
 
@@ -627,21 +434,23 @@ abstract class LibfdxIosCProjectTask : DefaultTask() {
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val assets: ConfigurableFileCollection
 
+    @get:Classpath
+    abstract val toolClasspath: ConfigurableFileCollection
+
     @TaskAction
     fun writeProject() {
-        IosCProjectWriter.write(
-            IosCProject.builder()
-                .buildRoot(buildRoot.get().asFile.toPath())
-                .generatedSourcesDirectory(generatedSourcesDir.get().asFile.toPath())
-                .releaseDirectory(releaseDir.get().asFile.toPath())
-                .xcodeProjectDirectory(xcodeProjectDir.get().asFile.toPath())
-                .projectName(projectName.get())
-                .bundleIdentifier(bundleIdentifier.get())
-                .graphicsApi(IosCGraphicsApi.fromId(graphicsApi.get()))
-                .nativeResourceClasspath(nativeResourceClasspath.files.map { it.toPath() })
-                .assets(assets.files.map { it.toPath() })
-                .build()
-        )
+        val request = LibfdxToolRequest().apply {
+            value("buildRoot", buildRoot.get().asFile.toPath())
+            value("generatedSourcesDirectory", generatedSourcesDir.get().asFile.toPath())
+            value("releaseDirectory", releaseDir.get().asFile.toPath())
+            value("xcodeProjectDirectory", xcodeProjectDir.get().asFile.toPath())
+            value("projectName", projectName.get())
+            value("bundleIdentifier", bundleIdentifier.get())
+            value("graphicsApi", graphicsApi.get())
+            paths("nativeResourceClasspath", nativeResourceClasspath.files.map(File::toPath))
+            paths("assets", assets.files.map(File::toPath))
+        }.write(File(temporaryDir, "ios-c-project.properties"))
+        executeLibfdxTool(execOperations, toolClasspath, IOS_C_PROJECT_TOOL_CLASS, request)
     }
 }
 
@@ -1321,7 +1130,7 @@ private fun copyDirectoryContents(sourceRoot: File, outputRoot: File) {
         }
 }
 
-private fun copyAssetRoots(assetRoots: Iterable<File>, outputRoot: File) {
+internal fun copyAssetRoots(assetRoots: Iterable<File>, outputRoot: File) {
     deleteDirectory(outputRoot)
     Files.createDirectories(outputRoot.toPath())
     assetRoots.forEach { asset ->

@@ -265,9 +265,9 @@ Java objects per frame.
 ## Validation
 
 Test a focused widget or layout first and inspect a rendered frame. Shared
-renderer, font, clipping, or input changes require the affected provider or
-platform scope described in
-[Contributing](../CONTRIBUTING.md#visual-and-graphics-changes).
+renderer, font, clipping, or input changes require validation on each affected
+provider or platform under the same layout, assets, input, timing, and frame
+conditions.
 
 Use stable `validationId` values when authoring reusable flows with the
 [scenario validator](../libfdx/extensions/scenario_validator/README.md#ui-selection).

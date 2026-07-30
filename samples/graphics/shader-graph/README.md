@@ -21,11 +21,10 @@ compatibility.
 
 ## Run It
 
-Use JDK 25 and run from the repository root. The property below makes the
-sample use the checked-out libFDX modules:
+Use JDK 25 and run from the repository root:
 
 ```powershell
-.\gradlew.bat "-Dlibfdx.development.usePublishedLibfdx=false" :samples:graphics:shader-graph:platform:desktop:libfdx_desktop_jvm_wgpu_run
+.\gradlew.bat :samples:graphics:shader-graph:platform:desktop:libfdx_desktop_jvm_wgpu_run
 ```
 
 Replace `wgpu` in the task name with:
@@ -41,7 +40,7 @@ The default path loads
 Select direct Java authoring with:
 
 ```powershell
-.\gradlew.bat "-Dlibfdx.development.usePublishedLibfdx=false" "-Dlibfdx.sample.graphSource=code" :samples:graphics:shader-graph:platform:desktop:libfdx_desktop_jvm_wgpu_run
+.\gradlew.bat "-Dlibfdx.sample.graphSource=code" :samples:graphics:shader-graph:platform:desktop:libfdx_desktop_jvm_wgpu_run
 ```
 
 The canonical Java definition is
@@ -107,7 +106,7 @@ written by this check.
 Launch the visual editor for the same graph with:
 
 ```powershell
-.\gradlew.bat "-Dlibfdx.development.usePublishedLibfdx=false" "-Dlibfdx.sample.editor=true" :samples:graphics:shader-graph:platform:desktop:libfdx_desktop_jvm_wgpu_run
+.\gradlew.bat "-Dlibfdx.sample.editor=true" :samples:graphics:shader-graph:platform:desktop:libfdx_desktop_jvm_wgpu_run
 ```
 
 The editor compiles the semantic document through the same headless compiler.
@@ -126,13 +125,13 @@ The generator writes a candidate asset under the core module's build
 directory:
 
 ```powershell
-.\gradlew.bat "-Dlibfdx.development.usePublishedLibfdx=false" :samples:graphics:shader-graph:core:shader_graph_sample_generate_asset
+.\gradlew.bat :samples:graphics:shader-graph:core:shader_graph_sample_generate_asset
 ```
 
 Run the focused checks with:
 
 ```powershell
-.\gradlew.bat "-Dlibfdx.development.usePublishedLibfdx=false" :libfdx:extensions:graphics:shader-graph:runtime:test :samples:graphics:shader-graph:core:test
+.\gradlew.bat :libfdx:extensions:graphics:shader-graph:runtime:test :samples:graphics:shader-graph:core:test
 ```
 
 The sample has desktop launch targets for GL, WGPU, Vulkan, and Direct3D 12.
