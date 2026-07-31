@@ -26,6 +26,7 @@ public final class DefaultFileSystem implements FileSystem {
     private final File externalRoot;
     private final File cacheRoot;
     private final List<File> internalRoots = new ArrayList<File>();
+    private ClasspathResourceResolver classpathResourceResolver;
 
     /**
      * Creates a default file system.
@@ -76,6 +77,22 @@ public final class DefaultFileSystem implements FileSystem {
         if (root != null) {
             internalRoots.add(0, root);
         }
+        return this;
+    }
+
+    /**
+     * Installs the platform-specific classpath resource resolver.
+     *
+     * <p>The shared file-system implementation deliberately has no direct
+     * dependency on JVM classloader APIs, keeping it reachable from TeaVM C
+     * and browser targets.</p>
+     *
+     * @param resolver platform resource resolver, or {@code null} to clear it
+     * @return this default file system for chaining
+     */
+    public DefaultFileSystem classpathResourceResolver(
+            ClasspathResourceResolver resolver) {
+        classpathResourceResolver = resolver;
         return this;
     }
 
@@ -252,7 +269,21 @@ public final class DefaultFileSystem implements FileSystem {
             return true;
         }
         File file = resolveFile(handle);
-        return file != null && file.exists();
+        if (file != null && file.exists()) {
+            return true;
+        }
+        if (handle.location != FileLocation.INTERNAL) {
+            return false;
+        }
+        InputStream input = classpathStream(handle.path);
+        if (input == null) {
+            return false;
+        }
+        try {
+            input.close();
+        } catch (IOException ignored) {
+        }
+        return true;
     }
 
     FileMetadata metadata(DefaultFileHandle handle) {
@@ -264,7 +295,20 @@ public final class DefaultFileSystem implements FileSystem {
     }
 
     private InputStream classpathStream(String path) {
-        File file = new File(normalize(path));
+        String normalizedPath = normalize(path);
+        String resourcePath = normalizedPath;
+        while (resourcePath.startsWith("/")) {
+            resourcePath = resourcePath.substring(1);
+        }
+
+        InputStream resource = classpathResourceResolver != null
+                ? classpathResourceResolver.open(resourcePath)
+                : null;
+        if (resource != null) {
+            return resource;
+        }
+
+        File file = new File(normalizedPath);
         if (!file.isFile()) {
             return null;
         }

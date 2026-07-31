@@ -14,6 +14,24 @@ import java.nio.ByteOrder;
  * @author xpenatan
  */
 public final class Mesh implements Disposable {
+    public static final int POSITION_FLOATS_PER_VERTEX = 3;
+    public static final int POSITION_BYTES_PER_VERTEX = POSITION_FLOATS_PER_VERTEX * 4;
+    public static final VertexLayout POSITION_LAYOUT = VertexLayout.of(
+            POSITION_BYTES_PER_VERTEX,
+            VertexAttribute.of(0, VertexFormat.FLOAT32X3, 0));
+    public static final int POSITION_NORMAL_FLOATS_PER_VERTEX = 6;
+    public static final int POSITION_NORMAL_BYTES_PER_VERTEX = POSITION_NORMAL_FLOATS_PER_VERTEX * 4;
+    public static final VertexLayout POSITION_NORMAL_LAYOUT = VertexLayout.of(
+            POSITION_NORMAL_BYTES_PER_VERTEX,
+            VertexAttribute.of(0, VertexFormat.FLOAT32X3, 0),
+            VertexAttribute.of(1, VertexFormat.FLOAT32X3, 12));
+    public static final int POSITION_NORMAL_COLOR_FLOATS_PER_VERTEX = 10;
+    public static final int POSITION_NORMAL_COLOR_BYTES_PER_VERTEX = POSITION_NORMAL_COLOR_FLOATS_PER_VERTEX * 4;
+    public static final VertexLayout POSITION_NORMAL_COLOR_LAYOUT = VertexLayout.of(
+            POSITION_NORMAL_COLOR_BYTES_PER_VERTEX,
+            VertexAttribute.of(0, VertexFormat.FLOAT32X3, 0),
+            VertexAttribute.of(1, VertexFormat.FLOAT32X3, 12),
+            VertexAttribute.of(3, VertexFormat.FLOAT32X4, 24));
     public static final int POSITION_COLOR_FLOATS_PER_VERTEX = 7;
     public static final int POSITION_COLOR_BYTES_PER_VERTEX = POSITION_COLOR_FLOATS_PER_VERTEX * 4;
     public static final VertexLayout POSITION_COLOR_LAYOUT = VertexLayout.of(
@@ -180,6 +198,55 @@ public final class Mesh implements Disposable {
     }
 
     /**
+     * Creates a position-only 3D mesh while retaining its source positions and colors.
+     *
+     * @param graphics the graphics context
+     * @param id the identifier
+     * @param sourcePositions the source positions
+     * @param sourceColors the source colors retained for CPU fallback rendering
+     * @param bounds the bounds
+     * @return a new mesh
+     */
+    public static Mesh position3D(GraphicsContext graphics, String id, float[] sourcePositions,
+            float[] sourceColors, BoundingBox bounds) {
+        return packedStatic3D(graphics, id, POSITION_LAYOUT, sourcePositions, sourceColors, null, bounds);
+    }
+
+    /**
+     * Creates a position/normal 3D mesh while retaining its source positions, colors, and normals.
+     *
+     * @param graphics the graphics context
+     * @param id the identifier
+     * @param sourcePositions the source positions
+     * @param sourceColors the source colors retained for CPU fallback rendering
+     * @param sourceNormals the source normals
+     * @param bounds the bounds
+     * @return a new mesh
+     */
+    public static Mesh positionNormal3D(GraphicsContext graphics, String id, float[] sourcePositions,
+            float[] sourceColors, float[] sourceNormals, BoundingBox bounds) {
+        return packedStatic3D(graphics, id, POSITION_NORMAL_LAYOUT, sourcePositions, sourceColors, sourceNormals,
+                bounds);
+    }
+
+    /**
+     * Creates a position/normal/color 3D mesh while retaining all supplied source attributes.
+     *
+     * @param graphics the graphics context
+     * @param id the identifier
+     * @param sourcePositions the source positions
+     * @param sourceColors the source colors
+     * @param sourceNormals the source normals
+     * @param bounds the bounds
+     * @return a new mesh
+     */
+    public static Mesh positionNormalColor3D(GraphicsContext graphics, String id, float[] sourcePositions,
+            float[] sourceColors, float[] sourceNormals, BoundingBox bounds) {
+        return packedStatic3D(graphics, id, POSITION_NORMAL_COLOR_LAYOUT, sourcePositions, sourceColors,
+                sourceNormals, bounds);
+    }
+
+    /**
      * Creates a mesh.
      *
      * @param graphics the graphics context
@@ -266,6 +333,55 @@ public final class Mesh implements Disposable {
         return positionColor3D(graphics, id, sourcePositions, sourceColors, sourceBakedColors, sourceNormals,
                 sourceTexCoords, sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, null, null, bounds,
                 retainSourceData);
+    }
+
+    private static Mesh packedStatic3D(GraphicsContext graphics, String id, VertexLayout layout,
+            float[] sourcePositions, float[] sourceColors, float[] sourceNormals, BoundingBox bounds) {
+        if (sourcePositions == null || sourcePositions.length == 0 || sourcePositions.length % 3 != 0) {
+            throw new FdxException("Static 3D meshes require xyz source positions");
+        }
+        int vertexCount = sourcePositions.length / 3;
+        boolean includeNormals = layout == POSITION_NORMAL_LAYOUT || layout == POSITION_NORMAL_COLOR_LAYOUT;
+        boolean includeColors = layout == POSITION_NORMAL_COLOR_LAYOUT;
+        if (includeNormals && (sourceNormals == null || sourceNormals.length != vertexCount * 3)) {
+            throw new FdxException("Static 3D meshes with normals require xyz source normals");
+        }
+        if (sourceColors == null || sourceColors.length != vertexCount * 4) {
+            throw new FdxException("Static 3D meshes require rgba source colors");
+        }
+        float[] vertices = packStatic3D(sourcePositions, sourceNormals, sourceColors, vertexCount,
+                includeNormals, includeColors);
+        return new Mesh(graphics, id, layout, vertices, vertexCount, null, 0, bounds,
+                sourcePositions, sourceColors, null, sourceNormals, null, null, null, null, null, null, null, true);
+    }
+
+    private static float[] packStatic3D(float[] sourcePositions, float[] sourceNormals, float[] sourceColors,
+            int vertexCount, boolean includeNormals, boolean includeColors) {
+        int floatsPerVertex = POSITION_FLOATS_PER_VERTEX
+                + (includeNormals ? 3 : 0)
+                + (includeColors ? 4 : 0);
+        float[] vertices = new float[vertexCount * floatsPerVertex];
+        int out = 0;
+        for (int i = 0; i < vertexCount; i++) {
+            int positionOffset = i * 3;
+            vertices[out++] = sourcePositions[positionOffset];
+            vertices[out++] = sourcePositions[positionOffset + 1];
+            vertices[out++] = sourcePositions[positionOffset + 2];
+            if (includeNormals) {
+                int normalOffset = i * 3;
+                vertices[out++] = sourceNormals[normalOffset];
+                vertices[out++] = sourceNormals[normalOffset + 1];
+                vertices[out++] = sourceNormals[normalOffset + 2];
+            }
+            if (includeColors) {
+                int colorOffset = i * 4;
+                vertices[out++] = sourceColors[colorOffset];
+                vertices[out++] = sourceColors[colorOffset + 1];
+                vertices[out++] = sourceColors[colorOffset + 2];
+                vertices[out++] = sourceColors[colorOffset + 3];
+            }
+        }
+        return vertices;
     }
 
     /**

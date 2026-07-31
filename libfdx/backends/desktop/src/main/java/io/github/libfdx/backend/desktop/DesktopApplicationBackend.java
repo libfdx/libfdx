@@ -138,7 +138,9 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
                 new DefaultCursor(), new DefaultGamepads(), null, new DesktopClipboard(windowHandle));
         installCallbacks(listener);
 
-        DefaultFileSystem files = new DefaultFileSystem();
+        DefaultFileSystem files = new DefaultFileSystem()
+                .classpathResourceResolver(
+                        new DesktopClasspathResourceResolver());
 
         graphics = graphicsProvider.create(new DesktopGraphicsEnvironment(display, createNativeWindow(windowHandle)));
         if (graphicsRequirements.clientApi() == GraphicsClientApi.OPENGL) {
@@ -448,6 +450,11 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         long lastTime = System.nanoTime();
         while (running && !GLFW.glfwWindowShouldClose(display.windowHandle())) {
             GLFW.glfwPollEvents();
+            // GLFW normally reports both logical and framebuffer size changes,
+            // but native maximize/restore transitions can coalesce a callback.
+            // Reconcile cached dimensions every frame so graphics attachments
+            // cannot remain configured for a stale surface size.
+            refreshDisplayAfterResize(listener);
             if (graphics != null) {
                 graphics.processEvents();
             }

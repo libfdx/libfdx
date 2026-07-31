@@ -10,9 +10,11 @@ import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
@@ -25,6 +27,7 @@ import org.java_websocket.WebSocket;
  */
 public final class WebRtcSignalingServer implements Disposable {
     private static final String SERVER_PEER_ID = "server";
+    private static final int MAX_ROOM_ID_UTF8_BYTES = 128;
 
     private final WebRtcSignalingServerConfig config;
     private final WebRtcSignalingProcessingConfig processingConfig;
@@ -111,6 +114,15 @@ public final class WebRtcSignalingServer implements Disposable {
         return rooms.size();
     }
 
+    /**
+     * Returns a stable snapshot of the currently active room IDs.
+     */
+    public synchronized List<String> roomIds() {
+        ArrayList<String> roomIds = new ArrayList<String>(rooms.keySet());
+        Collections.sort(roomIds);
+        return roomIds;
+    }
+
     public synchronized int peerCount(String roomId) {
         Room room = rooms.get(roomId);
         return room != null ? room.peers.size() : 0;
@@ -194,7 +206,15 @@ public final class WebRtcSignalingServer implements Disposable {
     private synchronized void opened(WebSocket socket, String resource, Map<String, String> headers,
             InetSocketAddress remoteAddress) {
         cleanupIdlePeers();
-        Map<String, String> query = parseQuery(resource);
+        Map<String, String> query;
+        try {
+            query = parseQuery(resource);
+        }
+        catch(RuntimeException error) {
+            error(socket, null, "malformed query");
+            socket.close(1008, "malformed query");
+            return;
+        }
         String roomId = query.get("room");
         String requestedPeerId = query.get("peerId");
         String token = query.get("token");
@@ -203,7 +223,11 @@ public final class WebRtcSignalingServer implements Disposable {
             socket.close(1008, "missing room");
             return;
         }
-        Room room = room(roomId);
+        if (!isSafeRoomId(roomId)) {
+            error(socket, null, "invalid room");
+            socket.close(1008, "invalid room");
+            return;
+        }
         WebRtcSignalingJoinRequest request = new WebRtcSignalingJoinRequest(roomId, requestedPeerId, token,
                 resource, path(resource), query, headers, remoteAddress);
         WebRtcSignalingAuthResult authResult = config.auth().authenticate(request);
@@ -214,26 +238,31 @@ public final class WebRtcSignalingServer implements Disposable {
             socket.close(1008, reason);
             return;
         }
-        if (!config.roomPolicy().allowJoin(roomId, requestedPeerId, room.peers.size())) {
+        Room room = rooms.get(roomId);
+        int peerCount = room != null ? room.peers.size() : 0;
+        if (!config.roomPolicy().allowJoin(roomId, requestedPeerId, peerCount)) {
             error(socket, roomId, "room policy rejected");
             socket.close(1008, "room policy rejected");
             return;
         }
-        if (room.peers.size() >= config.maxPeersPerRoom()) {
+        if (peerCount >= config.maxPeersPerRoom()) {
             error(socket, roomId, "room is full");
             socket.close(1008, "room is full");
             return;
         }
         String peerId = uniquePeerId(room, config.peerIdGenerator().generatePeerId(roomId, requestedPeerId,
-                room.peers.size()));
+                peerCount));
         WebRtcSignalingAccessDecision joinDecision = config.joinPolicy().allowJoin(
-                new WebRtcSignalingJoinContext(request, peerId, room.peers.size(), authResult.session()));
+                new WebRtcSignalingJoinContext(request, peerId, peerCount, authResult.session()));
         if (joinDecision == null || !joinDecision.allowed()) {
             String reason = joinDecision != null ? reason(joinDecision.rejectionReason(), "join policy rejected")
                     : "join policy rejected";
             error(socket, roomId, reason);
             socket.close(1008, reason);
             return;
+        }
+        if (room == null) {
+            room = room(roomId);
         }
         Peer peer = new Peer(socket, roomId, peerId, request, authResult.session());
         scratchPeers.clear();
@@ -403,6 +432,10 @@ public final class WebRtcSignalingServer implements Disposable {
             error(owner.socket, owner.roomId, "room registration missing roomId");
             return;
         }
+        if (!isSafeRoomId(roomId)) {
+            error(owner.socket, owner.roomId, "room registration invalid roomId");
+            return;
+        }
         String name = payload.stringValue("name", roomId);
         String hostPeerId = payload.stringValue("hostPeerId", owner.peerId);
         int players = Math.max(1, payload.intValue("players", 1));
@@ -417,6 +450,10 @@ public final class WebRtcSignalingServer implements Disposable {
         String roomId = payload.stringValue("roomId", null);
         if (roomId == null || roomId.trim().isEmpty()) {
             error(owner.socket, owner.roomId, "room unregister missing roomId");
+            return;
+        }
+        if (!isSafeRoomId(roomId)) {
+            error(owner.socket, owner.roomId, "room unregister invalid roomId");
             return;
         }
         RegisteredRoom room = registeredRooms.get(roomId);
@@ -484,7 +521,7 @@ public final class WebRtcSignalingServer implements Disposable {
         String base = generated != null && !generated.trim().isEmpty() ? generated : "peer";
         String candidate = base;
         int suffix = 2;
-        while (room.peers.containsKey(candidate)) {
+        while (room != null && room.peers.containsKey(candidate)) {
             candidate = base + "-" + suffix++;
         }
         return candidate;
@@ -495,6 +532,19 @@ public final class WebRtcSignalingServer implements Disposable {
                 || type == WebRtcSignalingMessageType.ANSWER
                 || type == WebRtcSignalingMessageType.ICE
                 || type == WebRtcSignalingMessageType.CONNECT_REQUEST;
+    }
+
+    private static boolean isSafeRoomId(String roomId) {
+        if (roomId == null || roomId.length() == 0 || utf8Length(roomId) > MAX_ROOM_ID_UTF8_BYTES) {
+            return false;
+        }
+        for (int i = 0; i < roomId.length(); i++) {
+            char character = roomId.charAt(i);
+            if (character == '|' || Character.isISOControl(character)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static Map<String, String> parseQuery(String resource) {
@@ -546,6 +596,9 @@ public final class WebRtcSignalingServer implements Disposable {
     private static String decode(String value) {
         try {
             return URLDecoder.decode(value, "UTF-8");
+        }
+        catch(IllegalArgumentException exception) {
+            throw new FdxException("Malformed URL-encoded query value", exception);
         }
         catch (UnsupportedEncodingException exception) {
             throw new FdxException("UTF-8 is not supported", exception);

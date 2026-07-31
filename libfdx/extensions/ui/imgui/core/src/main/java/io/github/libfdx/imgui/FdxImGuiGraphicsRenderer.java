@@ -72,7 +72,6 @@ public class FdxImGuiGraphicsRenderer implements FdxImGuiRenderer, FdxImGuiViewp
                 @location(1) color : vec4f,
             };
             @group(0) @binding(0) var u_texture : texture_2d<f32>;
-            @group(0) @binding(1) var u_sampler : sampler;
             @vertex
             fn vertexMain(input : VertexInput) -> VertexOutput {
                 var output : VertexOutput;
@@ -394,8 +393,7 @@ public class FdxImGuiGraphicsRenderer implements FdxImGuiRenderer, FdxImGuiViewp
             .generatedSpirv(IMGUI_VULKAN_VERTEX_SPIRV, fragmentSpirv)
             .reflection(ShaderReflection.of(
                     new ShaderBinding[] {
-                            ShaderBinding.of(0, 0, "u_texture", ShaderBindingType.TEXTURE),
-                            ShaderBinding.of(0, 1, "u_sampler", ShaderBindingType.SAMPLER)
+                            ShaderBinding.of(0, 0, "u_texture", ShaderBindingType.TEXTURE)
                     },
                     new ShaderAttribute[] {
                             ShaderAttribute.of(0, "position", VertexFormat.FLOAT32X2),

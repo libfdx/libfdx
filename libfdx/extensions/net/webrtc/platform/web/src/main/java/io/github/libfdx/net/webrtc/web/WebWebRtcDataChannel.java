@@ -120,11 +120,11 @@ public final class WebWebRtcDataChannel implements WebRtcDataChannel {
     private static native int bufferedAmount0(int channel);
 
     @JSBody(params = {"channel", "bytes", "offset", "length"}, script =
-            "var c = window.__libfdxWebRtc.channels[channel];"
-                    + "if (!c || c.readyState !== 'open') return false;"
+            "var dataChannel = window.__libfdxWebRtc.channels[channel];"
+                    + "if (!dataChannel || dataChannel.readyState !== 'open') return false;"
                     + "var out = new Uint8Array(length);"
                     + "for (var i = 0; i < length; i++) out[i] = bytes[offset + i] & 255;"
-                    + "c.send(out.buffer);"
+                    + "dataChannel.send(out.buffer);"
                     + "return true;")
     private static native boolean send0(int channel, byte[] bytes, int offset, int length);
 

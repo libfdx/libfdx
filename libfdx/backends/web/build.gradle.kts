@@ -32,6 +32,13 @@ dependencies {
     implementation(libs.teavm.jso.impl)
     implementation("org.teavm:teavm-platform:${libs.versions.teavm.get()}")
     compileOnly("org.teavm:teavm-core:${libs.versions.teavm.get()}")
+
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 java {
     withSourcesJar()

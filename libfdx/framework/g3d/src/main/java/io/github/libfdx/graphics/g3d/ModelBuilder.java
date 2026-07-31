@@ -52,7 +52,18 @@ public final class ModelBuilder {
      * @return the cube
      */
     public Model cube(float size) {
-        return cube("cube", size);
+        return cube("cube", size, ModelVertexUsage.DEFAULT);
+    }
+
+    /**
+     * Builds a cube with the requested vertex usages.
+     *
+     * @param size the size
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the cube
+     */
+    public Model cube(float size, long usage) {
+        return cube("cube", size, usage);
     }
 
     /**
@@ -63,7 +74,19 @@ public final class ModelBuilder {
      * @return the cube
      */
     public Model cube(String id, float size) {
-        return box(id, size, size, size);
+        return cube(id, size, ModelVertexUsage.DEFAULT);
+    }
+
+    /**
+     * Builds a named cube with the requested vertex usages.
+     *
+     * @param id the identifier
+     * @param size the size
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the cube
+     */
+    public Model cube(String id, float size, long usage) {
+        return box(id, size, size, size, usage);
     }
 
     /**
@@ -75,7 +98,20 @@ public final class ModelBuilder {
      * @return the box
      */
     public Model box(float width, float height, float depth) {
-        return box("box", width, height, depth);
+        return box("box", width, height, depth, ModelVertexUsage.DEFAULT);
+    }
+
+    /**
+     * Builds a box with the requested vertex usages.
+     *
+     * @param width the width
+     * @param height the height
+     * @param depth the depth
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the box
+     */
+    public Model box(float width, float height, float depth, long usage) {
+        return box("box", width, height, depth, usage);
     }
 
     /**
@@ -88,6 +124,22 @@ public final class ModelBuilder {
      * @return the box
      */
     public Model box(String id, float width, float height, float depth) {
+        return box(id, width, height, depth, ModelVertexUsage.DEFAULT);
+    }
+
+    /**
+     * Builds a named box with the requested vertex usages.
+     *
+     * @param id the identifier
+     * @param width the width
+     * @param height the height
+     * @param depth the depth
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the box
+     */
+    public Model box(String id, float width, float height, float depth,
+            long usage) {
+        validateUsage(usage);
         if (width <= 0.0f || height <= 0.0f || depth <= 0.0f) {
             throw new FdxException("Box dimensions must be greater than zero");
         }
@@ -95,7 +147,8 @@ public final class ModelBuilder {
         float hy = height * 0.5f;
         float hz = depth * 0.5f;
         ArrayList<Float> positions = new ArrayList<Float>();
-        ArrayList<Float> colors = new ArrayList<Float>();
+        ArrayList<Float> colors = hasUsage(usage, ModelVertexUsage.COLOR)
+                ? new ArrayList<Float>() : null;
         addFace(positions, colors,
                 -hx, -hy, -hz, -hx, hy, -hz, hx, hy, -hz, hx, -hy, -hz,
                 0.30f, 0.42f, 0.75f, 1.0f);
@@ -114,7 +167,8 @@ public final class ModelBuilder {
         addFace(positions, colors,
                 -hx, -hy, -hz, -hx, -hy, hz, -hx, hy, hz, -hx, hy, -hz,
                 0.24f, 0.68f, 0.87f, 1.0f);
-        return triangles(id, toFloatArray(positions), null, toFloatArray(colors));
+        return triangles(id, toFloatArray(positions), null,
+                colors != null ? toFloatArray(colors) : null, usage);
     }
 
     /**
@@ -125,7 +179,21 @@ public final class ModelBuilder {
      * @return the sphere
      */
     public Model sphere(float radius, int divisions) {
-        return sphere("sphere", radius, divisions, Math.max(2, divisions / 2));
+        return sphere("sphere", radius, divisions,
+                Math.max(2, divisions / 2), ModelVertexUsage.DEFAULT);
+    }
+
+    /**
+     * Builds a sphere with the requested vertex usages.
+     *
+     * @param radius the radius
+     * @param divisions the divisions
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the sphere
+     */
+    public Model sphere(float radius, int divisions, long usage) {
+        return sphere("sphere", radius, divisions,
+                Math.max(2, divisions / 2), usage);
     }
 
     /**
@@ -138,6 +206,22 @@ public final class ModelBuilder {
      * @return the sphere
      */
     public Model sphere(String id, float radius, int slices, int stacks) {
+        return sphere(id, radius, slices, stacks, ModelVertexUsage.DEFAULT);
+    }
+
+    /**
+     * Builds a named sphere with the requested vertex usages.
+     *
+     * @param id the identifier
+     * @param radius the radius
+     * @param slices the slices
+     * @param stacks the stacks
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the sphere
+     */
+    public Model sphere(String id, float radius, int slices, int stacks,
+            long usage) {
+        validateUsage(usage);
         if (radius <= 0.0f) {
             throw new FdxException("Sphere radius must be greater than zero");
         }
@@ -147,9 +231,13 @@ public final class ModelBuilder {
         int vertexColumns = slices + 1;
         int vertexRows = stacks + 1;
         float[] positions = new float[vertexColumns * vertexRows * 3];
-        float[] colors = new float[vertexColumns * vertexRows * 4];
+        float[] colors = hasUsage(usage, ModelVertexUsage.COLOR)
+                ? new float[vertexColumns * vertexRows * 4] : null;
+        float[] normals = hasUsage(usage, ModelVertexUsage.NORMAL)
+                ? new float[vertexColumns * vertexRows * 3] : null;
         int p = 0;
         int c = 0;
+        int n = 0;
         for (int stack = 0; stack <= stacks; stack++) {
             float v = stack / (float) stacks;
             float theta = (float) (-Math.PI * 0.5 + Math.PI * v);
@@ -166,10 +254,17 @@ public final class ModelBuilder {
                 float nx = x / radius;
                 float ny = y / radius;
                 float nz = z / radius;
-                colors[c++] = 0.35f + 0.45f * (nx * 0.5f + 0.5f);
-                colors[c++] = 0.45f + 0.40f * (ny * 0.5f + 0.5f);
-                colors[c++] = 0.55f + 0.35f * (nz * 0.5f + 0.5f);
-                colors[c++] = 1.0f;
+                if (normals != null) {
+                    normals[n++] = nx;
+                    normals[n++] = ny;
+                    normals[n++] = nz;
+                }
+                if (colors != null) {
+                    colors[c++] = 0.35f + 0.45f * (nx * 0.5f + 0.5f);
+                    colors[c++] = 0.45f + 0.40f * (ny * 0.5f + 0.5f);
+                    colors[c++] = 0.55f + 0.35f * (nz * 0.5f + 0.5f);
+                    colors[c++] = 1.0f;
+                }
             }
         }
         int[] indices = new int[slices * stacks * 6];
@@ -188,7 +283,7 @@ public final class ModelBuilder {
                 indices[index++] = d;
             }
         }
-        return triangles(id, positions, indices, colors);
+        return triangles(id, positions, indices, colors, normals, usage);
     }
 
     /**
@@ -201,26 +296,102 @@ public final class ModelBuilder {
      * @return the triangles
      */
     public Model triangles(String id, float[] positions, int[] indices, float[] colors) {
+        return triangles(id, positions, indices, colors,
+                ModelVertexUsage.DEFAULT);
+    }
+
+    /**
+     * Builds triangles with the requested vertex usages.
+     *
+     * <p>When normals are requested, this overload generates one flat normal
+     * from each triangle's winding.</p>
+     *
+     * @param id the identifier
+     * @param positions the positions
+     * @param indices the indices
+     * @param colors the colors
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the triangles
+     */
+    public Model triangles(String id, float[] positions, int[] indices,
+            float[] colors, long usage) {
+        return triangles(id, positions, indices, colors, null, usage);
+    }
+
+    /**
+     * Builds triangles with explicit source normals and the default color
+     * usage.
+     *
+     * @param id the identifier
+     * @param positions the positions
+     * @param indices the indices
+     * @param colors the colors
+     * @param normals the source normals
+     * @return the triangles
+     */
+    public Model triangles(String id, float[] positions, int[] indices,
+            float[] colors, float[] normals) {
+        return triangles(id, positions, indices, colors, normals,
+                ModelVertexUsage.DEFAULT | ModelVertexUsage.NORMAL);
+    }
+
+    /**
+     * Builds triangles with optional explicit source normals and the requested
+     * vertex usages.
+     *
+     * <p>Explicit normals are expanded through {@code indices}, preserving
+     * smooth normals supplied for shared source vertices. When normals are
+     * requested and {@code normals} is {@code null}, one flat normal is
+     * generated from each triangle's winding.</p>
+     *
+     * @param id the identifier
+     * @param positions the positions
+     * @param indices the indices
+     * @param colors the colors
+     * @param normals the source normals, or {@code null} to generate flat normals
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the triangles
+     */
+    public Model triangles(String id, float[] positions, int[] indices,
+            float[] colors, float[] normals, long usage) {
+        validateUsage(usage);
         if (positions == null || positions.length == 0 || positions.length % 3 != 0) {
             throw new FdxException("Triangle positions must be xyz triples");
         }
-        TriangleVertices vertices = triangleVertices(positions, indices, colors, Color.WHITE);
-        Mesh mesh = Mesh.positionColor3D(graphics, id, vertices.positions, vertices.colors,
-                bounds(positions));
+        boolean includeColors = hasUsage(usage, ModelVertexUsage.COLOR);
+        boolean includeNormals = hasUsage(usage, ModelVertexUsage.NORMAL);
+        TriangleVertices vertices = triangleVertices(positions, indices,
+                includeColors ? colors : null,
+                includeNormals ? normals : null, includeNormals, Color.WHITE);
+        Mesh mesh = createMesh(id, vertices, usage, bounds(positions));
         MeshPart meshPart = new MeshPart(id + " part", mesh, null, 0, mesh.vertexCount());
         return DefaultModel.singleNode(id, meshPart, material);
     }
 
     static TriangleVertices triangleVertices(float[] positions, int[] indices, float[] colors, Color fallbackColor) {
+        return triangleVertices(positions, indices, colors, null, false,
+                fallbackColor);
+    }
+
+    private static TriangleVertices triangleVertices(float[] positions,
+            int[] indices, float[] colors, float[] normals,
+            boolean includeNormals, Color fallbackColor) {
         int sourceVertexCount = positions.length / 3;
+        if (includeNormals && normals != null
+                && normals.length != sourceVertexCount * 3) {
+            throw new FdxException("Vertex normals must be xyz values per vertex");
+        }
         int[] triangleIndices = indices != null ? indices.clone() : sequence(sourceVertexCount);
         if (triangleIndices.length == 0 || triangleIndices.length % 3 != 0) {
             throw new FdxException("Triangle index count must be a positive multiple of three");
         }
         float[] expandedPositions = new float[triangleIndices.length * 3];
         float[] expandedColors = new float[triangleIndices.length * 4];
+        float[] expandedNormals = includeNormals
+                ? new float[triangleIndices.length * 3] : null;
         int positionOut = 0;
         int colorOut = 0;
+        int normalOut = 0;
         for (int i = 0; i < triangleIndices.length; i++) {
             int index = triangleIndices[i];
             validateIndex(index, sourceVertexCount);
@@ -229,8 +400,18 @@ public final class ModelBuilder {
             expandedPositions[positionOut++] = positions[positionOffset + 1];
             expandedPositions[positionOut++] = positions[positionOffset + 2];
             colorOut = appendColor(expandedColors, colorOut, positions.length / 3, colors, fallbackColor, index);
+            if (expandedNormals != null && normals != null) {
+                int normalOffset = index * 3;
+                expandedNormals[normalOut++] = normals[normalOffset];
+                expandedNormals[normalOut++] = normals[normalOffset + 1];
+                expandedNormals[normalOut++] = normals[normalOffset + 2];
+            }
         }
-        return new TriangleVertices(expandedPositions, expandedColors);
+        if (expandedNormals != null && normals == null) {
+            generateFlatNormals(expandedPositions, expandedNormals);
+        }
+        return new TriangleVertices(expandedPositions, expandedColors,
+                expandedNormals);
     }
 
     private static int appendColor(float[] expandedColors, int out, int vertexCount, float[] colors,
@@ -264,6 +445,75 @@ public final class ModelBuilder {
             return 3;
         }
         throw new FdxException("Vertex colors must be rgb or rgba values per vertex");
+    }
+
+    private Mesh createMesh(String id, TriangleVertices vertices, long usage,
+            BoundingBox meshBounds) {
+        boolean includeColors = hasUsage(usage, ModelVertexUsage.COLOR);
+        boolean includeNormals = hasUsage(usage, ModelVertexUsage.NORMAL);
+        if (includeNormals) {
+            if (includeColors) {
+                return Mesh.positionNormalColor3D(graphics, id,
+                        vertices.positions, vertices.colors, vertices.normals,
+                        meshBounds);
+            }
+            return Mesh.positionNormal3D(graphics, id, vertices.positions,
+                    vertices.colors, vertices.normals, meshBounds);
+        }
+        if (includeColors) {
+            return Mesh.positionColor3D(graphics, id, vertices.positions,
+                    vertices.colors, meshBounds);
+        }
+        return Mesh.position3D(graphics, id, vertices.positions,
+                vertices.colors, meshBounds);
+    }
+
+    private static void generateFlatNormals(float[] positions,
+            float[] normals) {
+        for (int i = 0; i < positions.length; i += 9) {
+            float ax = positions[i + 3] - positions[i];
+            float ay = positions[i + 4] - positions[i + 1];
+            float az = positions[i + 5] - positions[i + 2];
+            float bx = positions[i + 6] - positions[i];
+            float by = positions[i + 7] - positions[i + 1];
+            float bz = positions[i + 8] - positions[i + 2];
+            float nx = ay * bz - az * by;
+            float ny = az * bx - ax * bz;
+            float nz = ax * by - ay * bx;
+            float lengthSquared = nx * nx + ny * ny + nz * nz;
+            if (lengthSquared > 0.0f && Float.isFinite(lengthSquared)) {
+                float inverseLength = 1.0f / (float)Math.sqrt(lengthSquared);
+                nx *= inverseLength;
+                ny *= inverseLength;
+                nz *= inverseLength;
+            }
+            else {
+                nx = 0.0f;
+                ny = 0.0f;
+                nz = 0.0f;
+            }
+            for (int vertex = 0; vertex < 3; vertex++) {
+                int normalOffset = i + vertex * 3;
+                normals[normalOffset] = nx;
+                normals[normalOffset + 1] = ny;
+                normals[normalOffset + 2] = nz;
+            }
+        }
+    }
+
+    private static boolean hasUsage(long usage, long expected) {
+        return (usage & expected) == expected;
+    }
+
+    private static void validateUsage(long usage) {
+        long unknown = usage & ~ModelVertexUsage.ALL;
+        if (unknown != 0L) {
+            throw new FdxException("Unsupported model vertex usage bits: "
+                    + unknown);
+        }
+        if (!hasUsage(usage, ModelVertexUsage.POSITION)) {
+            throw new FdxException("Model vertex usage must include POSITION");
+        }
     }
 
     private static int[] sequence(int count) {
@@ -319,10 +569,12 @@ public final class ModelBuilder {
         positions.add(x);
         positions.add(y);
         positions.add(z);
-        colors.add(red);
-        colors.add(green);
-        colors.add(blue);
-        colors.add(alpha);
+        if (colors != null) {
+            colors.add(red);
+            colors.add(green);
+            colors.add(blue);
+            colors.add(alpha);
+        }
     }
 
     private static float[] toFloatArray(ArrayList<Float> values) {
@@ -341,10 +593,13 @@ public final class ModelBuilder {
     static final class TriangleVertices {
         private final float[] positions;
         private final float[] colors;
+        private final float[] normals;
 
-        TriangleVertices(float[] positions, float[] colors) {
+        TriangleVertices(float[] positions, float[] colors,
+                float[] normals) {
             this.positions = positions;
             this.colors = colors;
+            this.normals = normals;
         }
     }
 }

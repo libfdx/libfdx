@@ -37,26 +37,16 @@ import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.VertexLayout;
 import io.github.libfdx.math.Matrix4;
 
-import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Renders a WGSL-authored shell outline for 3D PBR meshes.
+ * Renders a WGSL-authored shell outline for static 3D meshes with normals.
  *
  * @author xpenatan
  */
 public final class OutlineRenderer3D implements Disposable {
     private static final int PRIMITIVE_TOPOLOGY_COUNT = PrimitiveTopology.values().length;
-    private static final String SOURCE = """
-            struct VertexInput {
-                @location(0) position : vec3f,
-                @location(1) normal : vec3f,
-                @location(2) uv : vec2f,
-                @location(3) color : vec4f,
-                @location(4) pbr : vec3f,
-                @location(5) emissive : vec3f,
-            };
+    private static final String SHADER_BODY = """
             struct VertexOutput {
                 @builtin(position) position : vec4f,
                 @location(0) color : vec4f,
@@ -115,6 +105,29 @@ public final class OutlineRenderer3D implements Disposable {
                 return input.color;
             }
             """;
+    private static final String PBR_SOURCE = """
+            struct VertexInput {
+                @location(0) position : vec3f,
+                @location(1) normal : vec3f,
+                @location(2) uv : vec2f,
+                @location(3) color : vec4f,
+                @location(4) pbr : vec3f,
+                @location(5) emissive : vec3f,
+            };
+            """ + SHADER_BODY;
+    private static final String POSITION_NORMAL_SOURCE = """
+            struct VertexInput {
+                @location(0) position : vec3f,
+                @location(1) normal : vec3f,
+            };
+            """ + SHADER_BODY;
+    private static final String POSITION_NORMAL_COLOR_SOURCE = """
+            struct VertexInput {
+                @location(0) position : vec3f,
+                @location(1) normal : vec3f,
+                @location(3) color : vec4f,
+            };
+            """ + SHADER_BODY;
     private static final ShaderValueType MATRIX4 = ShaderValueType
             .matrix(ShaderScalarType.F32, 4, 4, 16)
             .named("mat4x4<f32>");
@@ -159,15 +172,39 @@ public final class OutlineRenderer3D implements Disposable {
             UNIFORM_LAYOUT.requireHandle("ambientColor");
     private static final ShaderParameterHandle FOG_PARAMS =
             UNIFORM_LAYOUT.requireHandle("fogParams");
-    private static final ShaderReflection REFLECTION = reflection();
+    private static final ShaderReflection PBR_REFLECTION = reflection(
+            variable("input.position", "position", 0,
+                    ShaderValueType.vector(ShaderScalarType.F32, 3)),
+            variable("input.normal", "normal", 1,
+                    ShaderValueType.vector(ShaderScalarType.F32, 3)),
+            variable("input.uv", "uv", 2,
+                    ShaderValueType.vector(ShaderScalarType.F32, 2)),
+            variable("input.color", "color", 3,
+                    ShaderValueType.vector(ShaderScalarType.F32, 4)),
+            variable("input.pbr", "pbr", 4,
+                    ShaderValueType.vector(ShaderScalarType.F32, 3)),
+            variable("input.emissive", "emissive", 5,
+                    ShaderValueType.vector(ShaderScalarType.F32, 3)));
+    private static final ShaderReflection POSITION_NORMAL_REFLECTION = reflection(
+            variable("input.position", "position", 0,
+                    ShaderValueType.vector(ShaderScalarType.F32, 3)),
+            variable("input.normal", "normal", 1,
+                    ShaderValueType.vector(ShaderScalarType.F32, 3)));
+    private static final ShaderReflection POSITION_NORMAL_COLOR_REFLECTION = reflection(
+            variable("input.position", "position", 0,
+                    ShaderValueType.vector(ShaderScalarType.F32, 3)),
+            variable("input.normal", "normal", 1,
+                    ShaderValueType.vector(ShaderScalarType.F32, 3)),
+            variable("input.color", "color", 3,
+                    ShaderValueType.vector(ShaderScalarType.F32, 4)));
 
     private final GraphicsContext graphics;
     private final DefaultRenderQueue3D queue = new DefaultRenderQueue3D();
-    private final ShaderModule shader;
+    private final OutlineShaderVariant pbrVariant;
+    private final OutlineShaderVariant positionNormalVariant;
+    private final OutlineShaderVariant positionNormalColorVariant;
     private final ShaderParameterBlock uniformBlock =
             ShaderParameterBlock.allocate(UNIFORM_LAYOUT);
-    private final Map<VertexLayout, RenderPipeline[]> pipelines =
-            new IdentityHashMap<VertexLayout, RenderPipeline[]>();
     private final RenderPassDescriptor renderPassDescriptor =
             new RenderPassDescriptor().label("outline renderer 3d pass");
     private final float[] modelMatrix = new float[Matrix4.VALUE_COUNT];
@@ -193,7 +230,29 @@ public final class OutlineRenderer3D implements Disposable {
             throw new FdxException("GraphicsContext cannot be null");
         }
         this.graphics = graphics;
-        shader = graphics.device().createShaderModule(ShaderModuleDescriptor.wgsl("outline renderer 3d", SOURCE));
+        OutlineShaderVariant createdPbr = null;
+        OutlineShaderVariant createdPositionNormal = null;
+        OutlineShaderVariant createdPositionNormalColor = null;
+        try {
+            createdPbr = variant("outline renderer 3d pbr", PBR_SOURCE,
+                    PBR_REFLECTION);
+            createdPositionNormal = variant(
+                    "outline renderer 3d position normal",
+                    POSITION_NORMAL_SOURCE, POSITION_NORMAL_REFLECTION);
+            createdPositionNormalColor = variant(
+                    "outline renderer 3d position normal color",
+                    POSITION_NORMAL_COLOR_SOURCE,
+                    POSITION_NORMAL_COLOR_REFLECTION);
+        }
+        catch (RuntimeException | Error failure) {
+            disposeAfterFailedCreation(createdPositionNormalColor, failure);
+            disposeAfterFailedCreation(createdPositionNormal, failure);
+            disposeAfterFailedCreation(createdPbr, failure);
+            throw failure;
+        }
+        pbrVariant = createdPbr;
+        positionNormalVariant = createdPositionNormal;
+        positionNormalColorVariant = createdPositionNormalColor;
     }
 
     /**
@@ -365,22 +424,26 @@ public final class OutlineRenderer3D implements Disposable {
      */
     public void end() {
         ensureDrawing();
-        flush();
-        drawing = false;
-        camera = null;
-        if (ownsPass) {
-            pass.end();
+        RenderPass activePass = pass;
+        boolean endOwnedPass = ownsPass;
+        try {
+            flush();
         }
-        pass = null;
-        ownsPass = false;
+        finally {
+            queue.clear();
+            drawing = false;
+            camera = null;
+            pass = null;
+            ownsPass = false;
+            if (endOwnedPass) {
+                activePass.end();
+            }
+        }
     }
 
     private void draw(Renderable3D renderable) {
         MeshPart meshPart = renderable.meshPart();
         Mesh mesh = meshPart.mesh();
-        if (mesh.vertexLayout() != Mesh.PBR_LAYOUT) {
-            throw new FdxException("OutlineRenderer3D requires Mesh.PBR_LAYOUT meshes with normals");
-        }
         pass.setPipeline(pipeline(mesh.vertexLayout(), meshPart.primitiveTopology()));
         pass.setVertexBuffer(mesh.vertexBuffer());
         renderable.worldTransform().copyValues(modelMatrix, 0);
@@ -407,11 +470,7 @@ public final class OutlineRenderer3D implements Disposable {
         return ShaderParameter.of(name, type, offset, size, 16);
     }
 
-    private static ShaderReflection reflection() {
-        ShaderValueType float2 =
-                ShaderValueType.vector(ShaderScalarType.F32, 2);
-        ShaderValueType float3 =
-                ShaderValueType.vector(ShaderScalarType.F32, 3);
+    private static ShaderReflection reflection(ShaderStageVariable... vertexInputs) {
         ShaderValueType float4 =
                 ShaderValueType.vector(ShaderScalarType.F32, 4);
         ShaderStageVariable outputColor = variable(
@@ -429,18 +488,7 @@ public final class OutlineRenderer3D implements Disposable {
                         ShaderEntryPoint.builder("vertexMain",
                                         ShaderStage.VERTEX)
                                 .builtins(ShaderBuiltinUsage.POSITION, -1)
-                                .inputs(
-                                        variable("input.position", "position",
-                                                0, float3),
-                                        variable("input.normal", "normal", 1,
-                                                float3),
-                                        variable("input.uv", "uv", 2, float2),
-                                        variable("input.color", "color", 3,
-                                                float4),
-                                        variable("input.pbr", "pbr", 4,
-                                                float3),
-                                        variable("input.emissive", "emissive",
-                                                5, float3))
+                                .inputs(vertexInputs)
                                 .outputs(outputColor)
                                 .resources(ShaderResourceUse.of(0, 0, 976))
                                 .build(),
@@ -463,25 +511,55 @@ public final class OutlineRenderer3D implements Disposable {
 
     private RenderPipeline pipeline(VertexLayout vertexLayout, PrimitiveTopology topology) {
         PrimitiveTopology actualTopology = topology != null ? topology : PrimitiveTopology.TRIANGLE_LIST;
-        RenderPipeline[] variants = pipelines.get(vertexLayout);
-        if (variants == null) {
-            variants = new RenderPipeline[PRIMITIVE_TOPOLOGY_COUNT];
-            pipelines.put(vertexLayout, variants);
-        }
+        OutlineShaderVariant variant = variant(vertexLayout);
         int slot = actualTopology.ordinal();
-        RenderPipeline pipeline = variants[slot];
+        RenderPipeline pipeline = variant.pipelines[slot];
         if (pipeline == null) {
             pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
-                    .shader(shader, graphics.surfaceFormat())
-                    .label("outline renderer 3d")
-                    .shaderReflection(REFLECTION)
+                    .shader(variant.shader, graphics.surfaceFormat())
+                    .label(variant.label)
+                    .shaderReflection(variant.reflection)
                     .primitiveTopology(actualTopology)
                     .depthTestEnabled(false)
                     .depthWriteEnabled(false)
                     .vertexLayout(vertexLayout));
-            variants[slot] = pipeline;
+            variant.pipelines[slot] = pipeline;
         }
         return pipeline;
+    }
+
+    private OutlineShaderVariant variant(String label, String source,
+            ShaderReflection reflection) {
+        return new OutlineShaderVariant(label,
+                graphics.device().createShaderModule(
+                        ShaderModuleDescriptor.wgsl(label, source)),
+                reflection);
+    }
+
+    private OutlineShaderVariant variant(VertexLayout vertexLayout) {
+        if (Mesh.PBR_LAYOUT.equals(vertexLayout)) {
+            return pbrVariant;
+        }
+        if (Mesh.POSITION_NORMAL_LAYOUT.equals(vertexLayout)) {
+            return positionNormalVariant;
+        }
+        if (Mesh.POSITION_NORMAL_COLOR_LAYOUT.equals(vertexLayout)) {
+            return positionNormalColorVariant;
+        }
+        throw new FdxException("OutlineRenderer3D requires a static mesh layout with normals");
+    }
+
+    private static void disposeAfterFailedCreation(OutlineShaderVariant variant,
+            Throwable failure) {
+        if (variant == null) {
+            return;
+        }
+        try {
+            variant.dispose();
+        }
+        catch (Throwable cleanupFailure) {
+            failure.addSuppressed(cleanupFailure);
+        }
     }
 
     private void ensureCamera(Camera camera) {
@@ -512,15 +590,9 @@ public final class OutlineRenderer3D implements Disposable {
             return;
         }
         disposed = true;
-        for (RenderPipeline[] variants : pipelines.values()) {
-            for (int i = 0; i < variants.length; i++) {
-                if (variants[i] != null) {
-                    variants[i].dispose();
-                }
-            }
-        }
-        pipelines.clear();
-        shader.dispose();
+        pbrVariant.dispose();
+        positionNormalVariant.dispose();
+        positionNormalColorVariant.dispose();
     }
 
     /**
@@ -531,6 +603,37 @@ public final class OutlineRenderer3D implements Disposable {
     @Override
     public boolean isDisposed() {
         return disposed;
+    }
+
+    private static final class OutlineShaderVariant implements Disposable {
+        private final String label;
+        private final ShaderModule shader;
+        private final ShaderReflection reflection;
+        private final RenderPipeline[] pipelines =
+                new RenderPipeline[PRIMITIVE_TOPOLOGY_COUNT];
+
+        OutlineShaderVariant(String label, ShaderModule shader,
+                ShaderReflection reflection) {
+            this.label = label;
+            this.shader = shader;
+            this.reflection = reflection;
+        }
+
+        @Override
+        public void dispose() {
+            for (int i = 0; i < pipelines.length; i++) {
+                if (pipelines[i] != null) {
+                    pipelines[i].dispose();
+                    pipelines[i] = null;
+                }
+            }
+            shader.dispose();
+        }
+
+        @Override
+        public boolean isDisposed() {
+            return shader.isDisposed();
+        }
     }
 
 }

@@ -6,8 +6,11 @@ import io.github.libfdx.net.webrtc.signaling.WebRtcSignalingCodec;
 import io.github.libfdx.net.webrtc.signaling.WebRtcSignalingMessage;
 import io.github.libfdx.net.webrtc.signaling.WebRtcSignalingMessageType;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -50,6 +53,96 @@ final class WebRtcSignalingServerTest {
             a.closeBlocking();
             b.closeBlocking();
             c.closeBlocking();
+        }
+        finally {
+            server.dispose();
+        }
+    }
+
+    @Test
+    void roomIdsReturnsSortedDefensiveSnapshot() throws Exception {
+        int port = freePort();
+        WebRtcSignalingServer server = new WebRtcSignalingServer(WebRtcSignalingServerConfig.builder(port)
+                .bindHost("127.0.0.1")
+                .build());
+        server.start();
+        try {
+            TestSocket roomB = connect(port, "room-b", "b");
+            TestSocket roomA = connect(port, "room-a", "a");
+            assertTrue(awaitMessages(server, roomB, 1));
+            assertTrue(awaitMessages(server, roomA, 1));
+
+            List<String> roomIds = server.roomIds();
+            assertEquals(Arrays.asList("room-a", "room-b"), roomIds);
+
+            roomIds.clear();
+            assertEquals(Arrays.asList("room-a", "room-b"), server.roomIds());
+
+            roomA.closeBlocking();
+            roomB.closeBlocking();
+        }
+        finally {
+            server.dispose();
+        }
+    }
+
+    @Test
+    void malformedPercentEscapeDoesNotEscapeTheProcessingLoop() throws Exception {
+        int port = freePort();
+        WebRtcSignalingServer server = new WebRtcSignalingServer(WebRtcSignalingServerConfig.builder(port)
+                .bindHost("127.0.0.1")
+                .build());
+        server.start();
+        try (Socket malformed = new Socket("127.0.0.1", port)) {
+            String request = "GET /?room=%ZZ&peerId=bad HTTP/1.1\r\n"
+                    + "Host: 127.0.0.1:" + port + "\r\n"
+                    + "Upgrade: websocket\r\n"
+                    + "Connection: Upgrade\r\n"
+                    + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                    + "Sec-WebSocket-Version: 13\r\n\r\n";
+            malformed.getOutputStream().write(request.getBytes(StandardCharsets.US_ASCII));
+            malformed.getOutputStream().flush();
+            for (int i = 0; i < 20; i++) {
+                server.process(0.01f);
+                Thread.sleep(5L);
+            }
+
+            TestSocket accepted = connect(port, "healthy-room", "healthy-peer");
+            assertTrue(awaitMessages(server, accepted, 1));
+            assertEquals(WebRtcSignalingMessageType.WELCOME,
+                    codec.decode(accepted.messages().get(0)).type());
+            assertEquals(1, server.roomCount());
+            accepted.closeBlocking();
+        }
+        finally {
+            server.dispose();
+        }
+    }
+
+    @Test
+    void rejectsUnsafeAndOversizedEncodedRoomIdsBeforeJoin() throws Exception {
+        int port = freePort();
+        WebRtcSignalingServer server = new WebRtcSignalingServer(WebRtcSignalingServerConfig.builder(port)
+                .bindHost("127.0.0.1")
+                .build());
+        server.start();
+        try {
+            String[] encodedRoomIds = {
+                    "line%0Abreak",
+                    "line%0Dbreak",
+                    "pipe%7Cbreak",
+                    "control%1Fbreak",
+                    repeated('x', 129)
+            };
+            for (int i = 0; i < encodedRoomIds.length; i++) {
+                TestSocket socket = rawConnect("ws://127.0.0.1:" + port
+                        + "/?room=" + encodedRoomIds[i] + "&peerId=peer");
+                assertTrue(awaitMessages(server, socket, 1));
+                WebRtcSignalingMessage error = lastType(socket.messages(), WebRtcSignalingMessageType.ERROR);
+                assertEquals("invalid room", error.payload().requireString("message"));
+                assertEquals(0, server.roomCount());
+                socket.closeBlocking();
+            }
         }
         finally {
             server.dispose();
@@ -105,6 +198,7 @@ final class WebRtcSignalingServerTest {
             TestSocket rejected = rawConnect("ws://127.0.0.1:" + port + "/?room=room&peerId=bad");
             assertTrue(awaitMessages(server, rejected, 1));
             assertEquals(WebRtcSignalingMessageType.ERROR, codec.decode(rejected.messages().get(0)).type());
+            assertEquals(0, server.roomCount());
 
             TestSocket accepted = rawConnect("ws://127.0.0.1:" + port + "/?room=room&peerId=ok&token=ok");
             assertTrue(awaitMessages(server, accepted, 1));
@@ -258,6 +352,66 @@ final class WebRtcSignalingServerTest {
 
             host.closeBlocking();
             browser.closeBlocking();
+        }
+        finally {
+            server.dispose();
+        }
+    }
+
+    @Test
+    void rejectsUnsafeAndOversizedRegisteredRoomIds() throws Exception {
+        int port = freePort();
+        WebRtcSignalingServer server = new WebRtcSignalingServer(WebRtcSignalingServerConfig.builder(port)
+                .bindHost("127.0.0.1")
+                .build());
+        server.start();
+        try {
+            TestSocket host = connect(port, "lobby", "host-lobby");
+            assertTrue(awaitMessages(server, host, 1));
+            String[] invalidRoomIds = {
+                    "line\nbreak",
+                    "line\rbreak",
+                    "pipe|break",
+                    "control\u001Fbreak",
+                    repeated('x', 129)
+            };
+
+            for (int i = 0; i < invalidRoomIds.length; i++) {
+                int beforeRegister = host.messageCount();
+                host.send(codec.encode(WebRtcSignalingMessage.builder(WebRtcSignalingMessageType.ROOM_REGISTER)
+                        .payload(JsonValue.object().put("roomId", invalidRoomIds[i]))
+                        .build()));
+                WebRtcSignalingMessage error = awaitTypeAfter(server, host, WebRtcSignalingMessageType.ERROR,
+                        beforeRegister);
+                assertEquals("room registration invalid roomId", error.payload().requireString("message"));
+                assertEquals(0, server.registeredRoomCount());
+            }
+
+            int beforeValidRegister = host.messageCount();
+            host.send(codec.encode(WebRtcSignalingMessage.builder(WebRtcSignalingMessageType.ROOM_REGISTER)
+                    .payload(JsonValue.object().put("roomId", "ordinary-room_42"))
+                    .build()));
+            awaitTypeAfter(server, host, WebRtcSignalingMessageType.ROOM_LIST, beforeValidRegister);
+            assertEquals(1, server.registeredRoomCount());
+
+            for (int i = 0; i < invalidRoomIds.length; i++) {
+                int beforeUnregister = host.messageCount();
+                host.send(codec.encode(WebRtcSignalingMessage.builder(WebRtcSignalingMessageType.ROOM_UNREGISTER)
+                        .payload(JsonValue.object().put("roomId", invalidRoomIds[i]))
+                        .build()));
+                WebRtcSignalingMessage error = awaitTypeAfter(server, host, WebRtcSignalingMessageType.ERROR,
+                        beforeUnregister);
+                assertEquals("room unregister invalid roomId", error.payload().requireString("message"));
+                assertEquals(1, server.registeredRoomCount());
+            }
+
+            int beforeValidUnregister = host.messageCount();
+            host.send(codec.encode(WebRtcSignalingMessage.builder(WebRtcSignalingMessageType.ROOM_UNREGISTER)
+                    .payload(JsonValue.object().put("roomId", "ordinary-room_42"))
+                    .build()));
+            awaitTypeAfter(server, host, WebRtcSignalingMessageType.ROOM_LIST_CHANGED, beforeValidUnregister);
+            assertEquals(0, server.registeredRoomCount());
+            host.closeBlocking();
         }
         finally {
             server.dispose();
@@ -472,6 +626,14 @@ final class WebRtcSignalingServerTest {
         int port = socket.getLocalPort();
         socket.close();
         return port;
+    }
+
+    private static String repeated(char value, int count) {
+        StringBuilder result = new StringBuilder(count);
+        for (int i = 0; i < count; i++) {
+            result.append(value);
+        }
+        return result.toString();
     }
 
     private static final class TestSocket extends org.java_websocket.client.WebSocketClient {

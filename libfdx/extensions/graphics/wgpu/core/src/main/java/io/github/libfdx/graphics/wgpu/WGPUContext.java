@@ -616,16 +616,33 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             WGPUSurfaceTexture surfaceTexture = WGPUSurfaceTexture.obtain();
             surface.getCurrentTexture(surfaceTexture);
             WGPUSurfaceGetCurrentTextureStatus status = surfaceTexture.getStatus();
+            if (status == WGPUSurfaceGetCurrentTextureStatus.Timeout) {
+                debugSurfaceAcquire(status, "retrying on the next frame");
+                return false;
+            }
+            if (status == WGPUSurfaceGetCurrentTextureStatus.Outdated
+                    || status == WGPUSurfaceGetCurrentTextureStatus.Lost) {
+                debugSurfaceAcquire(status, "reconfiguring the surface");
+                reconfigureSurfaceAfterAcquireFailure();
+                return false;
+            }
             if (status != WGPUSurfaceGetCurrentTextureStatus.SuccessOptimal
                     && status != WGPUSurfaceGetCurrentTextureStatus.SuccessSuboptimal) {
-                applyPendingResize();
-                return false;
+                throw new FdxException("Unable to acquire WGPU surface texture: "
+                        + status + " (" + width + "x" + height + ")");
             }
 
             surfaceTexture.getTexture(frameTexture);
             if (!frameTexture.isValid()) {
-                applyPendingResize();
-                return false;
+                throw new FdxException("WGPU surface acquisition " + status
+                        + " returned an invalid texture (" + width + "x" + height + ")");
+            }
+
+            if (status == WGPUSurfaceGetCurrentTextureStatus.SuccessSuboptimal
+                    && !pendingResize) {
+                pendingResize = true;
+                pendingResizeWidth = width;
+                pendingResizeHeight = height;
             }
 
             WGPUTextureViewDescriptor viewDescriptor = WGPUTextureViewDescriptor.obtain();
@@ -1204,6 +1221,22 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         int resizeHeight = pendingResizeHeight;
         pendingResize = false;
         configureSurface(resizeWidth, resizeHeight);
+    }
+
+    private void reconfigureSurfaceAfterAcquireFailure() {
+        int resizeWidth = pendingResize ? pendingResizeWidth : width;
+        int resizeHeight = pendingResize ? pendingResizeHeight : height;
+        pendingResize = false;
+        if (resizeWidth > 0 && resizeHeight > 0) {
+            configureSurface(resizeWidth, resizeHeight);
+        }
+    }
+
+    private void debugSurfaceAcquire(WGPUSurfaceGetCurrentTextureStatus status, String action) {
+        if (Boolean.getBoolean("libfdx.wgpu.debugSurfaceStatus")) {
+            System.err.println("[libfdx-wgpu] surface acquisition " + status
+                    + " at " + width + "x" + height + "; " + action);
+        }
     }
 
     private void rollbackTexture(WGPUTexture texture, WGPUTextureView view, boolean disposeView,

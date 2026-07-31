@@ -1,13 +1,20 @@
 package io.github.libfdx.backend.web;
 
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -20,8 +27,9 @@ import java.util.zip.ZipFile;
  * @author xpenatan
  */
 public final class WebAppWriter {
-    private static final Set<String> RUNTIME_SCRIPT_NAMES = Set.of("jWebGPU.js", "jWebGPU.wasm", "fdx.js",
-            "fdx.wasm", "runtime.js", "runtime.wasm");
+    private static final String GENERATED_LOADER_PATH = "fdx-loader.js";
+    private static final String WEB_RUNTIME_MARKER_PATH = "META-INF/libfdx-web.properties";
+    private static final String TEAVM_INTERNAL_RESOURCE_PREFIX = "org/teavm/";
 
     private WebAppWriter() {
     }
@@ -534,69 +542,288 @@ public final class WebAppWriter {
     }
 
     private static void copyRuntimeScripts(Path root, List<Path> runtimeClasspath) throws IOException {
+        Path webappRoot = root.toAbsolutePath().normalize();
         Path scriptsRoot = root.resolve("scripts").toAbsolutePath().normalize();
-        WebAssets.deleteDirectory(scriptsRoot);
-        LinkedHashMap<String, Long> copied = new LinkedHashMap<>();
+        LinkedHashMap<String, RuntimeScript> discovered = new LinkedHashMap<>();
+        LinkedHashMap<String, String> portablePaths = new LinkedHashMap<>();
         for (Path entry : runtimeClasspath) {
             Path normalized = entry.toAbsolutePath().normalize();
             if (Files.isDirectory(normalized)) {
-                copyRuntimeScriptsFromDirectory(normalized, scriptsRoot, copied);
-            } else if (Files.isRegularFile(normalized) && normalized.getFileName().toString().endsWith(".jar")) {
-                copyRuntimeScriptsFromJar(normalized, scriptsRoot, copied);
+                discoverRuntimeScriptsFromDirectory(normalized, webappRoot, discovered, portablePaths);
+            } else if (Files.isRegularFile(normalized) && isJar(normalized)) {
+                discoverRuntimeScriptsFromJar(normalized, discovered, portablePaths);
             }
         }
-        if (copied.isEmpty()) {
-            WebAssets.deleteDirectory(scriptsRoot);
+
+        ArrayList<RuntimeScriptCopy> copies = new ArrayList<>(discovered.size());
+        for (RuntimeScript script : discovered.values().stream()
+                .sorted(Comparator.comparing(RuntimeScript::resourcePath))
+                .toList()) {
+            Path output = runtimeScriptOutput(scriptsRoot, script.resourcePath(), script.origin());
+            copies.add(new RuntimeScriptCopy(script, output));
+        }
+
+        WebAssets.deleteDirectory(scriptsRoot);
+        for (RuntimeScriptCopy copy : copies) {
+            Files.createDirectories(copy.output().getParent());
+            try (InputStream input = copy.script().open()) {
+                Files.copy(input, copy.output(), StandardCopyOption.REPLACE_EXISTING);
+            }
         }
     }
 
-    private static void copyRuntimeScriptsFromDirectory(Path directory, Path scriptsRoot, Map<String, Long> copied)
+    private static void discoverRuntimeScriptsFromDirectory(Path directory, Path webappRoot,
+            Map<String, RuntimeScript> discovered, Map<String, String> portablePaths)
             throws IOException {
-        for (String name : RUNTIME_SCRIPT_NAMES) {
-            Path source = directory.resolve(name);
-            if (Files.isRegularFile(source) && shouldCopyRuntimeScript(name, Files.size(source), copied)) {
-                copyRuntimeScript(source, scriptsRoot.resolve(name), scriptsRoot);
+        if (directory.startsWith(webappRoot)) {
+            return;
+        }
+        try (var paths = Files.walk(directory)) {
+            for (Path source : paths
+                    .filter(Files::isRegularFile)
+                    .filter(path -> !path.toAbsolutePath().normalize().startsWith(webappRoot))
+                    .filter(path -> isRuntimeScript(directory.relativize(path).toString()))
+                    .sorted(Comparator.comparing(path -> directory.relativize(path).toString()))
+                    .toList()) {
+                String relativePath = directory.relativize(source).toString();
+                String resourcePath = normalizeRuntimeScriptPath(relativePath, source.toString());
+                registerRuntimeScript(RuntimeScript.file(resourcePath, source), discovered, portablePaths);
             }
         }
     }
 
-    private static void copyRuntimeScriptsFromJar(Path jarPath, Path scriptsRoot, Map<String, Long> copied)
+    private static void discoverRuntimeScriptsFromJar(Path jarPath, Map<String, RuntimeScript> discovered,
+            Map<String, String> portablePaths)
             throws IOException {
         try (ZipFile zip = new ZipFile(jarPath.toFile())) {
-            for (ZipEntry entry : zip.stream().toList()) {
-                String name = entry.getName().substring(entry.getName().lastIndexOf('/') + 1);
-                if (entry.isDirectory() || !RUNTIME_SCRIPT_NAMES.contains(name)
-                        || !shouldCopyRuntimeScript(name, entry.getSize(), copied)) {
-                    continue;
+            var runtimeEntries = zip.stream()
+                    .filter(candidate -> !candidate.isDirectory() && isRuntimeScript(candidate.getName()))
+                    .sorted(Comparator.comparing(ZipEntry::getName))
+                    .toList();
+            // WASM-bearing JARs identify themselves automatically. A JavaScript-only runtime JAR opts in once at
+            // artifact build time; application users never maintain a list of individual runtime filenames.
+            boolean webRuntimeJar = zip.getEntry(WEB_RUNTIME_MARKER_PATH) != null
+                    || containsPublishableWebAssembly(jarPath, runtimeEntries);
+            if (!webRuntimeJar) {
+                return;
+            }
+
+            Set<String> archivePaths = new HashSet<>();
+            for (ZipEntry entry : runtimeEntries) {
+                String origin = jarPath + "!/" + entry.getName();
+                String resourcePath = normalizeRuntimeScriptPath(entry.getName(), origin);
+                if (!archivePaths.add(resourcePath)) {
+                    throw new IOException("Duplicate runtime script path '" + resourcePath + "' in " + jarPath);
                 }
-                Path output = scriptsRoot.resolve(name).toAbsolutePath().normalize();
-                if (!output.startsWith(scriptsRoot)) {
-                    throw new IOException("Refusing to extract runtime script outside output directory: " + entry.getName());
+                registerRuntimeScript(RuntimeScript.jar(resourcePath, jarPath, entry.getName(), entry.getSize()),
+                        discovered, portablePaths);
+            }
+        }
+    }
+
+    private static boolean containsPublishableWebAssembly(Path jarPath, List<? extends ZipEntry> entries)
+            throws IOException {
+        for (ZipEntry entry : entries) {
+            if (!isWebAssembly(entry.getName())) {
+                continue;
+            }
+            String origin = jarPath + "!/" + entry.getName();
+            String resourcePath = normalizeRuntimeScriptPath(entry.getName(), origin);
+            if (!isExcludedRuntimeScript(resourcePath)
+                    && !resourcePath.equalsIgnoreCase(GENERATED_LOADER_PATH)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void registerRuntimeScript(RuntimeScript candidate, Map<String, RuntimeScript> discovered,
+            Map<String, String> portablePaths) throws IOException {
+        String resourcePath = candidate.resourcePath();
+        if (isExcludedRuntimeScript(resourcePath)) {
+            return;
+        }
+
+        String portableKey = resourcePath.toLowerCase(Locale.ROOT);
+        String loaderKey = GENERATED_LOADER_PATH.toLowerCase(Locale.ROOT);
+        if (portableKey.equals(loaderKey)) {
+            return;
+        }
+        if (portableKey.startsWith(loaderKey + "/")) {
+            throw new IOException("Runtime script path conflicts with generated loader '" + GENERATED_LOADER_PATH
+                    + "': '" + resourcePath + "' from " + candidate.origin());
+        }
+        String existingPortablePath = portablePaths.get(portableKey);
+        if (existingPortablePath != null && !existingPortablePath.equals(resourcePath)) {
+            RuntimeScript existing = discovered.get(existingPortablePath);
+            throw new IOException("Runtime script paths differ only by case: '" + existingPortablePath + "' from "
+                    + existing.origin() + " and '" + resourcePath + "' from " + candidate.origin());
+        }
+        for (Map.Entry<String, String> entry : portablePaths.entrySet()) {
+            String existingKey = entry.getKey();
+            if (portableKey.startsWith(existingKey + "/") || existingKey.startsWith(portableKey + "/")) {
+                RuntimeScript existing = discovered.get(entry.getValue());
+                throw new IOException("Runtime script path conflicts with a file/directory path: '"
+                        + existing.resourcePath() + "' from " + existing.origin() + " and '" + resourcePath
+                        + "' from " + candidate.origin());
+            }
+        }
+
+        RuntimeScript existing = discovered.get(resourcePath);
+        if (existing != null) {
+            if (!sameContent(existing, candidate)) {
+                throw new IOException("Conflicting runtime script '" + resourcePath + "' from " + existing.origin()
+                        + " and " + candidate.origin());
+            }
+            return;
+        }
+
+        portablePaths.put(portableKey, resourcePath);
+        discovered.put(resourcePath, candidate);
+    }
+
+    private static boolean sameContent(RuntimeScript first, RuntimeScript second) throws IOException {
+        if (first.size() >= 0 && second.size() >= 0 && first.size() != second.size()) {
+            return false;
+        }
+        try (InputStream firstInput = first.open(); InputStream secondInput = second.open()) {
+            byte[] firstBuffer = new byte[8192];
+            byte[] secondBuffer = new byte[8192];
+            while (true) {
+                int firstCount = firstInput.readNBytes(firstBuffer, 0, firstBuffer.length);
+                int secondCount = secondInput.readNBytes(secondBuffer, 0, secondBuffer.length);
+                if (firstCount != secondCount) {
+                    return false;
                 }
-                Files.createDirectories(output.getParent());
-                try (InputStream input = zip.getInputStream(entry)) {
-                    Files.copy(input, output, StandardCopyOption.REPLACE_EXISTING);
+                if (firstCount == 0) {
+                    return true;
+                }
+                if (Arrays.mismatch(firstBuffer, 0, firstCount, secondBuffer, 0, secondCount) >= 0) {
+                    return false;
                 }
             }
         }
     }
 
-    private static void copyRuntimeScript(Path source, Path output, Path scriptsRoot) throws IOException {
-        Path target = output.toAbsolutePath().normalize();
-        if (!target.startsWith(scriptsRoot)) {
-            throw new IOException("Refusing to copy runtime script outside output directory: " + source);
-        }
-        Files.createDirectories(target.getParent());
-        Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+    private static boolean isJar(Path path) {
+        return path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar");
     }
 
-    private static boolean shouldCopyRuntimeScript(String name, long size, Map<String, Long> copied) {
-        Long existingSize = copied.get(name);
-        if (existingSize != null && existingSize >= size) {
+    private static boolean isRuntimeScript(String path) {
+        String normalized = path.replace('\\', '/').toLowerCase(Locale.ROOT);
+        return normalized.endsWith(".js") || normalized.endsWith(".wasm");
+    }
+
+    private static boolean isWebAssembly(String path) {
+        return path.toLowerCase(Locale.ROOT).endsWith(".wasm");
+    }
+
+    private static boolean isExcludedRuntimeScript(String resourcePath) {
+        int separator = resourcePath.indexOf('/');
+        String firstSegment = separator < 0 ? resourcePath : resourcePath.substring(0, separator);
+        return firstSegment.equalsIgnoreCase("META-INF")
+                || firstSegment.equalsIgnoreCase("WEB-INF")
+                // TeaVM packages compiler inputs as JavaScript resources; they are not webapp runtime scripts.
+                || resourcePath.regionMatches(true, 0, TEAVM_INTERNAL_RESOURCE_PREFIX, 0,
+                        TEAVM_INTERNAL_RESOURCE_PREFIX.length());
+    }
+
+    private static String normalizeRuntimeScriptPath(String path, String origin) throws IOException {
+        String normalized = path.replace('\\', '/');
+        if (normalized.isEmpty() || normalized.startsWith("/") || normalized.indexOf('\0') >= 0) {
+            throw invalidRuntimeScriptPath(path, origin);
+        }
+        String[] segments = normalized.split("/", -1);
+        for (String segment : segments) {
+            if (!isPortableRuntimeScriptSegment(segment)) {
+                throw invalidRuntimeScriptPath(path, origin);
+            }
+        }
+        return String.join("/", segments);
+    }
+
+    private static boolean isPortableRuntimeScriptSegment(String segment) {
+        if (segment.isEmpty() || segment.equals(".") || segment.equals("..")
+                || segment.endsWith(".") || segment.endsWith(" ")) {
             return false;
         }
-        copied.put(name, size);
-        return true;
+        for (int i = 0; i < segment.length(); i++) {
+            char character = segment.charAt(i);
+            if (character < 32 || "<>:\"|?*".indexOf(character) >= 0) {
+                return false;
+            }
+        }
+
+        int extension = segment.indexOf('.');
+        String baseName = (extension < 0 ? segment : segment.substring(0, extension)).toUpperCase(Locale.ROOT);
+        if (baseName.equals("CON") || baseName.equals("PRN") || baseName.equals("AUX") || baseName.equals("NUL")) {
+            return false;
+        }
+        return !(baseName.length() == 4
+                && (baseName.startsWith("COM") || baseName.startsWith("LPT"))
+                && baseName.charAt(3) >= '1' && baseName.charAt(3) <= '9');
+    }
+
+    private static IOException invalidRuntimeScriptPath(String path, String origin) {
+        return new IOException("Invalid runtime script path '" + path + "' from " + origin);
+    }
+
+    private static Path runtimeScriptOutput(Path scriptsRoot, String resourcePath, String origin) throws IOException {
+        Path output;
+        try {
+            output = scriptsRoot.resolve(resourcePath).toAbsolutePath().normalize();
+        } catch (InvalidPathException error) {
+            throw new IOException("Invalid runtime script output path from " + origin + ": " + resourcePath, error);
+        }
+        if (!output.startsWith(scriptsRoot)) {
+            throw new IOException("Refusing to copy runtime script outside output directory: " + origin);
+        }
+        return output;
+    }
+
+    private record RuntimeScriptCopy(RuntimeScript script, Path output) {
+    }
+
+    private record RuntimeScript(String resourcePath, Path source, String jarEntryName, long size) {
+        private static RuntimeScript file(String resourcePath, Path source) throws IOException {
+            return new RuntimeScript(resourcePath, source, null, Files.size(source));
+        }
+
+        private static RuntimeScript jar(String resourcePath, Path jarPath, String jarEntryName, long size) {
+            return new RuntimeScript(resourcePath, jarPath, jarEntryName, size);
+        }
+
+        private String origin() {
+            return jarEntryName == null ? source.toString() : source + "!/" + jarEntryName;
+        }
+
+        private InputStream open() throws IOException {
+            if (jarEntryName == null) {
+                return Files.newInputStream(source);
+            }
+            ZipFile zip = new ZipFile(source.toFile());
+            ZipEntry entry = zip.getEntry(jarEntryName);
+            if (entry == null || entry.isDirectory()) {
+                zip.close();
+                throw new IOException("Runtime script disappeared from JAR: " + origin());
+            }
+            try {
+                InputStream input = zip.getInputStream(entry);
+                return new FilterInputStream(input) {
+                    @Override
+                    public void close() throws IOException {
+                        try {
+                            super.close();
+                        } finally {
+                            zip.close();
+                        }
+                    }
+                };
+            } catch (IOException | RuntimeException error) {
+                zip.close();
+                throw error;
+            }
+        }
     }
 
     private static String html(String value) {

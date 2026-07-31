@@ -125,6 +125,7 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                 String reason = ((GraphicsProviderSupport) graphicsProvider).supportFailureReason();
                 throw new FdxException(reason != null ? reason : "Web graphics provider is not supported");
             }
+            logger.info("Web graphics provider selected: " + graphicsProvider.providerId());
 
             this.config = actualConfig;
             this.listener = listener;
