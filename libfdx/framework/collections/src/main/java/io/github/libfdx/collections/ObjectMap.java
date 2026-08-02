@@ -11,7 +11,7 @@ import java.util.NoSuchElementException;
  * @param <V> the value type
  * @author xpenatan
  */
-public class ObjectMap<K, V> implements ObjectMapView<K, V> {
+public final class ObjectMap<K, V> implements ObjectMapView<K, V> {
     private static final float DEFAULT_LOAD_FACTOR = 0.75f;
     private Object[] keys;
     private Object[] values;
@@ -20,6 +20,7 @@ public class ObjectMap<K, V> implements ObjectMapView<K, V> {
     private int occupied;
     private int threshold;
     private final float loadFactor;
+    private final KeyComparison keyComparison;
     private Entries<K, V> entries;
     private Keys<K, V> keysView;
     private Values<K, V> valuesView;
@@ -29,7 +30,16 @@ public class ObjectMap<K, V> implements ObjectMapView<K, V> {
      * Creates a map.
      */
     public ObjectMap() {
-        this(32, DEFAULT_LOAD_FACTOR);
+        this(32, DEFAULT_LOAD_FACTOR, KeyComparison.EQUALITY);
+    }
+
+    /**
+     * Creates a map using the requested key comparison.
+     *
+     * @param keyComparison the key comparison
+     */
+    public ObjectMap(KeyComparison keyComparison) {
+        this(32, DEFAULT_LOAD_FACTOR, keyComparison);
     }
 
     /**
@@ -38,7 +48,17 @@ public class ObjectMap<K, V> implements ObjectMapView<K, V> {
      * @param capacity the expected capacity
      */
     public ObjectMap(int capacity) {
-        this(capacity, DEFAULT_LOAD_FACTOR);
+        this(capacity, DEFAULT_LOAD_FACTOR, KeyComparison.EQUALITY);
+    }
+
+    /**
+     * Creates a map using the requested key comparison.
+     *
+     * @param capacity the expected capacity
+     * @param keyComparison the key comparison
+     */
+    public ObjectMap(int capacity, KeyComparison keyComparison) {
+        this(capacity, DEFAULT_LOAD_FACTOR, keyComparison);
     }
 
     /**
@@ -47,7 +67,18 @@ public class ObjectMap<K, V> implements ObjectMapView<K, V> {
      * @param values the entries
      */
     public ObjectMap(ObjectMapView<? extends K, ? extends V> values) {
-        this(values != null ? values.size() : 0, DEFAULT_LOAD_FACTOR);
+        this(values, KeyComparison.EQUALITY);
+    }
+
+    /**
+     * Creates a map containing a copy of the supplied entries using the
+     * requested key comparison.
+     *
+     * @param values the entries
+     * @param keyComparison the key comparison
+     */
+    public ObjectMap(ObjectMapView<? extends K, ? extends V> values, KeyComparison keyComparison) {
+        this(values != null ? values.size() : 0, DEFAULT_LOAD_FACTOR, keyComparison);
         if (values != null) {
             putAll(values);
         }
@@ -60,11 +91,26 @@ public class ObjectMap<K, V> implements ObjectMapView<K, V> {
      * @param loadFactor the load factor
      */
     public ObjectMap(int capacity, float loadFactor) {
+        this(capacity, loadFactor, KeyComparison.EQUALITY);
+    }
+
+    /**
+     * Creates a map using the requested key comparison.
+     *
+     * @param capacity the expected capacity
+     * @param loadFactor the load factor
+     * @param keyComparison the key comparison
+     */
+    public ObjectMap(int capacity, float loadFactor, KeyComparison keyComparison) {
         if (capacity < 0) {
             throw new IllegalArgumentException("capacity must be >= 0");
         }
         CollectionHash.checkLoadFactor(loadFactor);
+        if (keyComparison == null) {
+            throw new IllegalArgumentException("keyComparison must not be null");
+        }
         this.loadFactor = loadFactor;
+        this.keyComparison = keyComparison;
         allocate(CollectionHash.tableSize(capacity, loadFactor));
     }
 
@@ -313,6 +359,15 @@ public class ObjectMap<K, V> implements ObjectMapView<K, V> {
     }
 
     /**
+     * Returns how keys are compared and hashed.
+     *
+     * @return the key comparison
+     */
+    public KeyComparison keyComparison() {
+        return keyComparison;
+    }
+
+    /**
      * Returns an iterable view over entries.
      *
      * @return the entries
@@ -362,14 +417,17 @@ public class ObjectMap<K, V> implements ObjectMapView<K, V> {
 
     private int locate(K key) {
         int mask = keys.length - 1;
-        int index = CollectionHash.mix(keyHash(key)) & mask;
+        boolean identity = keyComparison == KeyComparison.IDENTITY;
+        int hash = identity ? System.identityHashCode(key) : key.hashCode();
+        int index = CollectionHash.mix(hash) & mask;
         int firstRemoved = -1;
         for (int probes = 0; probes < keys.length; probes++) {
             byte state = states[index];
             if (state == CollectionHash.EMPTY) {
                 return -(firstRemoved >= 0 ? firstRemoved : index) - 1;
             }
-            if (state == CollectionHash.USED && keysEqual(key, keys[index])) {
+            if (state == CollectionHash.USED
+                    && (identity ? key == keys[index] : key.equals(keys[index]))) {
                 return index;
             }
             if (state == CollectionHash.REMOVED && firstRemoved < 0) {
@@ -378,29 +436,6 @@ public class ObjectMap<K, V> implements ObjectMapView<K, V> {
             index = (index + 1) & mask;
         }
         return -(firstRemoved >= 0 ? firstRemoved : 0) - 1;
-    }
-
-    /**
-     * Returns the hash used for a key. Subclasses may override this together
-     * with {@link #keysEqual(Object, Object)} to provide another key policy.
-     *
-     * @param key the non-null key
-     * @return the key hash
-     */
-    protected int keyHash(K key) {
-        return key.hashCode();
-    }
-
-    /**
-     * Returns whether two keys match. Subclasses may override this together
-     * with {@link #keyHash(Object)} to provide another key policy.
-     *
-     * @param key the lookup key
-     * @param storedKey the stored key
-     * @return true if the keys match
-     */
-    protected boolean keysEqual(K key, Object storedKey) {
-        return key.equals(storedKey);
     }
 
     private void allocate(int tableSize) {

@@ -1,6 +1,7 @@
 package io.github.libfdx.ui;
 
-import io.github.libfdx.collections.IdentityMap;
+import io.github.libfdx.collections.KeyComparison;
+import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.collections.OrderedMap;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.files.FileSystem;
@@ -32,7 +33,8 @@ final class UiTextEngine implements Disposable {
     private final OrderedMap<String, BitmapFont> fonts = new OrderedMap<String, BitmapFont>();
     private final OrderedMap<String, Boolean> unavailableFonts = new OrderedMap<String, Boolean>();
     private final OrderedMap<String, BitmapFontLayout> layouts = new OrderedMap<String, BitmapFontLayout>();
-    private final IdentityMap<UiFont, CachedFontKey> fontKeys = new IdentityMap<UiFont, CachedFontKey>();
+    private final ObjectMap<UiFont, CachedFontKey> fontKeys =
+            new ObjectMap<UiFont, CachedFontKey>(KeyComparison.IDENTITY);
     private UiFont lastResolvedFont;
     private float lastResolvedRasterScale;
     private BitmapFont lastResolvedBitmapFont;

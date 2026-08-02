@@ -1,6 +1,7 @@
 package io.github.libfdx.graphics.g3d;
 
-import io.github.libfdx.collections.IdentityMap;
+import io.github.libfdx.collections.KeyComparison;
+import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
 import io.github.libfdx.graphics.shader.runtime.ShaderResourceBinding;
 import io.github.libfdx.graphics.camera.Camera;
@@ -749,8 +750,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         private static final float MIN_VISIBLE_CLIP_W = 0.000001f;
         private final GraphicsContext graphics;
         private final ShaderModule shaderModule;
-        private final IdentityMap<VertexLayout, RenderPipeline[]> pipelines =
-                new IdentityMap<VertexLayout, RenderPipeline[]>();
+        private final ObjectMap<VertexLayout, RenderPipeline[]> pipelines =
+                new ObjectMap<VertexLayout, RenderPipeline[]>(KeyComparison.IDENTITY);
         private ScratchBuffer[] scratchBuffers = new ScratchBuffer[4];
         private WorldVertex[] worldVertexPool = new WorldVertex[64];
         private ColorVertex[] colorVertexPool = new ColorVertex[64];

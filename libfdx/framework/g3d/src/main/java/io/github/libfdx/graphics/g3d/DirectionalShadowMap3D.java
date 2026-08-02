@@ -1,7 +1,8 @@
 package io.github.libfdx.graphics.g3d;
 
 import io.github.libfdx.collections.ArrayView;
-import io.github.libfdx.collections.IdentityMap;
+import io.github.libfdx.collections.KeyComparison;
+import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.graphics.shader.reflection.ShaderInterpolation;
 import io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling;
 import io.github.libfdx.core.Disposable;
@@ -412,8 +413,8 @@ public final class DirectionalShadowMap3D implements Disposable {
         private static final ShaderReflection REFLECTION = reflection();
         private final GraphicsContext graphics;
         private final ShaderModule shaderModule;
-        private final IdentityMap<VertexLayout, RenderPipeline[]> pipelines =
-                new IdentityMap<VertexLayout, RenderPipeline[]>();
+        private final ObjectMap<VertexLayout, RenderPipeline[]> pipelines =
+                new ObjectMap<VertexLayout, RenderPipeline[]>(KeyComparison.IDENTITY);
         private final ShaderParameterBlock uniformBlock =
                 ShaderParameterBlock.allocate(UNIFORM_LAYOUT);
         private final float[] modelMatrix = new float[Matrix4.VALUE_COUNT];

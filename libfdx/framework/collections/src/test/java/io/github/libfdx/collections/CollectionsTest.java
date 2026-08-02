@@ -558,21 +558,39 @@ final class CollectionsTest {
     }
 
     @Test
-    void identityMapKeepsEqualButDistinctKeysSeparate() {
+    void objectMapIdentityComparisonKeepsEqualButDistinctKeysSeparate() {
         String first = new String("same");
         String second = new String("same");
-        IdentityMap<String, Integer> map = new IdentityMap<String, Integer>(1);
+        ObjectMap<String, Integer> map =
+                new ObjectMap<String, Integer>(1, KeyComparison.IDENTITY);
 
         map.put(first, 1);
         map.put(second, 2);
 
+        assertEquals(KeyComparison.IDENTITY, map.keyComparison());
         assertEquals(2, map.size());
         assertEquals(1, map.get(first));
         assertEquals(2, map.get(second));
         assertNull(map.get(new String("same")));
+
+        ObjectMap<String, Integer> identityCopy =
+                new ObjectMap<String, Integer>(map.view(), KeyComparison.IDENTITY);
+        assertEquals(2, identityCopy.size());
+        assertEquals(1, identityCopy.get(first));
+        assertEquals(2, identityCopy.get(second));
+
         assertEquals(1, map.remove(first));
         assertFalse(map.containsKey(first));
         assertEquals(2, map.get(second));
+
+        ObjectMap<String, Integer> equality = new ObjectMap<String, Integer>();
+        equality.put(first, 1);
+        equality.put(second, 2);
+        assertEquals(KeyComparison.EQUALITY, equality.keyComparison());
+        assertEquals(1, equality.size());
+        assertEquals(2, equality.get(first));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ObjectMap<String, Integer>(1, null));
     }
 
     @Test

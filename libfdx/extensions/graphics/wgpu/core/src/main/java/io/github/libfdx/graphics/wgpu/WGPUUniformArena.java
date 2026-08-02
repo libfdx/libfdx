@@ -13,7 +13,8 @@ import com.github.xpenatan.webgpu.WGPURenderPassEncoder;
 import com.github.xpenatan.webgpu.WGPUVectorBindGroupEntry;
 import com.github.xpenatan.webgpu.WGPUVectorInt;
 import io.github.libfdx.collections.Array;
-import io.github.libfdx.collections.IdentityMap;
+import io.github.libfdx.collections.KeyComparison;
+import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.core.FdxException;
 
 import java.nio.ByteBuffer;
@@ -158,8 +159,8 @@ final class WGPUUniformArena {
     private final class Chunk {
         private final SizeClass size;
         private final WGPUBuffer buffer;
-        private final IdentityMap<WGPUBindGroupLayout, WGPUBindGroup> bindGroups =
-                new IdentityMap<WGPUBindGroupLayout, WGPUBindGroup>();
+        private final ObjectMap<WGPUBindGroupLayout, WGPUBindGroup> bindGroups =
+                new ObjectMap<WGPUBindGroupLayout, WGPUBindGroup>(KeyComparison.IDENTITY);
 
         Chunk(SizeClass size, int index) {
             this.size = size;
