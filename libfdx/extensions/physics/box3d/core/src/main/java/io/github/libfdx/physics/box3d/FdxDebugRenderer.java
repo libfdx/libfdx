@@ -16,6 +16,7 @@ import com.github.xpenatan.jParser.api.NativeObject;
 import io.github.libfdx.collections.Array;
 import io.github.libfdx.collections.FloatArray;
 import io.github.libfdx.collections.LongMap;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsContext;
@@ -241,8 +242,9 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
         if(modelCache.isEmpty()) {
             return;
         }
-        for(DebugModel model : modelCache.values()) {
-            retiredModels.add(new RetiredDebugModel(model, RETIRED_MODEL_FRAME_DELAY));
+        ObjectIterator<DebugModel> iterator = modelCache.values().iterator();
+        while(iterator.hasNext()) {
+            retiredModels.add(new RetiredDebugModel(iterator.next(), RETIRED_MODEL_FRAME_DELAY));
         }
         modelCache.clear();
     }
@@ -549,8 +551,9 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
     }
 
     private void disposeCachedModels() {
-        for(DebugModel model : modelCache.values()) {
-            model.dispose();
+        ObjectIterator<DebugModel> iterator = modelCache.values().iterator();
+        while(iterator.hasNext()) {
+            iterator.next().dispose();
         }
         modelCache.clear();
     }

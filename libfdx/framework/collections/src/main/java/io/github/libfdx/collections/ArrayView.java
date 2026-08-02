@@ -10,7 +10,7 @@ package io.github.libfdx.collections;
  * @param <T> the value type
  * @author xpenatan
  */
-public interface ArrayView<T> extends Iterable<T> {
+public interface ArrayView<T> extends ObjectIterable<T> {
     /**
      * Returns the value at an index.
      *

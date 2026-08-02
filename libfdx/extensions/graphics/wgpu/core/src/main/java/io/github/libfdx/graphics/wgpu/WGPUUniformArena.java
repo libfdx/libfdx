@@ -14,6 +14,7 @@ import com.github.xpenatan.webgpu.WGPUVectorBindGroupEntry;
 import com.github.xpenatan.webgpu.WGPUVectorInt;
 import io.github.libfdx.collections.Array;
 import io.github.libfdx.collections.KeyComparison;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.core.FdxException;
 
@@ -228,8 +229,9 @@ final class WGPUUniformArena {
         }
 
         void dispose(WGPUCleanup cleanup) {
-            for (WGPUBindGroup bindGroup : bindGroups.values()) {
-                releaseBindGroup(bindGroup, cleanup);
+            ObjectIterator<WGPUBindGroup> iterator = bindGroups.values().iterator();
+            while (iterator.hasNext()) {
+                releaseBindGroup(iterator.next(), cleanup);
             }
             bindGroups.clear();
             cleanup.run(() -> {

@@ -1,6 +1,7 @@
 package io.github.libfdx.graphics.shadergraph.document;
 
 import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.collections.ObjectMapView;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.shadergraph.cache.ShaderGraphCompiledCache;
@@ -127,8 +128,9 @@ public final class ShaderGraphDocumentCodec {
                 JsonValue result = JsonValue.object();
                 ObjectMapView<String, JsonValue> members = value.objectMembers();
                 Array<String> sortedKeys = new Array<String>(members.size());
-                for (String key : members.keys()) {
-                    sortedKeys.add(key);
+                ObjectIterator<String> keys = members.keys().iterator();
+                while (keys.hasNext()) {
+                    sortedKeys.add(keys.next());
                 }
                 sortedKeys.sort();
                 for (int i = 0; i < sortedKeys.size(); i++) {
@@ -139,8 +141,9 @@ public final class ShaderGraphDocumentCodec {
             }
             case ARRAY -> {
                 JsonValue result = JsonValue.array();
-                for (JsonValue item : value.arrayValues()) {
-                    result.add(canonicalize(item));
+                ObjectIterator<JsonValue> items = value.arrayValues().iterator();
+                while (items.hasNext()) {
+                    result.add(canonicalize(items.next()));
                 }
                 yield result;
             }

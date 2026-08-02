@@ -395,7 +395,8 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
             String fragmentEntryPoint) {
         String key = descriptor.source() + '\0' + vertexEntryPoint
                 + '\0' + fragmentEntryPoint;
-        for (ModuleEntry module : modules) {
+        for (int i = 0; i < modules.size(); i++) {
+            ModuleEntry module = modules.get(i);
             if (module.key.equals(key)) {
                 return module;
             }
@@ -640,8 +641,8 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
     }
 
     private static void disposeModules(Array<ModuleEntry> modules) {
-        for (ModuleEntry module : modules) {
-            module.shader.dispose();
+        for (int i = 0; i < modules.size(); i++) {
+            modules.get(i).shader.dispose();
         }
         modules.clear();
     }

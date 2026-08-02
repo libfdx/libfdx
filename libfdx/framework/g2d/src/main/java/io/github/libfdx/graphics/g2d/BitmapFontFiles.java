@@ -4,6 +4,7 @@ import io.github.libfdx.collections.Array;
 import io.github.libfdx.collections.IntMap;
 import io.github.libfdx.collections.LongMap;
 import io.github.libfdx.collections.ObjectMap;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.assets.loaders.ImageAssetLoader;
 import io.github.libfdx.assets.loaders.ImageData;
 import io.github.libfdx.core.FdxException;
@@ -67,7 +68,9 @@ public final class BitmapFontFiles {
             pages.add(createTexture(graphics, pagePath, image));
         }
         IntMap<BitmapFontGlyph> glyphs = new IntMap<BitmapFontGlyph>();
-        for (BitmapFontDefinition.Glyph glyph : definition.glyphs.values()) {
+        ObjectIterator<BitmapFontDefinition.Glyph> glyphIterator = definition.glyphs.values().iterator();
+        while (glyphIterator.hasNext()) {
+            BitmapFontDefinition.Glyph glyph = glyphIterator.next();
             if (glyph.page >= 0 && glyph.page < pages.size() && glyph.width > 0 && glyph.height > 0) {
                 Texture page = pages.get(glyph.page);
                 TextureRegion region = new TextureRegion(page, glyph.x, glyph.y, glyph.width, glyph.height);
@@ -171,7 +174,9 @@ public final class BitmapFontFiles {
         Array<Texture> pages = new Array<Texture>();
         pages.add(texture);
         IntMap<BitmapFontGlyph> glyphs = new IntMap<BitmapFontGlyph>();
-        for (RasterizedGlyph glyph : rasterized.glyphs().values()) {
+        ObjectIterator<RasterizedGlyph> glyphIterator = rasterized.glyphs().values().iterator();
+        while (glyphIterator.hasNext()) {
+            RasterizedGlyph glyph = glyphIterator.next();
             TextureRegion region = new TextureRegion(texture, glyph.x(), glyph.y(), glyph.width(), glyph.height());
             glyphs.put(glyph.codePoint(), new BitmapFontGlyph(glyph.codePoint(), region,
                     glyph.xOffset(), glyph.yOffset(), glyph.xAdvance()));

@@ -1,7 +1,6 @@
 package io.github.libfdx.collections;
 
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
@@ -12,7 +11,7 @@ import java.util.NoSuchElementException;
  * @param <T> the value type
  * @author xpenatan
  */
-public final class ObjectSet<T> implements Iterable<T> {
+public final class ObjectSet<T> implements ObjectIterable<T> {
     private static final float DEFAULT_LOAD_FACTOR = 0.75f;
     private Object[] values;
     private byte[] states;
@@ -20,6 +19,7 @@ public final class ObjectSet<T> implements Iterable<T> {
     private int occupied;
     private int threshold;
     private final float loadFactor;
+    private ValueIterator<T> iterator;
 
     /**
      * Creates a set.
@@ -194,8 +194,11 @@ public final class ObjectSet<T> implements Iterable<T> {
     }
 
     @Override
-    public Iterator<T> iterator() {
-        return new ValueIterator<T>(this);
+    public ObjectIterator<T> iterator() {
+        if (iterator == null) {
+            iterator = new ValueIterator<T>(this);
+        }
+        return iterator.reset();
     }
 
     private int locate(T value) {
@@ -252,14 +255,21 @@ public final class ObjectSet<T> implements Iterable<T> {
         return (T)source[index];
     }
 
-    private static final class ValueIterator<T> implements Iterator<T> {
+    private static final class ValueIterator<T> implements ObjectIterator<T> {
         private final ObjectSet<T> set;
         private int nextIndex;
         private int returned;
 
         ValueIterator(ObjectSet<T> set) {
             this.set = set;
+        }
+
+        @Override
+        public ObjectIterator<T> reset() {
+            nextIndex = 0;
+            returned = 0;
             findNext();
+            return this;
         }
 
         @Override

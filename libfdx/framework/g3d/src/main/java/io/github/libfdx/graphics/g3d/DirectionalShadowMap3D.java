@@ -2,6 +2,8 @@ package io.github.libfdx.graphics.g3d;
 
 import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.collections.KeyComparison;
+import io.github.libfdx.collections.ObjectIterable;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.graphics.shader.reflection.ShaderInterpolation;
 import io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling;
@@ -179,7 +181,7 @@ public final class DirectionalShadowMap3D implements Disposable {
      * @param light the directional light
      * @param instances the model instances
      */
-    public void render(DirectionalLight light, Iterable<? extends ModelInstance> instances) {
+    public void render(DirectionalLight light, ObjectIterable<? extends ModelInstance> instances) {
         ensureNotDisposed();
         if (instances == null) {
             throw new FdxException("ModelInstance iterable cannot be null");
@@ -197,7 +199,9 @@ public final class DirectionalShadowMap3D implements Disposable {
                 }
             }
             else {
-                for (ModelInstance instance : instances) {
+                ObjectIterator<? extends ModelInstance> iterator = instances.iterator();
+                while (iterator.hasNext()) {
+                    ModelInstance instance = iterator.next();
                     if (instance != null) {
                         batch.render(instance);
                     }
@@ -558,7 +562,9 @@ public final class DirectionalShadowMap3D implements Disposable {
                 return;
             }
             disposed = true;
-            for (RenderPipeline[] variants : pipelines.values()) {
+            ObjectIterator<RenderPipeline[]> iterator = pipelines.values().iterator();
+            while (iterator.hasNext()) {
+                RenderPipeline[] variants = iterator.next();
                 for (int i = 0; i < variants.length; i++) {
                     if (variants[i] != null) {
                         variants[i].dispose();

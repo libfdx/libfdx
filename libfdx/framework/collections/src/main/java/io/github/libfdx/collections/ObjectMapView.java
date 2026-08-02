@@ -96,21 +96,24 @@ public interface ObjectMapView<K, V> {
     /**
      * Returns an iterable view over entries.
      *
+     * <p>The iterator may reuse one mutable entry object. Copy its key and
+     * value before advancing when they must be retained.</p>
+     *
      * @return the entries
      */
-    Iterable<? extends ObjectMapEntry<K, V>> entries();
+    ObjectIterable<? extends ObjectMapEntry<K, V>> entries();
 
     /**
      * Returns an iterable view over keys.
      *
      * @return the keys
      */
-    Iterable<K> keys();
+    ObjectIterable<K> keys();
 
     /**
      * Returns an iterable view over values.
      *
      * @return the values
      */
-    Iterable<V> values();
+    ObjectIterable<V> values();
 }

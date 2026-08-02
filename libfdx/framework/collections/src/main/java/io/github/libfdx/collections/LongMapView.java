@@ -27,9 +27,14 @@ public interface LongMapView<V> {
 
     boolean notEmpty();
 
-    Iterable<LongMap.Entry<V>> entries();
+    /**
+     * Returns the entries. The iterator may reuse one mutable entry object.
+     *
+     * @return the entries
+     */
+    ObjectIterable<LongMap.Entry<V>> entries();
 
-    LongMap.Keys keys();
+    LongIterable keys();
 
-    Iterable<V> values();
+    ObjectIterable<V> values();
 }

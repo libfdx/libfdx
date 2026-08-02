@@ -8,6 +8,7 @@ import io.github.libfdx.collections.IntMapView;
 import io.github.libfdx.collections.IntSet;
 import io.github.libfdx.collections.LongMap;
 import io.github.libfdx.collections.LongMapView;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.graphics.Texture;
 import java.util.Arrays;
@@ -60,7 +61,9 @@ public final class BitmapFont implements Disposable {
         this.pageView = this.pages.view();
         this.fallbackGlyph = this.glyphs.get('?');
         this.asciiGlyphs = new BitmapFontGlyph[ASCII_CACHE_SIZE];
-        for (IntMap.Entry<BitmapFontGlyph> entry : this.glyphs.entries()) {
+        ObjectIterator<IntMap.Entry<BitmapFontGlyph>> glyphIterator = this.glyphs.entries().iterator();
+        while (glyphIterator.hasNext()) {
+            IntMap.Entry<BitmapFontGlyph> entry = glyphIterator.next();
             int codePoint = entry.key();
             if (codePoint >= 0 && codePoint < ASCII_CACHE_SIZE) {
                 asciiGlyphs[codePoint] = entry.value();
@@ -68,7 +71,9 @@ public final class BitmapFont implements Disposable {
         }
         this.asciiKernings = new int[ASCII_CACHE_SIZE * ASCII_CACHE_SIZE];
         Arrays.fill(asciiKernings, NO_KERNING);
-        for (LongMap.Entry<Integer> entry : this.kernings.entries()) {
+        ObjectIterator<LongMap.Entry<Integer>> kerningIterator = this.kernings.entries().iterator();
+        while (kerningIterator.hasNext()) {
+            LongMap.Entry<Integer> entry = kerningIterator.next();
             long key = entry.key();
             int first = (int) (key >> 32);
             int second = (int) key;

@@ -286,7 +286,8 @@ public final class ShaderGraphComputeProvider implements Disposable {
                         ? '\0' + descriptor.targetArtifact()
                                 .cacheKey()
                         : "");
-        for (ModuleEntry module : modules) {
+        for (int i = 0; i < modules.size(); i++) {
+            ModuleEntry module = modules.get(i);
             if (module.key.equals(moduleKey)) {
                 return module;
             }
@@ -337,7 +338,8 @@ public final class ShaderGraphComputeProvider implements Disposable {
     private PipelineEntry pipeline(Array<PipelineEntry> pipelines,
             ModuleEntry module, String entryPoint, String key) {
         String physicalKey = key + '\0' + entryPoint;
-        for (PipelineEntry pipeline : pipelines) {
+        for (int i = 0; i < pipelines.size(); i++) {
+            PipelineEntry pipeline = pipelines.get(i);
             if (pipeline.key.equals(physicalKey)) {
                 return pipeline;
             }

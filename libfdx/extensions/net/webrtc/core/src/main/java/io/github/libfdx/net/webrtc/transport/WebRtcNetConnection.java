@@ -1,6 +1,7 @@
 package io.github.libfdx.net.webrtc.transport;
 
 import io.github.libfdx.collections.IntMap;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.json.JsonValue;
@@ -361,7 +362,9 @@ public final class WebRtcNetConnection implements NetConnection {
             return;
         }
         state = NetConnectionState.DISCONNECTED;
-        for (IntMap.Entry<WebRtcDataChannel> entry : channels.entries()) {
+        ObjectIterator<IntMap.Entry<WebRtcDataChannel>> iterator = channels.entries().iterator();
+        while (iterator.hasNext()) {
+            IntMap.Entry<WebRtcDataChannel> entry = iterator.next();
             entry.value().close();
         }
         channels.clear();

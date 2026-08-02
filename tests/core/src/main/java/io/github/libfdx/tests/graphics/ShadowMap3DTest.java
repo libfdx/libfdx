@@ -797,7 +797,8 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
         if (model == null) {
             return;
         }
-        for (Material material : model.materials()) {
+        for (int i = 0; i < model.materials().size(); i++) {
+            Material material = model.materials().get(i);
             if (material instanceof PbrMaterial) {
                 PbrMaterial pbr = (PbrMaterial)material;
                 Color baseColor = pbr.baseColor();

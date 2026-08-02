@@ -1,12 +1,11 @@
 package io.github.libfdx.ui;
 
 import com.sun.management.ThreadMXBean;
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.collections.ArrayView;
 import org.junit.jupiter.api.Test;
 
 import java.lang.management.ManagementFactory;
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -19,7 +18,8 @@ final class UiChildOrderingTest {
     private static final UiContent STABLE_ROOT_CONTENT = scope -> scope.column(STABLE_COLUMN_CONTENT);
     private static final UiContent STABLE_WINDOW_CONTENT = scope -> scope.text("window body");
     private static final UiContent STABLE_ANIMATED_CONTENT = scope -> scope.text("animated body");
-    private static final List<String> STABLE_ITEMS = List.of("first", "second", "third");
+    private static final ArrayView<String> STABLE_ITEMS =
+            Array.of("first", "second", "third").view();
     private static final UiSize STABLE_CUSTOM_SIZE = new UiSize(80.0f, 24.0f);
     private static final UiMeasureFunction STABLE_MEASURE = constraints -> STABLE_CUSTOM_SIZE;
     private static final UiDrawFunction STABLE_DRAW = (draw, bounds) -> { };

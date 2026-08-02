@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.ObjectIterable;
 import io.github.libfdx.graphics.camera.Camera;
 
 import io.github.libfdx.core.Disposable;
@@ -25,5 +26,6 @@ public interface RenderGraph3D extends Disposable {
      * @param environment the environment
      * @param instances the instances
      */
-    void render(Camera camera, Environment3D environment, Iterable<? extends ModelInstance> instances);
+    void render(Camera camera, Environment3D environment,
+            ObjectIterable<? extends ModelInstance> instances);
 }

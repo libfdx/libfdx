@@ -1,6 +1,8 @@
 package io.github.libfdx.graphics.g3d;
 
 import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.ObjectIterable;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.camera.Camera;
@@ -369,7 +371,7 @@ public final class OutlineRenderer3D implements Disposable {
      *
      * @param instances the instances
      */
-    public void render(Iterable<? extends ModelInstance> instances) {
+    public void render(ObjectIterable<? extends ModelInstance> instances) {
         ensureDrawing();
         if (instances == null) {
             throw new FdxException("ModelInstance iterable cannot be null");
@@ -384,7 +386,9 @@ public final class OutlineRenderer3D implements Disposable {
             }
             return;
         }
-        for (ModelInstance instance : instances) {
+        ObjectIterator<? extends ModelInstance> iterator = instances.iterator();
+        while (iterator.hasNext()) {
+            ModelInstance instance = iterator.next();
             if (instance != null) {
                 render(instance);
             }

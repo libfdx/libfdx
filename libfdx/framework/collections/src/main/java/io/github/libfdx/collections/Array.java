@@ -2,7 +2,6 @@ package io.github.libfdx.collections;
 
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
@@ -17,6 +16,7 @@ public final class Array<T> implements ArrayView<T> {
     private int size;
     private boolean ordered;
     private ArrayView<T> view;
+    private ArrayIterator<T> iterator;
 
     /**
      * Creates an ordered array.
@@ -597,8 +597,11 @@ public final class Array<T> implements ArrayView<T> {
     }
 
     @Override
-    public Iterator<T> iterator() {
-        return new ArrayIterator<T>(this);
+    public ObjectIterator<T> iterator() {
+        if (iterator == null) {
+            iterator = new ArrayIterator<T>(this);
+        }
+        return iterator.reset();
     }
 
     private void resize(int capacity) {
@@ -654,12 +657,18 @@ public final class Array<T> implements ArrayView<T> {
         }
     }
 
-    private static final class ArrayIterator<T> implements Iterator<T> {
+    private static final class ArrayIterator<T> implements ObjectIterator<T> {
         private final Array<T> array;
         private int index;
 
         ArrayIterator(Array<T> array) {
             this.array = array;
+        }
+
+        @Override
+        public ObjectIterator<T> reset() {
+            index = 0;
+            return this;
         }
 
         @Override
@@ -754,7 +763,7 @@ public final class Array<T> implements ArrayView<T> {
         }
 
         @Override
-        public Iterator<T> iterator() {
+        public ObjectIterator<T> iterator() {
             return array.iterator();
         }
     }

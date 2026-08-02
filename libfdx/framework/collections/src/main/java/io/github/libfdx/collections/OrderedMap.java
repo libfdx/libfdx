@@ -1,7 +1,6 @@
 package io.github.libfdx.collections;
 
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
@@ -127,7 +126,10 @@ public final class OrderedMap<K, V> implements ObjectMapView<K, V> {
             throw new IllegalArgumentException("entries must not be null");
         }
         ensureCapacity(entries.size());
-        for (ObjectMapEntry<? extends K, ? extends V> entry : entries.entries()) {
+        ObjectIterator<? extends ObjectMapEntry<? extends K, ? extends V>> iterator =
+                entries.entries().iterator();
+        while (iterator.hasNext()) {
+            ObjectMapEntry<? extends K, ? extends V> entry = iterator.next();
             put(entry.key(), entry.value());
         }
         return this;
@@ -341,10 +343,13 @@ public final class OrderedMap<K, V> implements ObjectMapView<K, V> {
     /**
      * Returns an insertion-ordered iterable view over entries.
      *
+     * <p>The iterator reuses one mutable entry object. Copy its key and value
+     * before advancing when they must be retained.</p>
+     *
      * @return the entries
      */
     @Override
-    public Iterable<Entry<K, V>> entries() {
+    public ObjectIterable<Entry<K, V>> entries() {
         if (entries == null) {
             entries = new Entries<K, V>(this);
         }
@@ -357,7 +362,7 @@ public final class OrderedMap<K, V> implements ObjectMapView<K, V> {
      * @return the keys
      */
     @Override
-    public Iterable<K> keys() {
+    public ObjectIterable<K> keys() {
         if (keysView == null) {
             keysView = new Keys<K, V>(this);
         }
@@ -370,7 +375,7 @@ public final class OrderedMap<K, V> implements ObjectMapView<K, V> {
      * @return the values
      */
     @Override
-    public Iterable<V> values() {
+    public ObjectIterable<V> values() {
         if (valuesView == null) {
             valuesView = new Values<K, V>(this);
         }
@@ -518,20 +523,24 @@ public final class OrderedMap<K, V> implements ObjectMapView<K, V> {
         }
     }
 
-    private static final class Entries<K, V> implements Iterable<Entry<K, V>> {
+    private static final class Entries<K, V> implements ObjectIterable<Entry<K, V>> {
         private final OrderedMap<K, V> map;
+        private EntryIterator<K, V> iterator;
 
         Entries(OrderedMap<K, V> map) {
             this.map = map;
         }
 
         @Override
-        public Iterator<Entry<K, V>> iterator() {
-            return new EntryIterator<K, V>(map);
+        public ObjectIterator<Entry<K, V>> iterator() {
+            if (iterator == null) {
+                iterator = new EntryIterator<K, V>(map);
+            }
+            return iterator.reset();
         }
     }
 
-    private static final class EntryIterator<K, V> implements Iterator<Entry<K, V>> {
+    private static final class EntryIterator<K, V> implements ObjectIterator<Entry<K, V>> {
         private final OrderedMap<K, V> map;
         private final Entry<K, V> entry = new Entry<K, V>();
         private int nextIndex;
@@ -539,12 +548,25 @@ public final class OrderedMap<K, V> implements ObjectMapView<K, V> {
 
         EntryIterator(OrderedMap<K, V> map) {
             this.map = map;
+        }
+
+        @Override
+        public ObjectIterator<Entry<K, V>> reset() {
+            entry.key = null;
+            entry.value = null;
             nextIndex = map.first;
+            returned = 0;
+            return this;
         }
 
         @Override
         public boolean hasNext() {
-            return returned < map.size;
+            boolean available = returned < map.size;
+            if (!available) {
+                entry.key = null;
+                entry.value = null;
+            }
+            return available;
         }
 
         @Override
@@ -561,27 +583,37 @@ public final class OrderedMap<K, V> implements ObjectMapView<K, V> {
         }
     }
 
-    private static final class Keys<K, V> implements Iterable<K> {
+    private static final class Keys<K, V> implements ObjectIterable<K> {
         private final OrderedMap<K, V> map;
+        private KeyIterator<K, V> iterator;
 
         Keys(OrderedMap<K, V> map) {
             this.map = map;
         }
 
         @Override
-        public Iterator<K> iterator() {
-            return new KeyIterator<K, V>(map);
+        public ObjectIterator<K> iterator() {
+            if (iterator == null) {
+                iterator = new KeyIterator<K, V>(map);
+            }
+            return iterator.reset();
         }
     }
 
-    private static final class KeyIterator<K, V> implements Iterator<K> {
+    private static final class KeyIterator<K, V> implements ObjectIterator<K> {
         private final OrderedMap<K, V> map;
         private int nextIndex;
         private int returned;
 
         KeyIterator(OrderedMap<K, V> map) {
             this.map = map;
+        }
+
+        @Override
+        public ObjectIterator<K> reset() {
             nextIndex = map.first;
+            returned = 0;
+            return this;
         }
 
         @Override
@@ -601,27 +633,37 @@ public final class OrderedMap<K, V> implements ObjectMapView<K, V> {
         }
     }
 
-    private static final class Values<K, V> implements Iterable<V> {
+    private static final class Values<K, V> implements ObjectIterable<V> {
         private final OrderedMap<K, V> map;
+        private ValueIterator<K, V> iterator;
 
         Values(OrderedMap<K, V> map) {
             this.map = map;
         }
 
         @Override
-        public Iterator<V> iterator() {
-            return new ValueIterator<K, V>(map);
+        public ObjectIterator<V> iterator() {
+            if (iterator == null) {
+                iterator = new ValueIterator<K, V>(map);
+            }
+            return iterator.reset();
         }
     }
 
-    private static final class ValueIterator<K, V> implements Iterator<V> {
+    private static final class ValueIterator<K, V> implements ObjectIterator<V> {
         private final OrderedMap<K, V> map;
         private int nextIndex;
         private int returned;
 
         ValueIterator(OrderedMap<K, V> map) {
             this.map = map;
+        }
+
+        @Override
+        public ObjectIterator<V> reset() {
             nextIndex = map.first;
+            returned = 0;
+            return this;
         }
 
         @Override
@@ -699,17 +741,17 @@ public final class OrderedMap<K, V> implements ObjectMapView<K, V> {
         }
 
         @Override
-        public Iterable<? extends ObjectMapEntry<K, V>> entries() {
+        public ObjectIterable<? extends ObjectMapEntry<K, V>> entries() {
             return map.entries();
         }
 
         @Override
-        public Iterable<K> keys() {
+        public ObjectIterable<K> keys() {
             return map.keys();
         }
 
         @Override
-        public Iterable<V> values() {
+        public ObjectIterable<V> values() {
             return map.values();
         }
     }

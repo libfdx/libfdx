@@ -3,6 +3,7 @@ package io.github.libfdx.graphics.g3d;
 import io.github.libfdx.collections.Array;
 import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.collections.IntMap;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
@@ -628,8 +629,9 @@ final class GltfModelLoader implements AssetLoader<Model> {
             }
             Array<AnimationClip.NodeTransformChannel> nodeChannels =
                     new Array<AnimationClip.NodeTransformChannel>();
-            for (GltfNodeAnimationBuilder builder : builders.values()) {
-                nodeChannels.add(builder.build());
+            ObjectIterator<GltfNodeAnimationBuilder> iterator = builders.values().iterator();
+            while (iterator.hasNext()) {
+                nodeChannels.add(iterator.next().build());
             }
             String id = string(animation, "name", "animation-" + animationIndex);
             result.add(new AnimationClip(id, duration,

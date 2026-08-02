@@ -2,6 +2,7 @@ package io.github.libfdx.validation.scenario;
 
 import io.github.libfdx.collections.Array;
 import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.collections.OrderedMap;
 
@@ -281,8 +282,9 @@ public final class ScenarioHost {
             return Array.emptyView();
         }
         Array<ScenarioCapture> values = new Array<ScenarioCapture>(captures.size());
-        for (ScenarioCapture capture : captures.values()) {
-            values.add(capture);
+        ObjectIterator<ScenarioCapture> iterator = captures.values().iterator();
+        while (iterator.hasNext()) {
+            values.add(iterator.next());
         }
         return values.view();
     }
@@ -361,7 +363,10 @@ public final class ScenarioHost {
         }
         ScenarioValidationConfig effectiveConfig = config != null ? config : ScenarioValidationConfig.defaults();
         ScenarioReport report = new ScenarioReport();
-        for (Scenario scenario : catalog.select(effectiveConfig.selection())) {
+        ObjectIterator<Scenario> iterator =
+                catalog.select(effectiveConfig.selection()).iterator();
+        while (iterator.hasNext()) {
+            Scenario scenario = iterator.next();
             if (effectiveConfig.mode() == ScenarioValidationMode.VISUAL
                     && !scenario.requiresVisualBaseline()) {
                 continue;

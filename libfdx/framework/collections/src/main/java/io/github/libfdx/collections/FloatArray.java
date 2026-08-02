@@ -8,10 +8,11 @@ import java.util.NoSuchElementException;
  *
  * @author xpenatan
  */
-public final class FloatArray {
+public final class FloatArray implements FloatIterable {
     private float[] items;
     private int size;
     private boolean ordered;
+    private ArrayIterator iterator;
 
     /**
      * Creates an ordered array.
@@ -411,6 +412,14 @@ public final class FloatArray {
         return Arrays.copyOf(items, size);
     }
 
+    @Override
+    public FloatIterator iterator() {
+        if (iterator == null) {
+            iterator = new ArrayIterator(this);
+        }
+        return iterator.reset();
+    }
+
     private void resize(int capacity) {
         items = Arrays.copyOf(items, capacity);
     }
@@ -436,6 +445,34 @@ public final class FloatArray {
     private void checkNotEmpty() {
         if (size == 0) {
             throw new NoSuchElementException("Array is empty");
+        }
+    }
+
+    private static final class ArrayIterator implements FloatIterator {
+        private final FloatArray array;
+        private int index;
+
+        ArrayIterator(FloatArray array) {
+            this.array = array;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return index < array.size;
+        }
+
+        @Override
+        public float nextFloat() {
+            if (!hasNext()) {
+                throw new NoSuchElementException();
+            }
+            return array.items[index++];
+        }
+
+        @Override
+        public FloatIterator reset() {
+            index = 0;
+            return this;
         }
     }
 }

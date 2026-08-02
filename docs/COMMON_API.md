@@ -170,6 +170,14 @@ for reuse.
 - Read-only collection access uses cached live views where ownership remains
   with the source object; callers copy explicitly when they need independent
   storage.
+- Collection traversal uses the standalone libFDX contracts `ObjectIterable`,
+  `IntIterable`, `LongIterable`, or `FloatIterable` and their matching
+  iterators. None extends Java iteration contracts; primitive traversal cannot
+  silently box values.
+- Collection iterables retain and reset their iterator instead of allocating
+  one per traversal. Requesting the same iterable's iterator again invalidates
+  its active traversal; nested or concurrent traversal over the same iterable
+  requires indexed access or explicitly copied storage.
 - Reuse buffers, descriptors, command storage, arrays, collections, events,
   and render objects.
 - Do not add steady-state Java allocation without a measured reason.

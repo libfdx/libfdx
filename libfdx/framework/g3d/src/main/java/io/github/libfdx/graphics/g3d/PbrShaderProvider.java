@@ -1,6 +1,7 @@
 package io.github.libfdx.graphics.g3d;
 
 import io.github.libfdx.collections.KeyComparison;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
 import io.github.libfdx.graphics.shader.runtime.ShaderResourceBinding;
@@ -906,7 +907,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     scratchBuffers[i] = null;
                 }
             }
-            for (RenderPipeline[] variants : pipelines.values()) {
+            ObjectIterator<RenderPipeline[]> iterator = pipelines.values().iterator();
+            while (iterator.hasNext()) {
+                RenderPipeline[] variants = iterator.next();
                 for (int i = 0; i < variants.length; i++) {
                     if (variants[i] != null) {
                         variants[i].dispose();

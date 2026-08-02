@@ -451,7 +451,9 @@ final class CollectionsTest {
         boolean sawTwo = false;
         boolean sawThree = false;
         int count = 0;
-        for (ObjectMap.Entry<Key, String> entry : map.entries()) {
+        ObjectIterator<ObjectMap.Entry<Key, String>> entryIterator = map.entries().iterator();
+        while (entryIterator.hasNext()) {
+            ObjectMap.Entry<Key, String> entry = entryIterator.next();
             count++;
             if (entry.key().value == 2) {
                 sawTwo = true;
@@ -466,7 +468,7 @@ final class CollectionsTest {
         assertEquals(2, count);
         assertTrue(sawTwo);
         assertTrue(sawThree);
-        Iterator<ObjectMap.Entry<Key, String>> iterator = map.entries().iterator();
+        ObjectIterator<ObjectMap.Entry<Key, String>> iterator = map.entries().iterator();
         iterator.next();
         iterator.next();
         assertThrows(NoSuchElementException.class, iterator::next);
@@ -485,7 +487,9 @@ final class CollectionsTest {
 
         int keySum = 0;
         int keyCount = 0;
-        for (Key key : map.keys()) {
+        ObjectIterator<Key> keyIterator = map.keys().iterator();
+        while (keyIterator.hasNext()) {
+            Key key = keyIterator.next();
             keySum += key.value;
             keyCount++;
         }
@@ -493,7 +497,9 @@ final class CollectionsTest {
         int valueCount = 0;
         boolean sawNull = false;
         boolean sawThree = false;
-        for (String value : map.values()) {
+        ObjectIterator<String> valueIterator = map.values().iterator();
+        while (valueIterator.hasNext()) {
+            String value = valueIterator.next();
             valueCount++;
             if (value == null) {
                 sawNull = true;
@@ -508,11 +514,11 @@ final class CollectionsTest {
         assertEquals(2, valueCount);
         assertTrue(sawNull);
         assertTrue(sawThree);
-        Iterator<Key> keys = map.keys().iterator();
+        ObjectIterator<Key> keys = map.keys().iterator();
         keys.next();
         keys.next();
         assertThrows(NoSuchElementException.class, keys::next);
-        Iterator<String> values = map.values().iterator();
+        ObjectIterator<String> values = map.values().iterator();
         values.next();
         values.next();
         assertThrows(NoSuchElementException.class, values::next);
@@ -628,7 +634,9 @@ final class CollectionsTest {
         assertTrue(objects.remove(first));
         assertTrue(objects.add(third));
         int objectSum = 0;
-        for (Key value : objects) {
+        ObjectIterator<Key> objectIterator = objects.iterator();
+        while (objectIterator.hasNext()) {
+            Key value = objectIterator.next();
             objectSum += value.value;
         }
         assertEquals(5, objectSum);
@@ -643,7 +651,7 @@ final class CollectionsTest {
         }
         long intSum = 0L;
         int intCount = 0;
-        IntSet.IntIterator iterator = ints.iterator();
+        IntIterator iterator = ints.iterator();
         while (iterator.hasNext()) {
             int value = iterator.nextInt();
             assertTrue((value & 1) != 0);
@@ -653,6 +661,105 @@ final class CollectionsTest {
         assertEquals(64, intCount);
         assertEquals(4096L, intSum);
         assertThrows(NoSuchElementException.class, iterator::nextInt);
+    }
+
+    @Test
+    void libfdxIterablesDoNotDependOnJavaIterationContracts() {
+        assertFalse(Iterable.class.isAssignableFrom(ObjectIterable.class));
+        assertFalse(Iterable.class.isAssignableFrom(IntIterable.class));
+        assertFalse(Iterable.class.isAssignableFrom(LongIterable.class));
+        assertFalse(Iterable.class.isAssignableFrom(FloatIterable.class));
+        assertFalse(Iterator.class.isAssignableFrom(ObjectIterator.class));
+        assertFalse(Iterator.class.isAssignableFrom(IntIterator.class));
+        assertFalse(Iterator.class.isAssignableFrom(LongIterator.class));
+        assertFalse(Iterator.class.isAssignableFrom(FloatIterator.class));
+
+        IntArray ints = new IntArray().add(3).add(5);
+        IntIterator intIterator = ints.iterator();
+        assertEquals(3, intIterator.nextInt());
+        assertSame(intIterator, ints.iterator());
+        assertEquals(3, intIterator.nextInt());
+
+        LongArray longs = new LongArray().add(7L).add(11L);
+        LongIterator longIterator = longs.iterator();
+        assertEquals(7L, longIterator.nextLong());
+        assertSame(longIterator, longs.iterator());
+        assertEquals(7L, longIterator.nextLong());
+
+        FloatArray floats = new FloatArray().add(1.5f).add(2.5f);
+        FloatIterator floatIterator = floats.iterator();
+        assertEquals(Float.floatToIntBits(1.5f), Float.floatToIntBits(floatIterator.nextFloat()));
+        assertSame(floatIterator, floats.iterator());
+        assertEquals(Float.floatToIntBits(1.5f), Float.floatToIntBits(floatIterator.nextFloat()));
+    }
+
+    @Test
+    void collectionIterablesReuseTheirIteratorInstances() {
+        Array<Integer> array = Array.of(1, 2);
+        ObjectSet<Integer> set = new ObjectSet<Integer>();
+        set.add(1);
+        ObjectQueue<Integer> queue = new ObjectQueue<Integer>();
+        queue.addLast(1);
+        ObjectLinkedList<Integer> list = new ObjectLinkedList<Integer>();
+        list.addLast(1);
+
+        assertReusableIterator(array);
+        assertReusableIterator(array.view());
+        assertReusableIterator(set);
+        assertReusableIterator(queue);
+        assertReusableIterator(list);
+
+        ObjectMap<Integer, Integer> objects = new ObjectMap<Integer, Integer>();
+        objects.put(1, 1);
+        objects.put(2, 2);
+        assertReusableIterator(objects.entries());
+        assertReusableIterator(objects.keys());
+        assertReusableIterator(objects.values());
+        ObjectIterator<ObjectMap.Entry<Integer, Integer>> objectEntries = objects.entries().iterator();
+        assertSame(objectEntries.next(), objectEntries.next());
+
+        OrderedMap<Integer, Integer> ordered = new OrderedMap<Integer, Integer>();
+        ordered.put(1, 1);
+        ordered.put(2, 2);
+        assertReusableIterator(ordered.entries());
+        assertReusableIterator(ordered.keys());
+        assertReusableIterator(ordered.values());
+        ObjectIterator<OrderedMap.Entry<Integer, Integer>> orderedEntries = ordered.entries().iterator();
+        assertSame(orderedEntries.next(), orderedEntries.next());
+
+        IntMap<Integer> ints = new IntMap<Integer>();
+        ints.put(1, 1);
+        ints.put(2, 2);
+        assertReusableIterator(ints.entries());
+        assertReusableIterator(ints.keys());
+        assertReusableIterator(ints.values());
+        ObjectIterator<IntMap.Entry<Integer>> intEntries = ints.entries().iterator();
+        assertSame(intEntries.next(), intEntries.next());
+
+        LongMap<Integer> longs = new LongMap<Integer>();
+        longs.put(1L, 1);
+        longs.put(2L, 2);
+        assertReusableIterator(longs.entries());
+        assertReusableIterator(longs.keys());
+        assertReusableIterator(longs.values());
+        ObjectIterator<LongMap.Entry<Integer>> longEntries = longs.entries().iterator();
+        assertSame(longEntries.next(), longEntries.next());
+
+        FloatMap<Integer> floats = new FloatMap<Integer>();
+        floats.put(1.0f, 1);
+        floats.put(2.0f, 2);
+        assertReusableIterator(floats.entries());
+        assertReusableIterator(floats.keys());
+        assertReusableIterator(floats.values());
+        ObjectIterator<FloatMap.Entry<Integer>> floatEntries = floats.entries().iterator();
+        assertSame(floatEntries.next(), floatEntries.next());
+
+        IntSet intSet = new IntSet();
+        intSet.add(1);
+        assertReusableIterator(intSet);
+        assertReusableIterator(new IntArray().add(1));
+        assertReusableIterator(new LongArray().add(1L));
+        assertReusableIterator(new FloatArray().add(1.0f));
     }
 
     @Test
@@ -667,8 +774,9 @@ final class CollectionsTest {
         assertEquals(-1, queue.first());
         assertEquals(2, queue.get(1));
         Array<Integer> values = new Array<Integer>();
-        for (Integer value : queue) {
-            values.add(value);
+        ObjectIterator<Integer> queueIterator = queue.iterator();
+        while (queueIterator.hasNext()) {
+            values.add(queueIterator.next());
         }
         assertArrayEquals(new Object[] { -1, 2, 3, 4 }, values.toArray());
         assertEquals(-1, queue.pollFirst());
@@ -703,20 +811,23 @@ final class CollectionsTest {
 
         long objectSum = 0L;
         int objectCount = 0;
-        for (Integer value : objects.values()) {
-            objectSum += value;
+        ObjectIterator<Integer> objectValues = objects.values().iterator();
+        while (objectValues.hasNext()) {
+            objectSum += objectValues.next();
             objectCount++;
         }
         long intSum = 0L;
         int intCount = 0;
-        for (Integer value : ints.values()) {
-            intSum += value;
+        ObjectIterator<Integer> intValues = ints.values().iterator();
+        while (intValues.hasNext()) {
+            intSum += intValues.next();
             intCount++;
         }
         long orderedSum = 0L;
         int orderedCount = 0;
-        for (Integer value : ordered.values()) {
-            orderedSum += value;
+        ObjectIterator<Integer> orderedValues = ordered.values().iterator();
+        while (orderedValues.hasNext()) {
+            orderedSum += orderedValues.next();
             orderedCount++;
         }
         assertEquals(20_000, objectCount);
@@ -745,7 +856,9 @@ final class CollectionsTest {
         int index = 0;
         Key[] expectedKeys = { one, three, four, two };
         String[] expectedValues = { "uno", "three", "four", "two again" };
-        for (OrderedMap.Entry<Key, String> entry : map.entries()) {
+        ObjectIterator<OrderedMap.Entry<Key, String>> iterator = map.entries().iterator();
+        while (iterator.hasNext()) {
+            OrderedMap.Entry<Key, String> entry = iterator.next();
             assertSame(expectedKeys[index], entry.key());
             assertEquals(expectedValues[index], entry.value());
             index++;
@@ -776,7 +889,7 @@ final class CollectionsTest {
         assertEquals(3, map.size());
         assertEquals("missing", map.get(missing, "missing"));
         assertFalse(map.containsKey(missing));
-        Iterator<Key> keys = map.keys().iterator();
+        ObjectIterator<Key> keys = map.keys().iterator();
         assertSame(slot1, keys.next());
         assertSame(slot2, keys.next());
         assertSame(slot3, keys.next());
@@ -907,7 +1020,9 @@ final class CollectionsTest {
         int keySum = 0;
         int count = 0;
         boolean sawNullValue = false;
-        for (IntMap.Entry<String> entry : map.entries()) {
+        ObjectIterator<IntMap.Entry<String>> iterator = map.entries().iterator();
+        while (iterator.hasNext()) {
+            IntMap.Entry<String> entry = iterator.next();
             keySum += entry.key();
             count++;
             if (entry.key() == 5) {
@@ -990,14 +1105,16 @@ final class CollectionsTest {
 
         int intKeySum = 0;
         int intKeyCount = 0;
-        IntMap.KeyIterator intKeys = ints.keys().iterator();
+        IntIterator intKeys = ints.keys().iterator();
         while (intKeys.hasNext()) {
             intKeySum += intKeys.nextInt();
             intKeyCount++;
         }
         int intValueCount = 0;
         boolean sawEleven = false;
-        for (String value : ints.values()) {
+        ObjectIterator<String> intValues = ints.values().iterator();
+        while (intValues.hasNext()) {
+            String value = intValues.next();
             intValueCount++;
             if ("eleven".equals(value)) {
                 sawEleven = true;
@@ -1017,14 +1134,16 @@ final class CollectionsTest {
 
         long longKeySum = 0L;
         int longKeyCount = 0;
-        LongMap.KeyIterator longKeys = longs.keys().iterator();
+        LongIterator longKeys = longs.keys().iterator();
         while (longKeys.hasNext()) {
             longKeySum += longKeys.nextLong();
             longKeyCount++;
         }
         int longValueCount = 0;
         boolean sawSeventeen = false;
-        for (String value : longs.values()) {
+        ObjectIterator<String> longValues = longs.values().iterator();
+        while (longValues.hasNext()) {
+            String value = longValues.next();
             longValueCount++;
             if ("seventeen".equals(value)) {
                 sawSeventeen = true;
@@ -1044,7 +1163,7 @@ final class CollectionsTest {
 
         int floatKeyBits = 0;
         int floatKeyCount = 0;
-        FloatMap.KeyIterator floatKeys = floats.keys().iterator();
+        FloatIterator floatKeys = floats.keys().iterator();
         while (floatKeys.hasNext()) {
             floatKeyBits ^= Float.floatToIntBits(floatKeys.nextFloat());
             floatKeyCount++;
@@ -1052,7 +1171,9 @@ final class CollectionsTest {
         int floatValueCount = 0;
         boolean sawNegativeZero = false;
         boolean sawTwoPointFive = false;
-        for (String value : floats.values()) {
+        ObjectIterator<String> floatValues = floats.values().iterator();
+        while (floatValues.hasNext()) {
+            String value = floatValues.next();
             floatValueCount++;
             if ("negative zero".equals(value)) {
                 sawNegativeZero = true;
@@ -1115,7 +1236,9 @@ final class CollectionsTest {
         int count = 0;
         long key = 0L;
         String value = null;
-        for (LongMap.Entry<String> entry : map.entries()) {
+        ObjectIterator<LongMap.Entry<String>> iterator = map.entries().iterator();
+        while (iterator.hasNext()) {
+            LongMap.Entry<String> entry = iterator.next();
             count++;
             key = entry.key();
             value = entry.value();
@@ -1172,7 +1295,9 @@ final class CollectionsTest {
         boolean sawPositiveZero = false;
         boolean sawNegativeZero = false;
         boolean sawNan = false;
-        for (FloatMap.Entry<String> entry : map.entries()) {
+        ObjectIterator<FloatMap.Entry<String>> iterator = map.entries().iterator();
+        while (iterator.hasNext()) {
+            FloatMap.Entry<String> entry = iterator.next();
             int keyBits = Float.floatToIntBits(entry.key());
             if (keyBits == Float.floatToIntBits(0.0f)) {
                 sawPositiveZero = true;
@@ -1227,7 +1352,7 @@ final class CollectionsTest {
         assertEquals("b", list.remove(middle));
         assertEquals(2, list.size());
 
-        Iterator<String> iterator = list.iterator();
+        ObjectIterator<String> iterator = list.iterator();
         assertEquals("a", iterator.next());
         assertEquals("c", iterator.next());
         assertFalse(iterator.hasNext());
@@ -1247,6 +1372,63 @@ final class CollectionsTest {
         assertThrows(IllegalArgumentException.class, () -> second.remove(node));
         first.clear();
         assertThrows(IllegalArgumentException.class, () -> first.remove(node));
+    }
+
+    @Test
+    void linkedListPoolsRemovedNodesAndClearsTheirValues() {
+        ObjectLinkedList<Object> list = new ObjectLinkedList<Object>(1);
+        Object firstValue = new Object();
+        ObjectLinkedList.Node<Object> firstNode = list.addLast(firstValue);
+
+        assertEquals(1, list.capacity());
+        assertSame(firstValue, list.remove(firstNode));
+        assertNull(firstNode.value());
+
+        Object secondValue = new Object();
+        ObjectLinkedList.Node<Object> reusedNode = list.addFirst(secondValue);
+
+        assertSame(firstNode, reusedNode);
+        assertSame(secondValue, reusedNode.value());
+        assertEquals(1, list.capacity());
+
+        list.clear();
+        assertNull(reusedNode.value());
+        assertEquals(1, list.capacity());
+    }
+
+    @Test
+    void linkedListCanReserveNodesBeforeAdds() {
+        ObjectLinkedList<String> list = new ObjectLinkedList<String>(0);
+
+        list.ensureCapacity(3);
+
+        assertEquals(3, list.capacity());
+        list.addLast("a");
+        list.addLast("b");
+        list.addLast("c");
+        assertEquals(3, list.capacity());
+        assertThrows(IllegalArgumentException.class, () -> list.ensureCapacity(-1));
+        assertThrows(IllegalArgumentException.class, () -> new ObjectLinkedList<String>(-1));
+    }
+
+    private static void assertReusableIterator(ObjectIterable<?> iterable) {
+        ObjectIterator<?> iterator = iterable.iterator();
+        assertSame(iterator, iterable.iterator());
+    }
+
+    private static void assertReusableIterator(IntIterable iterable) {
+        IntIterator iterator = iterable.iterator();
+        assertSame(iterator, iterable.iterator());
+    }
+
+    private static void assertReusableIterator(LongIterable iterable) {
+        LongIterator iterator = iterable.iterator();
+        assertSame(iterator, iterable.iterator());
+    }
+
+    private static void assertReusableIterator(FloatIterable iterable) {
+        FloatIterator iterator = iterable.iterator();
+        assertSame(iterator, iterable.iterator());
     }
 
     private static final class Key {

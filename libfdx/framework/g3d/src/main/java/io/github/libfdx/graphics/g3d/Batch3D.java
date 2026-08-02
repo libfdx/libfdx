@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.ObjectIterable;
 import io.github.libfdx.graphics.camera.Camera;
 
 import io.github.libfdx.core.Disposable;
@@ -81,7 +82,7 @@ public interface Batch3D extends Disposable {
      *
      * @param instances the instances
      */
-    void render(Iterable<? extends ModelInstance> instances);
+    void render(ObjectIterable<? extends ModelInstance> instances);
 
     /**
      * Runs the flush step.

@@ -1,7 +1,6 @@
 package io.github.libfdx.collections;
 
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
@@ -12,7 +11,7 @@ import java.util.NoSuchElementException;
  *
  * @author xpenatan
  */
-public final class IntSet implements Iterable<Integer> {
+public final class IntSet implements IntIterable {
     private static final float DEFAULT_LOAD_FACTOR = 0.75f;
     private int[] keys;
     private byte[] states;
@@ -20,6 +19,7 @@ public final class IntSet implements Iterable<Integer> {
     private int occupied;
     private int threshold;
     private final float loadFactor;
+    private SetIterator iterator;
 
     /**
      * Creates a set.
@@ -190,7 +190,10 @@ public final class IntSet implements Iterable<Integer> {
 
     @Override
     public IntIterator iterator() {
-        return new IntIterator(this);
+        if (iterator == null) {
+            iterator = new SetIterator(this);
+        }
+        return iterator.reset();
     }
 
     private int locate(int key) {
@@ -241,14 +244,21 @@ public final class IntSet implements Iterable<Integer> {
      *
      * @author xpenatan
      */
-    public static final class IntIterator implements Iterator<Integer> {
+    private static final class SetIterator implements IntIterator {
         private final IntSet set;
         private int nextIndex;
         private int returned;
 
-        private IntIterator(IntSet set) {
+        SetIterator(IntSet set) {
             this.set = set;
+        }
+
+        @Override
+        public IntIterator reset() {
+            nextIndex = 0;
+            returned = 0;
             findNext();
+            return this;
         }
 
         @Override
@@ -270,11 +280,6 @@ public final class IntSet implements Iterable<Integer> {
             nextIndex++;
             findNext();
             return set.keys[index];
-        }
-
-        @Override
-        public Integer next() {
-            return Integer.valueOf(nextInt());
         }
 
         private void findNext() {

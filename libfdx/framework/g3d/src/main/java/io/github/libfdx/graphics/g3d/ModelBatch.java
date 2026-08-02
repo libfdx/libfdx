@@ -1,6 +1,8 @@
 package io.github.libfdx.graphics.g3d;
 
 import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.ObjectIterable;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.math.Color;
 
@@ -325,7 +327,7 @@ public final class ModelBatch implements Batch3D {
      * @param instances the instances
      */
     @Override
-    public void render(Iterable<? extends ModelInstance> instances) {
+    public void render(ObjectIterable<? extends ModelInstance> instances) {
         ensureDrawing();
         if (instances == null) {
             throw new FdxException("ModelInstance iterable cannot be null");
@@ -337,8 +339,9 @@ public final class ModelBatch implements Batch3D {
             }
             return;
         }
-        for (ModelInstance instance : instances) {
-            render(instance);
+        ObjectIterator<? extends ModelInstance> iterator = instances.iterator();
+        while (iterator.hasNext()) {
+            render(iterator.next());
         }
     }
 

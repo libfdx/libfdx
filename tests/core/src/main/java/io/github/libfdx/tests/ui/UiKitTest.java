@@ -6,6 +6,8 @@ import io.github.libfdx.application.ApplicationAdapter;
 import io.github.libfdx.assets.AssetDescriptor;
 import io.github.libfdx.assets.AssetManager;
 import io.github.libfdx.assets.DefaultAssetManager;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.Logger;
 import io.github.libfdx.core.ProviderId;
@@ -77,7 +79,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.zip.CRC32;
@@ -175,6 +176,8 @@ public final class UiKitTest extends ApplicationAdapter {
             "part",
             "flare"
     };
+    private static final ArrayView<String> ACTIVITY_ITEMS = Array.<String>of(ACTIVITY).view();
+    private static final ArrayView<String> INVENTORY_ITEMS = Array.<String>of(INVENTORY).view();
     private long exitAfterFrames;
     private Application application;
     private Display display;
@@ -1166,12 +1169,12 @@ public final class UiKitTest extends ApplicationAdapter {
             row.scroll(Ui.modifier().width(300.0f).height(190.0f).padding(8.0f).gap(5.0f).style("scroll"),
                     feedScroll, scroll -> {
                         scroll.text("scroll y=" + Math.round(feedScroll.y()), Ui.modifier().style("small"));
-                        scroll.items(Arrays.asList(ACTIVITY), item -> "feed-" + item,
+                        scroll.items(ACTIVITY_ITEMS, item -> "feed-" + item,
                                 (itemUi, item) -> itemUi.text(item, Ui.modifier().style("small")));
                     });
             row.panel(Ui.modifier().width(230.0f).height(190.0f).padding(8.0f).gap(5.0f).style("tile"), list -> {
                 list.text("virtual list", Ui.modifier().style("section"));
-                list.virtualList(Arrays.asList(INVENTORY), inventoryList, 4, item -> item,
+                list.virtualList(INVENTORY_ITEMS, inventoryList, 4, item -> item,
                         (itemUi, item) -> itemUi.text(item, Ui.modifier().style("small")));
             });
         });
@@ -4091,7 +4094,8 @@ public final class UiKitTest extends ApplicationAdapter {
         if (node.type() == type && (text == null || text.equals(nodeLabel(node)))) {
             return node;
         }
-        for (UiNode child : node.children()) {
+        for (int i = 0; i < node.children().size(); i++) {
+            UiNode child = node.children().get(i);
             UiNode found = find(child, type, text);
             if (found != null) {
                 return found;

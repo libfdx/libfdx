@@ -2,6 +2,8 @@ package io.github.libfdx.ui;
 
 import io.github.libfdx.collections.Array;
 import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.ObjectIterable;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.collections.OrderedMap;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.display.Display;
@@ -723,7 +725,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     @SuppressWarnings("unchecked")
-    <T> ArrayView<T> materialize(Iterable<T> items) {
+    <T> ArrayView<T> materialize(ObjectIterable<T> items) {
         if (items instanceof ArrayView<?>) {
             return (ArrayView<T>)items;
         }
@@ -737,8 +739,9 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         compositionListCount++;
         values.clear();
-        for (T item : items) {
-            values.add(item);
+        ObjectIterator<T> iterator = items.iterator();
+        while (iterator.hasNext()) {
+            values.add(iterator.next());
         }
         return (ArrayView<T>)(ArrayView<?>)values.view();
     }

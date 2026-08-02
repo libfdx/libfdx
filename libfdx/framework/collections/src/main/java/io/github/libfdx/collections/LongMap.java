@@ -1,7 +1,6 @@
 package io.github.libfdx.collections;
 
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
@@ -114,7 +113,9 @@ public final class LongMap<V> implements LongMapView<V> {
             throw new IllegalArgumentException("entries must not be null");
         }
         ensureCapacity(entries.size());
-        for (Entry<? extends V> entry : entries.entries()) {
+        ObjectIterator<? extends Entry<? extends V>> iterator = entries.entries().iterator();
+        while (iterator.hasNext()) {
+            Entry<? extends V> entry = iterator.next();
             put(entry.key(), entry.value());
         }
         return this;
@@ -309,9 +310,12 @@ public final class LongMap<V> implements LongMapView<V> {
     /**
      * Returns an iterable view over entries.
      *
+     * <p>The iterator reuses one mutable entry object. Copy its key and value
+     * before advancing when they must be retained.</p>
+     *
      * @return the entries
      */
-    public Iterable<Entry<V>> entries() {
+    public ObjectIterable<Entry<V>> entries() {
         if (entries == null) {
             entries = new Entries<V>(this);
         }
@@ -335,7 +339,7 @@ public final class LongMap<V> implements LongMapView<V> {
      *
      * @return the values
      */
-    public Iterable<V> values() {
+    public ObjectIterable<V> values() {
         if (valuesView == null) {
             valuesView = new Values<V>(this);
         }
@@ -443,20 +447,24 @@ public final class LongMap<V> implements LongMapView<V> {
         }
     }
 
-    private static final class Entries<V> implements Iterable<Entry<V>> {
+    private static final class Entries<V> implements ObjectIterable<Entry<V>> {
         private final LongMap<V> map;
+        private EntryIterator<V> iterator;
 
         Entries(LongMap<V> map) {
             this.map = map;
         }
 
         @Override
-        public Iterator<Entry<V>> iterator() {
-            return new EntryIterator<V>(map);
+        public ObjectIterator<Entry<V>> iterator() {
+            if (iterator == null) {
+                iterator = new EntryIterator<V>(map);
+            }
+            return iterator.reset();
         }
     }
 
-    private static final class EntryIterator<V> implements Iterator<Entry<V>> {
+    private static final class EntryIterator<V> implements ObjectIterator<Entry<V>> {
         private final LongMap<V> map;
         private final Entry<V> entry = new Entry<V>();
         private int nextIndex;
@@ -464,12 +472,24 @@ public final class LongMap<V> implements LongMapView<V> {
 
         EntryIterator(LongMap<V> map) {
             this.map = map;
+        }
+
+        @Override
+        public ObjectIterator<Entry<V>> reset() {
+            entry.value = null;
+            nextIndex = 0;
+            returned = 0;
             findNext();
+            return this;
         }
 
         @Override
         public boolean hasNext() {
-            return returned < map.size;
+            boolean available = returned < map.size;
+            if (!available) {
+                entry.value = null;
+            }
+            return available;
         }
 
         @Override
@@ -494,12 +514,13 @@ public final class LongMap<V> implements LongMapView<V> {
     }
 
     /**
-     * Iterable view over long keys.
+     * Traversal view over long keys.
      *
      * @author xpenatan
      */
-    public static final class Keys implements Iterable<Long> {
+    public static final class Keys implements LongIterable {
         private final LongMap<?> map;
+        private KeyIterator iterator;
 
         private Keys(LongMap<?> map) {
             this.map = map;
@@ -507,7 +528,11 @@ public final class LongMap<V> implements LongMapView<V> {
 
         @Override
         public KeyIterator iterator() {
-            return new KeyIterator(map);
+            if (iterator == null) {
+                iterator = new KeyIterator(map);
+            }
+            iterator.reset();
+            return iterator;
         }
     }
 
@@ -516,14 +541,21 @@ public final class LongMap<V> implements LongMapView<V> {
      *
      * @author xpenatan
      */
-    public static final class KeyIterator implements Iterator<Long> {
+    public static final class KeyIterator implements LongIterator {
         private final LongMap<?> map;
         private int nextIndex;
         private int returned;
 
         private KeyIterator(LongMap<?> map) {
             this.map = map;
+        }
+
+        @Override
+        public LongIterator reset() {
+            nextIndex = 0;
+            returned = 0;
             findNext();
+            return this;
         }
 
         @Override
@@ -536,6 +568,7 @@ public final class LongMap<V> implements LongMapView<V> {
          *
          * @return the next key
          */
+        @Override
         public long nextLong() {
             if (!hasNext()) {
                 throw new NoSuchElementException();
@@ -547,11 +580,6 @@ public final class LongMap<V> implements LongMapView<V> {
             return map.keys[index];
         }
 
-        @Override
-        public Long next() {
-            return Long.valueOf(nextLong());
-        }
-
         private void findNext() {
             while (nextIndex < map.states.length && map.states[nextIndex] != CollectionHash.USED) {
                 nextIndex++;
@@ -559,27 +587,38 @@ public final class LongMap<V> implements LongMapView<V> {
         }
     }
 
-    private static final class Values<V> implements Iterable<V> {
+    private static final class Values<V> implements ObjectIterable<V> {
         private final LongMap<V> map;
+        private ValueIterator<V> iterator;
 
         Values(LongMap<V> map) {
             this.map = map;
         }
 
         @Override
-        public Iterator<V> iterator() {
-            return new ValueIterator<V>(map);
+        public ObjectIterator<V> iterator() {
+            if (iterator == null) {
+                iterator = new ValueIterator<V>(map);
+            }
+            return iterator.reset();
         }
     }
 
-    private static final class ValueIterator<V> implements Iterator<V> {
+    private static final class ValueIterator<V> implements ObjectIterator<V> {
         private final LongMap<V> map;
         private int nextIndex;
         private int returned;
 
         ValueIterator(LongMap<V> map) {
             this.map = map;
+        }
+
+        @Override
+        public ObjectIterator<V> reset() {
+            nextIndex = 0;
+            returned = 0;
             findNext();
+            return this;
         }
 
         @Override
@@ -664,17 +703,17 @@ public final class LongMap<V> implements LongMapView<V> {
         }
 
         @Override
-        public Iterable<Entry<V>> entries() {
+        public ObjectIterable<Entry<V>> entries() {
             return map.entries();
         }
 
         @Override
-        public Keys keys() {
+        public LongIterable keys() {
             return map.keys();
         }
 
         @Override
-        public Iterable<V> values() {
+        public ObjectIterable<V> values() {
             return map.values();
         }
     }

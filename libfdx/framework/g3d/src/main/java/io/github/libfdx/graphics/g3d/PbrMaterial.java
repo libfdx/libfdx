@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.collections.ObjectSet;
 import io.github.libfdx.math.Color;
 
@@ -353,8 +354,9 @@ public class PbrMaterial implements Material, Disposable {
         addTexture(textures, normalTexture);
         addTexture(textures, occlusionTexture);
         addTexture(textures, emissiveTexture);
-        for (Texture texture : textures) {
-            texture.dispose();
+        ObjectIterator<Texture> iterator = textures.iterator();
+        while (iterator.hasNext()) {
+            iterator.next().dispose();
         }
     }
 

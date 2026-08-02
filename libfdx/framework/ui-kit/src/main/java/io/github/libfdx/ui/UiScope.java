@@ -1,6 +1,7 @@
 package io.github.libfdx.ui;
 
 import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.ObjectIterable;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 import java.util.Arrays;
 import java.util.Objects;
@@ -1025,7 +1026,7 @@ public final class UiScope {
      * @param key the key
      * @param content the content
      */
-    public <T> void items(Iterable<T> items, UiKey<T> key, UiItemContent<T> content) {
+    public <T> void items(ObjectIterable<T> items, UiKey<T> key, UiItemContent<T> content) {
         if (items == null || content == null) {
             return;
         }
@@ -1050,7 +1051,7 @@ public final class UiScope {
      * @param content the content
      * @return the virtual list
      */
-    public <T> UiNode virtualList(Iterable<T> items, UiListState state, int visibleCount, UiKey<T> key,
+    public <T> UiNode virtualList(ObjectIterable<T> items, UiListState state, int visibleCount, UiKey<T> key,
             UiItemContent<T> content) {
         UiListState listState = state != null ? state : listState(null);
         UiNode node = addNode(UiNodeType.SCROLL, "virtual-list", DEFAULT_VIRTUAL_LIST_MODIFIER);

@@ -2,6 +2,7 @@ package io.github.libfdx.json;
 
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.collections.ObjectMapEntry;
 
 
@@ -281,15 +282,19 @@ public final class JsonWriter {
     private void writeTree(JsonValue value) {
         if (value.isObject()) {
             object();
-            for (ObjectMapEntry<String, JsonValue> entry : value.objectMembers().entries()) {
+            ObjectIterator<? extends ObjectMapEntry<String, JsonValue>> iterator =
+                    value.objectMembers().entries().iterator();
+            while (iterator.hasNext()) {
+                ObjectMapEntry<String, JsonValue> entry = iterator.next();
                 name(entry.key()).value(entry.value());
             }
             endObject();
         }
         else if (value.isArray()) {
             array();
-            for (JsonValue child : value.arrayValues()) {
-                value(child);
+            ObjectIterator<JsonValue> iterator = value.arrayValues().iterator();
+            while (iterator.hasNext()) {
+                value(iterator.next());
             }
             endArray();
         }

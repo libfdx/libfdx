@@ -8,10 +8,11 @@ import java.util.NoSuchElementException;
  *
  * @author xpenatan
  */
-public final class LongArray {
+public final class LongArray implements LongIterable {
     private long[] items;
     private int size;
     private boolean ordered;
+    private ArrayIterator iterator;
 
     /**
      * Creates an ordered array.
@@ -409,6 +410,14 @@ public final class LongArray {
         return Arrays.copyOf(items, size);
     }
 
+    @Override
+    public LongIterator iterator() {
+        if (iterator == null) {
+            iterator = new ArrayIterator(this);
+        }
+        return iterator.reset();
+    }
+
     private void resize(int capacity) {
         items = Arrays.copyOf(items, capacity);
     }
@@ -434,6 +443,34 @@ public final class LongArray {
     private void checkNotEmpty() {
         if (size == 0) {
             throw new NoSuchElementException("Array is empty");
+        }
+    }
+
+    private static final class ArrayIterator implements LongIterator {
+        private final LongArray array;
+        private int index;
+
+        ArrayIterator(LongArray array) {
+            this.array = array;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return index < array.size;
+        }
+
+        @Override
+        public long nextLong() {
+            if (!hasNext()) {
+                throw new NoSuchElementException();
+            }
+            return array.items[index++];
+        }
+
+        @Override
+        public LongIterator reset() {
+            index = 0;
+            return this;
         }
     }
 }

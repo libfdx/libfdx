@@ -88,8 +88,19 @@ public final class ScenarioCatalog {
             }
         }
         if (!names.isEmpty()) {
-            throw new IllegalArgumentException("Unknown scenario selection: [" + String.join(", ", names) + "]");
+            throw new IllegalArgumentException("Unknown scenario selection: [" + join(names) + "]");
         }
         return selected.view();
+    }
+
+    private static String join(ArrayView<String> values) {
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                result.append(", ");
+            }
+            result.append(values.get(i));
+        }
+        return result.toString();
     }
 }

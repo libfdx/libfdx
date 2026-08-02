@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.ObjectIterable;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.camera.Camera;
@@ -218,7 +219,8 @@ public final class CascadedShadowMap3D implements Disposable {
      * @param viewCamera the scene view camera
      * @param instances the model instances
      */
-    public void render(DirectionalLight light, Camera viewCamera, Iterable<? extends ModelInstance> instances) {
+    public void render(DirectionalLight light, Camera viewCamera,
+            ObjectIterable<? extends ModelInstance> instances) {
         ensureNotDisposed();
         if (instances == null) {
             throw new FdxException("ModelInstance iterable cannot be null");

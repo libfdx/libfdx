@@ -2,6 +2,7 @@ package io.github.libfdx.json;
 
 import io.github.libfdx.collections.Array;
 import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.collections.ObjectMapEntry;
 import io.github.libfdx.collections.ObjectMapView;
 import org.junit.jupiter.api.Test;
@@ -55,7 +56,9 @@ final class JsonTest {
         object.put("third", 3);
 
         Array<String> keys = new Array<String>();
-        for (ObjectMapEntry<String, JsonValue> entry : members.entries()) {
+        ObjectIterator<? extends ObjectMapEntry<String, JsonValue>> iterator = members.entries().iterator();
+        while (iterator.hasNext()) {
+            ObjectMapEntry<String, JsonValue> entry = iterator.next();
             keys.add(entry.key());
         }
         assertArrayEquals(new String[] { "first", "second", "third" }, keys.toArray(new String[0]));

@@ -27,9 +27,14 @@ public interface IntMapView<V> {
 
     boolean notEmpty();
 
-    Iterable<IntMap.Entry<V>> entries();
+    /**
+     * Returns the entries. The iterator may reuse one mutable entry object.
+     *
+     * @return the entries
+     */
+    ObjectIterable<IntMap.Entry<V>> entries();
 
-    IntMap.Keys keys();
+    IntIterable keys();
 
-    Iterable<V> values();
+    ObjectIterable<V> values();
 }

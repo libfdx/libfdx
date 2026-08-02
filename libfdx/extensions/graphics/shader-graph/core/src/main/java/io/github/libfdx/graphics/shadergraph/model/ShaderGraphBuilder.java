@@ -411,7 +411,8 @@ public final class ShaderGraphBuilder {
     }
 
     private ShaderGraphParameter parameter(ShaderGraphId id) {
-        for (ShaderGraphParameter parameter : parameters) {
+        for (int i = 0; i < parameters.size(); i++) {
+            ShaderGraphParameter parameter = parameters.get(i);
             if (parameter.id().equals(id)) {
                 return parameter;
             }
@@ -420,7 +421,8 @@ public final class ShaderGraphBuilder {
     }
 
     private ShaderGraphResource resource(ShaderGraphId id) {
-        for (ShaderGraphResource resource : resources) {
+        for (int i = 0; i < resources.size(); i++) {
+            ShaderGraphResource resource = resources.get(i);
             if (resource.id().equals(id)) {
                 return resource;
             }
@@ -429,7 +431,8 @@ public final class ShaderGraphBuilder {
     }
 
     private void addDependency(ShaderGraph graph) {
-        for (ShaderGraphDependency dependency : dependencies) {
+        for (int i = 0; i < dependencies.size(); i++) {
+            ShaderGraphDependency dependency = dependencies.get(i);
             if (dependency.graphId().equals(graph.id())) {
                 if (!dependency.semanticHash().equals(graph.semanticHash())) {
                     throw new FdxException("Conflicting shader graph dependency: " + graph.id());

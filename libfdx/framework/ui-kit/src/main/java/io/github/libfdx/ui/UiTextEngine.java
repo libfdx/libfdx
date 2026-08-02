@@ -1,6 +1,7 @@
 package io.github.libfdx.ui;
 
 import io.github.libfdx.collections.KeyComparison;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.collections.OrderedMap;
 import io.github.libfdx.core.Disposable;
@@ -220,7 +221,9 @@ final class UiTextEngine implements Disposable {
             return;
         }
         disposed = true;
-        for (BitmapFont font : fonts.values()) {
+        ObjectIterator<BitmapFont> iterator = fonts.values().iterator();
+        while (iterator.hasNext()) {
+            BitmapFont font = iterator.next();
             if (font != null && !font.isDisposed()) {
                 font.dispose();
             }

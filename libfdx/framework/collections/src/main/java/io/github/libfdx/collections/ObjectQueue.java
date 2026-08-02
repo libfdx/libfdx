@@ -1,6 +1,5 @@
 package io.github.libfdx.collections;
 
-import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
@@ -12,10 +11,11 @@ import java.util.NoSuchElementException;
  * @param <T> the value type
  * @author xpenatan
  */
-public final class ObjectQueue<T> implements Iterable<T> {
+public final class ObjectQueue<T> implements ObjectIterable<T> {
     private Object[] items;
     private int head;
     private int size;
+    private QueueIterator<T> iterator;
 
     /**
      * Creates a queue.
@@ -174,8 +174,11 @@ public final class ObjectQueue<T> implements Iterable<T> {
     }
 
     @Override
-    public Iterator<T> iterator() {
-        return new QueueIterator<T>(this);
+    public ObjectIterator<T> iterator() {
+        if (iterator == null) {
+            iterator = new QueueIterator<T>(this);
+        }
+        return iterator.reset();
     }
 
     @SuppressWarnings("unchecked")
@@ -210,12 +213,18 @@ public final class ObjectQueue<T> implements Iterable<T> {
         head = 0;
     }
 
-    private static final class QueueIterator<T> implements Iterator<T> {
+    private static final class QueueIterator<T> implements ObjectIterator<T> {
         private final ObjectQueue<T> queue;
         private int index;
 
         QueueIterator(ObjectQueue<T> queue) {
             this.queue = queue;
+        }
+
+        @Override
+        public ObjectIterator<T> reset() {
+            index = 0;
+            return this;
         }
 
         @Override

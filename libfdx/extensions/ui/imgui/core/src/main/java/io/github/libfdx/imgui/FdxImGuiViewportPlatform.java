@@ -9,6 +9,7 @@ import imgui.enums.ImGuiBackendFlags;
 import imgui.enums.ImGuiViewportFlags;
 import io.github.libfdx.Fdx;
 import io.github.libfdx.collections.IntMap;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.display.Display;
 import io.github.libfdx.display.DisplayConfig;
@@ -89,8 +90,9 @@ final class FdxImGuiViewportPlatform extends ImGuiViewportPlatformCallbacks {
             clearBackendFlags(ImGuiBackendFlags.PlatformHasViewports.getValue()
                     | ImGuiBackendFlags.RendererHasViewports.getValue());
         }
-        for (WindowData window : windows.values()) {
-            disposeWindow(window);
+        ObjectIterator<WindowData> iterator = windows.values().iterator();
+        while (iterator.hasNext()) {
+            disposeWindow(iterator.next());
         }
         windows.clear();
         dispose();

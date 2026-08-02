@@ -3,6 +3,7 @@ package io.github.libfdx.tools.project.generator.ui;
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.collections.ObjectMapEntry;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.tools.project.generator.GeneratedProject;
@@ -138,7 +139,10 @@ public final class ProjectGeneratorApplication extends ApplicationAdapter {
     private UiTheme generatorTheme() {
         UiFont font = UiFont.freeType(UI_FONT_ASSET, 16.0f);
         UiTheme theme = UiTheme.dark();
-        for (ObjectMapEntry<String, UiStyle> entry : theme.styles().entries()) {
+        ObjectIterator<? extends ObjectMapEntry<String, UiStyle>> iterator =
+                theme.styles().entries().iterator();
+        while (iterator.hasNext()) {
+            ObjectMapEntry<String, UiStyle> entry = iterator.next();
             UiStyle style = entry.value();
             theme = theme.style(entry.key(), style.text(style.textStyle().font(font)));
         }

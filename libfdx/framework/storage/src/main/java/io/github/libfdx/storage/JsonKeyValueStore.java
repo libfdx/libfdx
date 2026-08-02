@@ -1,6 +1,7 @@
 package io.github.libfdx.storage;
 
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.collections.ObjectMapEntry;
 import io.github.libfdx.collections.OrderedMap;
 import io.github.libfdx.json.Json;
@@ -72,7 +73,10 @@ final class JsonKeyValueStore implements KeyValueStore {
             JsonValue root = json.read(decoded);
             JsonValue storedEntries = root.get("entries");
             if (storedEntries != null && storedEntries.isObject()) {
-                for (ObjectMapEntry<String, JsonValue> entry : storedEntries.objectMembers().entries()) {
+                ObjectIterator<? extends ObjectMapEntry<String, JsonValue>> iterator =
+                        storedEntries.objectMembers().entries().iterator();
+                while (iterator.hasNext()) {
+                    ObjectMapEntry<String, JsonValue> entry = iterator.next();
                     Entry storedEntry = readEntry(entry.value());
                     if (storedEntry != null) {
                         entries.put(entry.key(), storedEntry);
@@ -105,8 +109,9 @@ final class JsonKeyValueStore implements KeyValueStore {
         ensureLoaded();
         String[] keys = new String[entries.size()];
         int index = 0;
-        for (String key : entries.keys()) {
-            keys[index++] = key;
+        ObjectIterator<String> iterator = entries.keys().iterator();
+        while (iterator.hasNext()) {
+            keys[index++] = iterator.next();
         }
         return keys;
     }
@@ -268,7 +273,9 @@ final class JsonKeyValueStore implements KeyValueStore {
     private JsonValue writeRoot() {
         JsonValue root = JsonValue.object();
         JsonValue storedEntries = JsonValue.object();
-        for (OrderedMap.Entry<String, Entry> mapEntry : entries.entries()) {
+        ObjectIterator<OrderedMap.Entry<String, Entry>> iterator = entries.entries().iterator();
+        while (iterator.hasNext()) {
+            OrderedMap.Entry<String, Entry> mapEntry = iterator.next();
             storedEntries.put(mapEntry.key(), writeEntry(mapEntry.value()));
         }
         root.put("version", 1);

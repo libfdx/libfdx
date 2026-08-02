@@ -1,34 +1,56 @@
 package io.github.libfdx.collections;
 
-import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
  * Stores values in a doubly linked list.
  *
+ * <p>Nodes are retained in a per-list pool after removal. Adds reuse pooled
+ * nodes and allocate only when the list exceeds its retained capacity.</p>
+ *
  * @param <T> the value type
  * @author xpenatan
  */
-public final class ObjectLinkedList<T> implements Iterable<T> {
+public final class ObjectLinkedList<T> implements ObjectIterable<T> {
+    private static final int DEFAULT_CAPACITY = 16;
     private Node<T> first;
     private Node<T> last;
+    private Node<T> free;
     private int size;
+    private int capacity;
+    private ListIterator<T> iterator;
 
     /**
      * Creates a linked list.
      */
     public ObjectLinkedList() {
+        this(DEFAULT_CAPACITY);
+    }
+
+    /**
+     * Creates a linked list with enough pooled nodes for the requested number
+     * of values.
+     *
+     * @param capacity the initial node capacity
+     */
+    public ObjectLinkedList(int capacity) {
+        if (capacity < 0) {
+            throw new IllegalArgumentException("capacity must be >= 0");
+        }
+        addFreeNodes(capacity);
     }
 
     /**
      * Adds a value at the front.
      *
+     * <p>The returned node is valid only until it is removed or this list is
+     * cleared. Removed nodes are pooled and may be reused by a later add.</p>
+     *
      * @param value the value
-     * @return the created node
+     * @return the active node
      */
     public Node<T> addFirst(T value) {
-        Node<T> node = new Node<T>(value);
-        node.owner = this;
+        Node<T> node = obtain(value);
         Node<T> oldFirst = first;
         first = node;
         node.next = oldFirst;
@@ -44,12 +66,14 @@ public final class ObjectLinkedList<T> implements Iterable<T> {
     /**
      * Adds a value at the end.
      *
+     * <p>The returned node is valid only until it is removed or this list is
+     * cleared. Removed nodes are pooled and may be reused by a later add.</p>
+     *
      * @param value the value
-     * @return the created node
+     * @return the active node
      */
     public Node<T> addLast(T value) {
-        Node<T> node = new Node<T>(value);
-        node.owner = this;
+        Node<T> node = obtain(value);
         Node<T> oldLast = last;
         last = node;
         node.previous = oldLast;
@@ -89,7 +113,10 @@ public final class ObjectLinkedList<T> implements Iterable<T> {
     /**
      * Removes a node from this list.
      *
-     * @param node the node
+     * <p>The node reference becomes invalid after this call and must not be
+     * retained because its storage may be reused by a later add.</p>
+     *
+     * @param node the active node
      * @return the removed value
      */
     public T remove(Node<T> node) {
@@ -108,23 +135,20 @@ public final class ObjectLinkedList<T> implements Iterable<T> {
         } else {
             last = previous;
         }
-        node.owner = null;
-        node.previous = null;
-        node.next = null;
+        T value = node.value;
         size--;
-        return node.value;
+        release(node);
+        return value;
     }
 
     /**
-     * Removes all values.
+     * Removes all values and retains their nodes for reuse.
      */
     public void clear() {
         Node<T> node = first;
         while (node != null) {
             Node<T> next = node.next;
-            node.owner = null;
-            node.previous = null;
-            node.next = null;
+            release(node);
             node = next;
         }
         first = null;
@@ -195,13 +219,48 @@ public final class ObjectLinkedList<T> implements Iterable<T> {
         return size > 0;
     }
 
-    @Override
-    public Iterator<T> iterator() {
-        return new ListIterator<T>(first);
+    /**
+     * Returns the number of allocated nodes retained by this list.
+     *
+     * @return the active and pooled node capacity
+     */
+    public int capacity() {
+        return capacity;
     }
 
     /**
-     * Represents a linked list node.
+     * Ensures that the requested number of additional values can be added
+     * without allocating nodes.
+     *
+     * @param additionalCapacity the additional values to reserve
+     * @return this list
+     */
+    public ObjectLinkedList<T> ensureCapacity(int additionalCapacity) {
+        if (additionalCapacity < 0) {
+            throw new IllegalArgumentException("additionalCapacity must be >= 0");
+        }
+        int required = size + additionalCapacity;
+        if (required > capacity) {
+            addFreeNodes(required - capacity);
+        }
+        return this;
+    }
+
+    @Override
+    public ObjectIterator<T> iterator() {
+        if (iterator == null) {
+            iterator = new ListIterator<T>(this);
+        }
+        return iterator.reset();
+    }
+
+    /**
+     * Represents an active linked list node.
+     *
+     * <p>A node is valid only while it belongs to a list. Removal and
+     * {@link ObjectLinkedList#clear()} return it to an internal pool, after
+     * which the same node instance may represent another value. Callers must
+     * discard node references immediately after removal.</p>
      *
      * @param <T> the value type
      * @author xpenatan
@@ -210,10 +269,10 @@ public final class ObjectLinkedList<T> implements Iterable<T> {
         private ObjectLinkedList<T> owner;
         private Node<T> previous;
         private Node<T> next;
-        private final T value;
+        private Node<T> poolNext;
+        private T value;
 
-        private Node(T value) {
-            this.value = value;
+        private Node() {
         }
 
         /**
@@ -244,11 +303,48 @@ public final class ObjectLinkedList<T> implements Iterable<T> {
         }
     }
 
-    private static final class ListIterator<T> implements Iterator<T> {
+    private Node<T> obtain(T value) {
+        if (free == null) {
+            addFreeNodes(Math.max(8, capacity >> 1));
+        }
+        Node<T> node = free;
+        free = node.poolNext;
+        node.poolNext = null;
+        node.owner = this;
+        node.value = value;
+        return node;
+    }
+
+    private void release(Node<T> node) {
+        node.owner = null;
+        node.previous = null;
+        node.next = null;
+        node.value = null;
+        node.poolNext = free;
+        free = node;
+    }
+
+    private void addFreeNodes(int count) {
+        for (int i = 0; i < count; i++) {
+            Node<T> node = new Node<T>();
+            node.poolNext = free;
+            free = node;
+        }
+        capacity += count;
+    }
+
+    private static final class ListIterator<T> implements ObjectIterator<T> {
+        private final ObjectLinkedList<T> list;
         private Node<T> node;
 
-        ListIterator(Node<T> node) {
-            this.node = node;
+        ListIterator(ObjectLinkedList<T> list) {
+            this.list = list;
+        }
+
+        @Override
+        public ObjectIterator<T> reset() {
+            node = list.first;
+            return this;
         }
 
         @Override
