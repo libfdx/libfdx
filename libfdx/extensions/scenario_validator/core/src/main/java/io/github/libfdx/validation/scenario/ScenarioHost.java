@@ -1,10 +1,9 @@
 package io.github.libfdx.validation.scenario;
 
-import java.util.LinkedHashMap;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.ObjectMap;
+import io.github.libfdx.collections.OrderedMap;
 
 /**
  * Represents a scenario host.
@@ -12,8 +11,8 @@ import java.util.Map;
  * @author xpenatan
  */
 public final class ScenarioHost {
-    private final Map<Class<?>, Object> probes = new LinkedHashMap<Class<?>, Object>();
-    private final Map<String, ScenarioCapture> captures = new LinkedHashMap<String, ScenarioCapture>();
+    private final ObjectMap<Class<?>, Object> probes = new ObjectMap<Class<?>, Object>();
+    private final OrderedMap<String, ScenarioCapture> captures = new OrderedMap<String, ScenarioCapture>();
     private final ScenarioEvents events = new ScenarioEvents();
     private ScenarioFrameDriver frameDriver;
     private ScenarioInputDriver inputDriver;
@@ -277,11 +276,15 @@ public final class ScenarioHost {
      *
      * @return the captures
      */
-    public List<ScenarioCapture> captures() {
+    public ArrayView<ScenarioCapture> captures() {
         if (captures.isEmpty()) {
-            return Collections.emptyList();
+            return Array.emptyView();
         }
-        return Collections.unmodifiableList(new ArrayList<ScenarioCapture>(captures.values()));
+        Array<ScenarioCapture> values = new Array<ScenarioCapture>(captures.size());
+        for (ScenarioCapture capture : captures.values()) {
+            values.add(capture);
+        }
+        return values.view();
     }
 
     /**

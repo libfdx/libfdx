@@ -1,8 +1,14 @@
 package io.github.libfdx.json;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.ObjectMapEntry;
+import io.github.libfdx.collections.ObjectMapView;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -39,6 +45,27 @@ final class JsonTest {
         assertEquals("{\"name\":\"Ada\",\"level\":3,\"items\":[\"one\",2,null]}", compact);
         assertTrue(JsonWriter.pretty(root).indexOf('\n') >= 0);
         assertEquals(2, new JsonReader().parse(compact).require("items").require(1).intValue());
+    }
+
+    @Test
+    void exposesCachedReadOnlyLiveLibfdxViewsInInsertionOrder() {
+        JsonValue object = JsonValue.object().put("first", 1).put("second", 2);
+        ObjectMapView<String, JsonValue> members = object.objectMembers();
+        assertSame(members, object.objectMembers());
+        object.put("third", 3);
+
+        Array<String> keys = new Array<String>();
+        for (ObjectMapEntry<String, JsonValue> entry : members.entries()) {
+            keys.add(entry.key());
+        }
+        assertArrayEquals(new String[] { "first", "second", "third" }, keys.toArray(new String[0]));
+
+        JsonValue array = JsonValue.array().add("first");
+        ArrayView<JsonValue> values = array.arrayValues();
+        assertSame(values, array.arrayValues());
+        array.add("second");
+        assertEquals(2, values.size());
+        assertEquals("second", values.get(1).stringValue());
     }
 
     @Test

@@ -1,5 +1,7 @@
 package io.github.libfdx.ui;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.LoadOp;
@@ -14,8 +16,6 @@ import io.github.libfdx.graphics.g2d.BitmapFontLayout;
 import io.github.libfdx.graphics.g2d.ShapeRenderer2D;
 import io.github.libfdx.graphics.g2d.SpriteBatch;
 import io.github.libfdx.graphics.g2d.TextureRegion;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Renders UI nodes using the libFDX 2D graphics pipeline.
@@ -64,9 +64,9 @@ public final class UiG2DRenderer implements UiRenderer {
     private final GraphicsContext graphics;
     private final ShapeRenderer2D shapes;
     private final RenderPassDescriptor renderPassDescriptor = new RenderPassDescriptor().label("ui g2d pass");
-    private final List<CustomTextDraw> customTextDraws = new ArrayList<CustomTextDraw>();
-    private final List<CustomImageDraw> customImageDraws = new ArrayList<CustomImageDraw>();
-    private final List<UiNode> overlayNodes = new ArrayList<UiNode>();
+    private final Array<CustomTextDraw> customTextDraws = new Array<CustomTextDraw>();
+    private final Array<CustomImageDraw> customImageDraws = new Array<CustomImageDraw>();
+    private final Array<UiNode> overlayNodes = new Array<UiNode>();
     private final CustomDrawContext customDrawContext = new CustomDrawContext();
     private int customTextDrawCount;
     private int customImageDrawCount;
@@ -162,7 +162,7 @@ public final class UiG2DRenderer implements UiRenderer {
                 }
             }
         }
-        List<UiNode> children = root.renderChildren(node);
+        ArrayView<UiNode> children = root.renderChildren(node);
         for (int i = 0; i < children.size(); i++) {
             prepareText(root, children.get(i));
         }
@@ -214,7 +214,7 @@ public final class UiG2DRenderer implements UiRenderer {
         } else if (node.type() == UiNodeType.TABS && !hasBitmapFont(root, node)) {
             drawTabsFallbackText(root, node, alpha);
         }
-        List<UiNode> children = root.renderChildren(node);
+        ArrayView<UiNode> children = root.renderChildren(node);
         for (int i = 0; i < children.size(); i++) {
             UiNode child = children.get(i);
             if (root.isOverlayNode(child)) {
@@ -247,7 +247,7 @@ public final class UiG2DRenderer implements UiRenderer {
         } else if (node.type() == UiNodeType.TABS) {
             drawTabsBitmapText(root, node, alpha);
         }
-        List<UiNode> children = root.renderChildren(node);
+        ArrayView<UiNode> children = root.renderChildren(node);
         for (int i = 0; i < children.size(); i++) {
             UiNode child = children.get(i);
             if (!root.isOverlayNode(child)) {
@@ -391,7 +391,7 @@ public final class UiG2DRenderer implements UiRenderer {
                 && hasBitmapFont(root, node)) {
             return true;
         }
-        List<UiNode> children = root.renderChildren(node);
+        ArrayView<UiNode> children = root.renderChildren(node);
         for (int i = 0; i < children.size(); i++) {
             UiNode child = children.get(i);
             if (!root.isOverlayNode(child) && needsBatch(root, child)) {
@@ -1628,7 +1628,7 @@ public final class UiG2DRenderer implements UiRenderer {
             drawOutline(root, root.windowTitleBar(node), DEBUG_WINDOW_TITLE);
             drawOutline(root, root.windowResizeHandle(node), DEBUG_WINDOW_RESIZE);
         }
-        List<UiNode> children = root.renderChildren(node);
+        ArrayView<UiNode> children = root.renderChildren(node);
         for (int i = 0; i < children.size(); i++) {
             renderDebugLines(root, children.get(i));
         }
@@ -1736,7 +1736,7 @@ public final class UiG2DRenderer implements UiRenderer {
 
     private void drawBitmapTextLines(UiRoot root, BitmapFont font, BitmapFontLayout layout, float x, float y,
             UiTextStyle style, UiColor color, float alpha, float availableWidth) {
-        List<String> lines = layout.lines();
+        ArrayView<String> lines = layout.lines();
         for (int lineIndex = 0; lineIndex < lines.size(); lineIndex++) {
             String line = lines.get(lineIndex);
             float lineX = alignedLineX(x, layout.lineWidth(lineIndex), style.align(), availableWidth);

@@ -1,5 +1,7 @@
 package io.github.libfdx.ui;
 
+import io.github.libfdx.collections.IdentityMap;
+import io.github.libfdx.collections.OrderedMap;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.files.FileSystem;
 import io.github.libfdx.graphics.GraphicsContext;
@@ -7,9 +9,6 @@ import io.github.libfdx.graphics.g2d.BitmapFont;
 import io.github.libfdx.graphics.g2d.BitmapFontFiles;
 import io.github.libfdx.graphics.g2d.BitmapFontLayout;
 import io.github.libfdx.graphics.g2d.FreeTypeFontOptions;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -30,10 +29,10 @@ final class UiTextEngine implements Disposable {
 
     private final FileSystem files;
     private final GraphicsContext graphics;
-    private final Map<String, BitmapFont> fonts = new LinkedHashMap<String, BitmapFont>();
-    private final Map<String, Boolean> unavailableFonts = new LinkedHashMap<String, Boolean>();
-    private final Map<String, BitmapFontLayout> layouts = new LinkedHashMap<String, BitmapFontLayout>();
-    private final Map<UiFont, CachedFontKey> fontKeys = new IdentityHashMap<UiFont, CachedFontKey>();
+    private final OrderedMap<String, BitmapFont> fonts = new OrderedMap<String, BitmapFont>();
+    private final OrderedMap<String, Boolean> unavailableFonts = new OrderedMap<String, Boolean>();
+    private final OrderedMap<String, BitmapFontLayout> layouts = new OrderedMap<String, BitmapFontLayout>();
+    private final IdentityMap<UiFont, CachedFontKey> fontKeys = new IdentityMap<UiFont, CachedFontKey>();
     private UiFont lastResolvedFont;
     private float lastResolvedRasterScale;
     private BitmapFont lastResolvedBitmapFont;

@@ -1,11 +1,9 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.math.Color;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 /**
  * Represents an environment3 d.
@@ -23,8 +21,8 @@ public final class Environment3D {
     private DirectionalShadowMap3D directionalShadowMap;
     private CascadedShadowMap3D cascadedShadowMap;
     private SkyEnvironment3D skyEnvironment;
-    private final ArrayList<Light> lights = new ArrayList<Light>();
-    private final List<Light> readOnlyLights = Collections.unmodifiableList(lights);
+    private final Array<Light> lights = new Array<Light>();
+    private final ArrayView<Light> readOnlyLights = lights.view();
 
     /**
      * Sets the ambient color and returns this environment3 d.
@@ -227,7 +225,7 @@ public final class Environment3D {
      *
      * @return the lights
      */
-    public List<Light> lights() {
+    public ArrayView<Light> lights() {
         return readOnlyLights;
     }
 

@@ -1,11 +1,11 @@
 package io.github.libfdx.tests.ui;
 
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.validation.scenario.Scenario;
 import io.github.libfdx.validation.scenario.ScenarioCatalog;
 import io.github.libfdx.validation.scenario.ScenarioCapturePolicy;
 import io.github.libfdx.validation.scenario.ScenarioValidationMode;
 import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Represents an ui kit validation scenarios.
@@ -70,7 +70,7 @@ final class UiKitValidationScenarios {
             if (entries.length == 0) {
                 return this;
             }
-            List<Scenario> selectedScenarios = catalog.select(selection);
+            ArrayView<Scenario> selectedScenarios = catalog.select(selection);
             ScenarioValidationMode effectiveMode = mode != null ? mode : ScenarioValidationMode.MIXED;
             ScenarioCatalog selectedCatalog = ScenarioCatalog.create();
             ArrayList<Entry> selectedEntries = new ArrayList<Entry>();

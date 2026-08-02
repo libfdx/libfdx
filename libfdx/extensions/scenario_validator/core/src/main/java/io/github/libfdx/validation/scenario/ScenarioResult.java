@@ -1,7 +1,7 @@
 package io.github.libfdx.validation.scenario;
 
-import java.util.Collections;
-import java.util.List;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
 
 /**
  * Represents the result of a scenario operation.
@@ -16,14 +16,14 @@ public final class ScenarioResult {
     private final String message;
     private final int frame;
     private final long elapsedMillis;
-    private final List<String> operationNames;
-    private final List<String> recentEvents;
-    private final List<ScenarioCapture> captures;
+    private final Array<String> operationNames;
+    private final Array<String> recentEvents;
+    private final Array<ScenarioCapture> captures;
     private final boolean visualBaselineRequired;
 
     private ScenarioResult(String scenarioName, boolean passed, String operationName, int operationIndex,
-            String message, int frame, long elapsedMillis, List<String> operationNames, List<String> recentEvents,
-            List<ScenarioCapture> captures, boolean visualBaselineRequired) {
+            String message, int frame, long elapsedMillis, ArrayView<String> operationNames,
+            ArrayView<String> recentEvents, ArrayView<ScenarioCapture> captures, boolean visualBaselineRequired) {
         this.scenarioName = scenarioName;
         this.passed = passed;
         this.operationName = operationName;
@@ -31,9 +31,9 @@ public final class ScenarioResult {
         this.message = message;
         this.frame = frame;
         this.elapsedMillis = elapsedMillis;
-        this.operationNames = operationNames != null ? operationNames : Collections.<String>emptyList();
-        this.recentEvents = recentEvents != null ? recentEvents : Collections.<String>emptyList();
-        this.captures = captures != null ? captures : Collections.<ScenarioCapture>emptyList();
+        this.operationNames = copy(operationNames);
+        this.recentEvents = copy(recentEvents);
+        this.captures = copy(captures);
         this.visualBaselineRequired = visualBaselineRequired;
     }
 
@@ -47,8 +47,8 @@ public final class ScenarioResult {
      */
     public static ScenarioResult passed(String scenarioName, int frame, long elapsedMillis) {
         return new ScenarioResult(scenarioName, true, null, -1, null, frame, elapsedMillis,
-                Collections.<String>emptyList(), Collections.<String>emptyList(),
-                Collections.<ScenarioCapture>emptyList(), false);
+                Array.<String>emptyView(), Array.<String>emptyView(),
+                Array.<ScenarioCapture>emptyView(), false);
     }
 
     /**
@@ -65,19 +65,20 @@ public final class ScenarioResult {
     public static ScenarioResult failed(String scenarioName, String operationName, int operationIndex, String message,
             int frame, long elapsedMillis) {
         return new ScenarioResult(scenarioName, false, operationName, operationIndex, message, frame, elapsedMillis,
-                Collections.<String>emptyList(), Collections.<String>emptyList(),
-                Collections.<ScenarioCapture>emptyList(), false);
+                Array.<String>emptyView(), Array.<String>emptyView(),
+                Array.<ScenarioCapture>emptyView(), false);
     }
 
-    static ScenarioResult passed(String scenarioName, int frame, long elapsedMillis, List<String> operationNames,
-            List<String> recentEvents, List<ScenarioCapture> captures, boolean visualBaselineRequired) {
+    static ScenarioResult passed(String scenarioName, int frame, long elapsedMillis,
+            ArrayView<String> operationNames, ArrayView<String> recentEvents, ArrayView<ScenarioCapture> captures,
+            boolean visualBaselineRequired) {
         return new ScenarioResult(scenarioName, true, null, -1, null, frame, elapsedMillis,
                 operationNames, recentEvents, captures, visualBaselineRequired);
     }
 
     static ScenarioResult failed(String scenarioName, String operationName, int operationIndex, String message,
-            int frame, long elapsedMillis, List<String> operationNames, List<String> recentEvents,
-            List<ScenarioCapture> captures, boolean visualBaselineRequired) {
+            int frame, long elapsedMillis, ArrayView<String> operationNames, ArrayView<String> recentEvents,
+            ArrayView<ScenarioCapture> captures, boolean visualBaselineRequired) {
         return new ScenarioResult(scenarioName, false, operationName, operationIndex, message, frame, elapsedMillis,
                 operationNames, recentEvents, captures, visualBaselineRequired);
     }
@@ -150,8 +151,8 @@ public final class ScenarioResult {
      *
      * @return the operation names
      */
-    public List<String> operationNames() {
-        return operationNames;
+    public ArrayView<String> operationNames() {
+        return operationNames.view();
     }
 
     /**
@@ -159,8 +160,8 @@ public final class ScenarioResult {
      *
      * @return the recent events
      */
-    public List<String> recentEvents() {
-        return recentEvents;
+    public ArrayView<String> recentEvents() {
+        return recentEvents.view();
     }
 
     /**
@@ -168,8 +169,8 @@ public final class ScenarioResult {
      *
      * @return the captures
      */
-    public List<ScenarioCapture> captures() {
-        return captures;
+    public ArrayView<ScenarioCapture> captures() {
+        return captures.view();
     }
 
     /**
@@ -179,5 +180,9 @@ public final class ScenarioResult {
      */
     public boolean visualBaselineRequired() {
         return visualBaselineRequired;
+    }
+
+    private static <T> Array<T> copy(ArrayView<T> values) {
+        return values != null ? new Array<T>(values) : new Array<T>(0);
     }
 }

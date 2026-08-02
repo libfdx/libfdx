@@ -1,13 +1,12 @@
 package io.github.libfdx.json;
 
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.ObjectMapView;
+import io.github.libfdx.collections.OrderedMap;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Represents a json value.
@@ -32,13 +31,13 @@ public final class JsonValue {
     private static final JsonValue NULL = new JsonValue(Type.NULL, null, null, null, null, false);
 
     private final Type type;
-    private final LinkedHashMap<String, JsonValue> object;
-    private final ArrayList<JsonValue> array;
+    private final OrderedMap<String, JsonValue> object;
+    private final Array<JsonValue> array;
     private final String string;
     private final String number;
     private final boolean bool;
 
-    private JsonValue(Type type, LinkedHashMap<String, JsonValue> object, ArrayList<JsonValue> array, String string,
+    private JsonValue(Type type, OrderedMap<String, JsonValue> object, Array<JsonValue> array, String string,
             String number, boolean bool) {
         this.type = type;
         this.object = object;
@@ -54,7 +53,7 @@ public final class JsonValue {
      * @return a new JSON value
      */
     public static JsonValue object() {
-        return new JsonValue(Type.OBJECT, new LinkedHashMap<String, JsonValue>(), null, null, null, false);
+        return new JsonValue(Type.OBJECT, new OrderedMap<String, JsonValue>(), null, null, null, false);
     }
 
     /**
@@ -63,7 +62,7 @@ public final class JsonValue {
      * @return a new JSON value
      */
     public static JsonValue array() {
-        return new JsonValue(Type.ARRAY, null, new ArrayList<JsonValue>(), null, null, false);
+        return new JsonValue(Type.ARRAY, null, new Array<JsonValue>(), null, null, false);
     }
 
     /**
@@ -231,9 +230,9 @@ public final class JsonValue {
      *
      * @return the object members
      */
-    public Map<String, JsonValue> objectMembers() {
+    public ObjectMapView<String, JsonValue> objectMembers() {
         expect(Type.OBJECT);
-        return Collections.unmodifiableMap(object);
+        return object.view();
     }
 
     /**
@@ -241,9 +240,9 @@ public final class JsonValue {
      *
      * @return the array values
      */
-    public List<JsonValue> arrayValues() {
+    public ArrayView<JsonValue> arrayValues() {
         expect(Type.ARRAY);
-        return Collections.unmodifiableList(array);
+        return array.view();
     }
 
     /**

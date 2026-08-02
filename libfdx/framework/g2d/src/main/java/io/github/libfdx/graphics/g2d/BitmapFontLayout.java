@@ -1,8 +1,8 @@
 package io.github.libfdx.graphics.g2d;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.FloatArray;
 
 /**
  * Represents a bitmap font layout.
@@ -10,15 +10,20 @@ import java.util.List;
  * @author xpenatan
  */
 public final class BitmapFontLayout {
-    private final List<String> lines;
-    private final List<Float> lineWidths;
+    private final Array<String> lines;
+    private final ArrayView<String> lineView;
+    private final FloatArray lineWidths;
     private final float width;
     private final float height;
     private final float lineHeight;
 
-    BitmapFontLayout(List<String> lines, List<Float> lineWidths, float width, float height, float lineHeight) {
-        this.lines = Collections.unmodifiableList(new ArrayList<String>(lines));
-        this.lineWidths = Collections.unmodifiableList(new ArrayList<Float>(lineWidths));
+    BitmapFontLayout(ArrayView<String> lines, FloatArray lineWidths, float width, float height, float lineHeight) {
+        this.lines = new Array<String>(lines);
+        this.lineView = this.lines.view();
+        this.lineWidths = new FloatArray(lineWidths.size());
+        for (int i = 0; i < lineWidths.size(); i++) {
+            this.lineWidths.add(lineWidths.get(i));
+        }
         this.width = width;
         this.height = height;
         this.lineHeight = lineHeight;
@@ -29,8 +34,8 @@ public final class BitmapFontLayout {
      *
      * @return the lines
      */
-    public List<String> lines() {
-        return lines;
+    public ArrayView<String> lines() {
+        return lineView;
     }
 
     /**
@@ -40,7 +45,7 @@ public final class BitmapFontLayout {
      * @return the line width
      */
     public float lineWidth(int index) {
-        return lineWidths.get(index).floatValue();
+        return lineWidths.get(index);
     }
 
     /**

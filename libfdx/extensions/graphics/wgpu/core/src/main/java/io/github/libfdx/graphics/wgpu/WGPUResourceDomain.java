@@ -1,17 +1,16 @@
 package io.github.libfdx.graphics.wgpu;
 
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.core.FdxException;
 
 import com.github.xpenatan.webgpu.WGPUBindGroupLayout;
-
-import java.util.ArrayList;
 
 /**
  * Identifies one shared native WGPU device resource domain.
  */
 final class WGPUResourceDomain {
     private int contextReferences;
-    private final ArrayList<WGPUContext> contexts = new ArrayList<WGPUContext>();
+    private final Array<WGPUContext> contexts = new Array<WGPUContext>();
     private Runnable nativeRelease;
     private boolean closed;
 
@@ -40,7 +39,7 @@ final class WGPUResourceDomain {
     }
 
     void unregisterContext(WGPUContext context) {
-        contexts.remove(context);
+        contexts.removeValue(context, true);
     }
 
     void releaseUniformBindGroups(WGPUBindGroupLayout layout) {

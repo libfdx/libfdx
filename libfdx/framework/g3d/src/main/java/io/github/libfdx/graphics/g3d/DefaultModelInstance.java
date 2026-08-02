@@ -1,11 +1,10 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.math.Matrix4;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
 
 /**
  * Provides the default implementation of a model instance.
@@ -15,11 +14,11 @@ import java.util.List;
 public final class DefaultModelInstance implements ModelInstance {
     private final Model model;
     private final Matrix4 transform = new Matrix4();
-    private final ArrayList<Renderable3D> renderables = new ArrayList<Renderable3D>();
-    private final ArrayList<InstanceNode> rootNodes = new ArrayList<InstanceNode>();
-    private final ArrayList<InstanceNode> instanceNodes = new ArrayList<InstanceNode>();
-    private final ArrayList<SkinningPalette> skinningPalettes = new ArrayList<SkinningPalette>();
-    private final HashMap<String, InstanceNode> nodesById = new HashMap<String, InstanceNode>();
+    private final Array<Renderable3D> renderables = new Array<Renderable3D>();
+    private final Array<InstanceNode> rootNodes = new Array<InstanceNode>();
+    private final Array<InstanceNode> instanceNodes = new Array<InstanceNode>();
+    private final Array<SkinningPalette> skinningPalettes = new Array<SkinningPalette>();
+    private final ObjectMap<String, InstanceNode> nodesById = new ObjectMap<String, InstanceNode>();
 
     /**
      * Creates a default model instance.
@@ -163,7 +162,7 @@ public final class DefaultModelInstance implements ModelInstance {
         instanceNodes.clear();
         skinningPalettes.clear();
         nodesById.clear();
-        List<ModelNode> nodes = model.nodes();
+        ArrayView<ModelNode> nodes = model.nodes();
         for (int i = 0; i < nodes.size(); i++) {
             rootNodes.add(copyNode(nodes.get(i)));
         }
@@ -177,14 +176,14 @@ public final class DefaultModelInstance implements ModelInstance {
         if (id != null && !nodesById.containsKey(id)) {
             nodesById.put(id, node);
         }
-        List<ModelNodePart> parts = source.parts();
+        ArrayView<ModelNodePart> parts = source.parts();
         for (int i = 0; i < parts.size(); i++) {
             ModelNodePart part = parts.get(i);
             SkinningPalette palette = part.skin() != null ? skinningPalette(part.skin()) : null;
             renderables.add(new Renderable3D(part.meshPart(), part.material(), node.worldTransform,
                     part.meshPart().mesh().bounds(), palette));
         }
-        List<ModelNode> children = source.children();
+        ArrayView<ModelNode> children = source.children();
         for (int i = 0; i < children.size(); i++) {
             node.children.add(copyNode(children.get(i)));
         }
@@ -280,7 +279,7 @@ public final class DefaultModelInstance implements ModelInstance {
         private final Matrix4 localTransform;
         private final Matrix4 modelTransform = new Matrix4();
         private final Matrix4 worldTransform = new Matrix4();
-        private final ArrayList<InstanceNode> children = new ArrayList<InstanceNode>();
+        private final Array<InstanceNode> children = new Array<InstanceNode>();
 
         InstanceNode(ModelNode source) {
             this.source = source;

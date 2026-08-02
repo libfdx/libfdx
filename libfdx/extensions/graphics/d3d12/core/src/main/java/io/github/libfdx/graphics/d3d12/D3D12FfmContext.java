@@ -1,13 +1,13 @@
 package io.github.libfdx.graphics.d3d12;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.IntArray;
 import io.github.libfdx.core.FdxException;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Arrays;
 
 final class D3D12FfmContext implements AutoCloseable {
@@ -24,14 +24,14 @@ final class D3D12FfmContext implements AutoCloseable {
     private final boolean validation;
     private final int frameCount;
     private final Arena nativeArena = Arena.ofShared();
-    private final ArrayList<FrameSlot> frames = new ArrayList<FrameSlot>();
-    private final ArrayDeque<Integer> freeRtvs = new ArrayDeque<Integer>();
-    private final ArrayDeque<Integer> freeDsvs = new ArrayDeque<Integer>();
-    private final ArrayDeque<Integer> freeSrvs = new ArrayDeque<Integer>();
-    private final ArrayDeque<Integer> freeSamplers = new ArrayDeque<Integer>();
-    private final ArrayList<BufferAllocation> recordedBuffers = new ArrayList<BufferAllocation>();
-    private final ArrayList<TextureAllocation> recordedTextures = new ArrayList<TextureAllocation>();
-    private final ArrayList<RetiredResource> retired = new ArrayList<RetiredResource>();
+    private final Array<FrameSlot> frames = new Array<FrameSlot>();
+    private final IntArray freeRtvs = new IntArray();
+    private final IntArray freeDsvs = new IntArray();
+    private final IntArray freeSrvs = new IntArray();
+    private final IntArray freeSamplers = new IntArray();
+    private final Array<BufferAllocation> recordedBuffers = new Array<BufferAllocation>();
+    private final Array<TextureAllocation> recordedTextures = new Array<TextureAllocation>();
+    private final Array<RetiredResource> retired = new Array<RetiredResource>();
     private final BufferAllocation[] vertexBuffers = new BufferAllocation[MAX_VERTEX_BUFFERS];
     private final Texture[] textures = new Texture[MAX_TEXTURES];
     private final ResourceRegistry resources = new ResourceRegistry();
@@ -694,7 +694,7 @@ final class D3D12FfmContext implements AutoCloseable {
             }
         }
         while (retired.size() > output) {
-            retired.remove(retired.size() - 1);
+            retired.removeIndex(retired.size() - 1);
         }
     }
 
@@ -743,9 +743,9 @@ final class D3D12FfmContext implements AutoCloseable {
         return descriptorHeapCpuHandle(cpuSamplerHeap) + (long)index * samplerSize;
     }
 
-    private int allocateDescriptor(ArrayDeque<Integer> freeList, int type, String name) {
+    private int allocateDescriptor(IntArray freeList, int type, String name) {
         if (!freeList.isEmpty()) {
-            return freeList.removeLast();
+            return freeList.pop();
         }
         int value;
         switch (type) {
@@ -1129,11 +1129,11 @@ final class D3D12FfmContext implements AutoCloseable {
             return allocation;
         } catch (RuntimeException | Error error) {
             if (allocation.srvIndex != INVALID_DESCRIPTOR) {
-                freeSrvs.addLast(allocation.srvIndex);
+                freeSrvs.add(allocation.srvIndex);
                 allocation.srvIndex = INVALID_DESCRIPTOR;
             }
             if (allocation.rtvIndex != INVALID_DESCRIPTOR) {
-                freeRtvs.addLast(allocation.rtvIndex);
+                freeRtvs.add(allocation.rtvIndex);
                 allocation.rtvIndex = INVALID_DESCRIPTOR;
             }
             allocation.close();
@@ -1905,7 +1905,7 @@ final class D3D12FfmContext implements AutoCloseable {
         private final D3D12FfmContext context;
         private final int size;
         private final int usage;
-        private final ArrayList<BufferAllocation> allocations = new ArrayList<BufferAllocation>();
+        private final Array<BufferAllocation> allocations = new Array<BufferAllocation>();
         private int current;
 
         private Buffer(D3D12FfmContext context, int size, int usage) {
@@ -1946,7 +1946,7 @@ final class D3D12FfmContext implements AutoCloseable {
         private final int height;
         private final int format;
         private final int usage;
-        private final ArrayList<TextureAllocation> allocations = new ArrayList<TextureAllocation>();
+        private final Array<TextureAllocation> allocations = new Array<TextureAllocation>();
         private MemorySegment depth = D3D12Ffm.NULL;
         private int current;
         private int samplerIndex = INVALID_DESCRIPTOR;
@@ -1967,20 +1967,20 @@ final class D3D12FfmContext implements AutoCloseable {
             for (int index = allocations.size() - 1; index >= 0; index--) {
                 TextureAllocation allocation = allocations.get(index);
                 if (allocation.srvIndex != INVALID_DESCRIPTOR) {
-                    context.freeSrvs.addLast(allocation.srvIndex);
+                    context.freeSrvs.add(allocation.srvIndex);
                 }
                 if (allocation.rtvIndex != INVALID_DESCRIPTOR) {
-                    context.freeRtvs.addLast(allocation.rtvIndex);
+                    context.freeRtvs.add(allocation.rtvIndex);
                 }
                 allocation.close();
             }
             allocations.clear();
             if (samplerIndex != INVALID_DESCRIPTOR) {
-                context.freeSamplers.addLast(samplerIndex);
+                context.freeSamplers.add(samplerIndex);
                 samplerIndex = INVALID_DESCRIPTOR;
             }
             if (dsvIndex != INVALID_DESCRIPTOR) {
-                context.freeDsvs.addLast(dsvIndex);
+                context.freeDsvs.add(dsvIndex);
                 dsvIndex = INVALID_DESCRIPTOR;
             }
             D3D12Ffm.release(depth);

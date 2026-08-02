@@ -1,15 +1,14 @@
 package io.github.libfdx.graphics.wgpu;
 
 import com.github.xpenatan.webgpu.WGPUSampler;
-
-import java.util.ArrayList;
+import io.github.libfdx.collections.Array;
 
 /**
  * Owns one independently bindable native WGPU sampler.
  */
 final class WGPUSamplerAllocation extends WGPURecordedResource {
     private final WGPUSampler nativeSampler;
-    private ArrayList<WGPUTextureBindGroupResource> textureBindGroups;
+    private Array<WGPUTextureBindGroupResource> textureBindGroups;
 
     WGPUSamplerAllocation(WGPUResourceDomain resourceDomain, WGPUSampler nativeSampler) {
         super(resourceDomain);
@@ -22,7 +21,7 @@ final class WGPUSamplerAllocation extends WGPURecordedResource {
 
     void addTextureBindGroup(WGPUTextureBindGroupResource bindGroup) {
         if (textureBindGroups == null) {
-            textureBindGroups = new ArrayList<WGPUTextureBindGroupResource>();
+            textureBindGroups = new Array<WGPUTextureBindGroupResource>();
         }
         if (!textureBindGroups.contains(bindGroup)) {
             textureBindGroups.add(bindGroup);
@@ -33,7 +32,7 @@ final class WGPUSamplerAllocation extends WGPURecordedResource {
         if (textureBindGroups == null) {
             return;
         }
-        textureBindGroups.remove(bindGroup);
+        textureBindGroups.removeValue(bindGroup, true);
     }
 
     @Override

@@ -1,5 +1,9 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.IntMap;
+import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.math.Matrix4;
@@ -25,13 +29,8 @@ import io.github.libfdx.json.JsonValue;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Loads gltf model data.
@@ -46,6 +45,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
     private static final int GLTF_CLAMP_TO_EDGE = 33071;
     private static final int GLTF_MIRRORED_REPEAT = 33648;
     private static final int GLTF_REPEAT = 10497;
+    private static final ArrayView<JsonValue> EMPTY_JSON_ARRAY = new Array<JsonValue>(0).view();
 
     private final GraphicsContext graphics;
 
@@ -94,7 +94,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
 
     private GltfDocument loadDocument(FileHandle file, byte[] bytes) {
         final GltfDocument document = parseDocument(bytes);
-        List<JsonValue> buffers = array(document.root, "buffers");
+        ArrayView<JsonValue> buffers = array(document.root, "buffers");
         if (buffers.isEmpty()) {
             document.buffers = new byte[0][];
             return document;
@@ -123,7 +123,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
     }
 
     private GltfDocument loadImages(FileHandle file, final GltfDocument document) {
-        List<JsonValue> images = array(document.root, "images");
+        ArrayView<JsonValue> images = array(document.root, "images");
         if (images.isEmpty()) {
             document.images = new ImageData[0];
             return document;
@@ -191,16 +191,17 @@ final class GltfModelLoader implements AssetLoader<Model> {
 
     private Model buildModel(String path, GltfDocument document) {
         uploadTextures(path, document);
-        List<JsonValue> meshes = array(document.root, "meshes");
+        ArrayView<JsonValue> meshes = array(document.root, "meshes");
         if (meshes.isEmpty()) {
             throw new FdxException("glTF model contains no meshes: " + path);
         }
         document.nodeIds = nodeIds(document);
-        document.skins = skins(document).toArray(new Skin[0]);
-        ArrayList<ModelNode> nodes = new ArrayList<ModelNode>();
-        ArrayList<Material> materials = new ArrayList<Material>();
-        ArrayList<Mesh> meshResources = new ArrayList<Mesh>();
-        List<JsonValue> sceneNodes = sceneNodes(document);
+        Array<Skin> loadedSkins = skins(document);
+        document.skins = loadedSkins.toArray(new Skin[0]);
+        Array<ModelNode> nodes = new Array<ModelNode>();
+        Array<Material> materials = new Array<Material>();
+        Array<Mesh> meshResources = new Array<Mesh>();
+        ArrayView<JsonValue> sceneNodes = sceneNodes(document);
         if (sceneNodes.isEmpty()) {
             for (int meshIndex = 0; meshIndex < meshes.size(); meshIndex++) {
                 ModelNode node = new ModelNode(path + " mesh " + meshIndex);
@@ -220,16 +221,14 @@ final class GltfModelLoader implements AssetLoader<Model> {
         if (meshResources.isEmpty()) {
             throw new FdxException("glTF model contains no renderable triangles: " + path);
         }
-        ArrayList<Skin> skins = new ArrayList<Skin>();
-        Collections.addAll(skins, document.skins);
-        return new DefaultModel(nodes, materials, animations(document), skins, meshResources);
+        return new DefaultModel(nodes, materials, animations(document), loadedSkins, meshResources);
     }
 
     private void uploadTextures(String path, GltfDocument document) {
         if (document.images == null || document.images.length == 0 || document.gpuTextures != null) {
             return;
         }
-        List<JsonValue> textures = array(document.root, "textures");
+        ArrayView<JsonValue> textures = array(document.root, "textures");
         document.gpuTextures = new Texture[textures.size()];
         for (int i = 0; i < textures.size(); i++) {
             JsonValue texture = object(textures.get(i), "texture");
@@ -268,9 +267,9 @@ final class GltfModelLoader implements AssetLoader<Model> {
     }
 
     private String[] nodeIds(GltfDocument document) {
-        List<JsonValue> nodes = array(document.root, "nodes");
+        ArrayView<JsonValue> nodes = array(document.root, "nodes");
         String[] ids = new String[nodes.size()];
-        Map<String, Integer> used = new HashMap<String, Integer>();
+        ObjectMap<String, Integer> used = new ObjectMap<String, Integer>();
         for (int i = 0; i < nodes.size(); i++) {
             JsonValue node = object(nodes.get(i), "node");
             String base = string(node, "name", "");
@@ -301,16 +300,16 @@ final class GltfModelLoader implements AssetLoader<Model> {
         return document.skins[skinIndex];
     }
 
-    private ArrayList<Skin> skins(GltfDocument document) {
-        ArrayList<Skin> result = new ArrayList<Skin>();
-        List<JsonValue> skins = array(document.root, "skins");
+    private Array<Skin> skins(GltfDocument document) {
+        Array<Skin> result = new Array<Skin>();
+        ArrayView<JsonValue> skins = array(document.root, "skins");
         int[] parentNodes = parentNodes(document);
         for (int skinIndex = 0; skinIndex < skins.size(); skinIndex++) {
             JsonValue skin = object(skins.get(skinIndex), "skin");
-            List<JsonValue> joints = array(skin, "joints");
+            ArrayView<JsonValue> joints = array(skin, "joints");
             Matrix4[] inverseBindMatrices = inverseBindMatrices(document, integer(skin, "inverseBindMatrices", -1),
                     joints.size());
-            ArrayList<Bone> bones = new ArrayList<Bone>();
+            Array<Bone> bones = new Array<Bone>();
             for (int jointIndex = 0; jointIndex < joints.size(); jointIndex++) {
                 int nodeIndex = integerValue(joints.get(jointIndex), -1);
                 int parentIndex = indexOf(joints, parentNodes, nodeIndex);
@@ -343,11 +342,11 @@ final class GltfModelLoader implements AssetLoader<Model> {
     }
 
     private int[] parentNodes(GltfDocument document) {
-        List<JsonValue> nodes = array(document.root, "nodes");
+        ArrayView<JsonValue> nodes = array(document.root, "nodes");
         int[] parents = new int[nodes.size()];
         Arrays.fill(parents, -1);
         for (int i = 0; i < nodes.size(); i++) {
-            List<JsonValue> children = array(object(nodes.get(i), "node"), "children");
+            ArrayView<JsonValue> children = array(object(nodes.get(i), "node"), "children");
             for (int childIndex = 0; childIndex < children.size(); childIndex++) {
                 int child = integerValue(children.get(childIndex), -1);
                 if (child >= 0 && child < parents.length) {
@@ -358,7 +357,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
         return parents;
     }
 
-    private int indexOf(List<JsonValue> joints, int[] parentNodes, int nodeIndex) {
+    private int indexOf(ArrayView<JsonValue> joints, int[] parentNodes, int nodeIndex) {
         if (nodeIndex < 0 || nodeIndex >= parentNodes.length) {
             return -1;
         }
@@ -371,8 +370,8 @@ final class GltfModelLoader implements AssetLoader<Model> {
         return -1;
     }
 
-    private ModelNode modelNode(String path, GltfDocument document, int nodeIndex, List<Material> materials,
-            List<Mesh> meshResources) {
+    private ModelNode modelNode(String path, GltfDocument document, int nodeIndex, Array<Material> materials,
+            Array<Mesh> meshResources) {
         if (nodeIndex < 0) {
             return null;
         }
@@ -383,7 +382,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
             appendMeshParts(path, document, modelNode, meshIndex, skin(document, integer(node, "skin", -1)),
                     materials, meshResources);
         }
-        List<JsonValue> children = array(node, "children");
+        ArrayView<JsonValue> children = array(node, "children");
         for (int i = 0; i < children.size(); i++) {
             ModelNode child = modelNode(path, document, integerValue(children.get(i), -1), materials, meshResources);
             if (child != null) {
@@ -394,9 +393,9 @@ final class GltfModelLoader implements AssetLoader<Model> {
     }
 
     private void appendMeshParts(String path, GltfDocument document, ModelNode node, int meshIndex, Skin skin,
-            List<Material> materials, List<Mesh> meshResources) {
+            Array<Material> materials, Array<Mesh> meshResources) {
         JsonValue mesh = object(array(document.root, "meshes").get(meshIndex), "mesh");
-        List<JsonValue> primitives = array(mesh, "primitives");
+        ArrayView<JsonValue> primitives = array(mesh, "primitives");
         for (int primitiveIndex = 0; primitiveIndex < primitives.size(); primitiveIndex++) {
             JsonValue primitive = object(primitives.get(primitiveIndex), "primitive");
             node.addPart(modelNodePart(path, document, meshIndex, primitiveIndex, primitive, skin, materials,
@@ -405,7 +404,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
     }
 
     private ModelNodePart modelNodePart(String path, GltfDocument document, int meshIndex, int primitiveIndex,
-            JsonValue primitive, Skin skin, List<Material> materials, List<Mesh> meshResources) {
+            JsonValue primitive, Skin skin, Array<Material> materials, Array<Mesh> meshResources) {
         GeometryBuilder geometry = new GeometryBuilder();
             int mode = integer(primitive, "mode", MODE_TRIANGLES);
             if (mode != MODE_TRIANGLES) {
@@ -578,27 +577,27 @@ final class GltfModelLoader implements AssetLoader<Model> {
         return new TriangleBasis(n0, tangent, bitangent);
     }
 
-    private List<JsonValue> sceneNodes(GltfDocument document) {
-        List<JsonValue> scenes = array(document.root, "scenes");
+    private ArrayView<JsonValue> sceneNodes(GltfDocument document) {
+        ArrayView<JsonValue> scenes = array(document.root, "scenes");
         if (scenes.isEmpty()) {
-            return Collections.emptyList();
+            return EMPTY_JSON_ARRAY;
         }
         int sceneIndex = integer(document.root, "scene", 0);
         if (sceneIndex < 0 || sceneIndex >= scenes.size()) {
-            return Collections.emptyList();
+            return EMPTY_JSON_ARRAY;
         }
         return array(object(scenes.get(sceneIndex), "scene"), "nodes");
     }
 
-    private ArrayList<AnimationClip> animations(GltfDocument document) {
-        ArrayList<AnimationClip> result = new ArrayList<AnimationClip>();
-        List<JsonValue> animations = array(document.root, "animations");
-        List<JsonValue> nodes = array(document.root, "nodes");
+    private Array<AnimationClip> animations(GltfDocument document) {
+        Array<AnimationClip> result = new Array<AnimationClip>();
+        ArrayView<JsonValue> animations = array(document.root, "animations");
+        ArrayView<JsonValue> nodes = array(document.root, "nodes");
         for (int animationIndex = 0; animationIndex < animations.size(); animationIndex++) {
             JsonValue animation = object(animations.get(animationIndex), "animation");
-            List<JsonValue> samplers = array(animation, "samplers");
-            List<JsonValue> channels = array(animation, "channels");
-            Map<Integer, GltfNodeAnimationBuilder> builders = new HashMap<Integer, GltfNodeAnimationBuilder>();
+            ArrayView<JsonValue> samplers = array(animation, "samplers");
+            ArrayView<JsonValue> channels = array(animation, "channels");
+            IntMap<GltfNodeAnimationBuilder> builders = new IntMap<GltfNodeAnimationBuilder>();
             float duration = 0.0f;
             for (int channelIndex = 0; channelIndex < channels.size(); channelIndex++) {
                 JsonValue channel = object(channels.get(channelIndex), "animation channel");
@@ -627,8 +626,8 @@ final class GltfModelLoader implements AssetLoader<Model> {
                 }
                 builder.channel(path, times, values);
             }
-            ArrayList<AnimationClip.NodeTransformChannel> nodeChannels =
-                    new ArrayList<AnimationClip.NodeTransformChannel>();
+            Array<AnimationClip.NodeTransformChannel> nodeChannels =
+                    new Array<AnimationClip.NodeTransformChannel>();
             for (GltfNodeAnimationBuilder builder : builders.values()) {
                 nodeChannels.add(builder.build());
             }
@@ -650,7 +649,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
     }
 
     private Matrix4 nodeTransform(JsonValue node) {
-        List<JsonValue> matrix = array(node, "matrix");
+        ArrayView<JsonValue> matrix = array(node, "matrix");
         if (matrix.size() == Matrix4.VALUE_COUNT) {
             float[] values = new float[Matrix4.VALUE_COUNT];
             for (int i = 0; i < values.length; i++) {
@@ -658,9 +657,9 @@ final class GltfModelLoader implements AssetLoader<Model> {
             }
             return Matrix4.of(values);
         }
-        List<JsonValue> translation = array(node, "translation");
-        List<JsonValue> rotation = array(node, "rotation");
-        List<JsonValue> scale = array(node, "scale");
+        ArrayView<JsonValue> translation = array(node, "translation");
+        ArrayView<JsonValue> rotation = array(node, "rotation");
+        ArrayView<JsonValue> scale = array(node, "scale");
         Matrix4 translationMatrix = translation.size() >= 3
                 ? Matrix4.translation(number(translation.get(0), 0.0f), number(translation.get(1), 0.0f),
                 number(translation.get(2), 0.0f))
@@ -679,7 +678,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
         if (materialIndex < 0) {
             return GltfMaterial.DEFAULT;
         }
-        List<JsonValue> materials = array(document.root, "materials");
+        ArrayView<JsonValue> materials = array(document.root, "materials");
         if (materialIndex >= materials.size()) {
             return GltfMaterial.DEFAULT;
         }
@@ -691,7 +690,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
         }
         JsonValue material = object(materials.get(materialIndex), "material");
         JsonValue pbr = object(material.get("pbrMetallicRoughness"), "pbr", true);
-        Color baseColor = colorFactor(pbr != null ? array(pbr, "baseColorFactor") : Collections.<JsonValue>emptyList(),
+        Color baseColor = colorFactor(pbr != null ? array(pbr, "baseColorFactor") : EMPTY_JSON_ARRAY,
                 Color.WHITE);
         ImageData baseColorImage = textureImage(document, pbr != null ? object(pbr.get("baseColorTexture"),
                 "baseColorTexture", true) : null);
@@ -729,7 +728,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
             return null;
         }
         int textureIndex = integer(textureInfo, "index", -1);
-        List<JsonValue> textures = array(document.root, "textures");
+        ArrayView<JsonValue> textures = array(document.root, "textures");
         if (textureIndex < 0 || textureIndex >= textures.size()) {
             return null;
         }
@@ -761,7 +760,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
     }
 
     private TextureWrap samplerWrap(GltfDocument document, JsonValue texture, String key) {
-        List<JsonValue> samplers = array(document.root, "samplers");
+        ArrayView<JsonValue> samplers = array(document.root, "samplers");
         int samplerIndex = integer(texture, "sampler", -1);
         if (samplerIndex < 0 || samplerIndex >= samplers.size()) {
             return TextureWrap.REPEAT;
@@ -793,7 +792,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
                 || "wgpu".equals(providerId) || "vulkan".equals(providerId);
     }
 
-    private Color colorFactor(List<JsonValue> values, Color fallback) {
+    private Color colorFactor(ArrayView<JsonValue> values, Color fallback) {
         if (values.size() >= 4) {
             return new Color(number(values.get(0), fallback.red()), number(values.get(1), fallback.green()),
                     number(values.get(2), fallback.blue()), number(values.get(3), fallback.alpha()));
@@ -1042,13 +1041,13 @@ final class GltfModelLoader implements AssetLoader<Model> {
         if (materialIndex < 0) {
             return Color.WHITE;
         }
-        List<JsonValue> materials = array(document.root, "materials");
+        ArrayView<JsonValue> materials = array(document.root, "materials");
         if (materialIndex >= materials.size()) {
             return Color.WHITE;
         }
         JsonValue material = object(materials.get(materialIndex), "material");
         JsonValue pbr = object(material.get("pbrMetallicRoughness"), "pbr", true);
-        List<JsonValue> factor = pbr != null ? array(pbr, "baseColorFactor") : Collections.<JsonValue>emptyList();
+        ArrayView<JsonValue> factor = pbr != null ? array(pbr, "baseColorFactor") : EMPTY_JSON_ARRAY;
         if (factor.size() >= 4) {
             return new Color(number(factor.get(0), 1.0f), number(factor.get(1), 1.0f),
                     number(factor.get(2), 1.0f), number(factor.get(3), 1.0f));
@@ -1118,10 +1117,10 @@ final class GltfModelLoader implements AssetLoader<Model> {
         return value;
     }
 
-    private static List<JsonValue> array(JsonValue object, String key) {
+    private static ArrayView<JsonValue> array(JsonValue object, String key) {
         JsonValue value = object.get(key);
         if (value == null || value.isNull()) {
-            return Collections.emptyList();
+            return EMPTY_JSON_ARRAY;
         }
         if (!value.isArray()) {
             throw new FdxException("glTF " + key + " must be an array");
@@ -1438,7 +1437,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
         }
 
         private static float[] vector(JsonValue object, String key, int expectedCount, float[] fallback) {
-            List<JsonValue> values = array(object, key);
+            ArrayView<JsonValue> values = array(object, key);
             if (values.size() < expectedCount) {
                 return fallback.clone();
             }

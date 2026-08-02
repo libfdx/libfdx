@@ -1,7 +1,6 @@
 package io.github.libfdx.graphics.g2d;
 
-import java.util.LinkedHashSet;
-import java.util.Set;
+import io.github.libfdx.collections.IntSet;
 
 /**
  * Stores option values for a free type font.
@@ -161,15 +160,14 @@ public final class FreeTypeFontOptions {
     }
 
     private static String unique(String characters) {
-        Set<Integer> seen = new LinkedHashSet<Integer>();
+        IntSet seen = new IntSet();
+        StringBuilder builder = new StringBuilder();
         for (int i = 0; i < characters.length();) {
             int codePoint = characters.codePointAt(i);
-            seen.add(Integer.valueOf(codePoint));
+            if (seen.add(codePoint)) {
+                builder.appendCodePoint(codePoint);
+            }
             i += Character.charCount(codePoint);
-        }
-        StringBuilder builder = new StringBuilder();
-        for (Integer codePoint : seen) {
-            builder.appendCodePoint(codePoint.intValue());
         }
         return builder.toString();
     }

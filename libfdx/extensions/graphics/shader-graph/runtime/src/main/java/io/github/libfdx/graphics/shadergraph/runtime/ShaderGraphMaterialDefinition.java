@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.shadergraph.runtime;
 
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraph;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompileOptions;
@@ -10,9 +11,6 @@ import io.github.libfdx.graphics.shadergraph.model.ShaderGraphKind;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphParameter;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphParameterKind;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphResource;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Immutable compiled surface graph and material-owned schema.
@@ -40,14 +38,14 @@ public final class ShaderGraphMaterialDefinition {
         }
         this.graph = graph;
         this.compilation = compilation;
-        List<ShaderGraphParameter> material = new ArrayList<>();
+        Array<ShaderGraphParameter> material = new Array<ShaderGraphParameter>();
         for (ShaderGraphParameter parameter : graph.parameters()) {
             if (parameter.kind() == ShaderGraphParameterKind.MATERIAL) {
                 requireMaterialSemantic(parameter);
                 material.add(parameter);
             }
         }
-        parameters = material.toArray(ShaderGraphParameter[]::new);
+        parameters = material.toArray(new ShaderGraphParameter[0]);
         resources = graph.resources();
     }
 

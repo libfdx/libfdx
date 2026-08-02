@@ -6,10 +6,10 @@ import com.github.xpenatan.box2d.B2Rot;
 import com.github.xpenatan.box2d.B2Transform;
 import com.github.xpenatan.box2d.B2Vec2;
 import com.github.xpenatan.box2d.B2World;
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.ImmediateModeRenderer;
 import io.github.libfdx.graphics.camera.Camera;
-import java.util.ArrayList;
 
 /** Collects Box2D debug-draw callbacks and renders them through libfdx. */
 public class FdxDebugRenderer extends B2DebugDrawEm {
@@ -18,7 +18,7 @@ public class FdxDebugRenderer extends B2DebugDrawEm {
 
     private final ImmediateModeRenderer lines;
     private final float[] viewProjection = new float[16];
-    private final ArrayList<PointCommand> points = new ArrayList<PointCommand>();
+    private final Array<PointCommand> points = new Array<PointCommand>();
     private final StringBuilder diagnostics = new StringBuilder();
     private int pointCount;
     private boolean graphicsDisposed;

@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.d3d12;
 
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.graphics.shader.ShaderModule;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
@@ -13,8 +14,6 @@ import io.github.libfdx.graphics.TextureFormat;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.ArrayList;
-
 final class D3D12Context implements GraphicsAttachment {
     private final D3D12Configuration configuration;
     private final long windowHandle;
@@ -23,7 +22,7 @@ final class D3D12Context implements GraphicsAttachment {
     private final D3D12TextureView colorAttachment;
     private final D3D12FrameBuffer frameBuffer;
     private final D3D12GraphicsFrame frame;
-    private final ArrayList<D3D12Resource> resources = new ArrayList<D3D12Resource>();
+    private final Array<D3D12Resource> resources = new Array<D3D12Resource>();
     private long nativeHandle;
     private int width;
     private int height;
@@ -85,7 +84,7 @@ final class D3D12Context implements GraphicsAttachment {
     }
 
     void unregister(D3D12Resource resource) {
-        resources.remove(resource);
+        resources.removeValue(resource, true);
     }
 
     D3D12Buffer requireBuffer(io.github.libfdx.graphics.Buffer value, String name) {

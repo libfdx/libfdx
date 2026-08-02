@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.shadergraph.runtime;
 
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.graphics.shader.runtime.ShaderResourceBinding;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
@@ -32,9 +33,6 @@ import io.github.libfdx.graphics.shadergraph.technique.ShaderGraphProgram;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphResource;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphTechniqueCompileResult;
 import io.github.libfdx.graphics.shadergraph.technique.ShaderGraphVariant;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Provider-neutral graph runtime for a complete render technique.
@@ -265,7 +263,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
     }
 
     private TechniqueState buildSingle(ShaderGraphRenderProgram program) {
-        List<ModuleEntry> modules = new ArrayList<>();
+        Array<ModuleEntry> modules = new Array<ModuleEntry>();
         try {
             ModuleEntry module = module(modules, program.shader(),
                     program.vertexEntryPoint(),
@@ -275,7 +273,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
             return new TechniqueState(new RuntimePass[] {
                     new RuntimePass(program.passId(), "",
                             new RuntimeVariant[] { variant })
-            }, modules.toArray(ModuleEntry[]::new), cacheCapacity);
+            }, modules.toArray(new ModuleEntry[0]), cacheCapacity);
         } catch (RuntimeException failure) {
             disposeModules(modules);
             throw failure;
@@ -284,7 +282,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
 
     private TechniqueState buildTechnique(
             ShaderGraphTechniqueCompileResult technique) {
-        List<ModuleEntry> modules = new ArrayList<>();
+        Array<ModuleEntry> modules = new Array<ModuleEntry>();
         try {
             ShaderGraphCompiledPass[] compiledPasses =
                     technique.passes();
@@ -331,7 +329,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
                         variants);
             }
             return new TechniqueState(passes,
-                    modules.toArray(ModuleEntry[]::new), cacheCapacity);
+                    modules.toArray(new ModuleEntry[0]), cacheCapacity);
         } catch (RuntimeException failure) {
             disposeModules(modules);
             throw failure;
@@ -340,7 +338,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
 
     private TechniqueState buildRenderTechnique(
             ShaderGraphRenderTechnique technique) {
-        List<ModuleEntry> modules = new ArrayList<>();
+        Array<ModuleEntry> modules = new Array<ModuleEntry>();
         try {
             ShaderGraphRenderTechniquePass[] sourcePasses =
                     technique.passes();
@@ -384,7 +382,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
                         variants);
             }
             return new TechniqueState(passes,
-                    modules.toArray(ModuleEntry[]::new),
+                    modules.toArray(new ModuleEntry[0]),
                     cacheCapacity);
         } catch (RuntimeException failure) {
             disposeModules(modules);
@@ -392,7 +390,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
         }
     }
 
-    private ModuleEntry module(List<ModuleEntry> modules,
+    private ModuleEntry module(Array<ModuleEntry> modules,
             ShaderModuleDescriptor descriptor, String vertexEntryPoint,
             String fragmentEntryPoint) {
         String key = descriptor.source() + '\0' + vertexEntryPoint
@@ -641,7 +639,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
         return disposed;
     }
 
-    private static void disposeModules(List<ModuleEntry> modules) {
+    private static void disposeModules(Array<ModuleEntry> modules) {
         for (ModuleEntry module : modules) {
             module.shader.dispose();
         }

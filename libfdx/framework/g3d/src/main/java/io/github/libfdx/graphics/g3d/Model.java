@@ -1,8 +1,7 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.core.Disposable;
-
-import java.util.List;
 
 /**
  * Defines the contract for model implementations.
@@ -15,26 +14,26 @@ public interface Model extends Disposable {
      *
      * @return the nodes
      */
-    List<ModelNode> nodes();
+    ArrayView<ModelNode> nodes();
 
     /**
      * Returns the materials.
      *
      * @return the materials
      */
-    List<Material> materials();
+    ArrayView<Material> materials();
 
     /**
      * Returns the animations.
      *
      * @return the animations
      */
-    List<AnimationClip> animations();
+    ArrayView<AnimationClip> animations();
 
     /**
      * Returns the skins.
      *
      * @return the skins
      */
-    List<Skin> skins();
+    ArrayView<Skin> skins();
 }

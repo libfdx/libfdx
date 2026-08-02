@@ -17,6 +17,7 @@ base {
 }
 
 dependencies {
+    api(project(":libfdx:framework:collections"))
     api(project(":libfdx:framework:graphics"))
     api(project(":libfdx:extensions:graphics:shader-graph:runtime"))
     api(project(":libfdx:framework:camera"))

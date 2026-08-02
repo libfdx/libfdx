@@ -1,10 +1,8 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.math.Matrix4;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 /**
  * Represents a model node.
@@ -14,10 +12,10 @@ import java.util.List;
 public final class ModelNode {
     private final String id;
     private Matrix4 localTransform = Matrix4.IDENTITY;
-    private final ArrayList<ModelNodePart> parts = new ArrayList<ModelNodePart>();
-    private final ArrayList<ModelNode> children = new ArrayList<ModelNode>();
-    private final List<ModelNodePart> readOnlyParts = Collections.unmodifiableList(parts);
-    private final List<ModelNode> readOnlyChildren = Collections.unmodifiableList(children);
+    private final Array<ModelNodePart> parts = new Array<ModelNodePart>();
+    private final Array<ModelNode> children = new Array<ModelNode>();
+    private final ArrayView<ModelNodePart> readOnlyParts = parts.view();
+    private final ArrayView<ModelNode> readOnlyChildren = children.view();
 
     /**
      * Creates a model node.
@@ -88,7 +86,7 @@ public final class ModelNode {
      *
      * @return the parts
      */
-    public List<ModelNodePart> parts() {
+    public ArrayView<ModelNodePart> parts() {
         return readOnlyParts;
     }
 
@@ -97,7 +95,7 @@ public final class ModelNode {
      *
      * @return the children
      */
-    public List<ModelNode> children() {
+    public ArrayView<ModelNode> children() {
         return readOnlyChildren;
     }
 }

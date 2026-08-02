@@ -1,10 +1,7 @@
 package io.github.libfdx.input;
 
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.core.ProviderId;
-import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Set;
 
 /**
  * Provides the default implementation of an input.
@@ -18,9 +15,9 @@ public final class DefaultInput implements Input {
     private final Gamepads gamepads;
     private final TextInputController textInputController;
     private final Clipboard clipboard;
-    private final List<InputProcessor> processors = new ArrayList<InputProcessor>();
-    private final Set<Key> keys = EnumSet.noneOf(Key.class);
-    private final Set<MouseButton> buttons = EnumSet.noneOf(MouseButton.class);
+    private final Array<InputProcessor> processors = new Array<InputProcessor>();
+    private final boolean[] keys = new boolean[Key.values().length];
+    private final boolean[] buttons = new boolean[MouseButton.values().length];
     private int pointerX;
     private int pointerY;
     private int pointerScreenX;
@@ -110,7 +107,7 @@ public final class DefaultInput implements Input {
      */
     @Override
     public void removeProcessor(InputProcessor processor) {
-        processors.remove(processor);
+        processors.removeValue(processor);
     }
 
     /**
@@ -159,7 +156,7 @@ public final class DefaultInput implements Input {
      */
     @Override
     public boolean isKeyPressed(Key key) {
-        return keys.contains(key);
+        return key != null && keys[key.ordinal()];
     }
 
     /**
@@ -173,7 +170,7 @@ public final class DefaultInput implements Input {
         if (button == MouseButton.LEFT && activeTouches > 0) {
             return true;
         }
-        return buttons.contains(button);
+        return button != null && buttons[button.ordinal()];
     }
 
     /**
@@ -243,8 +240,10 @@ public final class DefaultInput implements Input {
      * @return true if dispatch key down succeeds or is active; false otherwise
      */
     public boolean dispatchKeyDown(Key key) {
-        KeyEvent event = new KeyEvent(System.nanoTime(), key, keys.contains(key));
-        keys.add(event.key());
+        KeyEvent event = new KeyEvent(System.nanoTime(), key, isKeyPressed(key));
+        if (event.key() != null) {
+            keys[event.key().ordinal()] = true;
+        }
         boolean handled = false;
         for (int i = 0; i < processors.size(); i++) {
             handled = processors.get(i).keyDown(event) || handled;
@@ -260,7 +259,9 @@ public final class DefaultInput implements Input {
      */
     public boolean dispatchKeyUp(Key key) {
         KeyEvent event = new KeyEvent(System.nanoTime(), key, false);
-        keys.remove(event.key());
+        if (event.key() != null) {
+            keys[event.key().ordinal()] = false;
+        }
         boolean handled = false;
         for (int i = 0; i < processors.size(); i++) {
             handled = processors.get(i).keyUp(event) || handled;
@@ -296,7 +297,9 @@ public final class DefaultInput implements Input {
         pointerScreenX = screenX;
         pointerScreenY = screenY;
         PointerEvent event = PointerEvent.button(System.nanoTime(), button, x, y);
-        buttons.add(event.button());
+        if (event.button() != null) {
+            buttons[event.button().ordinal()] = true;
+        }
         boolean handled = false;
         for (int i = 0; i < processors.size(); i++) {
             handled = processors.get(i).pointerDown(event) || handled;
@@ -332,7 +335,9 @@ public final class DefaultInput implements Input {
         pointerScreenX = screenX;
         pointerScreenY = screenY;
         PointerEvent event = PointerEvent.button(System.nanoTime(), button, x, y);
-        buttons.remove(event.button());
+        if (event.button() != null) {
+            buttons[event.button().ordinal()] = false;
+        }
         boolean handled = false;
         for (int i = 0; i < processors.size(); i++) {
             handled = processors.get(i).pointerUp(event) || handled;

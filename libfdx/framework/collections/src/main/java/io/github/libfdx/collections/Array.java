@@ -1,6 +1,7 @@
 package io.github.libfdx.collections;
 
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
@@ -10,10 +11,12 @@ import java.util.NoSuchElementException;
  * @param <T> the value type
  * @author xpenatan
  */
-public final class Array<T> implements Iterable<T> {
+public final class Array<T> implements ArrayView<T> {
+    private static final ArrayView<?> EMPTY_VIEW = new Array<Object>(true, 0).view();
     private Object[] items;
     private int size;
     private boolean ordered;
+    private ArrayView<T> view;
 
     /**
      * Creates an ordered array.
@@ -32,6 +35,18 @@ public final class Array<T> implements Iterable<T> {
     }
 
     /**
+     * Creates an ordered array containing a copy of the supplied values.
+     *
+     * @param values the values
+     */
+    public Array(ArrayView<? extends T> values) {
+        this(true, values != null ? values.size() : 0);
+        if (values != null) {
+            addAll(values);
+        }
+    }
+
+    /**
      * Creates an array.
      *
      * @param ordered whether removals preserve order
@@ -43,6 +58,36 @@ public final class Array<T> implements Iterable<T> {
         }
         this.ordered = ordered;
         this.items = new Object[Math.max(1, capacity)];
+    }
+
+    /**
+     * Creates an ordered array containing the supplied values.
+     *
+     * @param values the values
+     * @param <T> the value type
+     * @return a new array
+     */
+    @SafeVarargs
+    public static <T> Array<T> of(T... values) {
+        if (values == null) {
+            throw new IllegalArgumentException("values must not be null");
+        }
+        Array<T> array = new Array<T>(values.length);
+        for (int i = 0; i < values.length; i++) {
+            array.add(values[i]);
+        }
+        return array;
+    }
+
+    /**
+     * Returns a shared immutable empty view.
+     *
+     * @param <T> the value type
+     * @return the empty view
+     */
+    @SuppressWarnings("unchecked")
+    public static <T> ArrayView<T> emptyView() {
+        return (ArrayView<T>)EMPTY_VIEW;
     }
 
     /**
@@ -64,9 +109,30 @@ public final class Array<T> implements Iterable<T> {
      * @return this array
      */
     public Array<T> addAll(Array<? extends T> values) {
-        ensureCapacity(values.size);
-        for (int i = 0; i < values.size; i++) {
-            items[size++] = values.items[i];
+        if (values == null) {
+            throw new IllegalArgumentException("values must not be null");
+        }
+        int valueCount = values.size;
+        ensureCapacity(valueCount);
+        System.arraycopy(values.items, 0, items, size, valueCount);
+        size += valueCount;
+        return this;
+    }
+
+    /**
+     * Adds all values from a read-only array view.
+     *
+     * @param values the values
+     * @return this array
+     */
+    public Array<T> addAll(ArrayView<? extends T> values) {
+        if (values == null) {
+            throw new IllegalArgumentException("values must not be null");
+        }
+        int valueCount = values.size();
+        ensureCapacity(valueCount);
+        for (int i = 0; i < valueCount; i++) {
+            items[size++] = values.get(i);
         }
         return this;
     }
@@ -352,6 +418,32 @@ public final class Array<T> implements Iterable<T> {
     }
 
     /**
+     * Sorts values in ascending natural order.
+     *
+     * @return this array
+     */
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    public Array<T> sort() {
+        Arrays.sort(items, 0, size, (Comparator)Comparator.naturalOrder());
+        return this;
+    }
+
+    /**
+     * Sorts values using a comparator.
+     *
+     * @param comparator the comparator
+     * @return this array
+     */
+    @SuppressWarnings("unchecked")
+    public Array<T> sort(Comparator<? super T> comparator) {
+        if (comparator == null) {
+            throw new IllegalArgumentException("comparator must not be null");
+        }
+        Arrays.sort((T[])items, 0, size, comparator);
+        return this;
+    }
+
+    /**
      * Reduces the size to at most the requested size.
      *
      * @param newSize the maximum size
@@ -470,6 +562,40 @@ public final class Array<T> implements Iterable<T> {
         return Arrays.copyOf(items, size);
     }
 
+    /**
+     * Copies the values into an array of the requested runtime type.
+     *
+     * @param destination the destination array
+     * @param <A> the array component type
+     * @return the destination array when large enough, or a new array
+     */
+    @SuppressWarnings("unchecked")
+    public <A> A[] toArray(A[] destination) {
+        if (destination == null) {
+            throw new IllegalArgumentException("destination must not be null");
+        }
+        if (destination.length < size) {
+            return (A[])Arrays.copyOf(items, size, destination.getClass());
+        }
+        System.arraycopy(items, 0, destination, 0, size);
+        if (destination.length > size) {
+            destination[size] = null;
+        }
+        return destination;
+    }
+
+    /**
+     * Returns a cached read-only live view of this array.
+     *
+     * @return the read-only view
+     */
+    public ArrayView<T> view() {
+        if (view == null) {
+            view = new ReadOnlyArrayView<T>(this);
+        }
+        return view;
+    }
+
     @Override
     public Iterator<T> iterator() {
         return new ArrayIterator<T>(this);
@@ -547,6 +673,89 @@ public final class Array<T> implements Iterable<T> {
                 throw new NoSuchElementException();
             }
             return array.get(index++);
+        }
+    }
+
+    private static final class ReadOnlyArrayView<T> implements ArrayView<T> {
+        private final Array<T> array;
+
+        ReadOnlyArrayView(Array<T> array) {
+            this.array = array;
+        }
+
+        @Override
+        public T get(int index) {
+            return array.get(index);
+        }
+
+        @Override
+        public T first() {
+            return array.first();
+        }
+
+        @Override
+        public T peek() {
+            return array.peek();
+        }
+
+        @Override
+        public boolean contains(T value) {
+            return array.contains(value);
+        }
+
+        @Override
+        public boolean contains(T value, boolean identity) {
+            return array.contains(value, identity);
+        }
+
+        @Override
+        public int indexOf(T value) {
+            return array.indexOf(value);
+        }
+
+        @Override
+        public int indexOf(T value, boolean identity) {
+            return array.indexOf(value, identity);
+        }
+
+        @Override
+        public int lastIndexOf(T value) {
+            return array.lastIndexOf(value);
+        }
+
+        @Override
+        public int lastIndexOf(T value, boolean identity) {
+            return array.lastIndexOf(value, identity);
+        }
+
+        @Override
+        public int size() {
+            return array.size();
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return array.isEmpty();
+        }
+
+        @Override
+        public boolean notEmpty() {
+            return array.notEmpty();
+        }
+
+        @Override
+        public Object[] toArray() {
+            return array.toArray();
+        }
+
+        @Override
+        public <A> A[] toArray(A[] destination) {
+            return array.toArray(destination);
+        }
+
+        @Override
+        public Iterator<T> iterator() {
+            return array.iterator();
         }
     }
 }

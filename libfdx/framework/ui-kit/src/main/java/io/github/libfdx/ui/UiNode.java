@@ -1,12 +1,11 @@
 package io.github.libfdx.ui;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.graphics.g2d.BitmapFontLayout;
 import io.github.libfdx.graphics.g2d.TextureRegion;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
 
 /**
  * Represents an ui node.
@@ -14,12 +13,12 @@ import java.util.List;
  * @author xpenatan
  */
 public final class UiNode implements Disposable {
-    private final List<UiNode> children = new ArrayList<UiNode>();
-    private final List<UiNode> readOnlyChildren = Collections.unmodifiableList(children);
-    private final ArrayList<UiNode> orderedChildren = new ArrayList<UiNode>();
-    private final List<UiNode> readOnlyOrderedChildren = Collections.unmodifiableList(orderedChildren);
-    private final ArrayList<UiNode> reverseOrderedChildren = new ArrayList<UiNode>();
-    private final List<UiNode> readOnlyReverseOrderedChildren = Collections.unmodifiableList(reverseOrderedChildren);
+    private final Array<UiNode> children = new Array<UiNode>();
+    private final ArrayView<UiNode> readOnlyChildren = children.view();
+    private final Array<UiNode> orderedChildren = new Array<UiNode>();
+    private final ArrayView<UiNode> readOnlyOrderedChildren = orderedChildren.view();
+    private final Array<UiNode> reverseOrderedChildren = new Array<UiNode>();
+    private final ArrayView<UiNode> readOnlyReverseOrderedChildren = reverseOrderedChildren.view();
     private long childOrderRevision = Long.MIN_VALUE;
     private UiNodeType type;
     private String identity;
@@ -264,11 +263,11 @@ public final class UiNode implements Disposable {
         return childOrderRevision == revision;
     }
 
-    ArrayList<UiNode> mutableOrderedChildren() {
+    Array<UiNode> mutableOrderedChildren() {
         return orderedChildren;
     }
 
-    ArrayList<UiNode> mutableReverseOrderedChildren() {
+    Array<UiNode> mutableReverseOrderedChildren() {
         return reverseOrderedChildren;
     }
 
@@ -276,7 +275,7 @@ public final class UiNode implements Disposable {
         childOrderRevision = revision;
     }
 
-    List<UiNode> orderedChildren(boolean frontToBack) {
+    ArrayView<UiNode> orderedChildren(boolean frontToBack) {
         return frontToBack ? readOnlyReverseOrderedChildren : readOnlyOrderedChildren;
     }
 
@@ -687,7 +686,7 @@ public final class UiNode implements Disposable {
      *
      * @return the children
      */
-    public List<UiNode> children() {
+    public ArrayView<UiNode> children() {
         return readOnlyChildren;
     }
 

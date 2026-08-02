@@ -1,5 +1,8 @@
 package io.github.libfdx.net.webrtc.transport;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ObjectMap;
+import io.github.libfdx.collections.ObjectQueue;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.json.JsonValue;
@@ -16,10 +19,6 @@ import io.github.libfdx.net.transport.NetSendResult;
 import io.github.libfdx.net.transport.NetStats;
 import io.github.libfdx.net.transform.NetTransformContext;
 import io.github.libfdx.net.transform.NetTransformResult;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
 import io.github.libfdx.net.webrtc.config.WebRtcEndpointSettings;
 import io.github.libfdx.net.webrtc.platform.WebRtcDataChannel;
 import io.github.libfdx.net.webrtc.platform.WebRtcIceCandidate;
@@ -37,10 +36,10 @@ import io.github.libfdx.net.webrtc.signaling.WebRtcSignalingMessageType;
 import io.github.libfdx.net.webrtc.WebRtcProvider;
 abstract class AbstractWebRtcEndpoint implements WebRtcSignalingListener {
     private final Object lock = new Object();
-    private final ArrayDeque<Runnable> events = new ArrayDeque<Runnable>();
-    private final HashMap<String, WebRtcNetConnection> connectionsByPeerId =
-            new HashMap<String, WebRtcNetConnection>();
-    private final ArrayList<WebRtcNetConnection> connections = new ArrayList<WebRtcNetConnection>();
+    private final ObjectQueue<Runnable> events = new ObjectQueue<Runnable>();
+    private final ObjectMap<String, WebRtcNetConnection> connectionsByPeerId =
+            new ObjectMap<String, WebRtcNetConnection>();
+    private final Array<WebRtcNetConnection> connections = new Array<WebRtcNetConnection>();
     private final WebRtcSignalingCodec codec = new WebRtcSignalingCodec();
     private final NetTransformContext receiveTransformContext = new NetTransformContext();
     private final NetPacketQueue receiveQueue;
@@ -115,13 +114,13 @@ abstract class AbstractWebRtcEndpoint implements WebRtcSignalingListener {
     }
 
     public void close() {
-        ArrayList<WebRtcNetConnection> copy;
+        Array<WebRtcNetConnection> copy;
         synchronized (lock) {
             if (closed) {
                 return;
             }
             closed = true;
-            copy = new ArrayList<WebRtcNetConnection>(connections);
+            copy = new Array<WebRtcNetConnection>(connections);
             connections.clear();
             connectionsByPeerId.clear();
             receiveQueue.clear();
@@ -253,7 +252,7 @@ abstract class AbstractWebRtcEndpoint implements WebRtcSignalingListener {
     void onConnectionDisconnected(WebRtcNetConnection connection) {
         boolean removed;
         synchronized (lock) {
-            removed = connections.remove(connection);
+            removed = connections.removeValue(connection, true);
             connectionsByPeerId.remove(connection.remotePeerId());
         }
         if (removed) {
@@ -461,7 +460,7 @@ abstract class AbstractWebRtcEndpoint implements WebRtcSignalingListener {
 
     private void enqueueEvent(Runnable event) {
         synchronized (events) {
-            events.add(event);
+            events.addLast(event);
         }
     }
 
@@ -469,7 +468,7 @@ abstract class AbstractWebRtcEndpoint implements WebRtcSignalingListener {
         while (true) {
             Runnable event;
             synchronized (events) {
-                event = events.poll();
+                event = events.pollFirst();
             }
             if (event == null) {
                 return;

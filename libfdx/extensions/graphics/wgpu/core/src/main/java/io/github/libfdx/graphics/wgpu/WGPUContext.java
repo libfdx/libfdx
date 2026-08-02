@@ -69,7 +69,7 @@ import io.github.libfdx.graphics.TextureFormat;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.ArrayList;
+import io.github.libfdx.collections.Array;
 
 /**
  * Represents a WGPU context.
@@ -102,11 +102,11 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     private WGPUTexture depthTexture;
     private WGPUTextureView depthTextureView;
     private WGPURenderPassEncoder clearPassEncoder;
-    private final ArrayList<OffscreenDepthResources> offscreenDepthResources =
-            new ArrayList<OffscreenDepthResources>();
-    private final ArrayList<WGPUTextureBindGroupResource> textureBindGroups =
-            new ArrayList<WGPUTextureBindGroupResource>();
-    private final ArrayList<WGPUBuffer> submittedBuffers = new ArrayList<WGPUBuffer>();
+    private final Array<OffscreenDepthResources> offscreenDepthResources =
+            new Array<OffscreenDepthResources>();
+    private final Array<WGPUTextureBindGroupResource> textureBindGroups =
+            new Array<WGPUTextureBindGroupResource>();
+    private final Array<WGPUBuffer> submittedBuffers = new Array<WGPUBuffer>();
     private final WGPURecordedResources recordedResources = new WGPURecordedResources();
     private WGPUUniformArena uniformArena;
     private WGPUGraphicsDevice graphicsDevice;
@@ -1131,7 +1131,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     void removeTextureBindGroup(WGPUTextureBindGroupResource resource) {
         for (int i = 0; i < textureBindGroups.size(); i++) {
             if (textureBindGroups.get(i) == resource) {
-                textureBindGroups.remove(i);
+                textureBindGroups.removeIndex(i);
                 return;
             }
         }

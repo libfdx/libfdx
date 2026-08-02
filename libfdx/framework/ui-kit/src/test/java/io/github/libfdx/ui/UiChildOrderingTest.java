@@ -1,11 +1,13 @@
 package io.github.libfdx.ui;
 
 import com.sun.management.ThreadMXBean;
+import io.github.libfdx.collections.ArrayView;
 import org.junit.jupiter.api.Test;
 
 import java.lang.management.ManagementFactory;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -47,16 +49,19 @@ final class UiChildOrderingTest {
 
         root.ensureWindowZOrder(firstState);
         root.ensureWindowZOrder(secondState);
-        List<UiNode> ordered = root.renderChildren(parent);
+        ArrayView<UiNode> ordered = root.renderChildren(parent);
 
-        assertEquals(List.of(content, firstWindow, secondWindow, popup, modal), ordered);
+        assertArrayEquals(new UiNode[] { content, firstWindow, secondWindow, popup, modal }, ordered.toArray());
         assertSame(ordered, root.renderChildren(parent));
-        assertEquals(List.of(modal, popup, secondWindow, firstWindow, content), parent.orderedChildren(true));
+        assertArrayEquals(new UiNode[] { modal, popup, secondWindow, firstWindow, content },
+                parent.orderedChildren(true).toArray());
 
         root.bringWindowToFront(firstState);
 
-        assertEquals(List.of(content, secondWindow, firstWindow, popup, modal), root.renderChildren(parent));
-        assertEquals(List.of(modal, popup, firstWindow, secondWindow, content), parent.orderedChildren(true));
+        assertArrayEquals(new UiNode[] { content, secondWindow, firstWindow, popup, modal },
+                root.renderChildren(parent).toArray());
+        assertArrayEquals(new UiNode[] { modal, popup, firstWindow, secondWindow, content },
+                parent.orderedChildren(true).toArray());
         root.dispose();
     }
 
@@ -392,8 +397,8 @@ final class UiChildOrderingTest {
         parent.addChild(content);
         parent.addChild(popup);
         parent.addChild(firstWindow);
-        List<UiNode> backToFront = root.renderChildren(parent);
-        List<UiNode> frontToBack = parent.orderedChildren(true);
+        ArrayView<UiNode> backToFront = root.renderChildren(parent);
+        ArrayView<UiNode> frontToBack = parent.orderedChildren(true);
         return backToFront.size() + frontToBack.size();
     }
 

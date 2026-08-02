@@ -164,6 +164,12 @@ Frame, render, upload, input/UI, game-loop, and network-processing paths are des
 for reuse.
 
 - Prefer primitives for state, configuration, identifiers, and counters.
+- Game-facing collection-bearing contracts use libFDX containers or read-only
+  views. Java collection types stay at explicit platform/tooling interop
+  boundaries rather than becoming application API contracts.
+- Read-only collection access uses cached live views where ownership remains
+  with the source object; callers copy explicitly when they need independent
+  storage.
 - Reuse buffers, descriptors, command storage, arrays, collections, events,
   and render objects.
 - Do not add steady-state Java allocation without a measured reason.

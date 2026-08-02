@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.shadergraph.runtime;
 
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.ComputePipeline;
@@ -19,9 +20,7 @@ import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompiledCompute
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphComputeTechniqueCompileResult;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphDiagnostic;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 /**
  * Owned runtime for explicitly scheduled graph compute techniques.
@@ -155,8 +154,8 @@ public final class ShaderGraphComputeProvider implements Disposable {
 
     private TechniqueState build(
             ShaderGraphComputeTechniqueCompileResult technique) {
-        List<ModuleEntry> modules = new ArrayList<>();
-        List<PipelineEntry> pipelines = new ArrayList<>();
+        Array<ModuleEntry> modules = new Array<ModuleEntry>();
+        Array<PipelineEntry> pipelines = new Array<PipelineEntry>();
         try {
             ShaderGraphCompiledComputePass[] compiledPasses =
                     technique.passes();
@@ -206,8 +205,8 @@ public final class ShaderGraphComputeProvider implements Disposable {
                         variants);
             }
             return new TechniqueState(passes,
-                    modules.toArray(ModuleEntry[]::new),
-                    pipelines.toArray(PipelineEntry[]::new));
+                    modules.toArray(new ModuleEntry[0]),
+                    pipelines.toArray(new PipelineEntry[0]));
         } catch (RuntimeException | Error failure) {
             disposePipelines(pipelines);
             disposeModules(modules);
@@ -221,8 +220,8 @@ public final class ShaderGraphComputeProvider implements Disposable {
             throw new FdxException(
                     "Graph compute runtime technique cannot be null");
         }
-        List<ModuleEntry> modules = new ArrayList<>();
-        List<PipelineEntry> pipelines = new ArrayList<>();
+        Array<ModuleEntry> modules = new Array<ModuleEntry>();
+        Array<PipelineEntry> pipelines = new Array<PipelineEntry>();
         try {
             ShaderGraphComputeRuntimeTechnique.Pass[] sourcePasses =
                     technique.passes();
@@ -264,8 +263,8 @@ public final class ShaderGraphComputeProvider implements Disposable {
                         sourcePass.defaultVariantKey(), variants);
             }
             return new TechniqueState(passes,
-                    modules.toArray(ModuleEntry[]::new),
-                    pipelines.toArray(PipelineEntry[]::new));
+                    modules.toArray(new ModuleEntry[0]),
+                    pipelines.toArray(new PipelineEntry[0]));
         } catch (RuntimeException | Error failure) {
             disposePipelines(pipelines);
             disposeModules(modules);
@@ -273,13 +272,13 @@ public final class ShaderGraphComputeProvider implements Disposable {
         }
     }
 
-    private ModuleEntry module(List<ModuleEntry> modules, String label,
+    private ModuleEntry module(Array<ModuleEntry> modules, String label,
             String source) {
         return module(modules, label,
                 ShaderModuleDescriptor.wgsl(label, source));
     }
 
-    private ModuleEntry module(List<ModuleEntry> modules,
+    private ModuleEntry module(Array<ModuleEntry> modules,
             String label, ShaderModuleDescriptor descriptor) {
         String source = descriptor.wgslSource();
         String moduleKey = source
@@ -335,7 +334,7 @@ public final class ShaderGraphComputeProvider implements Disposable {
         }
     }
 
-    private PipelineEntry pipeline(List<PipelineEntry> pipelines,
+    private PipelineEntry pipeline(Array<PipelineEntry> pipelines,
             ModuleEntry module, String entryPoint, String key) {
         String physicalKey = key + '\0' + entryPoint;
         for (PipelineEntry pipeline : pipelines) {
@@ -411,13 +410,13 @@ public final class ShaderGraphComputeProvider implements Disposable {
     }
 
     private static void disposePipelines(
-            List<PipelineEntry> pipelines) {
+            Array<PipelineEntry> pipelines) {
         for (int i = pipelines.size() - 1; i >= 0; i--) {
             pipelines.get(i).pipeline.dispose();
         }
     }
 
-    private static void disposeModules(List<ModuleEntry> modules) {
+    private static void disposeModules(Array<ModuleEntry> modules) {
         for (int i = modules.size() - 1; i >= 0; i--) {
             modules.get(i).shader.dispose();
         }

@@ -22,6 +22,15 @@ dependencies {
 tasks.named<Test>("test") {
     useJUnitPlatform()
 }
+
+tasks.register<JavaExec>("benchmarkCollections") {
+    group = "verification"
+    description = "Runs the repeatable libFDX/JDK collection smoke benchmark."
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("io.github.libfdx.collections.CollectionsBenchmark")
+    jvmArgs("-Xms512m", "-Xmx512m")
+}
 java {
     withSourcesJar()
     withJavadocJar()

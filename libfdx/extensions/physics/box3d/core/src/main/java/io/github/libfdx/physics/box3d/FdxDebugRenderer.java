@@ -13,6 +13,9 @@ import com.github.xpenatan.box3d.B3Transform;
 import com.github.xpenatan.box3d.B3Vec3;
 import com.github.xpenatan.box3d.B3World;
 import com.github.xpenatan.jParser.api.NativeObject;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.FloatArray;
+import io.github.libfdx.collections.LongMap;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsContext;
@@ -28,9 +31,6 @@ import io.github.libfdx.graphics.g3d.ModelBuilder;
 import io.github.libfdx.graphics.g3d.PbrMaterial;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.math.Matrix4;
-
-import java.util.ArrayList;
-import java.util.Arrays;
 
 public class FdxDebugRenderer extends B3DebugDrawEm {
     public static final float DEFAULT_SHADOW_BIAS = 0.001f;
@@ -49,10 +49,10 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
     private final DirectionalShadowMap3D shadowMap;
     private final boolean ownsModelBatch;
     private final boolean ownsLineRenderer;
-    private final LongDebugModelMap modelCache = new LongDebugModelMap();
-    private final ArrayList<RetiredDebugModel> retiredModels = new ArrayList<RetiredDebugModel>();
-    private final ArrayList<DefaultModelInstance> visibleInstances = new ArrayList<DefaultModelInstance>();
-    private final ArrayList<DefaultModelInstance> shadowCasterInstances = new ArrayList<DefaultModelInstance>();
+    private final LongMap<DebugModel> modelCache = new LongMap<DebugModel>(128, 0.7f);
+    private final Array<RetiredDebugModel> retiredModels = new Array<RetiredDebugModel>();
+    private final Array<DefaultModelInstance> visibleInstances = new Array<DefaultModelInstance>();
+    private final Array<DefaultModelInstance> shadowCasterInstances = new Array<DefaultModelInstance>();
     private final Matrix4 worldTransform = new Matrix4();
     private final Matrix4 combinedTransform = new Matrix4();
     private final float[] solidRgba = new float[] { 0.58f, 0.60f, 0.62f, 1.0f };
@@ -241,15 +241,8 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
         if(modelCache.isEmpty()) {
             return;
         }
-        DebugModel zeroValue = modelCache.zeroValue();
-        if(zeroValue != null) {
-            retiredModels.add(new RetiredDebugModel(zeroValue, RETIRED_MODEL_FRAME_DELAY));
-        }
-        for(int i = 0; i < modelCache.capacity(); i++) {
-            DebugModel model = modelCache.valueAt(i);
-            if(model != null) {
-                retiredModels.add(new RetiredDebugModel(model, RETIRED_MODEL_FRAME_DELAY));
-            }
+        for(DebugModel model : modelCache.values()) {
+            retiredModels.add(new RetiredDebugModel(model, RETIRED_MODEL_FRAME_DELAY));
         }
         modelCache.clear();
     }
@@ -550,21 +543,14 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
             retired.remainingFrames--;
             if(retired.remainingFrames <= 0) {
                 retired.model.dispose();
-                retiredModels.remove(i);
+                retiredModels.removeIndex(i);
             }
         }
     }
 
     private void disposeCachedModels() {
-        DebugModel zeroValue = modelCache.zeroValue();
-        if(zeroValue != null) {
-            zeroValue.dispose();
-        }
-        for(int i = 0; i < modelCache.capacity(); i++) {
-            DebugModel model = modelCache.valueAt(i);
-            if(model != null) {
-                model.dispose();
-            }
+        for(DebugModel model : modelCache.values()) {
+            model.dispose();
         }
         modelCache.clear();
     }
@@ -666,7 +652,7 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
     }
 
     private static float[] sphereTriangles(float radius, int slices, int stacks) {
-        ArrayList<Float> out = new ArrayList<Float>();
+        FloatArray out = new FloatArray();
         for(int stack = 0; stack < stacks; stack++) {
             float v0 = stack / (float)stacks;
             float v1 = (stack + 1) / (float)stacks;
@@ -683,12 +669,12 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
                 addTriangle(out, p01, p10, p11);
             }
         }
-        return toFloatArray(out);
+        return out.toArray();
     }
 
     private static float[] capsuleTriangles(float radius, float segmentLength, int slices, int hemisphereStacks) {
-        ArrayList<Float> out = new ArrayList<Float>();
-        ArrayList<float[]> rings = new ArrayList<float[]>();
+        FloatArray out = new FloatArray();
+        Array<float[]> rings = new Array<float[]>();
         float half = segmentLength * 0.5f;
         for(int i = 0; i <= hemisphereStacks; i++) {
             float t = i / (float)hemisphereStacks;
@@ -716,7 +702,7 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
                 addTriangle(out, p01, p10, p11);
             }
         }
-        return toFloatArray(out);
+        return out.toArray();
     }
 
     private static float[] spherePoint(float radius, float theta, float u) {
@@ -730,13 +716,13 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
         return new float[] { (float)Math.cos(phi) * ringRadius, y, (float)Math.sin(phi) * ringRadius };
     }
 
-    private static void addTriangle(ArrayList<Float> out, float[] p0, float[] p1, float[] p2) {
+    private static void addTriangle(FloatArray out, float[] p0, float[] p1, float[] p2) {
         addPoint(out, p0);
         addPoint(out, p1);
         addPoint(out, p2);
     }
 
-    private static void addPoint(ArrayList<Float> out, float[] point) {
+    private static void addPoint(FloatArray out, float[] point) {
         out.add(point[0]);
         out.add(point[1]);
         out.add(point[2]);
@@ -767,14 +753,6 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
         colors[offset++] = solidRgba[2];
         colors[offset++] = solidRgba[3];
         return offset;
-    }
-
-    private static float[] toFloatArray(ArrayList<Float> values) {
-        float[] out = new float[values.size()];
-        for(int i = 0; i < values.size(); i++) {
-            out[i] = values.get(i);
-        }
-        return out;
     }
 
     private static void transformPoint(B3Transform transform, B3Vec3 point, float[] out, int offset) {
@@ -827,7 +805,7 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
         Model meshModel;
         DefaultModelInstance meshInstance;
         B3Body shadowBody;
-        final ArrayList<PrimitiveInstance> primitives = new ArrayList<PrimitiveInstance>();
+        final Array<PrimitiveInstance> primitives = new Array<PrimitiveInstance>();
 
         boolean castsShadow() {
             return shadowBody != null && shadowBody.IsValid() && shadowBody.GetType() != B3.StaticBody();
@@ -875,103 +853,4 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
         }
     }
 
-    /** Primitive-long map used by the render loop without boxing shape IDs. */
-    private static final class LongDebugModelMap {
-        private static final int INITIAL_CAPACITY = 128;
-        private static final float LOAD_FACTOR = 0.7f;
-
-        private long[] keys = new long[INITIAL_CAPACITY];
-        private DebugModel[] values = new DebugModel[INITIAL_CAPACITY];
-        private DebugModel zeroValue;
-        private int size;
-        private int threshold = (int)(INITIAL_CAPACITY * LOAD_FACTOR);
-
-        boolean isEmpty() {
-            return size == 0;
-        }
-
-        DebugModel get(long key) {
-            if(key == 0L) {
-                return zeroValue;
-            }
-            int mask = keys.length - 1;
-            int index = index(key, mask);
-            while(keys[index] != 0L) {
-                if(keys[index] == key) {
-                    return values[index];
-                }
-                index = (index + 1) & mask;
-            }
-            return null;
-        }
-
-        void put(long key, DebugModel value) {
-            if(key == 0L) {
-                if(zeroValue == null) {
-                    size++;
-                }
-                zeroValue = value;
-                return;
-            }
-            if(size + 1 > threshold) {
-                resize(keys.length * 2);
-            }
-            putNonZero(key, value);
-        }
-
-        DebugModel zeroValue() {
-            return zeroValue;
-        }
-
-        int capacity() {
-            return values.length;
-        }
-
-        DebugModel valueAt(int index) {
-            return values[index];
-        }
-
-        void clear() {
-            Arrays.fill(keys, 0L);
-            Arrays.fill(values, null);
-            zeroValue = null;
-            size = 0;
-        }
-
-        private void putNonZero(long key, DebugModel value) {
-            int mask = keys.length - 1;
-            int index = index(key, mask);
-            while(keys[index] != 0L) {
-                if(keys[index] == key) {
-                    values[index] = value;
-                    return;
-                }
-                index = (index + 1) & mask;
-            }
-            keys[index] = key;
-            values[index] = value;
-            size++;
-        }
-
-        private void resize(int newCapacity) {
-            long[] oldKeys = keys;
-            DebugModel[] oldValues = values;
-            keys = new long[newCapacity];
-            values = new DebugModel[newCapacity];
-            threshold = (int)(newCapacity * LOAD_FACTOR);
-            size = zeroValue == null ? 0 : 1;
-            for(int i = 0; i < oldKeys.length; i++) {
-                if(oldKeys[i] != 0L) {
-                    putNonZero(oldKeys[i], oldValues[i]);
-                }
-            }
-        }
-
-        private static int index(long key, int mask) {
-            key ^= key >>> 33;
-            key *= 0xff51afd7ed558ccdL;
-            key ^= key >>> 33;
-            return (int)key & mask;
-        }
-    }
 }

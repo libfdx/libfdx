@@ -1,5 +1,6 @@
 package io.github.libfdx.net.webrtc.web;
 
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.net.webrtc.config.WebRtcEndpointSettings;
 import io.github.libfdx.net.webrtc.platform.WebRtcIceCandidate;
@@ -8,7 +9,6 @@ import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnectionListener;
 import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnectionProvider;
 import io.github.libfdx.net.webrtc.platform.WebRtcPeerConnectionState;
 import io.github.libfdx.net.webrtc.config.WebRtcTurnServer;
-import java.util.ArrayList;
 import org.teavm.jso.JSBody;
 
 /**
@@ -17,7 +17,7 @@ import org.teavm.jso.JSBody;
  * @author xpenatan
  */
 public final class WebWebRtcPeerConnectionProvider implements WebRtcPeerConnectionProvider {
-    private final ArrayList<WebWebRtcPeerConnection> connections = new ArrayList<WebWebRtcPeerConnection>();
+    private final Array<WebWebRtcPeerConnection> connections = new Array<WebWebRtcPeerConnection>();
     private boolean closed;
 
     @Override
@@ -79,7 +79,7 @@ public final class WebWebRtcPeerConnectionProvider implements WebRtcPeerConnecti
                     else if (failure != throwable) {
                         failure.addSuppressed(throwable);
                     }
-                    connections.remove(connection);
+                    connections.removeValue(connection, true);
                 }
             }
             if (failure instanceof RuntimeException) {
@@ -105,7 +105,7 @@ public final class WebWebRtcPeerConnectionProvider implements WebRtcPeerConnecti
     }
 
     void connectionClosed(WebWebRtcPeerConnection connection) {
-        connections.remove(connection);
+        connections.removeValue(connection, true);
     }
 
     static String iceServersJson(WebRtcEndpointSettings settings) {

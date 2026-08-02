@@ -19,6 +19,9 @@ public final class FloatMap<V> {
     private int occupied;
     private int threshold;
     private final float loadFactor;
+    private Entries<V> entries;
+    private Keys keysView;
+    private Values<V> valuesView;
 
     /**
      * Creates a map.
@@ -279,7 +282,10 @@ public final class FloatMap<V> {
      * @return the entries
      */
     public Iterable<Entry<V>> entries() {
-        return new Entries<V>(this);
+        if (entries == null) {
+            entries = new Entries<V>(this);
+        }
+        return entries;
     }
 
     /**
@@ -288,7 +294,10 @@ public final class FloatMap<V> {
      * @return the keys
      */
     public Keys keys() {
-        return new Keys(this);
+        if (keysView == null) {
+            keysView = new Keys(this);
+        }
+        return keysView;
     }
 
     /**
@@ -297,7 +306,10 @@ public final class FloatMap<V> {
      * @return the values
      */
     public Iterable<V> values() {
-        return new Values<V>(this);
+        if (valuesView == null) {
+            valuesView = new Values<V>(this);
+        }
+        return valuesView;
     }
 
     private int locate(float key) {

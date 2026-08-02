@@ -1,5 +1,6 @@
 package io.github.libfdx.net.webrtc.android;
 
+import io.github.libfdx.collections.Array;
 import android.content.Context;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.net.webrtc.config.WebRtcEndpointSettings;
@@ -26,8 +27,8 @@ public final class AndroidWebRtcPeerConnectionProvider implements WebRtcPeerConn
     private static boolean initialized;
 
     private final PeerConnectionFactory factory;
-    private final ArrayList<AndroidWebRtcPeerConnection> connections =
-            new ArrayList<AndroidWebRtcPeerConnection>();
+    private final Array<AndroidWebRtcPeerConnection> connections =
+            new Array<AndroidWebRtcPeerConnection>();
     private boolean closed;
 
     AndroidWebRtcPeerConnectionProvider(Context context) {
@@ -125,7 +126,7 @@ public final class AndroidWebRtcPeerConnectionProvider implements WebRtcPeerConn
                 }
                 catch (Throwable throwable) {
                     failure = firstFailure(failure, throwable);
-                    connections.remove(connection);
+                    connections.removeValue(connection, true);
                 }
             }
             try {
@@ -149,7 +150,7 @@ public final class AndroidWebRtcPeerConnectionProvider implements WebRtcPeerConn
     }
 
     synchronized void connectionClosed(AndroidWebRtcPeerConnection connection) {
-        connections.remove(connection);
+        connections.removeValue(connection, true);
     }
 
     private static Throwable firstFailure(Throwable first, Throwable next) {

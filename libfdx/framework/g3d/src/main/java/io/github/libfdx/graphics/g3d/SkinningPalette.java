@@ -1,9 +1,8 @@
 package io.github.libfdx.graphics.g3d;
 
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.math.Matrix4;
-
-import java.util.List;
 
 /**
  * Prepares reusable bone matrices for a skin.
@@ -26,7 +25,7 @@ public final class SkinningPalette {
             throw new FdxException("SkinningPalette skin and skeleton cannot be null");
         }
         this.skin = skin;
-        List<Bone> sourceBones = skin.skeleton().bones();
+        ArrayView<Bone> sourceBones = skin.skeleton().bones();
         bones = sourceBones.toArray(new Bone[0]);
         boneMatrices = new Matrix4[bones.length];
         values = new float[bones.length * Matrix4.VALUE_COUNT];

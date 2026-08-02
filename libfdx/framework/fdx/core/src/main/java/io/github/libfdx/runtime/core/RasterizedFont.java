@@ -1,9 +1,11 @@
 package io.github.libfdx.runtime.core;
 
+import io.github.libfdx.collections.IntMap;
+import io.github.libfdx.collections.IntMapView;
+import io.github.libfdx.collections.LongMap;
+import io.github.libfdx.collections.LongMapView;
+
 import java.nio.ByteBuffer;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * Represents a rasterized font.
@@ -18,8 +20,10 @@ public final class RasterizedFont {
     private final int atlasWidth;
     private final int atlasHeight;
     private final ByteBuffer rgba;
-    private final Map<Integer, RasterizedGlyph> glyphs;
-    private final Map<Long, Integer> kernings;
+    private final IntMap<RasterizedGlyph> glyphs;
+    private final LongMap<Integer> kernings;
+    private final IntMapView<RasterizedGlyph> glyphView;
+    private final LongMapView<Integer> kerningView;
 
     /**
      * Creates a rasterized font.
@@ -35,7 +39,8 @@ public final class RasterizedFont {
      * @param kernings the kernings
      */
     public RasterizedFont(String name, float nativeSize, float lineHeight, float baseLine, int atlasWidth,
-            int atlasHeight, ByteBuffer rgba, Map<Integer, RasterizedGlyph> glyphs, Map<Long, Integer> kernings) {
+            int atlasHeight, ByteBuffer rgba, IntMapView<RasterizedGlyph> glyphs,
+            LongMapView<Integer> kernings) {
         this.name = name != null ? name : "font";
         this.nativeSize = nativeSize > 0.0f ? nativeSize : 16.0f;
         this.lineHeight = lineHeight > 0.0f ? lineHeight : this.nativeSize;
@@ -43,8 +48,10 @@ public final class RasterizedFont {
         this.atlasWidth = Math.max(1, atlasWidth);
         this.atlasHeight = Math.max(1, atlasHeight);
         this.rgba = rgba != null ? rgba.slice() : ByteBuffer.allocateDirect(0);
-        this.glyphs = Collections.unmodifiableMap(new LinkedHashMap<Integer, RasterizedGlyph>(glyphs));
-        this.kernings = Collections.unmodifiableMap(new LinkedHashMap<Long, Integer>(kernings));
+        this.glyphs = glyphs != null ? new IntMap<RasterizedGlyph>(glyphs) : new IntMap<RasterizedGlyph>(0);
+        this.kernings = kernings != null ? new LongMap<Integer>(kernings) : new LongMap<Integer>(0);
+        this.glyphView = this.glyphs.view();
+        this.kerningView = this.kernings.view();
     }
 
     /**
@@ -98,11 +105,11 @@ public final class RasterizedFont {
      *
      * @return the glyphs
      */
-    public Map<Integer, RasterizedGlyph> glyphs() { return glyphs; }
+    public IntMapView<RasterizedGlyph> glyphs() { return glyphView; }
     /**
      * Returns the kernings.
      *
      * @return the kernings
      */
-    public Map<Long, Integer> kernings() { return kernings; }
+    public LongMapView<Integer> kernings() { return kerningView; }
 }

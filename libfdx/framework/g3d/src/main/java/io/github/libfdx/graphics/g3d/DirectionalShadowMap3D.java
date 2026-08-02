@@ -1,5 +1,7 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.IdentityMap;
 import io.github.libfdx.graphics.shader.reflection.ShaderInterpolation;
 import io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling;
 import io.github.libfdx.core.Disposable;
@@ -45,11 +47,7 @@ import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
 import io.github.libfdx.math.Matrix4;
 
-import java.util.List;
 import io.github.libfdx.math.Vector3;
-
-import java.util.IdentityHashMap;
-import java.util.Map;
 
 /**
  * Renders a directional-light shadow map into a sampled texture.
@@ -188,8 +186,8 @@ public final class DirectionalShadowMap3D implements Disposable {
         RenderPass pass = beginPass(light);
         try {
             batch.begin(pass, camera);
-            if (instances instanceof List<?>) {
-                List<?> values = (List<?>) instances;
+            if (instances instanceof ArrayView<?>) {
+                ArrayView<?> values = (ArrayView<?>)instances;
                 for (int i = 0; i < values.size(); i++) {
                     ModelInstance instance = (ModelInstance) values.get(i);
                     if (instance != null) {
@@ -414,8 +412,8 @@ public final class DirectionalShadowMap3D implements Disposable {
         private static final ShaderReflection REFLECTION = reflection();
         private final GraphicsContext graphics;
         private final ShaderModule shaderModule;
-        private final Map<VertexLayout, RenderPipeline[]> pipelines =
-                new IdentityHashMap<VertexLayout, RenderPipeline[]>();
+        private final IdentityMap<VertexLayout, RenderPipeline[]> pipelines =
+                new IdentityMap<VertexLayout, RenderPipeline[]>();
         private final ShaderParameterBlock uniformBlock =
                 ShaderParameterBlock.allocate(UNIFORM_LAYOUT);
         private final float[] modelMatrix = new float[Matrix4.VALUE_COUNT];

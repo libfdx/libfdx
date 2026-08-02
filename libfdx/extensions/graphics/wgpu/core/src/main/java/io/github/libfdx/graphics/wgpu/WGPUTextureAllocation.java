@@ -3,8 +3,7 @@ package io.github.libfdx.graphics.wgpu;
 import com.github.xpenatan.webgpu.WGPUSampler;
 import com.github.xpenatan.webgpu.WGPUTexture;
 import com.github.xpenatan.webgpu.WGPUTextureView;
-
-import java.util.ArrayList;
+import io.github.libfdx.collections.Array;
 
 /**
  * Owns one native texture/view/sampler allocation used by a logical WGPU texture.
@@ -14,7 +13,7 @@ final class WGPUTextureAllocation extends WGPURecordedResource {
     private final WGPUTextureView nativeView;
     private final WGPUTextureView nativeStorageView;
     private final WGPUSampler nativeSampler;
-    private ArrayList<WGPUTextureBindGroupResource> textureBindGroups;
+    private Array<WGPUTextureBindGroupResource> textureBindGroups;
 
     WGPUTextureAllocation(WGPUResourceDomain resourceDomain,
             WGPUTexture nativeTexture, WGPUTextureView nativeView,
@@ -47,7 +46,7 @@ final class WGPUTextureAllocation extends WGPURecordedResource {
             return;
         }
         if (textureBindGroups == null) {
-            textureBindGroups = new ArrayList<WGPUTextureBindGroupResource>();
+            textureBindGroups = new Array<WGPUTextureBindGroupResource>();
         }
         if (!textureBindGroups.contains(bindGroup)) {
             textureBindGroups.add(bindGroup);
@@ -60,7 +59,7 @@ final class WGPUTextureAllocation extends WGPURecordedResource {
         }
         for (int i = 0; i < textureBindGroups.size(); i++) {
             if (textureBindGroups.get(i) == bindGroup) {
-                textureBindGroups.remove(i);
+                textureBindGroups.removeIndex(i);
                 return;
             }
         }

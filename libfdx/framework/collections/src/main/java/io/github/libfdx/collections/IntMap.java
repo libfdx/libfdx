@@ -10,7 +10,7 @@ import java.util.NoSuchElementException;
  * @param <V> the value type
  * @author xpenatan
  */
-public final class IntMap<V> {
+public final class IntMap<V> implements IntMapView<V> {
     private static final float DEFAULT_LOAD_FACTOR = 0.75f;
     private int[] keys;
     private Object[] values;
@@ -19,6 +19,10 @@ public final class IntMap<V> {
     private int occupied;
     private int threshold;
     private final float loadFactor;
+    private Entries<V> entries;
+    private Keys keysView;
+    private Values<V> valuesView;
+    private IntMapView<V> view;
 
     /**
      * Creates a map.
@@ -34,6 +38,18 @@ public final class IntMap<V> {
      */
     public IntMap(int capacity) {
         this(capacity, DEFAULT_LOAD_FACTOR);
+    }
+
+    /**
+     * Creates a map containing a copy of the supplied entries.
+     *
+     * @param values the entries
+     */
+    public IntMap(IntMapView<? extends V> values) {
+        this(values != null ? values.size() : 0, DEFAULT_LOAD_FACTOR);
+        if (values != null) {
+            putAll(values);
+        }
     }
 
     /**
@@ -85,6 +101,23 @@ public final class IntMap<V> {
         values[index] = value;
         size++;
         return null;
+    }
+
+    /**
+     * Adds or replaces every entry from a read-only map view.
+     *
+     * @param entries the entries
+     * @return this map
+     */
+    public IntMap<V> putAll(IntMapView<? extends V> entries) {
+        if (entries == null) {
+            throw new IllegalArgumentException("entries must not be null");
+        }
+        ensureCapacity(entries.size());
+        for (Entry<? extends V> entry : entries.entries()) {
+            put(entry.key(), entry.value());
+        }
+        return this;
     }
 
     /**
@@ -279,7 +312,10 @@ public final class IntMap<V> {
      * @return the entries
      */
     public Iterable<Entry<V>> entries() {
-        return new Entries<V>(this);
+        if (entries == null) {
+            entries = new Entries<V>(this);
+        }
+        return entries;
     }
 
     /**
@@ -288,7 +324,10 @@ public final class IntMap<V> {
      * @return the keys
      */
     public Keys keys() {
-        return new Keys(this);
+        if (keysView == null) {
+            keysView = new Keys(this);
+        }
+        return keysView;
     }
 
     /**
@@ -297,7 +336,22 @@ public final class IntMap<V> {
      * @return the values
      */
     public Iterable<V> values() {
-        return new Values<V>(this);
+        if (valuesView == null) {
+            valuesView = new Values<V>(this);
+        }
+        return valuesView;
+    }
+
+    /**
+     * Returns a cached read-only live view of this map.
+     *
+     * @return the read-only view
+     */
+    public IntMapView<V> view() {
+        if (view == null) {
+            view = new ReadOnlyIntMapView<V>(this);
+        }
+        return view;
     }
 
     private int locate(int key) {
@@ -549,6 +603,79 @@ public final class IntMap<V> {
             while (nextIndex < map.states.length && map.states[nextIndex] != CollectionHash.USED) {
                 nextIndex++;
             }
+        }
+    }
+
+    private static final class ReadOnlyIntMapView<V> implements IntMapView<V> {
+        private final IntMap<V> map;
+
+        ReadOnlyIntMapView(IntMap<V> map) {
+            this.map = map;
+        }
+
+        @Override
+        public V get(int key) {
+            return map.get(key);
+        }
+
+        @Override
+        public V get(int key, V defaultValue) {
+            return map.get(key, defaultValue);
+        }
+
+        @Override
+        public boolean containsKey(int key) {
+            return map.containsKey(key);
+        }
+
+        @Override
+        public boolean containsValue(V value) {
+            return map.containsValue(value);
+        }
+
+        @Override
+        public boolean containsValue(V value, boolean identity) {
+            return map.containsValue(value, identity);
+        }
+
+        @Override
+        public int findKey(V value, int defaultKey) {
+            return map.findKey(value, defaultKey);
+        }
+
+        @Override
+        public int findKey(V value, boolean identity, int defaultKey) {
+            return map.findKey(value, identity, defaultKey);
+        }
+
+        @Override
+        public int size() {
+            return map.size();
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return map.isEmpty();
+        }
+
+        @Override
+        public boolean notEmpty() {
+            return map.notEmpty();
+        }
+
+        @Override
+        public Iterable<Entry<V>> entries() {
+            return map.entries();
+        }
+
+        @Override
+        public Keys keys() {
+            return map.keys();
+        }
+
+        @Override
+        public Iterable<V> values() {
+            return map.values();
         }
     }
 }

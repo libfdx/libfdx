@@ -9,7 +9,7 @@ import java.util.NoSuchElementException;
  * @param <T> the value type
  * @author xpenatan
  */
-public final class FdxLinkedList<T> implements Iterable<T> {
+public final class ObjectLinkedList<T> implements Iterable<T> {
     private Node<T> first;
     private Node<T> last;
     private int size;
@@ -17,7 +17,7 @@ public final class FdxLinkedList<T> implements Iterable<T> {
     /**
      * Creates a linked list.
      */
-    public FdxLinkedList() {
+    public ObjectLinkedList() {
     }
 
     /**
@@ -207,7 +207,7 @@ public final class FdxLinkedList<T> implements Iterable<T> {
      * @author xpenatan
      */
     public static final class Node<T> {
-        private FdxLinkedList<T> owner;
+        private ObjectLinkedList<T> owner;
         private Node<T> previous;
         private Node<T> next;
         private final T value;

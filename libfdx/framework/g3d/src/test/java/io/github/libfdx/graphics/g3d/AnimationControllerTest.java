@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
@@ -32,8 +33,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -188,15 +187,15 @@ final class AnimationControllerTest {
                 new MeshPart("gpu-part", mesh, null, 0, mesh.vertexCount()), material, skin,
                 new int[] {0, 0, 0, 0}, new float[] {1.0f, 0.0f, 0.0f, 0.0f}));
         root.addChild(new ModelNode("arm").localTransform(Matrix4.translation(0.0f, 1.0f, 0.0f)));
-        ArrayList<ModelNode> nodes = new ArrayList<ModelNode>();
+        Array<ModelNode> nodes = new Array<ModelNode>();
         nodes.add(root);
-        ArrayList<Material> materials = new ArrayList<Material>();
+        Array<Material> materials = new Array<Material>();
         materials.add(material);
-        ArrayList<Skin> skins = new ArrayList<Skin>();
+        Array<Skin> skins = new Array<Skin>();
         skins.add(skin);
-        ArrayList<Mesh> meshes = new ArrayList<Mesh>();
+        Array<Mesh> meshes = new Array<Mesh>();
         meshes.add(mesh);
-        DefaultModel model = new DefaultModel(nodes, materials, Collections.<AnimationClip>emptyList(), skins, meshes);
+        DefaultModel model = new DefaultModel(nodes, materials, new Array<AnimationClip>(0), skins, meshes);
         DefaultModelInstance instance = new DefaultModelInstance(model);
         new AnimationController(instance).play(moveArmClip(), false).time(1.5f);
         DefaultRenderQueue3D queue = new DefaultRenderQueue3D();
@@ -236,10 +235,10 @@ final class AnimationControllerTest {
         ModelNode root = new ModelNode("root").localTransform(Matrix4.translation(1.0f, 0.0f, 0.0f));
         root.addChild(new ModelNode("arm").localTransform(Matrix4.translation(0.0f, 1.0f, 0.0f)));
 
-        ArrayList<ModelNode> nodes = new ArrayList<ModelNode>();
+        Array<ModelNode> nodes = new Array<ModelNode>();
         nodes.add(root);
-        return new DefaultModel(nodes, Collections.<Material>emptyList(),
-                Collections.<AnimationClip>emptyList(), Collections.emptyList());
+        return new DefaultModel(nodes, new Array<Material>(0),
+                new Array<AnimationClip>(0), new Array<Mesh>(0));
     }
 
     private static DefaultModel hierarchicalModel() {
@@ -249,12 +248,12 @@ final class AnimationControllerTest {
         root.addChild(shoulder);
         shoulder.addChild(wrist);
 
-        ArrayList<ModelNode> nodes = new ArrayList<ModelNode>();
+        Array<ModelNode> nodes = new Array<ModelNode>();
         nodes.add(root);
-        ArrayList<Skin> skins = new ArrayList<Skin>();
+        Array<Skin> skins = new Array<Skin>();
         skins.add(hierarchicalSkin());
-        return new DefaultModel(nodes, Collections.<Material>emptyList(),
-                Collections.<AnimationClip>emptyList(), skins, Collections.<Mesh>emptyList());
+        return new DefaultModel(nodes, new Array<Material>(0),
+                new Array<AnimationClip>(0), skins, new Array<Mesh>(0));
     }
 
     private static DefaultModel skinnedModel(FakeGraphicsContext graphics) {
@@ -269,16 +268,16 @@ final class AnimationControllerTest {
                         material, skin, new int[] {0, 0, 0, 0}, new float[] {1.0f, 0.0f, 0.0f, 0.0f}));
         root.addChild(new ModelNode("arm").localTransform(Matrix4.translation(0.0f, 1.0f, 0.0f)));
 
-        ArrayList<ModelNode> nodes = new ArrayList<ModelNode>();
+        Array<ModelNode> nodes = new Array<ModelNode>();
         nodes.add(root);
-        ArrayList<Material> materials = new ArrayList<Material>();
+        Array<Material> materials = new Array<Material>();
         materials.add(material);
-        ArrayList<Skin> skins = new ArrayList<Skin>();
+        Array<Skin> skins = new Array<Skin>();
         skins.add(skin);
-        ArrayList<Mesh> meshes = new ArrayList<Mesh>();
+        Array<Mesh> meshes = new Array<Mesh>();
         meshes.add(firstMesh);
         meshes.add(secondMesh);
-        return new DefaultModel(nodes, materials, Collections.<AnimationClip>emptyList(), skins, meshes);
+        return new DefaultModel(nodes, materials, new Array<AnimationClip>(0), skins, meshes);
     }
 
     private static Mesh skinnedMesh(FakeGraphicsContext graphics, String id, float sourceY) {
@@ -310,13 +309,13 @@ final class AnimationControllerTest {
     }
 
     private static Skin skin() {
-        List<Bone> bones = new ArrayList<Bone>();
+        Array<Bone> bones = new Array<Bone>();
         bones.add(new Bone("arm", -1, Matrix4.translation(-1.0f, -1.0f, 0.0f)));
         return new Skin("arm-skin", new Skeleton(bones));
     }
 
     private static Skin hierarchicalSkin() {
-        List<Bone> bones = new ArrayList<Bone>();
+        Array<Bone> bones = new Array<Bone>();
         bones.add(new Bone("shoulder", -1, Matrix4.translation(0.0f, -1.0f, 0.0f)));
         bones.add(new Bone("wrist", 0, Matrix4.translation(0.0f, -2.0f, 0.0f)));
         return new Skin("arm-chain-skin", new Skeleton(bones));

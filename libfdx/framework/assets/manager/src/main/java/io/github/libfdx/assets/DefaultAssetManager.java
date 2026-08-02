@@ -1,18 +1,13 @@
 package io.github.libfdx.assets;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ObjectMap;
+import io.github.libfdx.collections.ObjectQueue;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.FdxFuture;
 import io.github.libfdx.core.FdxTask;
 import io.github.libfdx.files.FileSystem;
-
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
 
 /**
  * Manages default asset resources.
@@ -20,10 +15,11 @@ import java.util.Queue;
  * @author xpenatan
  */
 public final class DefaultAssetManager implements AssetManager {
-    private final Map<Class<?>, AssetLoader<?>> loaders = new LinkedHashMap<Class<?>, AssetLoader<?>>();
-    private final Map<String, DefaultAssetHandle<?>> handles = new LinkedHashMap<String, DefaultAssetHandle<?>>();
-    private final List<DefaultAssetHandle<?>> handleValues = new ArrayList<DefaultAssetHandle<?>>();
-    private final Queue<Runnable> updateTasks = new ArrayDeque<Runnable>();
+    private final ObjectMap<Class<?>, AssetLoader<?>> loaders = new ObjectMap<Class<?>, AssetLoader<?>>();
+    private final ObjectMap<String, DefaultAssetHandle<?>> handles =
+            new ObjectMap<String, DefaultAssetHandle<?>>();
+    private final Array<DefaultAssetHandle<?>> handleValues = new Array<DefaultAssetHandle<?>>();
+    private final ObjectQueue<Runnable> updateTasks = new ObjectQueue<Runnable>();
     private final FileSystem files;
     private volatile boolean disposed;
 
@@ -152,14 +148,13 @@ public final class DefaultAssetManager implements AssetManager {
      */
     @Override
     public void unload(String path) {
-        List<DefaultAssetHandle<?>> unloadedHandles = new ArrayList<DefaultAssetHandle<?>>();
+        Array<DefaultAssetHandle<?>> unloadedHandles = new Array<DefaultAssetHandle<?>>();
         synchronized (this) {
-            Iterator<Map.Entry<String, DefaultAssetHandle<?>>> iterator = handles.entrySet().iterator();
-            while (iterator.hasNext()) {
-                DefaultAssetHandle<?> handle = iterator.next().getValue();
+            for (int i = handleValues.size() - 1; i >= 0; i--) {
+                DefaultAssetHandle<?> handle = handleValues.get(i);
                 if (handle.descriptor().path().equals(path)) {
-                    iterator.remove();
-                    handleValues.remove(handle);
+                    handles.remove(key(handle.descriptor().path(), handle.descriptor().type()));
+                    handleValues.removeIndex(i);
                     unloadedHandles.add(handle);
                 }
             }
@@ -194,13 +189,13 @@ public final class DefaultAssetManager implements AssetManager {
      */
     @Override
     public void dispose() {
-        List<DefaultAssetHandle<?>> disposedHandles;
+        Array<DefaultAssetHandle<?>> disposedHandles;
         synchronized (this) {
             if (disposed) {
                 return;
             }
             disposed = true;
-            disposedHandles = new ArrayList<DefaultAssetHandle<?>>(handleValues);
+            disposedHandles = new Array<DefaultAssetHandle<?>>(handleValues);
             handles.clear();
             handleValues.clear();
             loaders.clear();
@@ -245,7 +240,7 @@ public final class DefaultAssetManager implements AssetManager {
         while (true) {
             Runnable task;
             synchronized (updateTasks) {
-                task = updateTasks.poll();
+                task = updateTasks.pollFirst();
             }
             if (task == null) {
                 return;
@@ -322,7 +317,7 @@ public final class DefaultAssetManager implements AssetManager {
             synchronized (updateTasks) {
                 rejected = disposed;
                 if (!rejected) {
-                    updateTasks.add(new Runnable() {
+                    updateTasks.addLast(new Runnable() {
                         @Override
                         public void run() {
                             try {

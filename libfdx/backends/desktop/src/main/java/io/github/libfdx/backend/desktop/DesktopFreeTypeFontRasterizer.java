@@ -1,5 +1,7 @@
 package io.github.libfdx.backend.desktop;
 
+import io.github.libfdx.collections.IntMap;
+import io.github.libfdx.collections.LongMap;
 import io.github.libfdx.runtime.core.FontRasterizer;
 import io.github.libfdx.runtime.core.FontRasterizerOptions;
 import io.github.libfdx.runtime.core.RasterizedFont;
@@ -7,9 +9,7 @@ import io.github.libfdx.runtime.core.RasterizedGlyph;
 import io.github.libfdx.runtime.core.RuntimeCoreException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -90,15 +90,15 @@ final class DesktopFreeTypeFontRasterizer implements FontRasterizer {
         int atlasWidth = atlasWidth(options, glyphs);
         int atlasHeight = packGlyphs(glyphs, atlasWidth, options.padding());
         ByteBuffer rgba = ByteBuffer.allocateDirect(atlasWidth * atlasHeight * 4);
-        Map<Integer, RasterizedGlyph> rasterizedGlyphs = new LinkedHashMap<Integer, RasterizedGlyph>();
-        Map<Integer, Integer> glyphIndices = new LinkedHashMap<Integer, Integer>();
+        IntMap<RasterizedGlyph> rasterizedGlyphs = new IntMap<RasterizedGlyph>();
+        IntMap<Integer> glyphIndices = new IntMap<Integer>();
 
         for (int i = 0; i < glyphs.size(); i++) {
             GlyphBitmap glyph = glyphs.get(i);
             writeGlyph(rgba, atlasWidth, glyph);
-            rasterizedGlyphs.put(Integer.valueOf(glyph.codePoint), new RasterizedGlyph(glyph.codePoint, glyph.x,
+            rasterizedGlyphs.put(glyph.codePoint, new RasterizedGlyph(glyph.codePoint, glyph.x,
                     glyph.y, glyph.width, glyph.height, glyph.xOffset, glyph.yOffset, glyph.xAdvance));
-            glyphIndices.put(Integer.valueOf(glyph.codePoint), Integer.valueOf(glyph.glyphIndex));
+            glyphIndices.put(glyph.codePoint, Integer.valueOf(glyph.glyphIndex));
         }
         rgba.clear();
 
@@ -211,9 +211,9 @@ final class DesktopFreeTypeFontRasterizer implements FontRasterizer {
         }
     }
 
-    private Map<Long, Integer> createKernings(FT_Face face, List<GlyphBitmap> glyphs,
-            Map<Integer, Integer> glyphIndices) {
-        Map<Long, Integer> kernings = new LinkedHashMap<Long, Integer>();
+    private LongMap<Integer> createKernings(FT_Face face, List<GlyphBitmap> glyphs,
+            IntMap<Integer> glyphIndices) {
+        LongMap<Integer> kernings = new LongMap<Integer>();
         if (!FT_HAS_KERNING(face)) {
             return kernings;
         }
@@ -233,7 +233,7 @@ final class DesktopFreeTypeFontRasterizer implements FontRasterizer {
                     }
                     int error = FT_Get_Kerning(face, leftIndex, rightIndex, FT_KERNING_DEFAULT, kerning);
                     if (error == 0 && kerning.x() != 0L) {
-                        kernings.put(Long.valueOf(kerningKey(left.codePoint, right.codePoint)),
+                        kernings.put(kerningKey(left.codePoint, right.codePoint),
                                 Integer.valueOf(Math.round(pixels(kerning.x()))));
                     }
                 }

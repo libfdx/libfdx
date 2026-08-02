@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.math.Color;
 
@@ -15,7 +16,6 @@ import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.TextureView;
 
-import java.util.List;
 
 /**
  * Represents a model batch.
@@ -330,8 +330,8 @@ public final class ModelBatch implements Batch3D {
         if (instances == null) {
             throw new FdxException("ModelInstance iterable cannot be null");
         }
-        if (instances instanceof List<?>) {
-            List<?> values = (List<?>) instances;
+        if (instances instanceof ArrayView<?>) {
+            ArrayView<?> values = (ArrayView<?>)instances;
             for (int i = 0; i < values.size(); i++) {
                 render((ModelInstance) values.get(i));
             }

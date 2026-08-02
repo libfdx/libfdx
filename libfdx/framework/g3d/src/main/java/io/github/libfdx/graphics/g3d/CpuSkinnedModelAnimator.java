@@ -1,10 +1,10 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.IntArray;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsContext;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Updates imported skinned model meshes using CPU animation and skinning.
@@ -34,10 +34,10 @@ public final class CpuSkinnedModelAnimator {
         this.instance = instance;
         controller = new AnimationController(instance);
 
-        ArrayList<SkinningPalette> paletteList = new ArrayList<SkinningPalette>();
-        ArrayList<CpuSkinningMeshUpdater> updaterList = new ArrayList<CpuSkinningMeshUpdater>();
-        ArrayList<Integer> updaterPaletteIndices = new ArrayList<Integer>();
-        List<Skin> skins = instance.model().skins();
+        Array<SkinningPalette> paletteList = new Array<SkinningPalette>();
+        Array<CpuSkinningMeshUpdater> updaterList = new Array<CpuSkinningMeshUpdater>();
+        IntArray updaterPaletteIndices = new IntArray();
+        ArrayView<Skin> skins = instance.model().skins();
         for (int i = 0; i < skins.size(); i++) {
             Skin skin = skins.get(i);
             if (skin != null) {
@@ -50,7 +50,7 @@ public final class CpuSkinnedModelAnimator {
         meshUpdaters = updaterList.toArray(new CpuSkinningMeshUpdater[0]);
         meshPaletteIndices = new int[updaterPaletteIndices.size()];
         for (int i = 0; i < updaterPaletteIndices.size(); i++) {
-            meshPaletteIndices[i] = updaterPaletteIndices.get(i).intValue();
+            meshPaletteIndices[i] = updaterPaletteIndices.get(i);
         }
     }
 
@@ -149,12 +149,12 @@ public final class CpuSkinnedModelAnimator {
         return meshUpdaters.length;
     }
 
-    private static void collectSkinnedParts(GraphicsContext graphics, List<ModelNode> nodes,
-            ArrayList<SkinningPalette> palettes, ArrayList<CpuSkinningMeshUpdater> updaters,
-            ArrayList<Integer> updaterPaletteIndices) {
+    private static void collectSkinnedParts(GraphicsContext graphics, ArrayView<ModelNode> nodes,
+            Array<SkinningPalette> palettes, Array<CpuSkinningMeshUpdater> updaters,
+            IntArray updaterPaletteIndices) {
         for (int i = 0; i < nodes.size(); i++) {
             ModelNode node = nodes.get(i);
-            List<ModelNodePart> parts = node.parts();
+            ArrayView<ModelNodePart> parts = node.parts();
             for (int partIndex = 0; partIndex < parts.size(); partIndex++) {
                 ModelNodePart part = parts.get(partIndex);
                 Skin skin = part.skin();
@@ -169,13 +169,13 @@ public final class CpuSkinnedModelAnimator {
                     paletteIndex = palettes.size() - 1;
                 }
                 updaters.add(new CpuSkinningMeshUpdater(graphics, part.meshPart().mesh(), joints, weights));
-                updaterPaletteIndices.add(Integer.valueOf(paletteIndex));
+                updaterPaletteIndices.add(paletteIndex);
             }
             collectSkinnedParts(graphics, node.children(), palettes, updaters, updaterPaletteIndices);
         }
     }
 
-    private static int paletteIndex(Skin skin, ArrayList<SkinningPalette> palettes) {
+    private static int paletteIndex(Skin skin, Array<SkinningPalette> palettes) {
         for (int i = 0; i < palettes.size(); i++) {
             if (palettes.get(i).skin() == skin) {
                 return i;

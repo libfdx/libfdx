@@ -8,6 +8,7 @@ import imgui.ImGuiViewportPlatformCallbacks;
 import imgui.enums.ImGuiBackendFlags;
 import imgui.enums.ImGuiViewportFlags;
 import io.github.libfdx.Fdx;
+import io.github.libfdx.collections.IntMap;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.display.Display;
 import io.github.libfdx.display.DisplayConfig;
@@ -16,9 +17,6 @@ import io.github.libfdx.graphics.GraphicsAttachment;
 import io.github.libfdx.graphics.GraphicsConfig;
 import io.github.libfdx.input.Input;
 
-import java.util.HashMap;
-import java.util.Map;
-
 final class FdxImGuiViewportPlatform extends ImGuiViewportPlatformCallbacks {
     private final Fdx fdx;
     private final Display mainDisplay;
@@ -26,7 +24,7 @@ final class FdxImGuiViewportPlatform extends ImGuiViewportPlatformCallbacks {
     private final FdxImGuiRenderer mainRenderer;
     private final FdxImGuiTextureRegistry textures;
     private final GraphicsAttachmentProvider graphicsProvider;
-    private final Map<Integer, WindowData> windows = new HashMap<>();
+    private final IntMap<WindowData> windows = new IntMap<WindowData>();
     private boolean installed;
     private boolean disposed;
 

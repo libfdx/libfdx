@@ -3,6 +3,7 @@ package io.github.libfdx.tools.project.generator.ui;
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
+import io.github.libfdx.collections.ObjectMapEntry;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.tools.project.generator.GeneratedProject;
 import io.github.libfdx.tools.project.generator.ProjectGenerationResult;
@@ -21,7 +22,6 @@ import io.github.libfdx.ui.UiStyle;
 import io.github.libfdx.ui.UiTheme;
 import io.github.libfdx.ui.UiToolkit;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Presents the bundled-sample project generator.
@@ -138,9 +138,9 @@ public final class ProjectGeneratorApplication extends ApplicationAdapter {
     private UiTheme generatorTheme() {
         UiFont font = UiFont.freeType(UI_FONT_ASSET, 16.0f);
         UiTheme theme = UiTheme.dark();
-        for (Map.Entry<String, UiStyle> entry : theme.styles().entrySet()) {
-            UiStyle style = entry.getValue();
-            theme = theme.style(entry.getKey(), style.text(style.textStyle().font(font)));
+        for (ObjectMapEntry<String, UiStyle> entry : theme.styles().entries()) {
+            UiStyle style = entry.value();
+            theme = theme.style(entry.key(), style.text(style.textStyle().font(font)));
         }
         return theme;
     }

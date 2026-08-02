@@ -1,13 +1,13 @@
 package io.github.libfdx.backend.android;
 
+import io.github.libfdx.collections.IntMap;
+import io.github.libfdx.collections.LongMap;
 import io.github.libfdx.runtime.core.FontRasterizer;
 import io.github.libfdx.runtime.core.FontRasterizerOptions;
 import io.github.libfdx.runtime.core.RasterizedFont;
 import io.github.libfdx.runtime.core.RasterizedGlyph;
 import io.github.libfdx.runtime.core.RuntimeCoreException;
 import java.nio.ByteBuffer;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * Represents an android free type font rasterizer.
@@ -63,20 +63,20 @@ final class AndroidFreeTypeFontRasterizer implements FontRasterizer {
         }
         rgba.clear();
 
-        Map<Integer, RasterizedGlyph> glyphs = new LinkedHashMap<Integer, RasterizedGlyph>();
+        IntMap<RasterizedGlyph> glyphs = new IntMap<RasterizedGlyph>();
         for (int i = 0; i < glyphCount; i++) {
             int intIndex = i * 5;
             int floatIndex = i * 3;
             int codePoint = glyphInts[intIndex];
-            glyphs.put(Integer.valueOf(codePoint), new RasterizedGlyph(codePoint, glyphInts[intIndex + 1],
+            glyphs.put(codePoint, new RasterizedGlyph(codePoint, glyphInts[intIndex + 1],
                     glyphInts[intIndex + 2], glyphInts[intIndex + 3], glyphInts[intIndex + 4],
                     glyphFloats[floatIndex], glyphFloats[floatIndex + 1], glyphFloats[floatIndex + 2]));
         }
 
-        Map<Long, Integer> kernings = new LinkedHashMap<Long, Integer>();
+        LongMap<Integer> kernings = new LongMap<Integer>();
         for (int i = 0; i < kerningCount; i++) {
             int index = i * 3;
-            kernings.put(Long.valueOf(kerningKey(kerningInts[index], kerningInts[index + 1])),
+            kernings.put(kerningKey(kerningInts[index], kerningInts[index + 1]),
                     Integer.valueOf(kerningInts[index + 2]));
         }
 

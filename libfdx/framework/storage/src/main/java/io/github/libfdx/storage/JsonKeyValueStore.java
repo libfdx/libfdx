@@ -1,13 +1,13 @@
 package io.github.libfdx.storage;
 
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.collections.ObjectMapEntry;
+import io.github.libfdx.collections.OrderedMap;
 import io.github.libfdx.json.Json;
 import io.github.libfdx.json.JsonValue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 final class JsonKeyValueStore implements KeyValueStore {
     private static final String TYPE_STRING = "string";
@@ -24,7 +24,7 @@ final class JsonKeyValueStore implements KeyValueStore {
     private final String name;
     private final String path;
     private final StorageCodec codec;
-    private final LinkedHashMap<String, Entry> entries = new LinkedHashMap<String, Entry>();
+    private final OrderedMap<String, Entry> entries = new OrderedMap<String, Entry>();
     private final Json json = new Json();
     private boolean loaded;
     private boolean dirty;
@@ -72,10 +72,10 @@ final class JsonKeyValueStore implements KeyValueStore {
             JsonValue root = json.read(decoded);
             JsonValue storedEntries = root.get("entries");
             if (storedEntries != null && storedEntries.isObject()) {
-                for (Map.Entry<String, JsonValue> entry : storedEntries.objectMembers().entrySet()) {
-                    Entry storedEntry = readEntry(entry.getValue());
+                for (ObjectMapEntry<String, JsonValue> entry : storedEntries.objectMembers().entries()) {
+                    Entry storedEntry = readEntry(entry.value());
                     if (storedEntry != null) {
-                        entries.put(entry.getKey(), storedEntry);
+                        entries.put(entry.key(), storedEntry);
                     }
                 }
             }
@@ -103,7 +103,12 @@ final class JsonKeyValueStore implements KeyValueStore {
     @Override
     public String[] keys() {
         ensureLoaded();
-        return entries.keySet().toArray(new String[entries.size()]);
+        String[] keys = new String[entries.size()];
+        int index = 0;
+        for (String key : entries.keys()) {
+            keys[index++] = key;
+        }
+        return keys;
     }
 
     @Override
@@ -263,8 +268,8 @@ final class JsonKeyValueStore implements KeyValueStore {
     private JsonValue writeRoot() {
         JsonValue root = JsonValue.object();
         JsonValue storedEntries = JsonValue.object();
-        for (Map.Entry<String, Entry> mapEntry : entries.entrySet()) {
-            storedEntries.put(mapEntry.getKey(), writeEntry(mapEntry.getValue()));
+        for (OrderedMap.Entry<String, Entry> mapEntry : entries.entries()) {
+            storedEntries.put(mapEntry.key(), writeEntry(mapEntry.value()));
         }
         root.put("version", 1);
         root.put("entries", storedEntries);

@@ -1,10 +1,7 @@
 package io.github.libfdx.validation.scenario;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
 
 /**
  * Represents a scenario catalog.
@@ -12,7 +9,7 @@ import java.util.Set;
  * @author xpenatan
  */
 public final class ScenarioCatalog {
-    private final ArrayList<Scenario> scenarios = new ArrayList<Scenario>();
+    private final Array<Scenario> scenarios = new Array<Scenario>();
 
     private ScenarioCatalog() {
     }
@@ -58,8 +55,8 @@ public final class ScenarioCatalog {
      *
      * @return the scenarios
      */
-    public List<Scenario> scenarios() {
-        return Collections.unmodifiableList(scenarios);
+    public ArrayView<Scenario> scenarios() {
+        return scenarios.view();
     }
 
     /**
@@ -68,29 +65,31 @@ public final class ScenarioCatalog {
      * @param selection the selection
      * @return the select
      */
-    public List<Scenario> select(String selection) {
+    public ArrayView<Scenario> select(String selection) {
         String normalizedSelection = selection != null ? selection.trim() : "";
         if (normalizedSelection.length() == 0 || "all".equalsIgnoreCase(normalizedSelection)) {
             return scenarios();
         }
-        Set<String> names = new LinkedHashSet<String>();
+        Array<String> names = new Array<String>();
         String[] parts = normalizedSelection.split(",");
         for (int i = 0; i < parts.length; i++) {
             String name = parts[i].trim();
             if (name.length() > 0) {
-                names.add(name);
+                if (!names.contains(name)) {
+                    names.add(name);
+                }
             }
         }
-        ArrayList<Scenario> selected = new ArrayList<Scenario>();
+        Array<Scenario> selected = new Array<Scenario>();
         for (int i = 0; i < scenarios.size(); i++) {
             Scenario scenario = scenarios.get(i);
-            if (names.remove(scenario.name())) {
+            if (names.removeValue(scenario.name())) {
                 selected.add(scenario);
             }
         }
         if (!names.isEmpty()) {
-            throw new IllegalArgumentException("Unknown scenario selection: " + names);
+            throw new IllegalArgumentException("Unknown scenario selection: [" + String.join(", ", names) + "]");
         }
-        return Collections.unmodifiableList(selected);
+        return selected.view();
     }
 }

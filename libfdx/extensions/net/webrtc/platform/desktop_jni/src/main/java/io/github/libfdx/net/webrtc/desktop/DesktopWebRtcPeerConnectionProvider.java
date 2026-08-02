@@ -1,5 +1,6 @@
 package io.github.libfdx.net.webrtc.desktop;
 
+import io.github.libfdx.collections.Array;
 import dev.onvoid.webrtc.PeerConnectionFactory;
 import dev.onvoid.webrtc.PeerConnectionObserver;
 import dev.onvoid.webrtc.RTCConfiguration;
@@ -28,8 +29,8 @@ import java.util.Collections;
 public final class DesktopWebRtcPeerConnectionProvider implements WebRtcPeerConnectionProvider {
     private final HeadlessAudioDeviceModule audioDeviceModule;
     private final PeerConnectionFactory factory;
-    private final ArrayList<DesktopWebRtcPeerConnection> connections =
-            new ArrayList<DesktopWebRtcPeerConnection>();
+    private final Array<DesktopWebRtcPeerConnection> connections =
+            new Array<DesktopWebRtcPeerConnection>();
     private boolean closed;
 
     public DesktopWebRtcPeerConnectionProvider() {
@@ -97,7 +98,7 @@ public final class DesktopWebRtcPeerConnectionProvider implements WebRtcPeerConn
                 }
                 catch (Throwable throwable) {
                     failure = firstFailure(failure, throwable);
-                    connections.remove(connection);
+                    connections.removeValue(connection, true);
                 }
             }
             try {
@@ -127,7 +128,7 @@ public final class DesktopWebRtcPeerConnectionProvider implements WebRtcPeerConn
     }
 
     synchronized void connectionClosed(DesktopWebRtcPeerConnection connection) {
-        connections.remove(connection);
+        connections.removeValue(connection, true);
     }
 
     private static Throwable firstFailure(Throwable first, Throwable next) {

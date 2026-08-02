@@ -11,7 +11,7 @@ import java.util.NoSuchElementException;
  * @param <V> the value type
  * @author xpenatan
  */
-public final class ObjectMap<K, V> {
+public class ObjectMap<K, V> implements ObjectMapView<K, V> {
     private static final float DEFAULT_LOAD_FACTOR = 0.75f;
     private Object[] keys;
     private Object[] values;
@@ -20,6 +20,10 @@ public final class ObjectMap<K, V> {
     private int occupied;
     private int threshold;
     private final float loadFactor;
+    private Entries<K, V> entries;
+    private Keys<K, V> keysView;
+    private Values<K, V> valuesView;
+    private ObjectMapView<K, V> view;
 
     /**
      * Creates a map.
@@ -35,6 +39,18 @@ public final class ObjectMap<K, V> {
      */
     public ObjectMap(int capacity) {
         this(capacity, DEFAULT_LOAD_FACTOR);
+    }
+
+    /**
+     * Creates a map containing a copy of the supplied entries.
+     *
+     * @param values the entries
+     */
+    public ObjectMap(ObjectMapView<? extends K, ? extends V> values) {
+        this(values != null ? values.size() : 0, DEFAULT_LOAD_FACTOR);
+        if (values != null) {
+            putAll(values);
+        }
     }
 
     /**
@@ -87,6 +103,23 @@ public final class ObjectMap<K, V> {
         values[index] = value;
         size++;
         return null;
+    }
+
+    /**
+     * Adds or replaces every entry from a read-only map view.
+     *
+     * @param entries the entries
+     * @return this map
+     */
+    public ObjectMap<K, V> putAll(ObjectMapView<? extends K, ? extends V> entries) {
+        if (entries == null) {
+            throw new IllegalArgumentException("entries must not be null");
+        }
+        ensureCapacity(entries.size());
+        for (ObjectMapEntry<? extends K, ? extends V> entry : entries.entries()) {
+            put(entry.key(), entry.value());
+        }
+        return this;
     }
 
     /**
@@ -285,7 +318,10 @@ public final class ObjectMap<K, V> {
      * @return the entries
      */
     public Iterable<Entry<K, V>> entries() {
-        return new Entries<K, V>(this);
+        if (entries == null) {
+            entries = new Entries<K, V>(this);
+        }
+        return entries;
     }
 
     /**
@@ -294,7 +330,10 @@ public final class ObjectMap<K, V> {
      * @return the keys
      */
     public Iterable<K> keys() {
-        return new Keys<K, V>(this);
+        if (keysView == null) {
+            keysView = new Keys<K, V>(this);
+        }
+        return keysView;
     }
 
     /**
@@ -303,19 +342,34 @@ public final class ObjectMap<K, V> {
      * @return the values
      */
     public Iterable<V> values() {
-        return new Values<K, V>(this);
+        if (valuesView == null) {
+            valuesView = new Values<K, V>(this);
+        }
+        return valuesView;
+    }
+
+    /**
+     * Returns a cached read-only live view of this map.
+     *
+     * @return the read-only view
+     */
+    public ObjectMapView<K, V> view() {
+        if (view == null) {
+            view = new ReadOnlyObjectMapView<K, V>(this);
+        }
+        return view;
     }
 
     private int locate(K key) {
         int mask = keys.length - 1;
-        int index = CollectionHash.mix(key.hashCode()) & mask;
+        int index = CollectionHash.mix(keyHash(key)) & mask;
         int firstRemoved = -1;
         for (int probes = 0; probes < keys.length; probes++) {
             byte state = states[index];
             if (state == CollectionHash.EMPTY) {
                 return -(firstRemoved >= 0 ? firstRemoved : index) - 1;
             }
-            if (state == CollectionHash.USED && key.equals(keys[index])) {
+            if (state == CollectionHash.USED && keysEqual(key, keys[index])) {
                 return index;
             }
             if (state == CollectionHash.REMOVED && firstRemoved < 0) {
@@ -324,6 +378,29 @@ public final class ObjectMap<K, V> {
             index = (index + 1) & mask;
         }
         return -(firstRemoved >= 0 ? firstRemoved : 0) - 1;
+    }
+
+    /**
+     * Returns the hash used for a key. Subclasses may override this together
+     * with {@link #keysEqual(Object, Object)} to provide another key policy.
+     *
+     * @param key the non-null key
+     * @return the key hash
+     */
+    protected int keyHash(K key) {
+        return key.hashCode();
+    }
+
+    /**
+     * Returns whether two keys match. Subclasses may override this together
+     * with {@link #keyHash(Object)} to provide another key policy.
+     *
+     * @param key the lookup key
+     * @param storedKey the stored key
+     * @return true if the keys match
+     */
+    protected boolean keysEqual(K key, Object storedKey) {
+        return key.equals(storedKey);
     }
 
     private void allocate(int tableSize) {
@@ -381,7 +458,7 @@ public final class ObjectMap<K, V> {
      * @param <V> the value type
      * @author xpenatan
      */
-    public static final class Entry<K, V> {
+    public static final class Entry<K, V> implements ObjectMapEntry<K, V> {
         private K key;
         private V value;
 
@@ -548,6 +625,79 @@ public final class ObjectMap<K, V> {
             while (nextIndex < map.states.length && map.states[nextIndex] != CollectionHash.USED) {
                 nextIndex++;
             }
+        }
+    }
+
+    private static final class ReadOnlyObjectMapView<K, V> implements ObjectMapView<K, V> {
+        private final ObjectMap<K, V> map;
+
+        ReadOnlyObjectMapView(ObjectMap<K, V> map) {
+            this.map = map;
+        }
+
+        @Override
+        public V get(K key) {
+            return map.get(key);
+        }
+
+        @Override
+        public V get(K key, V defaultValue) {
+            return map.get(key, defaultValue);
+        }
+
+        @Override
+        public boolean containsKey(K key) {
+            return map.containsKey(key);
+        }
+
+        @Override
+        public boolean containsValue(V value) {
+            return map.containsValue(value);
+        }
+
+        @Override
+        public boolean containsValue(V value, boolean identity) {
+            return map.containsValue(value, identity);
+        }
+
+        @Override
+        public K findKey(V value) {
+            return map.findKey(value);
+        }
+
+        @Override
+        public K findKey(V value, boolean identity) {
+            return map.findKey(value, identity);
+        }
+
+        @Override
+        public int size() {
+            return map.size();
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return map.isEmpty();
+        }
+
+        @Override
+        public boolean notEmpty() {
+            return map.notEmpty();
+        }
+
+        @Override
+        public Iterable<? extends ObjectMapEntry<K, V>> entries() {
+            return map.entries();
+        }
+
+        @Override
+        public Iterable<K> keys() {
+            return map.keys();
+        }
+
+        @Override
+        public Iterable<V> values() {
+            return map.values();
         }
     }
 }

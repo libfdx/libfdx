@@ -1,8 +1,7 @@
 package io.github.libfdx.validation.scenario;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
 
 /**
  * Represents a scenario events.
@@ -100,15 +99,15 @@ public final class ScenarioEvents {
      *
      * @return the recent
      */
-    public List<String> recent() {
+    public ArrayView<String> recent() {
         if (size == 0) {
-            return Collections.emptyList();
+            return Array.emptyView();
         }
-        ArrayList<String> recent = new ArrayList<String>(size);
+        Array<String> recent = new Array<String>(size);
         for (int i = 0; i < size; i++) {
             recent.add(events[indexAt(i)]);
         }
-        return Collections.unmodifiableList(recent);
+        return recent.view();
     }
 
     /**

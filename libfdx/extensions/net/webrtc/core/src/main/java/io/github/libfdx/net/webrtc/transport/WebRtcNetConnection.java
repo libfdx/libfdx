@@ -1,5 +1,6 @@
 package io.github.libfdx.net.webrtc.transport;
 
+import io.github.libfdx.collections.IntMap;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.json.JsonValue;
@@ -21,8 +22,6 @@ import io.github.libfdx.net.webrtc.platform.WebRtcSessionDescription;
 import io.github.libfdx.net.webrtc.platform.WebRtcSessionDescriptionCallback;
 import io.github.libfdx.net.webrtc.signaling.WebRtcSignalingMessageType;
 import io.github.libfdx.net.webrtc.WebRtcProvider;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * WebRTC-backed NetConnection.
@@ -35,9 +34,8 @@ public final class WebRtcNetConnection implements NetConnection {
     private final AbstractWebRtcEndpoint endpoint;
     private final int id;
     private final String remotePeerId;
-    private final HashMap<Integer, WebRtcDataChannel> channels = new HashMap<Integer, WebRtcDataChannel>();
-    private final HashMap<Integer, NetPacketTransform> transformOverrides =
-            new HashMap<Integer, NetPacketTransform>();
+    private final IntMap<WebRtcDataChannel> channels = new IntMap<WebRtcDataChannel>();
+    private final IntMap<NetPacketTransform> transformOverrides = new IntMap<NetPacketTransform>();
     private final NetTransformContext transformContext = new NetTransformContext();
     private WebRtcPeerConnection peerConnection;
     private NetConnectionState state = NetConnectionState.CONNECTING;
@@ -363,8 +361,8 @@ public final class WebRtcNetConnection implements NetConnection {
             return;
         }
         state = NetConnectionState.DISCONNECTED;
-        for (Map.Entry<Integer, WebRtcDataChannel> entry : channels.entrySet()) {
-            entry.getValue().close();
+        for (IntMap.Entry<WebRtcDataChannel> entry : channels.entries()) {
+            entry.value().close();
         }
         channels.clear();
         if (peerConnection != null) {

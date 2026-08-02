@@ -12,12 +12,11 @@ import com.github.xpenatan.webgpu.WGPULimits;
 import com.github.xpenatan.webgpu.WGPURenderPassEncoder;
 import com.github.xpenatan.webgpu.WGPUVectorBindGroupEntry;
 import com.github.xpenatan.webgpu.WGPUVectorInt;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.IdentityMap;
 import io.github.libfdx.core.FdxException;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.IdentityHashMap;
-import java.util.Map;
 
 /**
  * Reuses dynamically offset uniform buffers and bind groups across submitted
@@ -28,7 +27,7 @@ final class WGPUUniformArena {
 
     private final WGPUContext context;
     private final int alignment;
-    private final ArrayList<SizeClass> sizes = new ArrayList<SizeClass>();
+    private final Array<SizeClass> sizes = new Array<SizeClass>();
     private final WGPUVectorInt dynamicOffsets = new WGPUVectorInt();
     private boolean disposed;
 
@@ -133,7 +132,7 @@ final class WGPUUniformArena {
     private final class SizeClass {
         final int byteCount;
         final int stride;
-        final ArrayList<Chunk> chunks = new ArrayList<Chunk>();
+        final Array<Chunk> chunks = new Array<Chunk>();
         int allocationCursor;
 
         SizeClass(int byteCount) {
@@ -159,8 +158,8 @@ final class WGPUUniformArena {
     private final class Chunk {
         private final SizeClass size;
         private final WGPUBuffer buffer;
-        private final Map<WGPUBindGroupLayout, WGPUBindGroup> bindGroups =
-                new IdentityHashMap<WGPUBindGroupLayout, WGPUBindGroup>();
+        private final IdentityMap<WGPUBindGroupLayout, WGPUBindGroup> bindGroups =
+                new IdentityMap<WGPUBindGroupLayout, WGPUBindGroup>();
 
         Chunk(SizeClass size, int index) {
             this.size = size;

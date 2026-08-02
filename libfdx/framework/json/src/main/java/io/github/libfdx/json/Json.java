@@ -1,9 +1,7 @@
 package io.github.libfdx.json;
 
 import io.github.libfdx.core.FdxException;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
+import io.github.libfdx.collections.ObjectMap;
 
 /**
  * Represents a json.
@@ -12,7 +10,7 @@ import java.util.Map;
  */
 public final class Json {
     private final JsonReader reader = new JsonReader();
-    private final Map<Class<?>, JsonCodec<?>> codecs = new LinkedHashMap<Class<?>, JsonCodec<?>>();
+    private final ObjectMap<Class<?>, JsonCodec<?>> codecs = new ObjectMap<Class<?>, JsonCodec<?>>();
 
     /**
      * Runs the read step.

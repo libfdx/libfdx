@@ -1,8 +1,7 @@
 package io.github.libfdx.graphics.g3d;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
 
 /**
  * Represents a skeleton.
@@ -10,17 +9,17 @@ import java.util.List;
  * @author xpenatan
  */
 public final class Skeleton {
-    private final ArrayList<Bone> bones;
-    private final List<Bone> readOnlyBones;
+    private final Array<Bone> bones;
+    private final ArrayView<Bone> readOnlyBones;
 
     /**
      * Creates a skeleton.
      *
      * @param bones the bones
      */
-    public Skeleton(List<Bone> bones) {
-        this.bones = bones != null ? new ArrayList<Bone>(bones) : new ArrayList<Bone>();
-        readOnlyBones = Collections.unmodifiableList(this.bones);
+    public Skeleton(ArrayView<Bone> bones) {
+        this.bones = bones != null ? new Array<Bone>(bones) : new Array<Bone>(0);
+        readOnlyBones = this.bones.view();
     }
 
     /**
@@ -28,7 +27,7 @@ public final class Skeleton {
      *
      * @return the bones
      */
-    public List<Bone> bones() {
+    public ArrayView<Bone> bones() {
         return readOnlyBones;
     }
 }

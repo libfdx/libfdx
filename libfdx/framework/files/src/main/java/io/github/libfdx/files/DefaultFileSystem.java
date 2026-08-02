@@ -1,5 +1,6 @@
 package io.github.libfdx.files;
 
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.FdxFuture;
 import io.github.libfdx.core.ProviderId;
@@ -11,8 +12,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Provides the default implementation of a file system.
@@ -25,7 +24,7 @@ public final class DefaultFileSystem implements FileSystem {
     private final File localRoot;
     private final File externalRoot;
     private final File cacheRoot;
-    private final List<File> internalRoots = new ArrayList<File>();
+    private final Array<File> internalRoots = new Array<File>();
     private ClasspathResourceResolver classpathResourceResolver;
 
     /**
@@ -75,7 +74,7 @@ public final class DefaultFileSystem implements FileSystem {
      */
     public DefaultFileSystem addInternalRootFirst(File root) {
         if (root != null) {
-            internalRoots.add(0, root);
+            internalRoots.insert(0, root);
         }
         return this;
     }

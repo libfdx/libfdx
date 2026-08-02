@@ -1,14 +1,12 @@
 package io.github.libfdx.graphics.shadergraph.model;
 
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.graphics.shader.reflection.ShaderValueKind;
 import io.github.libfdx.graphics.shadergraph.node.ShaderNode;
 import io.github.libfdx.graphics.shadergraph.node.ShaderNodeProperty;
 import io.github.libfdx.graphics.shadergraph.standard.StandardShaderNodes;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.shader.reflection.ShaderScalarType;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Headless Java authoring API for the same semantic model used by serialized
@@ -19,12 +17,12 @@ public final class ShaderGraphBuilder {
 
     private final ShaderGraphId graphId;
     private final ShaderGraphKind kind;
-    private final List<ShaderGraphParameter> parameters = new ArrayList<>();
-    private final List<ShaderGraphResource> resources = new ArrayList<>();
-    private final List<ShaderNode> nodes = new ArrayList<>();
-    private final List<ShaderEdge> edges = new ArrayList<>();
-    private final List<ShaderGraphOutput> outputs = new ArrayList<>();
-    private final List<ShaderGraphDependency> dependencies = new ArrayList<>();
+    private final Array<ShaderGraphParameter> parameters = new Array<ShaderGraphParameter>();
+    private final Array<ShaderGraphResource> resources = new Array<ShaderGraphResource>();
+    private final Array<ShaderNode> nodes = new Array<ShaderNode>();
+    private final Array<ShaderEdge> edges = new Array<ShaderEdge>();
+    private final Array<ShaderGraphOutput> outputs = new Array<ShaderGraphOutput>();
+    private final Array<ShaderGraphDependency> dependencies = new Array<ShaderGraphDependency>();
     private int nextId;
 
     public ShaderGraphBuilder(String graphId, ShaderGraphKind kind) {
@@ -351,12 +349,12 @@ public final class ShaderGraphBuilder {
 
     public ShaderGraph build() {
         return ShaderGraph.builder(graphId.value(), kind)
-                .parameters(parameters.toArray(ShaderGraphParameter[]::new))
-                .resources(resources.toArray(ShaderGraphResource[]::new))
-                .nodes(nodes.toArray(ShaderNode[]::new))
-                .edges(edges.toArray(ShaderEdge[]::new))
-                .outputs(outputs.toArray(ShaderGraphOutput[]::new))
-                .dependencies(dependencies.toArray(ShaderGraphDependency[]::new))
+                .parameters(parameters.toArray(new ShaderGraphParameter[0]))
+                .resources(resources.toArray(new ShaderGraphResource[0]))
+                .nodes(nodes.toArray(new ShaderNode[0]))
+                .edges(edges.toArray(new ShaderEdge[0]))
+                .outputs(outputs.toArray(new ShaderGraphOutput[0]))
+                .dependencies(dependencies.toArray(new ShaderGraphDependency[0]))
                 .build();
     }
 

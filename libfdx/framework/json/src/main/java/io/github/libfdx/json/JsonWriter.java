@@ -1,9 +1,9 @@
 package io.github.libfdx.json;
 
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ObjectMapEntry;
 
-import java.util.ArrayList;
-import java.util.Map;
 
 /**
  * Writes json output.
@@ -12,7 +12,7 @@ import java.util.Map;
  */
 public final class JsonWriter {
     private final StringBuilder builder = new StringBuilder();
-    private final ArrayList<Context> stack = new ArrayList<Context>();
+    private final Array<Context> stack = new Array<Context>();
     private final boolean pretty;
     private int indent;
     private boolean rootWritten;
@@ -92,7 +92,7 @@ public final class JsonWriter {
         if (context.expectingValue) {
             throw new FdxException("JSON object member is missing a value");
         }
-        stack.remove(stack.size() - 1);
+        stack.pop();
         indent--;
         if (!context.first) {
             newline();
@@ -124,7 +124,7 @@ public final class JsonWriter {
         if (context.object) {
             throw new FdxException("JSON writer is not inside an array");
         }
-        stack.remove(stack.size() - 1);
+        stack.pop();
         indent--;
         if (!context.first) {
             newline();
@@ -281,8 +281,8 @@ public final class JsonWriter {
     private void writeTree(JsonValue value) {
         if (value.isObject()) {
             object();
-            for (Map.Entry<String, JsonValue> entry : value.objectMembers().entrySet()) {
-                name(entry.getKey()).value(entry.getValue());
+            for (ObjectMapEntry<String, JsonValue> entry : value.objectMembers().entries()) {
+                name(entry.key()).value(entry.value());
             }
             endObject();
         }

@@ -17,6 +17,7 @@ base {
 }
 
 dependencies {
+    api(project(":libfdx:framework:collections"))
     api(project(":libfdx:framework:fdx:core"))
     api(project(":libfdx:framework:display"))
     api(project(":libfdx:framework:input"))

@@ -1,8 +1,7 @@
 package io.github.libfdx.validation.scenario;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
 
 /**
  * Represents a report produced by a scenario.
@@ -10,8 +9,8 @@ import java.util.List;
  * @author xpenatan
  */
 public final class ScenarioReport {
-    private final ArrayList<ScenarioResult> results = new ArrayList<ScenarioResult>();
-    private final ArrayList<ScenarioValidationCell> validationCells = new ArrayList<ScenarioValidationCell>();
+    private final Array<ScenarioResult> results = new Array<ScenarioResult>();
+    private final Array<ScenarioValidationCell> validationCells = new Array<ScenarioValidationCell>();
 
     /**
      * Sets the add and returns this scenario report.
@@ -31,8 +30,8 @@ public final class ScenarioReport {
      *
      * @return the results
      */
-    public List<ScenarioResult> results() {
-        return Collections.unmodifiableList(results);
+    public ArrayView<ScenarioResult> results() {
+        return results.view();
     }
 
     /**
@@ -53,8 +52,8 @@ public final class ScenarioReport {
      *
      * @return the validation cells
      */
-    public List<ScenarioValidationCell> validationCells() {
-        return Collections.unmodifiableList(validationCells);
+    public ArrayView<ScenarioValidationCell> validationCells() {
+        return validationCells.view();
     }
 
     /**
@@ -120,12 +119,12 @@ public final class ScenarioReport {
      *
      * @return the captures
      */
-    public List<ScenarioCapture> captures() {
-        ArrayList<ScenarioCapture> captures = new ArrayList<ScenarioCapture>();
+    public ArrayView<ScenarioCapture> captures() {
+        Array<ScenarioCapture> captures = new Array<ScenarioCapture>();
         for (int i = 0; i < results.size(); i++) {
             captures.addAll(results.get(i).captures());
         }
-        return Collections.unmodifiableList(captures);
+        return captures.view();
     }
 
     /**

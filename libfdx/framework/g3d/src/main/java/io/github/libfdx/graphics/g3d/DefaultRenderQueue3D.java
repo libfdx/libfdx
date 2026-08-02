@@ -1,11 +1,10 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.graphics.camera.Camera;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
-import java.util.List;
 
 /**
  * Provides the default implementation of a render queue3 d.
@@ -13,8 +12,8 @@ import java.util.List;
  * @author xpenatan
  */
 public final class DefaultRenderQueue3D implements RenderQueue3D {
-    private final ArrayList<Renderable3D> renderables = new ArrayList<Renderable3D>();
-    private final List<Renderable3D> readOnlyRenderables = Collections.unmodifiableList(renderables);
+    private final Array<Renderable3D> renderables = new Array<Renderable3D>();
+    private final ArrayView<Renderable3D> readOnlyRenderables = renderables.view();
     private Renderable3D[] sortScratch = new Renderable3D[0];
     private final Comparator<Renderable3D> stateComparator = new Comparator<Renderable3D>() {
         @Override
@@ -145,7 +144,7 @@ public final class DefaultRenderQueue3D implements RenderQueue3D {
      * @return the renderables
      */
     @Override
-    public List<Renderable3D> renderables() {
+    public ArrayView<Renderable3D> renderables() {
         return readOnlyRenderables;
     }
 }

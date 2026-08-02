@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.camera.Camera;
@@ -37,7 +38,6 @@ import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.VertexLayout;
 import io.github.libfdx.math.Matrix4;
 
-import java.util.List;
 
 /**
  * Renders a WGSL-authored shell outline for static 3D meshes with normals.
@@ -374,8 +374,8 @@ public final class OutlineRenderer3D implements Disposable {
         if (instances == null) {
             throw new FdxException("ModelInstance iterable cannot be null");
         }
-        if (instances instanceof List<?>) {
-            List<?> values = (List<?>) instances;
+        if (instances instanceof ArrayView<?>) {
+            ArrayView<?> values = (ArrayView<?>)instances;
             for (int i = 0; i < values.size(); i++) {
                 ModelInstance instance = (ModelInstance) values.get(i);
                 if (instance != null) {

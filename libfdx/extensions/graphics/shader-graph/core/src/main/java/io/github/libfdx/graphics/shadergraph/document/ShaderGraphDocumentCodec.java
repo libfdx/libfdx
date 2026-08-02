@@ -1,5 +1,7 @@
 package io.github.libfdx.graphics.shadergraph.document;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ObjectMapView;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.shadergraph.cache.ShaderGraphCompiledCache;
 import io.github.libfdx.graphics.shadergraph.cache.ShaderGraphCompiledCacheCodec;
@@ -11,9 +13,6 @@ import io.github.libfdx.graphics.shadergraph.technique.ShaderGraphTechniqueCodec
 import io.github.libfdx.json.JsonReader;
 import io.github.libfdx.json.JsonValue;
 import io.github.libfdx.json.JsonWriter;
-
-import java.util.Map;
-import java.util.TreeMap;
 
 /**
  * Deterministic codec for one self-contained {@code .fdxgraph} document.
@@ -126,13 +125,15 @@ public final class ShaderGraphDocumentCodec {
         return switch (value.type()) {
             case OBJECT -> {
                 JsonValue result = JsonValue.object();
-                TreeMap<String, JsonValue> sorted =
-                        new TreeMap<String, JsonValue>(
-                                value.objectMembers());
-                for (Map.Entry<String, JsonValue> member
-                        : sorted.entrySet()) {
-                    result.put(member.getKey(),
-                            canonicalize(member.getValue()));
+                ObjectMapView<String, JsonValue> members = value.objectMembers();
+                Array<String> sortedKeys = new Array<String>(members.size());
+                for (String key : members.keys()) {
+                    sortedKeys.add(key);
+                }
+                sortedKeys.sort();
+                for (int i = 0; i < sortedKeys.size(); i++) {
+                    String key = sortedKeys.get(i);
+                    result.put(key, canonicalize(members.get(key)));
                 }
                 yield result;
             }

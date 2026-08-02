@@ -1,13 +1,10 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.ObjectSet;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.graphics.Mesh;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 
 /**
  * Provides the default implementation of a model.
@@ -15,15 +12,15 @@ import java.util.Set;
  * @author xpenatan
  */
 public final class DefaultModel implements Model {
-    private final ArrayList<ModelNode> nodes;
-    private final ArrayList<Material> materials;
-    private final ArrayList<AnimationClip> animations;
-    private final ArrayList<Skin> skins;
-    private final ArrayList<Mesh> meshes;
-    private final List<ModelNode> readOnlyNodes;
-    private final List<Material> readOnlyMaterials;
-    private final List<AnimationClip> readOnlyAnimations;
-    private final List<Skin> readOnlySkins;
+    private final Array<ModelNode> nodes;
+    private final Array<Material> materials;
+    private final Array<AnimationClip> animations;
+    private final Array<Skin> skins;
+    private final Array<Mesh> meshes;
+    private final ArrayView<ModelNode> readOnlyNodes;
+    private final ArrayView<Material> readOnlyMaterials;
+    private final ArrayView<AnimationClip> readOnlyAnimations;
+    private final ArrayView<Skin> readOnlySkins;
     private boolean disposed;
 
     /**
@@ -34,9 +31,9 @@ public final class DefaultModel implements Model {
      * @param animations the animations
      * @param meshes the meshes
      */
-    public DefaultModel(List<ModelNode> nodes, List<Material> materials, List<AnimationClip> animations,
-            List<Mesh> meshes) {
-        this(nodes, materials, animations, Collections.<Skin>emptyList(), meshes);
+    public DefaultModel(ArrayView<ModelNode> nodes, ArrayView<Material> materials,
+            ArrayView<AnimationClip> animations, ArrayView<Mesh> meshes) {
+        this(nodes, materials, animations, new Array<Skin>(0), meshes);
     }
 
     /**
@@ -48,17 +45,17 @@ public final class DefaultModel implements Model {
      * @param skins the skins
      * @param meshes the meshes
      */
-    public DefaultModel(List<ModelNode> nodes, List<Material> materials, List<AnimationClip> animations,
-            List<Skin> skins, List<Mesh> meshes) {
+    public DefaultModel(ArrayView<ModelNode> nodes, ArrayView<Material> materials,
+            ArrayView<AnimationClip> animations, ArrayView<Skin> skins, ArrayView<Mesh> meshes) {
         this.nodes = copy(nodes);
         this.materials = copy(materials);
         this.animations = copy(animations);
         this.skins = copy(skins);
         this.meshes = copy(meshes);
-        readOnlyNodes = Collections.unmodifiableList(this.nodes);
-        readOnlyMaterials = Collections.unmodifiableList(this.materials);
-        readOnlyAnimations = Collections.unmodifiableList(this.animations);
-        readOnlySkins = Collections.unmodifiableList(this.skins);
+        readOnlyNodes = this.nodes.view();
+        readOnlyMaterials = this.materials.view();
+        readOnlyAnimations = this.animations.view();
+        readOnlySkins = this.skins.view();
     }
 
     /**
@@ -72,17 +69,17 @@ public final class DefaultModel implements Model {
     public static DefaultModel singleNode(String id, MeshPart meshPart, Material material) {
         ModelNodePart nodePart = new ModelNodePart(meshPart, material);
         ModelNode node = new ModelNode(id).addPart(nodePart);
-        ArrayList<ModelNode> nodes = new ArrayList<ModelNode>();
+        Array<ModelNode> nodes = new Array<ModelNode>();
         nodes.add(node);
-        ArrayList<Material> materials = new ArrayList<Material>();
+        Array<Material> materials = new Array<Material>();
         materials.add(material);
-        ArrayList<Mesh> meshes = new ArrayList<Mesh>();
+        Array<Mesh> meshes = new Array<Mesh>();
         meshes.add(meshPart.mesh());
-        return new DefaultModel(nodes, materials, Collections.<AnimationClip>emptyList(), meshes);
+        return new DefaultModel(nodes, materials, new Array<AnimationClip>(0), meshes);
     }
 
-    private static <T> ArrayList<T> copy(List<T> values) {
-        return values != null ? new ArrayList<T>(values) : new ArrayList<T>();
+    private static <T> Array<T> copy(ArrayView<T> values) {
+        return values != null ? new Array<T>(values) : new Array<T>(0);
     }
 
     /**
@@ -91,7 +88,7 @@ public final class DefaultModel implements Model {
      * @return the nodes
      */
     @Override
-    public List<ModelNode> nodes() {
+    public ArrayView<ModelNode> nodes() {
         return readOnlyNodes;
     }
 
@@ -101,7 +98,7 @@ public final class DefaultModel implements Model {
      * @return the materials
      */
     @Override
-    public List<Material> materials() {
+    public ArrayView<Material> materials() {
         return readOnlyMaterials;
     }
 
@@ -111,7 +108,7 @@ public final class DefaultModel implements Model {
      * @return the animations
      */
     @Override
-    public List<AnimationClip> animations() {
+    public ArrayView<AnimationClip> animations() {
         return readOnlyAnimations;
     }
 
@@ -121,7 +118,7 @@ public final class DefaultModel implements Model {
      * @return the skins
      */
     @Override
-    public List<Skin> skins() {
+    public ArrayView<Skin> skins() {
         return readOnlySkins;
     }
 
@@ -134,14 +131,14 @@ public final class DefaultModel implements Model {
             return;
         }
         disposed = true;
-        Set<Mesh> disposedMeshes = new HashSet<Mesh>();
+        ObjectSet<Mesh> disposedMeshes = new ObjectSet<Mesh>();
         for (int i = 0; i < meshes.size(); i++) {
             Mesh mesh = meshes.get(i);
             if (mesh != null && disposedMeshes.add(mesh)) {
                 mesh.dispose();
             }
         }
-        Set<Disposable> disposedMaterials = new HashSet<Disposable>();
+        ObjectSet<Disposable> disposedMaterials = new ObjectSet<Disposable>();
         for (int i = 0; i < materials.size(); i++) {
             Material material = materials.get(i);
             if (material instanceof Disposable && disposedMaterials.add((Disposable)material)) {

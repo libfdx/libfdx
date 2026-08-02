@@ -1,7 +1,6 @@
 package io.github.libfdx.ui;
 
-import java.util.ArrayList;
-import java.util.List;
+import io.github.libfdx.collections.Array;
 
 /**
  * Represents an ui observable state.
@@ -9,7 +8,7 @@ import java.util.List;
  * @author xpenatan
  */
 abstract class UiObservableState {
-    private final List<UiStateListener> listeners = new ArrayList<UiStateListener>();
+    private final Array<UiStateListener> listeners = new Array<UiStateListener>();
     private Object[] notifySnapshot = new Object[0];
 
     final void observeRead() {
@@ -26,7 +25,7 @@ abstract class UiObservableState {
     }
 
     final void removeListener(UiStateListener listener) {
-        listeners.remove(listener);
+        listeners.removeValue(listener, true);
     }
 
     final void notifyListeners() {

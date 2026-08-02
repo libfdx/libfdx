@@ -1,12 +1,11 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.ObjectSet;
 import io.github.libfdx.math.Color;
 
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.graphics.Texture;
 
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * Represents a pbr material.
@@ -348,16 +347,20 @@ public class PbrMaterial implements Material, Disposable {
             return;
         }
         disposed = true;
-        Set<Texture> textures = new HashSet<Texture>();
-        textures.add(baseColorTexture);
-        textures.add(metallicRoughnessTexture);
-        textures.add(normalTexture);
-        textures.add(occlusionTexture);
-        textures.add(emissiveTexture);
+        ObjectSet<Texture> textures = new ObjectSet<Texture>();
+        addTexture(textures, baseColorTexture);
+        addTexture(textures, metallicRoughnessTexture);
+        addTexture(textures, normalTexture);
+        addTexture(textures, occlusionTexture);
+        addTexture(textures, emissiveTexture);
         for (Texture texture : textures) {
-            if (texture != null) {
-                texture.dispose();
-            }
+            texture.dispose();
+        }
+    }
+
+    private static void addTexture(ObjectSet<Texture> textures, Texture texture) {
+        if (texture != null) {
+            textures.add(texture);
         }
     }
 

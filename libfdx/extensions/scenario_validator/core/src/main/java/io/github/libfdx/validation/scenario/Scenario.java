@@ -1,8 +1,7 @@
 package io.github.libfdx.validation.scenario;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
 
 /**
  * Represents a scenario.
@@ -11,7 +10,7 @@ import java.util.List;
  */
 public final class Scenario {
     private final String name;
-    private final ArrayList<Step> steps = new ArrayList<Step>();
+    private final Array<Step> steps = new Array<Step>();
     private ScenarioSetup<?> setup;
     private ScenarioContent<Object> content;
     private boolean visualBaselineRequired;
@@ -159,12 +158,12 @@ public final class Scenario {
      *
      * @return the operation names
      */
-    public List<String> operationNames() {
-        ArrayList<String> names = new ArrayList<String>(steps.size());
+    public ArrayView<String> operationNames() {
+        Array<String> names = new Array<String>(steps.size());
         for (int i = 0; i < steps.size(); i++) {
             names.add(steps.get(i).name());
         }
-        return Collections.unmodifiableList(names);
+        return names.view();
     }
 
     ScenarioResult run(ScenarioHost host, ScenarioValidationConfig config) {
@@ -201,7 +200,7 @@ public final class Scenario {
             }
         }
         if (visualBaselineRequired && effectiveConfig.mode() != ScenarioValidationMode.BEHAVIOR) {
-            List<ScenarioCapture> captures = host.captures();
+            ArrayView<ScenarioCapture> captures = host.captures();
             if (captures.isEmpty()) {
                 return failed(host, context, "visualBaselineRequired", steps.size(),
                         new ScenarioFailure("Scenario requires a visual baseline but produced no capture."));
@@ -244,8 +243,8 @@ public final class Scenario {
                 operationNames(), recentEvents(host, context.validationConfig()), host.captures(), visualBaselineRequired);
     }
 
-    private List<String> recentEvents(ScenarioHost host, ScenarioValidationConfig config) {
-        return config.eventsEnabled() ? host.events().recent() : Collections.<String>emptyList();
+    private ArrayView<String> recentEvents(ScenarioHost host, ScenarioValidationConfig config) {
+        return config.eventsEnabled() ? host.events().recent() : Array.<String>emptyView();
     }
 
     /**

@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.FloatArray;
 import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.math.Vector3;
@@ -8,7 +9,6 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.Mesh;
 
-import java.util.ArrayList;
 
 /**
  * Builds model instances and related output.
@@ -146,9 +146,9 @@ public final class ModelBuilder {
         float hx = width * 0.5f;
         float hy = height * 0.5f;
         float hz = depth * 0.5f;
-        ArrayList<Float> positions = new ArrayList<Float>();
-        ArrayList<Float> colors = hasUsage(usage, ModelVertexUsage.COLOR)
-                ? new ArrayList<Float>() : null;
+        FloatArray positions = new FloatArray();
+        FloatArray colors = hasUsage(usage, ModelVertexUsage.COLOR)
+                ? new FloatArray() : null;
         addFace(positions, colors,
                 -hx, -hy, -hz, -hx, hy, -hz, hx, hy, -hz, hx, -hy, -hz,
                 0.30f, 0.42f, 0.75f, 1.0f);
@@ -167,8 +167,8 @@ public final class ModelBuilder {
         addFace(positions, colors,
                 -hx, -hy, -hz, -hx, -hy, hz, -hx, hy, hz, -hx, hy, -hz,
                 0.24f, 0.68f, 0.87f, 1.0f);
-        return triangles(id, toFloatArray(positions), null,
-                colors != null ? toFloatArray(colors) : null, usage);
+        return triangles(id, positions.toArray(), null,
+                colors != null ? colors.toArray() : null, usage);
     }
 
     /**
@@ -548,7 +548,7 @@ public final class ModelBuilder {
         return BoundingBox.of(new Vector3(minX, minY, minZ), new Vector3(maxX, maxY, maxZ));
     }
 
-    private static void addFace(ArrayList<Float> positions, ArrayList<Float> colors,
+    private static void addFace(FloatArray positions, FloatArray colors,
             float x0, float y0, float z0, float x1, float y1, float z1,
             float x2, float y2, float z2, float x3, float y3, float z3,
             float red, float green, float blue, float alpha) {
@@ -556,7 +556,7 @@ public final class ModelBuilder {
         addTriangle(positions, colors, x0, y0, z0, x2, y2, z2, x3, y3, z3, red, green, blue, alpha);
     }
 
-    private static void addTriangle(ArrayList<Float> positions, ArrayList<Float> colors,
+    private static void addTriangle(FloatArray positions, FloatArray colors,
             float x0, float y0, float z0, float x1, float y1, float z1,
             float x2, float y2, float z2, float red, float green, float blue, float alpha) {
         addVertex(positions, colors, x0, y0, z0, red, green, blue, alpha);
@@ -564,7 +564,7 @@ public final class ModelBuilder {
         addVertex(positions, colors, x2, y2, z2, red, green, blue, alpha);
     }
 
-    private static void addVertex(ArrayList<Float> positions, ArrayList<Float> colors,
+    private static void addVertex(FloatArray positions, FloatArray colors,
             float x, float y, float z, float red, float green, float blue, float alpha) {
         positions.add(x);
         positions.add(y);
@@ -575,14 +575,6 @@ public final class ModelBuilder {
             colors.add(blue);
             colors.add(alpha);
         }
-    }
-
-    private static float[] toFloatArray(ArrayList<Float> values) {
-        float[] result = new float[values.size()];
-        for (int i = 0; i < values.size(); i++) {
-            result[i] = values.get(i);
-        }
-        return result;
     }
 
     /**

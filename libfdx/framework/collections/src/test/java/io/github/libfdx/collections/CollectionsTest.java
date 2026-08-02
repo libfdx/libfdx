@@ -47,6 +47,59 @@ final class CollectionsTest {
     }
 
     @Test
+    void arrayViewIsReadOnlyLiveAndCached() {
+        Array<String> array = new Array<String>(1);
+        ArrayView<String> view = array.view();
+
+        assertSame(view, array.view());
+        assertTrue(view.isEmpty());
+        array.add("first").add("second");
+
+        assertEquals(2, view.size());
+        assertEquals("first", view.first());
+        assertEquals("second", view.peek());
+        assertArrayEquals(new Object[] { "first", "second" }, view.toArray());
+    }
+
+    @Test
+    void arrayFactoriesAndSelfAppendPreserveTheOriginalValuesOnce() {
+        ArrayView<String> empty = Array.emptyView();
+        ArrayView<String> secondEmpty = Array.emptyView();
+        assertSame(empty, secondEmpty);
+        assertTrue(empty.isEmpty());
+
+        Array<String> direct = Array.of("a", "b");
+        direct.addAll(direct);
+        assertArrayEquals(new String[] { "a", "b", "a", "b" }, direct.toArray(new String[0]));
+
+        Array<String> throughView = Array.of("c", "d");
+        throughView.addAll(throughView.view());
+        assertArrayEquals(new String[] { "c", "d", "c", "d" }, throughView.toArray(new String[0]));
+
+        Array<String> copy = new Array<String>(throughView.view());
+        assertArrayEquals(throughView.toArray(), copy.toArray());
+        assertThrows(IllegalArgumentException.class, () -> direct.addAll((Array<String>)null));
+        assertThrows(IllegalArgumentException.class, () -> direct.addAll((ArrayView<String>)null));
+    }
+
+    @Test
+    void arraySortsAndCopiesIntoTypedArrays() {
+        Array<String> array = new Array<String>(3);
+        array.add("charlie").add("alpha").add("bravo");
+
+        array.sort();
+        assertArrayEquals(new String[] { "alpha", "bravo", "charlie" }, array.toArray(new String[0]));
+
+        String[] destination = new String[] { "old", "old", "old", "old", "untouched" };
+        assertSame(destination, array.toArray(destination));
+        assertArrayEquals(new String[] { "alpha", "bravo", "charlie", null, "untouched" }, destination);
+
+        array.sort((left, right) -> right.compareTo(left));
+        assertArrayEquals(new String[] { "charlie", "bravo", "alpha" }, array.toArray(new String[0]));
+        assertThrows(IllegalArgumentException.class, () -> array.toArray(null));
+    }
+
+    @Test
     void arrayInsertsSwapsAndTruncates() {
         Array<String> ordered = new Array<String>(true, 2);
         ordered.add("a").add("c");
@@ -487,6 +540,237 @@ final class CollectionsTest {
     }
 
     @Test
+    void objectMapViewIsReadOnlyLiveAndCached() {
+        ObjectMap<Key, String> map = new ObjectMap<Key, String>(1);
+        ObjectMapView<Key, String> view = map.view();
+        Key key = new Key(7);
+
+        assertSame(view, map.view());
+        assertTrue(view.isEmpty());
+        map.put(key, "seven");
+
+        assertEquals(1, view.size());
+        assertTrue(view.containsKey(key));
+        assertEquals("seven", view.get(key));
+
+        ObjectMap<Key, String> copy = new ObjectMap<Key, String>(view);
+        assertEquals("seven", copy.get(key));
+    }
+
+    @Test
+    void identityMapKeepsEqualButDistinctKeysSeparate() {
+        String first = new String("same");
+        String second = new String("same");
+        IdentityMap<String, Integer> map = new IdentityMap<String, Integer>(1);
+
+        map.put(first, 1);
+        map.put(second, 2);
+
+        assertEquals(2, map.size());
+        assertEquals(1, map.get(first));
+        assertEquals(2, map.get(second));
+        assertNull(map.get(new String("same")));
+        assertEquals(1, map.remove(first));
+        assertFalse(map.containsKey(first));
+        assertEquals(2, map.get(second));
+    }
+
+    @Test
+    void primitiveMapViewsAreCachedLiveAndCopyable() {
+        IntMap<String> ints = new IntMap<String>();
+        IntMapView<String> intView = ints.view();
+        assertSame(intView, ints.view());
+        assertSame(ints.entries(), ints.entries());
+        assertSame(ints.keys(), ints.keys());
+        assertSame(ints.values(), ints.values());
+        ints.put(7, "seven");
+        assertEquals("seven", intView.get(7));
+        assertEquals("seven", new IntMap<String>(intView).get(7));
+
+        LongMap<String> longs = new LongMap<String>();
+        LongMapView<String> longView = longs.view();
+        assertSame(longView, longs.view());
+        assertSame(longs.entries(), longs.entries());
+        assertSame(longs.keys(), longs.keys());
+        assertSame(longs.values(), longs.values());
+        longs.put(9_000_000_000L, "wide");
+        assertEquals("wide", longView.get(9_000_000_000L));
+        assertEquals("wide", new LongMap<String>(longView).get(9_000_000_000L));
+    }
+
+    @Test
+    void setsHandleCollisionsRemovalAndPrimitiveIteration() {
+        ObjectSet<Key> objects = new ObjectSet<Key>(2);
+        Key first = new Key(1, 0);
+        Key second = new Key(2, 0);
+        Key third = new Key(3, 0);
+        assertTrue(objects.add(first));
+        assertTrue(objects.add(second));
+        assertFalse(objects.add(new Key(1, 0)));
+        assertTrue(objects.remove(first));
+        assertTrue(objects.add(third));
+        int objectSum = 0;
+        for (Key value : objects) {
+            objectSum += value.value;
+        }
+        assertEquals(5, objectSum);
+        assertEquals(2, objects.size());
+
+        IntSet ints = new IntSet(2);
+        for (int i = 0; i < 128; i++) {
+            assertTrue(ints.add(i));
+        }
+        for (int i = 0; i < 128; i += 2) {
+            assertTrue(ints.remove(i));
+        }
+        long intSum = 0L;
+        int intCount = 0;
+        IntSet.IntIterator iterator = ints.iterator();
+        while (iterator.hasNext()) {
+            int value = iterator.nextInt();
+            assertTrue((value & 1) != 0);
+            intSum += value;
+            intCount++;
+        }
+        assertEquals(64, intCount);
+        assertEquals(4096L, intSum);
+        assertThrows(NoSuchElementException.class, iterator::nextInt);
+    }
+
+    @Test
+    void objectQueueWrapsGrowsAndIteratesInQueueOrder() {
+        ObjectQueue<Integer> queue = new ObjectQueue<Integer>(3);
+        queue.addLast(0).addLast(1).addLast(2);
+        assertEquals(0, queue.removeFirst());
+        assertEquals(1, queue.removeFirst());
+        queue.addLast(3).addLast(4).addFirst(-1);
+
+        assertEquals(4, queue.size());
+        assertEquals(-1, queue.first());
+        assertEquals(2, queue.get(1));
+        Array<Integer> values = new Array<Integer>();
+        for (Integer value : queue) {
+            values.add(value);
+        }
+        assertArrayEquals(new Object[] { -1, 2, 3, 4 }, values.toArray());
+        assertEquals(-1, queue.pollFirst());
+        assertEquals(2, queue.pollFirst());
+        assertEquals(3, queue.pollFirst());
+        assertEquals(4, queue.pollFirst());
+        assertNull(queue.pollFirst());
+        assertThrows(NoSuchElementException.class, queue::removeFirst);
+    }
+
+    @Test
+    void hashCollectionsKeepExactResultsAcrossLargeMutationCycles() {
+        int count = 20_000;
+        ObjectMap<Integer, Integer> objects = new ObjectMap<Integer, Integer>(count);
+        IntMap<Integer> ints = new IntMap<Integer>(count);
+        OrderedMap<Integer, Integer> ordered = new OrderedMap<Integer, Integer>(count);
+        for (int i = 0; i < count; i++) {
+            objects.put(i, i * 3);
+            ints.put(i, i * 3);
+            ordered.put(i, i * 3);
+        }
+        for (int i = 0; i < count; i += 2) {
+            assertEquals(i * 3, objects.remove(i));
+            assertEquals(i * 3, ints.remove(i));
+            assertEquals(i * 3, ordered.remove(i));
+        }
+        for (int i = 0; i < count; i += 2) {
+            objects.put(i, i * 5);
+            ints.put(i, i * 5);
+            ordered.put(i, i * 5);
+        }
+
+        long objectSum = 0L;
+        int objectCount = 0;
+        for (Integer value : objects.values()) {
+            objectSum += value;
+            objectCount++;
+        }
+        long intSum = 0L;
+        int intCount = 0;
+        for (Integer value : ints.values()) {
+            intSum += value;
+            intCount++;
+        }
+        long orderedSum = 0L;
+        int orderedCount = 0;
+        for (Integer value : ordered.values()) {
+            orderedSum += value;
+            orderedCount++;
+        }
+        assertEquals(20_000, objectCount);
+        assertEquals(20_000, intCount);
+        assertEquals(20_000, orderedCount);
+        assertEquals(objectSum, intSum);
+        assertEquals(objectSum, orderedSum);
+    }
+
+    @Test
+    void orderedMapPreservesInsertionOrderAcrossReplaceRemoveAndResize() {
+        OrderedMap<Key, String> map = new OrderedMap<Key, String>(1);
+        Key one = new Key(1);
+        Key two = new Key(2);
+        Key three = new Key(3);
+        Key four = new Key(4);
+
+        map.put(one, "one");
+        map.put(two, null);
+        map.put(three, "three");
+        assertEquals("one", map.put(one, "uno"));
+        assertNull(map.remove(two));
+        map.put(four, "four");
+        map.put(two, "two again");
+
+        int index = 0;
+        Key[] expectedKeys = { one, three, four, two };
+        String[] expectedValues = { "uno", "three", "four", "two again" };
+        for (OrderedMap.Entry<Key, String> entry : map.entries()) {
+            assertSame(expectedKeys[index], entry.key());
+            assertEquals(expectedValues[index], entry.value());
+            index++;
+        }
+
+        assertEquals(expectedKeys.length, index);
+        assertEquals("three", map.get(three));
+        assertTrue(map.containsKey(two));
+        assertEquals(one, map.findKey("uno"));
+    }
+
+    @Test
+    void orderedMapCompactsTombstonesAndKeepsConstantTimeRemovalLinks() {
+        int mask = 3;
+        OrderedMap<Key, String> map = new OrderedMap<Key, String>(3, 0.75f);
+        Key slot0 = new Key(10, intHashForSlot(0, mask));
+        Key slot1 = new Key(11, intHashForSlot(1, mask));
+        Key slot2 = new Key(12, intHashForSlot(2, mask));
+        Key slot3 = new Key(13, intHashForSlot(3, mask));
+        Key missing = new Key(14, intHashForSlot(0, mask));
+
+        map.put(slot0, "zero");
+        map.put(slot1, "one");
+        map.put(slot2, "two");
+        assertEquals("zero", map.remove(slot0));
+        map.put(slot3, "three");
+
+        assertEquals(3, map.size());
+        assertEquals("missing", map.get(missing, "missing"));
+        assertFalse(map.containsKey(missing));
+        Iterator<Key> keys = map.keys().iterator();
+        assertSame(slot1, keys.next());
+        assertSame(slot2, keys.next());
+        assertSame(slot3, keys.next());
+        assertThrows(NoSuchElementException.class, keys::next);
+
+        ObjectMapView<Key, String> view = map.view();
+        assertSame(view, map.view());
+        map.clear();
+        assertTrue(view.isEmpty());
+    }
+
+    @Test
     void mapsReserveAndShrinkWithoutLosingEntries() {
         ObjectMap<Key, String> objects = new ObjectMap<Key, String>(1);
         int objectInitialCapacity = objects.capacity();
@@ -914,8 +1198,8 @@ final class CollectionsTest {
 
     @Test
     void linkedListAddsRemovesAndIterates() {
-        FdxLinkedList<String> list = new FdxLinkedList<String>();
-        FdxLinkedList.Node<String> middle = list.addLast("b");
+        ObjectLinkedList<String> list = new ObjectLinkedList<String>();
+        ObjectLinkedList.Node<String> middle = list.addLast("b");
         list.addFirst("a");
         list.addLast("c");
 
@@ -938,9 +1222,9 @@ final class CollectionsTest {
 
     @Test
     void linkedListRejectsForeignNodes() {
-        FdxLinkedList<String> first = new FdxLinkedList<String>();
-        FdxLinkedList<String> second = new FdxLinkedList<String>();
-        FdxLinkedList.Node<String> node = first.addLast("value");
+        ObjectLinkedList<String> first = new ObjectLinkedList<String>();
+        ObjectLinkedList<String> second = new ObjectLinkedList<String>();
+        ObjectLinkedList.Node<String> node = first.addLast("value");
 
         assertThrows(IllegalArgumentException.class, () -> second.remove(node));
         first.clear();

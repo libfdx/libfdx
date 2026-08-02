@@ -1,12 +1,12 @@
 package io.github.libfdx.graphics.wgpu;
 
-import java.util.ArrayList;
+import io.github.libfdx.collections.Array;
 
 /**
  * Reuses one context-local list of native resources referenced by the current recording.
  */
 final class WGPURecordedResources {
-    private final ArrayList<WGPURecordedResource> resources = new ArrayList<WGPURecordedResource>();
+    private final Array<WGPURecordedResource> resources = new Array<WGPURecordedResource>();
 
     void mark(WGPURecordedResource resource) {
         if (resource == null || resources.contains(resource)) {

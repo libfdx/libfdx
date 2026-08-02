@@ -1,7 +1,7 @@
 package io.github.libfdx.core;
 
-import java.util.ArrayList;
-import java.util.List;
+import io.github.libfdx.collections.Array;
+
 import java.util.function.Consumer;
 
 /**
@@ -12,8 +12,8 @@ import java.util.function.Consumer;
  * @author xpenatan
  */
 public final class FdxFuture<T> {
-    private final List<Consumer<T>> successCallbacks = new ArrayList<Consumer<T>>();
-    private final List<Consumer<Throwable>> failureCallbacks = new ArrayList<Consumer<Throwable>>();
+    private final Array<Consumer<T>> successCallbacks = new Array<Consumer<T>>();
+    private final Array<Consumer<Throwable>> failureCallbacks = new Array<Consumer<Throwable>>();
     private boolean done;
     private boolean dispatchingCallbacks;
     private T value;
@@ -191,7 +191,7 @@ public final class FdxFuture<T> {
      * @param value the value
      */
     public void complete(T value) {
-        List<Consumer<T>> callbacks;
+        Array<Consumer<T>> callbacks;
         synchronized (this) {
             if (done) {
                 return;
@@ -231,7 +231,7 @@ public final class FdxFuture<T> {
      */
     public void completeExceptionally(Throwable error) {
         Throwable actualError = error != null ? error : new FdxException("Future failed");
-        List<Consumer<Throwable>> callbacks;
+        Array<Consumer<Throwable>> callbacks;
         synchronized (this) {
             if (done) {
                 return;
@@ -264,25 +264,25 @@ public final class FdxFuture<T> {
         rethrowCallbackFailure(callbackFailure);
     }
 
-    private List<Consumer<T>> takeSuccessCallbacks() {
+    private Array<Consumer<T>> takeSuccessCallbacks() {
         if (successCallbacks.isEmpty()) {
             return null;
         }
-        List<Consumer<T>> callbacks = new ArrayList<Consumer<T>>(successCallbacks);
+        Array<Consumer<T>> callbacks = new Array<Consumer<T>>(successCallbacks);
         successCallbacks.clear();
         return callbacks;
     }
 
-    private List<Consumer<Throwable>> takeFailureCallbacks() {
+    private Array<Consumer<Throwable>> takeFailureCallbacks() {
         if (failureCallbacks.isEmpty()) {
             return null;
         }
-        List<Consumer<Throwable>> callbacks = new ArrayList<Consumer<Throwable>>(failureCallbacks);
+        Array<Consumer<Throwable>> callbacks = new Array<Consumer<Throwable>>(failureCallbacks);
         failureCallbacks.clear();
         return callbacks;
     }
 
-    private static <V> Throwable invokeCallbacks(List<Consumer<V>> callbacks, V callbackValue,
+    private static <V> Throwable invokeCallbacks(Array<Consumer<V>> callbacks, V callbackValue,
             Throwable firstFailure) {
         Throwable failure = firstFailure;
         for (int i = 0; i < callbacks.size(); i++) {

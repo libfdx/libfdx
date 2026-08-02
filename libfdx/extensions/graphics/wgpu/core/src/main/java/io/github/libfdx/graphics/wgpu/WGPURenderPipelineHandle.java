@@ -3,12 +3,11 @@ package io.github.libfdx.graphics.wgpu;
 import com.github.xpenatan.webgpu.WGPUPipelineLayout;
 import com.github.xpenatan.webgpu.WGPUBindGroupLayout;
 import com.github.xpenatan.webgpu.WGPURenderPipeline;
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderTargetLayout;
 import io.github.libfdx.graphics.internal.ShaderRenderBindings;
-
-import java.util.ArrayList;
 
 /**
  * Represents a WGPU render pipeline handle.
@@ -25,7 +24,7 @@ final class WGPURenderPipelineHandle extends WGPURecordedResource implements Ren
     private final int vertexBufferCount;
     private final ShaderRenderBindings resourceBindings;
     private final RenderTargetLayout targetLayout;
-    private ArrayList<WGPUTextureBindGroupResource> textureBindGroups;
+    private Array<WGPUTextureBindGroupResource> textureBindGroups;
 
     WGPURenderPipelineHandle(WGPUResourceDomain resourceDomain, WGPURenderPipeline nativePipeline,
             WGPUPipelineLayout nativeLayout,
@@ -88,7 +87,7 @@ final class WGPURenderPipelineHandle extends WGPURecordedResource implements Ren
             return;
         }
         if (textureBindGroups == null) {
-            textureBindGroups = new ArrayList<WGPUTextureBindGroupResource>();
+            textureBindGroups = new Array<WGPUTextureBindGroupResource>();
         }
         if (!textureBindGroups.contains(bindGroup)) {
             textureBindGroups.add(bindGroup);
@@ -101,7 +100,7 @@ final class WGPURenderPipelineHandle extends WGPURecordedResource implements Ren
         }
         for (int i = 0; i < textureBindGroups.size(); i++) {
             if (textureBindGroups.get(i) == bindGroup) {
-                textureBindGroups.remove(i);
+                textureBindGroups.removeIndex(i);
                 return;
             }
         }

@@ -1,5 +1,8 @@
 package io.github.libfdx.ui;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.OrderedMap;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.display.Display;
 import io.github.libfdx.files.FileSystem;
@@ -16,11 +19,7 @@ import io.github.libfdx.input.TextInputType;
 import io.github.libfdx.graphics.g2d.BitmapFont;
 import io.github.libfdx.graphics.g2d.BitmapFontGlyph;
 import io.github.libfdx.graphics.g2d.BitmapFontLayout;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Represents an ui root.
@@ -85,22 +84,23 @@ public final class UiRoot implements Disposable, UiStateListener {
     private final Display display;
     private final GraphicsContext graphics;
     private final UiTextEngine textEngine;
-    private final Map<String, UiNode> retainedNodes = new LinkedHashMap<String, UiNode>();
-    private final List<UiNode> retainedNodeValues = new ArrayList<UiNode>();
-    private final List<UiObservableState> observedStateValues = new ArrayList<UiObservableState>();
-    private final Map<String, UiAnimatable<?>> animatables = new LinkedHashMap<String, UiAnimatable<?>>();
-    private final List<String> animatableKeys = new ArrayList<String>();
-    private final List<UiAnimatable<?>> animatableValues = new ArrayList<UiAnimatable<?>>();
-    private final Map<String, UiFloatAnimatable> floatAnimatables = new LinkedHashMap<String, UiFloatAnimatable>();
-    private final List<String> floatAnimatableKeys = new ArrayList<String>();
-    private final List<UiFloatAnimatable> floatAnimatableValues = new ArrayList<UiFloatAnimatable>();
-    private final Map<String, UiScrollState> scrollStates = new LinkedHashMap<String, UiScrollState>();
-    private final Map<String, UiListState> listStates = new LinkedHashMap<String, UiListState>();
-    private final Map<String, UiRect> tooltipAnchors = new LinkedHashMap<String, UiRect>();
-    private final List<String> unusedNodeIdentities = new ArrayList<String>();
-    private final List<UiNode> focusableNodes = new ArrayList<UiNode>();
+    private final OrderedMap<String, UiNode> retainedNodes = new OrderedMap<String, UiNode>();
+    private final Array<UiNode> retainedNodeValues = new Array<UiNode>();
+    private final Array<UiObservableState> observedStateValues = new Array<UiObservableState>();
+    private final OrderedMap<String, UiAnimatable<?>> animatables = new OrderedMap<String, UiAnimatable<?>>();
+    private final Array<String> animatableKeys = new Array<String>();
+    private final Array<UiAnimatable<?>> animatableValues = new Array<UiAnimatable<?>>();
+    private final OrderedMap<String, UiFloatAnimatable> floatAnimatables =
+            new OrderedMap<String, UiFloatAnimatable>();
+    private final Array<String> floatAnimatableKeys = new Array<String>();
+    private final Array<UiFloatAnimatable> floatAnimatableValues = new Array<UiFloatAnimatable>();
+    private final OrderedMap<String, UiScrollState> scrollStates = new OrderedMap<String, UiScrollState>();
+    private final OrderedMap<String, UiListState> listStates = new OrderedMap<String, UiListState>();
+    private final OrderedMap<String, UiRect> tooltipAnchors = new OrderedMap<String, UiRect>();
+    private final Array<String> unusedNodeIdentities = new Array<String>();
+    private final Array<UiNode> focusableNodes = new Array<UiNode>();
     private UiScope[] compositionScopes = new UiScope[64];
-    private ArrayList<?>[] compositionLists = new ArrayList<?>[8];
+    private Array<?>[] compositionLists = new Array<?>[8];
     private int compositionScopeCount;
     private int compositionListCount;
     private final UiInputHandler inputHandler = new UiInputHandler(this);
@@ -723,16 +723,16 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     @SuppressWarnings("unchecked")
-    <T> List<T> materialize(Iterable<T> items) {
-        if (items instanceof List<?>) {
-            return (List<T>)items;
+    <T> ArrayView<T> materialize(Iterable<T> items) {
+        if (items instanceof ArrayView<?>) {
+            return (ArrayView<T>)items;
         }
         if (compositionListCount >= compositionLists.length) {
             compositionLists = Arrays.copyOf(compositionLists, compositionLists.length * 2);
         }
-        ArrayList<Object> values = (ArrayList<Object>)compositionLists[compositionListCount];
+        Array<Object> values = (Array<Object>)compositionLists[compositionListCount];
         if (values == null) {
-            values = new ArrayList<Object>();
+            values = new Array<Object>();
             compositionLists[compositionListCount] = values;
         }
         compositionListCount++;
@@ -740,7 +740,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         for (T item : items) {
             values.add(item);
         }
-        return (List<T>)(List<?>)values;
+        return (ArrayView<T>)(ArrayView<?>)values.view();
     }
 
     private void beginCompositionScratch() {
@@ -772,7 +772,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             for (int i = 0; i < unusedNodeIdentities.size(); i++) {
                 String identity = unusedNodeIdentities.get(i);
                 UiNode node = retainedNodes.remove(identity);
-                retainedNodeValues.remove(node);
+                retainedNodeValues.removeValue(node, true);
                 clearReferencesToNode(node);
                 removeAnimationsForNode(identity);
                 if (node != null) {
@@ -838,8 +838,8 @@ public final class UiRoot implements Disposable, UiStateListener {
             String key = animatableKeys.get(i);
             if (key.equals(identity) || key.startsWith(prefix)) {
                 animatables.remove(key);
-                animatableKeys.remove(i);
-                animatableValues.remove(i);
+                animatableKeys.removeIndex(i);
+                animatableValues.removeIndex(i);
             }
         }
     }
@@ -850,8 +850,8 @@ public final class UiRoot implements Disposable, UiStateListener {
             String key = floatAnimatableKeys.get(i);
             if (key.equals(identity) || key.startsWith(prefix)) {
                 floatAnimatables.remove(key);
-                floatAnimatableKeys.remove(i);
-                floatAnimatableValues.remove(i);
+                floatAnimatableKeys.removeIndex(i);
+                floatAnimatableValues.removeIndex(i);
             }
         }
     }
@@ -1286,7 +1286,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
     }
 
-    private void collectRadioGroup(UiNode node, UiRadioModel group, List<UiNode> result) {
+    private void collectRadioGroup(UiNode node, UiRadioModel group, Array<UiNode> result) {
         if (node == null || !node.visible()) {
             return;
         }
@@ -1295,7 +1295,7 @@ public final class UiRoot implements Disposable, UiStateListener {
                 && group.sameGroup((UiRadioModel) node.descriptor())) {
             result.add(node);
         }
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         for (int i = 0; i < children.size(); i++) {
             collectRadioGroup(children.get(i), group, result);
         }
@@ -1325,7 +1325,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
     }
 
-    private void collectFocusable(UiNode node, List<UiNode> result) {
+    private void collectFocusable(UiNode node, Array<UiNode> result) {
         if (node == null || !node.visible()) {
             return;
         }
@@ -1342,13 +1342,13 @@ public final class UiRoot implements Disposable, UiStateListener {
                 result.add(node);
             }
         }
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         for (int i = 0; i < children.size(); i++) {
             collectFocusable(children.get(i), result);
         }
     }
 
-    private int radioGroupIndex(List<UiNode> nodes, UiRadioModel group) {
+    private int radioGroupIndex(ArrayView<UiNode> nodes, UiRadioModel group) {
         for (int i = 0; i < nodes.size(); i++) {
             UiNode node = nodes.get(i);
             if (node.descriptor() instanceof UiRadioModel
@@ -1388,7 +1388,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         return hitResult;
     }
 
-    List<UiNode> renderChildren(UiNode node) {
+    ArrayView<UiNode> renderChildren(UiNode node) {
         return orderedChildren(node, false);
     }
 
@@ -1541,7 +1541,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         } else if (node.type() == UiNodeType.GRID) {
             layoutGrid(node, inner);
         } else {
-            List<UiNode> children = node.children();
+            ArrayView<UiNode> children = node.children();
             for (int i = 0; i < children.size(); i++) {
                 layoutNode(children.get(i), inner);
             }
@@ -1567,7 +1567,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     private boolean updateScrollMetrics(UiNode node, UiRect viewport, UiRect scrolled) {
         float contentRight = scrolled.x() + viewport.width();
         float contentBottom = scrolled.y() + viewport.height();
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         for (int i = 0; i < children.size(); i++) {
             UiNode child = children.get(i);
             if (!isLayoutChild(child)) {
@@ -1583,7 +1583,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private void layoutColumn(UiNode node, UiRect inner) {
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         int childCount = layoutChildCount(children);
         float gap = node.modifier().gap();
         float availableHeight = Math.max(0.0f, inner.height() - gap * Math.max(0, childCount - 1));
@@ -1664,7 +1664,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private void layoutRow(UiNode node, UiRect inner) {
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         int childCount = layoutChildCount(children);
         float gap = node.modifier().gap();
         float availableWidth = Math.max(0.0f, inner.width() - gap * Math.max(0, childCount - 1));
@@ -1741,7 +1741,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private void layoutGrid(UiNode node, UiRect inner) {
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         int columns = Math.max(1, node.intValue());
         float gap = node.modifier().gap();
         float cellWidth = Math.max(0.0f,
@@ -1769,7 +1769,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
     }
 
-    private int layoutChildCount(List<UiNode> children) {
+    private int layoutChildCount(ArrayView<UiNode> children) {
         int count = 0;
         for (int i = 0; i < children.size(); i++) {
             if (isLayoutChild(children.get(i))) {
@@ -1784,7 +1784,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private void layoutOverlayChildren(UiNode node, UiRect bounds) {
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         for (int i = 0; i < children.size(); i++) {
             UiNode child = children.get(i);
             if (child.visible() && isOverlay(child)) {
@@ -1827,7 +1827,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     private void layoutOverlay(UiNode node, UiRect inner) {
         UiTooltip tooltip = node.descriptor() instanceof UiTooltip ? (UiTooltip) node.descriptor() : null;
         UiRect tooltipAnchor = tooltip != null ? tooltipAnchorBounds(tooltip) : null;
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         for (int i = 0; i < children.size(); i++) {
             UiNode child = children.get(i);
             if (!isLayoutChild(child)) {
@@ -2036,7 +2036,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         float heightValue = padding.vertical();
         float gap = node.modifier().gap();
         int count = 0;
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         for (int i = 0; i < children.size(); i++) {
             UiNode child = children.get(i);
             if (!isLayoutChild(child)) {
@@ -2056,7 +2056,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         float heightValue = padding.vertical();
         float gap = node.modifier().gap();
         int count = 0;
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         for (int i = 0; i < children.size(); i++) {
             UiNode child = children.get(i);
             if (!isLayoutChild(child)) {
@@ -2081,7 +2081,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         float rowHeight = 0.0f;
         float rowsHeight = 0.0f;
         int count = 0;
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         for (int i = 0; i < children.size(); i++) {
             UiNode child = children.get(i);
             if (!isLayoutChild(child)) {
@@ -2275,9 +2275,9 @@ public final class UiRoot implements Disposable, UiStateListener {
             result.set(node, false);
             return true;
         }
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         if (children.size() > 1 && hasLayeredChildren(children)) {
-            List<UiNode> ordered = orderedChildren(node, true);
+            ArrayView<UiNode> ordered = orderedChildren(node, true);
             for (int i = 0; i < ordered.size(); i++) {
                 if (hitTest(ordered.get(i), x, y, result)) {
                     return true;
@@ -2316,20 +2316,20 @@ public final class UiRoot implements Disposable, UiStateListener {
                 || type == UiNodeType.TOOLTIP;
     }
 
-    private List<UiNode> orderedChildren(UiNode node, boolean frontToBack) {
-        List<UiNode> children = node.children();
+    private ArrayView<UiNode> orderedChildren(UiNode node, boolean frontToBack) {
+        ArrayView<UiNode> children = node.children();
         if (children.size() < 2 || !hasLayeredChildren(children)) {
             return children;
         }
         if (!node.hasChildOrderRevision(childOrderRevision)) {
-            ArrayList<UiNode> ordered = node.mutableOrderedChildren();
+            Array<UiNode> ordered = node.mutableOrderedChildren();
             ordered.clear();
             for (int i = 0; i < children.size(); i++) {
                 ordered.add(children.get(i));
             }
             sortLayeredChildren(ordered);
 
-            ArrayList<UiNode> reverse = node.mutableReverseOrderedChildren();
+            Array<UiNode> reverse = node.mutableReverseOrderedChildren();
             reverse.clear();
             for (int i = ordered.size() - 1; i >= 0; i--) {
                 reverse.add(ordered.get(i));
@@ -2339,7 +2339,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         return node.orderedChildren(frontToBack);
     }
 
-    private void sortLayeredChildren(ArrayList<UiNode> children) {
+    private void sortLayeredChildren(Array<UiNode> children) {
         for (int i = 1; i < children.size(); i++) {
             UiNode value = children.get(i);
             int insertion = i;
@@ -2367,7 +2367,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         return 0;
     }
 
-    private boolean hasLayeredChildren(List<UiNode> children) {
+    private boolean hasLayeredChildren(ArrayView<UiNode> children) {
         for (int i = 0; i < children.size(); i++) {
             if (layerRank(children.get(i)) > 0) {
                 return true;
@@ -3764,7 +3764,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     private void translateNode(UiNode node, float deltaX, float deltaY) {
         UiRect bounds = node.bounds();
         node.bounds(bounds.x() + deltaX, bounds.y() + deltaY, bounds.width(), bounds.height());
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         for (int i = 0; i < children.size(); i++) {
             translateNode(children.get(i), deltaX, deltaY);
         }

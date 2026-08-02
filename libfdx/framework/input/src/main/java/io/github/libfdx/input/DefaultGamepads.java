@@ -1,9 +1,8 @@
 package io.github.libfdx.input;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.core.ProviderId;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 /**
  * Provides the default implementation of a gamepads.
@@ -12,8 +11,9 @@ import java.util.List;
  */
 public final class DefaultGamepads implements Gamepads {
     private final ProviderId providerId = ProviderId.of("default_gamepads");
-    private final List<Gamepad> connected = new ArrayList<Gamepad>();
-    private final List<GamepadListener> listeners = new ArrayList<GamepadListener>();
+    private final Array<Gamepad> connected = new Array<Gamepad>();
+    private final ArrayView<Gamepad> connectedView = connected.view();
+    private final Array<GamepadListener> listeners = new Array<GamepadListener>();
 
     /**
      * Runs the connect step.
@@ -36,7 +36,7 @@ public final class DefaultGamepads implements Gamepads {
      * @param gamepad the gamepad
      */
     public void disconnect(Gamepad gamepad) {
-        if (gamepad == null || !connected.remove(gamepad)) {
+        if (gamepad == null || !connected.removeValue(gamepad)) {
             return;
         }
         for (int i = 0; i < listeners.size(); i++) {
@@ -50,8 +50,8 @@ public final class DefaultGamepads implements Gamepads {
      * @return the connected
      */
     @Override
-    public List<Gamepad> connected() {
-        return Collections.unmodifiableList(connected);
+    public ArrayView<Gamepad> connected() {
+        return connectedView;
     }
 
     /**
@@ -90,7 +90,7 @@ public final class DefaultGamepads implements Gamepads {
      */
     @Override
     public void removeListener(GamepadListener listener) {
-        listeners.remove(listener);
+        listeners.removeValue(listener);
     }
 
     /**

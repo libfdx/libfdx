@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.gl;
 
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.RenderPipeline;
@@ -9,8 +10,6 @@ import io.github.libfdx.graphics.shader.target.ShaderBindingRemap;
 import io.github.libfdx.graphics.shader.target.ShaderTargetBinding;
 import io.github.libfdx.graphics.VertexLayout;
 import io.github.libfdx.graphics.internal.ShaderRenderBindings;
-
-import java.util.ArrayList;
 
 /**
  * Represents a GL render pipeline handle.
@@ -168,7 +167,7 @@ final class GLRenderPipelineHandle implements RenderPipeline {
             ShaderRenderBindings bindings) {
         String[][] result = new String[bindings.sampledTextureCount()][];
         for (int slot = 0; slot < result.length; slot++) {
-            ArrayList<String> names = new ArrayList<String>();
+            Array<String> names = new Array<String>();
             addTargetNames(module, bindings.texture(slot), names);
             addTargetNames(module, bindings.sampler(slot), names);
             result[slot] = names.toArray(new String[0]);
@@ -177,7 +176,7 @@ final class GLRenderPipelineHandle implements RenderPipeline {
     }
 
     private static void addTargetNames(GLShaderModuleHandle module, ShaderBinding binding,
-            ArrayList<String> names) {
+            Array<String> names) {
         if (binding == null || module.translatedInterface() == null) {
             return;
         }

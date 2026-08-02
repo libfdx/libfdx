@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.gl.web;
 
+import io.github.libfdx.collections.IntMap;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.TextureFilter;
@@ -20,8 +21,6 @@ import org.teavm.jso.webgl.WebGLTexture;
 import org.teavm.jso.webgl.WebGLUniformLocation;
 
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Exposes API access for web GL.
@@ -107,7 +106,7 @@ final class WebGLApi implements GLApi {
     private final HandleMap<JSObject> framebuffers = HandleMap.create();
     private final HandleMap<JSObject> renderbuffers = HandleMap.create();
     private final HandleMap<HandleMap<WebGLUniformLocation>> uniforms = HandleMap.create();
-    private final Map<Integer, GLShaderType> shaderTypes = new HashMap<Integer, GLShaderType>();
+    private final IntMap<GLShaderType> shaderTypes = new IntMap<GLShaderType>();
     private int currentProgram;
 
     WebGLApi(WebGLRenderingContext gl) {

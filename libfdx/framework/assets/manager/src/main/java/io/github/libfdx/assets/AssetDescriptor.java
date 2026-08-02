@@ -1,10 +1,8 @@
 package io.github.libfdx.assets;
 
+import io.github.libfdx.collections.ObjectMap;
+import io.github.libfdx.collections.ObjectMapView;
 import io.github.libfdx.core.FdxException;
-
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * Describes the values used to create or identify an asset.
@@ -16,9 +14,10 @@ import java.util.Map;
 public final class AssetDescriptor<T> {
     private final String path;
     private final Class<T> type;
-    private final Map<String, Object> options;
+    private final ObjectMap<String, Object> options;
+    private final ObjectMapView<String, Object> optionsView;
 
-    private AssetDescriptor(String path, Class<T> type, Map<String, Object> options) {
+    private AssetDescriptor(String path, Class<T> type, ObjectMapView<String, Object> options) {
         if (path == null || path.trim().length() == 0) {
             throw new FdxException("Asset path cannot be empty");
         }
@@ -27,7 +26,8 @@ public final class AssetDescriptor<T> {
         }
         this.path = path.replace('\\', '/');
         this.type = type;
-        this.options = options != null ? new LinkedHashMap<String, Object>(options) : new LinkedHashMap<String, Object>();
+        this.options = options != null ? new ObjectMap<String, Object>(options) : new ObjectMap<String, Object>(0);
+        this.optionsView = this.options.view();
     }
 
     /**
@@ -51,7 +51,7 @@ public final class AssetDescriptor<T> {
      * @param options the options
      * @return the of
      */
-    public static <T> AssetDescriptor<T> of(String path, Class<T> type, Map<String, Object> options) {
+    public static <T> AssetDescriptor<T> of(String path, Class<T> type, ObjectMapView<String, Object> options) {
         return new AssetDescriptor<T>(path, type, options);
     }
 
@@ -78,7 +78,7 @@ public final class AssetDescriptor<T> {
      *
      * @return the options
      */
-    public Map<String, Object> options() {
-        return Collections.unmodifiableMap(options);
+    public ObjectMapView<String, Object> options() {
+        return optionsView;
     }
 }

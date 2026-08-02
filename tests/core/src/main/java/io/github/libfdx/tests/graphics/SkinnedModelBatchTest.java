@@ -1,6 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
 import io.github.libfdx.Fdx;
+import io.github.libfdx.collections.Array;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
 import io.github.libfdx.core.FdxException;
@@ -38,8 +39,6 @@ import io.github.libfdx.math.Vector3;
 import io.github.libfdx.tests.TestFpsLogger;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collections;
 
 /**
  * Runs the skinned model batch test scenario.
@@ -241,19 +240,19 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
         root.addChild(base);
         base.addChild(middle);
         middle.addChild(tip);
-        ArrayList<ModelNode> nodes = new ArrayList<ModelNode>();
+        Array<ModelNode> nodes = new Array<ModelNode>();
         nodes.add(root);
-        ArrayList<Material> materials = new ArrayList<Material>();
+        Array<Material> materials = new Array<Material>();
         materials.add(material);
-        ArrayList<Skin> skins = new ArrayList<Skin>();
+        Array<Skin> skins = new Array<Skin>();
         skins.add(skin);
-        ArrayList<Mesh> meshes = new ArrayList<Mesh>();
+        Array<Mesh> meshes = new Array<Mesh>();
         meshes.add(mesh);
-        return new DefaultModel(nodes, materials, Collections.<AnimationClip>emptyList(), skins, meshes);
+        return new DefaultModel(nodes, materials, new Array<AnimationClip>(0), skins, meshes);
     }
 
     private Skin skin() {
-        ArrayList<Bone> bones = new ArrayList<Bone>();
+        Array<Bone> bones = new Array<Bone>();
         bones.add(new Bone("bone-base", -1, Matrix4.translation(0.0f, -BONE_BASE_Y, 0.0f)));
         bones.add(new Bone("bone-middle", 0, Matrix4.translation(0.0f, -BONE_MIDDLE_Y, 0.0f)));
         bones.add(new Bone("bone-tip", 1, Matrix4.translation(0.0f, -BONE_TIP_Y, 0.0f)));

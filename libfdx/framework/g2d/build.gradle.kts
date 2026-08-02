@@ -20,7 +20,7 @@ dependencies {
     api(project(":libfdx:framework:graphics"))
     api(project(":libfdx:framework:assets:manager"))
     api(project(":libfdx:framework:assets:loaders"))
-    implementation(project(":libfdx:framework:collections"))
+    api(project(":libfdx:framework:collections"))
     implementation(project(":libfdx:framework:fdx:core"))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)

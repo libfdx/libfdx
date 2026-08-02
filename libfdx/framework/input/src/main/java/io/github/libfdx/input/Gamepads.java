@@ -1,7 +1,7 @@
 package io.github.libfdx.input;
 
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.core.ProviderHandle;
-import java.util.List;
 
 /**
  * Defines the contract for gamepads implementations.
@@ -14,7 +14,7 @@ public interface Gamepads extends ProviderHandle {
      *
      * @return the connected
      */
-    List<Gamepad> connected();
+    ArrayView<Gamepad> connected();
 
     /**
      * Finds a matching value.

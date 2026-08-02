@@ -1,16 +1,13 @@
 package io.github.libfdx.input;
 
-import java.util.EnumMap;
-import java.util.Map;
-
 /**
  * Represents a gamepad state.
  *
  * @author xpenatan
  */
 public final class GamepadState {
-    private final Map<GamepadAxis, Float> axes = new EnumMap<GamepadAxis, Float>(GamepadAxis.class);
-    private final Map<GamepadButton, Boolean> buttons = new EnumMap<GamepadButton, Boolean>(GamepadButton.class);
+    private final float[] axes = new float[GamepadAxis.values().length];
+    private final boolean[] buttons = new boolean[GamepadButton.values().length];
 
     /**
      * Runs the axis step.
@@ -19,8 +16,7 @@ public final class GamepadState {
      * @return the axis
      */
     public float axis(GamepadAxis axis) {
-        Float value = axes.get(axis);
-        return value != null ? value.floatValue() : 0.0f;
+        return axis != null ? axes[axis.ordinal()] : 0.0f;
     }
 
     /**
@@ -30,8 +26,7 @@ public final class GamepadState {
      * @return true if pressed succeeds or is active; false otherwise
      */
     public boolean pressed(GamepadButton button) {
-        Boolean value = buttons.get(button);
-        return value != null && value.booleanValue();
+        return button != null && buttons[button.ordinal()];
     }
 
     /**
@@ -42,7 +37,7 @@ public final class GamepadState {
      */
     public void axis(GamepadAxis axis, float value) {
         if (axis != null) {
-            axes.put(axis, Float.valueOf(value));
+            axes[axis.ordinal()] = value;
         }
     }
 
@@ -54,7 +49,7 @@ public final class GamepadState {
      */
     public void button(GamepadButton button, boolean pressed) {
         if (button != null) {
-            buttons.put(button, Boolean.valueOf(pressed));
+            buttons[button.ordinal()] = pressed;
         }
     }
 }

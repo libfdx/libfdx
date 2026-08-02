@@ -10,7 +10,7 @@ import java.util.NoSuchElementException;
  * @param <V> the value type
  * @author xpenatan
  */
-public final class LongMap<V> {
+public final class LongMap<V> implements LongMapView<V> {
     private static final float DEFAULT_LOAD_FACTOR = 0.75f;
     private long[] keys;
     private Object[] values;
@@ -19,6 +19,10 @@ public final class LongMap<V> {
     private int occupied;
     private int threshold;
     private final float loadFactor;
+    private Entries<V> entries;
+    private Keys keysView;
+    private Values<V> valuesView;
+    private LongMapView<V> view;
 
     /**
      * Creates a map.
@@ -34,6 +38,18 @@ public final class LongMap<V> {
      */
     public LongMap(int capacity) {
         this(capacity, DEFAULT_LOAD_FACTOR);
+    }
+
+    /**
+     * Creates a map containing a copy of the supplied entries.
+     *
+     * @param values the entries
+     */
+    public LongMap(LongMapView<? extends V> values) {
+        this(values != null ? values.size() : 0, DEFAULT_LOAD_FACTOR);
+        if (values != null) {
+            putAll(values);
+        }
     }
 
     /**
@@ -85,6 +101,23 @@ public final class LongMap<V> {
         values[index] = value;
         size++;
         return null;
+    }
+
+    /**
+     * Adds or replaces every entry from a read-only map view.
+     *
+     * @param entries the entries
+     * @return this map
+     */
+    public LongMap<V> putAll(LongMapView<? extends V> entries) {
+        if (entries == null) {
+            throw new IllegalArgumentException("entries must not be null");
+        }
+        ensureCapacity(entries.size());
+        for (Entry<? extends V> entry : entries.entries()) {
+            put(entry.key(), entry.value());
+        }
+        return this;
     }
 
     /**
@@ -279,7 +312,10 @@ public final class LongMap<V> {
      * @return the entries
      */
     public Iterable<Entry<V>> entries() {
-        return new Entries<V>(this);
+        if (entries == null) {
+            entries = new Entries<V>(this);
+        }
+        return entries;
     }
 
     /**
@@ -288,7 +324,10 @@ public final class LongMap<V> {
      * @return the keys
      */
     public Keys keys() {
-        return new Keys(this);
+        if (keysView == null) {
+            keysView = new Keys(this);
+        }
+        return keysView;
     }
 
     /**
@@ -297,7 +336,22 @@ public final class LongMap<V> {
      * @return the values
      */
     public Iterable<V> values() {
-        return new Values<V>(this);
+        if (valuesView == null) {
+            valuesView = new Values<V>(this);
+        }
+        return valuesView;
+    }
+
+    /**
+     * Returns a cached read-only live view of this map.
+     *
+     * @return the read-only view
+     */
+    public LongMapView<V> view() {
+        if (view == null) {
+            view = new ReadOnlyLongMapView<V>(this);
+        }
+        return view;
     }
 
     private int locate(long key) {
@@ -549,6 +603,79 @@ public final class LongMap<V> {
             while (nextIndex < map.states.length && map.states[nextIndex] != CollectionHash.USED) {
                 nextIndex++;
             }
+        }
+    }
+
+    private static final class ReadOnlyLongMapView<V> implements LongMapView<V> {
+        private final LongMap<V> map;
+
+        ReadOnlyLongMapView(LongMap<V> map) {
+            this.map = map;
+        }
+
+        @Override
+        public V get(long key) {
+            return map.get(key);
+        }
+
+        @Override
+        public V get(long key, V defaultValue) {
+            return map.get(key, defaultValue);
+        }
+
+        @Override
+        public boolean containsKey(long key) {
+            return map.containsKey(key);
+        }
+
+        @Override
+        public boolean containsValue(V value) {
+            return map.containsValue(value);
+        }
+
+        @Override
+        public boolean containsValue(V value, boolean identity) {
+            return map.containsValue(value, identity);
+        }
+
+        @Override
+        public long findKey(V value, long defaultKey) {
+            return map.findKey(value, defaultKey);
+        }
+
+        @Override
+        public long findKey(V value, boolean identity, long defaultKey) {
+            return map.findKey(value, identity, defaultKey);
+        }
+
+        @Override
+        public int size() {
+            return map.size();
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return map.isEmpty();
+        }
+
+        @Override
+        public boolean notEmpty() {
+            return map.notEmpty();
+        }
+
+        @Override
+        public Iterable<Entry<V>> entries() {
+            return map.entries();
+        }
+
+        @Override
+        public Keys keys() {
+            return map.keys();
+        }
+
+        @Override
+        public Iterable<V> values() {
+            return map.values();
         }
     }
 }

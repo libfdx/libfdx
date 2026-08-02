@@ -1,8 +1,8 @@
 package io.github.libfdx.ui;
 
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -1029,7 +1029,7 @@ public final class UiScope {
         if (items == null || content == null) {
             return;
         }
-        List<T> values = root.materialize(items);
+        ArrayView<T> values = root.materialize(items);
         for (int index = 0; index < values.size(); index++) {
             T item = values.get(index);
             String itemKey = itemKey(key != null ? key.key(item) : null, index, key != null);
@@ -1058,7 +1058,7 @@ public final class UiScope {
         if (items == null || content == null) {
             return node;
         }
-        List<T> values = root.materialize(items);
+        ArrayView<T> values = root.materialize(items);
         int first = Math.max(0, Math.min(listState.firstVisibleIndex(), values.size()));
         int count = Math.max(0, visibleCount);
         int last = Math.min(values.size(), first + count);

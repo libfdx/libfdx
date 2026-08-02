@@ -1,5 +1,9 @@
 package io.github.libfdx.graphics.g2d;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.IntMap;
+import io.github.libfdx.collections.LongMap;
+import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.assets.loaders.ImageAssetLoader;
 import io.github.libfdx.assets.loaders.ImageData;
 import io.github.libfdx.core.FdxException;
@@ -13,10 +17,6 @@ import io.github.libfdx.runtime.core.RasterizedGlyph;
 import io.github.libfdx.runtime.core.RuntimeCore;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Represents a bitmap font files.
@@ -60,18 +60,18 @@ public final class BitmapFontFiles {
         ensure(graphics, files, path);
         String text = files.internal(path).readString(StandardCharsets.UTF_8).get();
         BitmapFontDefinition definition = BitmapFontDefinition.parse(text);
-        List<Texture> pages = new ArrayList<Texture>();
+        Array<Texture> pages = new Array<Texture>();
         for (int i = 0; i < definition.pageFiles.size(); i++) {
             String pagePath = resolveSibling(path, definition.pageFiles.get(Integer.valueOf(i)));
             ImageData image = ImageAssetLoader.decode(pagePath, files.internal(pagePath).readBytes().get());
             pages.add(createTexture(graphics, pagePath, image));
         }
-        Map<Integer, BitmapFontGlyph> glyphs = new LinkedHashMap<Integer, BitmapFontGlyph>();
+        IntMap<BitmapFontGlyph> glyphs = new IntMap<BitmapFontGlyph>();
         for (BitmapFontDefinition.Glyph glyph : definition.glyphs.values()) {
             if (glyph.page >= 0 && glyph.page < pages.size() && glyph.width > 0 && glyph.height > 0) {
                 Texture page = pages.get(glyph.page);
                 TextureRegion region = new TextureRegion(page, glyph.x, glyph.y, glyph.width, glyph.height);
-                glyphs.put(Integer.valueOf(glyph.id), new BitmapFontGlyph(glyph.id, region, glyph.xOffset,
+                glyphs.put(glyph.id, new BitmapFontGlyph(glyph.id, region, glyph.xOffset,
                         glyph.yOffset, glyph.xAdvance));
             }
         }
@@ -168,12 +168,12 @@ public final class BitmapFontFiles {
         Texture texture = graphics.device().createTexture(TextureDescriptor.rgba8(label + " atlas",
                 rasterized.atlasWidth(), rasterized.atlasHeight()));
         graphics.device().writeTexture(texture, rasterized.rgba());
-        List<Texture> pages = new ArrayList<Texture>();
+        Array<Texture> pages = new Array<Texture>();
         pages.add(texture);
-        Map<Integer, BitmapFontGlyph> glyphs = new LinkedHashMap<Integer, BitmapFontGlyph>();
+        IntMap<BitmapFontGlyph> glyphs = new IntMap<BitmapFontGlyph>();
         for (RasterizedGlyph glyph : rasterized.glyphs().values()) {
             TextureRegion region = new TextureRegion(texture, glyph.x(), glyph.y(), glyph.width(), glyph.height());
-            glyphs.put(Integer.valueOf(glyph.codePoint()), new BitmapFontGlyph(glyph.codePoint(), region,
+            glyphs.put(glyph.codePoint(), new BitmapFontGlyph(glyph.codePoint(), region,
                     glyph.xOffset(), glyph.yOffset(), glyph.xAdvance()));
         }
         return new BitmapFont(rasterized.name(), rasterized.nativeSize(), rasterized.lineHeight(),
@@ -221,9 +221,9 @@ public final class BitmapFontFiles {
      * @author xpenatan
      */
     private static final class BitmapFontDefinition {
-        final Map<Integer, String> pageFiles = new LinkedHashMap<Integer, String>();
-        final Map<Integer, Glyph> glyphs = new LinkedHashMap<Integer, Glyph>();
-        final Map<Long, Integer> kernings = new LinkedHashMap<Long, Integer>();
+        final IntMap<String> pageFiles = new IntMap<String>();
+        final IntMap<Glyph> glyphs = new IntMap<Glyph>();
+        final LongMap<Integer> kernings = new LongMap<Integer>();
         String face = "bitmap";
         float size = 16.0f;
         float lineHeight = 16.0f;
@@ -262,7 +262,7 @@ public final class BitmapFontFiles {
                 return;
             }
             String type = type(line);
-            Map<String, String> values = values(line);
+            ObjectMap<String, String> values = values(line);
             if ("info".equals(type)) {
                 definition.face = value(values, "face", definition.face);
                 definition.size = floatValue(values, "size", definition.size);
@@ -270,7 +270,7 @@ public final class BitmapFontFiles {
                 definition.lineHeight = floatValue(values, "lineHeight", definition.lineHeight);
                 definition.base = floatValue(values, "base", definition.base);
             } else if ("page".equals(type)) {
-                definition.pageFiles.put(Integer.valueOf(intValue(values, "id", 0)), value(values, "file", ""));
+                definition.pageFiles.put(intValue(values, "id", 0), value(values, "file", ""));
             } else if ("char".equals(type)) {
                 Glyph glyph = new Glyph();
                 glyph.id = intValue(values, "id", 0);
@@ -282,12 +282,12 @@ public final class BitmapFontFiles {
                 glyph.yOffset = floatValue(values, "yoffset", 0.0f);
                 glyph.xAdvance = floatValue(values, "xadvance", glyph.width);
                 glyph.page = intValue(values, "page", 0);
-                definition.glyphs.put(Integer.valueOf(glyph.id), glyph);
+                definition.glyphs.put(glyph.id, glyph);
             } else if ("kerning".equals(type)) {
                 int first = intValue(values, "first", 0);
                 int second = intValue(values, "second", 0);
                 int amount = intValue(values, "amount", 0);
-                definition.kernings.put(Long.valueOf(BitmapFont.kerningKey(first, second)), Integer.valueOf(amount));
+                definition.kernings.put(BitmapFont.kerningKey(first, second), Integer.valueOf(amount));
             }
         }
 
@@ -296,8 +296,8 @@ public final class BitmapFontFiles {
             return space >= 0 ? line.substring(0, space) : line;
         }
 
-        private static Map<String, String> values(String line) {
-            Map<String, String> result = new LinkedHashMap<String, String>();
+        private static ObjectMap<String, String> values(String line) {
+            ObjectMap<String, String> result = new ObjectMap<String, String>();
             int index = line.indexOf(' ');
             while (index >= 0 && index < line.length()) {
                 while (index < line.length() && Character.isWhitespace(line.charAt(index))) {
@@ -327,12 +327,12 @@ public final class BitmapFontFiles {
             return result;
         }
 
-        private static String value(Map<String, String> values, String key, String fallback) {
+        private static String value(ObjectMap<String, String> values, String key, String fallback) {
             String value = values.get(key);
             return value != null ? value : fallback;
         }
 
-        private static int intValue(Map<String, String> values, String key, int fallback) {
+        private static int intValue(ObjectMap<String, String> values, String key, int fallback) {
             try {
                 return Integer.parseInt(value(values, key, String.valueOf(fallback)));
             } catch (NumberFormatException ignored) {
@@ -340,7 +340,7 @@ public final class BitmapFontFiles {
             }
         }
 
-        private static float floatValue(Map<String, String> values, String key, float fallback) {
+        private static float floatValue(ObjectMap<String, String> values, String key, float fallback) {
             try {
                 return Float.parseFloat(value(values, key, String.valueOf(fallback)));
             } catch (NumberFormatException ignored) {

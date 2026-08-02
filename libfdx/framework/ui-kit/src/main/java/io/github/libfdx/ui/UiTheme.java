@@ -1,8 +1,7 @@
 package io.github.libfdx.ui;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import io.github.libfdx.collections.ObjectMapView;
+import io.github.libfdx.collections.OrderedMap;
 
 /**
  * Represents an ui theme.
@@ -10,17 +9,18 @@ import java.util.Map;
  * @author xpenatan
  */
 public final class UiTheme {
-    private final Map<String, UiStyle> styles;
-    private final Map<String, UiDrawable> drawables;
-    private final Map<String, UiFont> fonts;
+    private final OrderedMap<String, UiStyle> styles;
+    private final OrderedMap<String, UiDrawable> drawables;
+    private final OrderedMap<String, UiFont> fonts;
     private final UiColor backgroundColor;
     private final UiColor textColor;
 
-    private UiTheme(Map<String, UiStyle> styles, Map<String, UiDrawable> drawables, Map<String, UiFont> fonts,
+    private UiTheme(ObjectMapView<String, UiStyle> styles, ObjectMapView<String, UiDrawable> drawables,
+            ObjectMapView<String, UiFont> fonts,
             UiColor backgroundColor, UiColor textColor) {
-        this.styles = Collections.unmodifiableMap(new LinkedHashMap<String, UiStyle>(styles));
-        this.drawables = Collections.unmodifiableMap(new LinkedHashMap<String, UiDrawable>(drawables));
-        this.fonts = Collections.unmodifiableMap(new LinkedHashMap<String, UiFont>(fonts));
+        this.styles = new OrderedMap<String, UiStyle>(styles);
+        this.drawables = new OrderedMap<String, UiDrawable>(drawables);
+        this.fonts = new OrderedMap<String, UiFont>(fonts);
         this.backgroundColor = backgroundColor != null ? backgroundColor : UiColor.TRANSPARENT;
         this.textColor = textColor != null ? textColor : UiColor.WHITE;
     }
@@ -31,7 +31,7 @@ public final class UiTheme {
      * @return a new UI theme
      */
     public static UiTheme light() {
-        Map<String, UiStyle> styles = new LinkedHashMap<String, UiStyle>();
+        OrderedMap<String, UiStyle> styles = new OrderedMap<String, UiStyle>();
         UiTextStyle text = UiTextStyle.text().color(UiColor.rgba8888(0x20242cff));
         styles.put("text", UiStyle.style().text(text));
         styles.put("button", UiStyle.button().text(text.wrap(false).ellipsis(true))
@@ -57,7 +57,7 @@ public final class UiTheme {
                 .text(text.wrap(false).ellipsis(true))
                 .background(UiDrawable.color(UiColor.rgba8888(0xe8ebf0ff)))
                 .foreground(UiDrawable.color(UiColor.rgba8888(0x2377d1ff))));
-        return new UiTheme(styles, new LinkedHashMap<String, UiDrawable>(), new LinkedHashMap<String, UiFont>(),
+        return new UiTheme(styles, new OrderedMap<String, UiDrawable>(), new OrderedMap<String, UiFont>(),
                 UiColor.WHITE, UiColor.rgba8888(0x20242cff));
     }
 
@@ -67,7 +67,7 @@ public final class UiTheme {
      * @return a new UI theme
      */
     public static UiTheme dark() {
-        Map<String, UiStyle> styles = new LinkedHashMap<String, UiStyle>();
+        OrderedMap<String, UiStyle> styles = new OrderedMap<String, UiStyle>();
         UiTextStyle text = UiTextStyle.text().color(UiColor.rgba8888(0xf2f4f8ff));
         styles.put("text", UiStyle.style().text(text));
         styles.put("button", UiStyle.button().text(text.wrap(false).ellipsis(true))
@@ -93,7 +93,7 @@ public final class UiTheme {
                 .text(text.wrap(false).ellipsis(true))
                 .background(UiDrawable.color(UiColor.rgba8888(0x10141bff)))
                 .foreground(UiDrawable.color(UiColor.rgba8888(0x47a8ffff))));
-        return new UiTheme(styles, new LinkedHashMap<String, UiDrawable>(), new LinkedHashMap<String, UiFont>(),
+        return new UiTheme(styles, new OrderedMap<String, UiDrawable>(), new OrderedMap<String, UiFont>(),
                 UiColor.rgba8888(0x10141bff), UiColor.rgba8888(0xf2f4f8ff));
     }
 
@@ -105,7 +105,7 @@ public final class UiTheme {
      * @return this UI theme for chaining
      */
     public UiTheme style(String name, UiStyle style) {
-        Map<String, UiStyle> next = new LinkedHashMap<String, UiStyle>(styles);
+        OrderedMap<String, UiStyle> next = new OrderedMap<String, UiStyle>(styles);
         next.put(name, style);
         return new UiTheme(next, drawables, fonts, backgroundColor, textColor);
     }
@@ -268,7 +268,7 @@ public final class UiTheme {
      * @return this UI theme for chaining
      */
     public UiTheme drawable(String name, UiDrawable drawable) {
-        Map<String, UiDrawable> next = new LinkedHashMap<String, UiDrawable>(drawables);
+        OrderedMap<String, UiDrawable> next = new OrderedMap<String, UiDrawable>(drawables);
         next.put(name, drawable);
         return new UiTheme(styles, next, fonts, backgroundColor, textColor);
     }
@@ -281,7 +281,7 @@ public final class UiTheme {
      * @return this UI theme for chaining
      */
     public UiTheme font(String name, UiFont font) {
-        Map<String, UiFont> next = new LinkedHashMap<String, UiFont>(fonts);
+        OrderedMap<String, UiFont> next = new OrderedMap<String, UiFont>(fonts);
         next.put(name, font);
         return new UiTheme(styles, drawables, next, backgroundColor, textColor);
     }
@@ -332,8 +332,8 @@ public final class UiTheme {
      *
      * @return the styles
      */
-    public Map<String, UiStyle> styles() {
-        return styles;
+    public ObjectMapView<String, UiStyle> styles() {
+        return styles.view();
     }
 
     /**

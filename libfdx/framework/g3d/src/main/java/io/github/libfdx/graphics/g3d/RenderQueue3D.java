@@ -1,8 +1,7 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.graphics.camera.Camera;
-
-import java.util.List;
 
 /**
  * Defines the contract for render queue3 d implementations.
@@ -49,5 +48,5 @@ public interface RenderQueue3D {
      *
      * @return the renderables
      */
-    List<Renderable3D> renderables();
+    ArrayView<Renderable3D> renderables();
 }

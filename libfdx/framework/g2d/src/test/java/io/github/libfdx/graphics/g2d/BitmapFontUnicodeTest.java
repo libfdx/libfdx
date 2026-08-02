@@ -1,11 +1,10 @@
 package io.github.libfdx.graphics.g2d;
 
+import io.github.libfdx.collections.IntMap;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 final class BitmapFontUnicodeTest {
@@ -20,7 +19,7 @@ final class BitmapFontUnicodeTest {
         assertEquals(30.0f, font.width("A" + EMOJI_TEXT + "B", 10.0f));
 
         BitmapFontLayout wrapped = font.layout(EMOJI_TEXT + EMOJI_TEXT, 10.0f, 10.0f, true, false);
-        assertEquals(List.of(EMOJI_TEXT, EMOJI_TEXT), wrapped.lines());
+        assertArrayEquals(new String[] { EMOJI_TEXT, EMOJI_TEXT }, wrapped.lines().toArray(new String[0]));
 
         BitmapFontLayout truncated = font.layout(EMOJI_TEXT + "A", 10.0f, 30.0f, false, true);
         assertEquals(1, truncated.lines().size());
@@ -28,12 +27,12 @@ final class BitmapFontUnicodeTest {
     }
 
     private static BitmapFont font() {
-        Map<Integer, BitmapFontGlyph> glyphs = new LinkedHashMap<Integer, BitmapFontGlyph>();
-        glyphs.put(Integer.valueOf('?'), new BitmapFontGlyph('?', null, 0.0f, 0.0f, 10.0f));
-        glyphs.put(Integer.valueOf('.'), new BitmapFontGlyph('.', null, 0.0f, 0.0f, 5.0f));
-        glyphs.put(Integer.valueOf('A'), new BitmapFontGlyph('A', null, 0.0f, 0.0f, 10.0f));
-        glyphs.put(Integer.valueOf('B'), new BitmapFontGlyph('B', null, 0.0f, 0.0f, 10.0f));
-        glyphs.put(Integer.valueOf(EMOJI), new BitmapFontGlyph(EMOJI, null, 0.0f, 0.0f, 10.0f));
+        IntMap<BitmapFontGlyph> glyphs = new IntMap<BitmapFontGlyph>();
+        glyphs.put('?', new BitmapFontGlyph('?', null, 0.0f, 0.0f, 10.0f));
+        glyphs.put('.', new BitmapFontGlyph('.', null, 0.0f, 0.0f, 5.0f));
+        glyphs.put('A', new BitmapFontGlyph('A', null, 0.0f, 0.0f, 10.0f));
+        glyphs.put('B', new BitmapFontGlyph('B', null, 0.0f, 0.0f, 10.0f));
+        glyphs.put(EMOJI, new BitmapFontGlyph(EMOJI, null, 0.0f, 0.0f, 10.0f));
         return new BitmapFont("unicode-test", 10.0f, 10.0f, 8.0f, glyphs, null, null, false);
     }
 

@@ -1,11 +1,10 @@
 package io.github.libfdx.validation.scenario.ui.kit;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.ui.UiNode;
 import io.github.libfdx.ui.UiRoot;
 import io.github.libfdx.validation.scenario.ScenarioContext;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 /**
  * Represents an ui scenario target.
@@ -13,6 +12,7 @@ import java.util.List;
  * @author xpenatan
  */
 public final class UiScenarioTarget {
+    private static final ArrayView<UiNode> EMPTY_NODES = new Array<UiNode>(0).view();
     private final String description;
     private final String eventName;
     private final NodeMatcher matcher;
@@ -79,13 +79,13 @@ public final class UiScenarioTarget {
      * @param root the root
      * @return the resolve all
      */
-    public List<UiNode> resolveAll(UiRoot root) {
+    public ArrayView<UiNode> resolveAll(UiRoot root) {
         if (root == null) {
-            return Collections.emptyList();
+            return EMPTY_NODES;
         }
-        ArrayList<UiNode> nodes = new ArrayList<UiNode>();
+        Array<UiNode> nodes = new Array<UiNode>();
         collect(root.rootNode(), nodes);
-        return Collections.unmodifiableList(nodes);
+        return nodes.view();
     }
 
     private UiNode find(UiNode node) {
@@ -95,7 +95,7 @@ public final class UiScenarioTarget {
         if (matcher.matches(node)) {
             return node;
         }
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         for (int i = 0; i < children.size(); i++) {
             UiNode found = find(children.get(i));
             if (found != null) {
@@ -105,14 +105,14 @@ public final class UiScenarioTarget {
         return null;
     }
 
-    private void collect(UiNode node, List<UiNode> nodes) {
+    private void collect(UiNode node, Array<UiNode> nodes) {
         if (node == null) {
             return;
         }
         if (matcher.matches(node)) {
             nodes.add(node);
         }
-        List<UiNode> children = node.children();
+        ArrayView<UiNode> children = node.children();
         for (int i = 0; i < children.size(); i++) {
             collect(children.get(i), nodes);
         }

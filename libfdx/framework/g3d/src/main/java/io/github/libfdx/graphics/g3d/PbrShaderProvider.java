@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.collections.IdentityMap;
 import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
 import io.github.libfdx.graphics.shader.runtime.ShaderResourceBinding;
 import io.github.libfdx.graphics.camera.Camera;
@@ -34,8 +35,6 @@ import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphProvider;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
-import java.util.IdentityHashMap;
-import java.util.Map;
 
 /**
  * Provides pbr shader services.
@@ -750,8 +749,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         private static final float MIN_VISIBLE_CLIP_W = 0.000001f;
         private final GraphicsContext graphics;
         private final ShaderModule shaderModule;
-        private final Map<VertexLayout, RenderPipeline[]> pipelines =
-                new IdentityHashMap<VertexLayout, RenderPipeline[]>();
+        private final IdentityMap<VertexLayout, RenderPipeline[]> pipelines =
+                new IdentityMap<VertexLayout, RenderPipeline[]>();
         private ScratchBuffer[] scratchBuffers = new ScratchBuffer[4];
         private WorldVertex[] worldVertexPool = new WorldVertex[64];
         private ColorVertex[] colorVertexPool = new ColorVertex[64];

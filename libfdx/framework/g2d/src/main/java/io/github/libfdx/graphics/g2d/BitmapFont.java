@@ -1,15 +1,16 @@
 package io.github.libfdx.graphics.g2d;
 
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.FloatArray;
+import io.github.libfdx.collections.IntMap;
+import io.github.libfdx.collections.IntMapView;
+import io.github.libfdx.collections.IntSet;
+import io.github.libfdx.collections.LongMap;
+import io.github.libfdx.collections.LongMapView;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.graphics.Texture;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Represents a bitmap font.
@@ -24,9 +25,10 @@ public final class BitmapFont implements Disposable {
     private final float nativeSize;
     private final float lineHeight;
     private final float baseLine;
-    private final Map<Integer, BitmapFontGlyph> glyphs;
-    private final Map<Long, Integer> kernings;
-    private final List<Texture> pages;
+    private final IntMap<BitmapFontGlyph> glyphs;
+    private final LongMap<Integer> kernings;
+    private final Array<Texture> pages;
+    private final ArrayView<Texture> pageView;
     private final BitmapFontGlyph fallbackGlyph;
     private final BitmapFontGlyph[] asciiGlyphs;
     private final int[] asciiKernings;
@@ -46,33 +48,32 @@ public final class BitmapFont implements Disposable {
      * @param ownsPages the owns pages
      */
     public BitmapFont(String name, float nativeSize, float lineHeight, float baseLine,
-            Map<Integer, BitmapFontGlyph> glyphs, Map<Long, Integer> kernings, List<Texture> pages,
+            IntMapView<BitmapFontGlyph> glyphs, LongMapView<Integer> kernings, ArrayView<Texture> pages,
             boolean ownsPages) {
         this.name = name != null ? name : "bitmap";
         this.nativeSize = nativeSize > 0.0f ? nativeSize : lineHeight > 0.0f ? lineHeight : 16.0f;
         this.lineHeight = lineHeight > 0.0f ? lineHeight : this.nativeSize;
         this.baseLine = baseLine > 0.0f ? baseLine : this.lineHeight;
-        this.glyphs = Collections.unmodifiableMap(new LinkedHashMap<Integer, BitmapFontGlyph>(glyphs));
-        this.kernings = Collections.unmodifiableMap(new LinkedHashMap<Long, Integer>(
-                kernings != null ? kernings : new LinkedHashMap<Long, Integer>()));
-        this.pages = Collections.unmodifiableList(new ArrayList<Texture>(
-                pages != null ? pages : new ArrayList<Texture>()));
-        this.fallbackGlyph = this.glyphs.get(Integer.valueOf('?'));
+        this.glyphs = glyphs != null ? new IntMap<BitmapFontGlyph>(glyphs) : new IntMap<BitmapFontGlyph>(0);
+        this.kernings = kernings != null ? new LongMap<Integer>(kernings) : new LongMap<Integer>(0);
+        this.pages = pages != null ? new Array<Texture>(pages) : new Array<Texture>(0);
+        this.pageView = this.pages.view();
+        this.fallbackGlyph = this.glyphs.get('?');
         this.asciiGlyphs = new BitmapFontGlyph[ASCII_CACHE_SIZE];
-        for (Map.Entry<Integer, BitmapFontGlyph> entry : this.glyphs.entrySet()) {
-            int codePoint = entry.getKey().intValue();
+        for (IntMap.Entry<BitmapFontGlyph> entry : this.glyphs.entries()) {
+            int codePoint = entry.key();
             if (codePoint >= 0 && codePoint < ASCII_CACHE_SIZE) {
-                asciiGlyphs[codePoint] = entry.getValue();
+                asciiGlyphs[codePoint] = entry.value();
             }
         }
         this.asciiKernings = new int[ASCII_CACHE_SIZE * ASCII_CACHE_SIZE];
         Arrays.fill(asciiKernings, NO_KERNING);
-        for (Map.Entry<Long, Integer> entry : this.kernings.entrySet()) {
-            long key = entry.getKey().longValue();
+        for (LongMap.Entry<Integer> entry : this.kernings.entries()) {
+            long key = entry.key();
             int first = (int) (key >> 32);
             int second = (int) key;
             if (first >= 0 && first < ASCII_CACHE_SIZE && second >= 0 && second < ASCII_CACHE_SIZE) {
-                asciiKernings[first * ASCII_CACHE_SIZE + second] = entry.getValue().intValue();
+                asciiKernings[first * ASCII_CACHE_SIZE + second] = entry.value().intValue();
             }
         }
         this.ownsPages = ownsPages;
@@ -89,13 +90,13 @@ public final class BitmapFont implements Disposable {
      */
     public static BitmapFont fromGrid(Texture texture, String characters, int glyphWidth, int glyphHeight) {
         String text = characters != null ? characters : "";
-        Map<Integer, BitmapFontGlyph> glyphs = new LinkedHashMap<Integer, BitmapFontGlyph>();
+        IntMap<BitmapFontGlyph> glyphs = new IntMap<BitmapFontGlyph>();
         int columns = Math.max(1, texture.width() / Math.max(1, glyphWidth));
-        Set<Integer> seen = new LinkedHashSet<Integer>();
+        IntSet seen = new IntSet();
         int glyphIndex = 0;
         for (int i = 0; i < text.length();) {
             int codePoint = text.codePointAt(i);
-            if (!seen.add(Integer.valueOf(codePoint))) {
+            if (!seen.add(codePoint)) {
                 glyphIndex++;
                 i += Character.charCount(codePoint);
                 continue;
@@ -105,16 +106,16 @@ public final class BitmapFont implements Disposable {
             int x = column * glyphWidth;
             int y = row * glyphHeight;
             if (x + glyphWidth <= texture.width() && y + glyphHeight <= texture.height()) {
-                glyphs.put(Integer.valueOf(codePoint), new BitmapFontGlyph(codePoint,
+                glyphs.put(codePoint, new BitmapFontGlyph(codePoint,
                         new TextureRegion(texture, x, y, glyphWidth, glyphHeight), 0.0f, 0.0f, glyphWidth));
             }
             glyphIndex++;
             i += Character.charCount(codePoint);
         }
-        List<Texture> pages = new ArrayList<Texture>();
+        Array<Texture> pages = new Array<Texture>();
         pages.add(texture);
         return new BitmapFont("grid", glyphHeight, glyphHeight, glyphHeight, glyphs,
-                new LinkedHashMap<Long, Integer>(), pages, false);
+                new LongMap<Integer>(0), pages, false);
     }
 
     /**
@@ -166,7 +167,7 @@ public final class BitmapFont implements Disposable {
         if (glyph != null) {
             return glyph;
         }
-        glyph = glyphs.get(Integer.valueOf(codePoint));
+        glyph = glyphs.get(codePoint);
         return glyph != null ? glyph : fallbackGlyph;
     }
 
@@ -180,7 +181,7 @@ public final class BitmapFont implements Disposable {
         if (codePoint >= 0 && codePoint < ASCII_CACHE_SIZE && asciiGlyphs[codePoint] != null) {
             return true;
         }
-        return glyphs.containsKey(Integer.valueOf(codePoint));
+        return glyphs.containsKey(codePoint);
     }
 
     /**
@@ -195,7 +196,7 @@ public final class BitmapFont implements Disposable {
             int value = asciiKernings[first * ASCII_CACHE_SIZE + second];
             return value != NO_KERNING ? value : 0;
         }
-        Integer value = kernings.get(Long.valueOf(kerningKey(first, second)));
+        Integer value = kernings.get(kerningKey(first, second));
         return value != null ? value.intValue() : 0;
     }
 
@@ -262,8 +263,8 @@ public final class BitmapFont implements Disposable {
      * @return the layout
      */
     public BitmapFontLayout layout(String text, float size, float maxWidth, boolean wrap, boolean ellipsis) {
-        List<String> lines = new ArrayList<String>();
-        List<Float> widths = new ArrayList<Float>();
+        Array<String> lines = new Array<String>();
+        FloatArray widths = new FloatArray();
         String value = text != null ? text : "";
         int lineStart = 0;
         for (int i = 0; i <= value.length(); i++) {
@@ -274,11 +275,11 @@ public final class BitmapFont implements Disposable {
         }
         if (lines.isEmpty()) {
             lines.add("");
-            widths.add(Float.valueOf(0.0f));
+            widths.add(0.0f);
         }
         float max = 0.0f;
         for (int i = 0; i < widths.size(); i++) {
-            max = Math.max(max, widths.get(i).floatValue());
+            max = Math.max(max, widths.get(i));
         }
         float actualLineHeight = lineHeight(size);
         return new BitmapFontLayout(lines, widths, max, actualLineHeight * lines.size(), actualLineHeight);
@@ -289,8 +290,8 @@ public final class BitmapFont implements Disposable {
      *
      * @return the pages
      */
-    public List<Texture> pages() {
-        return pages;
+    public ArrayView<Texture> pages() {
+        return pageView;
     }
 
     /**
@@ -327,7 +328,7 @@ public final class BitmapFont implements Disposable {
     }
 
     private void appendWrappedLine(String value, float size, float maxWidth, boolean wrap, boolean ellipsis,
-            List<String> lines, List<Float> widths) {
+            Array<String> lines, FloatArray widths) {
         if (!wrap || maxWidth <= 0.0f || width(value, size) <= maxWidth) {
             appendLine(truncate(value, size, maxWidth, ellipsis), size, lines, widths);
             return;
@@ -386,8 +387,8 @@ public final class BitmapFont implements Disposable {
         return value.substring(0, end) + marker;
     }
 
-    private void appendLine(String line, float size, List<String> lines, List<Float> widths) {
+    private void appendLine(String line, float size, Array<String> lines, FloatArray widths) {
         lines.add(line);
-        widths.add(Float.valueOf(width(line, size)));
+        widths.add(width(line, size));
     }
 }
