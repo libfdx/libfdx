@@ -15,6 +15,7 @@ import org.openjdk.jmh.runner.options.OptionsBuilder;
 public final class CollectionsBenchmarkRunner {
     private static final String[] COLLECTION_NAMES = {
             "Array",
+            "ArrayList",
             "IntArray",
             "LongArray",
             "FloatArray",
@@ -23,6 +24,7 @@ public final class CollectionsBenchmarkRunner {
             "OrderedIntNodeMap",
             "OrderedIntSparseNodeMap",
             "IntMap",
+            "HashMap",
             "LongMap",
             "FloatMap",
             "ObjectSet",

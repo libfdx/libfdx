@@ -1,5 +1,8 @@
 package io.github.libfdx.collections;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.openjdk.jmh.annotations.Benchmark;
@@ -30,9 +33,10 @@ import org.openjdk.jmh.annotations.Warmup;
  * cover 0.50 and 0.75 load factors, while {@link ObjectMap} additionally covers
  * equality and identity keys. Indexed {@code GET} cases use a deterministic
  * scrambled access order; indexed loops remain sequential. The
- * {@link OrderedIntNodeMap} benchmark directly compares unordered array,
- * unordered primitive map, ordered object map, hash-backed ordered nodes,
- * and sparse-set ordered nodes.</p>
+ * {@link OrderedIntNodeMap} benchmark directly compares ordered and unordered
+ * libFDX arrays, Java {@link ArrayList}, libFDX {@link IntMap}, Java
+ * {@link HashMap}, ordered object maps, hash-backed ordered nodes, and
+ * sparse-set ordered nodes.</p>
  *
  * <p>Run the complete benchmark with {@code benchmarkCollections}, or verify
  * the matrix quickly with {@code benchmarkCollectionsQuick}. The full task
@@ -135,8 +139,11 @@ public class CollectionsBenchmark {
 
     /** Implementations in the ordered int node map comparison. */
     public enum NodeMapComparisonImplementation {
-        ARRAY,
+        ARRAY_ORDERED,
+        ARRAY_UNORDERED,
+        JAVA_ARRAY_LIST,
         INT_MAP,
+        JAVA_HASH_MAP,
         ORDERED_MAP,
         ORDERED_INT_NODE_MAP,
         ORDERED_INT_SPARSE_NODE_MAP
@@ -187,6 +194,43 @@ public class CollectionsBenchmark {
         @TearDown(Level.Invocation)
         public void validate() {
             validateSize("Array", values.size(), isArrayRemoval(operation) ? 0 : ELEMENT_COUNT);
+        }
+    }
+
+    /** State for Java {@link ArrayList} using the same object values. */
+    @State(Scope.Thread)
+    public static class JavaArrayListState {
+        @Param
+        public ArrayOperation operation;
+
+        public ArrayList<BenchmarkValue> values;
+
+        @Setup(Level.Trial)
+        public void setupTrial() {
+            values = new ArrayList<BenchmarkValue>(ELEMENT_COUNT);
+            if (isArrayRead(operation)) {
+                fill(values);
+            }
+            if (operation == ArrayOperation.ITERATE) {
+                values.iterator();
+            }
+        }
+
+        @Setup(Level.Invocation)
+        public void setupInvocation() {
+            if (operation == ArrayOperation.ADD) {
+                values.clear();
+            }
+            else if (isArrayRemoval(operation)) {
+                values.clear();
+                fill(values);
+            }
+        }
+
+        @TearDown(Level.Invocation)
+        public void validate() {
+            validateSize("ArrayList", values.size(),
+                    isArrayRemoval(operation) ? 0 : ELEMENT_COUNT);
         }
     }
 
@@ -421,6 +465,45 @@ public class CollectionsBenchmark {
         @TearDown(Level.Invocation)
         public void validate() {
             validateSize("IntMap", values.size(), operation == MapOperation.REMOVE ? 0 : ELEMENT_COUNT);
+        }
+    }
+
+    /** State for Java {@link HashMap} with boxed integer keys. */
+    @State(Scope.Thread)
+    public static class JavaHashMapState {
+        @Param({"0.50", "0.75"})
+        public float loadFactor;
+
+        @Param
+        public MapOperation operation;
+
+        public HashMap<Integer, BenchmarkValue> values;
+
+        @Setup(Level.Trial)
+        public void setupTrial() {
+            values = new HashMap<Integer, BenchmarkValue>(
+                    javaHashMapInitialCapacity(ELEMENT_COUNT, loadFactor), loadFactor);
+            if (isMapRead(operation)) {
+                fill(values);
+            }
+            prewarmJavaHashMapView(values, operation);
+        }
+
+        @Setup(Level.Invocation)
+        public void setupInvocation() {
+            if (operation == MapOperation.PUT) {
+                values.clear();
+            }
+            else if (operation == MapOperation.REMOVE) {
+                values.clear();
+                fill(values);
+            }
+        }
+
+        @TearDown(Level.Invocation)
+        public void validate() {
+            validateSize("HashMap", values.size(),
+                    operation == MapOperation.REMOVE ? 0 : ELEMENT_COUNT);
         }
     }
 
@@ -665,7 +748,9 @@ public class CollectionsBenchmark {
         public NodeMapComparisonOperation operation;
 
         public Array<BenchmarkValue> array;
+        public ArrayList<BenchmarkValue> javaArrayList;
         public IntMap<BenchmarkValue> intMap;
+        public HashMap<Integer, BenchmarkValue> javaHashMap;
         public OrderedMap<BenchmarkKey, BenchmarkValue> orderedMap;
         public OrderedIntNodeMap<BenchmarkValue, BenchmarkNode> nodeMap;
         public OrderedIntSparseNodeMap<BenchmarkValue, BenchmarkSparseNode> sparseNodeMap;
@@ -675,11 +760,20 @@ public class CollectionsBenchmark {
         @Setup(Level.Trial)
         public void setupTrial() {
             switch (implementation) {
-                case ARRAY:
+                case ARRAY_ORDERED:
+                    array = new Array<BenchmarkValue>(true, ELEMENT_COUNT);
+                    break;
+                case ARRAY_UNORDERED:
                     array = new Array<BenchmarkValue>(false, ELEMENT_COUNT);
+                    break;
+                case JAVA_ARRAY_LIST:
+                    javaArrayList = new ArrayList<BenchmarkValue>(ELEMENT_COUNT);
                     break;
                 case INT_MAP:
                     intMap = new IntMap<BenchmarkValue>(ELEMENT_COUNT);
+                    break;
+                case JAVA_HASH_MAP:
+                    javaHashMap = new HashMap<Integer, BenchmarkValue>(ELEMENT_COUNT, 0.75f);
                     break;
                 case ORDERED_MAP:
                     orderedMap = new OrderedMap<BenchmarkKey, BenchmarkValue>(ELEMENT_COUNT);
@@ -784,6 +878,31 @@ public class CollectionsBenchmark {
                 return removeLastSum(state.values);
             case ITERATE:
                 return sum(state.values);
+            default:
+                throw new AssertionError(state.operation);
+        }
+    }
+
+    /** Benchmarks Java {@link ArrayList} with the same array operations. */
+    @Benchmark
+    @OperationsPerInvocation(ELEMENT_COUNT)
+    public long arrayList(JavaArrayListState state) {
+        switch (state.operation) {
+            case ADD:
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    state.values.add(OBJECT_VALUES[i]);
+                }
+                return state.values.size();
+            case GET:
+                return randomAccessSum(state.values);
+            case LOOP_INDEXED:
+                return indexedSum(state.values);
+            case REMOVE_FIRST:
+                return removeFirstSum(state.values);
+            case REMOVE_LAST:
+                return removeLastSum(state.values);
+            case ITERATE:
+                return javaArrayListIterationSum(state.values);
             default:
                 throw new AssertionError(state.operation);
         }
@@ -933,15 +1052,41 @@ public class CollectionsBenchmark {
         }
     }
 
+    /** Benchmarks Java {@link HashMap} with the same logical int-map operations. */
+    @Benchmark
+    @OperationsPerInvocation(ELEMENT_COUNT)
+    public long hashMap(JavaHashMapState state) {
+        switch (state.operation) {
+            case PUT:
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    state.values.put(intKey(i), OBJECT_VALUES[i]);
+                }
+                return state.values.size();
+            case GET:
+                return getSum(state.values);
+            case REMOVE:
+                return removeSum(state.values);
+            case ITERATE_KEYS:
+                return javaHashMapKeySum(state.values);
+            case ITERATE_VALUES:
+                return javaHashMapValueSum(state.values);
+            case ITERATE_ENTRIES:
+                return javaHashMapEntrySum(state.values);
+            default:
+                throw new AssertionError(state.operation);
+        }
+    }
+
     /**
-     * Directly compares native operations across an unordered array,
-     * {@link IntMap}, insertion-ordered {@link OrderedMap}, and
-     * {@link OrderedIntNodeMap}. Array access/removal uses known dense indices;
-     * map access/removal uses keys. Direct removal uses a retained node
-     * reference for node maps; collections without node handles repeat their
-     * native known-index or key removal as the baseline. {@code LOOP_ALL}
-     * measures the fastest public full traversal available to each collection;
-     * it does not require the traversal order to be equivalent.
+     * Directly compares native operations across libFDX and Java arrays and
+     * maps, insertion-ordered {@link OrderedMap}, and customizable ordered node
+     * maps. Array access/removal uses known dense indices; map access/removal
+     * uses keys. Java's {@code HashMap<Integer, BenchmarkValue>} necessarily
+     * boxes primitive keys. Direct removal uses a retained node reference for
+     * node maps; collections without node handles repeat their native
+     * known-index or key removal as the baseline. {@code LOOP_ALL} measures the
+     * fastest public full traversal available to each collection; it does not
+     * require the traversal order to be equivalent.
      *
      * @param state the selected implementation and operation
      * @return a checksum consumed by JMH
@@ -950,10 +1095,15 @@ public class CollectionsBenchmark {
     @OperationsPerInvocation(ELEMENT_COUNT)
     public long orderedIntNodeMap(OrderedIntNodeMapComparisonState state) {
         switch (state.implementation) {
-            case ARRAY:
+            case ARRAY_ORDERED:
+            case ARRAY_UNORDERED:
                 return compareArray(state.array, state.operation);
+            case JAVA_ARRAY_LIST:
+                return compareJavaArrayList(state.javaArrayList, state.operation);
             case INT_MAP:
                 return compareIntMap(state.intMap, state.operation);
+            case JAVA_HASH_MAP:
+                return compareJavaHashMap(state.javaHashMap, state.operation);
             case ORDERED_MAP:
                 return compareOrderedMap(state.orderedMap, state.operation);
             case ORDERED_INT_NODE_MAP:
@@ -1164,6 +1314,38 @@ public class CollectionsBenchmark {
         }
     }
 
+    private static long compareJavaArrayList(ArrayList<BenchmarkValue> values,
+            NodeMapComparisonOperation operation) {
+        switch (operation) {
+            case ADD:
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    values.add(OBJECT_VALUES[i]);
+                }
+                return values.size();
+            case GET_BY_INDEX_OR_KEY:
+                long getChecksum = 0L;
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    getChecksum += values.get(ACCESS_INDICES[i]).id;
+                }
+                return getChecksum;
+            case REMOVE_BY_INDEX_OR_KEY:
+            case REMOVE_DIRECT:
+                long removeChecksum = 0L;
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    removeChecksum += values.remove(REMOVAL_INDICES[i]).id;
+                }
+                return removeChecksum;
+            case LOOP_ALL:
+                long loopChecksum = 0L;
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    loopChecksum += values.get(i).id;
+                }
+                return loopChecksum;
+            default:
+                throw new AssertionError(operation);
+        }
+    }
+
     private static long compareIntMap(IntMap<BenchmarkValue> values,
             NodeMapComparisonOperation operation) {
         switch (operation) {
@@ -1188,6 +1370,39 @@ public class CollectionsBenchmark {
                 return removeChecksum;
             case LOOP_ALL:
                 return sum(values.values());
+            default:
+                throw new AssertionError(operation);
+        }
+    }
+
+    private static long compareJavaHashMap(HashMap<Integer, BenchmarkValue> values,
+            NodeMapComparisonOperation operation) {
+        switch (operation) {
+            case ADD:
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    values.put(comparisonKey(i), OBJECT_VALUES[i]);
+                }
+                return values.size();
+            case GET_BY_INDEX_OR_KEY:
+                long getChecksum = 0L;
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    getChecksum += values.get(comparisonKey(ACCESS_INDICES[i])).id;
+                }
+                return getChecksum;
+            case REMOVE_BY_INDEX_OR_KEY:
+            case REMOVE_DIRECT:
+                long removeChecksum = 0L;
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    int valueIndex = REMOVAL_VALUE_INDICES[i];
+                    removeChecksum += values.remove(comparisonKey(valueIndex)).id;
+                }
+                return removeChecksum;
+            case LOOP_ALL:
+                long loopChecksum = 0L;
+                for (BenchmarkValue value : values.values()) {
+                    loopChecksum += value.id;
+                }
+                return loopChecksum;
             default:
                 throw new AssertionError(operation);
         }
@@ -1316,8 +1531,11 @@ public class CollectionsBenchmark {
             case ORDERED_INT_SPARSE_NODE_MAP:
                 prepareDirectRemoval(state.sparseNodeMap, state.sparseNodeRemovalOrder);
                 break;
-            case ARRAY:
+            case ARRAY_ORDERED:
+            case ARRAY_UNORDERED:
+            case JAVA_ARRAY_LIST:
             case INT_MAP:
+            case JAVA_HASH_MAP:
             case ORDERED_MAP:
                 break;
             default:
@@ -1327,11 +1545,18 @@ public class CollectionsBenchmark {
 
     private static void fillComparison(OrderedIntNodeMapComparisonState state) {
         switch (state.implementation) {
-            case ARRAY:
+            case ARRAY_ORDERED:
+            case ARRAY_UNORDERED:
                 fill(state.array);
+                break;
+            case JAVA_ARRAY_LIST:
+                fill(state.javaArrayList);
                 break;
             case INT_MAP:
                 fillComparison(state.intMap);
+                break;
+            case JAVA_HASH_MAP:
+                fillComparison(state.javaHashMap);
                 break;
             case ORDERED_MAP:
                 fill(state.orderedMap);
@@ -1349,11 +1574,18 @@ public class CollectionsBenchmark {
 
     private static void clearComparison(OrderedIntNodeMapComparisonState state) {
         switch (state.implementation) {
-            case ARRAY:
+            case ARRAY_ORDERED:
+            case ARRAY_UNORDERED:
                 state.array.clear();
+                break;
+            case JAVA_ARRAY_LIST:
+                state.javaArrayList.clear();
                 break;
             case INT_MAP:
                 state.intMap.clear();
+                break;
+            case JAVA_HASH_MAP:
+                state.javaHashMap.clear();
                 break;
             case ORDERED_MAP:
                 state.orderedMap.clear();
@@ -1371,10 +1603,15 @@ public class CollectionsBenchmark {
 
     private static int comparisonSize(OrderedIntNodeMapComparisonState state) {
         switch (state.implementation) {
-            case ARRAY:
+            case ARRAY_ORDERED:
+            case ARRAY_UNORDERED:
                 return state.array.size();
+            case JAVA_ARRAY_LIST:
+                return state.javaArrayList.size();
             case INT_MAP:
                 return state.intMap.size();
+            case JAVA_HASH_MAP:
+                return state.javaHashMap.size();
             case ORDERED_MAP:
                 return state.orderedMap.size();
             case ORDERED_INT_NODE_MAP:
@@ -1391,10 +1628,15 @@ public class CollectionsBenchmark {
             return;
         }
         switch (state.implementation) {
-            case ARRAY:
+            case ARRAY_ORDERED:
+            case ARRAY_UNORDERED:
+            case JAVA_ARRAY_LIST:
                 break;
             case INT_MAP:
                 state.intMap.values().iterator();
+                break;
+            case JAVA_HASH_MAP:
+                state.javaHashMap.values();
                 break;
             case ORDERED_MAP:
                 state.orderedMap.values().iterator();
@@ -1439,6 +1681,10 @@ public class CollectionsBenchmark {
         return index;
     }
 
+    private static int javaHashMapInitialCapacity(int expectedSize, float loadFactor) {
+        return Math.max(1, (int)Math.ceil(expectedSize / (double)loadFactor));
+    }
+
     private static int intKey(int index) {
         return index * 0x9E3779B9;
     }
@@ -1464,6 +1710,12 @@ public class CollectionsBenchmark {
     }
 
     private static void fill(Array<BenchmarkValue> values) {
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            values.add(OBJECT_VALUES[i]);
+        }
+    }
+
+    private static void fill(ArrayList<BenchmarkValue> values) {
         for (int i = 0; i < ELEMENT_COUNT; i++) {
             values.add(OBJECT_VALUES[i]);
         }
@@ -1505,6 +1757,12 @@ public class CollectionsBenchmark {
         }
     }
 
+    private static void fill(HashMap<Integer, BenchmarkValue> values) {
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            values.put(intKey(i), OBJECT_VALUES[i]);
+        }
+    }
+
     private static void fill(OrderedIntNodeMap<BenchmarkValue, BenchmarkNode> values) {
         for (int i = 0; i < ELEMENT_COUNT; i++) {
             values.put(intKey(i), OBJECT_VALUES[i]);
@@ -1512,6 +1770,12 @@ public class CollectionsBenchmark {
     }
 
     private static void fillComparison(IntMap<BenchmarkValue> values) {
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            values.put(comparisonKey(i), OBJECT_VALUES[i]);
+        }
+    }
+
+    private static void fillComparison(HashMap<Integer, BenchmarkValue> values) {
         for (int i = 0; i < ELEMENT_COUNT; i++) {
             values.put(comparisonKey(i), OBJECT_VALUES[i]);
         }
@@ -1623,6 +1887,19 @@ public class CollectionsBenchmark {
         }
     }
 
+    private static void prewarmJavaHashMapView(
+            HashMap<Integer, BenchmarkValue> values, MapOperation operation) {
+        if (operation == MapOperation.ITERATE_KEYS) {
+            values.keySet();
+        }
+        else if (operation == MapOperation.ITERATE_VALUES) {
+            values.values();
+        }
+        else if (operation == MapOperation.ITERATE_ENTRIES) {
+            values.entrySet();
+        }
+    }
+
     private static void prewarmMapIterator(LongMap<BenchmarkValue> values, MapOperation operation) {
         if (operation == MapOperation.ITERATE_KEYS) {
             values.keys().iterator();
@@ -1648,6 +1925,14 @@ public class CollectionsBenchmark {
     }
 
     private static long randomAccessSum(Array<BenchmarkValue> values) {
+        long checksum = 0L;
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            checksum += values.get(ACCESS_INDICES[i]).id;
+        }
+        return checksum;
+    }
+
+    private static long randomAccessSum(ArrayList<BenchmarkValue> values) {
         long checksum = 0L;
         for (int i = 0; i < ELEMENT_COUNT; i++) {
             checksum += values.get(ACCESS_INDICES[i]).id;
@@ -1687,6 +1972,14 @@ public class CollectionsBenchmark {
         return checksum;
     }
 
+    private static long indexedSum(ArrayList<BenchmarkValue> values) {
+        long checksum = 0L;
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            checksum += values.get(i).id;
+        }
+        return checksum;
+    }
+
     private static long indexedSum(IntArray values) {
         long checksum = 0L;
         for (int i = 0; i < ELEMENT_COUNT; i++) {
@@ -1719,6 +2012,14 @@ public class CollectionsBenchmark {
         return checksum;
     }
 
+    private static long removeFirstSum(ArrayList<BenchmarkValue> values) {
+        long checksum = 0L;
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            checksum += values.remove(0).id;
+        }
+        return checksum;
+    }
+
     private static long removeFirstSum(IntArray values) {
         long checksum = 0L;
         for (int i = 0; i < ELEMENT_COUNT; i++) {
@@ -1747,6 +2048,22 @@ public class CollectionsBenchmark {
         long checksum = 0L;
         for (int i = ELEMENT_COUNT - 1; i >= 0; i--) {
             checksum += values.removeIndex(i).id;
+        }
+        return checksum;
+    }
+
+    private static long removeLastSum(ArrayList<BenchmarkValue> values) {
+        long checksum = 0L;
+        for (int i = ELEMENT_COUNT - 1; i >= 0; i--) {
+            checksum += values.remove(i).id;
+        }
+        return checksum;
+    }
+
+    private static long javaArrayListIterationSum(ArrayList<BenchmarkValue> values) {
+        long checksum = 0L;
+        for (BenchmarkValue value : values) {
+            checksum += value.id;
         }
         return checksum;
     }
@@ -1816,6 +2133,22 @@ public class CollectionsBenchmark {
     }
 
     private static long removeSum(IntMap<BenchmarkValue> values) {
+        long checksum = 0L;
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            checksum += values.remove(intKey(ACCESS_INDICES[i])).id;
+        }
+        return checksum;
+    }
+
+    private static long getSum(HashMap<Integer, BenchmarkValue> values) {
+        long checksum = 0L;
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            checksum += values.get(intKey(ACCESS_INDICES[i])).id;
+        }
+        return checksum;
+    }
+
+    private static long removeSum(HashMap<Integer, BenchmarkValue> values) {
         long checksum = 0L;
         for (int i = 0; i < ELEMENT_COUNT; i++) {
             checksum += values.remove(intKey(ACCESS_INDICES[i])).id;
@@ -1920,6 +2253,30 @@ public class CollectionsBenchmark {
         ObjectIterator<BenchmarkValue> iterator = values.iterator();
         while (iterator.hasNext()) {
             checksum += iterator.next().id;
+        }
+        return checksum;
+    }
+
+    private static long javaHashMapKeySum(HashMap<Integer, BenchmarkValue> values) {
+        long checksum = 0L;
+        for (Integer key : values.keySet()) {
+            checksum += key;
+        }
+        return checksum;
+    }
+
+    private static long javaHashMapValueSum(HashMap<Integer, BenchmarkValue> values) {
+        long checksum = 0L;
+        for (BenchmarkValue value : values.values()) {
+            checksum += value.id;
+        }
+        return checksum;
+    }
+
+    private static long javaHashMapEntrySum(HashMap<Integer, BenchmarkValue> values) {
+        long checksum = 0L;
+        for (Map.Entry<Integer, BenchmarkValue> entry : values.entrySet()) {
+            checksum += entry.getKey() + entry.getValue().id;
         }
         return checksum;
     }

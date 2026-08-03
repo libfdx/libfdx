@@ -30,6 +30,7 @@ tasks.named<Test>("test") {
 
 val collectionBenchmarkNames = listOf(
     "Array",
+    "ArrayList",
     "IntArray",
     "LongArray",
     "FloatArray",
@@ -38,6 +39,7 @@ val collectionBenchmarkNames = listOf(
     "OrderedIntNodeMap",
     "OrderedIntSparseNodeMap",
     "IntMap",
+    "HashMap",
     "LongMap",
     "FloatMap",
     "ObjectSet",
@@ -76,7 +78,7 @@ collectionBenchmarkNames.forEach { collectionName ->
         .lowercase()
     tasks.register<JavaExec>("benchmark$collectionName") {
         description = if (collectionName == "OrderedIntNodeMap") {
-            "Compares Array, IntMap, OrderedMap, OrderedIntNodeMap, and OrderedIntSparseNodeMap and writes JSON and Markdown reports."
+            "Compares libFDX arrays and maps with Java ArrayList and HashMap and writes JSON and Markdown reports."
         } else {
             "Benchmarks $collectionName and writes $reportStem JSON and Markdown reports."
         }

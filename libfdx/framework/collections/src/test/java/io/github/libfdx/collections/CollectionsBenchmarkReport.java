@@ -170,7 +170,7 @@ public final class CollectionsBenchmarkReport {
         }
 
         text.append("## Performance comparison\n\n");
-        text.append("| Collection |");
+        text.append("| Implementation |");
         for (int i = 0; i < groups.size(); i++) {
             text.append(' ').append(operationName(groups.get(i).operation)).append(" |");
         }
@@ -197,9 +197,11 @@ public final class CollectionsBenchmarkReport {
         }
         text.append("\nLower is faster. `Loop all` uses each collection's fastest public ")
                 .append("full traversal and does not require the same visit order: indexed for ")
-                .append("Array, cached value iteration for IntMap and OrderedMap, and packed ")
-                .append("node-index traversal for both node maps. Detailed confidence intervals ")
-                .append("and allocation measurements are included below.\n\n");
+                .append("arrays and ArrayList, value iteration for hash maps, and packed ")
+                .append("node-index traversal for both node maps. Java HashMap uses Integer ")
+                .append("keys because the Java API has no primitive-int HashMap, so its results ")
+                .append("include the required boxing and per-entry node behavior. Detailed ")
+                .append("confidence intervals and allocation measurements are included below.\n\n");
     }
 
     private static boolean hasOnlyImplementationOptions(ComparisonGroup group) {
@@ -229,6 +231,30 @@ public final class CollectionsBenchmarkReport {
     }
 
     private static String implementationName(String value) {
+        if ("ARRAY_ORDERED".equals(value)) {
+            return "libFDX Array (ordered)";
+        }
+        if ("ARRAY_UNORDERED".equals(value)) {
+            return "libFDX Array (unordered)";
+        }
+        if ("JAVA_ARRAY_LIST".equals(value)) {
+            return "Java ArrayList";
+        }
+        if ("INT_MAP".equals(value)) {
+            return "libFDX IntMap";
+        }
+        if ("JAVA_HASH_MAP".equals(value)) {
+            return "Java HashMap (Integer keys)";
+        }
+        if ("ORDERED_MAP".equals(value)) {
+            return "libFDX OrderedMap";
+        }
+        if ("ORDERED_INT_NODE_MAP".equals(value)) {
+            return "libFDX OrderedIntNodeMap";
+        }
+        if ("ORDERED_INT_SPARSE_NODE_MAP".equals(value)) {
+            return "libFDX OrderedIntSparseNodeMap";
+        }
         StringBuilder name = new StringBuilder(value.length());
         boolean capitalize = true;
         for (int i = 0; i < value.length(); i++) {
