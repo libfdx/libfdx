@@ -5,14 +5,14 @@
 [![Snapshot](https://img.shields.io/badge/snapshot---SNAPSHOT-red)](https://central.sonatype.com/service/rest/repository/browse/maven-snapshots/io/github/libfdx/fdx/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
+> [!WARNING]
+> libFDX is in an early stage of development and is not intended for use in
+> production projects while it remains a work in progress.
+
 libFDX is a modular Java game framework. Shared game code uses portable APIs;
 platform launchers select a backend and optional graphics/network providers.
 It is inspired by libGDX, but is a new framework rather than a fork or
 compatibility layer.
-
-The project is under active early development. Source and Javadocs define exact
-APIs, while implemented behavior is exercised by tests and samples. Planned
-work belongs in [GitHub issues](https://github.com/libfdx/libfdx/issues).
 
 ## Structure
 
