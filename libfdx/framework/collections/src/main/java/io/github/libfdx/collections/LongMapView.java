@@ -32,7 +32,7 @@ public interface LongMapView<V> {
      *
      * @return the entries
      */
-    ObjectIterable<LongMap.Entry<V>> entries();
+    ObjectIterable<? extends LongMapEntry<V>> entries();
 
     LongIterable keys();
 

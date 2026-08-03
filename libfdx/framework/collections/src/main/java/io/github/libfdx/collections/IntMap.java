@@ -125,9 +125,10 @@ public final class IntMap<V> implements IntMapView<V> {
             throw new IllegalArgumentException("entries must not be null");
         }
         ensureCapacity(entries.size());
-        ObjectIterator<? extends Entry<? extends V>> iterator = entries.entries().iterator();
+        ObjectIterator<? extends IntMapEntry<? extends V>> iterator =
+                entries.entries().iterator();
         while (iterator.hasNext()) {
-            Entry<? extends V> entry = iterator.next();
+            IntMapEntry<? extends V> entry = iterator.next();
             put(entry.key(), entry.value());
         }
         return this;
@@ -433,7 +434,7 @@ public final class IntMap<V> implements IntMapView<V> {
      * @param <V> the value type
      * @author xpenatan
      */
-    public static final class Entry<V> {
+    public static final class Entry<V> implements IntMapEntry<V> {
         private int key;
         private V value;
 
@@ -445,6 +446,7 @@ public final class IntMap<V> implements IntMapView<V> {
          *
          * @return the key
          */
+        @Override
         public int key() {
             return key;
         }
@@ -454,6 +456,7 @@ public final class IntMap<V> implements IntMapView<V> {
          *
          * @return the value
          */
+        @Override
         public V value() {
             return value;
         }

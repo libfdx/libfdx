@@ -35,8 +35,8 @@ import org.openjdk.jmh.annotations.Warmup;
  * scrambled access order; indexed loops remain sequential. The
  * {@link OrderedIntNodeMap} benchmark directly compares ordered and unordered
  * libFDX arrays, Java {@link ArrayList}, libFDX {@link IntMap}, Java
- * {@link HashMap}, ordered object maps, hash-backed ordered nodes, and
- * sparse-set ordered nodes.</p>
+ * {@link HashMap}, ordered object and primitive maps, a node-free sparse
+ * ordered map, hash-backed ordered nodes, and sparse-set ordered nodes.</p>
  *
  * <p>Run the complete benchmark with {@code benchmarkCollections}, or verify
  * the matrix quickly with {@code benchmarkCollectionsQuick}. The full task
@@ -143,8 +143,10 @@ public class CollectionsBenchmark {
         ARRAY_UNORDERED,
         JAVA_ARRAY_LIST,
         INT_MAP,
+        ORDERED_INT_MAP,
         JAVA_HASH_MAP,
         ORDERED_MAP,
+        ORDERED_INT_SPARSE_MAP,
         ORDERED_INT_NODE_MAP,
         ORDERED_INT_SPARSE_NODE_MAP
     }
@@ -468,6 +470,44 @@ public class CollectionsBenchmark {
         }
     }
 
+    /** State for {@link OrderedIntMap}. */
+    @State(Scope.Thread)
+    public static class OrderedIntMapState {
+        @Param({"0.50", "0.75"})
+        public float loadFactor;
+
+        @Param
+        public MapOperation operation;
+
+        public OrderedIntMap<BenchmarkValue> values;
+
+        @Setup(Level.Trial)
+        public void setupTrial() {
+            values = new OrderedIntMap<BenchmarkValue>(ELEMENT_COUNT, loadFactor);
+            if (isMapRead(operation)) {
+                fill(values);
+            }
+            prewarmMapIterator(values, operation);
+        }
+
+        @Setup(Level.Invocation)
+        public void setupInvocation() {
+            if (operation == MapOperation.PUT) {
+                values.clear();
+            }
+            else if (operation == MapOperation.REMOVE) {
+                values.clear();
+                fill(values);
+            }
+        }
+
+        @TearDown(Level.Invocation)
+        public void validate() {
+            validateSize("OrderedIntMap", values.size(),
+                    operation == MapOperation.REMOVE ? 0 : ELEMENT_COUNT);
+        }
+    }
+
     /** State for Java {@link HashMap} with boxed integer keys. */
     @State(Scope.Thread)
     public static class JavaHashMapState {
@@ -541,6 +581,44 @@ public class CollectionsBenchmark {
         @TearDown(Level.Invocation)
         public void validate() {
             validateSize("LongMap", values.size(), operation == MapOperation.REMOVE ? 0 : ELEMENT_COUNT);
+        }
+    }
+
+    /** State for {@link OrderedLongMap}. */
+    @State(Scope.Thread)
+    public static class OrderedLongMapState {
+        @Param({"0.50", "0.75"})
+        public float loadFactor;
+
+        @Param
+        public MapOperation operation;
+
+        public OrderedLongMap<BenchmarkValue> values;
+
+        @Setup(Level.Trial)
+        public void setupTrial() {
+            values = new OrderedLongMap<BenchmarkValue>(ELEMENT_COUNT, loadFactor);
+            if (isMapRead(operation)) {
+                fill(values);
+            }
+            prewarmMapIterator(values, operation);
+        }
+
+        @Setup(Level.Invocation)
+        public void setupInvocation() {
+            if (operation == MapOperation.PUT) {
+                values.clear();
+            }
+            else if (operation == MapOperation.REMOVE) {
+                values.clear();
+                fill(values);
+            }
+        }
+
+        @TearDown(Level.Invocation)
+        public void validate() {
+            validateSize("OrderedLongMap", values.size(),
+                    operation == MapOperation.REMOVE ? 0 : ELEMENT_COUNT);
         }
     }
 
@@ -750,8 +828,10 @@ public class CollectionsBenchmark {
         public Array<BenchmarkValue> array;
         public ArrayList<BenchmarkValue> javaArrayList;
         public IntMap<BenchmarkValue> intMap;
+        public OrderedIntMap<BenchmarkValue> orderedIntMap;
         public HashMap<Integer, BenchmarkValue> javaHashMap;
         public OrderedMap<BenchmarkKey, BenchmarkValue> orderedMap;
+        public OrderedIntSparseMap<BenchmarkValue> sparseMap;
         public OrderedIntNodeMap<BenchmarkValue, BenchmarkNode> nodeMap;
         public OrderedIntSparseNodeMap<BenchmarkValue, BenchmarkSparseNode> sparseNodeMap;
         public BenchmarkNode[] nodeRemovalOrder;
@@ -772,11 +852,18 @@ public class CollectionsBenchmark {
                 case INT_MAP:
                     intMap = new IntMap<BenchmarkValue>(ELEMENT_COUNT);
                     break;
+                case ORDERED_INT_MAP:
+                    orderedIntMap = new OrderedIntMap<BenchmarkValue>(ELEMENT_COUNT);
+                    break;
                 case JAVA_HASH_MAP:
                     javaHashMap = new HashMap<Integer, BenchmarkValue>(ELEMENT_COUNT, 0.75f);
                     break;
                 case ORDERED_MAP:
                     orderedMap = new OrderedMap<BenchmarkKey, BenchmarkValue>(ELEMENT_COUNT);
+                    break;
+                case ORDERED_INT_SPARSE_MAP:
+                    sparseMap = new OrderedIntSparseMap<BenchmarkValue>(
+                            ELEMENT_COUNT, ELEMENT_COUNT);
                     break;
                 case ORDERED_INT_NODE_MAP:
                     nodeMap = new OrderedIntNodeMap<BenchmarkValue, BenchmarkNode>(
@@ -815,6 +902,41 @@ public class CollectionsBenchmark {
         public void validate() {
             boolean removal = isNodeMapComparisonRemoval(operation);
             validateSize(implementation.name(), comparisonSize(this), removal ? 0 : ELEMENT_COUNT);
+        }
+    }
+
+    /** State for the standalone {@link OrderedIntSparseMap} benchmark. */
+    @State(Scope.Thread)
+    public static class OrderedIntSparseMapState {
+        @Param
+        public NodeMapComparisonOperation operation;
+
+        public OrderedIntSparseMap<BenchmarkValue> values;
+
+        @Setup(Level.Trial)
+        public void setupTrial() {
+            values = new OrderedIntSparseMap<BenchmarkValue>(ELEMENT_COUNT, ELEMENT_COUNT);
+            if (isNodeMapComparisonRead(operation)) {
+                fillComparison(values);
+            }
+        }
+
+        @Setup(Level.Invocation)
+        public void setupInvocation() {
+            if (operation == NodeMapComparisonOperation.ADD) {
+                values.clear();
+            }
+            else if (isNodeMapComparisonRemoval(operation)) {
+                values.clear();
+                fillComparison(values);
+            }
+        }
+
+        @TearDown(Level.Invocation)
+        public void validate() {
+            boolean removal = isNodeMapComparisonRemoval(operation);
+            validateSize("OrderedIntSparseMap", values.size(),
+                    removal ? 0 : ELEMENT_COUNT);
         }
     }
 
@@ -1052,6 +1174,30 @@ public class CollectionsBenchmark {
         }
     }
 
+    @Benchmark
+    @OperationsPerInvocation(ELEMENT_COUNT)
+    public long orderedIntMap(OrderedIntMapState state) {
+        switch (state.operation) {
+            case PUT:
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    state.values.put(intKey(i), OBJECT_VALUES[i]);
+                }
+                return state.values.size();
+            case GET:
+                return getSum(state.values);
+            case REMOVE:
+                return removeSum(state.values);
+            case ITERATE_KEYS:
+                return sum(state.values.keys());
+            case ITERATE_VALUES:
+                return sum(state.values.values());
+            case ITERATE_ENTRIES:
+                return orderedIntMapEntrySum(state.values.entries());
+            default:
+                throw new AssertionError(state.operation);
+        }
+    }
+
     /** Benchmarks Java {@link HashMap} with the same logical int-map operations. */
     @Benchmark
     @OperationsPerInvocation(ELEMENT_COUNT)
@@ -1102,10 +1248,14 @@ public class CollectionsBenchmark {
                 return compareJavaArrayList(state.javaArrayList, state.operation);
             case INT_MAP:
                 return compareIntMap(state.intMap, state.operation);
+            case ORDERED_INT_MAP:
+                return compareOrderedIntMap(state.orderedIntMap, state.operation);
             case JAVA_HASH_MAP:
                 return compareJavaHashMap(state.javaHashMap, state.operation);
             case ORDERED_MAP:
                 return compareOrderedMap(state.orderedMap, state.operation);
+            case ORDERED_INT_SPARSE_MAP:
+                return compareOrderedIntSparseMap(state.sparseMap, state.operation);
             case ORDERED_INT_NODE_MAP:
                 return compareOrderedIntNodeMap(
                         state.nodeMap, state.nodeRemovalOrder, state.operation);
@@ -1115,6 +1265,18 @@ public class CollectionsBenchmark {
             default:
                 throw new AssertionError(state.implementation);
         }
+    }
+
+    /**
+     * Benchmarks the node-free sparse-set ordered map independently.
+     *
+     * @param state the selected operation
+     * @return a checksum consumed by JMH
+     */
+    @Benchmark
+    @OperationsPerInvocation(ELEMENT_COUNT)
+    public long orderedIntSparseMap(OrderedIntSparseMapState state) {
+        return compareOrderedIntSparseMap(state.values, state.operation);
     }
 
     /**
@@ -1149,6 +1311,30 @@ public class CollectionsBenchmark {
                 return sum(state.values.values());
             case ITERATE_ENTRIES:
                 return longMapEntrySum(state.values.entries());
+            default:
+                throw new AssertionError(state.operation);
+        }
+    }
+
+    @Benchmark
+    @OperationsPerInvocation(ELEMENT_COUNT)
+    public long orderedLongMap(OrderedLongMapState state) {
+        switch (state.operation) {
+            case PUT:
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    state.values.put(longKey(i), OBJECT_VALUES[i]);
+                }
+                return state.values.size();
+            case GET:
+                return getSum(state.values);
+            case REMOVE:
+                return removeSum(state.values);
+            case ITERATE_KEYS:
+                return sum(state.values.keys());
+            case ITERATE_VALUES:
+                return sum(state.values.values());
+            case ITERATE_ENTRIES:
+                return orderedLongMapEntrySum(state.values.entries());
             default:
                 throw new AssertionError(state.operation);
         }
@@ -1375,6 +1561,39 @@ public class CollectionsBenchmark {
         }
     }
 
+    private static long compareOrderedIntMap(OrderedIntMap<BenchmarkValue> values,
+            NodeMapComparisonOperation operation) {
+        switch (operation) {
+            case ADD:
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    values.put(comparisonKey(i), OBJECT_VALUES[i]);
+                }
+                return values.size();
+            case GET_BY_INDEX_OR_KEY:
+                long getChecksum = 0L;
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    getChecksum += values.get(comparisonKey(ACCESS_INDICES[i])).id;
+                }
+                return getChecksum;
+            case REMOVE_BY_INDEX_OR_KEY:
+            case REMOVE_DIRECT:
+                long removeChecksum = 0L;
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    int valueIndex = REMOVAL_VALUE_INDICES[i];
+                    removeChecksum += values.remove(comparisonKey(valueIndex)).id;
+                }
+                return removeChecksum;
+            case LOOP_ALL:
+                long denseChecksum = 0L;
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    denseChecksum += values.valueAt(i).id;
+                }
+                return denseChecksum;
+            default:
+                throw new AssertionError(operation);
+        }
+    }
+
     private static long compareJavaHashMap(HashMap<Integer, BenchmarkValue> values,
             NodeMapComparisonOperation operation) {
         switch (operation) {
@@ -1428,6 +1647,40 @@ public class CollectionsBenchmark {
                 return removeChecksum;
             case LOOP_ALL:
                 return sum(values.values());
+            default:
+                throw new AssertionError(operation);
+        }
+    }
+
+    private static long compareOrderedIntSparseMap(
+            OrderedIntSparseMap<BenchmarkValue> values,
+            NodeMapComparisonOperation operation) {
+        switch (operation) {
+            case ADD:
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    values.put(comparisonKey(i), OBJECT_VALUES[i]);
+                }
+                return values.size();
+            case GET_BY_INDEX_OR_KEY:
+                long getChecksum = 0L;
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    getChecksum += values.get(comparisonKey(ACCESS_INDICES[i])).id;
+                }
+                return getChecksum;
+            case REMOVE_BY_INDEX_OR_KEY:
+            case REMOVE_DIRECT:
+                long removeChecksum = 0L;
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    int valueIndex = REMOVAL_VALUE_INDICES[i];
+                    removeChecksum += values.remove(comparisonKey(valueIndex)).id;
+                }
+                return removeChecksum;
+            case LOOP_ALL:
+                long denseChecksum = 0L;
+                for (int i = 0; i < ELEMENT_COUNT; i++) {
+                    denseChecksum += values.valueAt(i).id;
+                }
+                return denseChecksum;
             default:
                 throw new AssertionError(operation);
         }
@@ -1535,8 +1788,10 @@ public class CollectionsBenchmark {
             case ARRAY_UNORDERED:
             case JAVA_ARRAY_LIST:
             case INT_MAP:
+            case ORDERED_INT_MAP:
             case JAVA_HASH_MAP:
             case ORDERED_MAP:
+            case ORDERED_INT_SPARSE_MAP:
                 break;
             default:
                 throw new AssertionError(state.implementation);
@@ -1555,11 +1810,17 @@ public class CollectionsBenchmark {
             case INT_MAP:
                 fillComparison(state.intMap);
                 break;
+            case ORDERED_INT_MAP:
+                fillComparison(state.orderedIntMap);
+                break;
             case JAVA_HASH_MAP:
                 fillComparison(state.javaHashMap);
                 break;
             case ORDERED_MAP:
                 fill(state.orderedMap);
+                break;
+            case ORDERED_INT_SPARSE_MAP:
+                fillComparison(state.sparseMap);
                 break;
             case ORDERED_INT_NODE_MAP:
                 fillComparison(state.nodeMap);
@@ -1584,11 +1845,17 @@ public class CollectionsBenchmark {
             case INT_MAP:
                 state.intMap.clear();
                 break;
+            case ORDERED_INT_MAP:
+                state.orderedIntMap.clear();
+                break;
             case JAVA_HASH_MAP:
                 state.javaHashMap.clear();
                 break;
             case ORDERED_MAP:
                 state.orderedMap.clear();
+                break;
+            case ORDERED_INT_SPARSE_MAP:
+                state.sparseMap.clear();
                 break;
             case ORDERED_INT_NODE_MAP:
                 state.nodeMap.clear();
@@ -1610,10 +1877,14 @@ public class CollectionsBenchmark {
                 return state.javaArrayList.size();
             case INT_MAP:
                 return state.intMap.size();
+            case ORDERED_INT_MAP:
+                return state.orderedIntMap.size();
             case JAVA_HASH_MAP:
                 return state.javaHashMap.size();
             case ORDERED_MAP:
                 return state.orderedMap.size();
+            case ORDERED_INT_SPARSE_MAP:
+                return state.sparseMap.size();
             case ORDERED_INT_NODE_MAP:
                 return state.nodeMap.size();
             case ORDERED_INT_SPARSE_NODE_MAP:
@@ -1635,12 +1906,15 @@ public class CollectionsBenchmark {
             case INT_MAP:
                 state.intMap.values().iterator();
                 break;
+            case ORDERED_INT_MAP:
+                break;
             case JAVA_HASH_MAP:
                 state.javaHashMap.values();
                 break;
             case ORDERED_MAP:
                 state.orderedMap.values().iterator();
                 break;
+            case ORDERED_INT_SPARSE_MAP:
             case ORDERED_INT_NODE_MAP:
             case ORDERED_INT_SPARSE_NODE_MAP:
                 break;
@@ -1757,6 +2031,12 @@ public class CollectionsBenchmark {
         }
     }
 
+    private static void fill(OrderedIntMap<BenchmarkValue> values) {
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            values.put(intKey(i), OBJECT_VALUES[i]);
+        }
+    }
+
     private static void fill(HashMap<Integer, BenchmarkValue> values) {
         for (int i = 0; i < ELEMENT_COUNT; i++) {
             values.put(intKey(i), OBJECT_VALUES[i]);
@@ -1775,6 +2055,12 @@ public class CollectionsBenchmark {
         }
     }
 
+    private static void fillComparison(OrderedIntMap<BenchmarkValue> values) {
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            values.put(comparisonKey(i), OBJECT_VALUES[i]);
+        }
+    }
+
     private static void fillComparison(HashMap<Integer, BenchmarkValue> values) {
         for (int i = 0; i < ELEMENT_COUNT; i++) {
             values.put(comparisonKey(i), OBJECT_VALUES[i]);
@@ -1783,6 +2069,13 @@ public class CollectionsBenchmark {
 
     private static void fillComparison(
             OrderedIntNodeMap<BenchmarkValue, BenchmarkNode> values) {
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            values.put(comparisonKey(i), OBJECT_VALUES[i]);
+        }
+    }
+
+    private static void fillComparison(
+            OrderedIntSparseMap<BenchmarkValue> values) {
         for (int i = 0; i < ELEMENT_COUNT; i++) {
             values.put(comparisonKey(i), OBJECT_VALUES[i]);
         }
@@ -1814,6 +2107,12 @@ public class CollectionsBenchmark {
     }
 
     private static void fill(LongMap<BenchmarkValue> values) {
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            values.put(longKey(i), OBJECT_VALUES[i]);
+        }
+    }
+
+    private static void fill(OrderedLongMap<BenchmarkValue> values) {
         for (int i = 0; i < ELEMENT_COUNT; i++) {
             values.put(longKey(i), OBJECT_VALUES[i]);
         }
@@ -1887,6 +2186,19 @@ public class CollectionsBenchmark {
         }
     }
 
+    private static void prewarmMapIterator(
+            OrderedIntMap<BenchmarkValue> values, MapOperation operation) {
+        if (operation == MapOperation.ITERATE_KEYS) {
+            values.keys().iterator();
+        }
+        else if (operation == MapOperation.ITERATE_VALUES) {
+            values.values().iterator();
+        }
+        else if (operation == MapOperation.ITERATE_ENTRIES) {
+            values.entries().iterator();
+        }
+    }
+
     private static void prewarmJavaHashMapView(
             HashMap<Integer, BenchmarkValue> values, MapOperation operation) {
         if (operation == MapOperation.ITERATE_KEYS) {
@@ -1901,6 +2213,19 @@ public class CollectionsBenchmark {
     }
 
     private static void prewarmMapIterator(LongMap<BenchmarkValue> values, MapOperation operation) {
+        if (operation == MapOperation.ITERATE_KEYS) {
+            values.keys().iterator();
+        }
+        else if (operation == MapOperation.ITERATE_VALUES) {
+            values.values().iterator();
+        }
+        else if (operation == MapOperation.ITERATE_ENTRIES) {
+            values.entries().iterator();
+        }
+    }
+
+    private static void prewarmMapIterator(
+            OrderedLongMap<BenchmarkValue> values, MapOperation operation) {
         if (operation == MapOperation.ITERATE_KEYS) {
             values.keys().iterator();
         }
@@ -2140,6 +2465,22 @@ public class CollectionsBenchmark {
         return checksum;
     }
 
+    private static long getSum(OrderedIntMap<BenchmarkValue> values) {
+        long checksum = 0L;
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            checksum += values.get(intKey(ACCESS_INDICES[i])).id;
+        }
+        return checksum;
+    }
+
+    private static long removeSum(OrderedIntMap<BenchmarkValue> values) {
+        long checksum = 0L;
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            checksum += values.remove(intKey(ACCESS_INDICES[i])).id;
+        }
+        return checksum;
+    }
+
     private static long getSum(HashMap<Integer, BenchmarkValue> values) {
         long checksum = 0L;
         for (int i = 0; i < ELEMENT_COUNT; i++) {
@@ -2165,6 +2506,22 @@ public class CollectionsBenchmark {
     }
 
     private static long removeSum(LongMap<BenchmarkValue> values) {
+        long checksum = 0L;
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            checksum += values.remove(longKey(ACCESS_INDICES[i])).id;
+        }
+        return checksum;
+    }
+
+    private static long getSum(OrderedLongMap<BenchmarkValue> values) {
+        long checksum = 0L;
+        for (int i = 0; i < ELEMENT_COUNT; i++) {
+            checksum += values.get(longKey(ACCESS_INDICES[i])).id;
+        }
+        return checksum;
+    }
+
+    private static long removeSum(OrderedLongMap<BenchmarkValue> values) {
         long checksum = 0L;
         for (int i = 0; i < ELEMENT_COUNT; i++) {
             checksum += values.remove(longKey(ACCESS_INDICES[i])).id;
@@ -2352,11 +2709,33 @@ public class CollectionsBenchmark {
         return checksum;
     }
 
+    private static long orderedIntMapEntrySum(
+            ObjectIterable<OrderedIntMap.Entry<BenchmarkValue>> values) {
+        long checksum = 0L;
+        ObjectIterator<OrderedIntMap.Entry<BenchmarkValue>> iterator = values.iterator();
+        while (iterator.hasNext()) {
+            OrderedIntMap.Entry<BenchmarkValue> entry = iterator.next();
+            checksum += entry.key() + entry.value().id;
+        }
+        return checksum;
+    }
+
     private static long longMapEntrySum(ObjectIterable<LongMap.Entry<BenchmarkValue>> values) {
         long checksum = 0L;
         ObjectIterator<LongMap.Entry<BenchmarkValue>> iterator = values.iterator();
         while (iterator.hasNext()) {
             LongMap.Entry<BenchmarkValue> entry = iterator.next();
+            checksum += entry.key() + entry.value().id;
+        }
+        return checksum;
+    }
+
+    private static long orderedLongMapEntrySum(
+            ObjectIterable<OrderedLongMap.Entry<BenchmarkValue>> values) {
+        long checksum = 0L;
+        ObjectIterator<OrderedLongMap.Entry<BenchmarkValue>> iterator = values.iterator();
+        while (iterator.hasNext()) {
+            OrderedLongMap.Entry<BenchmarkValue> entry = iterator.next();
             checksum += entry.key() + entry.value().id;
         }
         return checksum;

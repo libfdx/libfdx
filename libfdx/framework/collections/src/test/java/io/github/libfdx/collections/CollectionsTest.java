@@ -232,6 +232,42 @@ final class CollectionsTest {
     }
 
     @Test
+    void booleanArraySupportsOrderedAndUnorderedOperations() {
+        BooleanArray ordered = new BooleanArray(true, 1);
+        ordered.add(true).add(false).insert(1, true);
+
+        assertArrayEquals(new boolean[] { true, true, false }, ordered.toArray());
+        assertEquals(1, ordered.lastIndexOf(true));
+        assertTrue(ordered.removeValue(false));
+        assertArrayEquals(new boolean[] { true, true }, ordered.toArray());
+        assertTrue(ordered.removeAll(new BooleanArray().add(true)));
+        assertArrayEquals(new boolean[] { true }, ordered.toArray());
+
+        BooleanArray unordered = new BooleanArray(false, 2);
+        unordered.add(true).add(false).add(false);
+        assertTrue(unordered.removeIndex(0));
+        assertArrayEquals(new boolean[] { false, false }, unordered.toArray());
+        unordered.swap(0, 1).reverse().truncate(1);
+        assertEquals(1, unordered.size());
+        assertFalse(unordered.first());
+    }
+
+    @Test
+    void booleanArrayIteratorIsPrimitiveAndReusable() {
+        BooleanArray values = new BooleanArray().add(true).add(false);
+        BooleanIterator first = values.iterator();
+
+        assertTrue(first.nextBoolean());
+        assertFalse(first.nextBoolean());
+        assertFalse(first.hasNext());
+        assertThrows(NoSuchElementException.class, first::nextBoolean);
+
+        BooleanIterator second = values.iterator();
+        assertSame(first, second);
+        assertTrue(second.nextBoolean());
+    }
+
+    @Test
     void intArrayCanRemoveWithoutPreservingOrder() {
         IntArray array = new IntArray(false, 2);
         array.add(10).add(20).add(30);

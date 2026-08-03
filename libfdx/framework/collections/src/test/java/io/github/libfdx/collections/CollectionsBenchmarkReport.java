@@ -140,7 +140,7 @@ public final class CollectionsBenchmarkReport {
         text.append("> Lower `ns/op` is faster. Comparisons are made only between configurations ")
                 .append("of the same collection and operation.\n\n");
 
-        appendImplementationComparison(text, comparisons);
+        appendAllCollectionsComparison(text, results);
         appendRunConfiguration(text, metadata, results);
         appendConclusions(text, results, comparisons);
         appendComparisonTable(text, comparisons);
@@ -148,86 +148,178 @@ public final class CollectionsBenchmarkReport {
         return text.toString();
     }
 
-    private static void appendImplementationComparison(StringBuilder text,
-            Array<ComparisonGroup> comparisons) {
-        Array<ComparisonGroup> groups = new Array<ComparisonGroup>();
-        for (int i = 0; i < comparisons.size(); i++) {
-            ComparisonGroup group = comparisons.get(i);
-            if ("OrderedIntNodeMap".equals(group.collection)
-                    && hasOnlyImplementationOptions(group)) {
-                groups.add(group);
-            }
-        }
-        if (groups.isEmpty()) {
+    static void appendAllCollectionsComparison(StringBuilder text,
+            Array<BenchmarkResult> results) {
+        Array<SummaryRow> rows = buildSummaryRows(results);
+        if (rows.isEmpty()) {
             return;
         }
 
-        Array<String> implementations = new Array<String>();
-        ComparisonGroup firstGroup = groups.first();
-        for (int i = 0; i < firstGroup.results.size(); i++) {
-            implementations.add(optionValue(firstGroup.results.get(i).options,
-                    "implementation"));
-        }
-
-        text.append("## Performance comparison\n\n");
-        text.append("| Implementation |");
-        for (int i = 0; i < groups.size(); i++) {
-            text.append(' ').append(operationName(groups.get(i).operation)).append(" |");
-        }
-        text.append("\n|---|");
-        for (int i = 0; i < groups.size(); i++) {
-            text.append("---:|");
-        }
-        text.append('\n');
-
-        for (int i = 0; i < implementations.size(); i++) {
-            String implementation = implementations.get(i);
-            text.append("| ").append(implementationName(implementation)).append(" |");
-            for (int j = 0; j < groups.size(); j++) {
-                BenchmarkResult result = findImplementationResult(groups.get(j), implementation);
-                if (result == null) {
-                    text.append(" - |");
-                }
-                else {
-                    text.append(' ').append(formatScore(result.score)).append(' ')
-                            .append(result.unit).append(" |");
-                }
+        text.append("## All collections performance comparison\n\n");
+        text.append("Each result is `average time / allocated bytes per operation`. A `-` means ")
+                .append("the collection does not expose a matching benchmark operation.\n\n");
+        text.append("| Collection | Add / put | Lookup | Remove | Direct removal | Loop all |\n");
+        text.append("|---|---:|---:|---:|---:|---:|\n");
+        for (int i = 0; i < rows.size(); i++) {
+            SummaryRow row = rows.get(i);
+            text.append("| ").append(row.name).append(" |");
+            for (int column = 0; column < SummaryColumn.COUNT; column++) {
+                appendSummaryCell(text, row.results[column]);
             }
             text.append('\n');
         }
-        text.append("\nLower is faster. `Loop all` uses each collection's fastest public ")
-                .append("full traversal and does not require the same visit order: indexed for ")
-                .append("arrays and ArrayList, value iteration for hash maps, and packed ")
-                .append("node-index traversal for both node maps. Java HashMap uses Integer ")
-                .append("keys because the Java API has no primitive-int HashMap, so its results ")
-                .append("include the required boxing and per-entry node behavior. Detailed ")
-                .append("confidence intervals and allocation measurements are included below.\n\n");
+        text.append("\nEvery collection in the report is listed. When present, ordered and ")
+                .append("unordered array variants, plus ObjectMap equality and identity modes, ")
+                .append("have separate rows. `Lookup` includes get, contains, first, or last ")
+                .append("operations. When ")
+                .append("multiple operations or configurations fit one cell, it shows the ")
+                .append("fastest observed result; this is not a claim of statistical separation. ")
+                .append("`Loop all` selects the fastest measured complete traversal and does not ")
+                .append("require the same visit order or element representation. Java HashMap ")
+                .append("uses Integer keys because Java has no primitive-int HashMap. Exact ")
+                .append("operations, configurations, confidence intervals, and allocations are ")
+                .append("listed below.\n\n");
     }
 
-    private static boolean hasOnlyImplementationOptions(ComparisonGroup group) {
-        for (int i = 0; i < group.results.size(); i++) {
-            String options = group.results.get(i).options;
-            if (!options.startsWith("implementation=") || options.indexOf(',') >= 0) {
-                return false;
+    private static Array<SummaryRow> buildSummaryRows(Array<BenchmarkResult> results) {
+        Array<SummaryRow> rows = new Array<SummaryRow>();
+        Array<String> standardizedKeys = new Array<String>();
+
+        for (int i = 0; i < results.size(); i++) {
+            BenchmarkResult result = results.get(i);
+            if (!isImplementationComparison(result)) {
+                continue;
+            }
+            String implementation = optionValue(result.options, "implementation");
+            SummaryIdentity identity = implementationIdentity(implementation);
+            SummaryRow row = findOrCreateSummaryRow(rows, identity);
+            row.offer(result);
+            if (!standardizedKeys.contains(identity.key)) {
+                standardizedKeys.add(identity.key);
             }
         }
-        return true;
+
+        for (int i = 0; i < results.size(); i++) {
+            BenchmarkResult result = results.get(i);
+            if (isImplementationComparison(result)) {
+                continue;
+            }
+            SummaryIdentity identity = resultIdentity(result);
+            if (!standardizedKeys.contains(identity.key)) {
+                findOrCreateSummaryRow(rows, identity).offer(result);
+            }
+        }
+
+        rows.sort((left, right) -> left.key.compareTo(right.key));
+        return rows;
     }
 
-    private static BenchmarkResult findImplementationResult(ComparisonGroup group,
-            String implementation) {
-        for (int i = 0; i < group.results.size(); i++) {
-            BenchmarkResult result = group.results.get(i);
-            if (implementation.equals(optionValue(result.options, "implementation"))) {
-                return result;
+    private static SummaryRow findOrCreateSummaryRow(Array<SummaryRow> rows,
+            SummaryIdentity identity) {
+        for (int i = 0; i < rows.size(); i++) {
+            SummaryRow row = rows.get(i);
+            if (row.key.equals(identity.key)) {
+                return row;
             }
         }
-        return null;
+        SummaryRow row = new SummaryRow(identity.key, identity.name);
+        rows.add(row);
+        return row;
+    }
+
+    private static boolean isImplementationComparison(BenchmarkResult result) {
+        return "OrderedIntNodeMap".equals(result.collection)
+                && result.options.startsWith("implementation=")
+                && result.options.indexOf(',') < 0;
+    }
+
+    private static SummaryIdentity implementationIdentity(String implementation) {
+        if ("ARRAY_ORDERED".equals(implementation)) {
+            return new SummaryIdentity("Array|0", "libFDX Array (ordered)");
+        }
+        if ("ARRAY_UNORDERED".equals(implementation)) {
+            return new SummaryIdentity("Array|1", "libFDX Array (unordered)");
+        }
+        if ("JAVA_ARRAY_LIST".equals(implementation)) {
+            return new SummaryIdentity("ArrayList", "Java ArrayList");
+        }
+        if ("JAVA_HASH_MAP".equals(implementation)) {
+            return new SummaryIdentity("HashMap", "Java HashMap (Integer keys)");
+        }
+        if ("INT_MAP".equals(implementation)) {
+            return new SummaryIdentity("IntMap", "libFDX IntMap");
+        }
+        if ("ORDERED_INT_MAP".equals(implementation)) {
+            return new SummaryIdentity("OrderedIntMap", "libFDX OrderedIntMap");
+        }
+        if ("ORDERED_MAP".equals(implementation)) {
+            return new SummaryIdentity("OrderedMap", "libFDX OrderedMap");
+        }
+        if ("ORDERED_INT_NODE_MAP".equals(implementation)) {
+            return new SummaryIdentity("OrderedIntNodeMap", "libFDX OrderedIntNodeMap");
+        }
+        if ("ORDERED_INT_SPARSE_MAP".equals(implementation)) {
+            return new SummaryIdentity("OrderedIntSparseMap", "libFDX OrderedIntSparseMap");
+        }
+        if ("ORDERED_INT_SPARSE_NODE_MAP".equals(implementation)) {
+            return new SummaryIdentity("OrderedIntSparseNodeMap",
+                    "libFDX OrderedIntSparseNodeMap");
+        }
+        return new SummaryIdentity("comparison|" + implementation,
+                implementationName(implementation));
+    }
+
+    private static SummaryIdentity resultIdentity(BenchmarkResult result) {
+        String collection = result.collection;
+        if (isArrayCollection(collection)) {
+            boolean ordered = Boolean.parseBoolean(optionValue(result.options, "ordered"));
+            return new SummaryIdentity(collection + (ordered ? "|0" : "|1"),
+                    "libFDX " + collection + (ordered ? " (ordered)" : " (unordered)"));
+        }
+        if ("ObjectMap".equals(collection)) {
+            String comparison = optionValue(result.options, "keyComparison");
+            boolean identity = "IDENTITY".equals(comparison);
+            return new SummaryIdentity(collection + (identity ? "|1" : "|0"),
+                    "libFDX ObjectMap (" + (identity ? "identity" : "equality") + ')');
+        }
+        if ("ArrayList".equals(collection)) {
+            return new SummaryIdentity(collection, "Java ArrayList");
+        }
+        if ("HashMap".equals(collection)) {
+            return new SummaryIdentity(collection, "Java HashMap (Integer keys)");
+        }
+        return new SummaryIdentity(collection, "libFDX " + collection);
+    }
+
+    private static boolean isArrayCollection(String collection) {
+        return "Array".equals(collection) || "IntArray".equals(collection)
+                || "LongArray".equals(collection) || "FloatArray".equals(collection);
+    }
+
+    private static void appendSummaryCell(StringBuilder text, BenchmarkResult result) {
+        if (result == null) {
+            text.append(" - |");
+            return;
+        }
+        text.append(' ').append(formatScore(result.score)).append(' ')
+                .append(result.unit).append(" / ")
+                .append(formatComparisonAllocation(result.allocation)).append(" |");
     }
 
     private static String optionValue(String options, String name) {
         String prefix = name + '=';
-        return options.startsWith(prefix) ? options.substring(prefix.length()) : options;
+        int start = 0;
+        while (start < options.length()) {
+            int end = options.indexOf(", ", start);
+            if (end < 0) {
+                end = options.length();
+            }
+            if (options.startsWith(prefix, start)) {
+                return options.substring(start + prefix.length(), end);
+            }
+            start = end + 2;
+        }
+        return "";
     }
 
     private static String implementationName(String value) {
@@ -243,6 +335,9 @@ public final class CollectionsBenchmarkReport {
         if ("INT_MAP".equals(value)) {
             return "libFDX IntMap";
         }
+        if ("ORDERED_INT_MAP".equals(value)) {
+            return "libFDX OrderedIntMap";
+        }
         if ("JAVA_HASH_MAP".equals(value)) {
             return "Java HashMap (Integer keys)";
         }
@@ -251,6 +346,9 @@ public final class CollectionsBenchmarkReport {
         }
         if ("ORDERED_INT_NODE_MAP".equals(value)) {
             return "libFDX OrderedIntNodeMap";
+        }
+        if ("ORDERED_INT_SPARSE_MAP".equals(value)) {
+            return "libFDX OrderedIntSparseMap";
         }
         if ("ORDERED_INT_SPARSE_NODE_MAP".equals(value)) {
             return "libFDX OrderedIntSparseNodeMap";
@@ -269,22 +367,6 @@ public final class CollectionsBenchmarkReport {
             }
         }
         return name.toString();
-    }
-
-    private static String operationName(String value) {
-        if ("GET_BY_INDEX_OR_KEY".equals(value)) {
-            return "Get";
-        }
-        if ("REMOVE_BY_INDEX_OR_KEY".equals(value)) {
-            return "Remove";
-        }
-        if ("REMOVE_DIRECT".equals(value)) {
-            return "Direct removal";
-        }
-        if ("LOOP_ALL".equals(value)) {
-            return "Loop all";
-        }
-        return implementationName(value);
     }
 
     private static void appendRunConfiguration(StringBuilder text, BenchmarkParams metadata,
@@ -462,6 +544,13 @@ public final class CollectionsBenchmarkReport {
         return format("%.5f B/op", value);
     }
 
+    private static String formatComparisonAllocation(double value) {
+        if (!Double.isNaN(value) && Math.abs(value) < 0.001d) {
+            return "~0 B/op";
+        }
+        return formatAllocation(value);
+    }
+
     private static String formatPercent(double value) {
         return Double.isNaN(value) ? "n/a" : format("%.1f%%", value);
     }
@@ -470,7 +559,7 @@ public final class CollectionsBenchmarkReport {
         return String.format(Locale.ROOT, pattern, value);
     }
 
-    private static final class BenchmarkResult {
+    static final class BenchmarkResult {
         private final String collection;
         private final String operation;
         private final String options;
@@ -481,7 +570,7 @@ public final class CollectionsBenchmarkReport {
         private final double allocation;
         private final double gcCount;
 
-        private BenchmarkResult(String collection, String operation, String options, double score,
+        BenchmarkResult(String collection, String operation, String options, double score,
                 double confidenceLow, double confidenceHigh, String unit, double allocation,
                 double gcCount) {
             this.collection = collection;
@@ -493,6 +582,77 @@ public final class CollectionsBenchmarkReport {
             this.unit = unit;
             this.allocation = allocation;
             this.gcCount = gcCount;
+        }
+    }
+
+    private static final class SummaryColumn {
+        private static final int ADD = 0;
+        private static final int LOOKUP = 1;
+        private static final int REMOVE = 2;
+        private static final int DIRECT_REMOVE = 3;
+        private static final int LOOP = 4;
+        private static final int COUNT = 5;
+
+        private SummaryColumn() {
+        }
+
+        private static int forOperation(String operation) {
+            if ("ADD".equals(operation) || "PUT".equals(operation)
+                    || "ADD_FIRST".equals(operation) || "ADD_LAST".equals(operation)) {
+                return ADD;
+            }
+            if ("GET".equals(operation) || "CONTAINS".equals(operation)
+                    || "FIRST".equals(operation) || "LAST".equals(operation)
+                    || "GET_BY_INDEX_OR_KEY".equals(operation)) {
+                return LOOKUP;
+            }
+            if ("REMOVE".equals(operation) || "REMOVE_FIRST".equals(operation)
+                    || "REMOVE_LAST".equals(operation)
+                    || "REMOVE_BY_INDEX_OR_KEY".equals(operation)) {
+                return REMOVE;
+            }
+            if ("REMOVE_DIRECT".equals(operation)) {
+                return DIRECT_REMOVE;
+            }
+            if ("ITERATE".equals(operation) || "ITERATE_KEYS".equals(operation)
+                    || "ITERATE_VALUES".equals(operation)
+                    || "ITERATE_ENTRIES".equals(operation)
+                    || "LOOP_INDEXED".equals(operation) || "LOOP_ALL".equals(operation)) {
+                return LOOP;
+            }
+            return -1;
+        }
+    }
+
+    private static final class SummaryIdentity {
+        private final String key;
+        private final String name;
+
+        private SummaryIdentity(String key, String name) {
+            this.key = key;
+            this.name = name;
+        }
+    }
+
+    private static final class SummaryRow {
+        private final String key;
+        private final String name;
+        private final BenchmarkResult[] results = new BenchmarkResult[SummaryColumn.COUNT];
+
+        private SummaryRow(String key, String name) {
+            this.key = key;
+            this.name = name;
+        }
+
+        private void offer(BenchmarkResult result) {
+            int column = SummaryColumn.forOperation(result.operation);
+            if (column < 0) {
+                return;
+            }
+            BenchmarkResult current = results[column];
+            if (current == null || result.score < current.score) {
+                results[column] = result;
+            }
         }
     }
 

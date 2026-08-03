@@ -125,9 +125,10 @@ public final class LongMap<V> implements LongMapView<V> {
             throw new IllegalArgumentException("entries must not be null");
         }
         ensureCapacity(entries.size());
-        ObjectIterator<? extends Entry<? extends V>> iterator = entries.entries().iterator();
+        ObjectIterator<? extends LongMapEntry<? extends V>> iterator =
+                entries.entries().iterator();
         while (iterator.hasNext()) {
-            Entry<? extends V> entry = iterator.next();
+            LongMapEntry<? extends V> entry = iterator.next();
             put(entry.key(), entry.value());
         }
         return this;
@@ -433,7 +434,7 @@ public final class LongMap<V> implements LongMapView<V> {
      * @param <V> the value type
      * @author xpenatan
      */
-    public static final class Entry<V> {
+    public static final class Entry<V> implements LongMapEntry<V> {
         private long key;
         private V value;
 
@@ -445,6 +446,7 @@ public final class LongMap<V> implements LongMapView<V> {
          *
          * @return the key
          */
+        @Override
         public long key() {
             return key;
         }
@@ -454,6 +456,7 @@ public final class LongMap<V> implements LongMapView<V> {
          *
          * @return the value
          */
+        @Override
         public V value() {
             return value;
         }

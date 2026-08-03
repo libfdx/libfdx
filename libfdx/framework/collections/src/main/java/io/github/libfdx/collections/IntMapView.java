@@ -32,7 +32,7 @@ public interface IntMapView<V> {
      *
      * @return the entries
      */
-    ObjectIterable<IntMap.Entry<V>> entries();
+    ObjectIterable<? extends IntMapEntry<V>> entries();
 
     IntIterable keys();
 
