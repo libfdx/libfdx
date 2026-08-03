@@ -114,20 +114,27 @@ public final class CollectionsBenchmarkRunner {
                 + "'. Available collections: " + joinedAvailableCollections());
     }
 
-    private static String benchmarkFilter(Array<String> collections) {
+    static String benchmarkFilter(Array<String> collections) {
         StringBuilder filter = new StringBuilder(160);
         filter.append("io\\.github\\.libfdx\\.collections\\.CollectionsBenchmark\\.(?:");
         for (int i = 0; i < collections.size(); i++) {
             if (i > 0) {
                 filter.append('|');
             }
-            filter.append(benchmarkMethod(collections.get(i)));
+            filter.append(benchmarkPattern(collections.get(i)));
         }
         return filter.append(")\\z").toString();
     }
 
     private static String benchmarkMethod(String collectionName) {
         return Character.toLowerCase(collectionName.charAt(0)) + collectionName.substring(1);
+    }
+
+    private static String benchmarkPattern(String collectionName) {
+        if ("OrderedIntNodeMap".equals(collectionName)) {
+            return "(?:orderedIntNodeMap|orderedIntNodeRetainedRemoval)";
+        }
+        return benchmarkMethod(collectionName);
     }
 
     static String reportStem(String collectionName) {

@@ -158,7 +158,8 @@ public final class CollectionsBenchmarkReport {
         text.append("## All collections performance comparison\n\n");
         text.append("Each result is `average time / allocated bytes per operation`. A `-` means ")
                 .append("the collection does not expose a matching benchmark operation.\n\n");
-        text.append("| Collection | Add / put | Lookup | Remove | Direct removal | Loop all |\n");
+        text.append("| Collection | Add / put | Lookup | Remove | Remove by retained node | "
+                + "Loop all |\n");
         text.append("|---|---:|---:|---:|---:|---:|\n");
         for (int i = 0; i < rows.size(); i++) {
             SummaryRow row = rows.get(i);
@@ -171,7 +172,9 @@ public final class CollectionsBenchmarkReport {
         text.append("\nEvery collection in the report is listed. When present, ordered and ")
                 .append("unordered array variants, plus ObjectMap equality and identity modes, ")
                 .append("have separate rows. `Lookup` includes get, contains, first, or last ")
-                .append("operations. When ")
+                .append("operations. `Remove by retained node` applies only to node maps exposing ")
+                .append("a public node handle; normal index and key removal belong in `Remove`. ")
+                .append("When ")
                 .append("multiple operations or configurations fit one cell, it shows the ")
                 .append("fastest observed result; this is not a claim of statistical separation. ")
                 .append("`Loop all` selects the fastest measured complete traversal and does not ")
@@ -222,7 +225,7 @@ public final class CollectionsBenchmarkReport {
                 return row;
             }
         }
-        SummaryRow row = new SummaryRow(identity.key, identity.name);
+        SummaryRow row = new SummaryRow(identity);
         rows.add(row);
         return row;
     }
@@ -256,14 +259,14 @@ public final class CollectionsBenchmarkReport {
             return new SummaryIdentity("OrderedMap", "libFDX OrderedMap");
         }
         if ("ORDERED_INT_NODE_MAP".equals(implementation)) {
-            return new SummaryIdentity("OrderedIntNodeMap", "libFDX OrderedIntNodeMap");
+            return new SummaryIdentity("OrderedIntNodeMap", "libFDX OrderedIntNodeMap", true);
         }
         if ("ORDERED_INT_SPARSE_MAP".equals(implementation)) {
             return new SummaryIdentity("OrderedIntSparseMap", "libFDX OrderedIntSparseMap");
         }
         if ("ORDERED_INT_SPARSE_NODE_MAP".equals(implementation)) {
             return new SummaryIdentity("OrderedIntSparseNodeMap",
-                    "libFDX OrderedIntSparseNodeMap");
+                    "libFDX OrderedIntSparseNodeMap", true);
         }
         return new SummaryIdentity("comparison|" + implementation,
                 implementationName(implementation));
@@ -288,7 +291,13 @@ public final class CollectionsBenchmarkReport {
         if ("HashMap".equals(collection)) {
             return new SummaryIdentity(collection, "Java HashMap (Integer keys)");
         }
-        return new SummaryIdentity(collection, "libFDX " + collection);
+        return new SummaryIdentity(collection, "libFDX " + collection,
+                isRetainedNodeCollection(collection));
+    }
+
+    private static boolean isRetainedNodeCollection(String collection) {
+        return "OrderedIntNodeMap".equals(collection)
+                || "OrderedIntSparseNodeMap".equals(collection);
     }
 
     private static boolean isArrayCollection(String collection) {
@@ -499,7 +508,10 @@ public final class CollectionsBenchmarkReport {
                 .append(markdownEscape(value)).append("|\n");
     }
 
-    private static String collectionName(String method) {
+    static String collectionName(String method) {
+        if ("orderedIntNodeRetainedRemoval".equals(method)) {
+            return "OrderedIntNodeMap";
+        }
         return Character.toUpperCase(method.charAt(0)) + method.substring(1);
     }
 
@@ -589,7 +601,7 @@ public final class CollectionsBenchmarkReport {
         private static final int ADD = 0;
         private static final int LOOKUP = 1;
         private static final int REMOVE = 2;
-        private static final int DIRECT_REMOVE = 3;
+        private static final int RETAINED_NODE_REMOVE = 3;
         private static final int LOOP = 4;
         private static final int COUNT = 5;
 
@@ -611,8 +623,8 @@ public final class CollectionsBenchmarkReport {
                     || "REMOVE_BY_INDEX_OR_KEY".equals(operation)) {
                 return REMOVE;
             }
-            if ("REMOVE_DIRECT".equals(operation)) {
-                return DIRECT_REMOVE;
+            if ("REMOVE_BY_RETAINED_NODE".equals(operation)) {
+                return RETAINED_NODE_REMOVE;
             }
             if ("ITERATE".equals(operation) || "ITERATE_KEYS".equals(operation)
                     || "ITERATE_VALUES".equals(operation)
@@ -627,26 +639,35 @@ public final class CollectionsBenchmarkReport {
     private static final class SummaryIdentity {
         private final String key;
         private final String name;
+        private final boolean retainedNodeRemoval;
 
         private SummaryIdentity(String key, String name) {
+            this(key, name, false);
+        }
+
+        private SummaryIdentity(String key, String name, boolean retainedNodeRemoval) {
             this.key = key;
             this.name = name;
+            this.retainedNodeRemoval = retainedNodeRemoval;
         }
     }
 
     private static final class SummaryRow {
         private final String key;
         private final String name;
+        private final boolean retainedNodeRemoval;
         private final BenchmarkResult[] results = new BenchmarkResult[SummaryColumn.COUNT];
 
-        private SummaryRow(String key, String name) {
-            this.key = key;
-            this.name = name;
+        private SummaryRow(SummaryIdentity identity) {
+            key = identity.key;
+            name = identity.name;
+            retainedNodeRemoval = identity.retainedNodeRemoval;
         }
 
         private void offer(BenchmarkResult result) {
             int column = SummaryColumn.forOperation(result.operation);
-            if (column < 0) {
+            if (column < 0 || (column == SummaryColumn.RETAINED_NODE_REMOVE
+                    && !retainedNodeRemoval)) {
                 return;
             }
             BenchmarkResult current = results[column];

@@ -156,8 +156,14 @@ public class CollectionsBenchmark {
         ADD,
         GET_BY_INDEX_OR_KEY,
         REMOVE_BY_INDEX_OR_KEY,
-        REMOVE_DIRECT,
+        REMOVE_BY_RETAINED_NODE,
         LOOP_ALL
+    }
+
+    /** Node implementations that expose removal through a retained node. */
+    public enum NodeRetainedRemovalImplementation {
+        ORDERED_INT_NODE_MAP,
+        ORDERED_INT_SPARSE_NODE_MAP
     }
 
     /** State for ordered and unordered {@link Array} variants. */
@@ -822,7 +828,12 @@ public class CollectionsBenchmark {
         @Param
         public NodeMapComparisonImplementation implementation;
 
-        @Param
+        @Param({
+                "ADD",
+                "GET_BY_INDEX_OR_KEY",
+                "REMOVE_BY_INDEX_OR_KEY",
+                "LOOP_ALL"
+        })
         public NodeMapComparisonOperation operation;
 
         public Array<BenchmarkValue> array;
@@ -834,8 +845,6 @@ public class CollectionsBenchmark {
         public OrderedIntSparseMap<BenchmarkValue> sparseMap;
         public OrderedIntNodeMap<BenchmarkValue, BenchmarkNode> nodeMap;
         public OrderedIntSparseNodeMap<BenchmarkValue, BenchmarkSparseNode> sparseNodeMap;
-        public BenchmarkNode[] nodeRemovalOrder;
-        public BenchmarkSparseNode[] sparseNodeRemovalOrder;
 
         @Setup(Level.Trial)
         public void setupTrial() {
@@ -868,12 +877,10 @@ public class CollectionsBenchmark {
                 case ORDERED_INT_NODE_MAP:
                     nodeMap = new OrderedIntNodeMap<BenchmarkValue, BenchmarkNode>(
                             ELEMENT_COUNT, BenchmarkNode::new);
-                    nodeRemovalOrder = new BenchmarkNode[ELEMENT_COUNT];
                     break;
                 case ORDERED_INT_SPARSE_NODE_MAP:
                     sparseNodeMap = new OrderedIntSparseNodeMap<BenchmarkValue, BenchmarkSparseNode>(
                             ELEMENT_COUNT, ELEMENT_COUNT, BenchmarkSparseNode::new);
-                    sparseNodeRemovalOrder = new BenchmarkSparseNode[ELEMENT_COUNT];
                     break;
                 default:
                     throw new AssertionError(implementation);
@@ -892,9 +899,6 @@ public class CollectionsBenchmark {
             else if (isNodeMapComparisonRemoval(operation)) {
                 clearComparison(this);
                 fillComparison(this);
-                if (operation == NodeMapComparisonOperation.REMOVE_DIRECT) {
-                    prepareDirectRemoval(this);
-                }
             }
         }
 
@@ -905,10 +909,83 @@ public class CollectionsBenchmark {
         }
     }
 
+    /** State for removal through retained node references only. */
+    @State(Scope.Thread)
+    public static class OrderedIntNodeRetainedRemovalState {
+        @Param
+        public NodeRetainedRemovalImplementation implementation;
+
+        @Param({"REMOVE_BY_RETAINED_NODE"})
+        public NodeMapComparisonOperation operation;
+
+        public OrderedIntNodeMap<BenchmarkValue, BenchmarkNode> nodeMap;
+        public OrderedIntSparseNodeMap<BenchmarkValue, BenchmarkSparseNode> sparseNodeMap;
+        public BenchmarkNode[] nodeRemovalOrder;
+        public BenchmarkSparseNode[] sparseNodeRemovalOrder;
+
+        @Setup(Level.Trial)
+        public void setupTrial() {
+            switch (implementation) {
+                case ORDERED_INT_NODE_MAP:
+                    nodeMap = new OrderedIntNodeMap<BenchmarkValue, BenchmarkNode>(
+                            ELEMENT_COUNT, BenchmarkNode::new);
+                    nodeRemovalOrder = new BenchmarkNode[ELEMENT_COUNT];
+                    break;
+                case ORDERED_INT_SPARSE_NODE_MAP:
+                    sparseNodeMap = new OrderedIntSparseNodeMap<BenchmarkValue,
+                            BenchmarkSparseNode>(ELEMENT_COUNT, ELEMENT_COUNT,
+                            BenchmarkSparseNode::new);
+                    sparseNodeRemovalOrder = new BenchmarkSparseNode[ELEMENT_COUNT];
+                    break;
+                default:
+                    throw new AssertionError(implementation);
+            }
+        }
+
+        @Setup(Level.Invocation)
+        public void setupInvocation() {
+            switch (implementation) {
+                case ORDERED_INT_NODE_MAP:
+                    nodeMap.clear();
+                    fillComparison(nodeMap);
+                    prepareRetainedNodeRemoval(nodeMap, nodeRemovalOrder);
+                    break;
+                case ORDERED_INT_SPARSE_NODE_MAP:
+                    sparseNodeMap.clear();
+                    fillComparison(sparseNodeMap);
+                    prepareRetainedNodeRemoval(sparseNodeMap, sparseNodeRemovalOrder);
+                    break;
+                default:
+                    throw new AssertionError(implementation);
+            }
+        }
+
+        @TearDown(Level.Invocation)
+        public void validate() {
+            int size;
+            switch (implementation) {
+                case ORDERED_INT_NODE_MAP:
+                    size = nodeMap.size();
+                    break;
+                case ORDERED_INT_SPARSE_NODE_MAP:
+                    size = sparseNodeMap.size();
+                    break;
+                default:
+                    throw new AssertionError(implementation);
+            }
+            validateSize(implementation.name(), size, 0);
+        }
+    }
+
     /** State for the standalone {@link OrderedIntSparseMap} benchmark. */
     @State(Scope.Thread)
     public static class OrderedIntSparseMapState {
-        @Param
+        @Param({
+                "ADD",
+                "GET_BY_INDEX_OR_KEY",
+                "REMOVE_BY_INDEX_OR_KEY",
+                "LOOP_ALL"
+        })
         public NodeMapComparisonOperation operation;
 
         public OrderedIntSparseMap<BenchmarkValue> values;
@@ -967,8 +1044,8 @@ public class CollectionsBenchmark {
             else if (isNodeMapComparisonRemoval(operation)) {
                 values.clear();
                 fillComparison(values);
-                if (operation == NodeMapComparisonOperation.REMOVE_DIRECT) {
-                    prepareDirectRemoval(values, removalOrder);
+                if (operation == NodeMapComparisonOperation.REMOVE_BY_RETAINED_NODE) {
+                    prepareRetainedNodeRemoval(values, removalOrder);
                 }
             }
         }
@@ -1228,11 +1305,10 @@ public class CollectionsBenchmark {
      * maps, insertion-ordered {@link OrderedMap}, and customizable ordered node
      * maps. Array access/removal uses known dense indices; map access/removal
      * uses keys. Java's {@code HashMap<Integer, BenchmarkValue>} necessarily
-     * boxes primitive keys. Direct removal uses a retained node reference for
-     * node maps; collections without node handles repeat their native
-     * known-index or key removal as the baseline. {@code LOOP_ALL} measures the
-     * fastest public full traversal available to each collection; it does not
-     * require the traversal order to be equivalent.
+     * boxes primitive keys. {@code LOOP_ALL} measures the fastest public full
+     * traversal available to each collection; it does not require the
+     * traversal order to be equivalent. Retained-node removal is benchmarked
+     * separately because ordinary collections do not expose that operation.
      *
      * @param state the selected implementation and operation
      * @return a checksum consumed by JMH
@@ -1256,6 +1332,26 @@ public class CollectionsBenchmark {
                 return compareOrderedMap(state.orderedMap, state.operation);
             case ORDERED_INT_SPARSE_MAP:
                 return compareOrderedIntSparseMap(state.sparseMap, state.operation);
+            case ORDERED_INT_NODE_MAP:
+                return compareOrderedIntNodeMap(state.nodeMap, state.operation);
+            case ORDERED_INT_SPARSE_NODE_MAP:
+                return compareOrderedIntSparseNodeMap(state.sparseNodeMap, state.operation);
+            default:
+                throw new AssertionError(state.implementation);
+        }
+    }
+
+    /**
+     * Compares removal through an already-retained node reference. Only map
+     * implementations exposing a public node handle participate.
+     *
+     * @param state the selected node implementation
+     * @return a checksum consumed by JMH
+     */
+    @Benchmark
+    @OperationsPerInvocation(ELEMENT_COUNT)
+    public long orderedIntNodeRetainedRemoval(OrderedIntNodeRetainedRemovalState state) {
+        switch (state.implementation) {
             case ORDERED_INT_NODE_MAP:
                 return compareOrderedIntNodeMap(
                         state.nodeMap, state.nodeRemovalOrder, state.operation);
@@ -1487,7 +1583,6 @@ public class CollectionsBenchmark {
             case GET_BY_INDEX_OR_KEY:
                 return randomAccessSum(values);
             case REMOVE_BY_INDEX_OR_KEY:
-            case REMOVE_DIRECT:
                 long removeChecksum = 0L;
                 for (int i = 0; i < ELEMENT_COUNT; i++) {
                     removeChecksum += values.removeIndex(REMOVAL_INDICES[i]).id;
@@ -1515,7 +1610,6 @@ public class CollectionsBenchmark {
                 }
                 return getChecksum;
             case REMOVE_BY_INDEX_OR_KEY:
-            case REMOVE_DIRECT:
                 long removeChecksum = 0L;
                 for (int i = 0; i < ELEMENT_COUNT; i++) {
                     removeChecksum += values.remove(REMOVAL_INDICES[i]).id;
@@ -1547,7 +1641,6 @@ public class CollectionsBenchmark {
                 }
                 return getChecksum;
             case REMOVE_BY_INDEX_OR_KEY:
-            case REMOVE_DIRECT:
                 long removeChecksum = 0L;
                 for (int i = 0; i < ELEMENT_COUNT; i++) {
                     int valueIndex = REMOVAL_VALUE_INDICES[i];
@@ -1576,7 +1669,6 @@ public class CollectionsBenchmark {
                 }
                 return getChecksum;
             case REMOVE_BY_INDEX_OR_KEY:
-            case REMOVE_DIRECT:
                 long removeChecksum = 0L;
                 for (int i = 0; i < ELEMENT_COUNT; i++) {
                     int valueIndex = REMOVAL_VALUE_INDICES[i];
@@ -1609,7 +1701,6 @@ public class CollectionsBenchmark {
                 }
                 return getChecksum;
             case REMOVE_BY_INDEX_OR_KEY:
-            case REMOVE_DIRECT:
                 long removeChecksum = 0L;
                 for (int i = 0; i < ELEMENT_COUNT; i++) {
                     int valueIndex = REMOVAL_VALUE_INDICES[i];
@@ -1638,7 +1729,6 @@ public class CollectionsBenchmark {
             case GET_BY_INDEX_OR_KEY:
                 return getSum(values);
             case REMOVE_BY_INDEX_OR_KEY:
-            case REMOVE_DIRECT:
                 long removeChecksum = 0L;
                 for (int i = 0; i < ELEMENT_COUNT; i++) {
                     int valueIndex = REMOVAL_VALUE_INDICES[i];
@@ -1668,7 +1758,6 @@ public class CollectionsBenchmark {
                 }
                 return getChecksum;
             case REMOVE_BY_INDEX_OR_KEY:
-            case REMOVE_DIRECT:
                 long removeChecksum = 0L;
                 for (int i = 0; i < ELEMENT_COUNT; i++) {
                     int valueIndex = REMOVAL_VALUE_INDICES[i];
@@ -1684,6 +1773,15 @@ public class CollectionsBenchmark {
             default:
                 throw new AssertionError(operation);
         }
+    }
+
+    private static long compareOrderedIntNodeMap(
+            OrderedIntNodeMap<BenchmarkValue, BenchmarkNode> values,
+            NodeMapComparisonOperation operation) {
+        if (operation == NodeMapComparisonOperation.REMOVE_BY_RETAINED_NODE) {
+            throw new AssertionError("retained-node removal uses its dedicated benchmark");
+        }
+        return compareOrderedIntNodeMap(values, null, operation);
     }
 
     private static long compareOrderedIntNodeMap(
@@ -1709,12 +1807,12 @@ public class CollectionsBenchmark {
                     removeChecksum += values.remove(comparisonKey(valueIndex)).id;
                 }
                 return removeChecksum;
-            case REMOVE_DIRECT:
-                long directRemoveChecksum = 0L;
+            case REMOVE_BY_RETAINED_NODE:
+                long retainedRemoveChecksum = 0L;
                 for (int i = 0; i < ELEMENT_COUNT; i++) {
-                    directRemoveChecksum += values.removeNode(removalOrder[i]).id;
+                    retainedRemoveChecksum += values.removeNode(removalOrder[i]).id;
                 }
-                return directRemoveChecksum;
+                return retainedRemoveChecksum;
             case LOOP_ALL:
                 long denseChecksum = 0L;
                 for (int i = 0; i < ELEMENT_COUNT; i++) {
@@ -1724,6 +1822,15 @@ public class CollectionsBenchmark {
             default:
                 throw new AssertionError(operation);
         }
+    }
+
+    private static long compareOrderedIntSparseNodeMap(
+            OrderedIntSparseNodeMap<BenchmarkValue, BenchmarkSparseNode> values,
+            NodeMapComparisonOperation operation) {
+        if (operation == NodeMapComparisonOperation.REMOVE_BY_RETAINED_NODE) {
+            throw new AssertionError("retained-node removal uses its dedicated benchmark");
+        }
+        return compareOrderedIntSparseNodeMap(values, null, operation);
     }
 
     private static long compareOrderedIntSparseNodeMap(
@@ -1749,12 +1856,12 @@ public class CollectionsBenchmark {
                     removeChecksum += values.remove(comparisonKey(valueIndex)).id;
                 }
                 return removeChecksum;
-            case REMOVE_DIRECT:
-                long directRemoveChecksum = 0L;
+            case REMOVE_BY_RETAINED_NODE:
+                long retainedRemoveChecksum = 0L;
                 for (int i = 0; i < ELEMENT_COUNT; i++) {
-                    directRemoveChecksum += values.removeNode(removalOrder[i]).id;
+                    retainedRemoveChecksum += values.removeNode(removalOrder[i]).id;
                 }
-                return directRemoveChecksum;
+                return retainedRemoveChecksum;
             case LOOP_ALL:
                 long denseChecksum = 0L;
                 for (int i = 0; i < ELEMENT_COUNT; i++) {
@@ -1773,29 +1880,7 @@ public class CollectionsBenchmark {
 
     private static boolean isNodeMapComparisonRemoval(NodeMapComparisonOperation operation) {
         return operation == NodeMapComparisonOperation.REMOVE_BY_INDEX_OR_KEY
-                || operation == NodeMapComparisonOperation.REMOVE_DIRECT;
-    }
-
-    private static void prepareDirectRemoval(OrderedIntNodeMapComparisonState state) {
-        switch (state.implementation) {
-            case ORDERED_INT_NODE_MAP:
-                prepareDirectRemoval(state.nodeMap, state.nodeRemovalOrder);
-                break;
-            case ORDERED_INT_SPARSE_NODE_MAP:
-                prepareDirectRemoval(state.sparseNodeMap, state.sparseNodeRemovalOrder);
-                break;
-            case ARRAY_ORDERED:
-            case ARRAY_UNORDERED:
-            case JAVA_ARRAY_LIST:
-            case INT_MAP:
-            case ORDERED_INT_MAP:
-            case JAVA_HASH_MAP:
-            case ORDERED_MAP:
-            case ORDERED_INT_SPARSE_MAP:
-                break;
-            default:
-                throw new AssertionError(state.implementation);
-        }
+                || operation == NodeMapComparisonOperation.REMOVE_BY_RETAINED_NODE;
     }
 
     private static void fillComparison(OrderedIntNodeMapComparisonState state) {
@@ -2088,7 +2173,7 @@ public class CollectionsBenchmark {
         }
     }
 
-    private static void prepareDirectRemoval(
+    private static void prepareRetainedNodeRemoval(
             OrderedIntNodeMap<BenchmarkValue, BenchmarkNode> values,
             BenchmarkNode[] removalOrder) {
         for (int i = 0; i < ELEMENT_COUNT; i++) {
@@ -2097,7 +2182,7 @@ public class CollectionsBenchmark {
         }
     }
 
-    private static void prepareDirectRemoval(
+    private static void prepareRetainedNodeRemoval(
             OrderedIntSparseNodeMap<BenchmarkValue, BenchmarkSparseNode> values,
             BenchmarkSparseNode[] removalOrder) {
         for (int i = 0; i < ELEMENT_COUNT; i++) {

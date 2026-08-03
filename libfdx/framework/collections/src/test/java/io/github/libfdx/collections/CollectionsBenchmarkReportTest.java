@@ -8,6 +8,12 @@ import org.junit.jupiter.api.Test;
 
 class CollectionsBenchmarkReportTest {
     @Test
+    void retainedRemovalBenchmarkContributesToOrderedIntNodeMap() {
+        assertEquals("OrderedIntNodeMap",
+                CollectionsBenchmarkReport.collectionName("orderedIntNodeRetainedRemoval"));
+    }
+
+    @Test
     void includesEveryStandaloneCollectionAndMarksUnsupportedOperations() {
         Array<CollectionsBenchmarkReport.BenchmarkResult> results = new Array<>();
         results.add(result("CustomBag", "ADD", "", 4d));
@@ -18,7 +24,7 @@ class CollectionsBenchmarkReportTest {
         String markdown = comparison(results);
 
         assertTrue(markdown.contains("| Collection | Add / put | Lookup | Remove | "
-                + "Direct removal | Loop all |"));
+                + "Remove by retained node | Loop all |"));
         assertTrue(markdown.contains("| libFDX CustomBag | 4.000 ns/op / ~0 B/op | "
                 + "3.000 ns/op / ~0 B/op | 2.000 ns/op / ~0 B/op | - | "
                 + "1.000 ns/op / ~0 B/op |"));
@@ -51,13 +57,22 @@ class CollectionsBenchmarkReportTest {
         results.add(result("OrderedIntNodeMap", "ADD", "implementation=INT_MAP", 5d));
         results.add(result("OrderedIntNodeMap", "GET_BY_INDEX_OR_KEY",
                 "implementation=INT_MAP", 4d));
+        results.add(result("OrderedIntNodeMap", "REMOVE_BY_RETAINED_NODE",
+                "implementation=INT_MAP", 0.5d));
+        results.add(result("OrderedIntNodeMap", "REMOVE_BY_RETAINED_NODE",
+                "implementation=ORDERED_INT_NODE_MAP", 2d));
         results.add(result("IntMap", "PUT", "loadFactor=0.75", 1d));
 
         String markdown = comparison(results);
 
         assertTrue(markdown.contains("| libFDX IntMap | 5.000 ns/op / ~0 B/op | "
                 + "4.000 ns/op / ~0 B/op |"));
+        assertTrue(markdown.contains("| libFDX IntMap | 5.000 ns/op / ~0 B/op | "
+                + "4.000 ns/op / ~0 B/op | - | - | - |"));
+        assertTrue(markdown.contains("| libFDX OrderedIntNodeMap | - | - | - | "
+                + "2.000 ns/op / ~0 B/op | - |"));
         assertFalse(markdown.contains("| libFDX IntMap | 1.000 ns/op"));
+        assertFalse(markdown.contains("0.500 ns/op"));
         assertEquals(1, occurrences(markdown, "| libFDX IntMap |"));
     }
 
