@@ -5,8 +5,17 @@ import java.util.NoSuchElementException;
 /**
  * Stores values in a growable circular queue.
  *
- * <p>Adding and removing values at opposite ends are amortized constant-time
- * operations. Queue storage is reused after values are removed.</p>
+ * <p><b>Algorithm:</b> A circular {@code Object[]} stores a logical sequence
+ * that may wrap around the end of the backing array. The array is copied into
+ * logical order when capacity grows.</p>
+ *
+ * <p><b>Ordering:</b> Ordered from front to back. Wraparound and resizing do
+ * not change logical queue order.</p>
+ *
+ * <p><b>Performance:</b> Adding at either end is amortized {@code O(1)};
+ * removing or reading the first value and indexed get are {@code O(1)}.
+ * Iteration and clear are {@code O(n)}. Queue storage is reused after values
+ * are removed.</p>
  *
  * @param <T> the value type
  * @author xpenatan

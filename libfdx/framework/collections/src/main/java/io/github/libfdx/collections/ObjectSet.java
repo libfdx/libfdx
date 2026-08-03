@@ -6,7 +6,17 @@ import java.util.NoSuchElementException;
 /**
  * Stores non-null object values in a compact open-addressed set.
  *
- * <p>Add, membership lookup, and removal are expected constant time.</p>
+ * <p><b>Algorithm:</b> A power-of-two hash table uses linear probing and
+ * tombstones, with values compared by equality.</p>
+ *
+ * <p><b>Ordering:</b> Unordered. Iteration follows occupied table slots; it
+ * does not preserve insertion order and may change after mutation or
+ * resizing.</p>
+ *
+ * <p><b>Performance:</b> Add is expected amortized {@code O(1)}, and
+ * membership lookup and removal are expected {@code O(1)} with a
+ * well-distributed hash. Collision-heavy worst cases are {@code O(n)}. Full
+ * iteration scans the backing table and is {@code O(table capacity)}.</p>
  *
  * @param <T> the value type
  * @author xpenatan

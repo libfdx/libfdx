@@ -148,8 +148,7 @@ public class CollectionsBenchmark {
         GET_BY_INDEX_OR_KEY,
         REMOVE_BY_INDEX_OR_KEY,
         REMOVE_DIRECT,
-        ITERATE_DENSE,
-        ITERATE_ORDERED
+        LOOP_ALL
     }
 
     /** State for ordered and unordered {@link Array} variants. */
@@ -742,9 +741,6 @@ public class CollectionsBenchmark {
             if (isNodeMapComparisonRead(operation)) {
                 fillComparison(values);
             }
-            if (operation == NodeMapComparisonOperation.ITERATE_ORDERED) {
-                values.iterator();
-            }
         }
 
         @Setup(Level.Invocation)
@@ -941,11 +937,11 @@ public class CollectionsBenchmark {
      * Directly compares native operations across an unordered array,
      * {@link IntMap}, insertion-ordered {@link OrderedMap}, and
      * {@link OrderedIntNodeMap}. Array access/removal uses known dense indices;
-     * map access/removal uses keys. Dense and ordered node-map traversals are
-     * measured independently, while the baseline collections repeat their
-     * native traversal in both iteration rows. Direct removal uses a retained
-     * node reference for node maps; collections without node handles repeat
-     * their native known-index or key removal as the baseline.
+     * map access/removal uses keys. Direct removal uses a retained node
+     * reference for node maps; collections without node handles repeat their
+     * native known-index or key removal as the baseline. {@code LOOP_ALL}
+     * measures the fastest public full traversal available to each collection;
+     * it does not require the traversal order to be equivalent.
      *
      * @param state the selected implementation and operation
      * @return a checksum consumed by JMH
@@ -1161,8 +1157,7 @@ public class CollectionsBenchmark {
                     removeChecksum += values.removeIndex(REMOVAL_INDICES[i]).id;
                 }
                 return removeChecksum;
-            case ITERATE_DENSE:
-            case ITERATE_ORDERED:
+            case LOOP_ALL:
                 return indexedSum(values);
             default:
                 throw new AssertionError(operation);
@@ -1191,8 +1186,7 @@ public class CollectionsBenchmark {
                     removeChecksum += values.remove(comparisonKey(valueIndex)).id;
                 }
                 return removeChecksum;
-            case ITERATE_DENSE:
-            case ITERATE_ORDERED:
+            case LOOP_ALL:
                 return sum(values.values());
             default:
                 throw new AssertionError(operation);
@@ -1217,8 +1211,7 @@ public class CollectionsBenchmark {
                     removeChecksum += values.remove(EQUAL_OBJECT_KEYS[valueIndex]).id;
                 }
                 return removeChecksum;
-            case ITERATE_DENSE:
-            case ITERATE_ORDERED:
+            case LOOP_ALL:
                 return sum(values.values());
             default:
                 throw new AssertionError(operation);
@@ -1254,19 +1247,12 @@ public class CollectionsBenchmark {
                     directRemoveChecksum += values.removeNode(removalOrder[i]).id;
                 }
                 return directRemoveChecksum;
-            case ITERATE_DENSE:
+            case LOOP_ALL:
                 long denseChecksum = 0L;
                 for (int i = 0; i < ELEMENT_COUNT; i++) {
                     denseChecksum += values.nodeAt(i).value().id;
                 }
                 return denseChecksum;
-            case ITERATE_ORDERED:
-                long orderedChecksum = 0L;
-                ObjectIterator<BenchmarkNode> iterator = values.iterator();
-                while (iterator.hasNext()) {
-                    orderedChecksum += iterator.next().value().id;
-                }
-                return orderedChecksum;
             default:
                 throw new AssertionError(operation);
         }
@@ -1301,19 +1287,12 @@ public class CollectionsBenchmark {
                     directRemoveChecksum += values.removeNode(removalOrder[i]).id;
                 }
                 return directRemoveChecksum;
-            case ITERATE_DENSE:
+            case LOOP_ALL:
                 long denseChecksum = 0L;
                 for (int i = 0; i < ELEMENT_COUNT; i++) {
                     denseChecksum += values.nodeAt(i).value().id;
                 }
                 return denseChecksum;
-            case ITERATE_ORDERED:
-                long orderedChecksum = 0L;
-                ObjectIterator<BenchmarkSparseNode> iterator = values.iterator();
-                while (iterator.hasNext()) {
-                    orderedChecksum += iterator.next().value().id;
-                }
-                return orderedChecksum;
             default:
                 throw new AssertionError(operation);
         }
@@ -1408,8 +1387,7 @@ public class CollectionsBenchmark {
     }
 
     private static void prewarmComparisonIterator(OrderedIntNodeMapComparisonState state) {
-        if (state.operation != NodeMapComparisonOperation.ITERATE_DENSE
-                && state.operation != NodeMapComparisonOperation.ITERATE_ORDERED) {
+        if (state.operation != NodeMapComparisonOperation.LOOP_ALL) {
             return;
         }
         switch (state.implementation) {
@@ -1422,14 +1400,7 @@ public class CollectionsBenchmark {
                 state.orderedMap.values().iterator();
                 break;
             case ORDERED_INT_NODE_MAP:
-                if (state.operation == NodeMapComparisonOperation.ITERATE_ORDERED) {
-                    state.nodeMap.iterator();
-                }
-                break;
             case ORDERED_INT_SPARSE_NODE_MAP:
-                if (state.operation == NodeMapComparisonOperation.ITERATE_ORDERED) {
-                    state.sparseNodeMap.iterator();
-                }
                 break;
             default:
                 throw new AssertionError(state.implementation);

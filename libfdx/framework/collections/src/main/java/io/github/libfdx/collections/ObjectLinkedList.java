@@ -5,8 +5,18 @@ import java.util.NoSuchElementException;
 /**
  * Stores values in a doubly linked list.
  *
- * <p>Nodes are retained in a per-list pool after removal. Adds reuse pooled
- * nodes and allocate only when the list exceeds its retained capacity.</p>
+ * <p><b>Algorithm:</b> Values occupy doubly linked nodes. Removed nodes are
+ * retained in a per-list pool; adds reuse them and allocate only when the list
+ * exceeds its retained node capacity.</p>
+ *
+ * <p><b>Ordering:</b> Ordered by the linked sequence from first to last.
+ * Adding or removing at either end preserves the relative order of remaining
+ * values.</p>
+ *
+ * <p><b>Performance:</b> Adding at either end is amortized {@code O(1)}.
+ * Reading or removing either end, and removing a retained active
+ * {@link Node}, are {@code O(1)}. Iteration and clear are {@code O(n)}. The
+ * list intentionally provides no indexed random access.</p>
  *
  * @param <T> the value type
  * @author xpenatan

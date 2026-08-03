@@ -195,8 +195,11 @@ public final class CollectionsBenchmarkReport {
             }
             text.append('\n');
         }
-        text.append("\nLower is faster. Detailed confidence intervals and allocation measurements ")
-                .append("are included below.\n\n");
+        text.append("\nLower is faster. `Loop all` uses each collection's fastest public ")
+                .append("full traversal and does not require the same visit order: indexed for ")
+                .append("Array, cached value iteration for IntMap and OrderedMap, and packed ")
+                .append("node-index traversal for both node maps. Detailed confidence intervals ")
+                .append("and allocation measurements are included below.\n\n");
     }
 
     private static boolean hasOnlyImplementationOptions(ComparisonGroup group) {
@@ -252,11 +255,8 @@ public final class CollectionsBenchmarkReport {
         if ("REMOVE_DIRECT".equals(value)) {
             return "Direct removal";
         }
-        if ("ITERATE_DENSE".equals(value)) {
-            return "Dense iteration";
-        }
-        if ("ITERATE_ORDERED".equals(value)) {
-            return "Ordered iteration";
+        if ("LOOP_ALL".equals(value)) {
+            return "Loop all";
         }
         return implementationName(value);
     }

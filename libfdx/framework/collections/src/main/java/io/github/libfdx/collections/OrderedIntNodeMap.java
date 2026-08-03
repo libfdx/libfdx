@@ -6,18 +6,24 @@ import java.util.NoSuchElementException;
  * Maps primitive int keys to customizable pooled nodes with both stable ordered
  * traversal and dense unordered indexed access.
  *
- * <p>Key lookup is delegated to an {@link IntMap}. The same node instances are
- * stored in an unordered dense {@link Array}; removal swaps the last dense node
- * into the removed position and repairs its index. Node references form an
- * independent doubly linked insertion order, so dense storage changes do not
- * disturb ordered traversal.</p>
+ * <p><b>Algorithm:</b> An {@link IntMap} provides key lookup. The same node
+ * instances occupy a packed unordered {@link Array}; removal swaps the last
+ * dense node into the removed position and repairs its index. Node references
+ * also form an independent doubly linked sequence.</p>
  *
- * <p>Lookup and removal are expected constant time, insertion is amortized
- * constant time, and either complete traversal is linear in {@link #size()}.
- * Ordered traversal follows node links, while dense traversal through
- * {@link #nodeAt(int)} or {@link #denseNodes()} visits packed array positions.</p>
+ * <p><b>Ordering:</b> Ordered traversal through {@link #iterator()} or
+ * {@link #orderedNodes()} follows insertion order, as modified by
+ * {@link #moveToFirst(Node)} and {@link #moveToLast(Node)}. Dense traversal
+ * through {@link #nodeAt(int)} or {@link #denseNodes()} is unordered and may
+ * change after removal.</p>
  *
- * <p>Removed nodes are retained in a per-map pool. A node reference is valid
+ * <p><b>Performance:</b> Put is expected amortized {@code O(1)}, while get,
+ * key lookup, key removal, and node removal are expected {@code O(1)} with
+ * well-distributed keys. Hash-collision or resize worst cases are {@code O(n)}.
+ * Dense indexed access, first/last access, and order moves are {@code O(1)}.
+ * Either complete traversal is {@code O(n)}.</p>
+ *
+ * <p><b>Pooling:</b> Removed nodes are retained in a per-map pool. A node reference is valid
  * only while {@link Node#isActive()} is true and must not be retained after
  * removal because a later insertion may reuse that instance.</p>
  *

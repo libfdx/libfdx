@@ -6,6 +6,19 @@ import java.util.NoSuchElementException;
 /**
  * Maps object keys to object values with a compact open-addressed table.
  *
+ * <p><b>Algorithm:</b> A power-of-two hash table uses linear probing and
+ * tombstones. Keys use {@link KeyComparison#EQUALITY} by default or
+ * {@link KeyComparison#IDENTITY} when requested.</p>
+ *
+ * <p><b>Ordering:</b> Unordered. Iteration follows occupied table slots; it
+ * does not preserve insertion order and may change after mutation or
+ * resizing.</p>
+ *
+ * <p><b>Performance:</b> Put is expected amortized {@code O(1)}, and get,
+ * key lookup, and removal are expected {@code O(1)} with a well-distributed
+ * hash. Collision-heavy worst cases are {@code O(n)}. Full iteration scans
+ * the backing table and is {@code O(table capacity)}.</p>
+ *
  * @param <K> the key type
  * @param <V> the value type
  * @author xpenatan

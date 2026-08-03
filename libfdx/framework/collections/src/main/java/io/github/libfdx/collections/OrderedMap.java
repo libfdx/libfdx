@@ -6,10 +6,18 @@ import java.util.NoSuchElementException;
 /**
  * Maps object keys to object values while preserving insertion order.
  *
- * <p>Lookup, insertion, replacement, and removal use an open-addressed hash
- * table and are expected constant time. A pair of primitive link arrays keeps
- * iteration in insertion order without allocating one node per entry. Iteration
- * visits active entries directly rather than scanning unused table slots.</p>
+ * <p><b>Algorithm:</b> A power-of-two open-addressed hash table uses linear
+ * probing and tombstones. Parallel primitive previous/next index arrays link
+ * active slots without allocating one node per entry.</p>
+ *
+ * <p><b>Ordering:</b> Ordered. Entries iterate in insertion order. Replacing
+ * an existing key retains its position; removing and inserting it again places
+ * it at the end.</p>
+ *
+ * <p><b>Performance:</b> Put is expected amortized {@code O(1)}, and get,
+ * key lookup, and removal are expected {@code O(1)} with a well-distributed
+ * hash. Collision-heavy worst cases are {@code O(n)}. Ordered iteration visits
+ * only active entries and is {@code O(n)}.</p>
  *
  * @param <K> the key type
  * @param <V> the value type

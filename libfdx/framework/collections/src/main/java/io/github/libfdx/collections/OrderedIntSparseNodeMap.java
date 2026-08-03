@@ -7,24 +7,32 @@ import java.util.NoSuchElementException;
  * Maps non-negative int keys to customizable pooled nodes using sparse-set
  * lookup, dense unordered indexed storage, and stable ordered traversal.
  *
- * <p>The sparse array maps each key directly to the same node stored in a
- * partitioned node-slot array. Active nodes occupy a packed prefix and pooled
- * nodes occupy the remaining slots. Removal clears the direct key slot, swaps
- * the last active node into the removed position, and leaves the removed node
- * in the first pooled slot. This avoids a second pool container and does not
- * require a sparse update for the moved node. Independent node links preserve
- * logical insertion order.</p>
+ * <p><b>Algorithm:</b> A sparse array maps each key directly to the same node
+ * stored in a partitioned node-slot array. Active nodes occupy a packed prefix
+ * and pooled nodes occupy the remaining slots. Removal clears the direct key
+ * slot, swaps the last active node into the removed position, and leaves the
+ * removed node in the first pooled slot. Independent node links maintain a
+ * separate logical sequence.</p>
  *
- * <p>Lookup and removal are worst-case constant time. Insertion is amortized
- * constant time when key or node storage must grow. Dense and ordered complete
- * traversal are linear in {@link #size()}.</p>
+ * <p><b>Ordering:</b> Ordered traversal through {@link #iterator()} or
+ * {@link #orderedNodes()} follows insertion order, as modified by
+ * {@link #moveToFirst(Node)} and {@link #moveToLast(Node)}. Dense traversal
+ * through {@link #nodeAt(int)} or {@link #denseNodes()} is unordered and may
+ * change after removal.</p>
  *
- * <p>This design is intended for compact non-negative IDs such as entity or
+ * <p><b>Performance:</b> With sufficient reserved capacity, put, get, key
+ * lookup, key removal, node removal, dense indexed access, first/last access,
+ * and order moves are worst-case {@code O(1)}. A put that grows sparse-key or
+ * node storage is {@code O(new capacity)}; geometric growth makes gradual
+ * expansion amortized {@code O(1)}. Either complete traversal is
+ * {@code O(n)}.</p>
+ *
+ * <p><b>Key range:</b> This design is intended for compact non-negative IDs such as entity or
  * component IDs. Sparse storage is proportional to the largest addressable key,
  * so {@link OrderedIntNodeMap} is more appropriate for negative or widely
  * separated keys.</p>
  *
- * <p>Removed nodes are retained in a per-map pool. A node reference is valid
+ * <p><b>Pooling:</b> Removed nodes are retained in a per-map pool. A node reference is valid
  * only while {@link Node#isActive()} is true and must not be retained after
  * removal because a later insertion may reuse that instance.</p>
  *

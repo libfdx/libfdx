@@ -6,6 +6,18 @@ import java.util.NoSuchElementException;
 /**
  * Maps primitive int keys to object values without boxing keys.
  *
+ * <p><b>Algorithm:</b> A power-of-two open-addressed hash table uses linear
+ * probing and tombstones.</p>
+ *
+ * <p><b>Ordering:</b> Unordered. Iteration follows occupied table slots; it
+ * does not preserve insertion order and may change after mutation or
+ * resizing.</p>
+ *
+ * <p><b>Performance:</b> Put is expected amortized {@code O(1)}, and get,
+ * key lookup, and removal are expected {@code O(1)} with well-distributed
+ * keys. Collision-heavy worst cases are {@code O(n)}. Full iteration scans
+ * the backing table and is {@code O(table capacity)}.</p>
+ *
  * @param <V> the value type
  * @author xpenatan
  */

@@ -6,7 +6,17 @@ import java.util.NoSuchElementException;
 /**
  * Stores primitive int values in a compact open-addressed set.
  *
- * <p>Add, membership lookup, and removal are expected constant time. Use
+ * <p><b>Algorithm:</b> A power-of-two hash table uses linear probing and
+ * tombstones without boxing values.</p>
+ *
+ * <p><b>Ordering:</b> Unordered. Iteration follows occupied table slots; it
+ * does not preserve insertion order and may change after mutation or
+ * resizing.</p>
+ *
+ * <p><b>Performance:</b> Add is expected amortized {@code O(1)}, and
+ * membership lookup and removal are expected {@code O(1)} with
+ * well-distributed values. Collision-heavy worst cases are {@code O(n)}. Full
+ * iteration scans the backing table and is {@code O(table capacity)}. Use
  * {@link IntIterator#nextInt()} in hot loops to avoid boxing.</p>
  *
  * @author xpenatan

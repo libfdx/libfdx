@@ -6,6 +6,20 @@ import java.util.NoSuchElementException;
 /**
  * Stores primitive float values in a reusable growable array.
  *
+ * <p><b>Algorithm:</b> Values occupy a packed prefix of a contiguous
+ * {@code float[]} that grows when its capacity is exhausted.</p>
+ *
+ * <p><b>Ordering:</b> Ordered by default. When {@link #isOrdered()} is true,
+ * insertion and removal preserve index order. When false, insertion and
+ * removal may move another value and do not preserve order.</p>
+ *
+ * <p><b>Performance:</b> Indexed get and set are {@code O(1)}; append is
+ * amortized {@code O(1)}; iteration is {@code O(n)}. In ordered mode,
+ * insertion or removal at an arbitrary index is {@code O(n)}. In unordered
+ * mode, arbitrary-index removal is {@code O(1)} and insertion is amortized
+ * {@code O(1)} by moving one existing value. Search and value-based removal
+ * are {@code O(n)}.</p>
+ *
  * @author xpenatan
  */
 public final class FloatArray implements FloatIterable {
