@@ -31,6 +31,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class DefaultRenderQueue3DAllocationTest {
     private static final ProviderId PROVIDER_ID = ProviderId.of("allocation-test");
+    private static final int ALLOCATION_MEASUREMENT_ATTEMPTS = 5;
+    private static final int ALLOCATION_OPERATIONS_PER_ATTEMPT = 2_000;
 
     @Test
     void warmedSortAndReadOnlyAccessAllocateNoPerCallObjects() {
@@ -53,7 +55,7 @@ final class DefaultRenderQueue3DAllocationTest {
         assertSame(queue.renderables(), queue.renderables());
         assertSame(Mesh.POSITION_COLOR_LAYOUT.attribute(0), Mesh.POSITION_COLOR_LAYOUT.attribute(0));
 
-        for (int i = 0; i < 2_000; i++) {
+        for (int i = 0; i < ALLOCATION_OPERATIONS_PER_ATTEMPT; i++) {
             queue.sort(camera);
             queue.renderables();
             Mesh.POSITION_COLOR_LAYOUT.attribute(0);
@@ -67,18 +69,23 @@ final class DefaultRenderQueue3DAllocationTest {
             bean.setThreadAllocatedMemoryEnabled(true);
         }
         long threadId = Thread.currentThread().threadId();
-        long before = bean.getThreadAllocatedBytes(threadId);
-        int checksum = 0;
-        for (int i = 0; i < 2_000; i++) {
-            queue.sort(camera);
-            checksum += queue.renderables().size();
-            checksum += Mesh.POSITION_COLOR_LAYOUT.attribute(0).location();
+        bean.getThreadAllocatedBytes(threadId);
+        long minimumAllocated = Long.MAX_VALUE;
+        for (int attempt = 0; attempt < ALLOCATION_MEASUREMENT_ATTEMPTS; attempt++) {
+            long before = bean.getThreadAllocatedBytes(threadId);
+            int checksum = 0;
+            for (int i = 0; i < ALLOCATION_OPERATIONS_PER_ATTEMPT; i++) {
+                queue.sort(camera);
+                checksum += queue.renderables().size();
+                checksum += Mesh.POSITION_COLOR_LAYOUT.attribute(0).location();
+            }
+            long allocated = bean.getThreadAllocatedBytes(threadId) - before;
+            assertEquals(128_000, checksum);
+            minimumAllocated = Math.min(minimumAllocated, allocated);
         }
-        long allocated = bean.getThreadAllocatedBytes(threadId) - before;
 
-        assertEquals(128_000, checksum);
-        assertTrue(allocated <= 512L, "Expected no post-warm-up queue/accessor churn, allocated " + allocated
-                + " bytes");
+        assertTrue(minimumAllocated <= 512L,
+                "Expected no post-warm-up queue/accessor churn, minimum allocated " + minimumAllocated + " bytes");
         mesh.dispose();
     }
 

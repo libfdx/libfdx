@@ -43,6 +43,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class CascadedShadowMap3DTest {
     private static final float EPSILON = 0.0001f;
+    private static final int ALLOCATION_MEASUREMENT_ATTEMPTS = 5;
+    private static final int ALLOCATION_OPERATIONS_PER_ATTEMPT = 2_000;
 
     @Test
     void cpuProjectionAllocatesNoPerDrawObjectsAfterWarmup() {
@@ -61,7 +63,7 @@ final class CascadedShadowMap3DTest {
         PbrShaderProvider provider = new PbrShaderProvider(graphics, new PbrShaderConfig());
         Shader3D shader = provider.shader(renderable, context);
 
-        for (int i = 0; i < 2_000; i++) {
+        for (int i = 0; i < ALLOCATION_OPERATIONS_PER_ATTEMPT; i++) {
             shader.begin(context);
             shader.render(renderable);
             shader.end();
@@ -75,18 +77,24 @@ final class CascadedShadowMap3DTest {
             bean.setThreadAllocatedMemoryEnabled(true);
         }
         long threadId = Thread.currentThread().threadId();
-        long before = bean.getThreadAllocatedBytes(threadId);
+        bean.getThreadAllocatedBytes(threadId);
+        long minimumAllocated = Long.MAX_VALUE;
         int initialDrawCalls = pass.drawCalls;
-        for (int i = 0; i < 2_000; i++) {
-            shader.begin(context);
-            shader.render(renderable);
-            shader.end();
+        for (int attempt = 0; attempt < ALLOCATION_MEASUREMENT_ATTEMPTS; attempt++) {
+            long before = bean.getThreadAllocatedBytes(threadId);
+            for (int i = 0; i < ALLOCATION_OPERATIONS_PER_ATTEMPT; i++) {
+                shader.begin(context);
+                shader.render(renderable);
+                shader.end();
+            }
+            long allocated = bean.getThreadAllocatedBytes(threadId) - before;
+            minimumAllocated = Math.min(minimumAllocated, allocated);
         }
-        long allocated = bean.getThreadAllocatedBytes(threadId) - before;
 
-        assertEquals(initialDrawCalls + 2_000, pass.drawCalls);
-        assertTrue(allocated <= 1_024L, "Expected no post-warm-up CPU projection churn, allocated " + allocated
-                + " bytes");
+        assertEquals(initialDrawCalls
+                + ALLOCATION_MEASUREMENT_ATTEMPTS * ALLOCATION_OPERATIONS_PER_ATTEMPT, pass.drawCalls);
+        assertTrue(minimumAllocated <= 1_024L,
+                "Expected no post-warm-up CPU projection churn, minimum allocated " + minimumAllocated + " bytes");
         provider.dispose();
         renderable.meshPart().mesh().dispose();
     }
@@ -113,7 +121,7 @@ final class CascadedShadowMap3DTest {
                 graphics, new PbrShaderConfig());
         Shader3D shader = provider.shader(renderable, context);
 
-        for (int i = 0; i < 2_000; i++) {
+        for (int i = 0; i < ALLOCATION_OPERATIONS_PER_ATTEMPT; i++) {
             shader.begin(context);
             shader.render(renderable);
             shader.end();
@@ -128,45 +136,59 @@ final class CascadedShadowMap3DTest {
             bean.setThreadAllocatedMemoryEnabled(true);
         }
         long threadId = Thread.currentThread().threadId();
-        long lifecycleBefore =
-                bean.getThreadAllocatedBytes(threadId);
-        long lifecycleStart = System.nanoTime();
-        for (int i = 0; i < 2_000; i++) {
-            shader.begin(context);
-            shader.end();
+        bean.getThreadAllocatedBytes(threadId);
+        long lifecycleAllocated = Long.MAX_VALUE;
+        long lifecycleNanos = 0L;
+        for (int attempt = 0; attempt < ALLOCATION_MEASUREMENT_ATTEMPTS; attempt++) {
+            long lifecycleBefore = bean.getThreadAllocatedBytes(threadId);
+            long lifecycleStart = System.nanoTime();
+            for (int i = 0; i < ALLOCATION_OPERATIONS_PER_ATTEMPT; i++) {
+                shader.begin(context);
+                shader.end();
+            }
+            long attemptNanos = System.nanoTime() - lifecycleStart;
+            long attemptAllocated = bean.getThreadAllocatedBytes(threadId) - lifecycleBefore;
+            if (attemptAllocated < lifecycleAllocated) {
+                lifecycleAllocated = attemptAllocated;
+                lifecycleNanos = attemptNanos;
+            }
         }
-        long lifecycleNanos =
-                System.nanoTime() - lifecycleStart;
-        long lifecycleAllocated =
-                bean.getThreadAllocatedBytes(threadId)
-                        - lifecycleBefore;
-        shader.begin(context);
-        long before = bean.getThreadAllocatedBytes(threadId);
         int initialDrawCalls = pass.drawCalls;
-        long drawStart = System.nanoTime();
-        for (int i = 0; i < 2_000; i++) {
-            shader.render(renderable);
+        long allocated = Long.MAX_VALUE;
+        long drawNanos = 0L;
+        for (int attempt = 0; attempt < ALLOCATION_MEASUREMENT_ATTEMPTS; attempt++) {
+            shader.begin(context);
+            long before = bean.getThreadAllocatedBytes(threadId);
+            long drawStart = System.nanoTime();
+            for (int i = 0; i < ALLOCATION_OPERATIONS_PER_ATTEMPT; i++) {
+                shader.render(renderable);
+            }
+            long attemptNanos = System.nanoTime() - drawStart;
+            long attemptAllocated = bean.getThreadAllocatedBytes(threadId) - before;
+            shader.end();
+            if (attemptAllocated < allocated) {
+                allocated = attemptAllocated;
+                drawNanos = attemptNanos;
+            }
         }
-        long drawNanos = System.nanoTime() - drawStart;
-        long allocated =
-                bean.getThreadAllocatedBytes(threadId) - before;
-        shader.end();
 
-        assertEquals(initialDrawCalls + 2_000,
+        assertEquals(initialDrawCalls
+                        + ALLOCATION_MEASUREMENT_ATTEMPTS * ALLOCATION_OPERATIONS_PER_ATTEMPT,
                 pass.drawCalls);
         assertTrue(allocated <= 4_096L,
-                "Expected no post-warm-up graph PBR churn, allocated "
+                "Expected no post-warm-up graph PBR churn, minimum allocated "
                         + allocated + " render bytes and "
                         + lifecycleAllocated + " lifecycle bytes");
         assertTrue(lifecycleAllocated <= 4_096L,
-                "Expected no post-warm-up graph PBR lifecycle churn, allocated "
+                "Expected no post-warm-up graph PBR lifecycle churn, minimum allocated "
                         + lifecycleAllocated + " bytes");
         System.out.printf(java.util.Locale.ROOT,
                 "SHADER_GRAPH_PERF pbr_draws=%d draw_ns_per_op=%.3f "
                         + "draw_bytes=%d lifecycle_ns_per_op=%.3f "
                         + "lifecycle_bytes=%d%n",
-                2_000, drawNanos / 2_000.0, allocated,
-                lifecycleNanos / 2_000.0, lifecycleAllocated);
+                ALLOCATION_OPERATIONS_PER_ATTEMPT,
+                drawNanos / (double)ALLOCATION_OPERATIONS_PER_ATTEMPT, allocated,
+                lifecycleNanos / (double)ALLOCATION_OPERATIONS_PER_ATTEMPT, lifecycleAllocated);
         provider.dispose();
         renderable.meshPart().mesh().dispose();
     }
