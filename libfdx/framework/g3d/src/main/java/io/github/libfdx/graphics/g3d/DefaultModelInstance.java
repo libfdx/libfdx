@@ -19,6 +19,8 @@ public final class DefaultModelInstance implements ModelInstance {
     private final Array<InstanceNode> instanceNodes = new Array<InstanceNode>();
     private final Array<SkinningPalette> skinningPalettes = new Array<SkinningPalette>();
     private final ObjectMap<String, InstanceNode> nodesById = new ObjectMap<String, InstanceNode>();
+    private final float[] appliedTransformValues = new float[Matrix4.VALUE_COUNT];
+    private final float[] currentTransformValues = new float[Matrix4.VALUE_COUNT];
 
     /**
      * Creates a default model instance.
@@ -98,6 +100,7 @@ public final class DefaultModelInstance implements ModelInstance {
         if (out == null) {
             throw new FdxException("Model node transform output cannot be null");
         }
+        synchronizeMutableTransform();
         return out.set(node(nodeId).worldTransform);
     }
 
@@ -197,6 +200,18 @@ public final class DefaultModelInstance implements ModelInstance {
         for (int i = 0; i < skinningPalettes.size(); i++) {
             skinningPalettes.get(i).update(this);
         }
+        transform.copyValues(appliedTransformValues, 0);
+    }
+
+    private void synchronizeMutableTransform() {
+        transform.copyValues(currentTransformValues, 0);
+        for (int i = 0; i < Matrix4.VALUE_COUNT; i++) {
+            if (Float.floatToRawIntBits(currentTransformValues[i])
+                    != Float.floatToRawIntBits(appliedTransformValues[i])) {
+                updateWorldTransforms();
+                return;
+            }
+        }
     }
 
     private void updateModelTransform(InstanceNode node, Matrix4 parentModelTransform) {
@@ -250,7 +265,8 @@ public final class DefaultModelInstance implements ModelInstance {
     }
 
     /**
-     * Returns the transform.
+     * Returns the mutable transform. Direct mutations are synchronized before
+     * world transforms are queried or renderables are collected.
      *
      * @return the transform
      */
@@ -269,6 +285,7 @@ public final class DefaultModelInstance implements ModelInstance {
         if (queue == null) {
             throw new FdxException("RenderQueue3D cannot be null");
         }
+        synchronizeMutableTransform();
         for (int i = 0; i < renderables.size(); i++) {
             queue.add(renderables.get(i));
         }

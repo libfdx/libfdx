@@ -16,7 +16,8 @@ public interface ModelInstance {
     Model model();
 
     /**
-     * Returns the transform.
+     * Returns the mutable transform. Changes made to the returned matrix must
+     * be reflected in subsequently collected renderables.
      *
      * @return the transform
      */

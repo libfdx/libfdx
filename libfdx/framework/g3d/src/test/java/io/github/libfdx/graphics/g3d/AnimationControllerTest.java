@@ -106,6 +106,39 @@ final class AnimationControllerTest {
     }
 
     @Test
+    void directInstanceTransformMutationUpdatesQueriesAndRenderables() {
+        FakeGraphicsContext graphics = new FakeGraphicsContext();
+        DefaultModel model = skinnedModel(graphics);
+        try {
+            DefaultModelInstance instance = new DefaultModelInstance(model);
+
+            instance.transform().setToTrs(
+                    2.0f, 3.0f, 4.0f,
+                    0.0f, 0.0f, 0.0f, 1.0f,
+                    1.0f, 1.0f, 1.0f);
+
+            assertTranslation(instance.nodeWorldTransform("root"),
+                    3.0f, 3.0f, 4.0f);
+
+            instance.transform().setToTrs(
+                    5.0f, 6.0f, 7.0f,
+                    0.0f, 0.0f, 0.0f, 1.0f,
+                    1.0f, 1.0f, 1.0f);
+            DefaultRenderQueue3D queue = new DefaultRenderQueue3D();
+            instance.collectRenderables(queue);
+
+            assertEquals(2, queue.size());
+            assertTranslation(queue.get(0).worldTransform(),
+                    6.0f, 6.0f, 7.0f);
+            assertTranslation(queue.get(1).worldTransform(),
+                    6.0f, 6.0f, 7.0f);
+        }
+        finally {
+            model.dispose();
+        }
+    }
+
+    @Test
     void skinningPaletteUsesParentedBoneModelTransforms() {
         DefaultModelInstance instance = new DefaultModelInstance(hierarchicalModel());
         AnimationClip clip = new AnimationClip("rotate-shoulder", 1.0f, new AnimationClip.NodeTransformChannel[] {
