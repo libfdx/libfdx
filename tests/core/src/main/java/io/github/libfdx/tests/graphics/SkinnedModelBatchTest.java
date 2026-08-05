@@ -20,6 +20,7 @@ import io.github.libfdx.graphics.g3d.CpuSkinnedModelAnimator;
 import io.github.libfdx.graphics.g3d.DefaultModel;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
+import io.github.libfdx.graphics.g3d.EdgeDetectionOutlineRenderer3D;
 import io.github.libfdx.graphics.g3d.Environment3D;
 import io.github.libfdx.graphics.g3d.Material;
 import io.github.libfdx.graphics.g3d.MeshPart;
@@ -62,6 +63,7 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
     private Logger logger;
     private TestFpsLogger fpsLogger;
     private GraphicsContext graphics;
+    private EdgeDetectionOutlineRenderer3D outlineRenderer;
     private ModelBatch batch;
     private ShaderProvider graphShaderProvider;
     private Camera camera;
@@ -102,6 +104,11 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
                     .shaderProvider(graphShaderProvider));
         } else {
             batch = new ModelBatch(graphics);
+        }
+        if (Boolean.getBoolean("libfdx.test.edgeOutline")) {
+            outlineRenderer = new EdgeDetectionOutlineRenderer3D(graphics)
+                    .outlineColor(0.0f, 0.86f, 1.0f, 1.0f)
+                    .outlineWidth(2.0f);
         }
         batch.environment(new Environment3D()
                 .ambientColor(new Color(0.42f, 0.42f, 0.45f, 1.0f))
@@ -147,6 +154,11 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
                 throw failure;
             }
         }
+        if (outlineRenderer != null) {
+            outlineRenderer.begin(camera);
+            outlineRenderer.render(instance);
+            outlineRenderer.end();
+        }
         if (capturePath != null && capturePath.length() > 0 && !captured && renderedFrames >= captureFrame) {
             captureFrame(capturePath);
             captured = true;
@@ -163,6 +175,10 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
      */
     @Override
     public void dispose() {
+        if (outlineRenderer != null) {
+            outlineRenderer.dispose();
+            outlineRenderer = null;
+        }
         if (batch != null) {
             batch.dispose();
             batch = null;

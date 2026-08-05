@@ -129,7 +129,6 @@ sourceSets {
 }
 
 tasks.named<ProcessResources>("processResources") {
-    dependsOn(generateRuntimeFdxHostNative)
     mustRunAfter(generateRuntimeFdxWindowsNative, generateRuntimeFdxLinuxNative, generateRuntimeFdxMacosNative)
 }
 
@@ -173,7 +172,6 @@ java {
 }
 
 tasks.named("sourcesJar") {
-    dependsOn(generateRuntimeFdxHostNative)
     mustRunAfter(generateRuntimeFdxWindowsNative, generateRuntimeFdxLinuxNative, generateRuntimeFdxMacosNative)
 }
 

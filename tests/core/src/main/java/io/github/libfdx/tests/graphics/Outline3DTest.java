@@ -15,11 +15,11 @@ import io.github.libfdx.graphics.Mesh;
 import io.github.libfdx.graphics.g3d.DefaultModel;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
+import io.github.libfdx.graphics.g3d.EdgeDetectionOutlineRenderer3D;
 import io.github.libfdx.graphics.g3d.Environment3D;
 import io.github.libfdx.graphics.g3d.MeshPart;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
-import io.github.libfdx.graphics.g3d.OutlineRenderer3D;
 import io.github.libfdx.graphics.g3d.PbrMaterial;
 import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
@@ -31,7 +31,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
 /**
- * Runs the 3D outline shader test scenario.
+ * Runs the screen-space edge outline test scenario.
  *
  * @author xpenatan
  */
@@ -42,7 +42,7 @@ public final class Outline3DTest extends ApplicationAdapter {
     private Logger logger;
     private TestFpsLogger fpsLogger;
     private GraphicsContext graphics;
-    private OutlineRenderer3D outlineRenderer;
+    private EdgeDetectionOutlineRenderer3D outlineRenderer;
     private ModelBatch batch;
     private Camera camera;
     private OrbitCameraController3D cameraInput;
@@ -82,9 +82,9 @@ public final class Outline3DTest extends ApplicationAdapter {
                         .direction(-0.35f, -0.75f, -0.42f)
                         .color(new Color(1.0f, 0.94f, 0.84f, 1.0f))
                         .intensity(1.6f));
-        outlineRenderer = new OutlineRenderer3D(graphics)
+        outlineRenderer = new EdgeDetectionOutlineRenderer3D(graphics)
                 .outlineColor(0.0f, 0.86f, 1.0f, 1.0f)
-                .outlineWidth(0.24f);
+                .outlineWidth(2.0f);
         batch = new ModelBatch(graphics).environment(environment);
         cubeModel = createCubeModel(graphics);
         instances = createInstances(cubeModel);
@@ -101,7 +101,7 @@ public final class Outline3DTest extends ApplicationAdapter {
         captureFrame = Long.parseLong(System.getProperty("libfdx.test.captureFrame", "10"));
 
         created = true;
-        logger.info("Outline3DTest created WGSL 3D outline renderer for provider "
+        logger.info("Outline3DTest created WGSL edge-detection outline renderer for provider "
                 + graphics.providerId().value());
     }
 
@@ -113,14 +113,14 @@ public final class Outline3DTest extends ApplicationAdapter {
         float deltaSeconds = application.deltaTime();
         camera.viewport(framebufferWidth(), framebufferHeight());
         cameraInput.update(deltaSeconds);
-        outlineRenderer.begin(LoadOp.clear(0.018f, 0.022f, 0.032f, 1.0f), camera);
-        outlineRenderer.render(instances);
-        outlineRenderer.end();
-        batch.begin(LoadOp.load(), camera);
+        batch.begin(LoadOp.clear(0.018f, 0.022f, 0.032f, 1.0f), camera);
         for (int i = 0; i < instances.length; i++) {
             batch.render(instances[i]);
         }
         batch.end();
+        outlineRenderer.begin(camera);
+        outlineRenderer.render(instances[1]);
+        outlineRenderer.end();
 
         if (capturePath != null && capturePath.length() > 0 && !captured && renderedFrames >= captureFrame) {
             captureFrame(capturePath);
