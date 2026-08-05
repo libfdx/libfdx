@@ -37,6 +37,12 @@ val runtimeFdxClasspath = configurations.create("runtimeFdxClasspath") {
     }
 }
 
+val interactiveGraphicsRuntimeClasspath = files(
+    glRuntimeClasspath,
+    vulkanRuntimeClasspath,
+    wgpuRuntimeClasspath,
+)
+
 base {
     archivesName.set("tests_desktop")
 }
@@ -121,18 +127,19 @@ libfdx {
 
         target("d3d12") {
             displayName.set("Direct3D 12 graphics tests")
+            runtimeClasspath(interactiveGraphicsRuntimeClasspath)
             graphics("d3d12", "Direct3D 12")
             runDescription.set("Runs graphics tests with Direct3D 12 through Java 25 FFM on Windows.")
         }
         target("gl") {
             displayName.set("GL graphics tests")
-            runtimeClasspath(glRuntimeClasspath)
+            runtimeClasspath(interactiveGraphicsRuntimeClasspath)
             graphics("gl", "GL")
             runDescription.set("Runs graphics tests with desktop GL.")
         }
         target("wgpu") {
             displayName.set("WGPU graphics tests")
-            runtimeClasspath(wgpuRuntimeClasspath)
+            runtimeClasspath(interactiveGraphicsRuntimeClasspath)
             graphics("wgpu", "WGPU")
             runDescription.set("Runs graphics tests with WGPU.")
         }
@@ -226,7 +233,7 @@ libfdx {
         }
         target("vulkan") {
             displayName.set("Vulkan graphics tests")
-            runtimeClasspath(vulkanRuntimeClasspath)
+            runtimeClasspath(interactiveGraphicsRuntimeClasspath)
             graphics("vulkan", "Vulkan")
             runDescription.set("Runs graphics tests with desktop Vulkan.")
         }

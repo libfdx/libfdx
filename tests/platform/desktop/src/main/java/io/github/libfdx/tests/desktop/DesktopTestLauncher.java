@@ -332,6 +332,8 @@ public final class DesktopTestLauncher {
                 String argument = arguments.get(i);
                 if (argument.startsWith("--enable-native-access")
                         || argument.startsWith("-Dorg.lwjgl.system.stackSize")
+                        || argument.startsWith("-Dlibfdx.test.")
+                        || argument.startsWith("-Dlibfdx.validation.")
                         || argument.startsWith("-Xms")
                         || argument.startsWith("-Xmx")) {
                     command.add(argument);
