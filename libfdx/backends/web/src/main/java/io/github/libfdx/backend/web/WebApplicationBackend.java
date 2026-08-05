@@ -21,7 +21,6 @@ import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.GraphicsEnvironment;
 import io.github.libfdx.graphics.GraphicsProviderSupport;
 import io.github.libfdx.graphics.NativeWindow;
-import io.github.libfdx.input.DefaultCursor;
 import io.github.libfdx.input.DefaultGamepads;
 import io.github.libfdx.input.DefaultInput;
 import io.github.libfdx.input.DefaultInputCapabilities;
@@ -36,6 +35,7 @@ import java.util.List;
 import org.teavm.jso.JSBody;
 import org.teavm.jso.browser.AnimationFrameCallback;
 import org.teavm.jso.browser.Window;
+import org.teavm.jso.dom.events.Event;
 import org.teavm.jso.dom.events.EventListener;
 import org.teavm.jso.dom.events.KeyboardEvent;
 import org.teavm.jso.dom.events.MouseEvent;
@@ -44,6 +44,7 @@ import org.teavm.jso.dom.events.Touch;
 import org.teavm.jso.dom.events.TouchEvent;
 import org.teavm.jso.dom.events.WheelEvent;
 import org.teavm.jso.dom.html.HTMLCanvasElement;
+import org.teavm.jso.dom.html.HTMLDocument;
 import org.teavm.runtime.Fiber;
 
 /**
@@ -70,6 +71,9 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
     private HTMLCanvasElement canvas;
     private GraphicsAttachment graphics;
     private DefaultInput input;
+    private WebCursor cursor;
+    private double mouseX;
+    private double mouseY;
     private WebTextInputController textInputController;
     private WebPreloadApplicationListener preloadApplicationListener;
     private WebPreloadContext preloadContext;
@@ -189,8 +193,9 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
     private DefaultInput createInput() {
         textInputController = new WebTextInputController();
         textInputController.canvas(canvas);
+        cursor = new WebCursor(canvas);
         DefaultInput createdInput = new DefaultInput(ProviderId.of("web_input"),
-                new DefaultInputCapabilities(true, true, true, true, false, false), new DefaultCursor(),
+                new DefaultInputCapabilities(true, true, true, true, false, false), cursor,
                 new DefaultGamepads(), textInputController, new WebClipboard());
         textInputController.input(createdInput);
         return createdInput;
@@ -201,13 +206,27 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             return;
         }
         final Window window = Window.current();
+        final HTMLDocument document = HTMLDocument.current();
+        inputRegistrations.add(document.onEvent("pointerlockchange", new EventListener<Event>() {
+            @Override
+            public void handleEvent(Event event) {
+                cursor.pointerLockChanged();
+            }
+        }));
+        inputRegistrations.add(document.onEvent("pointerlockerror", new EventListener<Event>() {
+            @Override
+            public void handleEvent(Event event) {
+                cursor.pointerLockFailed();
+            }
+        }));
         inputRegistrations.add(canvas.onMouseDown(new EventListener<MouseEvent>() {
             @Override
             public void handleEvent(MouseEvent event) {
+                cursor.beginUserGesture();
                 focusCanvas(canvas);
                 event.preventDefault();
-                input.dispatchPointerDown(mapMouseButton(event.getButton()), eventX(canvas, event.getClientX()),
-                        eventY(canvas, event.getClientY()));
+                updateMousePosition(event);
+                input.dispatchPointerDown(mapMouseButton(event.getButton()), roundedMouseX(), roundedMouseY());
             }
         }));
         inputRegistrations.add(window.onMouseMove(new EventListener<MouseEvent>() {
@@ -216,7 +235,8 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                 if (textInputController != null && textInputController.handlesEvent(event)) {
                     return;
                 }
-                input.dispatchPointerMoved(eventX(canvas, event.getClientX()), eventY(canvas, event.getClientY()));
+                updateMousePosition(event);
+                input.dispatchPointerMoved(roundedMouseX(), roundedMouseY());
             }
         }));
         inputRegistrations.add(window.onMouseUp(new EventListener<MouseEvent>() {
@@ -225,15 +245,17 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                 if (textInputController != null && textInputController.handlesEvent(event)) {
                     return;
                 }
-                input.dispatchPointerUp(mapMouseButton(event.getButton()), eventX(canvas, event.getClientX()),
-                        eventY(canvas, event.getClientY()));
+                updateMousePosition(event);
+                input.dispatchPointerUp(mapMouseButton(event.getButton()), roundedMouseX(), roundedMouseY());
             }
         }));
         inputRegistrations.add(canvas.onWheel(new EventListener<WheelEvent>() {
             @Override
             public void handleEvent(WheelEvent event) {
                 event.preventDefault();
-                input.dispatchScrolled(eventX(canvas, event.getClientX()), eventY(canvas, event.getClientY()),
+                int x = cursor.pointerLocked() ? roundedMouseX() : eventX(canvas, event.getClientX());
+                int y = cursor.pointerLocked() ? roundedMouseY() : eventY(canvas, event.getClientY());
+                input.dispatchScrolled(x, y,
                         wheelDelta(event.getDeltaX(), event.getDeltaMode(), display != null ? display.height() : 0),
                         wheelDelta(event.getDeltaY(), event.getDeltaMode(), display != null ? display.height() : 0));
             }
@@ -319,6 +341,34 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                 }
             }
         }));
+    }
+
+    private void updateMousePosition(MouseEvent event) {
+        if (cursor != null && cursor.pointerLocked()) {
+            mouseX += event.getMovementX();
+            mouseY += event.getMovementY();
+        } else {
+            mouseX = eventX(canvas, event.getClientX());
+            mouseY = eventY(canvas, event.getClientY());
+        }
+    }
+
+    private int roundedMouseX() {
+        return saturatedRound(mouseX);
+    }
+
+    private int roundedMouseY() {
+        return saturatedRound(mouseY);
+    }
+
+    private static int saturatedRound(double value) {
+        if (value <= Integer.MIN_VALUE) {
+            return Integer.MIN_VALUE;
+        }
+        if (value >= Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        return (int) Math.round(value);
     }
 
     private void dispatchTouches(TouchEvent event, TouchDispatch dispatch) {
@@ -608,6 +658,9 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                 graphics.dispose();
                 graphics = null;
             }
+            if (cursor != null) {
+                cursor.dispose();
+            }
             for (int i = 0; i < inputRegistrations.size(); i++) {
                 inputRegistrations.get(i).dispose();
             }
@@ -617,6 +670,7 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                 textInputController.input(null);
                 textInputController = null;
             }
+            cursor = null;
             input = null;
             fdx = null;
             listener = null;
