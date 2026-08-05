@@ -449,6 +449,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
     private void loop(ApplicationListener listener, DisplayConfig displayConfig) {
         long lastTime = System.nanoTime();
         while (running && !GLFW.glfwWindowShouldClose(display.windowHandle())) {
+            long frameStart = System.nanoTime();
             GLFW.glfwPollEvents();
             // GLFW normally reports both logical and framebuffer size changes,
             // but native maximize/restore transitions can coalesce a callback.
@@ -492,7 +493,11 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
                     }
                 }
             }
-            sync.sync(displayConfig.foregroundFps());
+            // The graphics provider already performs presentation pacing when
+            // VSync is enabled. Sleeping as well adds an entire second frame
+            // interval and lowers a nominal 60 FPS loop to roughly 53 FPS.
+            sync.sync(displayConfig.vSync() ? 0
+                    : displayConfig.foregroundFps(), frameStart);
         }
     }
 
@@ -924,16 +929,20 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
      * @author xpenatan
      */
     private static final class FrameSync {
-        void sync(int fps) {
+        void sync(int fps, long frameStart) {
             if (fps <= 0) {
                 return;
             }
-            long sleepMillis = 1000L / fps;
-            if (sleepMillis <= 0L) {
+            long targetFrameNanos = 1_000_000_000L / fps;
+            long remainingNanos = targetFrameNanos
+                    - (System.nanoTime() - frameStart);
+            if (remainingNanos <= 0L) {
                 return;
             }
             try {
-                Thread.sleep(sleepMillis);
+                long sleepMillis = remainingNanos / 1_000_000L;
+                int sleepNanos = (int)(remainingNanos % 1_000_000L);
+                Thread.sleep(sleepMillis, sleepNanos);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }

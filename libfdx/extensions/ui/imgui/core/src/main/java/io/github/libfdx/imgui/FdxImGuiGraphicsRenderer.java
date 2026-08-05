@@ -45,7 +45,6 @@ import io.github.libfdx.graphics.shader.reflection.ShaderAttribute;
 import io.github.libfdx.graphics.shader.reflection.ShaderBinding;
 import io.github.libfdx.graphics.shader.reflection.ShaderBindingType;
 import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
-import io.github.libfdx.graphics.shader.target.ShaderTarget;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -72,6 +71,12 @@ public class FdxImGuiGraphicsRenderer implements FdxImGuiRenderer, FdxImGuiViewp
                 @location(1) color : vec4f,
             };
             @group(0) @binding(0) var u_texture : texture_2d<f32>;
+            @group(0) @binding(1) var u_sampler : sampler;
+            fn sampleTexel(texel : vec2i, dimensions : vec2i) -> vec4f {
+                let clamped = clamp(texel, vec2i(0), dimensions - vec2i(1));
+                let texCoord = (vec2f(clamped) + vec2f(0.5)) / vec2f(dimensions);
+                return textureSampleLevel(u_texture, u_sampler, texCoord, 0.0);
+            }
             @vertex
             fn vertexMain(input : VertexInput) -> VertexOutput {
                 var output : VertexOutput;
@@ -82,19 +87,16 @@ public class FdxImGuiGraphicsRenderer implements FdxImGuiRenderer, FdxImGuiViewp
             }
             """;
     private static final String IMGUI_WGSL_LINEAR = IMGUI_WGSL_PREFIX + """
-            fn clampTexel(texel : vec2i, dimensions : vec2i) -> vec2i {
-                return clamp(texel, vec2i(0), dimensions - vec2i(1));
-            }
             @fragment
             fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
                 let dimensions = vec2i(textureDimensions(u_texture));
                 let position = input.texCoord * vec2f(dimensions) - vec2f(0.5);
                 let base = vec2i(floor(position));
                 let weight = fract(position);
-                let c00 = textureLoad(u_texture, clampTexel(base, dimensions), 0);
-                let c10 = textureLoad(u_texture, clampTexel(base + vec2i(1, 0), dimensions), 0);
-                let c01 = textureLoad(u_texture, clampTexel(base + vec2i(0, 1), dimensions), 0);
-                let c11 = textureLoad(u_texture, clampTexel(base + vec2i(1, 1), dimensions), 0);
+                let c00 = sampleTexel(base, dimensions);
+                let c10 = sampleTexel(base + vec2i(1, 0), dimensions);
+                let c01 = sampleTexel(base + vec2i(0, 1), dimensions);
+                let c11 = sampleTexel(base + vec2i(1, 1), dimensions);
                 return mix(mix(c00, c10, weight.x), mix(c01, c11, weight.x), weight.y) * input.color;
             }
             """;
@@ -103,297 +105,24 @@ public class FdxImGuiGraphicsRenderer implements FdxImGuiRenderer, FdxImGuiViewp
             fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
                 let dimensions = vec2i(textureDimensions(u_texture));
                 let texel = clamp(vec2i(floor(input.texCoord * vec2f(dimensions))), vec2i(0), dimensions - vec2i(1));
-                return textureLoad(u_texture, texel, 0) * input.color;
+                return sampleTexel(texel, dimensions) * input.color;
             }
             """;
-    private static final String IMGUI_VERTEX_GLSL = """
-            #version 330 core
-            layout(location = 0) in vec2 a_position;
-            layout(location = 1) in vec2 a_texCoord;
-            layout(location = 2) in vec4 a_color;
-            out vec2 v_texCoord;
-            out vec4 v_color;
-            void main() {
-                v_texCoord = a_texCoord;
-                v_color = a_color;
-                gl_Position = vec4(a_position, 0.0, 1.0);
-            }
-            """;
-    private static final String IMGUI_FRAGMENT_LINEAR_GLSL = """
-            #version 330 core
-            in vec2 v_texCoord;
-            in vec4 v_color;
-            uniform sampler2D u_texture;
-            out vec4 fragColor;
-            void main() {
-                ivec2 dimensions = textureSize(u_texture, 0);
-                vec2 position = v_texCoord * vec2(dimensions) - vec2(0.5);
-                ivec2 base = ivec2(floor(position));
-                vec2 weight = fract(position);
-                ivec2 maxTexel = dimensions - ivec2(1);
-                vec4 c00 = texelFetch(u_texture, clamp(base, ivec2(0), maxTexel), 0);
-                vec4 c10 = texelFetch(u_texture, clamp(base + ivec2(1, 0), ivec2(0), maxTexel), 0);
-                vec4 c01 = texelFetch(u_texture, clamp(base + ivec2(0, 1), ivec2(0), maxTexel), 0);
-                vec4 c11 = texelFetch(u_texture, clamp(base + ivec2(1, 1), ivec2(0), maxTexel), 0);
-                fragColor = mix(mix(c00, c10, weight.x), mix(c01, c11, weight.x), weight.y) * v_color;
-            }
-            """;
-    private static final String IMGUI_FRAGMENT_NEAREST_GLSL = """
-            #version 330 core
-            in vec2 v_texCoord;
-            in vec4 v_color;
-            uniform sampler2D u_texture;
-            out vec4 fragColor;
-            void main() {
-                ivec2 dimensions = textureSize(u_texture, 0);
-                ivec2 texel = clamp(ivec2(floor(v_texCoord * vec2(dimensions))), ivec2(0), dimensions - ivec2(1));
-                fragColor = texelFetch(u_texture, texel, 0) * v_color;
-            }
-            """;
-    private static final String IMGUI_VERTEX_GLSL_ES = """
-            #version 300 es
-            precision highp float;
-            layout(location = 0) in vec2 a_position;
-            layout(location = 1) in vec2 a_texCoord;
-            layout(location = 2) in vec4 a_color;
-            out vec2 v_texCoord;
-            out vec4 v_color;
-            void main() {
-                v_texCoord = a_texCoord;
-                v_color = a_color;
-                gl_Position = vec4(a_position, 0.0, 1.0);
-            }
-            """;
-    private static final String IMGUI_FRAGMENT_LINEAR_GLSL_ES = """
-            #version 300 es
-            precision highp float;
-            precision highp int;
-            in vec2 v_texCoord;
-            in vec4 v_color;
-            uniform sampler2D u_texture;
-            out vec4 fragColor;
-            void main() {
-                ivec2 dimensions = textureSize(u_texture, 0);
-                vec2 position = v_texCoord * vec2(dimensions) - vec2(0.5);
-                ivec2 base = ivec2(floor(position));
-                vec2 weight = fract(position);
-                ivec2 maxTexel = dimensions - ivec2(1);
-                vec4 c00 = texelFetch(u_texture, clamp(base, ivec2(0), maxTexel), 0);
-                vec4 c10 = texelFetch(u_texture, clamp(base + ivec2(1, 0), ivec2(0), maxTexel), 0);
-                vec4 c01 = texelFetch(u_texture, clamp(base + ivec2(0, 1), ivec2(0), maxTexel), 0);
-                vec4 c11 = texelFetch(u_texture, clamp(base + ivec2(1, 1), ivec2(0), maxTexel), 0);
-                fragColor = mix(mix(c00, c10, weight.x), mix(c01, c11, weight.x), weight.y) * v_color;
-            }
-            """;
-    private static final String IMGUI_FRAGMENT_NEAREST_GLSL_ES = """
-            #version 300 es
-            precision highp float;
-            precision highp int;
-            in vec2 v_texCoord;
-            in vec4 v_color;
-            uniform sampler2D u_texture;
-            out vec4 fragColor;
-            void main() {
-                ivec2 dimensions = textureSize(u_texture, 0);
-                ivec2 texel = clamp(ivec2(floor(v_texCoord * vec2(dimensions))), ivec2(0), dimensions - ivec2(1));
-                fragColor = texelFetch(u_texture, texel, 0) * v_color;
-            }
-            """;
-    private static final String IMGUI_VULKAN_VERTEX_GLSL = """
-            #version 450
-            layout(location = 0) in vec2 a_position;
-            layout(location = 1) in vec2 a_texCoord;
-            layout(location = 2) in vec4 a_color;
-            layout(location = 0) out vec2 v_texCoord;
-            layout(location = 1) out vec4 v_color;
-            void vertexMain() {
-                v_texCoord = a_texCoord;
-                v_color = a_color;
-                gl_Position = vec4(a_position, 0.0, 1.0);
-            }
-            """;
-    private static final String IMGUI_VULKAN_FRAGMENT_LINEAR_GLSL = """
-            #version 450
-            layout(set = 0, binding = 0) uniform sampler2D u_texture;
-            layout(location = 0) in vec2 v_texCoord;
-            layout(location = 1) in vec4 v_color;
-            layout(location = 0) out vec4 fragColor;
-            void fragmentMain() {
-                ivec2 dimensions = textureSize(u_texture, 0);
-                vec2 position = v_texCoord * vec2(dimensions) - vec2(0.5);
-                ivec2 base = ivec2(floor(position));
-                vec2 weight = fract(position);
-                ivec2 maxTexel = dimensions - ivec2(1);
-                vec4 c00 = texelFetch(u_texture, clamp(base, ivec2(0), maxTexel), 0);
-                vec4 c10 = texelFetch(u_texture, clamp(base + ivec2(1, 0), ivec2(0), maxTexel), 0);
-                vec4 c01 = texelFetch(u_texture, clamp(base + ivec2(0, 1), ivec2(0), maxTexel), 0);
-                vec4 c11 = texelFetch(u_texture, clamp(base + ivec2(1, 1), ivec2(0), maxTexel), 0);
-                fragColor = mix(mix(c00, c10, weight.x), mix(c01, c11, weight.x), weight.y) * v_color;
-            }
-            """;
-    private static final String IMGUI_VULKAN_FRAGMENT_NEAREST_GLSL = """
-            #version 450
-            layout(set = 0, binding = 0) uniform sampler2D u_texture;
-            layout(location = 0) in vec2 v_texCoord;
-            layout(location = 1) in vec4 v_color;
-            layout(location = 0) out vec4 fragColor;
-            void fragmentMain() {
-                ivec2 dimensions = textureSize(u_texture, 0);
-                ivec2 texel = clamp(ivec2(floor(v_texCoord * vec2(dimensions))), ivec2(0), dimensions - ivec2(1));
-                fragColor = texelFetch(u_texture, texel, 0) * v_color;
-            }
-            """;
-    // Vulkan consumes SPIR-V at runtime; keep shader edits in the readable GLSL above.
-    private static final int[] IMGUI_VULKAN_VERTEX_SPIRV = {
-            0x07230203,0x00010600,0x00070000,0x00000023,0x00000000,0x00020011,0x00000001,0x0006000b,
-            0x00000001,0x4c534c47,0x6474732e,0x3035342e,0x00000000,0x0003000e,0x00000000,0x00000001,
-            0x000c000f,0x00000000,0x00000002,0x74726576,0x614d7865,0x00006e69,0x00000003,0x00000004,
-            0x00000005,0x00000006,0x00000007,0x00000008,0x00030003,0x00000002,0x000001c2,0x000a0004,
-            0x475f4c47,0x4c474f4f,0x70635f45,0x74735f70,0x5f656c79,0x656e696c,0x7269645f,0x69746365,
-            0x00006576,0x00080004,0x475f4c47,0x4c474f4f,0x6e695f45,0x64756c63,0x69645f65,0x74636572,
-            0x00657669,0x00050005,0x00000002,0x74726576,0x614d7865,0x00006e69,0x00050005,0x00000003,
-            0x65745f76,0x6f6f4378,0x00006472,0x00050005,0x00000004,0x65745f61,0x6f6f4378,0x00006472,
-            0x00040005,0x00000005,0x6f635f76,0x00726f6c,0x00040005,0x00000006,0x6f635f61,0x00726f6c,
-            0x00060005,0x00000009,0x505f6c67,0x65567265,0x78657472,0x00000000,0x00060006,0x00000009,
-            0x00000000,0x505f6c67,0x7469736f,0x006e6f69,0x00070006,0x00000009,0x00000001,0x505f6c67,
-            0x746e696f,0x657a6953,0x00000000,0x00070006,0x00000009,0x00000002,0x435f6c67,0x4470696c,
-            0x61747369,0x0065636e,0x00070006,0x00000009,0x00000003,0x435f6c67,0x446c6c75,0x61747369,
-            0x0065636e,0x00030005,0x00000007,0x00000000,0x00050005,0x00000008,0x6f705f61,0x69746973,
-            0x00006e6f,0x00040047,0x00000003,0x0000001e,0x00000000,0x00040047,0x00000004,0x0000001e,
-            0x00000001,0x00040047,0x00000005,0x0000001e,0x00000001,0x00040047,0x00000006,0x0000001e,
-            0x00000002,0x00050048,0x00000009,0x00000000,0x0000000b,0x00000000,0x00050048,0x00000009,
-            0x00000001,0x0000000b,0x00000001,0x00050048,0x00000009,0x00000002,0x0000000b,0x00000003,
-            0x00050048,0x00000009,0x00000003,0x0000000b,0x00000004,0x00030047,0x00000009,0x00000002,
-            0x00040047,0x00000008,0x0000001e,0x00000000,0x00020013,0x0000000a,0x00030021,0x0000000b,
-            0x0000000a,0x00030016,0x0000000c,0x00000020,0x00040017,0x0000000d,0x0000000c,0x00000002,
-            0x00040020,0x0000000e,0x00000003,0x0000000d,0x0004003b,0x0000000e,0x00000003,0x00000003,
-            0x00040020,0x0000000f,0x00000001,0x0000000d,0x0004003b,0x0000000f,0x00000004,0x00000001,
-            0x00040017,0x00000010,0x0000000c,0x00000004,0x00040020,0x00000011,0x00000003,0x00000010,
-            0x0004003b,0x00000011,0x00000005,0x00000003,0x00040020,0x00000012,0x00000001,0x00000010,
-            0x0004003b,0x00000012,0x00000006,0x00000001,0x00040015,0x00000013,0x00000020,0x00000000,
-            0x0004002b,0x00000013,0x00000014,0x00000001,0x0004001c,0x00000015,0x0000000c,0x00000014,
-            0x0006001e,0x00000009,0x00000010,0x0000000c,0x00000015,0x00000015,0x00040020,0x00000016,
-            0x00000003,0x00000009,0x0004003b,0x00000016,0x00000007,0x00000003,0x00040015,0x00000017,
-            0x00000020,0x00000001,0x0004002b,0x00000017,0x00000018,0x00000000,0x0004003b,0x0000000f,
-            0x00000008,0x00000001,0x0004002b,0x0000000c,0x00000019,0x00000000,0x0004002b,0x0000000c,
-            0x0000001a,0x3f800000,0x00050036,0x0000000a,0x00000002,0x00000000,0x0000000b,0x000200f8,
-            0x0000001b,0x0004003d,0x0000000d,0x0000001c,0x00000004,0x0003003e,0x00000003,0x0000001c,
-            0x0004003d,0x00000010,0x0000001d,0x00000006,0x0003003e,0x00000005,0x0000001d,0x0004003d,
-            0x0000000d,0x0000001e,0x00000008,0x00050051,0x0000000c,0x0000001f,0x0000001e,0x00000000,
-            0x00050051,0x0000000c,0x00000020,0x0000001e,0x00000001,0x00070050,0x00000010,0x00000021,
-            0x0000001f,0x00000020,0x00000019,0x0000001a,0x00050041,0x00000011,0x00000022,0x00000007,
-            0x00000018,0x0003003e,0x00000022,0x00000021,0x000100fd,0x00010038
-    };
-    private static final int[] IMGUI_VULKAN_FRAGMENT_LINEAR_SPIRV = {
-            0x07230203,0x00010000,0x0008000b,0x00000069,0x00000000,0x00020011,0x00000001,0x00020011,
-            0x00000032,0x0006000b,0x00000001,0x4c534c47,0x6474732e,0x3035342e,0x00000000,0x0003000e,
-            0x00000000,0x00000001,0x000a000f,0x00000004,0x00000004,0x67617266,0x746e656d,0x6e69614d,
-            0x00000000,0x00000017,0x00000050,0x00000066,0x00030010,0x00000004,0x00000007,0x00030003,
-            0x00000002,0x000001c2,0x00060005,0x00000004,0x67617266,0x746e656d,0x6e69614d,0x00000000,
-            0x00050005,0x0000000e,0x65745f75,0x72757478,0x00000065,0x00050005,0x00000017,0x65745f76,
-            0x6f6f4378,0x00006472,0x00050005,0x00000050,0x67617266,0x6f6c6f43,0x00000072,0x00040005,
-            0x00000066,0x6f635f76,0x00726f6c,0x00040047,0x0000000e,0x00000022,0x00000000,0x00040047,
-            0x0000000e,0x00000021,0x00000000,0x00040047,0x00000017,0x0000001e,0x00000000,0x00040047,
-            0x00000050,0x0000001e,0x00000000,0x00040047,0x00000066,0x0000001e,0x00000001,0x00020013,
-            0x00000002,0x00030021,0x00000003,0x00000002,0x00040015,0x00000006,0x00000020,0x00000001,
-            0x00040017,0x00000007,0x00000006,0x00000002,0x00030016,0x0000000a,0x00000020,0x00090019,
-            0x0000000b,0x0000000a,0x00000001,0x00000000,0x00000000,0x00000000,0x00000001,0x00000000,
-            0x0003001b,0x0000000c,0x0000000b,0x00040020,0x0000000d,0x00000000,0x0000000c,0x0004003b,
-            0x0000000d,0x0000000e,0x00000000,0x0004002b,0x00000006,0x00000010,0x00000000,0x00040017,
-            0x00000013,0x0000000a,0x00000002,0x00040020,0x00000016,0x00000001,0x00000013,0x0004003b,
-            0x00000016,0x00000017,0x00000001,0x0004002b,0x0000000a,0x0000001c,0x3f000000,0x0005002c,
-            0x00000013,0x0000001d,0x0000001c,0x0000001c,0x0004002b,0x00000006,0x00000028,0x00000001,
-            0x0005002c,0x00000007,0x00000029,0x00000028,0x00000028,0x00040017,0x0000002b,0x0000000a,
-            0x00000004,0x0005002c,0x00000007,0x00000030,0x00000010,0x00000010,0x0005002c,0x00000007,
-            0x00000038,0x00000028,0x00000010,0x0005002c,0x00000007,0x00000041,0x00000010,0x00000028,
-            0x00040020,0x0000004f,0x00000003,0x0000002b,0x0004003b,0x0000004f,0x00000050,0x00000003,
-            0x00040020,0x00000065,0x00000001,0x0000002b,0x0004003b,0x00000065,0x00000066,0x00000001,
-            0x00050036,0x00000002,0x00000004,0x00000000,0x00000003,0x000200f8,0x00000005,0x0004003d,
-            0x0000000c,0x0000000f,0x0000000e,0x00040064,0x0000000b,0x00000011,0x0000000f,0x00050067,
-            0x00000007,0x00000012,0x00000011,0x00000010,0x0004003d,0x00000013,0x00000018,0x00000017,
-            0x0004006f,0x00000013,0x0000001a,0x00000012,0x00050085,0x00000013,0x0000001b,0x00000018,
-            0x0000001a,0x00050083,0x00000013,0x0000001e,0x0000001b,0x0000001d,0x0006000c,0x00000013,
-            0x00000021,0x00000001,0x00000008,0x0000001e,0x0004006e,0x00000007,0x00000022,0x00000021,
-            0x0006000c,0x00000013,0x00000025,0x00000001,0x0000000a,0x0000001e,0x00050082,0x00000007,
-            0x0000002a,0x00000012,0x00000029,0x0008000c,0x00000007,0x00000032,0x00000001,0x0000002d,
-            0x00000022,0x00000030,0x0000002a,0x00040064,0x0000000b,0x00000033,0x0000000f,0x0007005f,
-            0x0000002b,0x00000034,0x00000033,0x00000032,0x00000002,0x00000010,0x00050080,0x00000007,
-            0x00000039,0x00000022,0x00000038,0x0008000c,0x00000007,0x0000003b,0x00000001,0x0000002d,
-            0x00000039,0x00000030,0x0000002a,0x00040064,0x0000000b,0x0000003c,0x0000000f,0x0007005f,
-            0x0000002b,0x0000003d,0x0000003c,0x0000003b,0x00000002,0x00000010,0x00050080,0x00000007,
-            0x00000042,0x00000022,0x00000041,0x0008000c,0x00000007,0x00000044,0x00000001,0x0000002d,
-            0x00000042,0x00000030,0x0000002a,0x00040064,0x0000000b,0x00000045,0x0000000f,0x0007005f,
-            0x0000002b,0x00000046,0x00000045,0x00000044,0x00000002,0x00000010,0x00050080,0x00000007,
-            0x0000004a,0x00000022,0x00000029,0x0008000c,0x00000007,0x0000004c,0x00000001,0x0000002d,
-            0x0000004a,0x00000030,0x0000002a,0x00040064,0x0000000b,0x0000004d,0x0000000f,0x0007005f,
-            0x0000002b,0x0000004e,0x0000004d,0x0000004c,0x00000002,0x00000010,0x00050051,0x0000000a,
-            0x00000057,0x00000025,0x00000000,0x00070050,0x0000002b,0x00000058,0x00000057,0x00000057,
-            0x00000057,0x00000057,0x0008000c,0x0000002b,0x00000059,0x00000001,0x0000002e,0x00000034,
-            0x0000003d,0x00000058,0x0008000c,0x0000002b,0x0000005f,0x00000001,0x0000002e,0x00000046,
-            0x0000004e,0x00000058,0x00050051,0x0000000a,0x00000062,0x00000025,0x00000001,0x00070050,
-            0x0000002b,0x00000063,0x00000062,0x00000062,0x00000062,0x00000062,0x0008000c,0x0000002b,
-            0x00000064,0x00000001,0x0000002e,0x00000059,0x0000005f,0x00000063,0x0004003d,0x0000002b,
-            0x00000067,0x00000066,0x00050085,0x0000002b,0x00000068,0x00000064,0x00000067,0x0003003e,
-            0x00000050,0x00000068,0x000100fd,0x00010038
-    };
-    private static final int[] IMGUI_VULKAN_FRAGMENT_NEAREST_SPIRV = {
-            0x07230203,0x00010000,0x0008000b,0x0000002e,0x00000000,0x00020011,0x00000001,0x00020011,
-            0x00000032,0x0006000b,0x00000001,0x4c534c47,0x6474732e,0x3035342e,0x00000000,0x0003000e,
-            0x00000000,0x00000001,0x000a000f,0x00000004,0x00000004,0x67617266,0x746e656d,0x6e69614d,
-            0x00000000,0x00000016,0x00000025,0x0000002b,0x00030010,0x00000004,0x00000007,0x00030003,
-            0x00000002,0x000001c2,0x00060005,0x00000004,0x67617266,0x746e656d,0x6e69614d,0x00000000,
-            0x00050005,0x0000000e,0x65745f75,0x72757478,0x00000065,0x00050005,0x00000016,0x65745f76,
-            0x6f6f4378,0x00006472,0x00050005,0x00000025,0x67617266,0x6f6c6f43,0x00000072,0x00040005,
-            0x0000002b,0x6f635f76,0x00726f6c,0x00040047,0x0000000e,0x00000022,0x00000000,0x00040047,
-            0x0000000e,0x00000021,0x00000000,0x00040047,0x00000016,0x0000001e,0x00000000,0x00040047,
-            0x00000025,0x0000001e,0x00000000,0x00040047,0x0000002b,0x0000001e,0x00000001,0x00020013,
-            0x00000002,0x00030021,0x00000003,0x00000002,0x00040015,0x00000006,0x00000020,0x00000001,
-            0x00040017,0x00000007,0x00000006,0x00000002,0x00030016,0x0000000a,0x00000020,0x00090019,
-            0x0000000b,0x0000000a,0x00000001,0x00000000,0x00000000,0x00000000,0x00000001,0x00000000,
-            0x0003001b,0x0000000c,0x0000000b,0x00040020,0x0000000d,0x00000000,0x0000000c,0x0004003b,
-            0x0000000d,0x0000000e,0x00000000,0x0004002b,0x00000006,0x00000010,0x00000000,0x00040017,
-            0x00000014,0x0000000a,0x00000002,0x00040020,0x00000015,0x00000001,0x00000014,0x0004003b,
-            0x00000015,0x00000016,0x00000001,0x0005002c,0x00000007,0x0000001d,0x00000010,0x00000010,
-            0x0004002b,0x00000006,0x0000001f,0x00000001,0x0005002c,0x00000007,0x00000020,0x0000001f,
-            0x0000001f,0x00040017,0x00000023,0x0000000a,0x00000004,0x00040020,0x00000024,0x00000003,
-            0x00000023,0x0004003b,0x00000024,0x00000025,0x00000003,0x00040020,0x0000002a,0x00000001,
-            0x00000023,0x0004003b,0x0000002a,0x0000002b,0x00000001,0x00050036,0x00000002,0x00000004,
-            0x00000000,0x00000003,0x000200f8,0x00000005,0x0004003d,0x0000000c,0x0000000f,0x0000000e,
-            0x00040064,0x0000000b,0x00000011,0x0000000f,0x00050067,0x00000007,0x00000012,0x00000011,
-            0x00000010,0x0004003d,0x00000014,0x00000017,0x00000016,0x0004006f,0x00000014,0x00000019,
-            0x00000012,0x00050085,0x00000014,0x0000001a,0x00000017,0x00000019,0x0006000c,0x00000014,
-            0x0000001b,0x00000001,0x00000008,0x0000001a,0x0004006e,0x00000007,0x0000001c,0x0000001b,
-            0x00050082,0x00000007,0x00000021,0x00000012,0x00000020,0x0008000c,0x00000007,0x00000022,
-            0x00000001,0x0000002d,0x0000001c,0x0000001d,0x00000021,0x00040064,0x0000000b,0x00000028,
-            0x0000000f,0x0007005f,0x00000023,0x00000029,0x00000028,0x00000022,0x00000002,0x00000010,
-            0x0004003d,0x00000023,0x0000002c,0x0000002b,0x00050085,0x00000023,0x0000002d,0x00000029,
-            0x0000002c,0x0003003e,0x00000025,0x0000002d,0x000100fd,0x00010038
-    };
     private static final ShaderBundle IMGUI_LINEAR_SHADER = createShaderBundle(
             "imgui-linear",
-            IMGUI_WGSL_LINEAR,
-            IMGUI_FRAGMENT_LINEAR_GLSL,
-            IMGUI_FRAGMENT_LINEAR_GLSL_ES,
-            IMGUI_VULKAN_FRAGMENT_LINEAR_SPIRV);
+            IMGUI_WGSL_LINEAR);
     private static final ShaderBundle IMGUI_NEAREST_SHADER = createShaderBundle(
             "imgui-nearest",
-            IMGUI_WGSL_NEAREST,
-            IMGUI_FRAGMENT_NEAREST_GLSL,
-            IMGUI_FRAGMENT_NEAREST_GLSL_ES,
-            IMGUI_VULKAN_FRAGMENT_NEAREST_SPIRV);
+            IMGUI_WGSL_NEAREST);
 
-    private static ShaderBundle createShaderBundle(String label, String wgsl, String fragmentGlsl,
-            String fragmentGlslEs, int[] fragmentSpirv) {
+    private static ShaderBundle createShaderBundle(String label, String wgsl) {
         return ShaderBundle.builder(label)
             .profile(ShaderProfile.PORTABLE_WEBGPU)
             .wgsl(wgsl)
-            .generatedGlsl(ShaderTarget.OPENGL_GLSL, IMGUI_VERTEX_GLSL, fragmentGlsl)
-            .generatedGlsl(ShaderTarget.GLES_GLSL_ES, IMGUI_VERTEX_GLSL_ES, fragmentGlslEs)
-            .generatedGlsl(ShaderTarget.WEBGL_GLSL_ES, IMGUI_VERTEX_GLSL_ES, fragmentGlslEs)
-            .generatedSpirv(IMGUI_VULKAN_VERTEX_SPIRV, fragmentSpirv)
             .reflection(ShaderReflection.of(
                     new ShaderBinding[] {
-                            ShaderBinding.of(0, 0, "u_texture", ShaderBindingType.TEXTURE)
+                            ShaderBinding.of(0, 0, "u_texture", ShaderBindingType.TEXTURE),
+                            ShaderBinding.of(0, 1, "u_sampler", ShaderBindingType.SAMPLER)
                     },
                     new ShaderAttribute[] {
                             ShaderAttribute.of(0, "position", VertexFormat.FLOAT32X2),

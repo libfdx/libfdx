@@ -75,22 +75,68 @@ public final class SkyboxRenderer3D implements Disposable {
                 return output;
             }
 
+            fn hashNoise(point : vec2f) -> f32 {
+                var value = fract(vec3f(point.x, point.y, point.x) * 0.1031);
+                let offset = dot(value, value.yzx + vec3f(33.33));
+                value = value + vec3f(offset);
+                return fract((value.x + value.y) * value.z);
+            }
+
+            fn valueNoise(point : vec2f) -> f32 {
+                let cell = floor(point);
+                let local = fract(point);
+                let blend = local * local * (vec2f(3.0) - 2.0 * local);
+                let low = mix(hashNoise(cell),
+                        hashNoise(cell + vec2f(1.0, 0.0)), blend.x);
+                let high = mix(hashNoise(cell + vec2f(0.0, 1.0)),
+                        hashNoise(cell + vec2f(1.0, 1.0)), blend.x);
+                return mix(low, high, blend.y);
+            }
+
+            fn skyFbm(point : vec2f) -> f32 {
+                var samplePoint = point;
+                var value = valueNoise(samplePoint) * 0.62;
+                samplePoint = samplePoint * 2.03 + vec2f(7.1, 3.7);
+                value = value + valueNoise(samplePoint) * 0.27;
+                samplePoint = samplePoint * 2.01 + vec2f(5.2, 8.3);
+                return value + valueNoise(samplePoint) * 0.11;
+            }
+
             @fragment
             fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
                 let ray = normalize(input.worldDirection);
                 let sunDirection = normalize(input.params.xyz);
-                let sunRadius = max(input.params.w * 0.24, 0.001);
+                let sunRadius = max(input.params.w * 0.10, 0.001);
                 let below = smoothstep(-0.58, 0.02, ray.y);
                 let above = smoothstep(0.02, 0.82, ray.y);
                 let horizonHaze = 1.0 - smoothstep(0.0, 0.38, abs(ray.y));
                 var color = mix(input.nadirColor, input.horizonColor, below);
                 color = mix(color, input.zenithColor, above);
-                color = mix(color, input.horizonColor, horizonHaze * 0.42);
+                color = mix(color, input.horizonColor, horizonHaze * 0.28);
                 let sunDot = dot(ray, sunDirection);
                 let disc = smoothstep(cos(sunRadius), cos(sunRadius * 0.35), sunDot);
-                let glow = smoothstep(cos(sunRadius * 5.2), cos(sunRadius), sunDot);
+                let glow = smoothstep(cos(sunRadius * 7.0), cos(sunRadius), sunDot);
                 var rgb = mix(color.rgb, input.sunColor.rgb, disc * input.sunColor.a);
-                rgb = rgb + input.sunColor.rgb * glow * input.sunColor.a * 0.20;
+                rgb = rgb + input.sunColor.rgb * glow * input.sunColor.a * 0.16;
+
+                let cloudFade = smoothstep(-0.02, 0.16, ray.y);
+                let cloudCoordinates = ray.xz * 4.1
+                        + vec2f(ray.y * 1.7, ray.y * -1.1);
+                let cloudBase = skyFbm(cloudCoordinates + vec2f(2.7, -1.8));
+                let cloudDetail = valueNoise(cloudCoordinates * 4.7
+                        + vec2f(-4.3, 6.1));
+                let cloudShape = smoothstep(0.54, 0.72,
+                        cloudBase + cloudDetail * 0.13) * cloudFade;
+                let sunLight = clamp(sunDirection.y * 0.55 + 0.45, 0.0, 1.0);
+                let cloudColor = mix(vec3f(0.58, 0.64, 0.72),
+                        vec3f(1.0, 0.97, 0.91), sunLight);
+                rgb = mix(rgb, cloudColor, cloudShape * 0.46);
+
+                let cirrusNoise = valueNoise(cloudCoordinates * 8.5
+                        + vec2f(8.4, 2.2));
+                let cirrus = smoothstep(0.66, 0.80, cirrusNoise)
+                        * smoothstep(0.05, 0.35, ray.y) * 0.14;
+                rgb = mix(rgb, vec3f(0.88, 0.92, 0.98), cirrus);
                 return vec4f(rgb, 1.0);
             }
             """;
@@ -110,10 +156,10 @@ public final class SkyboxRenderer3D implements Disposable {
     private final RenderPassDescriptor renderPassDescriptor =
             new RenderPassDescriptor().label("skybox renderer 3d pass");
     private final float[] vertices = new float[VERTEX_COUNT * FLOATS_PER_VERTEX];
-    private final float[] zenithColor = { 0.06f, 0.18f, 0.42f, 1.0f };
-    private final float[] horizonColor = { 0.78f, 0.56f, 0.34f, 1.0f };
-    private final float[] nadirColor = { 0.018f, 0.025f, 0.04f, 1.0f };
-    private final float[] sunColor = { 1.0f, 0.84f, 0.54f, 0.75f };
+    private final float[] zenithColor = { 0.08f, 0.20f, 0.42f, 1.0f };
+    private final float[] horizonColor = { 0.55f, 0.68f, 0.82f, 1.0f };
+    private final float[] nadirColor = { 0.035f, 0.045f, 0.06f, 1.0f };
+    private final float[] sunColor = { 1.0f, 0.91f, 0.72f, 0.90f };
     private Buffer vertexBuffer;
     private ByteBuffer uploadBuffer;
     private FloatBuffer uploadFloats;

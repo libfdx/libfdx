@@ -150,6 +150,44 @@ public final class Vector3 {
     }
 
     /**
+     * Rotates this vector around the supplied axis using the right-hand rule.
+     *
+     * @param axis the axis to rotate around
+     * @param radians the rotation angle in radians
+     * @return this vector for chaining
+     */
+    public Vector3 rotate(Vector3 axis, float radians) {
+        float axisX = axis.x;
+        float axisY = axis.y;
+        float axisZ = axis.z;
+        float axisLengthSquared = axisX * axisX + axisY * axisY + axisZ * axisZ;
+        if (axisLengthSquared == 0.0f || radians == 0.0f) {
+            return this;
+        }
+
+        float inverseAxisLength = 1.0f / (float)Math.sqrt(axisLengthSquared);
+        axisX *= inverseAxisLength;
+        axisY *= inverseAxisLength;
+        axisZ *= inverseAxisLength;
+
+        float vectorX = x;
+        float vectorY = y;
+        float vectorZ = z;
+        float cos = (float)Math.cos(radians);
+        float sin = (float)Math.sin(radians);
+        float oneMinusCos = 1.0f - cos;
+        float axisDotVector = axisX * vectorX + axisY * vectorY + axisZ * vectorZ;
+
+        return set(
+                vectorX * cos + (axisY * vectorZ - axisZ * vectorY) * sin
+                        + axisX * axisDotVector * oneMinusCos,
+                vectorY * cos + (axisZ * vectorX - axisX * vectorZ) * sin
+                        + axisY * axisDotVector * oneMinusCos,
+                vectorZ * cos + (axisX * vectorY - axisY * vectorX) * sin
+                        + axisZ * axisDotVector * oneMinusCos);
+    }
+
+    /**
      * Returns the length.
      *
      * @return the length

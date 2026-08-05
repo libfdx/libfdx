@@ -151,22 +151,22 @@ public final class ModelBuilder {
                 ? new FloatArray() : null;
         addFace(positions, colors,
                 -hx, -hy, -hz, -hx, hy, -hz, hx, hy, -hz, hx, -hy, -hz,
-                0.30f, 0.42f, 0.75f, 1.0f);
+                1.0f, 1.0f, 1.0f, 1.0f);
         addFace(positions, colors,
                 -hx, -hy, hz, hx, -hy, hz, hx, hy, hz, -hx, hy, hz,
-                0.91f, 0.44f, 0.36f, 1.0f);
+                1.0f, 1.0f, 1.0f, 1.0f);
         addFace(positions, colors,
                 -hx, -hy, -hz, hx, -hy, -hz, hx, -hy, hz, -hx, -hy, hz,
-                0.20f, 0.58f, 0.45f, 1.0f);
+                1.0f, 1.0f, 1.0f, 1.0f);
         addFace(positions, colors,
                 -hx, hy, -hz, -hx, hy, hz, hx, hy, hz, hx, hy, -hz,
-                0.95f, 0.76f, 0.28f, 1.0f);
+                1.0f, 1.0f, 1.0f, 1.0f);
         addFace(positions, colors,
                 hx, -hy, -hz, hx, hy, -hz, hx, hy, hz, hx, -hy, hz,
-                0.47f, 0.35f, 0.79f, 1.0f);
+                1.0f, 1.0f, 1.0f, 1.0f);
         addFace(positions, colors,
                 -hx, -hy, -hz, -hx, -hy, hz, -hx, hy, hz, -hx, hy, -hz,
-                0.24f, 0.68f, 0.87f, 1.0f);
+                1.0f, 1.0f, 1.0f, 1.0f);
         return triangles(id, positions.toArray(), null,
                 colors != null ? colors.toArray() : null, usage);
     }
@@ -260,9 +260,9 @@ public final class ModelBuilder {
                     normals[n++] = nz;
                 }
                 if (colors != null) {
-                    colors[c++] = 0.35f + 0.45f * (nx * 0.5f + 0.5f);
-                    colors[c++] = 0.45f + 0.40f * (ny * 0.5f + 0.5f);
-                    colors[c++] = 0.55f + 0.35f * (nz * 0.5f + 0.5f);
+                    colors[c++] = 1.0f;
+                    colors[c++] = 1.0f;
+                    colors[c++] = 1.0f;
                     colors[c++] = 1.0f;
                 }
             }

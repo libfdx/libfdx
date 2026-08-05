@@ -759,6 +759,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         private ProjectedVertex[] projectedVertexPool = new ProjectedVertex[64];
         private ProjectedTriangle[] projectedTriangles = new ProjectedTriangle[16];
         private ProjectedTriangle[] projectedTriangleSortScratch = new ProjectedTriangle[16];
+        private final ProjectedVertex[] clipInputVertices = new ProjectedVertex[3];
+        private final ProjectedVertex[] clipOutputVertices = new ProjectedVertex[4];
         private float[] projectedVertexValues = new float[0];
         private final float[] worldMatrixValues = new float[Matrix4.VALUE_COUNT];
         private final float[] viewProjectionMatrixValues = new float[Matrix4.VALUE_COUNT];
@@ -956,6 +958,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             float[] sourcePbr = mesh.sourceBakedPbr() != null ? mesh.sourceBakedPbr() : mesh.sourcePbr();
             float[] sourceEmissive = mesh.sourceBakedEmissive() != null ? mesh.sourceBakedEmissive()
                     : mesh.sourceEmissive();
+            boolean applyMaterialBaseColor = mesh.sourceBakedColors() == null;
             Camera camera = context.camera();
             int firstVertex = meshPart.firstVertex();
             int availableVertices = sourcePositions.length / 3;
@@ -964,7 +967,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 throw new FdxException("Position/color 3D mesh parts must address complete triangles");
             }
             int maximumTriangleCount = vertexCount / 3;
-            ensureProjectedTriangleCapacity(maximumTriangleCount);
+            ensureProjectedTriangleCapacity(maximumTriangleCount * 2);
             worldTransform.copyValues(worldMatrixValues, 0);
             camera.combined().copyValues(viewProjectionMatrixValues, 0);
             float[] world = worldMatrixValues;
@@ -979,15 +982,12 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 if (material.doubleSided() || facesCamera(w0, w1, w2, camera.position())) {
                     WorldVertex faceNormal = faceNormal(w0, w1, w2);
                     ProjectedVertex p0 = projectVertex(w0, sourceColors, sourceNormals, sourcePbr, sourceEmissive,
-                            vertex, faceNormal, world, viewProjection, context);
+                            vertex, faceNormal, world, viewProjection, material, applyMaterialBaseColor, context);
                     ProjectedVertex p1 = projectVertex(w1, sourceColors, sourceNormals, sourcePbr, sourceEmissive,
-                            vertex + 1, faceNormal, world, viewProjection, context);
+                            vertex + 1, faceNormal, world, viewProjection, material, applyMaterialBaseColor, context);
                     ProjectedVertex p2 = projectVertex(w2, sourceColors, sourceNormals, sourcePbr, sourceEmissive,
-                            vertex + 2, faceNormal, world, viewProjection, context);
-                    if (projectedTriangleVisible(p0, p1, p2, minClipW)) {
-                        projectedTriangles[triangleCount] = projectedTriangle(triangleCount, p0, p1, p2);
-                        triangleCount++;
-                    }
+                            vertex + 2, faceNormal, world, viewProjection, material, applyMaterialBaseColor, context);
+                    triangleCount += clipProjectedTriangle(p0, p1, p2, minClipW, triangleCount);
                 }
             }
             if (triangleCount == 0) {
@@ -998,15 +998,12 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     WorldVertex w2 = worldVertex(sourcePositions, vertex + 2, world);
                     WorldVertex faceNormal = faceNormal(w0, w1, w2);
                     ProjectedVertex p0 = projectVertex(w0, sourceColors, sourceNormals, sourcePbr, sourceEmissive,
-                            vertex, faceNormal, world, viewProjection, context);
+                            vertex, faceNormal, world, viewProjection, material, applyMaterialBaseColor, context);
                     ProjectedVertex p1 = projectVertex(w1, sourceColors, sourceNormals, sourcePbr, sourceEmissive,
-                            vertex + 1, faceNormal, world, viewProjection, context);
+                            vertex + 1, faceNormal, world, viewProjection, material, applyMaterialBaseColor, context);
                     ProjectedVertex p2 = projectVertex(w2, sourceColors, sourceNormals, sourcePbr, sourceEmissive,
-                            vertex + 2, faceNormal, world, viewProjection, context);
-                    if (projectedTriangleVisible(p0, p1, p2, minClipW)) {
-                        projectedTriangles[triangleCount] = projectedTriangle(triangleCount, p0, p1, p2);
-                        triangleCount++;
-                    }
+                            vertex + 2, faceNormal, world, viewProjection, material, applyMaterialBaseColor, context);
+                    triangleCount += clipProjectedTriangle(p0, p1, p2, minClipW, triangleCount);
                 }
             }
             sortProjectedTriangles(triangleCount);
@@ -1058,7 +1055,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
 
         private ProjectedVertex projectVertex(WorldVertex worldVertex, float[] colors, float[] normals, float[] pbr,
                 float[] emissive, int vertex, WorldVertex faceNormal, float[] worldMatrix, float[] matrix,
-                RenderContext3D context) {
+                Material material, boolean applyMaterialBaseColor, RenderContext3D context) {
             float x = worldVertex.x;
             float y = worldVertex.y;
             float z = worldVertex.z;
@@ -1066,35 +1063,84 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             float clipY = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
             float clipZ = matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14];
             float clipW = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15];
-            float invW = Math.abs(clipW) > 0.000001f ? 1.0f / clipW : 1.0f;
             int colorOffset = vertex * 4;
             ColorVertex shaded = shade(worldVertex, colors, normals, pbr, emissive, vertex, colorOffset, faceNormal,
-                    worldMatrix, context);
-            return obtainProjectedVertex(clipX * invW, clipY * invW, clipZ * invW,
+                    worldMatrix, material, applyMaterialBaseColor, context);
+            return obtainProjectedVertex(clipX, clipY, clipZ,
                     clipW, shaded.red, shaded.green, shaded.blue, shaded.alpha);
         }
 
-        private boolean projectedTriangleVisible(ProjectedVertex v0, ProjectedVertex v1, ProjectedVertex v2,
-                float minClipW) {
-            return projectedVertexVisible(v0, minClipW)
-                    && projectedVertexVisible(v1, minClipW)
-                    && projectedVertexVisible(v2, minClipW);
+        private int clipProjectedTriangle(ProjectedVertex v0, ProjectedVertex v1, ProjectedVertex v2,
+                float minClipW, int firstTriangle) {
+            if (!projectedVertexFinite(v0) || !projectedVertexFinite(v1) || !projectedVertexFinite(v2)) {
+                return 0;
+            }
+            clipInputVertices[0] = v0;
+            clipInputVertices[1] = v1;
+            clipInputVertices[2] = v2;
+            int clippedVertexCount = 0;
+            ProjectedVertex previous = clipInputVertices[2];
+            boolean previousInside = previous.clipW >= minClipW;
+            for (int i = 0; i < clipInputVertices.length; i++) {
+                ProjectedVertex current = clipInputVertices[i];
+                boolean currentInside = current.clipW >= minClipW;
+                if (currentInside != previousInside) {
+                    clipOutputVertices[clippedVertexCount++] = intersectNearPlane(previous, current, minClipW);
+                }
+                if (currentInside) {
+                    clipOutputVertices[clippedVertexCount++] = current;
+                }
+                previous = current;
+                previousInside = currentInside;
+            }
+            if (clippedVertexCount < 3) {
+                return 0;
+            }
+            int triangleCount = clippedVertexCount - 2;
+            for (int i = 0; i < triangleCount; i++) {
+                int triangleIndex = firstTriangle + i;
+                projectedTriangles[triangleIndex] = projectedTriangle(triangleIndex,
+                        clipOutputVertices[0], clipOutputVertices[i + 1], clipOutputVertices[i + 2]);
+            }
+            return triangleCount;
         }
 
-        private boolean projectedVertexVisible(ProjectedVertex vertex, float minClipW) {
-            return vertex.clipW >= minClipW
-                    && Float.isFinite(vertex.x)
+        private ProjectedVertex intersectNearPlane(ProjectedVertex start, ProjectedVertex end, float minClipW) {
+            float alpha = (minClipW - start.clipW) / (end.clipW - start.clipW);
+            return obtainProjectedVertex(
+                    start.x + (end.x - start.x) * alpha,
+                    start.y + (end.y - start.y) * alpha,
+                    start.z + (end.z - start.z) * alpha,
+                    minClipW,
+                    start.red + (end.red - start.red) * alpha,
+                    start.green + (end.green - start.green) * alpha,
+                    start.blue + (end.blue - start.blue) * alpha,
+                    start.alpha + (end.alpha - start.alpha) * alpha);
+        }
+
+        private boolean projectedVertexFinite(ProjectedVertex vertex) {
+            return Float.isFinite(vertex.x)
                     && Float.isFinite(vertex.y)
-                    && Float.isFinite(vertex.z);
+                    && Float.isFinite(vertex.z)
+                    && Float.isFinite(vertex.clipW);
         }
 
         private ColorVertex shade(WorldVertex worldVertex, float[] colors, float[] normals, float[] pbr,
                 float[] emissive, int vertex, int colorOffset, WorldVertex faceNormal, float[] worldMatrix,
-                RenderContext3D context) {
+                Material material, boolean applyMaterialBaseColor, RenderContext3D context) {
             float red = colors[colorOffset];
             float green = colors[colorOffset + 1];
             float blue = colors[colorOffset + 2];
             float alpha = colors[colorOffset + 3];
+            PbrMaterial pbrMaterial = material instanceof PbrMaterial
+                    ? (PbrMaterial)material : null;
+            if (applyMaterialBaseColor && pbrMaterial != null) {
+                Color baseColor = pbrMaterial.baseColor();
+                red *= baseColor.red();
+                green *= baseColor.green();
+                blue *= baseColor.blue();
+                alpha *= baseColor.alpha();
+            }
             if (normals == null) {
                 return obtainColorVertex(red, green, blue, alpha);
             }
@@ -1104,8 +1150,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 normal = faceNormal;
             }
             float ao = 1.0f;
-            float metallic = 0.0f;
-            float roughness = 1.0f;
+            float metallic = pbrMaterial != null
+                    ? clamp(pbrMaterial.metallicFactor(), 0.0f, 1.0f) : 0.0f;
+            float roughness = pbrMaterial != null
+                    ? clamp(pbrMaterial.roughnessFactor(), 0.04f, 1.0f) : 1.0f;
             if (pbr != null) {
                 int pbrOffset = vertex * 3;
                 ao = clamp(pbr[pbrOffset], 0.0f, 1.0f);
@@ -1229,6 +1277,12 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 emissiveRed = emissive[emissiveOffset];
                 emissiveGreen = emissive[emissiveOffset + 1];
                 emissiveBlue = emissive[emissiveOffset + 2];
+            }
+            else if (pbrMaterial != null) {
+                Color emissiveFactor = pbrMaterial.emissiveFactor();
+                emissiveRed = emissiveFactor.red();
+                emissiveGreen = emissiveFactor.green();
+                emissiveBlue = emissiveFactor.blue();
             }
 
             return applyFog(obtainColorVertex(
@@ -1432,9 +1486,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         }
 
         private int appendProjectedVertex(float[] vertices, int out, ProjectedVertex vertex) {
-            vertices[out++] = vertex.x;
-            vertices[out++] = vertex.y;
-            vertices[out++] = vertex.z;
+            float invW = 1.0f / vertex.clipW;
+            vertices[out++] = vertex.x * invW;
+            vertices[out++] = vertex.y * invW;
+            vertices[out++] = vertex.z * invW;
             vertices[out++] = vertex.red;
             vertices[out++] = vertex.green;
             vertices[out++] = vertex.blue;
@@ -1672,7 +1727,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 this.v0 = v0;
                 this.v1 = v1;
                 this.v2 = v2;
-                depth = (v0.z + v1.z + v2.z) / 3.0f;
+                depth = (v0.normalizedDepth() + v1.normalizedDepth() + v2.normalizedDepth()) / 3.0f;
                 return this;
             }
         }
@@ -1703,6 +1758,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 this.blue = blue;
                 this.alpha = alpha;
                 return this;
+            }
+
+            float normalizedDepth() {
+                return z / clipW;
             }
         }
     }
@@ -1831,7 +1890,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             applyMaterial(pass, renderable.material());
             ShaderMaterialBinding materialBinding =
                     renderable.material().shaderBinding();
-            io.github.libfdx.graphics.shader.runtime.ShaderResourceBinding
+            ShaderResourceBinding
                     selectedBinding = materialBinding != null
                             ? materialBinding
                             : resolved.defaultResources();
@@ -2410,7 +2469,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
 
             boolean matches(
-                    io.github.libfdx.graphics.shader.runtime.ShaderPassId requestedPass,
+                    ShaderPassId requestedPass,
                     ShaderProfile requestedProfile,
                     RenderPassCompatibility requestedCompatibility,
                     PrimitiveTopology requestedTopology,

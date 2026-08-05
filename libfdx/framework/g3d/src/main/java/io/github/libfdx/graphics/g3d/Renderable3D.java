@@ -12,7 +12,7 @@ import io.github.libfdx.core.FdxException;
  */
 public final class Renderable3D {
     private final MeshPart meshPart;
-    private final Material material;
+    private Material material;
     private final Matrix4 worldTransform;
     private final BoundingBox bounds;
     private final SkinningPalette skinningPalette;
@@ -69,6 +69,13 @@ public final class Renderable3D {
      */
     public Material material() {
         return material;
+    }
+
+    void material(Material material) {
+        if (material == null) {
+            throw new FdxException("Renderable3D material cannot be null");
+        }
+        this.material = material;
     }
 
     /**

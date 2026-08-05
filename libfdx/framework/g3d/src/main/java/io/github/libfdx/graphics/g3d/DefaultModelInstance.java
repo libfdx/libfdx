@@ -62,6 +62,52 @@ public final class DefaultModelInstance implements ModelInstance {
     }
 
     /**
+     * Overrides one node part's material for this model instance.
+     *
+     * <p>The material is borrowed and is not disposed by this instance. Change
+     * instance materials only when renderables from this instance are not
+     * already queued in an active batch.</p>
+     *
+     * @param nodeId the node identifier
+     * @param partIndex the zero-based node part index
+     * @param material the replacement material
+     * @return this default model instance for chaining
+     */
+    public DefaultModelInstance nodeMaterial(String nodeId, int partIndex,
+            Material material) {
+        if (material == null) {
+            throw new FdxException("Model node material cannot be null");
+        }
+        part(nodeId, partIndex).renderable.material(material);
+        return this;
+    }
+
+    /**
+     * Returns one instance-local node part material.
+     *
+     * @param nodeId the node identifier
+     * @param partIndex the zero-based node part index
+     * @return the current instance-local material
+     */
+    public Material nodeMaterial(String nodeId, int partIndex) {
+        return part(nodeId, partIndex).renderable.material();
+    }
+
+    /**
+     * Restores one node part's material from the shared model.
+     *
+     * @param nodeId the node identifier
+     * @param partIndex the zero-based node part index
+     * @return this default model instance for chaining
+     */
+    public DefaultModelInstance resetNodeMaterial(String nodeId,
+            int partIndex) {
+        InstancePart part = part(nodeId, partIndex);
+        part.renderable.material(part.source.material());
+        return this;
+    }
+
+    /**
      * Copies an instance-local node transform.
      *
      * @param nodeId the node identifier
@@ -149,6 +195,22 @@ public final class DefaultModelInstance implements ModelInstance {
     }
 
     /**
+     * Restores every instance-local material from the shared model.
+     *
+     * @return this default model instance for chaining
+     */
+    public DefaultModelInstance resetNodeMaterials() {
+        for (int i = 0; i < instanceNodes.size(); i++) {
+            InstanceNode node = instanceNodes.get(i);
+            for (int j = 0; j < node.parts.size(); j++) {
+                InstancePart part = node.parts.get(j);
+                part.renderable.material(part.source.material());
+            }
+        }
+        return this;
+    }
+
+    /**
      * Returns whether this instance has a node id.
      *
      * @param nodeId the node identifier
@@ -183,8 +245,11 @@ public final class DefaultModelInstance implements ModelInstance {
         for (int i = 0; i < parts.size(); i++) {
             ModelNodePart part = parts.get(i);
             SkinningPalette palette = part.skin() != null ? skinningPalette(part.skin()) : null;
-            renderables.add(new Renderable3D(part.meshPart(), part.material(), node.worldTransform,
-                    part.meshPart().mesh().bounds(), palette));
+            Renderable3D renderable = new Renderable3D(part.meshPart(),
+                    part.material(), node.worldTransform,
+                    part.meshPart().mesh().bounds(), palette);
+            node.parts.add(new InstancePart(part, renderable));
+            renderables.add(renderable);
         }
         ArrayView<ModelNode> children = source.children();
         for (int i = 0; i < children.size(); i++) {
@@ -232,6 +297,15 @@ public final class DefaultModelInstance implements ModelInstance {
             throw new FdxException("Model node not found: " + key);
         }
         return node;
+    }
+
+    private InstancePart part(String nodeId, int partIndex) {
+        InstanceNode node = node(nodeId);
+        if (partIndex < 0 || partIndex >= node.parts.size()) {
+            throw new FdxException("Model node part index is out of range: "
+                    + node.source.id() + "[" + partIndex + "]");
+        }
+        return node.parts.get(partIndex);
     }
 
     private static String trimNodeId(String nodeId) {
@@ -296,11 +370,22 @@ public final class DefaultModelInstance implements ModelInstance {
         private final Matrix4 localTransform;
         private final Matrix4 modelTransform = new Matrix4();
         private final Matrix4 worldTransform = new Matrix4();
+        private final Array<InstancePart> parts = new Array<InstancePart>();
         private final Array<InstanceNode> children = new Array<InstanceNode>();
 
         InstanceNode(ModelNode source) {
             this.source = source;
             localTransform = new Matrix4(source.localTransform());
+        }
+    }
+
+    private static final class InstancePart {
+        private final ModelNodePart source;
+        private final Renderable3D renderable;
+
+        InstancePart(ModelNodePart source, Renderable3D renderable) {
+            this.source = source;
+            this.renderable = renderable;
         }
     }
 }

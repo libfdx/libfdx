@@ -235,19 +235,24 @@ final class D3D12Device implements GraphicsDevice {
         }
 
         static PipelineBindings from(ShaderRenderBindings resources) {
-            int count = resources.sampledTextureCount();
-            int[] textureGroups = new int[count];
-            int[] textureBindings = new int[count];
-            int[] samplerGroups = new int[count];
-            int[] samplerBindings = new int[count];
-            for (int slot = 0; slot < count; slot++) {
-                if (resources.reflected()) {
+            int textureCount = resources.sampledTextureCount();
+            int samplerCount = resources.reflected() ? resources.samplerCount() : textureCount;
+            int[] textureGroups = new int[textureCount];
+            int[] textureBindings = new int[textureCount];
+            int[] samplerGroups = new int[samplerCount];
+            int[] samplerBindings = new int[samplerCount];
+            if (resources.reflected()) {
+                for (int slot = 0; slot < textureCount; slot++) {
                     textureGroups[slot] = resources.texture(slot).group();
                     textureBindings[slot] = resources.texture(slot).binding();
+                }
+                for (int slot = 0; slot < samplerCount; slot++) {
                     samplerGroups[slot] = resources.sampler(slot).group();
                     samplerBindings[slot] = resources.sampler(slot).binding();
                 }
-                else {
+            }
+            else {
+                for (int slot = 0; slot < textureCount; slot++) {
                     textureGroups[slot] = 0;
                     textureBindings[slot] = slot * 2;
                     samplerGroups[slot] = 0;

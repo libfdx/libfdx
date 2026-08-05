@@ -765,18 +765,19 @@ final class D3D12FfmContext implements AutoCloseable {
         if (pipeline == null || pipeline.sampledTextureCount == 0) {
             return;
         }
-        int count = pipeline.sampledTextureCount;
-        if (frame.srvCursor + count > FRAME_DESCRIPTOR_CAPACITY
-                || frame.samplerCursor + count > FRAME_SAMPLER_DESCRIPTOR_CAPACITY) {
+        int textureCount = pipeline.sampledTextureCount;
+        int samplerCount = pipeline.samplerCount;
+        if (frame.srvCursor + textureCount > FRAME_DESCRIPTOR_CAPACITY
+                || frame.samplerCursor + samplerCount > FRAME_SAMPLER_DESCRIPTOR_CAPACITY) {
             throw new FdxException("Direct3D 12 frame descriptor heap is exhausted");
         }
         long srvCpu = descriptorHeapCpuHandle(frame.srvHeap) + (long)frame.srvCursor * srvSize;
         long srvGpu = descriptorHeapGpuHandle(frame.srvHeap) + (long)frame.srvCursor * srvSize;
-        long samplerCpu = descriptorHeapCpuHandle(frame.samplerHeap)
+        long samplerCpu = samplerCount == 0 ? 0L : descriptorHeapCpuHandle(frame.samplerHeap)
                 + (long)frame.samplerCursor * samplerSize;
-        long samplerGpu = descriptorHeapGpuHandle(frame.samplerHeap)
+        long samplerGpu = samplerCount == 0 ? 0L : descriptorHeapGpuHandle(frame.samplerHeap)
                 + (long)frame.samplerCursor * samplerSize;
-        for (int index = 0; index < count; index++) {
+        for (int index = 0; index < textureCount; index++) {
             Texture texture = textures[index];
             if (texture == null) {
                 throw new FdxException("Direct3D 12 texture slot is not bound");
@@ -788,17 +789,21 @@ final class D3D12FfmContext implements AutoCloseable {
             D3D12Ffm.comVoidAILLI(device, D3D12Ffm.SLOT_DEVICE_COPY_DESCRIPTORS_SIMPLE,
                     1, srvCpu + (long)index * srvSize, allocation.srv,
                     D3D12Ffm.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-            D3D12Ffm.comVoidAILLI(device, D3D12Ffm.SLOT_DEVICE_COPY_DESCRIPTORS_SIMPLE,
-                    1, samplerCpu + (long)index * samplerSize, texture.sampler,
-                    D3D12Ffm.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+            if (index < samplerCount) {
+                D3D12Ffm.comVoidAILLI(device, D3D12Ffm.SLOT_DEVICE_COPY_DESCRIPTORS_SIMPLE,
+                        1, samplerCpu + (long)index * samplerSize, texture.sampler,
+                        D3D12Ffm.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+            }
             markRecorded(allocation);
         }
         D3D12Ffm.comVoidAIL(commands, D3D12Ffm.SLOT_COMMANDS_SET_GRAPHICS_ROOT_DESCRIPTOR_TABLE,
                 pipeline.textureRoot, srvGpu);
-        D3D12Ffm.comVoidAIL(commands, D3D12Ffm.SLOT_COMMANDS_SET_GRAPHICS_ROOT_DESCRIPTOR_TABLE,
-                pipeline.samplerRoot, samplerGpu);
-        frame.srvCursor += count;
-        frame.samplerCursor += count;
+        if (samplerCount > 0) {
+            D3D12Ffm.comVoidAIL(commands, D3D12Ffm.SLOT_COMMANDS_SET_GRAPHICS_ROOT_DESCRIPTOR_TABLE,
+                    pipeline.samplerRoot, samplerGpu);
+        }
+        frame.srvCursor += textureCount;
+        frame.samplerCursor += samplerCount;
     }
 
     private void transition(MemorySegment barrier, MemorySegment resource, int before, int after) {
@@ -1282,6 +1287,7 @@ final class D3D12FfmContext implements AutoCloseable {
         int[] textureBindings = array(textureBindingsValue);
         int[] samplerGroups = array(samplerGroupsValue);
         int[] samplerBindings = array(samplerBindingsValue);
+        int samplerCount = samplerGroups.length;
         if (sampledTextureCount < 0 || sampledTextureCount > MAX_TEXTURES) {
             throw new FdxException("Unsupported Direct3D 12 sampled texture count");
         }
@@ -1296,8 +1302,8 @@ final class D3D12FfmContext implements AutoCloseable {
         }
         if (textureGroups.length != sampledTextureCount
                 || textureBindings.length != sampledTextureCount
-                || samplerGroups.length != sampledTextureCount
-                || samplerBindings.length != sampledTextureCount) {
+                || samplerBindings.length != samplerCount
+                || (samplerCount != 0 && samplerCount != sampledTextureCount)) {
             throw new FdxException("Direct3D 12 reflection does not match the sampled texture count");
         }
         for (int stride : layoutStrides) {
@@ -1309,24 +1315,29 @@ final class D3D12FfmContext implements AutoCloseable {
         Pipeline created = new Pipeline();
         created.topology = primitiveTopology(topology);
         created.sampledTextureCount = sampledTextureCount;
+        created.samplerCount = samplerCount;
         created.strides = Arrays.copyOf(layoutStrides, layoutStrides.length);
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment textureRanges = sampledTextureCount == 0 ? D3D12Ffm.NULL
                     : arena.allocate((long)sampledTextureCount * D3D12Ffm.SIZE_DESCRIPTOR_RANGE, 4);
-            MemorySegment samplerRanges = sampledTextureCount == 0 ? D3D12Ffm.NULL
-                    : arena.allocate((long)sampledTextureCount * D3D12Ffm.SIZE_DESCRIPTOR_RANGE, 4);
+            MemorySegment samplerRanges = samplerCount == 0 ? D3D12Ffm.NULL
+                    : arena.allocate((long)samplerCount * D3D12Ffm.SIZE_DESCRIPTOR_RANGE, 4);
             for (int index = 0; index < sampledTextureCount; index++) {
                 long offset = (long)index * D3D12Ffm.SIZE_DESCRIPTOR_RANGE;
                 fillDescriptorRange(textureRanges.asSlice(offset, D3D12Ffm.SIZE_DESCRIPTOR_RANGE),
                         D3D12Ffm.D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
                         textureBindings[index], textureGroups[index], index);
+            }
+            for (int index = 0; index < samplerCount; index++) {
+                long offset = (long)index * D3D12Ffm.SIZE_DESCRIPTOR_RANGE;
                 fillDescriptorRange(samplerRanges.asSlice(offset, D3D12Ffm.SIZE_DESCRIPTOR_RANGE),
                         D3D12Ffm.D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,
                         samplerBindings[index], samplerGroups[index], index);
             }
 
             int rootCount = (uniformGroup >= 0 && uniformBinding >= 0 ? 1 : 0)
-                    + (sampledTextureCount > 0 ? 2 : 0);
+                    + (sampledTextureCount > 0 ? 1 : 0)
+                    + (samplerCount > 0 ? 1 : 0);
             if ((uniformGroup >= 0) != (uniformBinding >= 0)) {
                 throw new FdxException("Incomplete Direct3D 12 uniform binding");
             }
@@ -1350,11 +1361,13 @@ final class D3D12FfmContext implements AutoCloseable {
                                 (long)rootIndex++ * D3D12Ffm.SIZE_ROOT_PARAMETER,
                                 D3D12Ffm.SIZE_ROOT_PARAMETER),
                         sampledTextureCount, textureRanges);
+            }
+            if (samplerCount > 0) {
                 created.samplerRoot = rootIndex;
                 fillDescriptorTable(rootParameters.asSlice(
                                 (long)rootIndex * D3D12Ffm.SIZE_ROOT_PARAMETER,
                                 D3D12Ffm.SIZE_ROOT_PARAMETER),
-                        sampledTextureCount, samplerRanges);
+                        samplerCount, samplerRanges);
             }
 
             MemorySegment rootDescriptor = arena.allocate(D3D12Ffm.SIZE_ROOT_SIGNATURE_DESC, 8);
@@ -2007,6 +2020,7 @@ final class D3D12FfmContext implements AutoCloseable {
         private int topology = D3D12Ffm.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
         private int[] strides = new int[0];
         private int sampledTextureCount;
+        private int samplerCount;
         private int uniformRoot = -1;
         private int textureRoot = -1;
         private int samplerRoot = -1;
