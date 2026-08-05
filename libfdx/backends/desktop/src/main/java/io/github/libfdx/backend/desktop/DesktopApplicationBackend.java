@@ -26,9 +26,10 @@ import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.GraphicsContextProfile;
 import io.github.libfdx.graphics.GraphicsEnvironment;
 import io.github.libfdx.graphics.NativeWindow;
+import io.github.libfdx.input.Cursor;
+import io.github.libfdx.input.CursorShape;
 import io.github.libfdx.input.DefaultInput;
 import io.github.libfdx.input.DefaultInputCapabilities;
-import io.github.libfdx.input.DefaultCursor;
 import io.github.libfdx.input.DefaultGamepads;
 import io.github.libfdx.input.Key;
 import io.github.libfdx.input.MouseButton;
@@ -85,6 +86,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
     private GraphicsAttachmentProvider graphicsProvider;
     private GraphicsAttachmentRequirements graphicsRequirements;
     private DefaultInput input;
+    private DesktopCursor cursor;
     private final Map<DesktopDisplay, SecondaryWindowCallbacks> secondaryWindows =
             new LinkedHashMap<DesktopDisplay, SecondaryWindowCallbacks>();
     private final Map<GraphicsAttachment, DesktopDisplay> secondaryGraphics =
@@ -134,8 +136,9 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         long windowHandle = createWindow(displayConfig, graphicsRequirements);
         display = new DesktopDisplay(windowHandle, displayConfig.title());
         display.refreshSizes();
+        cursor = new DesktopCursor(windowHandle);
         input = new DefaultInput(ProviderId.of("desktop_input"), DefaultInputCapabilities.desktop(),
-                new DefaultCursor(), new DefaultGamepads(), null, new DesktopClipboard(windowHandle));
+                cursor, new DefaultGamepads(), null, new DesktopClipboard(windowHandle));
         installCallbacks(listener);
 
         DefaultFileSystem files = new DefaultFileSystem()
@@ -244,6 +247,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         if (callbacks != null) {
             callbacks.dispose();
         }
+        cursor.windowDestroyed(secondaryDisplay.windowHandle());
         GLFW.glfwDestroyWindow(secondaryDisplay.windowHandle());
     }
 
@@ -385,6 +389,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         cursorPosCallback = new GLFWCursorPosCallback() {
             @Override
             public void invoke(long window, double xpos, double ypos) {
+                cursor.activeWindow(window);
                 int x = (int) Math.round(xpos);
                 int y = (int) Math.round(ypos);
                 input.dispatchPointerMoved(x, y, display.x() + x, display.y() + y);
@@ -393,6 +398,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         mouseButtonCallback = new GLFWMouseButtonCallback() {
             @Override
             public void invoke(long window, int button, int action, int mods) {
+                cursor.activeWindow(window);
                 double[] x = new double[1];
                 double[] y = new double[1];
                 GLFW.glfwGetCursorPos(window, x, y);
@@ -411,6 +417,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         scrollCallback = new GLFWScrollCallback() {
             @Override
             public void invoke(long window, double xoffset, double yoffset) {
+                cursor.activeWindow(window);
                 double[] x = new double[1];
                 double[] y = new double[1];
                 GLFW.glfwGetCursorPos(window, x, y);
@@ -566,6 +573,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
                 scrollCallback = null;
             }
             input = null;
+            cursor = null;
             GLFW.glfwTerminate();
             RuntimeCore.registerProvider(null);
             MathAcceleration.register(null);
@@ -843,6 +851,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             cursorPos = new GLFWCursorPosCallback() {
                 @Override
                 public void invoke(long window, double xpos, double ypos) {
+                    cursor.activeWindow(window);
                     int x = (int) Math.round(xpos);
                     int y = (int) Math.round(ypos);
                     input.dispatchPointerMoved(x, y, secondaryDisplay.x() + x, secondaryDisplay.y() + y);
@@ -851,6 +860,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             mouseButton = new GLFWMouseButtonCallback() {
                 @Override
                 public void invoke(long window, int button, int action, int mods) {
+                    cursor.activeWindow(window);
                     double[] x = new double[1];
                     double[] y = new double[1];
                     GLFW.glfwGetCursorPos(window, x, y);
@@ -869,6 +879,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             scroll = new GLFWScrollCallback() {
                 @Override
                 public void invoke(long window, double xoffset, double yoffset) {
+                    cursor.activeWindow(window);
                     double[] x = new double[1];
                     double[] y = new double[1];
                     GLFW.glfwGetCursorPos(window, x, y);
@@ -1318,6 +1329,95 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
 
         private static float validScale(float scale) {
             return scale > 0.0f && Float.isFinite(scale) ? scale : 1.0f;
+        }
+    }
+
+    /** GLFW-backed cursor state for the main and ImGui viewport windows. */
+    private static final class DesktopCursor implements Cursor {
+        private final long mainWindow;
+        private long activeWindow;
+        private long capturedWindow;
+        private boolean visible = true;
+        private boolean captured;
+        private CursorShape shape = CursorShape.DEFAULT;
+
+        DesktopCursor(long mainWindow) {
+            this.mainWindow = mainWindow;
+            activeWindow = mainWindow;
+        }
+
+        void activeWindow(long window) {
+            if (window != 0L) {
+                activeWindow = window;
+            }
+        }
+
+        void windowDestroyed(long window) {
+            if (activeWindow == window) {
+                activeWindow = mainWindow;
+            }
+            if (capturedWindow == window) {
+                capturedWindow = 0L;
+                captured = false;
+            }
+        }
+
+        @Override
+        public boolean isVisible() {
+            return visible;
+        }
+
+        @Override
+        public void visible(boolean visible) {
+            if (this.visible == visible) {
+                return;
+            }
+            this.visible = visible;
+            if(!captured) {
+                GLFW.glfwSetInputMode(targetWindow(), GLFW.GLFW_CURSOR,
+                        visible ? GLFW.GLFW_CURSOR_NORMAL
+                                : GLFW.GLFW_CURSOR_HIDDEN);
+            }
+        }
+
+        @Override
+        public boolean isCaptured() {
+            return captured;
+        }
+
+        @Override
+        public void captured(boolean captured) {
+            if (this.captured == captured) {
+                return;
+            }
+            this.captured = captured;
+            if(captured) {
+                capturedWindow = targetWindow();
+                GLFW.glfwSetInputMode(capturedWindow, GLFW.GLFW_CURSOR,
+                        GLFW.GLFW_CURSOR_DISABLED);
+            }
+            else {
+                long window = capturedWindow != 0L
+                        ? capturedWindow : targetWindow();
+                GLFW.glfwSetInputMode(window, GLFW.GLFW_CURSOR,
+                        visible ? GLFW.GLFW_CURSOR_NORMAL
+                                : GLFW.GLFW_CURSOR_HIDDEN);
+                capturedWindow = 0L;
+            }
+        }
+
+        @Override
+        public CursorShape shape() {
+            return shape;
+        }
+
+        @Override
+        public void shape(CursorShape shape) {
+            this.shape = shape != null ? shape : CursorShape.DEFAULT;
+        }
+
+        private long targetWindow() {
+            return activeWindow != 0L ? activeWindow : mainWindow;
         }
     }
 }

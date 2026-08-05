@@ -13,7 +13,7 @@ import io.github.libfdx.graphics.g2d.Batch2D;
 import io.github.libfdx.graphics.g2d.BitmapFont;
 import io.github.libfdx.graphics.g2d.BitmapFontGlyph;
 import io.github.libfdx.graphics.g2d.BitmapFontLayout;
-import io.github.libfdx.graphics.g2d.ShapeRenderer2D;
+import io.github.libfdx.graphics.ShapeRenderer;
 import io.github.libfdx.graphics.g2d.SpriteBatch;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 
@@ -62,7 +62,7 @@ public final class UiG2DRenderer implements UiRenderer {
     private static final UiColor CONTROL_DARK = UiColor.rgba8888(0x17202aff);
 
     private final GraphicsContext graphics;
-    private final ShapeRenderer2D shapes;
+    private final ShapeRenderer shapes;
     private final RenderPassDescriptor renderPassDescriptor = new RenderPassDescriptor().label("ui g2d pass");
     private final Array<CustomTextDraw> customTextDraws = new Array<CustomTextDraw>();
     private final Array<CustomImageDraw> customImageDraws = new Array<CustomImageDraw>();
@@ -81,7 +81,7 @@ public final class UiG2DRenderer implements UiRenderer {
      */
     public UiG2DRenderer(GraphicsContext graphics) {
         this.graphics = graphics;
-        this.shapes = graphics != null ? new ShapeRenderer2D(graphics) : null;
+        this.shapes = graphics != null ? new ShapeRenderer(graphics) : null;
     }
 
     /**

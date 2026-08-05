@@ -1,6 +1,6 @@
 package io.github.libfdx.tests.graphics;
 
-import io.github.libfdx.graphics.g2d.ShapeRenderer2D;
+import io.github.libfdx.graphics.ShapeRenderer;
 
 /**
  * Runs the circle test scenario.
@@ -25,7 +25,7 @@ public final class CircleTest extends ShapeRenderTest {
     }
 
     @Override
-    void renderShape(ShapeRenderer2D shapes) {
+    void renderShape(ShapeRenderer shapes) {
         shapes.filledCircle(0.0f, 0.0f, 0.62f, 64, 0.32f, 0.60f, 0.95f, 1.0f);
     }
 }

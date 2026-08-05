@@ -19,7 +19,7 @@ import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Texture;
-import io.github.libfdx.graphics.g2d.ShapeRenderer2D;
+import io.github.libfdx.graphics.ShapeRenderer;
 import io.github.libfdx.graphics.g2d.SpriteBatch;
 import io.github.libfdx.graphics.g3d.CascadedShadowMap3D;
 import io.github.libfdx.graphics.camera.controller.FreeCameraController3D;
@@ -110,7 +110,7 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
     private DirectionalShadowMap3D shadowMap;
     private CascadedShadowMap3D cascadedShadowMap;
     private SpriteBatch spriteBatch;
-    private ShapeRenderer2D overlayShapes;
+    private ShapeRenderer overlayShapes;
     private ImmediateModeRenderer debugLineRenderer;
     private UiRoot root;
     private UiFloatState biasState;
@@ -235,7 +235,7 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
         instances = createInstances(floorModel, duckModel, dragonModel, sphereModels, pillarModel, rotating);
         rotatingInstances = rotating.toArray(new RotatingInstance[rotating.size()]);
         spriteBatch = new SpriteBatch(graphics);
-        overlayShapes = new ShapeRenderer2D(graphics);
+        overlayShapes = new ShapeRenderer(graphics);
         debugLineRenderer = new ImmediateModeRenderer(graphics);
         camera = new Camera()
                 .projection(CameraProjection.PERSPECTIVE)

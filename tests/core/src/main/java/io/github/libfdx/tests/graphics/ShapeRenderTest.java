@@ -7,7 +7,7 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.Logger;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.LoadOp;
-import io.github.libfdx.graphics.g2d.ShapeRenderer2D;
+import io.github.libfdx.graphics.ShapeRenderer;
 import io.github.libfdx.tests.TestFpsLogger;
 
 /**
@@ -27,7 +27,7 @@ abstract class ShapeRenderTest extends ApplicationAdapter {
     private GraphicsContext graphics;
     private Logger logger;
     private TestFpsLogger fpsLogger;
-    private ShapeRenderer2D shapes;
+    private ShapeRenderer shapes;
     private boolean created;
     private long renderedFrames;
 
@@ -47,11 +47,11 @@ abstract class ShapeRenderTest extends ApplicationAdapter {
         graphics = fdx.graphics().main();
         logger = fdx.logger();
         fpsLogger = TestFpsLogger.create(logger, testLabel());
-        shapes = new ShapeRenderer2D(graphics);
+        shapes = new ShapeRenderer(graphics);
 
         created = true;
         logger.info(testName + " created with graphics provider " + graphics.providerId()
-                + " and ShapeRenderer2D");
+                + " and ShapeRenderer");
     }
 
     /**
@@ -71,7 +71,7 @@ abstract class ShapeRenderTest extends ApplicationAdapter {
         }
     }
 
-    abstract void renderShape(ShapeRenderer2D shapes);
+    abstract void renderShape(ShapeRenderer shapes);
 
     /**
      * Releases resources held by this instance.

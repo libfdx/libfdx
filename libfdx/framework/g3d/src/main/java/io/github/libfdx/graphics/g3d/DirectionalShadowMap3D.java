@@ -389,6 +389,13 @@ public final class DirectionalShadowMap3D implements Disposable {
                     var output : VertexOutput;
                     let clip = uniforms.viewProjection * uniforms.model * vec4f(input.position, 1.0);
                     output.position = clip;
+                    // libFDX cameras use the portable OpenGL-style -w..w
+                    // clip-depth convention. WGSL/WebGPU clips z to 0..w,
+                    // which discarded the near half of an orthographic shadow
+                    // volume. Remap only the raster position; the separately
+                    // encoded depth below remains in the same 0..1 space used
+                    // by PBR shadow sampling on every provider.
+                    output.position.z = clip.z * 0.5 + clip.w * 0.5;
                     output.depth = clamp((clip.z / clip.w) * 0.5 + 0.5, 0.0, 1.0);
                     return output;
                 }

@@ -1,6 +1,6 @@
 package io.github.libfdx.tests.graphics;
 
-import io.github.libfdx.graphics.g2d.ShapeRenderer2D;
+import io.github.libfdx.graphics.ShapeRenderer;
 
 /**
  * Runs the triangle test scenario.
@@ -25,7 +25,7 @@ public final class TriangleTest extends ShapeRenderTest {
     }
 
     @Override
-    void renderShape(ShapeRenderer2D shapes) {
+    void renderShape(ShapeRenderer shapes) {
         shapes.filledTriangle(0.0f, 0.65f, -0.65f, -0.55f, 0.65f, -0.55f,
                 0.95f, 0.76f, 0.28f, 1.0f);
     }

@@ -9,7 +9,7 @@ import io.github.libfdx.display.Display;
 import io.github.libfdx.files.FileHandle;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.LoadOp;
-import io.github.libfdx.graphics.g2d.ShapeRenderer2D;
+import io.github.libfdx.graphics.ShapeRenderer;
 import io.github.libfdx.tests.TestFpsLogger;
 
 import java.io.File;
@@ -32,7 +32,7 @@ public final class ReadbackTest extends ApplicationAdapter {
     private GraphicsContext graphics;
     private Logger logger;
     private TestFpsLogger fpsLogger;
-    private ShapeRenderer2D shapes;
+    private ShapeRenderer shapes;
     private boolean created;
     private boolean validated;
     private long renderedFrames;
@@ -59,7 +59,7 @@ public final class ReadbackTest extends ApplicationAdapter {
         graphics = fdx.graphics().main();
         logger = fdx.logger();
         fpsLogger = TestFpsLogger.create(logger, "ReadbackTest");
-        shapes = new ShapeRenderer2D(graphics);
+        shapes = new ShapeRenderer(graphics);
 
         created = true;
         logger.info("ReadbackTest created with graphics provider " + graphics.providerId());

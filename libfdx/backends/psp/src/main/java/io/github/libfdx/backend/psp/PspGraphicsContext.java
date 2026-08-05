@@ -449,7 +449,7 @@ public final class PspGraphicsContext implements GraphicsContext {
                     throw new FdxException("PSP SpriteBatch pipeline must use triangle-list topology");
                 }
                 validateSpriteLayout(descriptor, 32, 1);
-                return new PspRenderPipeline(shader, PspPipelineKind.SPRITE, 32, true, GU_TRIANGLES,
+                return new PspRenderPipeline(shader, PspPipelineKind.SPRITE, 32, true, false, GU_TRIANGLES,
                         descriptor.renderTargetLayout());
             }
             if ("white sprite batch".equals(label)) {
@@ -457,23 +457,27 @@ public final class PspGraphicsContext implements GraphicsContext {
                     throw new FdxException("PSP SpriteBatch pipeline must use triangle-list topology");
                 }
                 validateSpriteLayout(descriptor, 16, 1);
-                return new PspRenderPipeline(shader, PspPipelineKind.WHITE_SPRITE, 16, true, GU_TRIANGLES,
+                return new PspRenderPipeline(shader, PspPipelineKind.WHITE_SPRITE, 16, true, false, GU_TRIANGLES,
                         descriptor.renderTargetLayout());
             }
-            if ("shape renderer 2d triangles".equals(label)) {
+            if ("shape renderer overlay triangles".equals(label)
+                    || "shape renderer depth triangles".equals(label)) {
                 if (descriptor.primitiveTopology() != PrimitiveTopology.TRIANGLE_LIST) {
                     throw new FdxException("PSP shape triangle pipeline must use triangle-list topology");
                 }
                 validateShapeLayout(descriptor);
-                return new PspRenderPipeline(shader, PspPipelineKind.SHAPE, 24, false, GU_TRIANGLES,
+                return new PspRenderPipeline(shader, PspPipelineKind.SHAPE, 32, false,
+                        label.contains(" depth "), GU_TRIANGLES,
                         descriptor.renderTargetLayout());
             }
-            if ("shape renderer 2d lines".equals(label)) {
+            if ("shape renderer overlay lines".equals(label)
+                    || "shape renderer depth lines".equals(label)) {
                 if (descriptor.primitiveTopology() != PrimitiveTopology.LINE_LIST) {
                     throw new FdxException("PSP shape line pipeline must use line-list topology");
                 }
                 validateShapeLayout(descriptor);
-                return new PspRenderPipeline(shader, PspPipelineKind.SHAPE, 24, false, GU_LINES,
+                return new PspRenderPipeline(shader, PspPipelineKind.SHAPE, 32, false,
+                        label.contains(" depth "), GU_LINES,
                         descriptor.renderTargetLayout());
             }
             throw new FdxException("Unsupported PSP render pipeline: " + label);
@@ -514,11 +518,11 @@ public final class PspGraphicsContext implements GraphicsContext {
 
         private static void validateShapeLayout(RenderPipelineDescriptor descriptor) {
             VertexLayout layout = descriptor.vertexLayout();
-            if (layout == null || layout.arrayStride() != 24) {
-                throw new FdxException("Unsupported PSP ShapeRenderer2D vertex layout");
+            if (layout == null || layout.arrayStride() != 32) {
+                throw new FdxException("Unsupported PSP ShapeRenderer vertex layout");
             }
             if (descriptor.sampledTextureCount() != 0) {
-                throw new FdxException("PSP ShapeRenderer2D pipeline must not sample textures");
+                throw new FdxException("PSP ShapeRenderer pipeline must not sample textures");
             }
         }
     }
@@ -814,13 +818,20 @@ public final class PspGraphicsContext implements GraphicsContext {
                 int offset = sourceOffset + i * stride;
                 float x = vertexBuffer.floatAt(offset);
                 float y = vertexBuffer.floatAt(offset + 4);
-                int color = color8888(vertexBuffer.floatAt(offset + 8), vertexBuffer.floatAt(offset + 12),
-                        vertexBuffer.floatAt(offset + 16), vertexBuffer.floatAt(offset + 20));
+                float z = vertexBuffer.floatAt(offset + 8);
+                float w = vertexBuffer.floatAt(offset + 12);
+                float inverseW = w != 0.0f ? 1.0f / w : 1.0f;
+                x *= inverseW;
+                y *= inverseW;
+                z *= inverseW;
+                int color = color8888(vertexBuffer.floatAt(offset + 16), vertexBuffer.floatAt(offset + 20),
+                        vertexBuffer.floatAt(offset + 24), vertexBuffer.floatAt(offset + 28));
                 int targetOffset = i * PspShapeVertex.BYTES;
                 convertedVertices.putInt(targetOffset, color);
                 convertedVertices.putFloat(targetOffset + 4, (x + 1.0f) * 0.5f * SCREEN_WIDTH);
                 convertedVertices.putFloat(targetOffset + 8, (1.0f - y) * 0.5f * SCREEN_HEIGHT);
-                convertedVertices.putFloat(targetOffset + 12, 0.0f);
+                convertedVertices.putFloat(targetOffset + 12,
+                        Math.max(0.0f, Math.min(1.0f, z)) * 65535.0f);
             }
             dcacheWritebackInvalidate(convertedVertices, outputBytes);
             bindShapeState();
@@ -848,7 +859,12 @@ public final class PspGraphicsContext implements GraphicsContext {
         }
 
         private void bindShapeState() {
-            sceGuDisable(GU_DEPTH_TEST);
+            if (pipeline.depthTest) {
+                sceGuEnable(GU_DEPTH_TEST);
+            }
+            else {
+                sceGuDisable(GU_DEPTH_TEST);
+            }
             sceGuDisable(GU_CULL_FACE);
             sceGuEnable(GU_BLEND);
             sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
@@ -916,16 +932,18 @@ public final class PspGraphicsContext implements GraphicsContext {
         private final PspPipelineKind kind;
         private final int stride;
         private final boolean textured;
+        private final boolean depthTest;
         private final int guPrimitive;
         private final RenderTargetLayout targetLayout;
         private boolean disposed;
 
         PspRenderPipeline(PspShaderModule shader, PspPipelineKind kind, int stride, boolean textured,
-                int guPrimitive, RenderTargetLayout targetLayout) {
+                boolean depthTest, int guPrimitive, RenderTargetLayout targetLayout) {
             this.shader = shader;
             this.kind = kind;
             this.stride = stride;
             this.textured = textured;
+            this.depthTest = depthTest;
             this.guPrimitive = guPrimitive;
             this.targetLayout = targetLayout;
         }
