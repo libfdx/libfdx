@@ -21,9 +21,6 @@ import java.util.zip.ZipInputStream;
 public final class ProjectGenerator {
     private static final String STARTER_SAMPLE_ID = "base/starter-project";
     private static final String STARTER_SOURCE_PACKAGE = "io.github.libfdx.samples.starter";
-    private static final String LEGACY_PLATFORMER_SAMPLE_ID = "2d/ecs-platformer";
-    private static final String PLATFORMER_SAMPLE_ID = "2d/platformer";
-
     private final List<ProjectSample> samples;
     private final Map<String, ProjectSample> samplesById;
 
@@ -40,10 +37,6 @@ public final class ProjectGenerator {
             if (byId.put(sample.id(), sample) != null) {
                 throw new IllegalStateException("Duplicate bundled sample identifier: " + sample.id());
             }
-        }
-        ProjectSample platformer = byId.get(PLATFORMER_SAMPLE_ID);
-        if (platformer != null) {
-            byId.put(LEGACY_PLATFORMER_SAMPLE_ID, platformer);
         }
         samples = Collections.unmodifiableList(available);
         samplesById = Collections.unmodifiableMap(byId);
@@ -367,7 +360,6 @@ public final class ProjectGenerator {
                 || lower.endsWith(".properties")
                 || lower.endsWith(".toml")
                 || lower.endsWith(".fnt")
-                || lower.endsWith(".fdxscene")
                 || lower.endsWith(".fdxgraph")
                 || lower.endsWith(".gitignore")
                 || lower.endsWith(".gitattributes");

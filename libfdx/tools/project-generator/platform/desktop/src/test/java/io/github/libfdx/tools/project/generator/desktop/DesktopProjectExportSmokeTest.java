@@ -49,8 +49,6 @@ public final class DesktopProjectExportSmokeTest {
         requireFile(spriteDestination.resolve(
                 "core/src/main/java/io/github/libfdx/samples/g2d/spritemovement/SpriteMovementApplication.java"),
                 "class SpriteMovementApplication");
-        require(!Files.exists(spriteDestination.resolve("fdx-project.json")),
-                "ordinary libFDX sample unexpectedly exported an engine project manifest");
         requireFile(spriteDestination.resolve("platform/desktop/build.gradle.kts"),
                 "desktopJvm {");
         requireFile(spriteDestination.resolve(

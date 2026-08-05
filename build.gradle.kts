@@ -351,22 +351,6 @@ tasks.register<Sync>("stage_pages") {
                 "WebGPU JS" to "webgpu-js/?graphics=webgpu"
             )
         )
-        writeRedirectPage(
-            root.resolve("samples/2d/ecs-platformer/index.html"),
-            "../platformer/"
-        )
-        writeRedirectPage(
-            root.resolve("samples/2d/ecs-platformer/webgl-js/index.html"),
-            "../../platformer/webgl-js/"
-        )
-        writeRedirectPage(
-            root.resolve("samples/2d/ecs-platformer/webgl-wasm/index.html"),
-            "../../platformer/webgl-wasm/"
-        )
-        writeRedirectPage(
-            root.resolve("samples/2d/ecs-platformer/webgpu-js/index.html"),
-            "../../platformer/webgpu-js/?graphics=webgpu"
-        )
     }
 }
 

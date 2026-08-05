@@ -28,7 +28,7 @@ The backend constructs the typed `Fdx` root and passes it to
 `ApplicationListener.create(Fdx)`. `Fdx` contains backend-owned runtime roots
 such as application, displays, graphics, input, files, storage, networking, and
 logging. Application-owned objects—including asset managers, batches, UI roots,
-scenes, game worlds, and systems—are constructed explicitly.
+and application state—are constructed explicitly.
 
 ## Repository Ownership
 
@@ -79,12 +79,9 @@ Source data and provider resources remain separate ownership domains. For
 example, decoded image data is not a texture; a loader that creates a GPU
 resource belongs in a module that already depends on graphics.
 
-Optional application features and external engines do not become backend
-services. They may depend on the portable framework contracts their APIs
-require, but libFDX does not depend back on them. In particular, ECS project,
-world, scene, and editor contracts are owned by fdx-engine rather than a libFDX
-extension. libFDX supplies the portable application, graphics, camera, input,
-file, JSON, math, and collection contracts that such an engine may compose.
+Optional application features remain application-owned and opt-in. They may
+depend on the portable framework contracts their APIs require, but libFDX does
+not depend back on application-specific architecture.
 
 ## Backends And Providers
 

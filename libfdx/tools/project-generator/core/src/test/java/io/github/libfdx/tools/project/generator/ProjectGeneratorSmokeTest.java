@@ -120,8 +120,6 @@ public final class ProjectGeneratorSmokeTest {
         require(project.file("build.gradle.kts").textContent()
                         .contains("libfdxDependencyVersion"),
                 "standalone version bridge missing");
-        require(!project.containsFile("fdx-project.json"),
-                "ordinary libFDX sample unexpectedly contains an engine project manifest");
         require(project.file("core/build.gradle.kts").textContent()
                         .contains("$libfdxDependencyVersion"),
                 "sample dependencies are not driven by the generator version");
@@ -135,14 +133,6 @@ public final class ProjectGeneratorSmokeTest {
         require(platformer.containsFile(
                 "assets/kenney/pixel-platformer/Tilemap/tilemap_packed.png"),
                 "sample-owned platformer assets were not bundled");
-        GeneratedProject legacyPlatformer = generator.generate(ProjectGenerationSettings.builder()
-                .projectName("legacy-platformer")
-                .sampleId("2d/ecs-platformer")
-                .build()).project();
-        require(legacyPlatformer.containsFile(
-                "assets/kenney/pixel-platformer/Tilemap/tilemap_packed.png"),
-                "legacy platformer sample identifier did not resolve to the renamed sample");
-
         ProjectValidationResult validation = ProjectValidationResult.validate(ProjectGenerationSettings.builder()
                 .projectName("bad name")
                 .build());

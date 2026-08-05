@@ -44,8 +44,7 @@ Do not manually duplicate inventories that can be read from source or Gradle.
 - Backends own runtime lifecycle and platform integration; providers implement
   optional graphics or transport capabilities.
 - `Fdx` remains finite, typed, and limited to backend-owned runtime roots.
-  Application-owned assets, batches, UI roots, scenes, worlds, and systems stay
-  explicit.
+  Application-owned assets, batches, UI roots, and state stay explicit.
 - Provider-specific access remains explicit through provider identity, typed
   setup, and `as()` escape hatches.
 - Public ownership, disposal, nullability, callback/thread, and frame-lifetime

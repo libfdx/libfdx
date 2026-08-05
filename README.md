@@ -26,7 +26,7 @@ libFDX separates four responsibilities:
 4. **Launchers** select the backend/provider stack for one application.
 
 The backend passes a typed `Fdx` runtime root to application code. User-owned
-objects such as asset managers, batches, UI roots, and game worlds remain
+objects such as asset managers, batches, UI roots, and application state remain
 explicit rather than becoming global services.
 
 ```java
@@ -41,7 +41,7 @@ public final class MyGame extends ApplicationAdapter {
     @Override
     public void render() {
         float deltaTime = fdx.app().deltaTime();
-        // Update and render application-owned systems.
+        // Update and render application-owned state.
     }
 }
 ```

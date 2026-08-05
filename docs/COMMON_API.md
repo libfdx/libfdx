@@ -56,8 +56,8 @@ Ownership is visible at creation time or documented by the returning method.
   imply transfer by itself.
 
 The backend owns runtime roots exposed through `Fdx`. Application code owns
-objects it creates, including asset managers, batches, UI roots, scenes, and
-game systems. These objects do not become global runtime services.
+objects it creates, including asset managers, batches, UI roots, and other
+application state. These objects do not become global runtime services.
 
 ## Nullability And Lookup
 
@@ -86,7 +86,7 @@ backend-owned capture or readback hooks.
 Operations owned by a running application dispatch user callbacks on the
 application event loop unless their declaration states another policy.
 Provider, socket, native, or worker threads enqueue work; they do not invoke
-ordinary application, UI, engine, or scenario callbacks directly.
+ordinary application, UI, or scenario callbacks directly.
 
 ## Futures
 
@@ -139,9 +139,9 @@ frame.
 
 ## User-Owned High-Level Features
 
-Assets, 2D/3D renderers, UI, external game engines, and scenario validation are optional
-application-owned features. Their composition remains explicit; there is no
-process-global backend, provider, scene, or world.
+Assets, 2D/3D renderers, UI, and scenario validation are optional
+application-owned features. Their composition remains explicit; libFDX does
+not turn them into process-global services.
 
 - Asset loading keeps decoded source data separate from GPU resources.
 - Batches and renderers expose explicit recording scopes and reuse prepared
@@ -149,9 +149,6 @@ process-global backend, provider, scene, or world.
 - Cameras are user-owned values passed to renderers rather than global runtime
   services.
 - UI retains composition/input/layout state inside an application-owned root.
-- External engine worlds, scenes, systems, and editors remain owned by that
-  engine. They may borrow libFDX runtime roots and frame values only within the
-  lifetimes documented by the corresponding libFDX declarations.
 - Scenario validation drives public input, time, event, probe, and capture
   boundaries without replacing normal runtime behavior.
 

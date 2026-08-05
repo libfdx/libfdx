@@ -53,9 +53,8 @@ requirements.
 
 ## Generated layout
 
-The selected sample's Java, assets, scenes, manifests, documentation, and
-sample-owned Gradle files are copied. The generator adds only the standalone
-root files:
+The selected sample's Java, assets, manifests, documentation, and sample-owned
+Gradle files are copied. The generator adds only the standalone root files:
 
 - `settings.gradle.kts`;
 - `build.gradle.kts`;
