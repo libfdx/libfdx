@@ -79,7 +79,7 @@ textures or samplers assigned to them.
 `ShaderGraphSampleGraphs.codeAuthoredSurface()` preserves the renderer-owned
 standard PBR input/output contract and adds material-owned `tint`, `warmth`,
 and `emissive_gain` parameters. The sample creates independent
-`GraphPbrMaterial` instances and assigns different values to prove the graph
+`GraphMaterial` instances and assigns different values to prove the graph
 parameters are applied per material.
 
 The surface graph does not take over the renderer. `ModelBatch` continues to

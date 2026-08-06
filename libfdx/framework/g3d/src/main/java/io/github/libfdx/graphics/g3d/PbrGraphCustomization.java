@@ -49,7 +49,7 @@ final class PbrGraphCustomization {
     private final ShaderGraphMaterialDefinition definition;
     private final ShaderProfile profile;
     private final ShaderGraphMaterialInstance defaultMaterial;
-    private final GraphPbrMaterial defaultGraphMaterial;
+    private final GraphMaterial defaultGraphMaterial;
     private final ShaderGraph vertexGraph;
     private final ShaderGraphCompileResult vertexCompilation;
     private final ShaderGraph lightingGraph;
@@ -98,7 +98,7 @@ final class PbrGraphCustomization {
         this.lightingGraph = lightingGraph;
         this.lightingCompilation = lightingCompilation;
         defaultMaterial = new ShaderGraphMaterialInstance(definition);
-        defaultGraphMaterial = new GraphPbrMaterial(
+        defaultGraphMaterial = new GraphMaterial(
                 "libfdx.standard.pbr.default", defaultMaterial);
         String materialFields = materialFields();
         String declarations = declarations();
@@ -127,11 +127,11 @@ final class PbrGraphCustomization {
         return new ShaderGraphMaterialInstance(definition);
     }
 
-    GraphPbrMaterial material(String id) {
-        return new GraphPbrMaterial(id, newMaterialInstance());
+    GraphMaterial material(String id) {
+        return new GraphMaterial(id, newMaterialInstance());
     }
 
-    GraphPbrMaterial defaultMaterial() {
+    GraphMaterial defaultMaterial() {
         return defaultGraphMaterial;
     }
 

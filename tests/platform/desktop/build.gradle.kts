@@ -108,6 +108,8 @@ val uiCustomSurfaceCapture =
     layout.buildDirectory.file("captures/ui-custom-surface.ppm").get().asFile.absolutePath
 val shaderGraphEditorCapture =
     layout.buildDirectory.file("captures/shader-graph-editor.ppm").get().asFile.absolutePath
+val shadingModels3DCapture =
+    layout.buildDirectory.file("captures/shading-models-3d.ppm").get().asFile.absolutePath
 val d3d12PbrStaticCapture =
     layout.buildDirectory.file("reports/shader-phase0/d3d12-smoke/static.ppm").get().asFile.absolutePath
 val d3d12PbrSkinnedCapture =
@@ -142,6 +144,16 @@ libfdx {
             runtimeClasspath(interactiveGraphicsRuntimeClasspath)
             graphics("wgpu", "WGPU")
             runDescription.set("Runs graphics tests with WGPU.")
+        }
+        target("wgpu_shading_models_3d") {
+            displayName.set("WGPU shading-model comparison test")
+            runtimeClasspath(wgpuRuntimeClasspath)
+            graphics("wgpu", "WGPU")
+            headless("shading-models-3d", 8, 800, 600,
+                shadingModels3DCapture, 4)
+            runDescription.set(
+                "Renders full PBR, partial PBR lighting, and unlit materials in one ModelBatch."
+            )
         }
         target("wgpu_compute") {
             displayName.set("WGPU handwritten compute test")

@@ -84,7 +84,7 @@ final class ModelBatchShaderProviderOwnershipTest {
         Mesh mesh = Mesh.coloredTriangle(graphics, "provider replacement");
         Renderable3D renderable = new Renderable3D(
                 new MeshPart(mesh, 0, 3),
-                new PbrMaterial("provider replacement"),
+                new Material("provider replacement"),
                 Matrix4.IDENTITY,
                 BoundingBox.empty());
         FakeRenderPass pass = new FakeRenderPass();

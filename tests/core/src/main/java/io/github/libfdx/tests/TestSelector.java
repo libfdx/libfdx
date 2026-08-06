@@ -27,6 +27,7 @@ import io.github.libfdx.tests.graphics.RecordedResourceRewriteTest;
 import io.github.libfdx.tests.graphics.RenderTargetChainTest;
 import io.github.libfdx.tests.graphics.RenderTargetCompatibilityTest;
 import io.github.libfdx.tests.graphics.ScissorViewportTest;
+import io.github.libfdx.tests.graphics.ShadingModels3DTest;
 import io.github.libfdx.tests.graphics.ShadowMap3DTest;
 import io.github.libfdx.tests.graphics.ShaderRuntimeTest;
 import io.github.libfdx.tests.graphics.ShaderGraphProgramTest;
@@ -201,6 +202,7 @@ public final class TestSelector {
     private static final String SKYBOX_3D = "skybox-3d";
     private static final String BILLBOARD_3D = "billboard-3d";
     private static final String PARTICLES_3D = "particles-3d";
+    private static final String SHADING_MODELS_3D = "shading-models-3d";
     private static final String POINT_LIGHT_3D = "point-light-3d";
     private static final String SPOT_LIGHT_3D = "spot-light-3d";
     private static final String SHADOW_MAP_3D = "shadow-map-3d";
@@ -344,6 +346,13 @@ public final class TestSelector {
                 @Override
                 public ApplicationListener create(long exitAfterFrames) {
                     return new Particles3DTest(exitAfterFrames);
+                }
+            }),
+            descriptor(SHADING_MODELS_3D, "Shading models 3D",
+                    "Graphics 3D", 800, 600, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new ShadingModels3DTest(exitAfterFrames);
                 }
             }),
             descriptor(POINT_LIGHT_3D, "Point light 3D", "Graphics 3D", 640, 480, new TestFactory() {

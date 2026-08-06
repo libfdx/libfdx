@@ -43,8 +43,8 @@ public final class PbrShaderManifestTool {
         try {
             byte[] staticReflection = reflect(compiler, temporaryDirectory, "pbr-static", staticSource);
             byte[] skinnedReflection = reflect(compiler, temporaryDirectory, "pbr-skinned", skinnedSource);
-            ShaderReflection freshStatic = decodeAndRequireSize(staticReflection, 1_216, "static");
-            ShaderReflection freshSkinned = decodeAndRequireSize(skinnedReflection, 5_328, "skinned");
+            ShaderReflection freshStatic = decodeAndRequireSize(staticReflection, 1_232, "static");
+            ShaderReflection freshSkinned = decodeAndRequireSize(skinnedReflection, 5_344, "skinned");
             String generated = generatedSource(staticSource, skinnedSource, staticReflection, skinnedReflection);
             if (check) {
                 if (!Files.isRegularFile(output)) {

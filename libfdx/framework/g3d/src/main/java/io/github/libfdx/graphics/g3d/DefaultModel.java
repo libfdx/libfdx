@@ -17,6 +17,7 @@ public final class DefaultModel implements Model {
     private final Array<AnimationClip> animations;
     private final Array<Skin> skins;
     private final Array<Mesh> meshes;
+    private final Array<Disposable> ownedResources;
     private final ArrayView<ModelNode> readOnlyNodes;
     private final ArrayView<Material> readOnlyMaterials;
     private final ArrayView<AnimationClip> readOnlyAnimations;
@@ -33,7 +34,7 @@ public final class DefaultModel implements Model {
      */
     public DefaultModel(ArrayView<ModelNode> nodes, ArrayView<Material> materials,
             ArrayView<AnimationClip> animations, ArrayView<Mesh> meshes) {
-        this(nodes, materials, animations, new Array<Skin>(0), meshes);
+        this(nodes, materials, animations, new Array<Skin>(0), meshes, null);
     }
 
     /**
@@ -47,11 +48,39 @@ public final class DefaultModel implements Model {
      */
     public DefaultModel(ArrayView<ModelNode> nodes, ArrayView<Material> materials,
             ArrayView<AnimationClip> animations, ArrayView<Skin> skins, ArrayView<Mesh> meshes) {
+        this(nodes, materials, animations, skins, meshes, null);
+    }
+
+    /**
+     * Creates a default model with additional explicitly owned resources.
+     * Materials and their attributes are borrowed.
+     *
+     * @param nodes the nodes
+     * @param materials borrowed materials
+     * @param animations the animations
+     * @param skins the skins
+     * @param meshes owned meshes
+     * @param ownedResources additional owned resources
+     */
+    public DefaultModel(ArrayView<ModelNode> nodes,
+            ArrayView<Material> materials,
+            ArrayView<AnimationClip> animations, ArrayView<Skin> skins,
+            ArrayView<Mesh> meshes,
+            ArrayView<? extends Disposable> ownedResources) {
         this.nodes = copy(nodes);
         this.materials = copy(materials);
         this.animations = copy(animations);
         this.skins = copy(skins);
         this.meshes = copy(meshes);
+        this.ownedResources = new Array<Disposable>();
+        if (ownedResources != null) {
+            for (int i = 0; i < ownedResources.size(); i++) {
+                Disposable resource = ownedResources.get(i);
+                if (resource != null) {
+                    this.ownedResources.add(resource);
+                }
+            }
+        }
         readOnlyNodes = this.nodes.view();
         readOnlyMaterials = this.materials.view();
         readOnlyAnimations = this.animations.view();
@@ -67,6 +96,20 @@ public final class DefaultModel implements Model {
      * @return a new default model
      */
     public static DefaultModel singleNode(String id, MeshPart meshPart, Material material) {
+        return singleNode(id, meshPart, material, (Disposable[])null);
+    }
+
+    /**
+     * Creates a one-node model with additional explicitly owned resources.
+     *
+     * @param id model ID
+     * @param meshPart owned mesh part
+     * @param material borrowed material
+     * @param ownedResources additional owned resources
+     * @return model
+     */
+    public static DefaultModel singleNode(String id, MeshPart meshPart,
+            Material material, Disposable... ownedResources) {
         ModelNodePart nodePart = new ModelNodePart(meshPart, material);
         ModelNode node = new ModelNode(id).addPart(nodePart);
         Array<ModelNode> nodes = new Array<ModelNode>();
@@ -75,7 +118,17 @@ public final class DefaultModel implements Model {
         materials.add(material);
         Array<Mesh> meshes = new Array<Mesh>();
         meshes.add(meshPart.mesh());
-        return new DefaultModel(nodes, materials, new Array<AnimationClip>(0), meshes);
+        Array<Disposable> resources = new Array<Disposable>();
+        if (ownedResources != null) {
+            for (Disposable resource : ownedResources) {
+                if (resource != null) {
+                    resources.add(resource);
+                }
+            }
+        }
+        return new DefaultModel(nodes, materials,
+                new Array<AnimationClip>(0), new Array<Skin>(0), meshes,
+                resources);
     }
 
     private static <T> Array<T> copy(ArrayView<T> values) {
@@ -131,18 +184,18 @@ public final class DefaultModel implements Model {
             return;
         }
         disposed = true;
-        ObjectSet<Mesh> disposedMeshes = new ObjectSet<Mesh>();
+        ObjectSet<Disposable> disposedResources =
+                new ObjectSet<Disposable>();
         for (int i = 0; i < meshes.size(); i++) {
             Mesh mesh = meshes.get(i);
-            if (mesh != null && disposedMeshes.add(mesh)) {
+            if (mesh != null && disposedResources.add(mesh)) {
                 mesh.dispose();
             }
         }
-        ObjectSet<Disposable> disposedMaterials = new ObjectSet<Disposable>();
-        for (int i = 0; i < materials.size(); i++) {
-            Material material = materials.get(i);
-            if (material instanceof Disposable && disposedMaterials.add((Disposable)material)) {
-                ((Disposable)material).dispose();
+        for (int i = 0; i < ownedResources.size(); i++) {
+            Disposable resource = ownedResources.get(i);
+            if (resource != null && disposedResources.add(resource)) {
+                resource.dispose();
             }
         }
     }

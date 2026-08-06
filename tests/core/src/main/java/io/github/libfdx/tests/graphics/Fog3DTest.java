@@ -19,7 +19,8 @@ import io.github.libfdx.graphics.g3d.Environment3D;
 import io.github.libfdx.graphics.g3d.MeshPart;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
-import io.github.libfdx.graphics.g3d.PbrMaterial;
+import io.github.libfdx.graphics.g3d.Material;
+import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.math.Matrix4;
@@ -206,9 +207,9 @@ public final class Fog3DTest extends ApplicationAdapter {
                 toFloatArray(colors), toFloatArray(normals), toFloatArray(texCoords),
                 toFloatArray(pbr), toFloatArray(emissive), bounds(sourcePositions));
         MeshPart meshPart = new MeshPart("fog-3d cube part", mesh, null, 0, mesh.vertexCount());
-        PbrMaterial material = new PbrMaterial("fog-3d material")
-                .roughnessFactor(0.72f)
-                .metallicFactor(0.02f);
+        Material material = new Material("fog-3d material")
+                .set(PbrAttributes.roughnessFactor(0.72f))
+                .set(PbrAttributes.metallicFactor(0.02f));
         return DefaultModel.singleNode("fog-3d cube", meshPart, material);
     }
 

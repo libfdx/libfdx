@@ -22,6 +22,11 @@ public final class DefaultRenderQueue3D implements RenderQueue3D {
             if (alpha != 0) {
                 return alpha;
             }
+            int shadingModel = left.material().shadingModel()
+                    .compareTo(right.material().shadingModel());
+            if (shadingModel != 0) {
+                return shadingModel;
+            }
             int material = left.material().id().compareTo(right.material().id());
             if (material != 0) {
                 return material;

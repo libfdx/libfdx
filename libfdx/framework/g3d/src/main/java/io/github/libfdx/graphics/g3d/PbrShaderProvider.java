@@ -39,7 +39,11 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 
 /**
- * Provides pbr shader services.
+ * Provides the standard PBR and unlit material shader services.
+ *
+ * <p>The provider accepts {@link ShadingModel#PBR} and
+ * {@link ShadingModel#UNLIT}. A material-specific provider remains the
+ * extension point for toon or other custom shading models.</p>
  *
  * @author xpenatan
  */
@@ -104,6 +108,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 postProcessing : vec4f,
                 textureFlags : vec4f,
                 emissiveFlags : vec4f,
+                materialParams : vec4f,
                 fogColor : vec4f,
                 fogParams : vec4f,
                 skyZenithColor : vec4f,
@@ -467,12 +472,16 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 }
                 var n = mappedNormal(input.normal, input.worldPosition, uv);
                 //__PBR_SURFACE_GRAPH_EVALUATION__
+                let albedo = base.rgb;
+                let lightingInfluence = clamp(uniforms.materialParams.x,
+                        0.0, 1.0);
+                var color = albedo + emissive;
+                if (lightingInfluence > 0.0) {
                 let v = normalize(uniforms.cameraPosition.xyz - input.worldPosition);
                 let l = normalize(-uniforms.lightDirection.xyz);
-                let albedo = base.rgb;
                 let radiance = uniforms.lightColorIntensity.rgb * uniforms.lightColorIntensity.a;
                 let shadow = directionalShadow(input.worldPosition);
-                var color = pbrLightContribution(n, v, l, albedo, metallic, roughness, radiance * shadow);
+                color = pbrLightContribution(n, v, l, albedo, metallic, roughness, radiance * shadow);
                 let fillRadiance = uniforms.fillLightColorIntensity.rgb
                         * uniforms.fillLightColorIntensity.a;
                 if (uniforms.fillLightColorIntensity.a > 0.0) {
@@ -523,6 +532,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 color += uniforms.ambientColor.rgb * albedo * ao;
                 color += emissive;
                 //__PBR_LIGHTING_GRAPH_EVALUATION__
+                color = mix(albedo + emissive, color,
+                        lightingInfluence);
+                }
                 let viewDistance = distance(uniforms.cameraPosition.xyz, input.worldPosition);
                 let fogRange = max(uniforms.fogParams.y - uniforms.fogParams.x, 0.0001);
                 let fogAmount = clamp((viewDistance - uniforms.fogParams.x) / fogRange,
@@ -686,6 +698,22 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 || "d3d12".equals(providerId);
     }
 
+    private static boolean supportsShadingModel(Material material) {
+        if (material == null) {
+            return false;
+        }
+        ShadingModel model = material.shadingModel();
+        return ShadingModel.PBR.equals(model)
+                || ShadingModel.UNLIT.equals(model);
+    }
+
+    private static float lightingInfluence(Material material) {
+        return material != null
+                && ShadingModel.UNLIT.equals(material.shadingModel())
+                        ? 0.0f
+                        : MaterialAttributes.lightingInfluence(material);
+    }
+
     /**
      * Runs the shader step.
      *
@@ -697,6 +725,12 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
     public Shader3D shader(Renderable3D renderable, RenderContext3D context) {
         if (disposed) {
             throw new FdxException("PbrShaderProvider has been disposed");
+        }
+        if (renderable != null
+                && !supportsShadingModel(renderable.material())) {
+            throw new FdxException("PbrShaderProvider does not support shading model '"
+                    + renderable.material().shadingModel()
+                    + "'; install a material shader provider for custom models");
         }
         if (gpuShader != null && gpuShader.canRender(renderable)) {
             return gpuShader;
@@ -1132,10 +1166,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             float green = colors[colorOffset + 1];
             float blue = colors[colorOffset + 2];
             float alpha = colors[colorOffset + 3];
-            PbrMaterial pbrMaterial = material instanceof PbrMaterial
-                    ? (PbrMaterial)material : null;
-            if (applyMaterialBaseColor && pbrMaterial != null) {
-                Color baseColor = pbrMaterial.baseColor();
+            if (applyMaterialBaseColor) {
+                Color baseColor = MaterialAttributes.baseColor(material);
                 red *= baseColor.red();
                 green *= baseColor.green();
                 blue *= baseColor.blue();
@@ -1144,16 +1176,40 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             if (normals == null) {
                 return obtainColorVertex(red, green, blue, alpha);
             }
+            float emissiveRed = 0.0f;
+            float emissiveGreen = 0.0f;
+            float emissiveBlue = 0.0f;
+            if (emissive != null) {
+                int emissiveOffset = vertex * 3;
+                emissiveRed = emissive[emissiveOffset];
+                emissiveGreen = emissive[emissiveOffset + 1];
+                emissiveBlue = emissive[emissiveOffset + 2];
+            }
+            else {
+                Color emissiveColor =
+                        MaterialAttributes.emissiveColor(material);
+                emissiveRed = emissiveColor.red();
+                emissiveGreen = emissiveColor.green();
+                emissiveBlue = emissiveColor.blue();
+            }
+            float lightingInfluence = lightingInfluence(material);
+            if (lightingInfluence <= 0.0f) {
+                return applyFog(obtainColorVertex(
+                        linearToSrgb(red + emissiveRed),
+                        linearToSrgb(green + emissiveGreen),
+                        linearToSrgb(blue + emissiveBlue),
+                        alpha), worldVertex, context);
+            }
 
             WorldVertex normal = worldNormal(normals, vertex, worldMatrix);
             if (normal.lengthSquared() == 0.0f) {
                 normal = faceNormal;
             }
             float ao = 1.0f;
-            float metallic = pbrMaterial != null
-                    ? clamp(pbrMaterial.metallicFactor(), 0.0f, 1.0f) : 0.0f;
-            float roughness = pbrMaterial != null
-                    ? clamp(pbrMaterial.roughnessFactor(), 0.04f, 1.0f) : 1.0f;
+            float metallic = clamp(PbrAttributes.metallicFactor(material),
+                    0.0f, 1.0f);
+            float roughness = clamp(PbrAttributes.roughnessFactor(material),
+                    0.04f, 1.0f);
             if (pbr != null) {
                 int pbrOffset = vertex * 3;
                 ao = clamp(pbr[pbrOffset], 0.0f, 1.0f);
@@ -1269,26 +1325,20 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             outGreen += skyContribution.green;
             outBlue += skyContribution.blue;
 
-            float emissiveRed = 0.0f;
-            float emissiveGreen = 0.0f;
-            float emissiveBlue = 0.0f;
-            if (emissive != null) {
-                int emissiveOffset = vertex * 3;
-                emissiveRed = emissive[emissiveOffset];
-                emissiveGreen = emissive[emissiveOffset + 1];
-                emissiveBlue = emissive[emissiveOffset + 2];
-            }
-            else if (pbrMaterial != null) {
-                Color emissiveFactor = pbrMaterial.emissiveFactor();
-                emissiveRed = emissiveFactor.red();
-                emissiveGreen = emissiveFactor.green();
-                emissiveBlue = emissiveFactor.blue();
-            }
+            float unlitRed = red + emissiveRed;
+            float unlitGreen = green + emissiveGreen;
+            float unlitBlue = blue + emissiveBlue;
+            float litRed = outRed + emissiveRed;
+            float litGreen = outGreen + emissiveGreen;
+            float litBlue = outBlue + emissiveBlue;
 
             return applyFog(obtainColorVertex(
-                    linearToSrgb(outRed + emissiveRed),
-                    linearToSrgb(outGreen + emissiveGreen),
-                    linearToSrgb(outBlue + emissiveBlue),
+                    linearToSrgb(unlitRed
+                            + (litRed - unlitRed) * lightingInfluence),
+                    linearToSrgb(unlitGreen
+                            + (litGreen - unlitGreen) * lightingInfluence),
+                    linearToSrgb(unlitBlue
+                            + (litBlue - unlitBlue) * lightingInfluence),
                     alpha), worldVertex, context);
         }
 
@@ -1894,7 +1944,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     selectedBinding = materialBinding != null
                             ? materialBinding
                             : resolved.defaultResources();
-            if (selectedBinding instanceof GraphPbrMaterial graphMaterial) {
+            if (selectedBinding instanceof GraphMaterial graphMaterial) {
                 graphMaterial.writeParameters(
                         resolved.resourceLayout(),
                         uniforms.block());
@@ -2346,14 +2396,30 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         }
 
         private void applyMaterial(RenderPass pass, Material material) {
-            PbrMaterial pbr = material instanceof PbrMaterial ? (PbrMaterial)material : null;
-            Texture baseColor = pbr != null && pbr.baseColorTexture() != null ? pbr.baseColorTexture() : whiteTexture;
-            Texture metallicRoughness = pbr != null && pbr.metallicRoughnessTexture() != null
-                    ? pbr.metallicRoughnessTexture()
+            Texture materialBaseColor =
+                    MaterialAttributes.baseColorTexture(material);
+            float lightingInfluence = lightingInfluence(material);
+            boolean evaluateLighting = lightingInfluence > 0.0f;
+            Texture materialMetallicRoughness = evaluateLighting
+                    ? PbrAttributes.metallicRoughnessTexture(material)
+                    : null;
+            Texture materialNormal = evaluateLighting
+                    ? MaterialAttributes.normalTexture(material) : null;
+            Texture materialOcclusion = evaluateLighting
+                    ? PbrAttributes.occlusionTexture(material) : null;
+            Texture materialEmissive =
+                    MaterialAttributes.emissiveTexture(material);
+            Texture baseColor = materialBaseColor != null
+                    ? materialBaseColor : whiteTexture;
+            Texture metallicRoughness = materialMetallicRoughness != null
+                    ? materialMetallicRoughness
                     : whiteTexture;
-            Texture normal = pbr != null && pbr.normalTexture() != null ? pbr.normalTexture() : normalTexture;
-            Texture occlusion = pbr != null && pbr.occlusionTexture() != null ? pbr.occlusionTexture() : whiteTexture;
-            Texture emissive = pbr != null && pbr.emissiveTexture() != null ? pbr.emissiveTexture() : blackTexture;
+            Texture normal = materialNormal != null
+                    ? materialNormal : normalTexture;
+            Texture occlusion = materialOcclusion != null
+                    ? materialOcclusion : whiteTexture;
+            Texture emissive = materialEmissive != null
+                    ? materialEmissive : blackTexture;
             uniforms.bindTexture(pass, 0, baseColor);
             uniforms.bindTexture(pass, 1, metallicRoughness);
             uniforms.bindTexture(pass, 2, normal);
@@ -2361,15 +2427,17 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             uniforms.bindTexture(pass, 4, emissive);
             applyShadowTextures(pass, context.environment());
             uniforms.setUniform1i(uniforms.HAS_BASE_COLOR_TEXTURE,
-                    pbr != null && pbr.baseColorTexture() != null ? 1 : 0);
+                    materialBaseColor != null ? 1 : 0);
             uniforms.setUniform1i(uniforms.HAS_METALLIC_ROUGHNESS_TEXTURE,
-                    pbr != null && pbr.metallicRoughnessTexture() != null ? 1 : 0);
+                    materialMetallicRoughness != null ? 1 : 0);
             uniforms.setUniform1i(uniforms.HAS_NORMAL_TEXTURE,
-                    pbr != null && pbr.normalTexture() != null ? 1 : 0);
+                    materialNormal != null ? 1 : 0);
             uniforms.setUniform1i(uniforms.HAS_OCCLUSION_TEXTURE,
-                    pbr != null && pbr.occlusionTexture() != null ? 1 : 0);
+                    materialOcclusion != null ? 1 : 0);
             uniforms.setUniform1i(uniforms.HAS_EMISSIVE_TEXTURE,
-                    pbr != null && pbr.emissiveTexture() != null ? 1 : 0);
+                    materialEmissive != null ? 1 : 0);
+            uniforms.setUniform1f(uniforms.LIGHTING_INFLUENCE,
+                    lightingInfluence);
         }
 
         private void applyShadowTextures(RenderPass pass, Environment3D environment) {

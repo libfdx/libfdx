@@ -20,7 +20,8 @@ import io.github.libfdx.graphics.g3d.Environment3D;
 import io.github.libfdx.graphics.g3d.MeshPart;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
-import io.github.libfdx.graphics.g3d.PbrMaterial;
+import io.github.libfdx.graphics.g3d.Material;
+import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.math.Matrix4;
@@ -209,9 +210,9 @@ public final class Outline3DTest extends ApplicationAdapter {
                 toFloatArray(colors), toFloatArray(normals), toFloatArray(texCoords),
                 toFloatArray(pbr), toFloatArray(emissive), bounds(sourcePositions));
         MeshPart meshPart = new MeshPart("outline-3d cube part", mesh, null, 0, mesh.vertexCount());
-        PbrMaterial material = new PbrMaterial("outline-3d material")
-                .roughnessFactor(0.66f)
-                .metallicFactor(0.02f);
+        Material material = new Material("outline-3d material")
+                .set(PbrAttributes.roughnessFactor(0.66f))
+                .set(PbrAttributes.metallicFactor(0.02f));
         return DefaultModel.singleNode("outline-3d cube", meshPart, material);
     }
 

@@ -25,7 +25,9 @@ import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
 import io.github.libfdx.graphics.g3d.ModelBuilder;
 import io.github.libfdx.graphics.g3d.ParticleEmitter3D;
-import io.github.libfdx.graphics.g3d.PbrMaterial;
+import io.github.libfdx.graphics.g3d.Material;
+import io.github.libfdx.graphics.g3d.MaterialAttributes;
+import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.graphics.g3d.SkyboxRenderer3D;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.math.Matrix4;
@@ -216,14 +218,16 @@ public final class Particles3DTest extends ApplicationAdapter {
     private void createModels() {
         ModelBuilder builder = new ModelBuilder(graphics);
         floorModel = builder
-                .material(new PbrMaterial("particles 3d floor material")
-                        .baseColor(0.20f, 0.28f, 0.30f, 1.0f)
-                        .roughnessFactor(0.94f))
+                .material(new Material("particles 3d floor material")
+                        .set(MaterialAttributes.baseColor(
+                                0.20f, 0.28f, 0.30f, 1.0f))
+                        .set(PbrAttributes.roughnessFactor(0.94f)))
                 .box("particles 3d floor", 5.0f, 0.08f, 4.4f);
         emitterModel = builder
-                .material(new PbrMaterial("particles 3d emitter material")
-                        .baseColor(0.70f, 0.25f, 0.20f, 1.0f)
-                        .roughnessFactor(0.78f))
+                .material(new Material("particles 3d emitter material")
+                        .set(MaterialAttributes.baseColor(
+                                0.70f, 0.25f, 0.20f, 1.0f))
+                        .set(PbrAttributes.roughnessFactor(0.78f)))
                 .box("particles 3d emitter", 0.38f, 0.22f, 0.38f);
         floorInstance = new DefaultModelInstance(floorModel)
                 .transform(Matrix4.translation(0.0f, -0.70f, -1.25f));

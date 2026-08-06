@@ -15,9 +15,18 @@ public final class ModelVertexUsage {
     public static final long COLOR = 1L << 1;
     /** Includes vertex normals. */
     public static final long NORMAL = 1L << 2;
+    /**
+     * Emits the full standard-PBR vertex layout. This flag requires
+     * {@link #COLOR} and {@link #NORMAL}; material factors are read from
+     * {@link MaterialAttributes} and {@link PbrAttributes} when the mesh is
+     * built.
+     */
+    public static final long PBR_LAYOUT = 1L << 3;
     /** Preserves the position/color output used by the original builders. */
     public static final long DEFAULT = POSITION | COLOR;
-    /** Includes every vertex usage supported by {@link ModelBuilder}. */
+    /** Standard lit geometry accepted by the GPU PBR and shadow pipelines. */
+    public static final long STANDARD_PBR = DEFAULT | NORMAL | PBR_LAYOUT;
+    /** Includes every independently selectable vertex attribute. */
     public static final long ALL = POSITION | COLOR | NORMAL;
 
     private ModelVertexUsage() {

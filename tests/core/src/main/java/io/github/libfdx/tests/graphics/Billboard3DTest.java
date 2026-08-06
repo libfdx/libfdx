@@ -24,7 +24,9 @@ import io.github.libfdx.graphics.g3d.Environment3D;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
 import io.github.libfdx.graphics.g3d.ModelBuilder;
-import io.github.libfdx.graphics.g3d.PbrMaterial;
+import io.github.libfdx.graphics.g3d.Material;
+import io.github.libfdx.graphics.g3d.MaterialAttributes;
+import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.graphics.g3d.SkyboxRenderer3D;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.math.Matrix4;
@@ -221,14 +223,16 @@ public final class Billboard3DTest extends ApplicationAdapter {
     private void createModels() {
         ModelBuilder builder = new ModelBuilder(graphics);
         floorModel = builder
-                .material(new PbrMaterial("billboard floor material")
-                        .baseColor(0.42f, 0.43f, 0.40f, 1.0f)
-                        .roughnessFactor(0.9f))
+                .material(new Material("billboard floor material")
+                        .set(MaterialAttributes.baseColor(
+                                0.42f, 0.43f, 0.40f, 1.0f))
+                        .set(PbrAttributes.roughnessFactor(0.9f)))
                 .box("billboard floor", 4.8f, 0.08f, 4.2f);
         pillarModel = builder
-                .material(new PbrMaterial("billboard pillar material")
-                        .baseColor(0.54f, 0.49f, 0.44f, 1.0f)
-                        .roughnessFactor(0.82f))
+                .material(new Material("billboard pillar material")
+                        .set(MaterialAttributes.baseColor(
+                                0.54f, 0.49f, 0.44f, 1.0f))
+                        .set(PbrAttributes.roughnessFactor(0.82f)))
                 .box("billboard pillar", 0.78f, 1.72f, 0.78f);
         floorInstance = new DefaultModelInstance(floorModel)
                 .transform(Matrix4.translation(0.0f, -0.70f, -1.25f));

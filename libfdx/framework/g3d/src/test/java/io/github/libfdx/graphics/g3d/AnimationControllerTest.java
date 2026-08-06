@@ -214,7 +214,7 @@ final class AnimationControllerTest {
     void pbrShaderUploadsSkinningPaletteForSkinnedRenderable() {
         FakeGraphicsContext graphics = new FakeGraphicsContext(ProviderId.of("gl"));
         Skin skin = skin();
-        PbrMaterial material = new PbrMaterial("skin-material");
+        Material material = new Material("skin-material");
         Mesh mesh = skinnedGpuMesh(graphics, "gpu-skinned");
         ModelNode root = new ModelNode("root").addPart(new ModelNodePart(
                 new MeshPart("gpu-part", mesh, null, 0, mesh.vertexCount()), material, skin,
@@ -291,7 +291,7 @@ final class AnimationControllerTest {
 
     private static DefaultModel skinnedModel(FakeGraphicsContext graphics) {
         Skin skin = skin();
-        PbrMaterial material = new PbrMaterial("skin-material");
+        Material material = new Material("skin-material");
         Mesh firstMesh = skinnedMesh(graphics, "skinned-a", 0.0f);
         Mesh secondMesh = skinnedMesh(graphics, "skinned-b", 2.0f);
         ModelNode root = new ModelNode("root").localTransform(Matrix4.translation(1.0f, 0.0f, 0.0f))

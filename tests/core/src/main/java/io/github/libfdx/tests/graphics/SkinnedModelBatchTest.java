@@ -29,7 +29,9 @@ import io.github.libfdx.graphics.g3d.ModelBatch;
 import io.github.libfdx.graphics.g3d.ModelBatchConfig;
 import io.github.libfdx.graphics.g3d.ModelNode;
 import io.github.libfdx.graphics.g3d.ModelNodePart;
-import io.github.libfdx.graphics.g3d.PbrMaterial;
+import io.github.libfdx.graphics.g3d.Material;
+import io.github.libfdx.graphics.g3d.MaterialAttributes;
+import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.graphics.g3d.Skeleton;
 import io.github.libfdx.graphics.g3d.ShaderGraphPbrTestSupport;
 import io.github.libfdx.graphics.g3d.Skin;
@@ -241,9 +243,10 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
                 null,
                 BoundingBox.of(new Vector3(-1.35f, -1.15f, -0.16f), new Vector3(1.35f, 1.15f, 0.16f)),
                 true);
-        PbrMaterial material = new PbrMaterial("skinned material")
-                .baseColor(1.0f, 1.0f, 1.0f, 1.0f)
-                .roughnessFactor(0.82f)
+        Material material = new Material("skinned material")
+                .set(MaterialAttributes.baseColor(
+                        1.0f, 1.0f, 1.0f, 1.0f))
+                .set(PbrAttributes.roughnessFactor(0.82f))
                 .doubleSided(true);
         ModelNode root = new ModelNode("root").addPart(new ModelNodePart(
                 new MeshPart("skinned ribbon part", mesh, null, 0, mesh.vertexCount()), material, skin,

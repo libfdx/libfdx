@@ -24,10 +24,12 @@ import io.github.libfdx.graphics.g2d.TextureRegion;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
 import io.github.libfdx.graphics.g3d.Environment3D;
-import io.github.libfdx.graphics.g3d.GraphPbrMaterial;
+import io.github.libfdx.graphics.g3d.GraphMaterial;
+import io.github.libfdx.graphics.g3d.MaterialAttributes;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
 import io.github.libfdx.graphics.g3d.ModelBatchConfig;
+import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.graphics.g3d.StandardPbrTechnique;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCacheContext;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompileOptions;
@@ -157,11 +159,11 @@ public final class ShaderGraphSampleApplication extends ApplicationAdapter {
                 new SpriteBatchConfig()
                         .shaderProvider(spriteShaderProvider));
 
-        GraphPbrMaterial floorMaterial = material("floor", 0.08f,
+        GraphMaterial floorMaterial = material("floor", 0.08f,
                 0.30f, 0.36f, 0.48f, 0.86f);
-        GraphPbrMaterial leftMaterial = material("cool", 0.0f,
+        GraphMaterial leftMaterial = material("cool", 0.0f,
                 0.20f, 0.62f, 0.95f, 0.34f);
-        GraphPbrMaterial rightMaterial = material("warm", 1.0f,
+        GraphMaterial rightMaterial = material("warm", 1.0f,
                 0.98f, 0.38f, 0.12f, 0.56f);
         floorModel = ShaderGraphSampleModelFactory.box(graphics,
                 "shader graph floor", 7.0f, 0.12f, 5.0f,
@@ -342,12 +344,13 @@ public final class ShaderGraphSampleApplication extends ApplicationAdapter {
                 "libfdx.sample.graphSource", "asset").trim();
     }
 
-    private GraphPbrMaterial material(String id, float warmth,
+    private GraphMaterial material(String id, float warmth,
             float red, float green, float blue, float roughness) {
-        GraphPbrMaterial material = activePbrTechnique.material(id);
-        material.baseColor(1.0f, 1.0f, 1.0f, 1.0f)
-                .metallicFactor(0.16f)
-                .roughnessFactor(roughness);
+        GraphMaterial material = activePbrTechnique.material(id);
+        material.set(MaterialAttributes.baseColor(
+                        1.0f, 1.0f, 1.0f, 1.0f))
+                .set(PbrAttributes.metallicFactor(0.16f))
+                .set(PbrAttributes.roughnessFactor(roughness));
         material.graphMaterial()
                 .set("tint", ShaderGraphLiteral.composite(VEC4,
                         ShaderGraphLiteral.f32(red),

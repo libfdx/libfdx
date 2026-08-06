@@ -37,6 +37,7 @@ final class PbrShaderParameters {
     final ShaderParameterHandle POST_PROCESSING;
     final ShaderParameterHandle TEXTURE_FLAGS;
     final ShaderParameterHandle EMISSIVE_FLAGS;
+    final ShaderParameterHandle MATERIAL_PARAMS;
     final ShaderParameterHandle FOG_COLOR;
     final ShaderParameterHandle FOG_PARAMS;
     final ShaderParameterHandle SKY_ZENITH_COLOR;
@@ -73,6 +74,7 @@ final class PbrShaderParameters {
     final ShaderParameterHandle HAS_NORMAL_TEXTURE;
     final ShaderParameterHandle HAS_OCCLUSION_TEXTURE;
     final ShaderParameterHandle HAS_EMISSIVE_TEXTURE;
+    final ShaderParameterHandle LIGHTING_INFLUENCE;
     final ShaderParameterHandle LIGHT_INTENSITY;
     final ShaderParameterHandle FILL_LIGHT_INTENSITY;
     final ShaderParameterHandle POINT_LIGHT_COUNT_VALUE;
@@ -143,6 +145,7 @@ final class PbrShaderParameters {
         POST_PROCESSING = layout.requireHandle("postProcessing");
         TEXTURE_FLAGS = layout.requireHandle("textureFlags");
         EMISSIVE_FLAGS = layout.requireHandle("emissiveFlags");
+        MATERIAL_PARAMS = layout.requireHandle("materialParams");
         FOG_COLOR = layout.requireHandle("fogColor");
         FOG_PARAMS = layout.requireHandle("fogParams");
         SKY_ZENITH_COLOR = layout.requireHandle("skyZenithColor");
@@ -179,6 +182,7 @@ final class PbrShaderParameters {
         HAS_NORMAL_TEXTURE = TEXTURE_FLAGS.component(2);
         HAS_OCCLUSION_TEXTURE = TEXTURE_FLAGS.component(3);
         HAS_EMISSIVE_TEXTURE = EMISSIVE_FLAGS.component(0);
+        LIGHTING_INFLUENCE = MATERIAL_PARAMS.component(0);
         LIGHT_INTENSITY = LIGHT_COLOR_INTENSITY.component(3);
         FILL_LIGHT_INTENSITY = FILL_LIGHT_COLOR_INTENSITY.component(3);
         POINT_LIGHT_COUNT_VALUE = POINT_LIGHT_COUNT.component(0);

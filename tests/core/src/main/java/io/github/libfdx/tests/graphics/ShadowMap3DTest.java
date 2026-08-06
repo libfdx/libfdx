@@ -32,9 +32,10 @@ import io.github.libfdx.graphics.g3d.Environment3D;
 import io.github.libfdx.graphics.g3d.G3DAssetLoaders;
 import io.github.libfdx.graphics.g3d.MeshPart;
 import io.github.libfdx.graphics.g3d.Material;
+import io.github.libfdx.graphics.g3d.MaterialAttributes;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
-import io.github.libfdx.graphics.g3d.PbrMaterial;
+import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.graphics.g3d.SkyEnvironment3D;
 import io.github.libfdx.graphics.g3d.SkyboxRenderer3D;
 import io.github.libfdx.math.BoundingBox;
@@ -799,14 +800,14 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
         }
         for (int i = 0; i < model.materials().size(); i++) {
             Material material = model.materials().get(i);
-            if (material instanceof PbrMaterial) {
-                PbrMaterial pbr = (PbrMaterial)material;
-                Color baseColor = pbr.baseColor();
-                pbr.metallicFactor(metallic)
-                        .roughnessFactor(roughness)
-                        .baseColor(baseColor.red() * redTint, baseColor.green() * greenTint,
-                                baseColor.blue() * blueTint, baseColor.alpha());
-            }
+            Color baseColor = MaterialAttributes.baseColor(material);
+            material.set(PbrAttributes.metallicFactor(metallic))
+                    .set(PbrAttributes.roughnessFactor(roughness))
+                    .set(MaterialAttributes.baseColor(
+                            baseColor.red() * redTint,
+                            baseColor.green() * greenTint,
+                            baseColor.blue() * blueTint,
+                            baseColor.alpha()));
         }
     }
 
@@ -1144,9 +1145,9 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
         Mesh mesh = Mesh.positionColor3D(graphics, "shadow-map-3d floor", positions, colors, normals, texCoords,
                 pbr, emissive, bounds(positions));
         MeshPart meshPart = new MeshPart("shadow-map-3d floor part", mesh, null, 0, mesh.vertexCount());
-        PbrMaterial material = new PbrMaterial("shadow-map-3d floor material")
-                .roughnessFactor(0.95f)
-                .metallicFactor(0.0f);
+        Material material = new Material("shadow-map-3d floor material")
+                .set(PbrAttributes.roughnessFactor(0.95f))
+                .set(PbrAttributes.metallicFactor(0.0f));
         return DefaultModel.singleNode("shadow-map-3d floor", meshPart, material);
     }
 
@@ -1310,9 +1311,9 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
                 toFloatArray(normals), toFloatArray(texCoords), toFloatArray(pbr), toFloatArray(emissive),
                 bounds(sourcePositions));
         MeshPart meshPart = new MeshPart(name + " part", mesh, null, 0, mesh.vertexCount());
-        PbrMaterial material = new PbrMaterial(name + " material")
-                .roughnessFactor(roughness)
-                .metallicFactor(metallic);
+        Material material = new Material(name + " material")
+                .set(PbrAttributes.roughnessFactor(roughness))
+                .set(PbrAttributes.metallicFactor(metallic));
         return DefaultModel.singleNode(name, meshPart, material);
     }
 

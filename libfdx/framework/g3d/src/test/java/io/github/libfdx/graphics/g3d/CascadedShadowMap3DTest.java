@@ -395,7 +395,7 @@ final class CascadedShadowMap3DTest {
                 },
                 BoundingBox.empty());
         return new Renderable3D(new MeshPart("cascade-pbr", mesh, null, 0, mesh.vertexCount()),
-                new PbrMaterial("cascade-material"), Matrix4.IDENTITY, mesh.bounds());
+                new Material("cascade-material"), Matrix4.IDENTITY, mesh.bounds());
     }
 
     private static final class FakeGraphicsContext implements GraphicsContext {

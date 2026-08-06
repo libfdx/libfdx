@@ -226,9 +226,9 @@ public final class StandardPbrTechnique {
      * Creates a material instance for this technique's surface schema.
      *
      * @param id material ID
-     * @return graph PBR material
+     * @return graph material
      */
-    public GraphPbrMaterial material(String id) {
+    public GraphMaterial material(String id) {
         return customization.material(id);
     }
 

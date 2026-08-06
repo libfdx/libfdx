@@ -17,7 +17,7 @@ import io.github.libfdx.graphics.Mesh;
  */
 public final class ModelBuilder {
     private final GraphicsContext graphics;
-    private Material material = new PbrMaterial("default");
+    private Material material = new Material("default");
 
     /**
      * Creates a model builder.
@@ -451,6 +451,9 @@ public final class ModelBuilder {
             BoundingBox meshBounds) {
         boolean includeColors = hasUsage(usage, ModelVertexUsage.COLOR);
         boolean includeNormals = hasUsage(usage, ModelVertexUsage.NORMAL);
+        if (hasUsage(usage, ModelVertexUsage.PBR_LAYOUT)) {
+            return createPbrMesh(id, vertices, meshBounds);
+        }
         if (includeNormals) {
             if (includeColors) {
                 return Mesh.positionNormalColor3D(graphics, id,
@@ -466,6 +469,42 @@ public final class ModelBuilder {
         }
         return Mesh.position3D(graphics, id, vertices.positions,
                 vertices.colors, meshBounds);
+    }
+
+    private Mesh createPbrMesh(String id, TriangleVertices vertices,
+            BoundingBox meshBounds) {
+        int vertexCount = vertices.positions.length / 3;
+        float[] colors = new float[vertexCount * 4];
+        float[] textureCoordinates = new float[vertexCount * 2];
+        float[] pbr = new float[vertexCount * 3];
+        float[] emissive = new float[vertexCount * 3];
+        Color baseColor = MaterialAttributes.baseColor(material);
+        Color emissiveFactor = MaterialAttributes.emissiveColor(material);
+        float metallic = clamp(PbrAttributes.metallicFactor(material),
+                0.0f, 1.0f);
+        float roughness = clamp(PbrAttributes.roughnessFactor(material),
+                0.04f, 1.0f);
+        for (int vertex = 0; vertex < vertexCount; vertex++) {
+            int colorOffset = vertex * 4;
+            colors[colorOffset] = vertices.colors[colorOffset]
+                    * baseColor.red();
+            colors[colorOffset + 1] = vertices.colors[colorOffset + 1]
+                    * baseColor.green();
+            colors[colorOffset + 2] = vertices.colors[colorOffset + 2]
+                    * baseColor.blue();
+            colors[colorOffset + 3] = vertices.colors[colorOffset + 3]
+                    * baseColor.alpha();
+            int pbrOffset = vertex * 3;
+            pbr[pbrOffset] = 1.0f;
+            pbr[pbrOffset + 1] = metallic;
+            pbr[pbrOffset + 2] = roughness;
+            emissive[pbrOffset] = emissiveFactor.red();
+            emissive[pbrOffset + 1] = emissiveFactor.green();
+            emissive[pbrOffset + 2] = emissiveFactor.blue();
+        }
+        return Mesh.positionColor3D(graphics, id, vertices.positions,
+                colors, colors, vertices.normals, textureCoordinates,
+                pbr, pbr, emissive, emissive, null, null, meshBounds, true);
     }
 
     private static void generateFlatNormals(float[] positions,
@@ -506,7 +545,8 @@ public final class ModelBuilder {
     }
 
     private static void validateUsage(long usage) {
-        long unknown = usage & ~ModelVertexUsage.ALL;
+        long supported = ModelVertexUsage.ALL | ModelVertexUsage.PBR_LAYOUT;
+        long unknown = usage & ~supported;
         if (unknown != 0L) {
             throw new FdxException("Unsupported model vertex usage bits: "
                     + unknown);
@@ -514,6 +554,16 @@ public final class ModelBuilder {
         if (!hasUsage(usage, ModelVertexUsage.POSITION)) {
             throw new FdxException("Model vertex usage must include POSITION");
         }
+        if (hasUsage(usage, ModelVertexUsage.PBR_LAYOUT)
+                && (!hasUsage(usage, ModelVertexUsage.COLOR)
+                || !hasUsage(usage, ModelVertexUsage.NORMAL))) {
+            throw new FdxException(
+                    "PBR_LAYOUT requires COLOR and NORMAL vertex usages");
+        }
+    }
+
+    private static float clamp(float value, float minimum, float maximum) {
+        return Math.max(minimum, Math.min(maximum, value));
     }
 
     private static int[] sequence(int count) {

@@ -18,7 +18,8 @@ import io.github.libfdx.graphics.g3d.FogOfWarRenderer3D;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
 import io.github.libfdx.graphics.g3d.ModelBuilder;
-import io.github.libfdx.graphics.g3d.PbrMaterial;
+import io.github.libfdx.graphics.g3d.Material;
+import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.tests.TestFpsLogger;
@@ -91,9 +92,9 @@ public final class FogOfWar3DTest extends ApplicationAdapter {
         fogRenderer = new FogOfWarRenderer3D(graphics)
                 .color(0.0f, 0.018f, 0.050f, 0.82f);
         ModelBuilder builder = new ModelBuilder(graphics)
-                .material(new PbrMaterial("fog-of-war-3d material")
-                        .roughnessFactor(0.78f)
-                        .metallicFactor(0.0f));
+                .material(new Material("fog-of-war-3d material")
+                        .set(PbrAttributes.roughnessFactor(0.78f))
+                        .set(PbrAttributes.metallicFactor(0.0f)));
         floorModel = builder.box("fog-of-war-3d floor", 8.0f, 0.04f, 7.2f);
         cubeModel = builder.box("fog-of-war-3d cube", 0.76f, 0.92f, 0.76f);
         instances = createInstances(floorModel, cubeModel);

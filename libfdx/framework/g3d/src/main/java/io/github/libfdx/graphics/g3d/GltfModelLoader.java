@@ -15,6 +15,7 @@ import io.github.libfdx.assets.AssetLoadContext;
 import io.github.libfdx.assets.AssetLoader;
 import io.github.libfdx.assets.loaders.ImageAssetLoader;
 import io.github.libfdx.assets.loaders.ImageData;
+import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.FdxFuture;
 import io.github.libfdx.core.FdxTask;
@@ -222,7 +223,16 @@ final class GltfModelLoader implements AssetLoader<Model> {
         if (meshResources.isEmpty()) {
             throw new FdxException("glTF model contains no renderable triangles: " + path);
         }
-        return new DefaultModel(nodes, materials, animations(document), loadedSkins, meshResources);
+        Array<Disposable> ownedResources = new Array<Disposable>();
+        if (document.gpuTextures != null) {
+            for (Texture texture : document.gpuTextures) {
+                if (texture != null) {
+                    ownedResources.add(texture);
+                }
+            }
+        }
+        return new DefaultModel(nodes, materials, animations(document),
+                loadedSkins, meshResources, ownedResources);
     }
 
     private void uploadTextures(String path, GltfDocument document) {
@@ -250,20 +260,27 @@ final class GltfModelLoader implements AssetLoader<Model> {
         }
     }
 
-    private PbrMaterial material(String id, GltfMaterial source) {
+    private Material material(String id, GltfMaterial source) {
         GltfMaterial material = source != null ? source : GltfMaterial.DEFAULT;
-        return new PbrMaterial(id)
-                .baseColor(material.baseColor)
-                .baseColorTexture(material.baseColorTexture)
-                .metallicFactor(material.metallicFactor)
-                .roughnessFactor(material.roughnessFactor)
-                .metallicRoughnessTexture(material.metallicRoughnessTexture)
-                .normalTexture(material.normalTexture)
-                .occlusionTexture(material.occlusionTexture)
-                .emissiveFactor(material.emissiveFactor)
-                .emissiveTexture(material.emissiveTexture)
+        return new Material(id)
+                .shadingModel(material.shadingModel)
+                .set(MaterialAttributes.baseColor(material.baseColor))
+                .set(MaterialAttributes.baseColorTexture(
+                        material.baseColorTexture))
+                .set(PbrAttributes.metallicFactor(
+                        material.metallicFactor))
+                .set(PbrAttributes.roughnessFactor(
+                        material.roughnessFactor))
+                .set(PbrAttributes.metallicRoughnessTexture(
+                        material.metallicRoughnessTexture))
+                .set(MaterialAttributes.normalTexture(material.normalTexture))
+                .set(PbrAttributes.occlusionTexture(
+                        material.occlusionTexture))
+                .set(MaterialAttributes.emissiveColor(material.emissiveFactor))
+                .set(MaterialAttributes.emissiveTexture(
+                        material.emissiveTexture))
                 .alphaMode(material.alphaMode)
-                .alphaCutoff(material.alphaCutoff)
+                .set(MaterialAttributes.alphaCutoff(material.alphaCutoff))
                 .doubleSided(material.doubleSided);
     }
 
@@ -451,7 +468,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
                     : sequence(sourcePositions.length / 3);
             appendPrimitive(geometry, sourcePositions, sourceNormals, sourceTexCoords, sourceColors, indices,
                     sourceJoints, sourceWeights, material, Matrix4.IDENTITY);
-        PbrMaterial pbrMaterial = material(path + " material " + meshIndex + "." + primitiveIndex, geometry.material)
+        Material pbrMaterial = material(path + " material " + meshIndex + "." + primitiveIndex, geometry.material)
                 .doubleSided(geometry.doubleSided);
         materials.add(pbrMaterial);
         boolean retainSourceData = !usesGpuPbrShader() || geometry.hasSkinning();
@@ -718,10 +735,16 @@ final class GltfModelLoader implements AssetLoader<Model> {
         MaterialAlphaMode alphaMode = alphaMode(string(material, "alphaMode", "OPAQUE"));
         float alphaCutoff = number(material.get("alphaCutoff"), 0.5f);
         boolean doubleSided = bool(material, "doubleSided", false);
+        JsonValue extensions = object(material.get("extensions"),
+                "material extensions", true);
+        ShadingModel shadingModel = extensions != null
+                && extensions.get("KHR_materials_unlit") != null
+                        ? ShadingModel.UNLIT : ShadingModel.PBR;
         document.materials[materialIndex] = new GltfMaterial(baseColor, baseColorImage, baseColorTexture,
                 metallicFactor, roughnessFactor, metallicRoughnessImage, metallicRoughnessTexture,
                 emissiveFactor, emissiveImage, emissiveTexture, occlusionImage, occlusionTexture,
-                normalImage, normalTexture, alphaMode, alphaCutoff, doubleSided);
+                normalImage, normalTexture, alphaMode, alphaCutoff, doubleSided,
+                shadingModel);
         return document.materials[materialIndex];
     }
 
@@ -1190,7 +1213,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
     private static final class GltfMaterial {
         private static final GltfMaterial DEFAULT = new GltfMaterial(Color.WHITE, null, null, 1.0f, 1.0f,
                 null, null, Color.BLACK, null, null, null, null, null, null, MaterialAlphaMode.OPAQUE, 0.5f,
-                false);
+                false, ShadingModel.PBR);
 
         private final Color baseColor;
         private final ImageData baseColorImage;
@@ -1209,12 +1232,14 @@ final class GltfModelLoader implements AssetLoader<Model> {
         private final MaterialAlphaMode alphaMode;
         private final float alphaCutoff;
         private final boolean doubleSided;
+        private final ShadingModel shadingModel;
 
         GltfMaterial(Color baseColor, ImageData baseColorImage, Texture baseColorTexture, float metallicFactor,
                 float roughnessFactor, ImageData metallicRoughnessImage, Texture metallicRoughnessTexture,
                 Color emissiveFactor, ImageData emissiveImage, Texture emissiveTexture, ImageData occlusionImage,
                 Texture occlusionTexture, ImageData normalImage, Texture normalTexture, MaterialAlphaMode alphaMode,
-                float alphaCutoff, boolean doubleSided) {
+                float alphaCutoff, boolean doubleSided,
+                ShadingModel shadingModel) {
             this.baseColor = baseColor != null ? baseColor : Color.WHITE;
             this.baseColorImage = baseColorImage;
             this.baseColorTexture = baseColorTexture;
@@ -1232,6 +1257,8 @@ final class GltfModelLoader implements AssetLoader<Model> {
             this.alphaMode = alphaMode != null ? alphaMode : MaterialAlphaMode.OPAQUE;
             this.alphaCutoff = alphaCutoff;
             this.doubleSided = doubleSided;
+            this.shadingModel = shadingModel != null
+                    ? shadingModel : ShadingModel.PBR;
         }
     }
 

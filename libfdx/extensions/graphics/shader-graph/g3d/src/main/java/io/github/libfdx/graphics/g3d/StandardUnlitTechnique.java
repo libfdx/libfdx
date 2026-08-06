@@ -59,8 +59,10 @@ public final class StandardUnlitTechnique {
         return delegate.passTechnique(passId);
     }
 
-    public GraphPbrMaterial material(String id) {
-        return delegate.material(id);
+    public GraphMaterial material(String id) {
+        GraphMaterial material = delegate.material(id);
+        material.shadingModel(ShadingModel.UNLIT);
+        return material;
     }
 
     public ShaderGraphMaterialDefinition materialDefinition() {

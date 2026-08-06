@@ -110,12 +110,35 @@ provider, and do not replace or mutate provider state during an active
 `begin()`/`end()` scope. A default ModelBatch owns its internally created
 standard provider and disposes it with the batch.
 
-The standard PBR implementation is graph-backed. `StandardPbrTechnique`
-exposes replaceable surface, post-skinning vertex, and final-lighting graphs;
-`GraphPbrMaterial` stores parameters and resources from that technique's
-surface schema. The renderer still owns camera, object, environment, skinning,
-shadow, texture-slot, and draw bindings. Its WGSL template is a composition
-scaffold and reflected ABI baseline, not a second runtime PBR implementation.
+The standard PBR implementation is graph-backed. `Material` is a generic
+typed-attribute container. `MaterialAttributes` owns shading-model-neutral
+surface semantics such as base color, normal and emissive textures, alpha
+cutoff, and lighting influence; `PbrAttributes` adds only metallic, roughness,
+and occlusion semantics. Materials without an attribute use the shader's
+documented default, and other shaders may consume or ignore the same
+attributes without requiring a PBR-specific material class.
+
+Every material also has a stable `ShadingModel` ID. The built-in provider
+supports `PBR` and `UNLIT` materials in one batch. Unlit output bypasses scene
+light and received-shadow evaluation while retaining transforms, depth,
+alpha, emissive, and fog behavior; it may still be submitted to a shadow pass
+as a caster. A PBR material can use the common `lightingInfluence` attribute to
+blend continuously between full-bright base color and fully evaluated
+lighting. Custom shading-model IDs require an explicit material shader
+provider and fail clearly when sent to the built-in provider.
+
+Shading-model selection remains independent from `RenderPath3D`: forward,
+forward-plus, or deferred scheduling decides when and where geometry is drawn,
+while PBR, unlit, toon, or custom shading decides how one material produces
+surface color. This allows a render path to mix supported shading models
+without encoding the render path into material data.
+
+`StandardPbrTechnique` exposes replaceable surface, post-skinning vertex, and
+final-lighting graphs. `GraphMaterial` combines ordinary material attributes
+with parameters and borrowed resources from that technique's surface schema.
+The renderer still owns camera, object, environment, skinning, shadow,
+texture-slot, and draw bindings. Its WGSL template is a composition scaffold
+and reflected ABI baseline, not a second runtime PBR implementation.
 
 Handwritten WGSL remains first-class. Wrap a complete
 `ShaderModuleDescriptor` in `ShaderGraphRenderProgram`, put it in a

@@ -29,7 +29,9 @@ import io.github.libfdx.graphics.g3d.Environment3D;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
 import io.github.libfdx.graphics.g3d.ModelBuilder;
-import io.github.libfdx.graphics.g3d.PbrMaterial;
+import io.github.libfdx.graphics.g3d.Material;
+import io.github.libfdx.graphics.g3d.MaterialAttributes;
+import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.math.Matrix4;
 
@@ -520,10 +522,11 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
         }
     }
 
-    private PbrMaterial solidMaterial(String id) {
-        return new PbrMaterial(id)
-                .baseColor(solidRgba[0], solidRgba[1], solidRgba[2], solidRgba[3])
-                .roughnessFactor(0.85f)
+    private Material solidMaterial(String id) {
+        return new Material(id)
+                .set(MaterialAttributes.baseColor(solidRgba[0], solidRgba[1],
+                        solidRgba[2], solidRgba[3]))
+                .set(PbrAttributes.roughnessFactor(0.85f))
                 .doubleSided(true);
     }
 

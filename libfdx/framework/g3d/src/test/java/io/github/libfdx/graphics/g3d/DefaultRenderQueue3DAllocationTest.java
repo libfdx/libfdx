@@ -44,7 +44,7 @@ final class DefaultRenderQueue3DAllocationTest {
                         0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f
                 }, 3, BoundingBox.empty());
         for (int i = 63; i >= 0; i--) {
-            PbrMaterial material = new PbrMaterial(String.format("material-%02d", i));
+            Material material = new Material(String.format("material-%02d", i));
             queue.add(new Renderable3D(new MeshPart(mesh, 0, 3), material, Matrix4.IDENTITY,
                     BoundingBox.empty()));
         }

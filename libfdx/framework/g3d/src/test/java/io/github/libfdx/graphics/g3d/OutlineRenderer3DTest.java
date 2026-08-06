@@ -95,7 +95,7 @@ final class OutlineRenderer3DTest {
                         0.0f, 0.0f, 0.0f,
                         0.0f, 0.0f, 0.0f
                 }, BoundingBox.empty());
-        PbrMaterial material = new PbrMaterial("outline material");
+        Material material = new Material("outline material");
         OutlineRenderer3D renderer = new OutlineRenderer3D(graphics);
         try {
             render(renderer, graphics, positionNormal, material);
@@ -110,7 +110,6 @@ final class OutlineRenderer3DTest {
             equivalentPositionNormal.dispose();
             positionNormalColor.dispose();
             pbr.dispose();
-            material.dispose();
         }
     }
 
@@ -139,7 +138,7 @@ final class OutlineRenderer3DTest {
                         1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f,
                         0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f
                 }, 3, BoundingBox.empty());
-        PbrMaterial material = new PbrMaterial("unsupported outline material");
+        Material material = new Material("unsupported outline material");
         try {
             renderer.begin(new Camera());
             renderer.render(new Renderable3D(new MeshPart(mesh, 0, 3),
@@ -159,7 +158,6 @@ final class OutlineRenderer3DTest {
         finally {
             renderer.dispose();
             mesh.dispose();
-            material.dispose();
         }
     }
 

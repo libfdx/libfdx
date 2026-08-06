@@ -41,7 +41,9 @@ import io.github.libfdx.graphics.g3d.G3DAssetLoaders;
 import io.github.libfdx.graphics.g3d.MeshPart;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
-import io.github.libfdx.graphics.g3d.PbrMaterial;
+import io.github.libfdx.graphics.g3d.Material;
+import io.github.libfdx.graphics.g3d.MaterialAttributes;
+import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.graphics.g3d.SkyEnvironment3D;
 import io.github.libfdx.graphics.g3d.SkyboxRenderer3D;
 import io.github.libfdx.input.Input;
@@ -479,11 +481,14 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter {
                 io.github.libfdx.math.BoundingBox.of(new Vector3(-halfWidth, 0.0f, -halfDepth),
                         new Vector3(halfWidth, 0.0f, halfDepth)));
         MeshPart meshPart = new MeshPart("camera-controller-showcase-ground part", mesh, null, 0, mesh.vertexCount());
-        PbrMaterial material = new PbrMaterial("camera-controller-showcase-ground material")
-                .baseColor(0.92f, 0.90f, 0.82f, 1.0f)
-                .baseColorTexture(texture)
-                .roughnessFactor(0.86f);
-        return DefaultModel.singleNode("camera-controller-showcase-ground", meshPart, material);
+        Material material = new Material("camera-controller-showcase-ground material")
+                .set(MaterialAttributes.baseColor(
+                        0.92f, 0.90f, 0.82f, 1.0f))
+                .set(MaterialAttributes.baseColorTexture(texture))
+                .set(PbrAttributes.roughnessFactor(0.86f));
+        return DefaultModel.singleNode(
+                "camera-controller-showcase-ground", meshPart, material,
+                texture);
     }
 
     private ByteBuffer checkerPixels(int width, int height) {
