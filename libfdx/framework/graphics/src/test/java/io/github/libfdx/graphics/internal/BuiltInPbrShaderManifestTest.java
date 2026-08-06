@@ -26,13 +26,13 @@ final class BuiltInPbrShaderManifestTest {
         assertEquals(2, skinnedReflection.entryPointCount());
         assertEquals(19, staticReflection.bindingCount());
         assertEquals(19, skinnedReflection.bindingCount());
-        assertEquals(1216, staticReflection.requireBinding(1, 0).minimumBindingSize());
-        assertEquals(5328, skinnedReflection.requireBinding(1, 0).minimumBindingSize());
-        assertEquals(40, staticReflection.requireBinding(1, 0).bufferLayout().parameterCount());
-        assertEquals(42, skinnedReflection.requireBinding(1, 0).bufferLayout().parameterCount());
+        assertEquals(1232, staticReflection.requireBinding(1, 0).minimumBindingSize());
+        assertEquals(5344, skinnedReflection.requireBinding(1, 0).minimumBindingSize());
+        assertEquals(41, staticReflection.requireBinding(1, 0).bufferLayout().parameterCount());
+        assertEquals(43, skinnedReflection.requireBinding(1, 0).bufferLayout().parameterCount());
         assertEquals(0, staticReflection.requireBinding(1, 0).bufferLayout()
                 .requireHandle("model").byteOffset());
-        assertEquals(1232, skinnedReflection.requireBinding(1, 0).bufferLayout()
+        assertEquals(1248, skinnedReflection.requireBinding(1, 0).bufferLayout()
                 .requireHandle("boneMatrices").byteOffset());
         assertNotEquals(staticReflection.physicalHash(), skinnedReflection.physicalHash());
         assertEquals(64, BuiltInPbrShaderManifest.staticSourceHash().length());
@@ -60,6 +60,8 @@ final class BuiltInPbrShaderManifestTest {
         assertSemantics(parameter("viewProjection"), ShaderParameterDomain.FRAME_VIEW,
                 ShaderUpdateFrequency.FRAME);
         assertSemantics(parameter("textureFlags"), ShaderParameterDomain.MATERIAL,
+                ShaderUpdateFrequency.ON_CHANGE);
+        assertSemantics(parameter("materialParams"), ShaderParameterDomain.MATERIAL,
                 ShaderUpdateFrequency.ON_CHANGE);
         assertSemantics(parameter("shadowParams"), ShaderParameterDomain.ENVIRONMENT_PASS,
                 ShaderUpdateFrequency.PASS);

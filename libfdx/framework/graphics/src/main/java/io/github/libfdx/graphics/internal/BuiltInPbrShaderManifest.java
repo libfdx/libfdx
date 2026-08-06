@@ -106,7 +106,7 @@ public final class BuiltInPbrShaderManifest {
         bindings.add(environmentBinding(16, "shadowTexture3"));
         bindings.add(environmentBinding(17, "shadowSampler3"));
 
-        List<ShaderParameterSemantic> parameters = new ArrayList<>(42);
+        List<ShaderParameterSemantic> parameters = new ArrayList<>(43);
         add(parameters, ShaderParameterDomain.OBJECT_DRAW, ShaderUpdateFrequency.DRAW,
                 "model");
         add(parameters, ShaderParameterDomain.FRAME_VIEW, ShaderUpdateFrequency.FRAME,
@@ -123,7 +123,7 @@ public final class BuiltInPbrShaderManifest {
                 "shadowCameraDirection", "shadowCameraUp", "shadowCameraParams",
                 "shadowFilterParams");
         add(parameters, ShaderParameterDomain.MATERIAL, ShaderUpdateFrequency.ON_CHANGE,
-                "textureFlags", "emissiveFlags");
+                "textureFlags", "emissiveFlags", "materialParams");
         if (skinned) {
             add(parameters, ShaderParameterDomain.OBJECT_DRAW, ShaderUpdateFrequency.DRAW,
                     "skinningParams", "boneMatrices");
