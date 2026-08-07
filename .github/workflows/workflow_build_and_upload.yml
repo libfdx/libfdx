@@ -395,7 +395,7 @@ jobs:
           CENTRAL_PUBLISHING_TYPE: ${{ inputs.autoPublish && 'AUTOMATIC' || 'USER_MANAGED' }}
         with:
           max_attempts: 6
-          timeout_minutes: 20
+          timeout_minutes: 50
           retry_on: error
           command: ./gradlew publishRelease
 
@@ -415,7 +415,7 @@ jobs:
         if: ${{ inputs.shouldUpload && !inputs.isRelease }}
         with:
           max_attempts: 6
-          timeout_minutes: 30
+          timeout_minutes: 50
           retry_on: error
           command: ./gradlew publishSnapshot
 
