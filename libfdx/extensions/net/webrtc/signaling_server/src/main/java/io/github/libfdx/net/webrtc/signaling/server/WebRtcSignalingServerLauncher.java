@@ -1,6 +1,7 @@
 package io.github.libfdx.net.webrtc.signaling.server;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Runs the standalone libFDX WebRTC signaling server.
@@ -8,6 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author xpenatan
  */
 public final class WebRtcSignalingServerLauncher {
+    private static final long STARTUP_TIMEOUT_SECONDS = 10L;
     private static final String HOST_PROPERTY = "libfdx.webrtc.signaling.host";
     private static final String PORT_PROPERTY = "libfdx.webrtc.signaling.port";
     private static final String MAX_PEERS_PROPERTY = "libfdx.webrtc.signaling.maxPeersPerRoom";
@@ -64,7 +66,9 @@ public final class WebRtcSignalingServerLauncher {
         }, "libfdx-webrtc-signaling-shutdown"));
 
         server.start();
-        System.out.println("libFDX WebRTC signaling server running on ws://" + displayHost(bindHost) + ":" + port);
+        int boundPort = server.awaitStarted(STARTUP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        System.out.println("libFDX WebRTC signaling server running on ws://" + displayHost(bindHost) + ":"
+                + boundPort);
         System.out.println("Press Ctrl+C to stop.");
         long lastTime = System.nanoTime();
         try {

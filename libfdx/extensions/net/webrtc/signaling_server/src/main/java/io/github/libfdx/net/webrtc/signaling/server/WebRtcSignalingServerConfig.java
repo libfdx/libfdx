@@ -25,7 +25,7 @@ public final class WebRtcSignalingServerConfig {
         if (builder.bindHost == null || builder.bindHost.trim().isEmpty()) {
             throw new FdxException("WebRTC signaling bind host cannot be empty");
         }
-        if (builder.port <= 0 || builder.port > 65535) {
+        if (builder.port < 0 || builder.port > 65535) {
             throw new FdxException("WebRTC signaling port is invalid: " + builder.port);
         }
         if (builder.maxPeersPerRoom <= 0) {
@@ -49,6 +49,13 @@ public final class WebRtcSignalingServerConfig {
         logger = builder.logger != null ? builder.logger : WebRtcSignalingServerLogger.none();
     }
 
+    /**
+     * Creates a signaling server config builder.
+     *
+     * @param port the bind port, or {@code 0} to request an ephemeral port from
+     *             the operating system
+     * @return the config builder
+     */
     public static Builder builder(int port) {
         return new Builder(port);
     }
@@ -57,6 +64,11 @@ public final class WebRtcSignalingServerConfig {
         return bindHost;
     }
 
+    /**
+     * Returns the requested bind port. This remains {@code 0} when an
+     * ephemeral port was requested; use
+     * {@link WebRtcSignalingServer#port()} after startup for the resolved port.
+     */
     public int port() {
         return port;
     }

@@ -16,6 +16,8 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
 import org.java_websocket.WebSocket;
@@ -40,8 +42,13 @@ public final class WebRtcSignalingServer implements Disposable {
     private final ArrayList<Peer> scratchPeers = new ArrayList<Peer>();
     private final ArrayList<String> scratchRoomIds = new ArrayList<String>();
     private final SocketServer server;
+    private final Object lifecycleLock = new Object();
+    private final CountDownLatch startupCompleted = new CountDownLatch(1);
+    private volatile LifecycleState lifecycleState = LifecycleState.NEW;
+    private int boundPort;
+    private Throwable startupFailure;
     private float accumulatedTime;
-    private boolean disposed;
+    private volatile boolean disposed;
 
     public WebRtcSignalingServer(WebRtcSignalingServerConfig config) {
         if (config == null) {
@@ -53,11 +60,105 @@ public final class WebRtcSignalingServer implements Disposable {
         server = new SocketServer(new InetSocketAddress(config.bindHost(), config.port()));
     }
 
+    /**
+     * Starts this server asynchronously. A server instance is single-use and
+     * may only be started once. Use {@link #awaitStarted(long, TimeUnit)} when
+     * the listening endpoint is needed before continuing.
+     */
     public void start() {
-        server.start();
+        synchronized (lifecycleLock) {
+            if (disposed) {
+                throw new FdxException("Cannot start a disposed WebRTC signaling server");
+            }
+            if (lifecycleState != LifecycleState.NEW) {
+                throw new IllegalStateException("WebRTC signaling server may only be started once");
+            }
+            lifecycleState = LifecycleState.STARTING;
+        }
+        try {
+            server.start();
+        }
+        catch (RuntimeException exception) {
+            startupFailed(exception);
+            throw exception;
+        }
+    }
+
+    /**
+     * Waits until this server is listening and returns its resolved bind port.
+     * Repeated calls return the same port while the server remains started.
+     *
+     * @param timeout the maximum time to wait; {@code 0} only checks the
+     *                current state
+     * @param unit the timeout unit
+     * @return the actual listening port, including an operating-system assigned
+     *         port when the configured port was {@code 0}
+     * @throws FdxException if startup times out or fails, this server was not
+     *                      started, it stops before the result is observed, or
+     *                      the waiting thread is interrupted
+     */
+    public int awaitStarted(long timeout, TimeUnit unit) {
+        if (timeout < 0L) {
+            throw new FdxException("WebRTC signaling startup timeout cannot be negative");
+        }
+        if (unit == null) {
+            throw new FdxException("WebRTC signaling startup timeout unit cannot be null");
+        }
+        synchronized (lifecycleLock) {
+            if (lifecycleState == LifecycleState.NEW) {
+                throw new FdxException("WebRTC signaling server has not been started");
+            }
+        }
+        boolean completed;
+        try {
+            completed = startupCompleted.await(timeout, unit);
+        }
+        catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new FdxException("Interrupted while starting WebRTC signaling server", exception);
+        }
+        if (!completed) {
+            throw new FdxException("Timed out waiting for WebRTC signaling server startup");
+        }
+        synchronized (lifecycleLock) {
+            if (lifecycleState == LifecycleState.STARTED) {
+                return boundPort;
+            }
+            if (lifecycleState == LifecycleState.FAILED) {
+                throw new FdxException("Failed to start WebRTC signaling server", startupFailure);
+            }
+            throw new FdxException("WebRTC signaling server stopped before startup completed");
+        }
+    }
+
+    /**
+     * Returns whether this server is currently listening for connections.
+     */
+    public boolean isStarted() {
+        return lifecycleState == LifecycleState.STARTED;
+    }
+
+    /**
+     * Returns the resolved listening port.
+     *
+     * @throws FdxException if this server is not currently listening
+     */
+    public int port() {
+        synchronized (lifecycleLock) {
+            if (lifecycleState != LifecycleState.STARTED) {
+                throw new FdxException("WebRTC signaling server is not started");
+            }
+            return boundPort;
+        }
     }
 
     public void stop() {
+        synchronized (lifecycleLock) {
+            if (lifecycleState != LifecycleState.FAILED) {
+                lifecycleState = LifecycleState.STOPPED;
+            }
+            startupCompleted.countDown();
+        }
         try {
             server.stop();
         }
@@ -134,10 +235,12 @@ public final class WebRtcSignalingServer implements Disposable {
 
     @Override
     public void dispose() {
-        if (disposed) {
-            return;
+        synchronized (lifecycleLock) {
+            if (disposed) {
+                return;
+            }
+            disposed = true;
         }
-        disposed = true;
         stop();
         events.clear();
     }
@@ -645,6 +748,19 @@ public final class WebRtcSignalingServer implements Disposable {
         }
     }
 
+    private void startupFailed(Throwable failure) {
+        synchronized (lifecycleLock) {
+            if (lifecycleState == LifecycleState.STARTING) {
+                startupFailure = failure;
+                lifecycleState = LifecycleState.FAILED;
+                startupCompleted.countDown();
+            }
+            else if (lifecycleState == LifecycleState.STARTED) {
+                lifecycleState = LifecycleState.STOPPED;
+            }
+        }
+    }
+
     private static int headersByteLength(Map<String, String> headers) {
         int length = 0;
         if (headers != null) {
@@ -702,13 +818,37 @@ public final class WebRtcSignalingServer implements Disposable {
 
         @Override
         public void onError(WebSocket conn, Exception ex) {
+            if (conn == null) {
+                startupFailed(ex);
+            }
             config.logger().error("WebRTC signaling socket error", ex);
         }
 
         @Override
         public void onStart() {
-            config.logger().info("WebRTC signaling server started on " + config.bindHost() + ":" + config.port());
+            int listeningPort = getPort();
+            boolean accepted = false;
+            synchronized (lifecycleLock) {
+                if (lifecycleState == LifecycleState.STARTING) {
+                    boundPort = listeningPort;
+                    lifecycleState = LifecycleState.STARTED;
+                    accepted = true;
+                }
+                startupCompleted.countDown();
+            }
+            if (accepted) {
+                config.logger().info("WebRTC signaling server started on " + config.bindHost() + ":"
+                        + listeningPort);
+            }
         }
+    }
+
+    private enum LifecycleState {
+        NEW,
+        STARTING,
+        STARTED,
+        STOPPED,
+        FAILED
     }
 
     private static final class SignalingEventQueue {
