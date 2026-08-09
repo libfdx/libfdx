@@ -25,6 +25,12 @@ public final class MaterialAttributes {
             ALPHA_CUTOFF = floatType("material.alphaCutoff");
     public static final MaterialAttributeType<FloatMaterialAttribute>
             LIGHTING_INFLUENCE = floatType("material.lightingInfluence");
+    public static final MaterialAttributeType<FloatMaterialAttribute>
+            SHADOW_INFLUENCE = floatType("material.shadowInfluence");
+    public static final MaterialAttributeType<FloatMaterialAttribute>
+            TEXTURE_OFFSET_U = floatType("material.textureOffsetU");
+    public static final MaterialAttributeType<FloatMaterialAttribute>
+            TEXTURE_OFFSET_V = floatType("material.textureOffsetV");
 
     private MaterialAttributes() {
     }
@@ -74,6 +80,26 @@ public final class MaterialAttributes {
                 clamp01(value));
     }
 
+    /**
+     * Sets how strongly directional shadows affect this material.
+     * Zero keeps the material lit while it may still cast shadows; one applies
+     * the scene shadow normally.
+     */
+    public static FloatMaterialAttribute shadowInfluence(float value) {
+        return new FloatMaterialAttribute(SHADOW_INFLUENCE,
+                clamp01(value));
+    }
+
+    /** Sets the horizontal offset shared by this material's texture maps. */
+    public static FloatMaterialAttribute textureOffsetU(float value) {
+        return new FloatMaterialAttribute(TEXTURE_OFFSET_U, value);
+    }
+
+    /** Sets the vertical offset shared by this material's texture maps. */
+    public static FloatMaterialAttribute textureOffsetV(float value) {
+        return new FloatMaterialAttribute(TEXTURE_OFFSET_V, value);
+    }
+
     public static Color baseColor(Material material) {
         ColorMaterialAttribute attribute = find(material, BASE_COLOR);
         return attribute != null ? attribute.value() : Color.WHITE;
@@ -102,6 +128,18 @@ public final class MaterialAttributes {
 
     public static float lightingInfluence(Material material) {
         return clamp01(value(material, LIGHTING_INFLUENCE, 1.0f));
+    }
+
+    public static float shadowInfluence(Material material) {
+        return clamp01(value(material, SHADOW_INFLUENCE, 1.0f));
+    }
+
+    public static float textureOffsetU(Material material) {
+        return value(material, TEXTURE_OFFSET_U, 0.0f);
+    }
+
+    public static float textureOffsetV(Material material) {
+        return value(material, TEXTURE_OFFSET_V, 0.0f);
     }
 
     private static float value(Material material,

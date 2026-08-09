@@ -644,6 +644,11 @@ final class AndroidGlesApi implements GLApi {
                 GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA);
     }
 
+    @Override
+    public void disableAlphaBlending() {
+        GLES30.glDisable(GLES30.GL_BLEND);
+    }
+
     /**
      * Runs the enable depth test step.
      *

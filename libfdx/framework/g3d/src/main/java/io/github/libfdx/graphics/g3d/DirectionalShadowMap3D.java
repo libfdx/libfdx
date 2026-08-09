@@ -214,6 +214,22 @@ public final class DirectionalShadowMap3D implements Disposable {
         }
     }
 
+    void renderRenderables(DirectionalLight light,
+            ArrayView<Renderable3D> renderables) {
+        ensureNotDisposed();
+        RenderPass pass = beginPass(light);
+        try {
+            batch.begin(pass, camera);
+            for (int i = 0; i < renderables.size(); i++) {
+                batch.render(renderables.get(i));
+            }
+            batch.end();
+        }
+        finally {
+            pass.end();
+        }
+    }
+
     /**
      * Returns the shadow texture.
      *
@@ -396,12 +412,15 @@ public final class DirectionalShadowMap3D implements Disposable {
                     // encoded depth below remains in the same 0..1 space used
                     // by PBR shadow sampling on every provider.
                     output.position.z = clip.z * 0.5 + clip.w * 0.5;
-                    output.depth = clamp((clip.z / clip.w) * 0.5 + 0.5, 0.0, 1.0);
+                    // Keep this value unclamped until after raster clipping.
+                    // Clamping per vertex corrupts the interpolated depth when
+                    // a large triangle crosses the light camera near/far plane.
+                    output.depth = (clip.z / clip.w) * 0.5 + 0.5;
                     return output;
                 }
                 @fragment
                 fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
-                    let depth = min(input.depth, 0.999999);
+                    let depth = clamp(input.depth, 0.0, 0.999999);
                     let raw = fract(depth * vec2f(1.0, 255.0));
                     return vec4f(
                             raw.x - raw.y / 255.0,

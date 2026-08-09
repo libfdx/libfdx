@@ -3,7 +3,6 @@ package io.github.libfdx.graphics.g3d;
 import io.github.libfdx.graphics.shader.reflection.ShaderParameterHandle;
 import io.github.libfdx.graphics.shader.reflection.ShaderParameterLayout;
 import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
-import io.github.libfdx.graphics.internal.BuiltInPbrShaderManifest;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,13 +30,19 @@ final class PbrShaderProviderTest {
     }
 
     @Test
-    void gpuPbrShaderIncludesReferenceQualityDisplayAndLightingFeatures() {
+    void gpuPbrShaderIncludesOptimizedQualityDisplayAndLightingFeatures() {
         assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains("fn neutralToneMapping"));
         assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains("fillLightColorIntensity"));
         assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains("irradiance * albedo / PI"));
         assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains("fn unpackShadowDepth"));
+        assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains(
+                "let x0 = -1.2 * radiusX;"));
+        assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains(
+                "vec2f(x1, y1)) * 36.0;"));
         assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains("return visibility / 256.0;"));
-        assertFalse(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains("return visibility / 9.0;"));
+        assertFalse(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains("let x4 ="));
+        assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains(
+                "let uv = input.uv + uniforms.materialParams.zw;"));
     }
 
     @Test
@@ -49,9 +54,23 @@ final class PbrShaderProviderTest {
     }
 
     @Test
+    void opaquePbrVariantOmitsFragmentDiscard() {
+        String opaque = PbrShaderProvider.pbrRendererTemplate(
+                false, "", false);
+        String masked = PbrShaderProvider.pbrRendererTemplate(
+                false, "", true);
+
+        assertFalse(opaque.contains("discard;"));
+        assertFalse(opaque.contains("//__PBR_ALPHA_TEST__"));
+        assertTrue(masked.contains(
+                "if (base.a <= uniforms.emissiveFlags.y)"));
+        assertTrue(masked.contains("discard;"));
+    }
+
+    @Test
     void staticAndSkinnedWgslLayoutsMatchGeneratedReflection() {
         assertWgslLayout(PbrShaderProvider.PBR_RENDERER_TEMPLATE,
-                BuiltInPbrShaderManifest.staticReflection());
+                PbrShaderParameters.staticReflection());
 
         String skinnedSource =
                 PbrShaderProvider.skinnedPbrRendererTemplate();
@@ -59,7 +78,7 @@ final class PbrShaderProviderTest {
         assertFalse(skinnedSource.contains("//__PBR_SKINNING_TRANSFORM__"));
         assertTrue(skinnedSource.contains("@location(6) joints : vec4f"));
         assertTrue(skinnedSource.contains("uniforms.boneMatrices[joint3]"));
-        assertWgslLayout(skinnedSource, BuiltInPbrShaderManifest.skinnedReflection());
+        assertWgslLayout(skinnedSource, PbrShaderParameters.skinnedReflection());
     }
 
     private static void assertWgslLayout(String source, ShaderReflection reflection) {

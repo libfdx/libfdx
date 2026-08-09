@@ -540,6 +540,11 @@ final class IosCGLApi implements GLApi {
                 IosCOpenGLES.ONE, IosCOpenGLES.ONE_MINUS_SRC_ALPHA);
     }
 
+    @Override
+    public void disableAlphaBlending() {
+        IosCOpenGLES.glDisable(IosCOpenGLES.BLEND);
+    }
+
     /**
      * Runs the enable depth test step.
      *

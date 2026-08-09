@@ -46,42 +46,25 @@ val hostReflectClassifier = when {
 }
 val hostReflectCli = runtimeFdxBuildProject.layout.buildDirectory.file(
     "generated/resources/runtimeFdxDesktop/libfdx-native/desktop/$hostReflectClassifier")
-val generatedPbrManifest = rootProject.layout.projectDirectory.file(
-    "libfdx/framework/graphics/src/main/java/io/github/libfdx/graphics/internal/"
-            + "GeneratedPbrShaderManifestData.java")
 val canonicalPbrSource = layout.projectDirectory.file(
     "src/main/java/io/github/libfdx/graphics/g3d/PbrShaderProvider.java")
+val canonicalPbrInterface = layout.projectDirectory.file(
+    "src/main/java/io/github/libfdx/graphics/g3d/PbrShaderParameters.java")
 
-fun registerPbrManifestTask(name: String, mode: String) = tasks.register<JavaExec>(name) {
+tasks.register<JavaExec>("check_pbr_shader_interface") {
     group = "shader reflection"
-    description = if (mode == "check") {
-        "Verifies the built-in PBR FDXI payloads against the canonical WGSL."
-    } else {
-        "Regenerates the built-in PBR FDXI payloads from the canonical WGSL."
-    }
+    description = "Verifies the explicit PBR Java interface against fresh Tint reflection."
     dependsOn(tasks.named("testClasses"),
         ":libfdx:framework:fdx:fdx-build:build_runtime_fdx_host_reflect_cli")
     classpath = sourceSets["test"].runtimeClasspath
-    mainClass.set("io.github.libfdx.graphics.g3d.PbrShaderManifestTool")
-    inputs.property("mode", mode)
+    mainClass.set("io.github.libfdx.graphics.g3d.PbrShaderInterfaceTool")
     inputs.file(hostReflectCli)
     inputs.file(canonicalPbrSource)
-    if (mode == "check") {
-        inputs.file(generatedPbrManifest)
-    } else {
-        outputs.file(generatedPbrManifest)
-    }
+    inputs.file(canonicalPbrInterface)
     doFirst {
-        args = listOf(
-            hostReflectCli.get().asFile.absolutePath,
-            generatedPbrManifest.asFile.absolutePath,
-            mode,
-        )
+        args = listOf(hostReflectCli.get().asFile.absolutePath)
     }
 }
-
-registerPbrManifestTask("generate_pbr_shader_manifest", "generate")
-registerPbrManifestTask("check_pbr_shader_manifest", "check")
 
 java {
     withSourcesJar()

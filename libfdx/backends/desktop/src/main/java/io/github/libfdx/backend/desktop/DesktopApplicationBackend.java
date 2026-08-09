@@ -25,6 +25,7 @@ import io.github.libfdx.graphics.GraphicsConfig;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.GraphicsContextProfile;
 import io.github.libfdx.graphics.GraphicsEnvironment;
+import io.github.libfdx.graphics.GraphicsFrameMetrics;
 import io.github.libfdx.graphics.NativeWindow;
 import io.github.libfdx.input.Cursor;
 import io.github.libfdx.input.CursorShape;
@@ -50,7 +51,11 @@ import org.lwjgl.glfw.GLFWWindowSizeCallback;
 
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
+import java.lang.management.GarbageCollectorMXBean;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryUsage;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -70,6 +75,9 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
 
     private final SystemLogger logger = new SystemLogger();
     private final FrameSync sync = new FrameSync();
+    private final DesktopFrameProfiler frameProfiler = new DesktopFrameProfiler(
+            logger, Boolean.parseBoolean(System.getProperty(
+            "libfdx.profileFrames", "false")));
     private Fdx fdx;
     private ApplicationLifecycle lifecycle = ApplicationLifecycle.DISPOSED;
     private GLFWErrorCallback errorCallback;
@@ -466,18 +474,29 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             if (graphics != null) {
                 graphics.processEvents();
             }
+            long eventsEnd = System.nanoTime();
 
             long now = System.nanoTime();
             deltaTime = (now - lastTime) / 1000000000.0f;
             lastTime = now;
             frameId++;
 
-            if (graphics == null || graphics.beginFrame()) {
+            long beginStart = System.nanoTime();
+            boolean frameBegan = graphics == null || graphics.beginFrame();
+            long beginEnd = System.nanoTime();
+            long renderNanos = 0L;
+            long frameEndNanos = 0L;
+            long presentNanos = 0L;
+            if (frameBegan) {
                 Throwable frameFailure = null;
                 try {
+                    long renderStart = System.nanoTime();
                     listener.render();
+                    renderNanos = System.nanoTime() - renderStart;
                     if (graphics != null) {
+                        long frameEndStart = System.nanoTime();
                         listener.onFrameEnd();
+                        frameEndNanos = System.nanoTime() - frameEndStart;
                     }
                 }
                 catch (RuntimeException | Error failure) {
@@ -487,7 +506,9 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
                 finally {
                     if (graphics != null) {
                         try {
+                            long presentStart = System.nanoTime();
                             graphics.endFrame();
+                            presentNanos = System.nanoTime() - presentStart;
                         }
                         catch (RuntimeException | Error cleanupFailure) {
                             if (frameFailure != null) {
@@ -503,8 +524,306 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             // The graphics provider already performs presentation pacing when
             // VSync is enabled. Sleeping as well adds an entire second frame
             // interval and lowers a nominal 60 FPS loop to roughly 53 FPS.
+            long syncStart = System.nanoTime();
             sync.sync(displayConfig.vSync() ? 0
                     : displayConfig.foregroundFps(), frameStart);
+            long frameComplete = System.nanoTime();
+            frameProfiler.record(display, displayConfig,
+                    graphics != null ? graphics.frameMetrics()
+                            : GraphicsFrameMetrics.UNAVAILABLE,
+                    frameStart, frameComplete,
+                    eventsEnd - frameStart, beginEnd - beginStart,
+                    renderNanos, frameEndNanos, presentNanos,
+                    frameComplete - syncStart);
+        }
+    }
+
+    private static final class DesktopFrameProfiler {
+        private static final long REPORT_INTERVAL_NANOS = 2_000_000_000L;
+        private static final double NANOS_TO_MILLIS = 1.0 / 1_000_000.0;
+        private static final double BYTES_TO_MIB = 1.0 / (1024.0 * 1024.0);
+
+        private final Logger logger;
+        private final boolean enabled;
+        private final double[] frameSamplesMillis = new double[8192];
+        private long windowStartNanos;
+        private long frameCount;
+        private int frameSampleCount;
+        private long totalFrameNanos;
+        private long totalEventsNanos;
+        private long totalBeginNanos;
+        private long totalRenderNanos;
+        private long totalFrameEndNanos;
+        private long totalPresentNanos;
+        private long totalSyncNanos;
+        private long totalDrawCalls;
+        private long totalVertices;
+        private long totalPrimitives;
+        private long totalProgramBinds;
+        private long totalTextureBinds;
+        private long totalFramebufferBinds;
+        private long totalUniformUpdates;
+        private long totalBufferUploads;
+        private long totalBufferUploadBytes;
+        private long totalTextureUploads;
+        private long totalTextureUploadBytes;
+        private long gpuSampleCount;
+        private double totalGpuMillis;
+        private long lastGpuFrameId = -1L;
+        private long pipelineSampleCount;
+        private long totalVertexShaderInvocations;
+        private long totalFragmentShaderInvocations;
+        private long totalClippingInputPrimitives;
+        private long totalClippingOutputPrimitives;
+        private long lastPipelineFrameId = -1L;
+        private long latestSubmittedFrameId = -1L;
+        private long initialGcCount;
+        private long initialGcMillis;
+        private boolean announced;
+
+        DesktopFrameProfiler(Logger logger, boolean enabled) {
+            this.logger = logger;
+            this.enabled = enabled;
+            if (enabled) {
+                initialGcCount = gcCount();
+                initialGcMillis = gcMillis();
+            }
+        }
+
+        void record(Display display, DisplayConfig config,
+                GraphicsFrameMetrics graphicsMetrics,
+                long frameStart, long frameComplete,
+                long eventsNanos, long beginNanos, long renderNanos,
+                long frameEndNanos, long presentNanos, long syncNanos) {
+            if (!enabled) {
+                return;
+            }
+            if (windowStartNanos == 0L) {
+                windowStartNanos = frameStart;
+            }
+            long frameNanos = frameComplete - frameStart;
+            frameCount++;
+            totalFrameNanos += frameNanos;
+            totalEventsNanos += eventsNanos;
+            totalBeginNanos += beginNanos;
+            totalRenderNanos += renderNanos;
+            totalFrameEndNanos += frameEndNanos;
+            totalPresentNanos += presentNanos;
+            totalSyncNanos += syncNanos;
+            if (frameSampleCount < frameSamplesMillis.length) {
+                frameSamplesMillis[frameSampleCount++] =
+                        frameNanos * NANOS_TO_MILLIS;
+            }
+
+            if (graphicsMetrics.available()) {
+                latestSubmittedFrameId = graphicsMetrics.frameId();
+                totalDrawCalls += graphicsMetrics.drawCalls();
+                totalVertices += graphicsMetrics.submittedVertices();
+                totalPrimitives += graphicsMetrics.submittedPrimitives();
+                totalProgramBinds += graphicsMetrics.programBinds();
+                totalTextureBinds += graphicsMetrics.textureBinds();
+                totalFramebufferBinds += graphicsMetrics.framebufferBinds();
+                totalUniformUpdates += graphicsMetrics.uniformUpdates();
+                totalBufferUploads += graphicsMetrics.bufferUploads();
+                totalBufferUploadBytes += graphicsMetrics.bufferUploadBytes();
+                totalTextureUploads += graphicsMetrics.textureUploads();
+                totalTextureUploadBytes += graphicsMetrics.textureUploadBytes();
+                long gpuFrameId = graphicsMetrics.gpuFrameId();
+                if (gpuFrameId > lastGpuFrameId
+                        && Double.isFinite(graphicsMetrics.gpuTimeMillis())) {
+                    lastGpuFrameId = gpuFrameId;
+                    gpuSampleCount++;
+                    totalGpuMillis += graphicsMetrics.gpuTimeMillis();
+                }
+                long pipelineFrameId = graphicsMetrics.pipelineFrameId();
+                if (pipelineFrameId > lastPipelineFrameId) {
+                    lastPipelineFrameId = pipelineFrameId;
+                    pipelineSampleCount++;
+                    totalVertexShaderInvocations +=
+                            graphicsMetrics.vertexShaderInvocations();
+                    totalFragmentShaderInvocations +=
+                            graphicsMetrics.fragmentShaderInvocations();
+                    totalClippingInputPrimitives +=
+                            graphicsMetrics.clippingInputPrimitives();
+                    totalClippingOutputPrimitives +=
+                            graphicsMetrics.clippingOutputPrimitives();
+                }
+                if (!announced) {
+                    logger.info(String.format(
+                            "libFDX detailed frame profiler enabled: %s, VSync %s, software cap %d FPS",
+                            graphicsMetrics.renderer(), config.vSync() ? "on" : "off",
+                            config.foregroundFps()));
+                    announced = true;
+                }
+            }
+
+            long elapsedNanos = frameComplete - windowStartNanos;
+            if (elapsedNanos < REPORT_INTERVAL_NANOS) {
+                return;
+            }
+            report(display, config, elapsedNanos);
+            reset(frameComplete);
+        }
+
+        private void report(Display display, DisplayConfig config,
+                long elapsedNanos) {
+            double elapsedSeconds = elapsedNanos / 1_000_000_000.0;
+            double frames = Math.max(1L, frameCount);
+            int width = display.framebufferWidth() > 0
+                    ? display.framebufferWidth() : display.width();
+            int height = display.framebufferHeight() > 0
+                    ? display.framebufferHeight() : display.height();
+            double megapixels = (long) width * height / 1_000_000.0;
+            double p95 = percentile(0.95);
+            double p99 = percentile(0.99);
+            logger.info(String.format(
+                    "libFDX frame profile: %.1f FPS at %dx%d (%.2f MP), %.3f ms avg / %.3f p95 / %.3f p99; VSync %s, cap %d",
+                    frameCount / elapsedSeconds, width, height, megapixels,
+                    totalFrameNanos * NANOS_TO_MILLIS / frames,
+                    p95, p99, config.vSync() ? "on" : "off",
+                    config.foregroundFps()));
+            logger.info(String.format(
+                    "libFDX CPU/frame: events %.3f ms, begin %.3f ms, app %.3f ms, frame-end %.3f ms, present %.3f ms, limiter %.3f ms",
+                    totalEventsNanos * NANOS_TO_MILLIS / frames,
+                    totalBeginNanos * NANOS_TO_MILLIS / frames,
+                    totalRenderNanos * NANOS_TO_MILLIS / frames,
+                    totalFrameEndNanos * NANOS_TO_MILLIS / frames,
+                    totalPresentNanos * NANOS_TO_MILLIS / frames,
+                    totalSyncNanos * NANOS_TO_MILLIS / frames));
+            if (totalDrawCalls > 0L || gpuSampleCount > 0L) {
+                double appMillis = totalRenderNanos * NANOS_TO_MILLIS
+                        / frames;
+                double gpuMillis = gpuSampleCount > 0L
+                        ? totalGpuMillis / gpuSampleCount : Double.NaN;
+                long gpuLag = lastGpuFrameId >= 0L && latestSubmittedFrameId >= 0L
+                        ? Math.max(0L, latestSubmittedFrameId - lastGpuFrameId) : 0L;
+                logger.info(String.format(
+                        "libFDX GPU/frame: %.3f ms (%d async samples, latest lag %d); %.1f draws, %.3f M vertices, %.3f M primitives, %.1f programs, %.1f textures, %.1f FBO binds",
+                        gpuMillis,
+                        gpuSampleCount, gpuLag,
+                        totalDrawCalls / frames,
+                        totalVertices / frames / 1_000_000.0,
+                        totalPrimitives / frames / 1_000_000.0,
+                        totalProgramBinds / frames,
+                        totalTextureBinds / frames,
+                        totalFramebufferBinds / frames));
+                logger.info(String.format(
+                        "libFDX command/frame: %.1f uniform updates, %.1f buffer uploads / %.1f KiB, %.2f texture uploads / %.1f KiB",
+                        totalUniformUpdates / frames,
+                        totalBufferUploads / frames,
+                        totalBufferUploadBytes / frames / 1024.0,
+                        totalTextureUploads / frames,
+                        totalTextureUploadBytes / frames / 1024.0));
+                if (Double.isFinite(gpuMillis)) {
+                    logger.info(String.format(
+                            "libFDX bottleneck: %s (application %.3f ms vs GPU %.3f ms)",
+                            bottleneck(appMillis, gpuMillis),
+                            appMillis, gpuMillis));
+                }
+                if (pipelineSampleCount > 0L) {
+                    double samples = pipelineSampleCount;
+                    double framebufferPixels = Math.max(1L,
+                            (long) width * height);
+                    double fragmentInvocations =
+                            totalFragmentShaderInvocations / samples;
+                    logger.info(String.format(
+                            "libFDX pipeline/frame: %.3f M vertex shader, %.3f M fragment shader (%.2fx main framebuffer), %.3f M clipping input / %.3f M output primitives; %d async samples",
+                            totalVertexShaderInvocations / samples / 1_000_000.0,
+                            fragmentInvocations / 1_000_000.0,
+                            fragmentInvocations / framebufferPixels,
+                            totalClippingInputPrimitives / samples / 1_000_000.0,
+                            totalClippingOutputPrimitives / samples / 1_000_000.0,
+                            pipelineSampleCount));
+                }
+            }
+            MemoryUsage heap = ManagementFactory.getMemoryMXBean()
+                    .getHeapMemoryUsage();
+            logger.info(String.format(
+                    "JVM profile: heap %.1f / %.1f MiB, GC +%d collections / +%d ms",
+                    heap.getUsed() * BYTES_TO_MIB,
+                    heap.getCommitted() * BYTES_TO_MIB,
+                    Math.max(0L, gcCount() - initialGcCount),
+                    Math.max(0L, gcMillis() - initialGcMillis)));
+        }
+
+        private static String bottleneck(double appMillis,
+                double gpuMillis) {
+            if (appMillis > gpuMillis * 1.35) {
+                return "CPU/application";
+            }
+            if (gpuMillis > appMillis * 1.35) {
+                return "GPU";
+            }
+            return "balanced CPU/GPU";
+        }
+
+        private double percentile(double fraction) {
+            if (frameSampleCount == 0) {
+                return 0.0;
+            }
+            double[] sorted = Arrays.copyOf(frameSamplesMillis,
+                    frameSampleCount);
+            Arrays.sort(sorted);
+            int index = Math.min(sorted.length - 1,
+                    Math.max(0, (int) Math.ceil(fraction * sorted.length) - 1));
+            return sorted[index];
+        }
+
+        private void reset(long now) {
+            windowStartNanos = now;
+            frameCount = 0L;
+            frameSampleCount = 0;
+            totalFrameNanos = 0L;
+            totalEventsNanos = 0L;
+            totalBeginNanos = 0L;
+            totalRenderNanos = 0L;
+            totalFrameEndNanos = 0L;
+            totalPresentNanos = 0L;
+            totalSyncNanos = 0L;
+            totalDrawCalls = 0L;
+            totalVertices = 0L;
+            totalPrimitives = 0L;
+            totalProgramBinds = 0L;
+            totalTextureBinds = 0L;
+            totalFramebufferBinds = 0L;
+            totalUniformUpdates = 0L;
+            totalBufferUploads = 0L;
+            totalBufferUploadBytes = 0L;
+            totalTextureUploads = 0L;
+            totalTextureUploadBytes = 0L;
+            gpuSampleCount = 0L;
+            totalGpuMillis = 0.0;
+            pipelineSampleCount = 0L;
+            totalVertexShaderInvocations = 0L;
+            totalFragmentShaderInvocations = 0L;
+            totalClippingInputPrimitives = 0L;
+            totalClippingOutputPrimitives = 0L;
+            initialGcCount = gcCount();
+            initialGcMillis = gcMillis();
+        }
+
+        private static long gcCount() {
+            long total = 0L;
+            for (GarbageCollectorMXBean collector
+                    : ManagementFactory.getGarbageCollectorMXBeans()) {
+                long count = collector.getCollectionCount();
+                if (count > 0L) {
+                    total += count;
+                }
+            }
+            return total;
+        }
+
+        private static long gcMillis() {
+            long total = 0L;
+            for (GarbageCollectorMXBean collector
+                    : ManagementFactory.getGarbageCollectorMXBeans()) {
+                long millis = collector.getCollectionTime();
+                if (millis > 0L) {
+                    total += millis;
+                }
+            }
+            return total;
         }
     }
 

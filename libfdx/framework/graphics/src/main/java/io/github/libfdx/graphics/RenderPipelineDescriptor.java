@@ -601,7 +601,12 @@ public final class RenderPipelineDescriptor {
             throw new FdxException("Render pipeline multisample state does not match target layout");
         }
         if (requiresCompleteRenderPipelineState()) {
-            capabilities.require(GraphicsFeature.COMPLETE_RENDER_PIPELINE_STATE);
+            if (!requiresOnlyAlphaBlendControl()
+                    || !capabilities.supports(
+                    GraphicsFeature.ALPHA_BLEND_CONTROL)) {
+                capabilities.require(
+                        GraphicsFeature.COMPLETE_RENDER_PIPELINE_STATE);
+            }
         }
         ShaderResourceLayout resources = resourceLayout();
         if (resources != null) {
@@ -642,5 +647,37 @@ public final class RenderPipelineDescriptor {
         }
         MultisampleState multisample = multisampleState();
         return multisample.mask() != -1 || multisample.alphaToCoverageEnabled();
+    }
+
+    private boolean requiresOnlyAlphaBlendControl() {
+        if (primitiveState.frontFace() != FrontFace.COUNTER_CLOCKWISE
+                || primitiveState.cullMode() != CullMode.NONE) {
+            return false;
+        }
+        boolean opaqueTarget = false;
+        for (ColorTargetState target : colorTargets()) {
+            if (target.writeMask() != ColorWriteMask.ALL) {
+                return false;
+            }
+            if (target.blend() == null) {
+                opaqueTarget = true;
+            }
+            else if (!BlendState.alphaBlend().equals(target.blend())) {
+                return false;
+            }
+        }
+        DepthStencilState depth = depthStencilState();
+        if (depth != null && (depth.depthCompare() != CompareFunction.LESS_EQUAL
+                || !StencilFaceState.disabled().equals(depth.stencilFront())
+                || !StencilFaceState.disabled().equals(depth.stencilBack())
+                || depth.stencilReadMask() != -1 || depth.stencilWriteMask() != -1
+                || depth.depthBias() != 0
+                || Float.floatToRawIntBits(depth.depthBiasSlopeScale()) != 0
+                || Float.floatToRawIntBits(depth.depthBiasClamp()) != 0)) {
+            return false;
+        }
+        MultisampleState multisample = multisampleState();
+        return opaqueTarget && multisample.mask() == -1
+                && !multisample.alphaToCoverageEnabled();
     }
 }

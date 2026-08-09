@@ -4,7 +4,6 @@ import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompileOptions;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompiler;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphLiteral;
 import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphMaterialDefinition;
-import io.github.libfdx.graphics.internal.BuiltInPbrShaderManifest;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -51,9 +50,9 @@ class PbrGraphCustomizationTest {
                 .requireBinding(1, 0);
         var skinnedUniform = customization.shader(true).reflection()
                 .requireBinding(1, 0);
-        long staticBaseSize = BuiltInPbrShaderManifest.staticReflection()
+        long staticBaseSize = PbrShaderParameters.staticReflection()
                 .requireBinding(1, 0).minimumBindingSize();
-        long skinnedBaseSize = BuiltInPbrShaderManifest.skinnedReflection()
+        long skinnedBaseSize = PbrShaderParameters.skinnedReflection()
                 .requireBinding(1, 0).minimumBindingSize();
         assertEquals(staticBaseSize,
                 staticUniform.bufferLayout()

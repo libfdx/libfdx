@@ -8,6 +8,7 @@ import io.github.libfdx.graphics.FrameBuffer;
 import io.github.libfdx.graphics.GraphicsAttachment;
 import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.GraphicsFrame;
+import io.github.libfdx.graphics.GraphicsFrameMetrics;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassCompatibility;
@@ -44,6 +45,7 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
     private int height;
     private boolean frameStarted;
     private boolean disposed;
+    private long submittedFrameId;
 
     /**
      * Creates a GL graphics attachment.
@@ -140,6 +142,7 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         }
         makeCurrent();
         commandEncoder.beginFrame();
+        gl.beginFrameMetrics(++submittedFrameId);
         gl.bindVertexArray(vertexArray);
         gl.viewport(0, 0, width, height);
         frameStarted = true;
@@ -156,6 +159,7 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         }
         makeCurrent();
         commandEncoder.ensurePassesEnded();
+        gl.endFrameMetrics();
         frameStarted = false;
         surface.swapBuffers();
     }
@@ -191,6 +195,11 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
             throw new FdxException("No GL frame is active");
         }
         return currentFrame;
+    }
+
+    @Override
+    public GraphicsFrameMetrics frameMetrics() {
+        return gl.frameMetrics();
     }
 
     /**
@@ -252,6 +261,7 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         }
         makeCurrent();
         disposeRenderTargets();
+        gl.disposeFrameMetrics();
         gl.deleteVertexArray(vertexArray);
         resourceDomain.remove(this);
         disposed = true;

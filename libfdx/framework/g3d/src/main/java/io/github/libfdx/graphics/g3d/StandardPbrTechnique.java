@@ -4,6 +4,7 @@ import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.CompareFunction;
 import io.github.libfdx.graphics.GraphicsContext;
+import io.github.libfdx.graphics.GraphicsFeature;
 import io.github.libfdx.graphics.Mesh;
 import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
 import io.github.libfdx.graphics.shader.ShaderProfile;
@@ -40,6 +41,7 @@ public final class StandardPbrTechnique {
     private final ShaderGraph surfaceGraph;
     private final ShaderGraph vertexGraph;
     private final ShaderGraph lightingGraph;
+    private final boolean alphaBlendControl;
 
     private StandardPbrTechnique(GraphicsContext graphics,
             ShaderGraph surfaceGraph, ShaderGraph vertexGraph,
@@ -61,6 +63,10 @@ public final class StandardPbrTechnique {
         this.surfaceGraph = surfaceGraph;
         this.vertexGraph = vertexGraph;
         this.lightingGraph = lightingGraph;
+        alphaBlendControl = graphics.device().capabilities().supports(
+                GraphicsFeature.ALPHA_BLEND_CONTROL)
+                || graphics.device().capabilities().supports(
+                        GraphicsFeature.COMPLETE_RENDER_PIPELINE_STATE);
         ShaderProfile profile = graphics.device().capabilities()
                 .supports(ShaderProfile.PORTABLE_WEBGPU)
                         ? ShaderProfile.PORTABLE_WEBGPU
@@ -96,40 +102,56 @@ public final class StandardPbrTechnique {
                         STANDARD_PASSES.length];
         for (int i = 0; i < passes.length; i++) {
             ShaderPassId passId = STANDARD_PASSES[i];
-            ShaderGraphRenderProgram staticProgram =
-                    ShaderGraphRenderProgram.builder(passId,
-                                    customization.shader(false))
-                            .label("standard graph PBR " + passId)
-                            .depth(true,
-                                    CompareFunction.LESS_EQUAL)
-                            .vertexLayouts(Mesh.PBR_LAYOUT)
-                            .defaultResources(
-                                    customization.defaultMaterial())
-                            .build();
-            ShaderGraphRenderProgram skinnedProgram =
-                    ShaderGraphRenderProgram.builder(passId,
-                                    customization.shader(true))
-                            .label("standard graph skinned PBR "
-                                    + passId)
-                            .depth(true,
-                                    CompareFunction.LESS_EQUAL)
-                            .vertexLayouts(
-                                    Mesh.PBR_SKINNED_LAYOUT)
-                            .defaultResources(
-                                    customization.defaultMaterial())
-                            .build();
+            ShaderGraphRenderProgram staticOpaque = program(
+                    passId, false, false, false, true, "opaque");
+            ShaderGraphRenderProgram skinnedOpaque = program(
+                    passId, true, false, false, true, "opaque");
+            ShaderGraphRenderProgram staticMask = program(
+                    passId, false, true, false, true, "mask");
+            ShaderGraphRenderProgram skinnedMask = program(
+                    passId, true, true, false, true, "mask");
+            ShaderGraphRenderProgram staticBlend = program(
+                    passId, false, true, true, false, "blend");
+            ShaderGraphRenderProgram skinnedBlend = program(
+                    passId, true, true, true, false, "blend");
             passes[i] = ShaderGraphRenderTechniquePass
                     .builder(passId)
                     .variants(
                             ShaderGraphRenderVariant.builder("",
-                                    staticProgram).build(),
+                                    staticOpaque).build(),
                             ShaderGraphRenderVariant.builder(
                                     "skinned",
-                                    skinnedProgram).build())
+                                    skinnedOpaque).build(),
+                            ShaderGraphRenderVariant.builder(
+                                    "mask", staticMask).build(),
+                            ShaderGraphRenderVariant.builder(
+                                    "skinned-mask", skinnedMask).build(),
+                            ShaderGraphRenderVariant.builder(
+                                    "blend", staticBlend).build(),
+                            ShaderGraphRenderVariant.builder(
+                                    "skinned-blend", skinnedBlend).build())
                     .build();
         }
         technique = ShaderGraphRenderTechnique.of(
                 "libfdx.standard.pbr", passes);
+    }
+
+    private ShaderGraphRenderProgram program(ShaderPassId passId,
+            boolean skinned, boolean alphaTest, boolean alphaBlend,
+            boolean depthWrite, String alphaLabel) {
+        return ShaderGraphRenderProgram.builder(passId,
+                        customization.shader(skinned, alphaTest))
+                .label("standard graph "
+                        + (skinned ? "skinned " : "")
+                        + alphaLabel + " PBR " + passId)
+                .depth(depthWrite, CompareFunction.LESS_EQUAL)
+                // Providers without explicit blend-state control retain the
+                // historical always-blended pipeline as a safe fallback.
+                .alphaBlend(alphaBlend || !alphaBlendControl)
+                .vertexLayouts(skinned
+                        ? Mesh.PBR_SKINNED_LAYOUT : Mesh.PBR_LAYOUT)
+                .defaultResources(customization.defaultMaterial())
+                .build();
     }
 
     /**

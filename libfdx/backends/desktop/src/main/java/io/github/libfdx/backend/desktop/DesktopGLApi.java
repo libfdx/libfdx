@@ -2,6 +2,7 @@ package io.github.libfdx.backend.desktop;
 
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.PrimitiveTopology;
+import io.github.libfdx.graphics.GraphicsFrameMetrics;
 import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureWrap;
 import io.github.libfdx.graphics.VertexFormat;
@@ -17,6 +18,8 @@ import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GL31;
 import org.lwjgl.opengl.GL32;
 import org.lwjgl.opengl.GL33;
+import org.lwjgl.opengl.GL;
+import org.lwjgl.opengl.ARBPipelineStatisticsQuery;
 
 import java.nio.ByteBuffer;
 
@@ -26,6 +29,313 @@ import java.nio.ByteBuffer;
  * @author xpenatan
  */
 final class DesktopGLApi implements GLApi {
+    private static final int QUERY_RING_SIZE = 4;
+    private static final int[] PIPELINE_QUERY_TARGETS = {
+            ARBPipelineStatisticsQuery.GL_VERTEX_SHADER_INVOCATIONS_ARB,
+            ARBPipelineStatisticsQuery.GL_FRAGMENT_SHADER_INVOCATIONS_ARB,
+            ARBPipelineStatisticsQuery.GL_CLIPPING_INPUT_PRIMITIVES_ARB,
+            ARBPipelineStatisticsQuery.GL_CLIPPING_OUTPUT_PRIMITIVES_ARB
+    };
+
+    private final boolean metricsEnabled = Boolean.parseBoolean(System.getProperty(
+            "libfdx.profileFrames", "false"));
+    private final boolean pipelineMetricsEnabled = Boolean.parseBoolean(
+            System.getProperty("libfdx.profilePipelineStats", "false"));
+    private final DesktopFrameMetrics metrics = new DesktopFrameMetrics();
+    private final int[] timerQueries = new int[QUERY_RING_SIZE];
+    private final boolean[] timerQueryPending = new boolean[QUERY_RING_SIZE];
+    private final long[] timerQueryFrameIds = new long[QUERY_RING_SIZE];
+    private final int[][] pipelineQueries =
+            new int[PIPELINE_QUERY_TARGETS.length][QUERY_RING_SIZE];
+    private final boolean[] pipelineQueryPending = new boolean[QUERY_RING_SIZE];
+    private final long[] pipelineQueryFrameIds = new long[QUERY_RING_SIZE];
+    private boolean timerQueriesInitialized;
+    private boolean timerQueriesSupported;
+    private boolean pipelineQueriesSupported;
+    private int nextTimerQuery;
+    private int activeTimerQuery = -1;
+    private int nextPipelineQuery;
+    private int activePipelineQuery = -1;
+    private long currentFrameId;
+    private int drawCalls;
+    private long submittedVertices;
+    private long submittedPrimitives;
+    private int programBinds;
+    private int textureBinds;
+    private int framebufferBinds;
+    private int uniformUpdates;
+    private int bufferUploads;
+    private long bufferUploadBytes;
+    private int textureUploads;
+    private long textureUploadBytes;
+
+    @Override
+    public void beginFrameMetrics(long frameId) {
+        if (!metricsEnabled) {
+            return;
+        }
+        initializeTimerQueries();
+        pollTimerQueries();
+        currentFrameId = frameId;
+        drawCalls = 0;
+        submittedVertices = 0L;
+        submittedPrimitives = 0L;
+        programBinds = 0;
+        textureBinds = 0;
+        framebufferBinds = 0;
+        uniformUpdates = 0;
+        bufferUploads = 0;
+        bufferUploadBytes = 0L;
+        textureUploads = 0;
+        textureUploadBytes = 0L;
+        activeTimerQuery = -1;
+        if (timerQueriesSupported && !timerQueryPending[nextTimerQuery]) {
+            activeTimerQuery = nextTimerQuery;
+            GL33.glBeginQuery(GL33.GL_TIME_ELAPSED, timerQueries[activeTimerQuery]);
+        }
+        activePipelineQuery = -1;
+        if (pipelineQueriesSupported
+                && !pipelineQueryPending[nextPipelineQuery]) {
+            activePipelineQuery = nextPipelineQuery;
+            for (int targetIndex = 0;
+                    targetIndex < PIPELINE_QUERY_TARGETS.length;
+                    targetIndex++) {
+                GL15.glBeginQuery(PIPELINE_QUERY_TARGETS[targetIndex],
+                        pipelineQueries[targetIndex][activePipelineQuery]);
+            }
+        }
+    }
+
+    @Override
+    public void endFrameMetrics() {
+        if (!metricsEnabled) {
+            return;
+        }
+        if (activeTimerQuery >= 0) {
+            GL33.glEndQuery(GL33.GL_TIME_ELAPSED);
+            timerQueryPending[activeTimerQuery] = true;
+            timerQueryFrameIds[activeTimerQuery] = currentFrameId;
+            nextTimerQuery = (activeTimerQuery + 1) % QUERY_RING_SIZE;
+            activeTimerQuery = -1;
+        }
+        if (activePipelineQuery >= 0) {
+            for (int target : PIPELINE_QUERY_TARGETS) {
+                GL15.glEndQuery(target);
+            }
+            pipelineQueryPending[activePipelineQuery] = true;
+            pipelineQueryFrameIds[activePipelineQuery] = currentFrameId;
+            nextPipelineQuery = (activePipelineQuery + 1) % QUERY_RING_SIZE;
+            activePipelineQuery = -1;
+        }
+        metrics.frameId = currentFrameId;
+        metrics.drawCalls = drawCalls;
+        metrics.submittedVertices = submittedVertices;
+        metrics.submittedPrimitives = submittedPrimitives;
+        metrics.programBinds = programBinds;
+        metrics.textureBinds = textureBinds;
+        metrics.framebufferBinds = framebufferBinds;
+        metrics.uniformUpdates = uniformUpdates;
+        metrics.bufferUploads = bufferUploads;
+        metrics.bufferUploadBytes = bufferUploadBytes;
+        metrics.textureUploads = textureUploads;
+        metrics.textureUploadBytes = textureUploadBytes;
+    }
+
+    @Override
+    public void disposeFrameMetrics() {
+        if (!timerQueriesInitialized) {
+            return;
+        }
+        if (activeTimerQuery >= 0) {
+            GL33.glEndQuery(GL33.GL_TIME_ELAPSED);
+            activeTimerQuery = -1;
+        }
+        if (activePipelineQuery >= 0) {
+            for (int target : PIPELINE_QUERY_TARGETS) {
+                GL15.glEndQuery(target);
+            }
+            activePipelineQuery = -1;
+        }
+        for (int query : timerQueries) {
+            if (query != 0) {
+                GL33.glDeleteQueries(query);
+            }
+        }
+        for (int[] queries : pipelineQueries) {
+            for (int query : queries) {
+                if (query != 0) {
+                    GL15.glDeleteQueries(query);
+                }
+            }
+        }
+        timerQueriesInitialized = false;
+    }
+
+    @Override
+    public GraphicsFrameMetrics frameMetrics() {
+        return metricsEnabled ? metrics : GraphicsFrameMetrics.UNAVAILABLE;
+    }
+
+    private void initializeTimerQueries() {
+        if (timerQueriesInitialized) {
+            return;
+        }
+        timerQueriesInitialized = true;
+        timerQueriesSupported = GL.getCapabilities().OpenGL33
+                || GL.getCapabilities().GL_ARB_timer_query;
+        pipelineQueriesSupported = pipelineMetricsEnabled
+                && GL.getCapabilities().GL_ARB_pipeline_statistics_query;
+        metrics.available = true;
+        String renderer = GL11.glGetString(GL11.GL_RENDERER);
+        String vendor = GL11.glGetString(GL11.GL_VENDOR);
+        metrics.renderer = (renderer != null ? renderer : "unknown OpenGL renderer")
+                + (vendor != null ? " (" + vendor + ")" : "");
+        if (timerQueriesSupported) {
+            for (int index = 0; index < timerQueries.length; index++) {
+                timerQueries[index] = GL15.glGenQueries();
+            }
+        }
+        if (pipelineQueriesSupported) {
+            for (int[] queries : pipelineQueries) {
+                for (int index = 0; index < queries.length; index++) {
+                    queries[index] = GL15.glGenQueries();
+                }
+            }
+        }
+    }
+
+    private void pollTimerQueries() {
+        if (!timerQueriesSupported) {
+            return;
+        }
+        for (int index = 0; index < timerQueries.length; index++) {
+            if (!timerQueryPending[index]
+                    || GL15.glGetQueryObjecti(timerQueries[index],
+                    GL15.GL_QUERY_RESULT_AVAILABLE) == GL11.GL_FALSE) {
+                continue;
+            }
+            long elapsedNanos = GL33.glGetQueryObjecti64(timerQueries[index],
+                    GL15.GL_QUERY_RESULT);
+            metrics.gpuFrameId = timerQueryFrameIds[index];
+            metrics.gpuTimeMillis = elapsedNanos / 1_000_000.0;
+            timerQueryPending[index] = false;
+        }
+        pollPipelineQueries();
+    }
+
+    private void pollPipelineQueries() {
+        if (!pipelineQueriesSupported) {
+            return;
+        }
+        queryLoop:
+        for (int index = 0; index < QUERY_RING_SIZE; index++) {
+            if (!pipelineQueryPending[index]) {
+                continue;
+            }
+            for (int[] queries : pipelineQueries) {
+                if (GL15.glGetQueryObjecti(queries[index],
+                        GL15.GL_QUERY_RESULT_AVAILABLE) == GL11.GL_FALSE) {
+                    continue queryLoop;
+                }
+            }
+            metrics.pipelineFrameId = pipelineQueryFrameIds[index];
+            metrics.vertexShaderInvocations = queryResult(
+                    pipelineQueries[0][index]);
+            metrics.fragmentShaderInvocations = queryResult(
+                    pipelineQueries[1][index]);
+            metrics.clippingInputPrimitives = queryResult(
+                    pipelineQueries[2][index]);
+            metrics.clippingOutputPrimitives = queryResult(
+                    pipelineQueries[3][index]);
+            pipelineQueryPending[index] = false;
+        }
+    }
+
+    private static long queryResult(int query) {
+        return GL33.glGetQueryObjecti64(query, GL15.GL_QUERY_RESULT);
+    }
+
+    private void recordDraw(PrimitiveTopology topology, int elementCount,
+            int instanceCount) {
+        if (!metricsEnabled) {
+            return;
+        }
+        long instances = Math.max(1, instanceCount);
+        long vertices = (long) Math.max(0, elementCount) * instances;
+        drawCalls++;
+        submittedVertices += vertices;
+        if (topology == PrimitiveTopology.LINE_LIST) {
+            submittedPrimitives += vertices / 2L;
+        }
+        else if (topology == PrimitiveTopology.TRIANGLE_STRIP) {
+            submittedPrimitives += Math.max(0L, elementCount - 2L) * instances;
+        }
+        else {
+            submittedPrimitives += vertices / 3L;
+        }
+    }
+
+    private void recordUpload(int bytes) {
+        if (metricsEnabled) {
+            bufferUploads++;
+            bufferUploadBytes += Math.max(0, bytes);
+        }
+    }
+
+    private void recordTextureUpload(int width, int height, ByteBuffer data) {
+        if (metricsEnabled && data != null) {
+            textureUploads++;
+            textureUploadBytes += Math.min(data.remaining(),
+                    Math.max(0L, (long) width * height * 4L));
+        }
+    }
+
+    private static final class DesktopFrameMetrics implements GraphicsFrameMetrics {
+        boolean available;
+        long frameId = -1L;
+        int drawCalls;
+        long submittedVertices;
+        long submittedPrimitives;
+        int programBinds;
+        int textureBinds;
+        int framebufferBinds;
+        int uniformUpdates;
+        int bufferUploads;
+        long bufferUploadBytes;
+        int textureUploads;
+        long textureUploadBytes;
+        long gpuFrameId = -1L;
+        double gpuTimeMillis = Double.NaN;
+        long pipelineFrameId = -1L;
+        long vertexShaderInvocations;
+        long fragmentShaderInvocations;
+        long clippingInputPrimitives;
+        long clippingOutputPrimitives;
+        String renderer = "OpenGL";
+
+        @Override public boolean available() { return available; }
+        @Override public long frameId() { return frameId; }
+        @Override public int drawCalls() { return drawCalls; }
+        @Override public long submittedVertices() { return submittedVertices; }
+        @Override public long submittedPrimitives() { return submittedPrimitives; }
+        @Override public int programBinds() { return programBinds; }
+        @Override public int textureBinds() { return textureBinds; }
+        @Override public int framebufferBinds() { return framebufferBinds; }
+        @Override public int uniformUpdates() { return uniformUpdates; }
+        @Override public int bufferUploads() { return bufferUploads; }
+        @Override public long bufferUploadBytes() { return bufferUploadBytes; }
+        @Override public int textureUploads() { return textureUploads; }
+        @Override public long textureUploadBytes() { return textureUploadBytes; }
+        @Override public long gpuFrameId() { return gpuFrameId; }
+        @Override public double gpuTimeMillis() { return gpuTimeMillis; }
+        @Override public long pipelineFrameId() { return pipelineFrameId; }
+        @Override public long vertexShaderInvocations() { return vertexShaderInvocations; }
+        @Override public long fragmentShaderInvocations() { return fragmentShaderInvocations; }
+        @Override public long clippingInputPrimitives() { return clippingInputPrimitives; }
+        @Override public long clippingOutputPrimitives() { return clippingOutputPrimitives; }
+        @Override public String renderer() { return renderer; }
+    }
+
     /**
      * Returns the create program.
      *
@@ -166,6 +476,9 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void useProgram(int program) {
+        if (metricsEnabled) {
+            programBinds++;
+        }
         GL20.glUseProgram(program);
     }
 
@@ -236,6 +549,7 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void bufferData(int size) {
+        recordUpload(size);
         GL15.glBufferData(GL15.GL_ARRAY_BUFFER, size, GL15.GL_DYNAMIC_DRAW);
     }
 
@@ -246,6 +560,7 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void elementBufferData(int size) {
+        recordUpload(size);
         GL15.glBufferData(GL15.GL_ELEMENT_ARRAY_BUFFER, size, GL15.GL_STATIC_DRAW);
     }
 
@@ -256,6 +571,7 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void bufferSubData(ByteBuffer data) {
+        recordUpload(data != null ? data.remaining() : 0);
         GL15.glBufferSubData(GL15.GL_ARRAY_BUFFER, 0, data);
     }
 
@@ -276,6 +592,7 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void uniformBufferData(int size) {
+        recordUpload(size);
         GL15.glBufferData(GL31.GL_UNIFORM_BUFFER, size, GL15.GL_DYNAMIC_DRAW);
     }
 
@@ -286,6 +603,7 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void uniformBufferSubData(ByteBuffer data) {
+        recordUpload(data != null ? data.remaining() : 0);
         GL15.glBufferSubData(GL31.GL_UNIFORM_BUFFER, 0, data);
     }
 
@@ -307,6 +625,7 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void elementBufferSubData(ByteBuffer data) {
+        recordUpload(data != null ? data.remaining() : 0);
         GL15.glBufferSubData(GL15.GL_ELEMENT_ARRAY_BUFFER, 0, data);
     }
 
@@ -337,6 +656,9 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void bindTexture2D(int texture) {
+        if (metricsEnabled) {
+            textureBinds++;
+        }
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
     }
 
@@ -349,6 +671,7 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void texImage2D(int width, int height, ByteBuffer data) {
+        recordTextureUpload(width, height, data);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
@@ -366,6 +689,7 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void texSubImage2D(int width, int height, ByteBuffer data) {
+        recordTextureUpload(width, height, data);
         GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, width, height,
                 GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, data);
     }
@@ -421,6 +745,9 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void bindFramebuffer(int framebuffer) {
+        if (metricsEnabled) {
+            framebufferBinds++;
+        }
         GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, framebuffer);
     }
 
@@ -537,6 +864,9 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void uniform1i(int location, int value) {
+        if (metricsEnabled) {
+            uniformUpdates++;
+        }
         GL20.glUniform1i(location, value);
     }
 
@@ -572,6 +902,9 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void uniform1f(int location, float value) {
+        if (metricsEnabled) {
+            uniformUpdates++;
+        }
         GL20.glUniform1f(location, value);
     }
 
@@ -585,6 +918,9 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void uniform3f(int location, float x, float y, float z) {
+        if (metricsEnabled) {
+            uniformUpdates++;
+        }
         GL20.glUniform3f(location, x, y, z);
     }
 
@@ -599,6 +935,9 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void uniform4f(int location, float x, float y, float z, float w) {
+        if (metricsEnabled) {
+            uniformUpdates++;
+        }
         GL20.glUniform4f(location, x, y, z, w);
     }
 
@@ -611,6 +950,9 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void uniformMatrix4fv(int location, boolean transpose, float[] values) {
+        if (metricsEnabled) {
+            uniformUpdates++;
+        }
         GL20.glUniformMatrix4fv(location, transpose, values);
     }
 
@@ -622,6 +964,11 @@ final class DesktopGLApi implements GLApi {
         GL11.glEnable(GL11.GL_BLEND);
         GL14.glBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA,
                 GL11.GL_ONE, GL11.GL_ONE_MINUS_SRC_ALPHA);
+    }
+
+    @Override
+    public void disableAlphaBlending() {
+        GL11.glDisable(GL11.GL_BLEND);
     }
 
     /**
@@ -805,6 +1152,7 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void drawArrays(PrimitiveTopology topology, int firstVertex, int vertexCount) {
+        recordDraw(topology, vertexCount, 1);
         GL20.glDrawArrays(toNative(topology), firstVertex, vertexCount);
     }
 
@@ -818,6 +1166,7 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void drawArraysInstanced(PrimitiveTopology topology, int firstVertex, int vertexCount, int instanceCount) {
+        recordDraw(topology, vertexCount, instanceCount);
         GL31.glDrawArraysInstanced(toNative(topology), firstVertex, vertexCount, instanceCount);
     }
 
@@ -848,6 +1197,7 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void drawElements(PrimitiveTopology topology, int indexCount, int offsetBytes) {
+        recordDraw(topology, indexCount, 1);
         GL11.glDrawElements(toNative(topology), indexCount, GL11.GL_UNSIGNED_SHORT, offsetBytes);
     }
 
@@ -861,6 +1211,7 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void drawElementsBaseVertex(PrimitiveTopology topology, int indexCount, int offsetBytes, int baseVertex) {
+        recordDraw(topology, indexCount, 1);
         GL32.glDrawElementsBaseVertex(toNative(topology), indexCount, GL11.GL_UNSIGNED_SHORT, offsetBytes, baseVertex);
     }
 
@@ -874,6 +1225,7 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void drawElementsInstanced(PrimitiveTopology topology, int indexCount, int offsetBytes, int instanceCount) {
+        recordDraw(topology, indexCount, instanceCount);
         GL31.glDrawElementsInstanced(toNative(topology), indexCount, GL11.GL_UNSIGNED_SHORT,
                 offsetBytes, instanceCount);
     }
@@ -890,6 +1242,7 @@ final class DesktopGLApi implements GLApi {
     @Override
     public void drawElementsInstancedBaseVertex(PrimitiveTopology topology, int indexCount, int offsetBytes,
             int instanceCount, int baseVertex) {
+        recordDraw(topology, indexCount, instanceCount);
         GL32.glDrawElementsInstancedBaseVertex(toNative(topology), indexCount, GL11.GL_UNSIGNED_SHORT, offsetBytes,
                 instanceCount, baseVertex);
     }

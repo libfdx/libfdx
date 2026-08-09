@@ -30,6 +30,15 @@ public interface GraphicsContext extends ProviderHandle {
     GraphicsFrame currentFrame();
 
     /**
+     * Returns diagnostics for the most recently submitted graphics frame.
+     *
+     * @return backend frame metrics, or an unavailable metrics object
+     */
+    default GraphicsFrameMetrics frameMetrics() {
+        return GraphicsFrameMetrics.UNAVAILABLE;
+    }
+
+    /**
      * Runs the clear step.
      *
      * @param red the red

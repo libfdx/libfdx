@@ -71,7 +71,7 @@ import java.util.ArrayList;
  * @author xpenatan
  */
 public final class EdgeDetectionOutlineRenderer3D implements Disposable {
-    private static final int MAX_BONES = PbrShaderParameters.manifestMaxBones();
+    private static final int MAX_BONES = PbrShaderParameters.MAX_BONES;
     private static final int POST_VERTEX_COUNT = 6;
     private static final int POST_FLOATS_PER_VERTEX = 12;
     private static final int POST_BYTES_PER_VERTEX = POST_FLOATS_PER_VERTEX * 4;

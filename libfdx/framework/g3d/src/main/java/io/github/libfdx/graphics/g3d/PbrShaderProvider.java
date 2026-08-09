@@ -50,11 +50,11 @@ import java.util.Arrays;
 public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
     private static final int PRIMITIVE_TOPOLOGY_COUNT = PrimitiveTopology.values().length;
     private static final float[] IDENTITY_MATRIX_VALUES = Matrix4.IDENTITY.values();
-    private static final int MAX_POINT_LIGHTS = PbrShaderParameters.manifestMaxPointLights();
-    private static final int MAX_SHADOW_CASCADES = PbrShaderParameters.manifestMaxShadowCascades();
+    private static final int MAX_POINT_LIGHTS = PbrShaderParameters.MAX_POINT_LIGHTS;
+    private static final int MAX_SHADOW_CASCADES = PbrShaderParameters.MAX_SHADOW_CASCADES;
     private static final int SHADOW_TEXTURE_SLOT_OFFSET = 5;
-    private static final int MAX_SHADER_BONES = PbrShaderParameters.manifestMaxBones();
-    private static final int MAX_SPOT_LIGHTS = PbrShaderParameters.manifestMaxSpotLights();
+    private static final int MAX_SHADER_BONES = PbrShaderParameters.MAX_BONES;
+    private static final int MAX_SPOT_LIGHTS = PbrShaderParameters.MAX_SPOT_LIGHTS;
     private static final String POSITION_COLOR_SHADER_SOURCE = """
             struct VertexInput {
                 @location(0) position : vec3f,
@@ -379,7 +379,14 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
             fn shadowVisibility(cascadeIndex : i32, uv : vec2f, currentDepth : f32,
                     bias : f32, offset : vec2f) -> f32 {
-                let closestDepth = shadowDepth(cascadeIndex, uv + offset);
+                let sampleUv = uv + offset;
+                // Samples beyond a cascade contain no shadow caster. Treat
+                // them as lit instead of repeating the texture's edge texel.
+                if (sampleUv.x < 0.0 || sampleUv.x > 1.0
+                        || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
+                    return 1.0;
+                }
+                let closestDepth = shadowDepth(cascadeIndex, sampleUv);
                 if (currentDepth - bias > closestDepth) {
                     return 1.0 - uniforms.shadowParams.z;
                 }
@@ -395,66 +402,60 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     return 1.0;
                 }
                 let ndc = lightClip.xyz / lightClip.w;
+                // libFDX light cameras use OpenGL-style -1..1 clip depth.
+                // A receiver outside that volume has no valid shadow sample.
+                if (ndc.z < -1.0 || ndc.z > 1.0) {
+                    return 1.0;
+                }
                 let uv = vec2f(ndc.x * 0.5 + 0.5,
                         0.5 + ndc.y * 0.5 * uniforms.shadowParams.w);
                 if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
                     return 1.0;
                 }
-                let currentDepth = clamp(ndc.z * 0.5 + 0.5, 0.0, 1.0);
+                let currentDepth = ndc.z * 0.5 + 0.5;
                 let bias = shadowBias(cascadeIndex);
                 let radiusX = max(uniforms.shadowFilterParams.x, 0.000001)
                         * uniforms.shadowFilterParams.z;
                 let radiusY = max(uniforms.shadowFilterParams.y, 0.000001)
                         * uniforms.shadowFilterParams.z;
-                let x0 = -2.0 * radiusX;
-                let x1 = -radiusX;
-                let x2 = 0.0;
-                let x3 = radiusX;
-                let x4 = 2.0 * radiusX;
-                let y0 = -2.0 * radiusY;
-                let y1 = -radiusY;
-                let y2 = 0.0;
-                let y3 = radiusY;
-                let y4 = 2.0 * radiusY;
-                var visibility = shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x0, y0));
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x1, y0)) * 4.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x2, y0)) * 6.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x3, y0)) * 4.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x4, y0));
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x0, y1)) * 4.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x1, y1)) * 16.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x2, y1)) * 24.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x3, y1)) * 16.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x4, y1)) * 4.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x0, y2)) * 6.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x1, y2)) * 24.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x2, y2)) * 36.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x3, y2)) * 24.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x4, y2)) * 6.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x0, y3)) * 4.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x1, y3)) * 16.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x2, y3)) * 24.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x3, y3)) * 16.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x4, y3)) * 4.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x0, y4));
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x1, y4)) * 4.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x2, y4)) * 6.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x3, y4)) * 4.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias, vec2f(x4, y4));
+                // Approximate the 1-4-6-4-1 Gaussian footprint with nine
+                // weighted taps instead of twenty-five texture fetches.
+                let x0 = -1.2 * radiusX;
+                let x1 = 0.0;
+                let x2 = 1.2 * radiusX;
+                let y0 = -1.2 * radiusY;
+                let y1 = 0.0;
+                let y2 = 1.2 * radiusY;
+                var visibility = shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                        vec2f(x0, y0)) * 25.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                        vec2f(x1, y0)) * 30.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                        vec2f(x2, y0)) * 25.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                        vec2f(x0, y1)) * 30.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                        vec2f(x1, y1)) * 36.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                        vec2f(x2, y1)) * 30.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                        vec2f(x0, y2)) * 25.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                        vec2f(x1, y2)) * 30.0;
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                        vec2f(x2, y2)) * 25.0;
                 return visibility / 256.0;
             }
             //__PBR_SURFACE_GRAPH_DECLARATIONS__
             @fragment
             fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
-                let uv = input.uv;
+                let uv = input.uv + uniforms.materialParams.zw;
                 var base = input.color;
                 if (uniforms.textureFlags.x > 0.5) {
                     let texel = textureSample(baseColorTexture, baseColorSampler, uv);
                     base = vec4f(base.rgb * srgbToLinear(texel.rgb), base.a * texel.a);
                 }
-                if (base.a <= 0.001) {
-                    discard;
-                }
+                //__PBR_ALPHA_TEST__
                 var ao = clamp(input.pbr.x, 0.0, 1.0);
                 var metallic = clamp(input.pbr.y, 0.0, 1.0);
                 var roughness = clamp(input.pbr.z, 0.04, 1.0);
@@ -480,7 +481,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 let v = normalize(uniforms.cameraPosition.xyz - input.worldPosition);
                 let l = normalize(-uniforms.lightDirection.xyz);
                 let radiance = uniforms.lightColorIntensity.rgb * uniforms.lightColorIntensity.a;
-                let shadow = directionalShadow(input.worldPosition);
+                let shadowInfluence = clamp(uniforms.materialParams.y, 0.0, 1.0);
+                let shadow = mix(1.0, directionalShadow(input.worldPosition), shadowInfluence);
                 color = pbrLightContribution(n, v, l, albedo, metallic, roughness, radiance * shadow);
                 let fillRadiance = uniforms.fillLightColorIntensity.rgb
                         * uniforms.fillLightColorIntensity.a;
@@ -548,19 +550,32 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
             """;
     static String skinnedPbrRendererTemplate() {
-        return pbrRendererTemplate(true, "");
+        return pbrRendererTemplate(true, "", true);
     }
 
     static String pbrRendererTemplate(boolean skinned,
             String graphMaterialFields) {
+        return pbrRendererTemplate(skinned, graphMaterialFields,
+                true);
+    }
+
+    static String pbrRendererTemplate(boolean skinned,
+            String graphMaterialFields, boolean alphaTest) {
         String materialFields = graphMaterialFields != null
                 ? graphMaterialFields : "";
+        String template = PBR_RENDERER_TEMPLATE.replace(
+                "//__PBR_ALPHA_TEST__",
+                alphaTest
+                        ? "if (base.a <= uniforms.emissiveFlags.y) {\n"
+                        + "        discard;\n"
+                        + "    }"
+                        : "");
         if (!skinned) {
-            return PBR_RENDERER_TEMPLATE.replace(
+            return template.replace(
                     "//__PBR_SKINNED_UNIFORMS__",
                     materialFields);
         }
-        String source = PBR_RENDERER_TEMPLATE.replace(
+        String source = template.replace(
                 "//__PBR_SKINNED_INPUTS__",
                 "@location(6) joints : vec4f,\n"
                         + "    @location(7) weights : vec4f,");
@@ -1921,7 +1936,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             RenderPass pass = context.pass();
             ResolvedShaderPass resolved = resolveCommon(
                     mesh.vertexLayout(),
-                    meshPart.primitiveTopology(), skinned);
+                    meshPart.primitiveTopology(), skinned,
+                    renderable.material().alphaMode());
             uniforms = commonParameters(resolved, skinned);
             pass.setPipeline(resolved.pipeline());
             pass.setVertexBuffer(mesh.vertexBuffer());
@@ -1966,7 +1982,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
 
         private ResolvedShaderPass resolveCommon(
                 VertexLayout vertexLayout,
-                PrimitiveTopology topology, boolean skinned) {
+                PrimitiveTopology topology, boolean skinned,
+                MaterialAlphaMode alphaMode) {
             if (commonProvider.revision() != commonRevision) {
                 throw new FdxException(
                         "ModelBatch shader provider changed during an active batch");
@@ -1980,13 +1997,14 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                                              : ShaderProfile.NATIVE;
             PrimitiveTopology actualTopology = topology != null
                     ? topology : PrimitiveTopology.TRIANGLE_LIST;
+            String variantKey = variantKey(skinned, alphaMode);
             RenderPassCompatibility compatibility =
                     context.renderPassCompatibility();
             for (ResolvedPassEntry entry : resolvedPassCache) {
                 if (entry != null && entry.matches(
                         context.shaderPassId(), profile,
                         compatibility, actualTopology, vertexLayout,
-                        skinned, commonRevision)) {
+                        variantKey, commonRevision)) {
                     entry.lastUse = ++resolvedPassClock;
                     return entry.resolved;
                 }
@@ -1997,12 +2015,13 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     .renderPass(compatibility)
                     .topology(actualTopology)
                     .vertexLayouts(vertexLayout)
-                    .variantKey(skinned ? "skinned" : "")
+                    .variantKey(variantKey)
                     .build();
             if (!commonProvider.supports(request)) {
                 throw new FdxException("ModelBatch shader provider does not "
                         + "support pass " + context.shaderPassId()
-                        + ", variant " + (skinned ? "skinned" : "static")
+                        + ", variant " + (variantKey.isEmpty()
+                        ? "opaque" : variantKey)
                         + ", and the renderable vertex layout");
             }
             ResolvedShaderPass resolved =
@@ -2016,9 +2035,24 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             int slot = emptyOrOldestResolvedPass();
             resolvedPassCache[slot] = new ResolvedPassEntry(
                     context.shaderPassId(), profile, compatibility,
-                    actualTopology, vertexLayout, skinned,
+                    actualTopology, vertexLayout, variantKey,
                     commonRevision, resolved, ++resolvedPassClock);
             return resolved;
+        }
+
+        private static String variantKey(boolean skinned,
+                MaterialAlphaMode alphaMode) {
+            MaterialAlphaMode mode = alphaMode != null
+                    ? alphaMode : MaterialAlphaMode.OPAQUE;
+            String alpha = switch (mode) {
+                case OPAQUE -> "";
+                case MASK -> "mask";
+                case BLEND -> "blend";
+            };
+            if (!skinned) {
+                return alpha;
+            }
+            return alpha.isEmpty() ? "skinned" : "skinned-" + alpha;
         }
 
         private int emptyOrOldestResolvedPass() {
@@ -2436,8 +2470,18 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     materialOcclusion != null ? 1 : 0);
             uniforms.setUniform1i(uniforms.HAS_EMISSIVE_TEXTURE,
                     materialEmissive != null ? 1 : 0);
+            uniforms.setUniform1f(uniforms.ALPHA_CUTOFF,
+                    material.alphaMode() == MaterialAlphaMode.MASK
+                            ? MaterialAttributes.alphaCutoff(material)
+                            : 0.001f);
             uniforms.setUniform1f(uniforms.LIGHTING_INFLUENCE,
                     lightingInfluence);
+            uniforms.setUniform1f(uniforms.SHADOW_INFLUENCE,
+                    MaterialAttributes.shadowInfluence(material));
+            uniforms.setUniform1f(uniforms.TEXTURE_OFFSET_U,
+                    MaterialAttributes.textureOffsetU(material));
+            uniforms.setUniform1f(uniforms.TEXTURE_OFFSET_V,
+                    MaterialAttributes.textureOffsetV(material));
         }
 
         private void applyShadowTextures(RenderPass pass, Environment3D environment) {
@@ -2512,7 +2556,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             final RenderPassCompatibility compatibility;
             final PrimitiveTopology topology;
             final VertexLayout vertexLayout;
-            final boolean skinned;
+            final String variantKey;
             final long providerRevision;
             final ResolvedShaderPass resolved;
             long lastUse;
@@ -2522,7 +2566,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     ShaderProfile profile,
                     RenderPassCompatibility compatibility,
                     PrimitiveTopology topology,
-                    VertexLayout vertexLayout, boolean skinned,
+                    VertexLayout vertexLayout, String variantKey,
                     long providerRevision,
                     ResolvedShaderPass resolved, long lastUse) {
                 this.passId = passId;
@@ -2530,7 +2574,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 this.compatibility = compatibility;
                 this.topology = topology;
                 this.vertexLayout = vertexLayout;
-                this.skinned = skinned;
+                this.variantKey = variantKey != null ? variantKey : "";
                 this.providerRevision = providerRevision;
                 this.resolved = resolved;
                 this.lastUse = lastUse;
@@ -2542,14 +2586,14 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     RenderPassCompatibility requestedCompatibility,
                     PrimitiveTopology requestedTopology,
                     VertexLayout requestedLayout,
-                    boolean requestedSkinned, long revision) {
+                    String requestedVariantKey, long revision) {
                 return passId.equals(requestedPass)
                         && profile == requestedProfile
                         && compatibility.equals(
                                 requestedCompatibility)
                         && topology == requestedTopology
                         && vertexLayout.equals(requestedLayout)
-                        && skinned == requestedSkinned
+                        && variantKey.equals(requestedVariantKey)
                         && providerRevision == revision;
             }
         }

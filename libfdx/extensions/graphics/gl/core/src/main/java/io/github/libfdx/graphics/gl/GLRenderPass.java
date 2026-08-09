@@ -94,6 +94,9 @@ final class GLRenderPass implements RenderPass {
         if (!compatibility.isCompatible(nextPipeline.targetLayout())) {
             throw new FdxException("GL render pipeline target layout is incompatible with the active pass");
         }
+        if (this.pipeline == nextPipeline) {
+            return;
+        }
         resetVertexAttributes();
         this.pipeline = nextPipeline;
         ensureTextureSlots(this.pipeline.sampledTextureCount());
@@ -103,7 +106,12 @@ final class GLRenderPass implements RenderPass {
         if (this.pipeline.depthTestEnabled()) {
             gl.depthFuncLessEqual();
         }
-        gl.enableAlphaBlending();
+        if (this.pipeline.alphaBlendEnabled()) {
+            gl.enableAlphaBlending();
+        }
+        else {
+            gl.disableAlphaBlending();
+        }
         if (this.pipeline.sampledTextureCount() > 0) {
             setTextureUniform(0);
         }
@@ -142,6 +150,9 @@ final class GLRenderPass implements RenderPass {
             throw new FdxException("RenderPass.setVertexBuffer requires a vertex buffer");
         }
         ensureVertexBufferSlot(slot);
+        if (vertexBuffers[slot] == vertexBuffer) {
+            return;
+        }
         vertexBuffers[slot] = vertexBuffer;
         gl.bindArrayBuffer(vertexBuffer.buffer());
         applyVertexLayout(slot);
@@ -158,6 +169,9 @@ final class GLRenderPass implements RenderPass {
         GLBufferHandle nextIndexBuffer = GLResources.requireBuffer(buffer, resourceDomain, "Index buffer");
         if (nextIndexBuffer.usage() != BufferUsage.INDEX) {
             throw new FdxException("RenderPass.setIndexBuffer requires an index buffer");
+        }
+        if (indexBuffer == nextIndexBuffer) {
+            return;
         }
         indexBuffer = nextIndexBuffer;
         gl.bindElementArrayBuffer(indexBuffer.buffer());
@@ -181,6 +195,9 @@ final class GLRenderPass implements RenderPass {
         GLTextureHandle glTexture = GLResources.requireTexture(texture, resourceDomain, "Texture");
         if (!glTexture.usage().sampled()) {
             throw new FdxException("Texture was not created with sampled usage");
+        }
+        if (textures[slot] == glTexture) {
+            return;
         }
         gl.activeTexture(slot);
         gl.bindTexture2D(glTexture.texture());

@@ -24,6 +24,7 @@ public final class ShaderGraphRenderProgram {
     private final CullMode cullMode;
     private final boolean depthWrite;
     private final CompareFunction depthCompare;
+    private final boolean alphaBlend;
     private final int cacheCapacity;
     private final VertexLayout[] vertexLayouts;
     private final ShaderResourceBinding defaultResources;
@@ -46,6 +47,7 @@ public final class ShaderGraphRenderProgram {
         depthWrite = builder.depthWrite;
         depthCompare = builder.depthCompare != null
                 ? builder.depthCompare : CompareFunction.LESS_EQUAL;
+        alphaBlend = builder.alphaBlend;
         cacheCapacity = builder.cacheCapacity;
         vertexLayouts = builder.vertexLayouts != null
                 ? builder.vertexLayouts.clone()
@@ -112,6 +114,15 @@ public final class ShaderGraphRenderProgram {
         return depthCompare;
     }
 
+    /**
+     * Returns whether source-alpha blending is enabled for color targets.
+     *
+     * @return true for alpha blending; false for opaque replacement
+     */
+    public boolean alphaBlend() {
+        return alphaBlend;
+    }
+
     public int cacheCapacity() {
         return cacheCapacity;
     }
@@ -148,6 +159,7 @@ public final class ShaderGraphRenderProgram {
         private CullMode cullMode;
         private boolean depthWrite = true;
         private CompareFunction depthCompare;
+        private boolean alphaBlend = true;
         private int cacheCapacity = 64;
         private VertexLayout[] vertexLayouts = new VertexLayout[0];
         private ShaderResourceBinding defaultResources;
@@ -177,6 +189,17 @@ public final class ShaderGraphRenderProgram {
         public Builder depth(boolean write, CompareFunction compare) {
             depthWrite = write;
             depthCompare = compare;
+            return this;
+        }
+
+        /**
+         * Selects source-alpha blending or opaque color replacement.
+         *
+         * @param value true for alpha blending; false for opaque output
+         * @return this builder
+         */
+        public Builder alphaBlend(boolean value) {
+            alphaBlend = value;
             return this;
         }
 

@@ -12,6 +12,7 @@ import java.nio.ByteBuffer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 final class RenderContractsTest {
@@ -110,6 +111,23 @@ final class RenderContractsTest {
                         LoadOp.load(), StoreOp.store()));
         assertThrows(FdxException.class, () ->
                 unsupportedResolve.validate(advancedCapabilities()));
+    }
+
+    @Test
+    void alphaBlendControlAllowsOpaqueColorTargetsWithoutCompleteState() {
+        GraphicsCapabilities capabilities = GraphicsCapabilities.builder()
+                .profile(ShaderProfile.PORTABLE_WEBGL2)
+                .feature(GraphicsFeature.ALPHA_BLEND_CONTROL)
+                .colorFormats(TextureFormat.RGBA8_UNORM)
+                .sampleCounts(1)
+                .limits(GraphicsLimits.conservativeRender())
+                .build();
+        RenderPipelineDescriptor opaque = RenderPipelineDescriptor
+                .shader(new FakeShaderModule(), TextureFormat.RGBA8_UNORM)
+                .colorTargets(ColorTargetState.opaque(
+                        TextureFormat.RGBA8_UNORM));
+
+        assertDoesNotThrow(() -> opaque.validate(capabilities));
     }
 
     @Test

@@ -540,8 +540,9 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
         ColorTargetState[] colors =
                 new ColorTargetState[targets.colorAttachmentCount()];
         for (int i = 0; i < colors.length; i++) {
-            colors[i] = ColorTargetState.alpha(
-                    targets.colorFormat(i));
+            colors[i] = program.alphaBlend()
+                    ? ColorTargetState.alpha(targets.colorFormat(i))
+                    : ColorTargetState.opaque(targets.colorFormat(i));
         }
         RenderPipelineDescriptor descriptor = RenderPipelineDescriptor
                 .shader(variant.module.shader,

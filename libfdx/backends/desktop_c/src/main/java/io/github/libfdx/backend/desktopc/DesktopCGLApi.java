@@ -638,6 +638,11 @@ final class DesktopCGLApi implements GLApi {
                 DesktopCOpenGL.ONE, DesktopCOpenGL.ONE_MINUS_SRC_ALPHA);
     }
 
+    @Override
+    public void disableAlphaBlending() {
+        DesktopCOpenGL.glDisable(DesktopCOpenGL.BLEND);
+    }
+
     /**
      * Runs the enable depth test step.
      *

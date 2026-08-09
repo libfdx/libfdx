@@ -758,6 +758,11 @@ final class WebGLApi implements GLApi {
         blendFuncSeparate(gl, SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ONE, ONE_MINUS_SRC_ALPHA);
     }
 
+    @Override
+    public void disableAlphaBlending() {
+        gl.disable(BLEND);
+    }
+
     /**
      * Runs the enable depth test step.
      *

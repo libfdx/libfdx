@@ -26,6 +26,7 @@ final class GLRenderPipelineHandle implements RenderPipeline {
     private final int sampledTextureCount;
     private final boolean depthTestEnabled;
     private final boolean depthWriteEnabled;
+    private final boolean alphaBlendEnabled;
     private final int uniformBuffer;
     private final ShaderRenderBindings resourceBindings;
     private final RenderTargetLayout targetLayout;
@@ -37,6 +38,21 @@ final class GLRenderPipelineHandle implements RenderPipeline {
             VertexLayout[] vertexLayouts, int sampledTextureCount, boolean depthTestEnabled,
             boolean depthWriteEnabled, int uniformBuffer, ShaderRenderBindings resourceBindings,
             RenderTargetLayout targetLayout) {
+        this(providerId, gl, resourceDomain, shaderModule, primitiveTopology,
+                vertexLayouts, sampledTextureCount, depthTestEnabled,
+                depthWriteEnabled, true, uniformBuffer, resourceBindings,
+                targetLayout);
+    }
+
+    GLRenderPipelineHandle(ProviderId providerId, GLApi gl,
+            GLResourceDomain resourceDomain,
+            GLShaderModuleHandle shaderModule,
+            PrimitiveTopology primitiveTopology,
+            VertexLayout[] vertexLayouts, int sampledTextureCount,
+            boolean depthTestEnabled, boolean depthWriteEnabled,
+            boolean alphaBlendEnabled, int uniformBuffer,
+            ShaderRenderBindings resourceBindings,
+            RenderTargetLayout targetLayout) {
         this.providerId = providerId;
         this.gl = gl;
         this.resourceDomain = resourceDomain;
@@ -46,6 +62,7 @@ final class GLRenderPipelineHandle implements RenderPipeline {
         this.sampledTextureCount = sampledTextureCount;
         this.depthTestEnabled = depthTestEnabled;
         this.depthWriteEnabled = depthWriteEnabled;
+        this.alphaBlendEnabled = alphaBlendEnabled;
         this.uniformBuffer = uniformBuffer;
         this.resourceBindings = resourceBindings;
         this.targetLayout = targetLayout;
@@ -91,6 +108,10 @@ final class GLRenderPipelineHandle implements RenderPipeline {
 
     boolean depthWriteEnabled() {
         return depthWriteEnabled;
+    }
+
+    boolean alphaBlendEnabled() {
+        return alphaBlendEnabled;
     }
 
     int uniformBuffer() {
@@ -168,11 +189,25 @@ final class GLRenderPipelineHandle implements RenderPipeline {
         String[][] result = new String[bindings.sampledTextureCount()][];
         for (int slot = 0; slot < result.length; slot++) {
             Array<String> names = new Array<String>();
-            addTargetNames(module, bindings.texture(slot), names);
-            addTargetNames(module, bindings.sampler(slot), names);
+            ShaderBinding texture = bindings.texture(slot);
+            ShaderBinding sampler = bindings.sampler(slot);
+            addTargetNames(module, texture, names);
+            addTargetNames(module, sampler, names);
+            addCombinedSamplerNames(texture, sampler, names);
             result[slot] = names.toArray(new String[0]);
         }
         return result;
+    }
+
+    private static void addCombinedSamplerNames(ShaderBinding texture,
+            ShaderBinding sampler, Array<String> names) {
+        if (texture == null || sampler == null) {
+            return;
+        }
+        String combined = texture.name() + '_' + sampler.name();
+        addName(names, combined);
+        addName(names, "v_" + combined);
+        addName(names, "f_" + combined);
     }
 
     private static void addTargetNames(GLShaderModuleHandle module, ShaderBinding binding,
@@ -186,11 +221,14 @@ final class GLRenderPipelineHandle implements RenderPipeline {
                 continue;
             }
             for (ShaderTargetBinding target : remap.targets()) {
-                String name = target.name();
-                if (!name.isEmpty() && !names.contains(name)) {
-                    names.add(name);
-                }
+                addName(names, target.name());
             }
+        }
+    }
+
+    private static void addName(Array<String> names, String name) {
+        if (name != null && !name.isEmpty() && !names.contains(name)) {
+            names.add(name);
         }
     }
 }

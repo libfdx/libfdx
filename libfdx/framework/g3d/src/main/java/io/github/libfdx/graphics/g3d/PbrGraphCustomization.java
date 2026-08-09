@@ -25,7 +25,6 @@ import io.github.libfdx.graphics.shader.reflection.ShaderUpdateFrequency;
 import io.github.libfdx.graphics.shader.reflection.ShaderValueKind;
 import io.github.libfdx.graphics.shader.reflection.ShaderValueType;
 import io.github.libfdx.graphics.Texture;
-import io.github.libfdx.graphics.internal.BuiltInPbrShaderManifest;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphLiteral;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraph;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompileResult;
@@ -56,6 +55,8 @@ final class PbrGraphCustomization {
     private final ShaderGraphCompileResult lightingCompilation;
     private final String staticSource;
     private final String skinnedSource;
+    private final String staticOpaqueSource;
+    private final String skinnedOpaqueSource;
     private final ShaderReflection staticReflection;
     private final ShaderReflection skinnedReflection;
 
@@ -113,10 +114,18 @@ final class PbrGraphCustomization {
                         true, materialFields),
                 declarations, surfaceEvaluation,
                 vertexEvaluation, lightingEvaluation);
+        staticOpaqueSource = compose(PbrShaderProvider.pbrRendererTemplate(
+                        false, materialFields, false),
+                declarations, surfaceEvaluation,
+                vertexEvaluation, lightingEvaluation);
+        skinnedOpaqueSource = compose(PbrShaderProvider.pbrRendererTemplate(
+                        true, materialFields, false),
+                declarations, surfaceEvaluation,
+                vertexEvaluation, lightingEvaluation);
         staticReflection = reflection(
-                BuiltInPbrShaderManifest.staticReflection());
+                PbrShaderParameters.staticReflection());
         skinnedReflection = reflection(
-                BuiltInPbrShaderManifest.skinnedReflection());
+                PbrShaderParameters.skinnedReflection());
     }
 
     ShaderGraphMaterialDefinition definition() {
@@ -136,10 +145,18 @@ final class PbrGraphCustomization {
     }
 
     ShaderModuleDescriptor shader(boolean skinned) {
+        return shader(skinned, true);
+    }
+
+    ShaderModuleDescriptor shader(boolean skinned,
+            boolean alphaTest) {
+        String source = alphaTest
+                ? skinned ? skinnedSource : staticSource
+                : skinned ? skinnedOpaqueSource : staticOpaqueSource;
         return ShaderModuleDescriptor.wgsl(
                 skinned ? "model batch graph skinned pbr"
                         : "model batch graph pbr",
-                skinned ? skinnedSource : staticSource)
+                source)
                 .reflection(skinned ? skinnedReflection
                         : staticReflection);
     }

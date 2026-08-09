@@ -1,6 +1,7 @@
 package io.github.libfdx.graphics.gl;
 
 import io.github.libfdx.graphics.PrimitiveTopology;
+import io.github.libfdx.graphics.GraphicsFrameMetrics;
 import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureWrap;
 import io.github.libfdx.graphics.VertexFormat;
@@ -13,6 +14,23 @@ import java.nio.ByteBuffer;
  * @author xpenatan
  */
 public interface GLApi {
+    /** Starts optional per-frame command and GPU diagnostics. */
+    default void beginFrameMetrics(long frameId) {
+    }
+
+    /** Finishes optional per-frame command and GPU diagnostics. */
+    default void endFrameMetrics() {
+    }
+
+    /** Releases optional diagnostics resources. */
+    default void disposeFrameMetrics() {
+    }
+
+    /** Returns the latest diagnostics exposed by this implementation. */
+    default GraphicsFrameMetrics frameMetrics() {
+        return GraphicsFrameMetrics.UNAVAILABLE;
+    }
+
     /**
      * Returns the create program.
      *
@@ -469,6 +487,9 @@ public interface GLApi {
      * Runs the enable alpha blending step.
      */
     void enableAlphaBlending();
+
+    /** Disables color blending for opaque pipelines. */
+    void disableAlphaBlending();
 
     /**
      * Runs the enable depth test step.

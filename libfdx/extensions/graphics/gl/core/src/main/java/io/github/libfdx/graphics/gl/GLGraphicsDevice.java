@@ -40,6 +40,7 @@ final class GLGraphicsDevice implements GraphicsDevice {
             .feature(GraphicsFeature.INDEXED_DRAW)
             .feature(GraphicsFeature.INSTANCED_DRAW)
             .feature(GraphicsFeature.DEPTH_STENCIL_ATTACHMENTS)
+            .feature(GraphicsFeature.ALPHA_BLEND_CONTROL)
             .colorFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
                     TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB)
             .depthStencilFormats(TextureFormat.DEPTH24_STENCIL8, TextureFormat.DEPTH32_FLOAT)
@@ -255,7 +256,8 @@ final class GLGraphicsDevice implements GraphicsDevice {
         try {
             return new GLRenderPipelineHandle(providerId, gl, resourceDomain, shaderModule,
                     descriptor.primitiveTopology(), descriptor.vertexLayouts(), descriptor.sampledTextureCount(),
-                    descriptor.depthTestEnabled(), descriptor.depthWriteEnabled(), uniformBuffer,
+                    descriptor.depthTestEnabled(), descriptor.depthWriteEnabled(),
+                    descriptor.colorTargets()[0].blend() != null, uniformBuffer,
                     resourceBindings, descriptor.renderTargetLayout());
         }
         catch (RuntimeException | Error failure) {

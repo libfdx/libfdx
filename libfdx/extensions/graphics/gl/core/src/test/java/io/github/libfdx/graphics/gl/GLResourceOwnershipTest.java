@@ -18,8 +18,20 @@ import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.VertexAttribute;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
-import io.github.libfdx.graphics.internal.BuiltInPbrShaderManifest;
 import io.github.libfdx.graphics.internal.ShaderRenderBindings;
+import io.github.libfdx.graphics.shader.ShaderProfile;
+import io.github.libfdx.graphics.shader.ShaderStage;
+import io.github.libfdx.graphics.shader.reflection.ShaderBinding;
+import io.github.libfdx.graphics.shader.reflection.ShaderEntryPoint;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameter;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameterLayout;
+import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceAccess;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceKind;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceUse;
+import io.github.libfdx.graphics.shader.reflection.ShaderScalarType;
+import io.github.libfdx.graphics.shader.reflection.ShaderStageVisibility;
+import io.github.libfdx.graphics.shader.reflection.ShaderValueType;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationHandler;
@@ -37,6 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class GLResourceOwnershipTest {
     private static final ProviderId PROVIDER_ID = ProviderId.of("gl-test");
+    private static final ShaderReflection UNIFORM_REFLECTION = uniformReflection();
 
     @Test
     void renderPassPoolReusesHighWaterSlotsAndRejectsOverlap() {
@@ -459,7 +472,7 @@ final class GLResourceOwnershipTest {
         GLShaderModuleHandle shader = shader(attachment, fakeGl, 401);
         RenderPipelineDescriptor descriptor = RenderPipelineDescriptor
                 .shader(shader, TextureFormat.RGBA8_UNORM)
-                .shaderReflection(BuiltInPbrShaderManifest.staticReflection());
+                .shaderReflection(UNIFORM_REFLECTION);
         fakeGl.resetCalls();
         fakeGl.failOn("uniformBufferData", 1);
 
@@ -475,6 +488,26 @@ final class GLResourceOwnershipTest {
     private static GLGraphicsAttachment attachment(FakeGL fakeGl, FakeSurface surface) {
         return new GLGraphicsAttachment(PROVIDER_ID, fakeGl.api(), surface, 64, 64,
                 TextureFormat.RGBA8_UNORM);
+    }
+
+    private static ShaderReflection uniformReflection() {
+        ShaderParameterLayout layout = ShaderParameterLayout.of(16, 16,
+                ShaderParameter.of("value",
+                        ShaderValueType.scalar(ShaderScalarType.F32), 0, 4, 4));
+        ShaderBinding uniform = ShaderBinding.builder(0, 0, "uniforms",
+                        ShaderResourceKind.UNIFORM_BUFFER)
+                .visibility(ShaderStageVisibility.VERTEX)
+                .access(ShaderResourceAccess.READ)
+                .buffer(16, 4, 16, layout)
+                .build();
+        return ShaderReflection.complete(ShaderProfile.PORTABLE_WEBGPU,
+                new ShaderEntryPoint[] {
+                        ShaderEntryPoint.builder("vertexMain", ShaderStage.VERTEX)
+                                .resources(ShaderResourceUse.of(0, 0, 16))
+                                .build(),
+                        ShaderEntryPoint.builder("fragmentMain", ShaderStage.FRAGMENT)
+                                .build()
+                }, new ShaderBinding[] { uniform }, new String[0]);
     }
 
     private static GLGraphicsAttachment sharedAttachment(FakeGL fakeGl, FakeSurface surface,
