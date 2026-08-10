@@ -75,6 +75,7 @@ public final class ImmediateModeRenderer implements Disposable {
             + "    var output: VertexOutput;\n"
             + "    let worldPosition = uniforms.model * vec4<f32>(input.position, 1.0);\n"
             + "    output.position = uniforms.viewProjection * worldPosition;\n"
+            + "    output.position.z -= 0.0005 * output.position.w;\n"
             + "    output.color = input.color;\n"
             + "    return output;\n"
             + "}\n"

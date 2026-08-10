@@ -177,6 +177,9 @@ public final class UiRoot implements Disposable, UiStateListener {
     private int height;
     private float elapsedSeconds;
     private int layoutPass;
+    private float lastLayoutRenderWidth = Float.NaN;
+    private float lastLayoutRenderHeight = Float.NaN;
+    private float lastLayoutUiScale = Float.NaN;
 
     /**
      * Represents the result of a hit operation.
@@ -236,6 +239,7 @@ public final class UiRoot implements Disposable, UiStateListener {
      * @param deltaSeconds the delta seconds
      */
     public void update(float deltaSeconds) {
+        syncDisplayMetrics();
         ensureComposed();
         float previousElapsedSeconds = elapsedSeconds;
         elapsedSeconds += Math.max(0.0f, deltaSeconds);
@@ -265,6 +269,7 @@ public final class UiRoot implements Disposable, UiStateListener {
      * Renders the current content.
      */
     public void render() {
+        syncDisplayMetrics();
         ensureComposed();
         if (renderer != null && rootNode != null) {
             renderer.render(this, rootNode);
@@ -423,7 +428,7 @@ public final class UiRoot implements Disposable, UiStateListener {
      * @return the display x
      */
     public int displayX(float uiX) {
-        return Math.round(uiX * effectiveUiScale());
+        return Math.round(uiX * logicalUiScale());
     }
 
     /**
@@ -433,7 +438,7 @@ public final class UiRoot implements Disposable, UiStateListener {
      * @return the display y
      */
     public int displayY(float uiY) {
-        return Math.round(uiY * effectiveUiScale());
+        return Math.round(uiY * logicalUiScale());
     }
 
     /**
@@ -443,7 +448,7 @@ public final class UiRoot implements Disposable, UiStateListener {
      * @return the UI x
      */
     public float uiX(int displayX) {
-        return displayX / effectiveUiScale();
+        return displayX / logicalUiScale();
     }
 
     /**
@@ -453,7 +458,7 @@ public final class UiRoot implements Disposable, UiStateListener {
      * @return the UI y
      */
     public float uiY(int displayY) {
-        return displayY / effectiveUiScale();
+        return displayY / logicalUiScale();
     }
 
     /**
@@ -861,21 +866,55 @@ public final class UiRoot implements Disposable, UiStateListener {
 
 
     float renderWidth() {
-        int value = display != null ? display.width() : width;
+        int value = display != null ? display.framebufferWidth() : width;
+        if(value <= 0 && display != null) {
+            value = display.width();
+        }
         return value > 0 ? value : width;
     }
 
     float renderHeight() {
-        int value = display != null ? display.height() : height;
+        int value = display != null ? display.framebufferHeight() : height;
+        if(value <= 0 && display != null) {
+            value = display.height();
+        }
         return value > 0 ? value : height;
     }
 
     float effectiveUiScale() {
-        float scale = uiScale > 0.0f ? uiScale : 1.0f;
+        float scale = logicalUiScale();
         if (autoUiScale && display != null) {
-            scale *= display.contentScale();
+            scale *= framebufferScale();
         }
         return Math.max(0.25f, Math.min(4.0f, scale));
+    }
+
+    private float logicalUiScale() {
+        return Math.max(0.25f, Math.min(4.0f, uiScale > 0.0f ? uiScale : 1.0f));
+    }
+
+    private float framebufferScale() {
+        int logicalWidth = display.width();
+        int logicalHeight = display.height();
+        int framebufferWidth = display.framebufferWidth();
+        int framebufferHeight = display.framebufferHeight();
+        float scaleX = logicalWidth > 0 && framebufferWidth > 0
+                ? framebufferWidth / (float)logicalWidth : 0.0f;
+        float scaleY = logicalHeight > 0 && framebufferHeight > 0
+                ? framebufferHeight / (float)logicalHeight : 0.0f;
+        boolean validX = scaleX > 0.0f && Float.isFinite(scaleX);
+        boolean validY = scaleY > 0.0f && Float.isFinite(scaleY);
+        if(validX && validY) {
+            return (scaleX + scaleY) * 0.5f;
+        }
+        if(validX) {
+            return scaleX;
+        }
+        if(validY) {
+            return scaleY;
+        }
+        float fallback = display.contentScale();
+        return fallback > 0.0f && Float.isFinite(fallback) ? fallback : 1.0f;
     }
 
     float elapsedSeconds() {
@@ -1462,8 +1501,25 @@ public final class UiRoot implements Disposable, UiStateListener {
             return;
         }
         rootNode.bounds(rootBounds);
+        lastLayoutRenderWidth = renderWidth();
+        lastLayoutRenderHeight = renderHeight();
+        lastLayoutUiScale = scale;
         layoutPass++;
         layoutChildren(rootNode, rootBounds);
+    }
+
+    private void syncDisplayMetrics() {
+        if (display == null || rootNode == null) {
+            return;
+        }
+        float renderWidth = renderWidth();
+        float renderHeight = renderHeight();
+        float scale = effectiveUiScale();
+        if (Float.floatToIntBits(renderWidth) != Float.floatToIntBits(lastLayoutRenderWidth)
+                || Float.floatToIntBits(renderHeight) != Float.floatToIntBits(lastLayoutRenderHeight)
+                || Float.floatToIntBits(scale) != Float.floatToIntBits(lastLayoutUiScale)) {
+            layout();
+        }
     }
 
     private void layoutNode(UiNode node, UiRect bounds) {
@@ -2767,7 +2823,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             return TextInputRequest.builder().build();
         }
         UiRect bounds = platformTextInputBounds(node, model);
-        float scale = effectiveUiScale();
+        float scale = logicalUiScale();
         return TextInputRequest.builder()
                 .text(model.value())
                 .selection(model.selectionStart(), model.selectionEnd())

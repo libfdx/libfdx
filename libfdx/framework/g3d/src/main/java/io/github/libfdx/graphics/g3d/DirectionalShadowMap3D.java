@@ -58,6 +58,12 @@ import io.github.libfdx.math.Vector3;
  * @author xpenatan
  */
 public final class DirectionalShadowMap3D implements Disposable {
+    /** Draws custom shadow casters into this map's active light pass. */
+    @FunctionalInterface
+    public interface ShadowPassRenderer {
+        void render(RenderPass pass, Matrix4 lightViewProjection);
+    }
+
     private static final int PRIMITIVE_TOPOLOGY_COUNT = PrimitiveTopology.values().length;
     private final GraphicsContext graphics;
     private final Texture texture;
@@ -208,6 +214,27 @@ public final class DirectionalShadowMap3D implements Disposable {
                 }
             }
             batch.end();
+        }
+        finally {
+            pass.end();
+        }
+    }
+
+    /**
+     * Renders custom shadow casters in the same pass and coordinate system used
+     * by the standard model shadow path.
+     *
+     * @param light directional light defining the shadow camera
+     * @param renderer custom pass renderer
+     */
+    public void render(DirectionalLight light, ShadowPassRenderer renderer) {
+        ensureNotDisposed();
+        if(renderer == null) {
+            throw new FdxException("ShadowPassRenderer cannot be null");
+        }
+        RenderPass pass = beginPass(light);
+        try {
+            renderer.render(pass, lightViewProjection);
         }
         finally {
             pass.end();

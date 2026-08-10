@@ -130,6 +130,9 @@ sourceSets {
 
 tasks.named<ProcessResources>("processResources") {
     mustRunAfter(generateRuntimeFdxWindowsNative, generateRuntimeFdxLinuxNative, generateRuntimeFdxMacosNative)
+    if(!System.getProperty("libfdx.compositeBuildDir").isNullOrBlank()) {
+        dependsOn(generateRuntimeFdxHostNative)
+    }
 }
 
 tasks.register("validate_runtime_fdx_desktop_c_resources") {

@@ -94,11 +94,15 @@ lists preserve keyed item identity. Windows retain position, size, and
 z-order. Safe-area insets and parent constraints keep content inside the active
 display.
 
-`UiRoot` automatically multiplies logical UI units by `Display.contentScale()`,
-so platform DPI scaling works without application setup. `uiScale(...)` applies
-an additional application-selected scale. Applications that already convert UI
-units to display-scaled units can opt out with `autoUiScale(false)` and should
-not apply the same display scaling twice.
+`UiRoot` automatically derives its render scale from the framebuffer-to-logical
+display-size ratio, so platform DPI scaling works without application setup while
+layout and pointer coordinates remain in logical display units. This also avoids
+applying Windows bitmap scaling twice when the framebuffer is already expressed in
+logical pixels. `uiScale(...)` applies an additional application-selected scale.
+Applications that already convert UI units to framebuffer pixels can opt out with
+`autoUiScale(false)`. The root observes live logical-size, framebuffer-size, and
+render-scale changes, including moving a desktop window between monitors, and
+relayouts even when the platform does not emit a logical window resize.
 
 Themes provide reusable colors, spacing, fonts, drawables, widget states, and
 motion values. `UiDrawable` supports colors, textures/regions, and nine-patch

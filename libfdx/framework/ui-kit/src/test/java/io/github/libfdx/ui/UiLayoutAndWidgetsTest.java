@@ -18,13 +18,45 @@ final class UiLayoutAndWidgetsTest {
 
         assertTrue(root.autoUiScale());
         assertEquals(1.5f, root.effectiveUiScale(), 0.001f);
-        assertEquals(15, root.displayX(10.0f));
+        assertEquals(10, root.displayX(10.0f));
 
         root.autoUiScale(false);
 
         assertFalse(root.autoUiScale());
         assertEquals(1.0f, root.effectiveUiScale(), 0.001f);
         assertEquals(10, root.displayX(10.0f));
+        root.dispose();
+    }
+
+    @Test
+    void displayContentScaleChangePreservesLogicalLayoutWithoutWindowResize() {
+        ScaledDisplay display = new ScaledDisplay(1.0f);
+        UiRoot root = new UiRoot(null, display, null, null);
+        root.setContent(scope -> scope.panel(Ui.modifier().fill(), null));
+        root.update(0.0f);
+
+        assertEquals(800.0f, root.rootNode().bounds().width(), 0.001f);
+        assertEquals(600.0f, root.rootNode().bounds().height(), 0.001f);
+
+        display.contentScale(2.0f);
+        root.update(0.0f);
+
+        assertEquals(800.0f, root.rootNode().bounds().width(), 0.001f);
+        assertEquals(600.0f, root.rootNode().bounds().height(), 0.001f);
+        assertEquals(2.0f, root.effectiveUiScale(), 0.001f);
+        root.dispose();
+    }
+
+    @Test
+    void desktopBitmapScalingDoesNotApplyContentScaleTwice() {
+        ScaledDisplay display = new ScaledDisplay(1.5f, false);
+        UiRoot root = new UiRoot(null, display, null, null);
+        root.setContent(scope -> scope.panel(Ui.modifier().fill(), null));
+        root.update(0.0f);
+
+        assertEquals(1.0f, root.effectiveUiScale(), 0.001f);
+        assertEquals(800.0f, root.rootNode().bounds().width(), 0.001f);
+        assertEquals(600.0f, root.rootNode().bounds().height(), 0.001f);
         root.dispose();
     }
 
@@ -188,9 +220,19 @@ final class UiLayoutAndWidgetsTest {
     }
 
     private static final class ScaledDisplay implements Display {
-        private final float contentScale;
+        private float contentScale;
+        private final boolean scaledFramebuffer;
 
         private ScaledDisplay(float contentScale) {
+            this(contentScale, true);
+        }
+
+        private ScaledDisplay(float contentScale, boolean scaledFramebuffer) {
+            this.contentScale = contentScale;
+            this.scaledFramebuffer = scaledFramebuffer;
+        }
+
+        private void contentScale(float contentScale) {
             this.contentScale = contentScale;
         }
 
@@ -225,12 +267,12 @@ final class UiLayoutAndWidgetsTest {
 
         @Override
         public int framebufferWidth() {
-            return Math.round(width() * contentScale);
+            return scaledFramebuffer ? Math.round(width() * contentScale) : width();
         }
 
         @Override
         public int framebufferHeight() {
-            return Math.round(height() * contentScale);
+            return scaledFramebuffer ? Math.round(height() * contentScale) : height();
         }
 
         @Override

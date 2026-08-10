@@ -5,10 +5,28 @@ plugins {
     alias(libs.plugins.easyPublishing)
 }
 
+System.getProperty("libfdx.compositeBuildDir")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?.let { isolatedRootPath ->
+        val isolatedRoot = file(isolatedRootPath)
+        allprojects {
+            if(path != ":libfdx:framework:fdx:fdx-build") {
+                val relativeProjectPath = if(path == ":") "root"
+                else path.removePrefix(":").replace(':', '/')
+                layout.buildDirectory.set(isolatedRoot.resolve(relativeProjectPath))
+            }
+        }
+    }
+
 val libfdxGroup = libs.versions.libfdxGroup.get()
 val libfdxVersion = libs.versions.libfdxRelease.get()
 val libfdxSnapshotVersion = libs.versions.libfdxSnapshot.get()
 gradle.extensions.extraProperties.set("libfdxDependencyVersion", libfdxSnapshotVersion)
+val useLocalJBox3DSnapshot = providers.gradleProperty("jbox3d.local")
+    .orElse(providers.gradleProperty("libfdx.local"))
+    .map(String::toBoolean)
+    .orElse(false)
 
 val externalExtensionVersions = linkedMapOf(
     "jBox2D" to libs.versions.jbox2d.get(),
@@ -141,6 +159,9 @@ allprojects {
     version = libfdxVersion
 
     repositories {
+        if(useLocalJBox3DSnapshot.get()) {
+            mavenLocal()
+        }
         google()
         mavenCentral()
         maven {

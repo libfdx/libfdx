@@ -9,6 +9,12 @@ plugins {
     `java-gradle-plugin`
 }
 
+System.getProperty("libfdx.compositeBuildDir")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?.let { isolatedRootPath ->
+        layout.buildDirectory.set(file(isolatedRootPath).resolve("_gradle-plugin"))
+    }
 
 val libfdxReleaseRequested = extensions.extraProperties.get("easyPublishing.releaseRequested") as Boolean
 val libfdxSelectedVersion = if (libfdxReleaseRequested) libs.versions.libfdxRelease.get() else libs.versions.libfdxSnapshot.get()
