@@ -89,9 +89,9 @@ final class InstancedSolidRenderer implements Disposable {
                 lightColorIntensity : vec4f,
                 shadowParams : vec4f,
             };
-            @group(0) @binding(0) var<uniform> uniforms : Uniforms;
-            @group(1) @binding(0) var shadowTexture : texture_2d<f32>;
-            @group(1) @binding(1) var shadowSampler : sampler;
+            @group(0) @binding(0) var shadowTexture : texture_2d<f32>;
+            @group(0) @binding(1) var shadowSampler : sampler;
+            @group(1) @binding(0) var<uniform> uniforms : Uniforms;
             struct VertexInput {
                 @location(0) position : vec3f,
                 @location(1) normal : vec3f,
@@ -336,9 +336,9 @@ final class InstancedSolidRenderer implements Disposable {
                 .colorAttachment(frame.colorAttachment()));
         try {
             pass.setPipeline(mainPipeline);
-            pass.setParameterBlock(0, 0, mainUniformBlock);
-            pass.setTextureBinding(1, 0, shadowMap.texture());
-            pass.setTextureSamplerBinding(1, 1, shadowMap.texture());
+            pass.setParameterBlock(1, 0, mainUniformBlock);
+            pass.setTextureBinding(0, 0, shadowMap.texture());
+            pass.setTextureSamplerBinding(0, 1, shadowMap.texture());
             for(int i = 0; i < geometries.size(); i++) {
                 Geometry geometry = geometries.get(i);
                 if(geometry.render(pass)) {
