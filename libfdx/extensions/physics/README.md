@@ -25,20 +25,16 @@ Snapshot libFDX builds may compile against snapshot binding APIs. A libFDX
 release is blocked until every external binding version is changed to a
 published non-snapshot version.
 
-When changing `box3d_ext` and jBox3D together, publish the exact jBox3D core
-snapshot to Maven Local first, then opt the libFDX build into that repository:
+When changing `box3d_ext` and jBox3D together, run the build from the jBox3D
+checkout with its local-libFDX composite enabled:
 
 ```powershell
-# From the jBox3D checkout
-.\gradlew.bat :box3d:core:publishToMavenLocal
-
-# From the libFDX checkout
-.\gradlew.bat "-Pjbox3d.local=true" :libfdx:extensions:physics:box3d:core:compileJava
+.\gradlew.bat "-Plibfdx.local=true" :samples:fdx:platforms:desktop-jni:box3d_fdx_desktop_vulkan_jni_run
 ```
 
-Maven Local is not consulted by default. This keeps normal dependency
-resolution reproducible while allowing the extension to compile against one
-exact, unreleased binding contract without an older-API compatibility layer.
+The jBox3D build self-registers its projects for composite substitution, so
+`box3d_ext` compiles directly against the exact local `:box3d:core` project.
+No intermediate publication or older-API compatibility layer is used.
 
 ## Box3D debug rendering
 

@@ -3,6 +3,8 @@ import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 plugins {
     id("base")
     alias(libs.plugins.easyPublishing)
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.library) apply false
 }
 
 System.getProperty("libfdx.compositeBuildDir")
@@ -23,10 +25,6 @@ val libfdxGroup = libs.versions.libfdxGroup.get()
 val libfdxVersion = libs.versions.libfdxRelease.get()
 val libfdxSnapshotVersion = libs.versions.libfdxSnapshot.get()
 gradle.extensions.extraProperties.set("libfdxDependencyVersion", libfdxSnapshotVersion)
-val useLocalJBox3DSnapshot = providers.gradleProperty("jbox3d.local")
-    .orElse(providers.gradleProperty("libfdx.local"))
-    .map(String::toBoolean)
-    .orElse(false)
 
 val externalExtensionVersions = linkedMapOf(
     "jBox2D" to libs.versions.jbox2d.get(),
@@ -159,9 +157,6 @@ allprojects {
     version = libfdxVersion
 
     repositories {
-        if(useLocalJBox3DSnapshot.get()) {
-            mavenLocal()
-        }
         google()
         mavenCentral()
         maven {

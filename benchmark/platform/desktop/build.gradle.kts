@@ -14,22 +14,22 @@ base {
     archivesName.set("benchmark_desktop")
 }
 
-val glRuntimeClasspath by configurations.creating {
+val glRuntimeClasspath = configurations.create("glRuntimeClasspath") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
 
-val wgpuJniRuntimeClasspath by configurations.creating {
+val wgpuJniRuntimeClasspath = configurations.create("wgpuJniRuntimeClasspath") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
 
-val vulkanRuntimeClasspath by configurations.creating {
+val vulkanRuntimeClasspath = configurations.create("vulkanRuntimeClasspath") {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
 
-val wgpuFfmRuntimeClasspath by configurations.creating {
+val wgpuFfmRuntimeClasspath = configurations.create("wgpuFfmRuntimeClasspath") {
     isCanBeConsumed = false
     isCanBeResolved = true
     attributes {

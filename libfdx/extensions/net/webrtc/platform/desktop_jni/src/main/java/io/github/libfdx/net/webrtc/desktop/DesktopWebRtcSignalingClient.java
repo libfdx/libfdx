@@ -9,6 +9,7 @@ import io.github.libfdx.net.websocket.WebSocketClient;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLEncoder;
+import org.java_websocket.framing.CloseFrame;
 import org.java_websocket.handshake.ServerHandshake;
 
 /**
@@ -99,7 +100,12 @@ public final class DesktopWebRtcSignalingClient implements WebRtcSignalingClient
         if (!closed) {
             closed = true;
             if (socket != null) {
-                socket.close();
+                // dispose() is an ownership boundary. A graceful close can
+                // otherwise leave Java-WebSocket's non-daemon reader/writer
+                // threads alive indefinitely when the signaling peer or
+                // server is torn down at the same time.
+                socket.closeConnection(CloseFrame.NORMAL,
+                        "Signaling client disposed");
             }
         }
     }

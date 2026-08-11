@@ -86,7 +86,6 @@ final class InstancedWireRenderer implements Disposable {
             + "    var output: VertexOutput;\n"
             + "    let model = mat4x4<f32>(input.model0, input.model1, input.model2, input.model3);\n"
             + "    output.position = uniforms.viewProjection * model * vec4<f32>(input.position, 1.0);\n"
-            + "    output.position.z -= 0.0005 * output.position.w;\n"
             + "    output.color = input.color;\n"
             + "    return output;\n"
             + "}\n"
