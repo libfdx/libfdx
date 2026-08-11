@@ -4,7 +4,7 @@ libfdxRelease = "0.0.2"
 libfdxSnapshot = "-SNAPSHOT"
 
 easyPublishing = "0.1.2"
-androidGradlePlugin = "9.3.1"
+androidGradlePlugin = "9.1.0"
 jbox2d = "-SNAPSHOT"
 jbox3d = "-SNAPSHOT"
 jimgui = "-SNAPSHOT"
