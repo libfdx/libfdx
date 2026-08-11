@@ -38,6 +38,7 @@ final class AndroidFileSystem implements FileSystem {
         File externalRoot = activity.getExternalFilesDir(null);
         File cacheRoot = activity.getCacheDir();
         defaultFiles = new DefaultFileSystem(localRoot, externalRoot != null ? externalRoot : localRoot, cacheRoot);
+        defaultFiles.classpathResourceResolver(AndroidFileSystem::openClasspathResource);
     }
 
     /**
@@ -105,6 +106,16 @@ final class AndroidFileSystem implements FileSystem {
     @Override
     public FileHandle temp(String prefix, String suffix) {
         return defaultFiles.temp(prefix, suffix);
+    }
+
+    private static InputStream openClasspathResource(String path) {
+        ClassLoader context = Thread.currentThread().getContextClassLoader();
+        InputStream resource = context != null ? context.getResourceAsStream(path) : null;
+        if (resource != null) {
+            return resource;
+        }
+        ClassLoader defining = AndroidFileSystem.class.getClassLoader();
+        return defining != null ? defining.getResourceAsStream(path) : null;
     }
 
     /**
@@ -253,10 +264,12 @@ final class AndroidFileSystem implements FileSystem {
             } catch (IOException ignored) {
                 try {
                     String[] children = assets.list(path);
-                    return children != null && children.length > 0;
+                    if (children != null && children.length > 0) {
+                        return true;
+                    }
                 } catch (IOException ignoredToo) {
-                    return false;
                 }
+                return defaultFiles.classpath(path).exists();
             } finally {
                 if (input != null) {
                     try {
@@ -307,7 +320,7 @@ final class AndroidFileSystem implements FileSystem {
                     input.close();
                 }
             } catch (Throwable error) {
-                return FdxFuture.failed(error);
+                return defaultFiles.classpath(path).readBytes();
             }
         }
 

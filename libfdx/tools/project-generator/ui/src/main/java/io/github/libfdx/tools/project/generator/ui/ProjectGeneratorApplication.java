@@ -15,6 +15,7 @@ import io.github.libfdx.tools.project.generator.ProjectSample;
 import io.github.libfdx.ui.Ui;
 import io.github.libfdx.ui.UiBooleanState;
 import io.github.libfdx.ui.UiFont;
+import io.github.libfdx.ui.UiFonts;
 import io.github.libfdx.ui.UiIntState;
 import io.github.libfdx.ui.UiRoot;
 import io.github.libfdx.ui.UiScope;
@@ -30,7 +31,6 @@ import java.util.List;
  * @author xpenatan
  */
 public final class ProjectGeneratorApplication extends ApplicationAdapter {
-    private static final String UI_FONT_ASSET = "font/LiberationSans-Regular.ttf";
     private static final float FIELD_HEIGHT = 30.0f;
     private static final float PLATFORM_CHOICE_HEIGHT = 28.0f;
 
@@ -137,7 +137,7 @@ public final class ProjectGeneratorApplication extends ApplicationAdapter {
     }
 
     private UiTheme generatorTheme() {
-        UiFont font = UiFont.freeType(UI_FONT_ASSET, 16.0f);
+        UiFont font = UiFonts.defaultFont(16.0f);
         UiTheme theme = UiTheme.dark();
         ObjectIterator<? extends ObjectMapEntry<String, UiStyle>> iterator =
                 theme.styles().entries().iterator();

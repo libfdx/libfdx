@@ -190,6 +190,20 @@ Text measurement/rendering uses bitmap-font data. FreeType sources are
 rasterized into cached atlases during loading, not per frame. Generate or load
 fonts at a suitable effective UI scale to avoid blurry upscaling.
 
+UI Kit bundles one licensed TrueType font and uses it when a text style does not
+select another font. Applications can reuse that same resource at another size
+without copying it into their own assets:
+
+```java
+UiFont compact = UiFonts.defaultFont(13);
+```
+
+The shared resource lives in the published UI-kit artifact under the reserved
+`libfdx-assets/` namespace. Desktop classpath loading and libFDX web/native
+packaging expose that namespace through the normal internal file system. The
+font license is shipped beside the font. Backends without runtime FreeType
+support continue to use UI Kit's built-in bitmap fallback.
+
 Text measurement, wrapping, truncation, hit testing, selection, caret movement,
 insertion, backspace, and delete operate on Unicode code points. Supplementary
 characters such as emoji are never split into isolated UTF-16 surrogates.

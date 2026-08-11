@@ -23,7 +23,7 @@ final class UiTextEngine implements Disposable {
     private static final Logger LOGGER = Logger.getLogger(UiTextEngine.class.getName());
     private static final int LAYOUT_CACHE_LIMIT = 512;
     private static final int FONT_KEY_CACHE_LIMIT = 512;
-    private static final UiFont DEFAULT_FONT = UiFont.family("Dialog", 16.0f);
+    private static final UiFont DEFAULT_FONT = UiFonts.defaultFont(16.0f);
     private static final float MIN_RASTER_SCALE = 1.0f;
     private static final float MAX_RASTER_SCALE = 4.0f;
     private static final float RASTER_SCALE_STEP = 0.25f;

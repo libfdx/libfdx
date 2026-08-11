@@ -22,6 +22,32 @@ final class WebAppWriterTest {
     Path temporaryDirectory;
 
     @Test
+    void publishesSharedAssetsFromClasspathDirectory() throws Exception {
+        Path runtime = Files.createDirectories(temporaryDirectory.resolve("runtime"));
+        byte[] font = new byte[] { 0, 1, 0, 0, 7 };
+        write(runtime.resolve("libfdx-assets/ui/font/default.ttf"), font);
+        Path webapp = temporaryDirectory.resolve("webapp");
+
+        writeWebApp(webapp, runtime);
+
+        assertArrayEquals(font,
+                Files.readAllBytes(webapp.resolve("assets/libfdx-assets/ui/font/default.ttf")));
+    }
+
+    @Test
+    void publishesSharedAssetsFromClasspathJar() throws Exception {
+        byte[] license = "shared-license".getBytes(StandardCharsets.UTF_8);
+        Path jar = createJar("shared-assets.jar",
+                Map.of("libfdx-assets/ui/font/OFL.txt", license));
+        Path webapp = temporaryDirectory.resolve("webapp");
+
+        writeWebApp(webapp, jar);
+
+        assertArrayEquals(license,
+                Files.readAllBytes(webapp.resolve("assets/libfdx-assets/ui/font/OFL.txt")));
+    }
+
+    @Test
     void discoversRuntimeScriptsFromClasspathDirectoryWithoutFilenameRegistration() throws Exception {
         Path runtime = Files.createDirectories(temporaryDirectory.resolve("runtime"));
         byte[] javascript = "custom-runtime".getBytes(StandardCharsets.UTF_8);

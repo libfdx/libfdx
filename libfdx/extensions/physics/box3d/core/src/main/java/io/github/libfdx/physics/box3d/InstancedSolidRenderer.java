@@ -19,6 +19,7 @@ import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.VertexAttribute;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
+import io.github.libfdx.graphics.g3d.CascadedShadowMap3D;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
 import io.github.libfdx.graphics.g3d.DirectionalShadowMap3D;
 import io.github.libfdx.graphics.shader.ShaderModule;
@@ -38,6 +39,7 @@ import java.nio.ByteOrder;
 
 /** GPU-instanced solid and shadow renderer for repeated Box3D debug geometry. */
 final class InstancedSolidRenderer implements Disposable {
+    private static final int MAX_SHADOW_CASCADES = 3;
     private static final int VERTEX_FLOATS = 6;
     private static final int INSTANCE_FLOATS = 20;
     private static final int INSTANCE_BYTES = INSTANCE_FLOATS * Float.BYTES;
@@ -57,19 +59,31 @@ final class InstancedSolidRenderer implements Disposable {
     private static final ShaderValueType FLOAT4 = ShaderValueType
             .vector(ShaderScalarType.F32, 4)
             .named("vec4<f32>");
-    private static final ShaderParameterLayout MAIN_UNIFORM_LAYOUT = ShaderParameterLayout.of(192, 16,
+    private static final ShaderParameterLayout MAIN_UNIFORM_LAYOUT = ShaderParameterLayout.of(416, 16,
             ShaderParameter.of("viewProjection", MATRIX4, 0, 64, 16),
-            ShaderParameter.of("lightViewProjection", MATRIX4, 64, 64, 16),
-            ShaderParameter.of("lightDirection", FLOAT4, 128, 16, 16),
-            ShaderParameter.of("ambientColor", FLOAT4, 144, 16, 16),
-            ShaderParameter.of("lightColorIntensity", FLOAT4, 160, 16, 16),
-            ShaderParameter.of("shadowParams", FLOAT4, 176, 16, 16));
+            ShaderParameter.of("lightViewProjection0", MATRIX4, 64, 64, 16),
+            ShaderParameter.of("lightViewProjection1", MATRIX4, 128, 64, 16),
+            ShaderParameter.of("lightViewProjection2", MATRIX4, 192, 64, 16),
+            ShaderParameter.of("lightDirection", FLOAT4, 256, 16, 16),
+            ShaderParameter.of("ambientColor", FLOAT4, 272, 16, 16),
+            ShaderParameter.of("lightColorIntensity", FLOAT4, 288, 16, 16),
+            ShaderParameter.of("shadowParams", FLOAT4, 304, 16, 16),
+            ShaderParameter.of("shadowCascadeSplits", FLOAT4, 320, 16, 16),
+            ShaderParameter.of("shadowBiases", FLOAT4, 336, 16, 16),
+            ShaderParameter.of("shadowCameraPosition", FLOAT4, 352, 16, 16),
+            ShaderParameter.of("shadowCameraDirection", FLOAT4, 368, 16, 16),
+            ShaderParameter.of("shadowFilterParams", FLOAT4, 384, 16, 16),
+            ShaderParameter.of("shadowFilterScales", FLOAT4, 400, 16, 16));
     private static final ShaderParameterLayout SHADOW_UNIFORM_LAYOUT = ShaderParameterLayout.of(64, 16,
             ShaderParameter.of("viewProjection", MATRIX4, 0, 64, 16));
     private static final ShaderParameterHandle MAIN_VIEW_PROJECTION =
             MAIN_UNIFORM_LAYOUT.requireHandle("viewProjection");
-    private static final ShaderParameterHandle LIGHT_VIEW_PROJECTION =
-            MAIN_UNIFORM_LAYOUT.requireHandle("lightViewProjection");
+    private static final ShaderParameterHandle LIGHT_VIEW_PROJECTION_0 =
+            MAIN_UNIFORM_LAYOUT.requireHandle("lightViewProjection0");
+    private static final ShaderParameterHandle LIGHT_VIEW_PROJECTION_1 =
+            MAIN_UNIFORM_LAYOUT.requireHandle("lightViewProjection1");
+    private static final ShaderParameterHandle LIGHT_VIEW_PROJECTION_2 =
+            MAIN_UNIFORM_LAYOUT.requireHandle("lightViewProjection2");
     private static final ShaderParameterHandle LIGHT_DIRECTION =
             MAIN_UNIFORM_LAYOUT.requireHandle("lightDirection");
     private static final ShaderParameterHandle AMBIENT_COLOR =
@@ -78,19 +92,43 @@ final class InstancedSolidRenderer implements Disposable {
             MAIN_UNIFORM_LAYOUT.requireHandle("lightColorIntensity");
     private static final ShaderParameterHandle SHADOW_PARAMS =
             MAIN_UNIFORM_LAYOUT.requireHandle("shadowParams");
+    private static final ShaderParameterHandle SHADOW_CASCADE_SPLITS =
+            MAIN_UNIFORM_LAYOUT.requireHandle("shadowCascadeSplits");
+    private static final ShaderParameterHandle SHADOW_BIASES =
+            MAIN_UNIFORM_LAYOUT.requireHandle("shadowBiases");
+    private static final ShaderParameterHandle SHADOW_CAMERA_POSITION =
+            MAIN_UNIFORM_LAYOUT.requireHandle("shadowCameraPosition");
+    private static final ShaderParameterHandle SHADOW_CAMERA_DIRECTION =
+            MAIN_UNIFORM_LAYOUT.requireHandle("shadowCameraDirection");
+    private static final ShaderParameterHandle SHADOW_FILTER_PARAMS =
+            MAIN_UNIFORM_LAYOUT.requireHandle("shadowFilterParams");
+    private static final ShaderParameterHandle SHADOW_FILTER_SCALES =
+            MAIN_UNIFORM_LAYOUT.requireHandle("shadowFilterScales");
     private static final ShaderParameterHandle SHADOW_VIEW_PROJECTION =
             SHADOW_UNIFORM_LAYOUT.requireHandle("viewProjection");
     private static final String MAIN_SHADER = """
             struct Uniforms {
                 viewProjection : mat4x4<f32>,
-                lightViewProjection : mat4x4<f32>,
+                lightViewProjection0 : mat4x4<f32>,
+                lightViewProjection1 : mat4x4<f32>,
+                lightViewProjection2 : mat4x4<f32>,
                 lightDirection : vec4f,
                 ambientColor : vec4f,
                 lightColorIntensity : vec4f,
                 shadowParams : vec4f,
+                shadowCascadeSplits : vec4f,
+                shadowBiases : vec4f,
+                shadowCameraPosition : vec4f,
+                shadowCameraDirection : vec4f,
+                shadowFilterParams : vec4f,
+                shadowFilterScales : vec4f,
             };
-            @group(0) @binding(0) var shadowTexture : texture_2d<f32>;
-            @group(0) @binding(1) var shadowSampler : sampler;
+            @group(0) @binding(0) var shadowTexture0 : texture_2d<f32>;
+            @group(0) @binding(1) var shadowSampler0 : sampler;
+            @group(0) @binding(2) var shadowTexture1 : texture_2d<f32>;
+            @group(0) @binding(3) var shadowSampler1 : sampler;
+            @group(0) @binding(4) var shadowTexture2 : texture_2d<f32>;
+            @group(0) @binding(5) var shadowSampler2 : sampler;
             @group(1) @binding(0) var<uniform> uniforms : Uniforms;
             struct VertexInput {
                 @location(0) position : vec3f,
@@ -121,24 +159,70 @@ final class InstancedSolidRenderer implements Disposable {
             fn unpackShadowDepth(encodedDepth : vec4f) -> f32 {
                 return encodedDepth.r + encodedDepth.g / 255.0;
             }
-            fn sampleVisibility(uv : vec2f, currentDepth : f32, offset : vec2f) -> f32 {
+            fn shadowMatrix(cascadeIndex : i32) -> mat4x4<f32> {
+                if (cascadeIndex == 1) {
+                    return uniforms.lightViewProjection1;
+                }
+                if (cascadeIndex == 2) {
+                    return uniforms.lightViewProjection2;
+                }
+                return uniforms.lightViewProjection0;
+            }
+            fn shadowSplit(cascadeIndex : i32) -> f32 {
+                if (cascadeIndex == 1) {
+                    return uniforms.shadowCascadeSplits.y;
+                }
+                if (cascadeIndex == 2) {
+                    return uniforms.shadowCascadeSplits.z;
+                }
+                return uniforms.shadowCascadeSplits.x;
+            }
+            fn shadowBias(cascadeIndex : i32) -> f32 {
+                if (cascadeIndex == 1) {
+                    return uniforms.shadowBiases.y;
+                }
+                if (cascadeIndex == 2) {
+                    return uniforms.shadowBiases.z;
+                }
+                return uniforms.shadowBiases.x;
+            }
+            fn shadowFilterScale(cascadeIndex : i32) -> f32 {
+                if (cascadeIndex == 1) {
+                    return uniforms.shadowFilterScales.y;
+                }
+                if (cascadeIndex == 2) {
+                    return uniforms.shadowFilterScales.z;
+                }
+                return uniforms.shadowFilterScales.x;
+            }
+            fn sampleShadowDepth(cascadeIndex : i32, uv : vec2f) -> f32 {
+                if (cascadeIndex == 1) {
+                    return unpackShadowDepth(textureSampleLevel(
+                            shadowTexture1, shadowSampler1, uv, 0.0));
+                }
+                if (cascadeIndex == 2) {
+                    return unpackShadowDepth(textureSampleLevel(
+                            shadowTexture2, shadowSampler2, uv, 0.0));
+                }
+                return unpackShadowDepth(textureSampleLevel(
+                        shadowTexture0, shadowSampler0, uv, 0.0));
+            }
+            fn sampleVisibility(cascadeIndex : i32, uv : vec2f,
+                    currentDepth : f32, receiverBias : f32, offset : vec2f) -> f32 {
                 let sampleUv = uv + offset;
                 if (sampleUv.x < 0.0 || sampleUv.x > 1.0
                         || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
                     return 1.0;
                 }
-                let closest = unpackShadowDepth(
-                        textureSampleLevel(shadowTexture, shadowSampler, sampleUv, 0.0));
-                if (currentDepth - uniforms.shadowParams.y > closest) {
-                    return 1.0 - uniforms.shadowParams.z;
+                let closest = sampleShadowDepth(cascadeIndex, sampleUv);
+                if (currentDepth - receiverBias > closest) {
+                    return 1.0 - uniforms.shadowParams.y;
                 }
                 return 1.0;
             }
-            fn shadowVisibility(worldPosition : vec3f) -> f32 {
-                if (uniforms.shadowParams.x < 0.5) {
-                    return 1.0;
-                }
-                let clip = uniforms.lightViewProjection * vec4f(worldPosition, 1.0);
+            fn cascadeVisibility(cascadeIndex : i32, worldPosition : vec3f,
+                    normalDotLight : f32) -> f32 {
+                let clip = shadowMatrix(cascadeIndex) * vec4f(worldPosition, 1.0);
                 if (abs(clip.w) <= 0.000001) {
                     return 1.0;
                 }
@@ -147,18 +231,81 @@ final class InstancedSolidRenderer implements Disposable {
                     return 1.0;
                 }
                 let uv = vec2f(ndc.x * 0.5 + 0.5,
-                        0.5 + ndc.y * 0.5 * uniforms.shadowParams.w);
+                        0.5 + ndc.y * 0.5 * uniforms.shadowParams.z);
                 if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
                     return 1.0;
                 }
                 let currentDepth = ndc.z * 0.5 + 0.5;
-                let dimensions = vec2f(textureDimensions(shadowTexture, 0));
-                let texel = vec2f(1.0) / max(dimensions, vec2f(1.0));
-                var visibility = sampleVisibility(uv, currentDepth, vec2f(0.0)) * 0.4;
-                visibility += sampleVisibility(uv, currentDepth, vec2f(texel.x, 0.0)) * 0.15;
-                visibility += sampleVisibility(uv, currentDepth, vec2f(-texel.x, 0.0)) * 0.15;
-                visibility += sampleVisibility(uv, currentDepth, vec2f(0.0, texel.y)) * 0.15;
-                visibility += sampleVisibility(uv, currentDepth, vec2f(0.0, -texel.y)) * 0.15;
+                // Match Box3D's receiver-side slope bias. The larger bias at
+                // grazing angles prevents self-shadow bands without moving
+                // head-on contact shadows away from their casters.
+                let biasResolutionScale = max(
+                        uniforms.shadowFilterParams.x * 2048.0, 1.0);
+                let receiverBias = max(shadowBias(cascadeIndex),
+                        mix(0.0040, 0.0008, normalDotLight) * biasResolutionScale);
+                let filterOffset = uniforms.shadowFilterParams.xy
+                        * uniforms.shadowFilterParams.z * shadowFilterScale(cascadeIndex);
+                var visibility = 0.0;
+                visibility += sampleVisibility(cascadeIndex, uv, currentDepth, receiverBias,
+                        vec2f(-filterOffset.x, -filterOffset.y)) * 25.0;
+                visibility += sampleVisibility(cascadeIndex, uv, currentDepth, receiverBias,
+                        vec2f(0.0, -filterOffset.y)) * 30.0;
+                visibility += sampleVisibility(cascadeIndex, uv, currentDepth, receiverBias,
+                        vec2f(filterOffset.x, -filterOffset.y)) * 25.0;
+                visibility += sampleVisibility(cascadeIndex, uv, currentDepth, receiverBias,
+                        vec2f(-filterOffset.x, 0.0)) * 30.0;
+                visibility += sampleVisibility(cascadeIndex, uv, currentDepth, receiverBias,
+                        vec2f(0.0)) * 36.0;
+                visibility += sampleVisibility(cascadeIndex, uv, currentDepth, receiverBias,
+                        vec2f(filterOffset.x, 0.0)) * 30.0;
+                visibility += sampleVisibility(cascadeIndex, uv, currentDepth, receiverBias,
+                        vec2f(-filterOffset.x, filterOffset.y)) * 25.0;
+                visibility += sampleVisibility(cascadeIndex, uv, currentDepth, receiverBias,
+                        vec2f(0.0, filterOffset.y)) * 30.0;
+                visibility += sampleVisibility(cascadeIndex, uv, currentDepth, receiverBias,
+                        vec2f(filterOffset.x, filterOffset.y)) * 25.0;
+                return visibility / 256.0;
+            }
+            fn shadowVisibility(worldPosition : vec3f, normal : vec3f) -> f32 {
+                let cascadeCount = i32(uniforms.shadowParams.x);
+                if (cascadeCount <= 0) {
+                    return 1.0;
+                }
+                let cameraDirection = normalize(uniforms.shadowCameraDirection.xyz);
+                let viewDistance = dot(worldPosition - uniforms.shadowCameraPosition.xyz,
+                        cameraDirection);
+                var cascadeIndex = 0;
+                if (cascadeCount > 1 && viewDistance > uniforms.shadowCascadeSplits.x) {
+                    cascadeIndex = 1;
+                }
+                if (cascadeCount > 2 && viewDistance > uniforms.shadowCascadeSplits.y) {
+                    cascadeIndex = 2;
+                }
+                if (viewDistance > shadowSplit(cascadeCount - 1)) {
+                    return 1.0;
+                }
+                let normalDotLight = max(dot(normalize(normal),
+                        normalize(-uniforms.lightDirection.xyz)), 0.0);
+                var visibility = cascadeVisibility(cascadeIndex, worldPosition, normalDotLight);
+                if (cascadeIndex + 1 < cascadeCount) {
+                    var splitNear = 0.0;
+                    if (cascadeIndex == 1) {
+                        splitNear = uniforms.shadowCascadeSplits.x;
+                    }
+                    if (cascadeIndex == 2) {
+                        splitNear = uniforms.shadowCascadeSplits.y;
+                    }
+                    let splitFar = shadowSplit(cascadeIndex);
+                    let blendWidth = max((splitFar - splitNear)
+                            * uniforms.shadowFilterParams.w, 0.0001);
+                    let blendStart = splitFar - blendWidth;
+                    if (viewDistance > blendStart) {
+                        let blend = clamp((viewDistance - blendStart) / blendWidth, 0.0, 1.0);
+                        visibility = mix(visibility,
+                                cascadeVisibility(cascadeIndex + 1, worldPosition,
+                                        normalDotLight), blend);
+                    }
+                }
                 return visibility;
             }
             fn linearToSrgb(value : vec3f) -> vec3f {
@@ -168,7 +315,7 @@ final class InstancedSolidRenderer implements Disposable {
                 let normal = normalize(input.normal);
                 let lightDirection = normalize(-uniforms.lightDirection.xyz);
                 let diffuse = max(dot(normal, lightDirection), 0.0);
-                let shadow = shadowVisibility(input.worldPosition);
+                let shadow = shadowVisibility(input.worldPosition, normal);
                 let direct = uniforms.lightColorIntensity.rgb
                         * uniforms.lightColorIntensity.a * diffuse * shadow;
                 let linearColor = input.color.rgb * (uniforms.ambientColor.rgb + direct);
@@ -219,7 +366,8 @@ final class InstancedSolidRenderer implements Disposable {
             ShaderParameterBlock.allocate(MAIN_UNIFORM_LAYOUT);
     private final ShaderParameterBlock shadowUniformBlock =
             ShaderParameterBlock.allocate(SHADOW_UNIFORM_LAYOUT);
-    private final float[] lightMatrix = new float[Matrix4.VALUE_COUNT];
+    private final float[][] lightMatrices = new float[MAX_SHADOW_CASCADES][Matrix4.VALUE_COUNT];
+    private final float[] shadowPassMatrix = new float[Matrix4.VALUE_COUNT];
     private ShaderModule mainShader;
     private ShaderModule shadowShader;
     private RenderPipeline mainPipeline;
@@ -288,27 +436,30 @@ final class InstancedSolidRenderer implements Disposable {
         return false;
     }
 
-    void renderShadow(DirectionalShadowMap3D shadowMap, DirectionalLight light) {
+    void renderShadow(CascadedShadowMap3D shadowMap, DirectionalLight light) {
         ensureNotDisposed();
         if(!supported() || !hasInstances()) {
             return;
         }
-        shadowMap.render(light, (pass, viewProjection) -> {
-            viewProjection.copyValues(lightMatrix, 0);
-            shadowUniformBlock.setFloatMatrix(SHADOW_VIEW_PROJECTION, lightMatrix, 0);
-            pass.setPipeline(shadowPipeline);
-            pass.setParameterBlock(0, 0, shadowUniformBlock);
-            for(int i = 0; i < geometries.size(); i++) {
-                Geometry geometry = geometries.get(i);
-                if(geometry.render(pass)) {
-                    shadowDrawCallCount++;
+        for(int cascadeIndex = 0; cascadeIndex < shadowMap.cascadeCount(); cascadeIndex++) {
+            DirectionalShadowMap3D cascade = shadowMap.cascade(cascadeIndex);
+            cascade.render(light, (pass, viewProjection) -> {
+                viewProjection.copyValues(shadowPassMatrix, 0);
+                shadowUniformBlock.setFloatMatrix(SHADOW_VIEW_PROJECTION, shadowPassMatrix, 0);
+                pass.setPipeline(shadowPipeline);
+                pass.setParameterBlock(0, 0, shadowUniformBlock);
+                for(int i = 0; i < geometries.size(); i++) {
+                    Geometry geometry = geometries.get(i);
+                    if(geometry.render(pass)) {
+                        shadowDrawCallCount++;
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 
     void render(float[] viewProjection, DirectionalLight light, Color ambient,
-            DirectionalShadowMap3D shadowMap, boolean shadowsEnabled) {
+            CascadedShadowMap3D shadowMap, boolean shadowsEnabled) {
         ensureNotDisposed();
         if(!supported() || !hasInstances()) {
             return;
@@ -319,17 +470,45 @@ final class InstancedSolidRenderer implements Disposable {
         Vector3 lightDirection = light.direction();
         Color lightColor = light.color();
         Color ambientColor = ambient != null ? ambient : Color.BLACK;
-        shadowMap.lightViewProjection().copyValues(lightMatrix, 0);
+        DirectionalShadowMap3D cascade0 = cascade(shadowMap, 0);
+        DirectionalShadowMap3D cascade1 = cascade(shadowMap, 1);
+        DirectionalShadowMap3D cascade2 = cascade(shadowMap, 2);
+        cascade0.lightViewProjection().copyValues(lightMatrices[0], 0);
+        cascade1.lightViewProjection().copyValues(lightMatrices[1], 0);
+        cascade2.lightViewProjection().copyValues(lightMatrices[2], 0);
         mainUniformBlock.setFloatMatrix(MAIN_VIEW_PROJECTION, viewProjection, 0);
-        mainUniformBlock.setFloatMatrix(LIGHT_VIEW_PROJECTION, lightMatrix, 0);
+        mainUniformBlock.setFloatMatrix(LIGHT_VIEW_PROJECTION_0, lightMatrices[0], 0);
+        mainUniformBlock.setFloatMatrix(LIGHT_VIEW_PROJECTION_1, lightMatrices[1], 0);
+        mainUniformBlock.setFloatMatrix(LIGHT_VIEW_PROJECTION_2, lightMatrices[2], 0);
         mainUniformBlock.setFloat4(LIGHT_DIRECTION, lightDirection.x(), lightDirection.y(),
                 lightDirection.z(), 0.0f);
         mainUniformBlock.setFloat4(AMBIENT_COLOR, ambientColor.red(), ambientColor.green(),
                 ambientColor.blue(), ambientColor.alpha());
         mainUniformBlock.setFloat4(LIGHT_COLOR_INTENSITY, lightColor.red(), lightColor.green(),
                 lightColor.blue(), light.intensity());
-        mainUniformBlock.setFloat4(SHADOW_PARAMS, shadowsEnabled ? 1.0f : 0.0f,
-                shadowMap.bias(), shadowMap.strength(), shadowYSign());
+        int cascadeCount = Math.min(shadowMap.cascadeCount(), MAX_SHADOW_CASCADES);
+        mainUniformBlock.setFloat4(SHADOW_PARAMS, shadowsEnabled ? cascadeCount : 0.0f,
+                cascade0.strength(), shadowYSign(), 0.0f);
+        mainUniformBlock.setFloat4(SHADOW_CASCADE_SPLITS,
+                split(shadowMap, 0), split(shadowMap, 1), split(shadowMap, 2), 0.0f);
+        mainUniformBlock.setFloat4(SHADOW_BIASES,
+                bias(shadowMap, 0), bias(shadowMap, 1), bias(shadowMap, 2), 0.0f);
+        Vector3 cameraPosition = shadowMap.viewCameraPosition();
+        Vector3 cameraDirection = shadowMap.viewCameraDirection();
+        mainUniformBlock.setFloat4(SHADOW_CAMERA_POSITION, cameraPosition.x(), cameraPosition.y(),
+                cameraPosition.z(), 0.0f);
+        mainUniformBlock.setFloat4(SHADOW_CAMERA_DIRECTION, cameraDirection.x(), cameraDirection.y(),
+                cameraDirection.z(), 0.0f);
+        mainUniformBlock.setFloat4(SHADOW_FILTER_PARAMS,
+                1.0f / Math.max(1, cascade0.texture().width()),
+                1.0f / Math.max(1, cascade0.texture().height()),
+                1.2f, 0.10f);
+        float firstHalfSize = shadowMap.cascadeHalfSize(0);
+        mainUniformBlock.setFloat4(SHADOW_FILTER_SCALES,
+                1.0f,
+                filterScale(firstHalfSize, halfSize(shadowMap, 1)),
+                filterScale(firstHalfSize, halfSize(shadowMap, 2)),
+                0.0f);
 
         GraphicsFrame frame = graphics.currentFrame();
         RenderPass pass = frame.commandEncoder().beginRenderPass(mainPassDescriptor
@@ -337,8 +516,12 @@ final class InstancedSolidRenderer implements Disposable {
         try {
             pass.setPipeline(mainPipeline);
             pass.setParameterBlock(1, 0, mainUniformBlock);
-            pass.setTextureBinding(0, 0, shadowMap.texture());
-            pass.setTextureSamplerBinding(0, 1, shadowMap.texture());
+            pass.setTextureBinding(0, 0, cascade0.texture());
+            pass.setTextureSamplerBinding(0, 1, cascade0.texture());
+            pass.setTextureBinding(0, 2, cascade1.texture());
+            pass.setTextureSamplerBinding(0, 3, cascade1.texture());
+            pass.setTextureBinding(0, 4, cascade2.texture());
+            pass.setTextureSamplerBinding(0, 5, cascade2.texture());
             for(int i = 0; i < geometries.size(); i++) {
                 Geometry geometry = geometries.get(i);
                 if(geometry.render(pass)) {
@@ -357,6 +540,29 @@ final class InstancedSolidRenderer implements Disposable {
 
     int shadowDrawCallCount() {
         return shadowDrawCallCount;
+    }
+
+    private static DirectionalShadowMap3D cascade(CascadedShadowMap3D shadowMap, int index) {
+        return shadowMap.cascade(Math.min(index, shadowMap.cascadeCount() - 1));
+    }
+
+    private static float split(CascadedShadowMap3D shadowMap, int index) {
+        return shadowMap.splitDistance(Math.min(index, shadowMap.cascadeCount() - 1));
+    }
+
+    private static float bias(CascadedShadowMap3D shadowMap, int index) {
+        return shadowMap.cascadeBias(Math.min(index, shadowMap.cascadeCount() - 1));
+    }
+
+    private static float halfSize(CascadedShadowMap3D shadowMap, int index) {
+        return shadowMap.cascadeHalfSize(Math.min(index, shadowMap.cascadeCount() - 1));
+    }
+
+    private static float filterScale(float firstHalfSize, float cascadeHalfSize) {
+        if(cascadeHalfSize <= 0.0f) {
+            return 1.0f;
+        }
+        return Math.max(0.25f, Math.min(1.0f, firstHalfSize / cascadeHalfSize));
     }
 
     private float shadowYSign() {

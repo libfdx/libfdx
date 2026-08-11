@@ -5,7 +5,7 @@ import io.github.libfdx.application.ApplicationAdapter;
 import io.github.libfdx.tools.project.generator.ui.ProjectGeneratorApplication;
 
 /**
- * Installs desktop resources before starting the portable generator UI.
+ * Adapts the portable generator UI to the desktop launcher.
  *
  * @author xpenatan
  */
@@ -18,7 +18,6 @@ final class ProjectGeneratorDesktopApplication extends ApplicationAdapter {
 
     @Override
     public void create(Fdx fdx) {
-        DesktopBundledFont.install(fdx);
         generator.create(fdx);
     }
 

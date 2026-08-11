@@ -22,9 +22,9 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.ImmediateModeRenderer;
 import io.github.libfdx.graphics.camera.Camera;
+import io.github.libfdx.graphics.g3d.CascadedShadowMap3D;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
-import io.github.libfdx.graphics.g3d.DirectionalShadowMap3D;
 import io.github.libfdx.graphics.g3d.Environment3D;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
@@ -47,6 +47,9 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
     private static final float TRANSFORM_AXIS_LENGTH = 0.35f;
     private static final int RETIRED_MODEL_FRAME_DELAY = 3;
     private static final float DEFAULT_DRAW_DISTANCE = 100.0f;
+    private static final int SHADOW_CASCADE_COUNT = 3;
+    private static final int SHADOW_MAP_SIZE = 1024;
+    private static final float SHADOW_DISTANCE = 50.0f;
     private static final float GRID_HALF_SIZE = 100.0f;
     private static final float GRID_SPACING = 5.0f;
     private static final int GRID_MAJOR_INTERVAL = 5;
@@ -58,7 +61,7 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
     private final InstancedWireRenderer instancedWireRenderer;
     private final Environment3D environment;
     private final DirectionalLight directionalLight;
-    private final DirectionalShadowMap3D shadowMap;
+    private final CascadedShadowMap3D shadowMap;
     private final boolean ownsModelBatch;
     private final boolean ownsLineRenderer;
     private final LongMap<SharedGeometry> geometryIdCache = new LongMap<SharedGeometry>(128, 0.7f);
@@ -128,14 +131,18 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
         this.ownsLineRenderer = ownsLineRenderer;
         directionalLight = new DirectionalLight().direction(-0.45f, -0.55f, -0.70f).intensity(1.75f);
         shadowMap = graphics != null
-                ? new DirectionalShadowMap3D(graphics, 2048, 2048).bounds(0.0f, 5.0f, 0.0f, 90.0f, 1.0f, 260.0f)
-                        .bias(shadowBias).strength(0.82f)
+                ? new CascadedShadowMap3D(graphics, SHADOW_CASCADE_COUNT,
+                        SHADOW_MAP_SIZE, SHADOW_MAP_SIZE)
+                        .maxDistance(SHADOW_DISTANCE)
+                        .bias(0.0f)
+                        .minTexelBias(shadowBias * SHADOW_MAP_SIZE)
+                        .strength(0.82f)
                 : null;
         this.environment = new Environment3D()
                 .ambientColor(new Color(0.18f, 0.19f, 0.21f, 1.0f))
                 .add(directionalLight);
         if(shadowMap != null) {
-            environment.directionalShadowMap(shadowMap);
+            environment.cascadedShadowMap(shadowMap);
         }
         if(modelBatch != null) {
             modelBatch.environment(environment);
@@ -247,10 +254,10 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
         this.shadowsEnabled = shadowsEnabled;
         if(shadowMap != null) {
             if(shadowsEnabled) {
-                environment.directionalShadowMap(shadowMap);
+                environment.cascadedShadowMap(shadowMap);
             }
             else {
-                environment.clearDirectionalShadowMap();
+                environment.clearCascadedShadowMap();
             }
         }
     }
@@ -262,7 +269,7 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
     public void setShadowBias(float shadowBias) {
         this.shadowBias = Math.max(0.0f, shadowBias);
         if(shadowMap != null) {
-            shadowMap.bias(this.shadowBias);
+            shadowMap.bias(0.0f).minTexelBias(this.shadowBias * SHADOW_MAP_SIZE);
         }
     }
 
@@ -458,7 +465,8 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
         modelBatch.render(visibleInstances.view());
         modelBatch.end();
         solidDrawCallCount = visibleInstances.size();
-        shadowDrawCallCount = shadowsEnabled ? shadowCasterInstances.size() : 0;
+        shadowDrawCallCount = shadowsEnabled
+                ? shadowCasterInstances.size() * shadowMap.cascadeCount() : 0;
     }
 
     private void renderInstancedSolids(Camera camera) {
@@ -478,21 +486,20 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
         if(!shadowsEnabled) {
             return;
         }
-        shadowMap.render(directionalLight, shadowCasterInstances);
+        for(int i = 0; i < shadowMap.cascadeCount(); i++) {
+            shadowMap.cascade(i).render(directionalLight, shadowCasterInstances);
+        }
     }
 
     private void updateShadowMap(Camera camera) {
         if(!shadowsEnabled || shadowMap == null) {
             if(shadowMap != null) {
-                environment.clearDirectionalShadowMap();
+                environment.clearCascadedShadowMap();
             }
             return;
         }
-        float centerX = camera.position().x() + camera.direction().x() * 42.0f;
-        float centerY = camera.position().y() + camera.direction().y() * 42.0f;
-        float centerZ = camera.position().z() + camera.direction().z() * 42.0f;
-        shadowMap.bounds(centerX, centerY, centerZ, 90.0f, 1.0f, 260.0f);
-        environment.directionalShadowMap(shadowMap);
+        shadowMap.update(directionalLight, camera);
+        environment.cascadedShadowMap(shadowMap);
     }
 
     private SharedGeometry getOrCreateGeometry(B3DebugShape shape) {

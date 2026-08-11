@@ -354,7 +354,9 @@ abstract class LibfdxDesktopCProjectTask @Inject constructor(
             paths("nativeResourceClasspath", nativeResourceClasspath.files.map(File::toPath))
         }.write(File(temporaryDir, "desktop-c-project.properties"))
         executeLibfdxTool(execOperations, toolClasspath, DESKTOP_C_PROJECT_TOOL_CLASS, request)
-        copyAssetRoots(assets.files, File(releaseDir.get().asFile, "assets"))
+        val outputAssets = File(releaseDir.get().asFile, "assets")
+        copyAssetRoots(assets.files, outputAssets)
+        copySharedAssetResources(nativeResourceClasspath.files, outputAssets)
     }
 }
 
@@ -399,6 +401,7 @@ abstract class LibfdxPspProjectTask @Inject constructor(
             paths("assets", assets.files.map(File::toPath))
         }.write(File(temporaryDir, "psp-project.properties"))
         executeLibfdxTool(execOperations, toolClasspath, PSP_PROJECT_TOOL_CLASS, request)
+        copySharedAssetResources(nativeResourceClasspath.files, File(buildRoot.get().asFile, "assets"))
     }
 }
 
@@ -451,6 +454,7 @@ abstract class LibfdxIosCProjectTask @Inject constructor(
             paths("assets", assets.files.map(File::toPath))
         }.write(File(temporaryDir, "ios-c-project.properties"))
         executeLibfdxTool(execOperations, toolClasspath, IOS_C_PROJECT_TOOL_CLASS, request)
+        copySharedAssetResources(nativeResourceClasspath.files, File(releaseDir.get().asFile, "assets"))
     }
 }
 
@@ -1139,6 +1143,62 @@ internal fun copyAssetRoots(assetRoots: Iterable<File>, outputRoot: File) {
             asset.isFile -> {
                 val output = File(outputRoot, asset.name)
                 Files.copy(asset.toPath(), output.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
+    }
+}
+
+private const val SHARED_ASSET_PREFIX = "libfdx-assets/"
+
+internal fun copySharedAssetResources(classpathEntries: Iterable<File>, outputRoot: File) {
+    val normalizedOutputRoot = outputRoot.canonicalFile.toPath()
+    Files.createDirectories(normalizedOutputRoot)
+    classpathEntries.forEach { entry ->
+        when {
+            entry.isDirectory -> {
+                val sharedRoot = File(entry, SHARED_ASSET_PREFIX).canonicalFile
+                if(sharedRoot.isDirectory) {
+                    sharedRoot.walkTopDown()
+                        .filter(File::isFile)
+                        .forEach { source ->
+                            val relative = sharedRoot.toPath().relativize(source.canonicalFile.toPath())
+                            val output = normalizedOutputRoot.resolve(SHARED_ASSET_PREFIX)
+                                .resolve(relative)
+                                .normalize()
+                            require(output.startsWith(normalizedOutputRoot)) {
+                                "Refusing to copy shared asset outside output directory: ${source.absolutePath}"
+                            }
+                            if(!Files.exists(output)) {
+                                Files.createDirectories(output.parent)
+                                Files.copy(source.toPath(), output)
+                            }
+                        }
+                }
+            }
+            entry.isFile && entry.extension.equals("jar", ignoreCase = true) -> {
+                ZipInputStream(Files.newInputStream(entry.toPath())).use { input ->
+                    while(true) {
+                        val zipEntry = input.nextEntry ?: break
+                        val resourcePath = zipEntry.name.replace('\\', '/')
+                        if(!zipEntry.isDirectory && resourcePath.startsWith(SHARED_ASSET_PREFIX)) {
+                            require(resourcePath.split('/').none { segment ->
+                                segment.isEmpty() || segment == "." || segment == ".."
+                            }) {
+                                "Invalid shared asset path: ${entry.absolutePath}!/${zipEntry.name}"
+                            }
+                            val output = normalizedOutputRoot.resolve(resourcePath).normalize()
+                            require(output.startsWith(normalizedOutputRoot)) {
+                                "Refusing to copy shared asset outside output directory: " +
+                                    "${entry.absolutePath}!/${zipEntry.name}"
+                            }
+                            if(!Files.exists(output)) {
+                                Files.createDirectories(output.parent)
+                                Files.copy(input, output)
+                            }
+                        }
+                        input.closeEntry()
+                    }
+                }
             }
         }
     }

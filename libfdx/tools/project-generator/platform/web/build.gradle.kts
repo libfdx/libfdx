@@ -37,10 +37,6 @@ val wasmWebappDir = layout.buildDirectory.dir("dist/web-wasm/webapp")
 val webGpuWasmWebappDir = layout.buildDirectory.dir("dist/webgpu-wasm/webapp")
 val builderClasspath = sourceSets["main"].runtimeClasspath
 val webPort = providers.gradleProperty("libfdx.web.port").map(String::toInt).orElse(8080)
-val generatorWebAssets = listOf(
-    project(":libfdx:tools:project-generator:ui")
-        .layout.projectDirectory.dir("src/main/resources").asFile
-)
 
 fun registerWebBuild(taskName: String, descriptionText: String, target: String, mainClassName: String,
         title: String, outputPath: Provider<Directory>, optimization: String,
@@ -63,7 +59,6 @@ fun registerWebBuild(taskName: String, descriptionText: String, target: String, 
                 title,
                 outputPath.get().asFile,
                 optimization,
-                generatorWebAssets,
                 mainClassArgs
             )
         }
@@ -131,7 +126,7 @@ registerWebRun("project_generator_webgpu_wasm_run",
         "project_generator_webgpu_wasm_build", webGpuWasmWebappDir, "/")
 
 fun runWebBuilder(classpath: FileCollection, target: String, mainClassName: String, title: String, outputDir: File,
-        optimization: String, assets: List<File> = emptyList(), mainClassArgs: List<String> = emptyList()) {
+        optimization: String, mainClassArgs: List<String> = emptyList()) {
     withBuilderClassLoader(classpath) { classLoader ->
         val builderClass = classLoader.loadClass("io.github.libfdx.backend.web.WebBuilder")
         var builder = builderClass.getMethod(if (target == "wasm") "wasm" else "javascript").invoke(null)
@@ -153,9 +148,6 @@ fun runWebBuilder(classpath: FileCollection, target: String, mainClassName: Stri
         }
         val optimizationClass = classLoader.loadClass("io.github.libfdx.backend.cshared.TeaVMOptimization")
         builder = invokeBuilder(builder, "optimization", listOf(optimizationClass), listOf(enumValue(optimizationClass, optimization)))
-        if (assets.isNotEmpty()) {
-            builder = invokeBuilder(builder, "assets", listOf(Collection::class.java), listOf(assets.map { it.toPath() }))
-        }
         invokeBuilder(builder, "build", emptyList(), emptyList())
     }
 }

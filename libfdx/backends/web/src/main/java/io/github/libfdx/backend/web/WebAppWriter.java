@@ -30,6 +30,7 @@ public final class WebAppWriter {
     private static final String GENERATED_LOADER_PATH = "fdx-loader.js";
     private static final String WEB_RUNTIME_MARKER_PATH = "META-INF/libfdx-web.properties";
     private static final String TEAVM_INTERNAL_RESOURCE_PREFIX = "org/teavm/";
+    private static final String SHARED_ASSET_PREFIX = "libfdx-assets/";
 
     private WebAppWriter() {
     }
@@ -48,12 +49,129 @@ public final class WebAppWriter {
         Files.createDirectories(root);
         Files.createDirectories(webInf);
         Files.deleteIfExists(root.resolve("libfdx-assets.js"));
-        List<WebAsset> assets = WebAssets.copy(app.getAssets(), root.resolve("assets"));
+        List<WebAsset> assets = new ArrayList<>(WebAssets.copy(app.getAssets(), root.resolve("assets")));
+        copySharedAssets(root.resolve("assets"), app.getRuntimeClasspath(), assets);
         copyRuntimeScripts(root, app.getRuntimeClasspath());
         writeFdxLoader(root, app, assets.size());
         Files.writeString(root.resolve("index.html"), indexHtml(app, assets.size()), StandardCharsets.UTF_8);
         Files.writeString(webInf.resolve("web.xml"), "<web-app></web-app>\n", StandardCharsets.UTF_8);
         return assets;
+    }
+
+    private static void copySharedAssets(Path assetsRoot, List<Path> runtimeClasspath,
+            List<WebAsset> assets) throws IOException {
+        Path outputRoot = assetsRoot.toAbsolutePath().normalize();
+        LinkedHashMap<String, SharedAsset> discovered = new LinkedHashMap<>();
+        for (Path entry : runtimeClasspath) {
+            Path normalized = entry.toAbsolutePath().normalize();
+            if (Files.isDirectory(normalized)) {
+                discoverSharedAssetsFromDirectory(normalized, discovered);
+            } else if (Files.isRegularFile(normalized) && isJar(normalized)) {
+                discoverSharedAssetsFromJar(normalized, discovered);
+            }
+        }
+
+        Set<String> applicationAssets = new HashSet<>();
+        for (WebAsset asset : assets) {
+            applicationAssets.add(asset.getPath().toLowerCase(Locale.ROOT));
+        }
+        for (SharedAsset asset : discovered.values().stream()
+                .sorted(Comparator.comparing(SharedAsset::resourcePath))
+                .toList()) {
+            if (applicationAssets.contains(asset.resourcePath().toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            Path output = sharedAssetOutput(outputRoot, asset.resourcePath(), asset.origin());
+            Files.createDirectories(output.getParent());
+            try (InputStream input = asset.open()) {
+                Files.copy(input, output, StandardCopyOption.REPLACE_EXISTING);
+            }
+            assets.add(new WebAsset(asset.resourcePath(), Files.size(output), output));
+        }
+    }
+
+    private static void discoverSharedAssetsFromDirectory(Path classpathRoot,
+            Map<String, SharedAsset> discovered) throws IOException {
+        Path sharedRoot = classpathRoot.resolve(SHARED_ASSET_PREFIX).normalize();
+        if (!Files.isDirectory(sharedRoot)) {
+            return;
+        }
+        try (var paths = Files.walk(sharedRoot)) {
+            for (Path source : paths.filter(Files::isRegularFile)
+                    .sorted(Comparator.comparing(path -> sharedRoot.relativize(path).toString()))
+                    .toList()) {
+                String relative = sharedRoot.relativize(source).toString().replace('\\', '/');
+                String resourcePath = normalizeSharedAssetPath(SHARED_ASSET_PREFIX + relative,
+                        source.toString());
+                registerSharedAsset(SharedAsset.file(resourcePath, source), discovered);
+            }
+        }
+    }
+
+    private static void discoverSharedAssetsFromJar(Path jarPath,
+            Map<String, SharedAsset> discovered) throws IOException {
+        try (ZipFile zip = new ZipFile(jarPath.toFile())) {
+            for (ZipEntry entry : zip.stream()
+                    .filter(candidate -> !candidate.isDirectory()
+                            && candidate.getName().startsWith(SHARED_ASSET_PREFIX))
+                    .sorted(Comparator.comparing(ZipEntry::getName))
+                    .toList()) {
+                String origin = jarPath + "!/" + entry.getName();
+                String resourcePath = normalizeSharedAssetPath(entry.getName(), origin);
+                registerSharedAsset(SharedAsset.jar(resourcePath, jarPath, entry.getName(), entry.getSize()),
+                        discovered);
+            }
+        }
+    }
+
+    private static void registerSharedAsset(SharedAsset candidate,
+            Map<String, SharedAsset> discovered) throws IOException {
+        String portableKey = candidate.resourcePath().toLowerCase(Locale.ROOT);
+        for (Map.Entry<String, SharedAsset> entry : discovered.entrySet()) {
+            String existingKey = entry.getKey();
+            if (portableKey.startsWith(existingKey + "/") || existingKey.startsWith(portableKey + "/")) {
+                throw new IOException("Shared asset path conflicts with a file/directory path: '"
+                        + entry.getValue().resourcePath() + "' from " + entry.getValue().origin() + " and '"
+                        + candidate.resourcePath() + "' from " + candidate.origin());
+            }
+        }
+        SharedAsset existing = discovered.get(portableKey);
+        if (existing != null) {
+            if (!existing.resourcePath().equals(candidate.resourcePath())) {
+                throw new IOException("Shared asset paths differ only by case: '" + existing.resourcePath()
+                        + "' from " + existing.origin() + " and '" + candidate.resourcePath() + "' from "
+                        + candidate.origin());
+            }
+            if (!sameContent(existing, candidate)) {
+                throw new IOException("Conflicting shared asset '" + candidate.resourcePath() + "' from "
+                        + existing.origin() + " and " + candidate.origin());
+            }
+            return;
+        }
+        discovered.put(portableKey, candidate);
+    }
+
+    private static boolean sameContent(SharedAsset first, SharedAsset second) throws IOException {
+        if (first.size() >= 0 && second.size() >= 0 && first.size() != second.size()) {
+            return false;
+        }
+        try (InputStream firstInput = first.open(); InputStream secondInput = second.open()) {
+            byte[] firstBuffer = new byte[8192];
+            byte[] secondBuffer = new byte[8192];
+            while (true) {
+                int firstCount = firstInput.readNBytes(firstBuffer, 0, firstBuffer.length);
+                int secondCount = secondInput.readNBytes(secondBuffer, 0, secondBuffer.length);
+                if (firstCount != secondCount) {
+                    return false;
+                }
+                if (firstCount == 0) {
+                    return true;
+                }
+                if (Arrays.mismatch(firstBuffer, 0, firstCount, secondBuffer, 0, secondCount) >= 0) {
+                    return false;
+                }
+            }
+        }
     }
 
     /**
@@ -735,14 +853,29 @@ public final class WebAppWriter {
         }
         String[] segments = normalized.split("/", -1);
         for (String segment : segments) {
-            if (!isPortableRuntimeScriptSegment(segment)) {
+            if (!isPortablePathSegment(segment)) {
                 throw invalidRuntimeScriptPath(path, origin);
             }
         }
         return String.join("/", segments);
     }
 
-    private static boolean isPortableRuntimeScriptSegment(String segment) {
+    private static String normalizeSharedAssetPath(String path, String origin) throws IOException {
+        String normalized = path.replace('\\', '/');
+        if (!normalized.startsWith(SHARED_ASSET_PREFIX) || normalized.length() <= SHARED_ASSET_PREFIX.length()
+                || normalized.startsWith("/") || normalized.indexOf('\0') >= 0) {
+            throw invalidSharedAssetPath(path, origin);
+        }
+        String[] segments = normalized.split("/", -1);
+        for (String segment : segments) {
+            if (!isPortablePathSegment(segment)) {
+                throw invalidSharedAssetPath(path, origin);
+            }
+        }
+        return String.join("/", segments);
+    }
+
+    private static boolean isPortablePathSegment(String segment) {
         if (segment.isEmpty() || segment.equals(".") || segment.equals("..")
                 || segment.endsWith(".") || segment.endsWith(" ")) {
             return false;
@@ -768,6 +901,23 @@ public final class WebAppWriter {
         return new IOException("Invalid runtime script path '" + path + "' from " + origin);
     }
 
+    private static IOException invalidSharedAssetPath(String path, String origin) {
+        return new IOException("Invalid shared asset path '" + path + "' from " + origin);
+    }
+
+    private static Path sharedAssetOutput(Path assetsRoot, String resourcePath, String origin) throws IOException {
+        Path output;
+        try {
+            output = assetsRoot.resolve(resourcePath).toAbsolutePath().normalize();
+        } catch (InvalidPathException error) {
+            throw new IOException("Invalid shared asset output path from " + origin + ": " + resourcePath, error);
+        }
+        if (!output.startsWith(assetsRoot)) {
+            throw new IOException("Refusing to copy shared asset outside output directory: " + origin);
+        }
+        return output;
+    }
+
     private static Path runtimeScriptOutput(Path scriptsRoot, String resourcePath, String origin) throws IOException {
         Path output;
         try {
@@ -782,6 +932,48 @@ public final class WebAppWriter {
     }
 
     private record RuntimeScriptCopy(RuntimeScript script, Path output) {
+    }
+
+    private record SharedAsset(String resourcePath, Path source, String jarEntryName, long size) {
+        private static SharedAsset file(String resourcePath, Path source) throws IOException {
+            return new SharedAsset(resourcePath, source, null, Files.size(source));
+        }
+
+        private static SharedAsset jar(String resourcePath, Path jarPath, String jarEntryName, long size) {
+            return new SharedAsset(resourcePath, jarPath, jarEntryName, size);
+        }
+
+        private String origin() {
+            return jarEntryName == null ? source.toString() : source + "!/" + jarEntryName;
+        }
+
+        private InputStream open() throws IOException {
+            if (jarEntryName == null) {
+                return Files.newInputStream(source);
+            }
+            ZipFile zip = new ZipFile(source.toFile());
+            ZipEntry entry = zip.getEntry(jarEntryName);
+            if (entry == null || entry.isDirectory()) {
+                zip.close();
+                throw new IOException("Shared asset disappeared from JAR: " + origin());
+            }
+            try {
+                InputStream input = zip.getInputStream(entry);
+                return new FilterInputStream(input) {
+                    @Override
+                    public void close() throws IOException {
+                        try {
+                            super.close();
+                        } finally {
+                            zip.close();
+                        }
+                    }
+                };
+            } catch (IOException | RuntimeException error) {
+                zip.close();
+                throw error;
+            }
+        }
     }
 
     private record RuntimeScript(String resourcePath, Path source, String jarEntryName, long size) {
