@@ -1,7 +1,7 @@
 package io.github.libfdx.backend.web;
 
 /**
- * Stores web asset preload progress.
+ * Stores web startup preload progress, including assets and the native runtime.
  *
  * @author xpenatan
  */

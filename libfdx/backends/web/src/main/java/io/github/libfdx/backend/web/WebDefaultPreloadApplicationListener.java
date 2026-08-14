@@ -36,7 +36,6 @@ public final class WebDefaultPreloadApplicationListener implements WebPreloadApp
     private static final float PROGRESS_TRACK_HEIGHT = 10.0f;
     private static final float PROGRESS_HEIGHT = PROGRESS_TRACK_HEIGHT + 2.0f;
     private static final float PROGRESS_OFFSET_Y = 0.0f;
-    private static final float COMPLETE_FILL_SECONDS = 2.0f;
     private static final float LOGO_ASPECT = 512.0f / 341.0f;
 
     private Texture logoTexture;
@@ -147,7 +146,7 @@ public final class WebDefaultPreloadApplicationListener implements WebPreloadApp
         float target = context.progress().progress();
         float delta = Math.max(0.0f, context.deltaTime());
         if (context.progress().isComplete()) {
-            displayedProgress = Math.min(1.0f, displayedProgress + delta / COMPLETE_FILL_SECONDS);
+            displayedProgress = context.progress().isFailed() ? target : 1.0f;
         } else if (target <= displayedProgress) {
             displayedProgress = target;
         } else {

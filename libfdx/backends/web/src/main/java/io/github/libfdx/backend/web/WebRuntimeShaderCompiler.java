@@ -10,7 +10,7 @@ import io.github.libfdx.runtime.core.shader.internal.NativeRuntimeShaderResultEn
 import org.teavm.jso.JSBody;
 
 /**
- * Web runtime shader compiler backed by the loaded fdx Emscripten module.
+ * Web shader compiler backed by exact startup artifacts and the loaded fdx Emscripten module.
  *
  * @author xpenatan
  */
@@ -23,6 +23,14 @@ final class WebRuntimeShaderCompiler implements RuntimeShaderCompiler {
      */
     @Override
     public RuntimeShaderCompileResult compile(RuntimeShaderCompileRequest request) {
+        RuntimeShaderCompileResult bootstrap = WebBootstrapShaderArtifacts.compile(request);
+        if (bootstrap != null) {
+            return bootstrap;
+        }
+        if (!available()) {
+            return failure("Web runtime shader compiler is not available. Regenerate fdx web native with "
+                    + "libfdx.runtimeFdx.shaderCompiler=true or the default compiler-enabled web build.");
+        }
         String encoded = compileBase64(request.source(), nativeTarget(request.target()), nativeStage(request.stage()),
                 request.entryPoint(), request.glslProfile(), request.glslEsProfile());
         if (encoded == null || encoded.length() == 0) {

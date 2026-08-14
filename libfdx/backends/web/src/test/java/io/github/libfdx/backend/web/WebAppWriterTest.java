@@ -48,6 +48,37 @@ final class WebAppWriterTest {
     }
 
     @Test
+    void startsWithCanvasAndUiKitRuntimeBeforeDeferredNativePreloading() throws Exception {
+        Path runtime = Files.createDirectories(temporaryDirectory.resolve("runtime"));
+        byte[] runtimeScript = "runtime-core-script".getBytes(StandardCharsets.UTF_8);
+        byte[] runtimeWasm = new byte[] { 0, 97, 115, 109, 1, 0, 0, 0 };
+        write(runtime.resolve("fdx.js"), runtimeScript);
+        write(runtime.resolve("fdx.wasm"), runtimeWasm);
+        Path webapp = temporaryDirectory.resolve("webapp");
+
+        writeWebApp(webapp, runtime);
+
+        String html = Files.readString(webapp.resolve("index.html"));
+        String loader = Files.readString(webapp.resolve("scripts/fdx-loader.js"));
+        int start = loader.indexOf("function start() {");
+        int exports = loader.indexOf("root.libfdxPreloadRuntimeCore", start);
+        String startup = loader.substring(start, exports);
+        assertTrue(html.contains("<canvas id=\"libfdx-canvas\""));
+        assertFalse(html.contains("libfdx-preload"));
+        assertTrue(loader.contains("preloadLogoPath: \"fdx_logo_dark.png\""));
+        assertTrue(loader.contains("runtimeCoreScriptSize: " + runtimeScript.length));
+        assertTrue(loader.contains("runtimeCoreWasmSize: " + runtimeWasm.length));
+        assertTrue(startup.contains("preloadBootstrapLogo()"));
+        assertTrue(startup.contains("prepareTeaVmApp()"));
+        assertFalse(startup.contains("fdx.js"));
+        assertTrue(loader.contains("root.libfdxPreloadRuntimeCore = loadRuntimeCore"));
+        assertTrue(loader.contains("WebAssembly.instantiate(bytes, imports)"));
+        assertFalse(loader.contains("new WebAssembly.Instance"));
+        assertTrue(loader.contains("return entry(config.mainClassArgs);"));
+        assertFalse(loader.contains("entry.apply(root, config.mainClassArgs)"));
+    }
+
+    @Test
     void discoversRuntimeScriptsFromClasspathDirectoryWithoutFilenameRegistration() throws Exception {
         Path runtime = Files.createDirectories(temporaryDirectory.resolve("runtime"));
         byte[] javascript = "custom-runtime".getBytes(StandardCharsets.UTF_8);

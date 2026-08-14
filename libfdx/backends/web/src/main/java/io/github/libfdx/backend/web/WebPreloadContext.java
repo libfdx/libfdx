@@ -62,7 +62,7 @@ public final class WebPreloadContext {
     }
 
     /**
-     * Returns the latest asset preload progress.
+     * Returns the latest startup preload progress.
      *
      * @return the preload progress
      */

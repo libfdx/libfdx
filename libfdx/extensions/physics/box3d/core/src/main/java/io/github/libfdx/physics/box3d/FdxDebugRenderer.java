@@ -20,7 +20,12 @@ import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsContext;
+import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.ImmediateModeRenderer;
+import io.github.libfdx.graphics.LoadOp;
+import io.github.libfdx.graphics.RenderPass;
+import io.github.libfdx.graphics.RenderPassDescriptor;
+import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.graphics.g3d.CascadedShadowMap3D;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
@@ -57,6 +62,11 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
     private final GraphicsContext graphics;
     private final ModelBatch modelBatch;
     private final ImmediateModeRenderer lineRenderer;
+    private final RenderPassDescriptor lineDepthClearPassDescriptor = new RenderPassDescriptor()
+            .label("box3d debug line depth clear")
+            .colorLoadOp(LoadOp.load())
+            .colorStoreOp(StoreOp.store())
+            .depthClear(1.0f);
     private final InstancedSolidRenderer instancedSolidRenderer;
     private final InstancedWireRenderer instancedWireRenderer;
     private final Environment3D environment;
@@ -86,6 +96,7 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
     private boolean shadowsEnabled = true;
     private boolean collectSolidShapes;
     private float shadowBias = DEFAULT_SHADOW_BIAS;
+    private float drawDistance = DEFAULT_DRAW_DISTANCE;
     private float drawOriginX;
     private float drawOriginY;
     private float drawOriginZ;
@@ -178,12 +189,18 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
             collectSolidShapes = false;
             drawReferenceGrid();
 
+            boolean depthPrepared = false;
             if(drawSolidShapes && instancedSolidRenderer != null
                     && instancedSolidRenderer.hasInstances()) {
                 renderInstancedSolids(camera);
+                depthPrepared = true;
             }
             else if(drawSolidShapes && modelBatch != null && !visibleInstances.isEmpty()) {
                 renderModelBatchSolids(camera);
+                depthPrepared = true;
+            }
+            if(!depthPrepared && graphics != null) {
+                clearLineDepth();
             }
 
             renderLines(camera.combined());
@@ -271,6 +288,17 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
         if(shadowMap != null) {
             shadowMap.bias(0.0f).minTexelBias(this.shadowBias * SHADOW_MAP_SIZE);
         }
+    }
+
+    public float getDrawDistance() {
+        return drawDistance;
+    }
+
+    public void setDrawDistance(float drawDistance) {
+        if(!Float.isFinite(drawDistance) || drawDistance <= 0.0f) {
+            throw new FdxException("Debug draw distance must be finite and greater than zero");
+        }
+        this.drawDistance = drawDistance;
     }
 
     public void setSolidColor(float red, float green, float blue, float alpha) {
@@ -467,6 +495,13 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
         solidDrawCallCount = visibleInstances.size();
         shadowDrawCallCount = shadowsEnabled
                 ? shadowCasterInstances.size() * shadowMap.cascadeCount() : 0;
+    }
+
+    private void clearLineDepth() {
+        GraphicsFrame frame = graphics.currentFrame();
+        RenderPass pass = frame.commandEncoder().beginRenderPass(lineDepthClearPassDescriptor
+                .colorAttachment(frame.colorAttachment()));
+        pass.end();
     }
 
     private void renderInstancedSolids(Camera camera) {
@@ -935,10 +970,10 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
     }
 
     private void updateDrawingBounds() {
-        drawingLowerBound.Set(drawOriginX - DEFAULT_DRAW_DISTANCE,
-                drawOriginY - DEFAULT_DRAW_DISTANCE, drawOriginZ - DEFAULT_DRAW_DISTANCE);
-        drawingUpperBound.Set(drawOriginX + DEFAULT_DRAW_DISTANCE,
-                drawOriginY + DEFAULT_DRAW_DISTANCE, drawOriginZ + DEFAULT_DRAW_DISTANCE);
+        drawingLowerBound.Set(drawOriginX - drawDistance,
+                drawOriginY - drawDistance, drawOriginZ - drawDistance);
+        drawingUpperBound.Set(drawOriginX + drawDistance,
+                drawOriginY + drawDistance, drawOriginZ + drawDistance);
         drawingBounds.SetLowerBound(drawingLowerBound);
         drawingBounds.SetUpperBound(drawingUpperBound);
         SetDrawingBounds(drawingBounds);

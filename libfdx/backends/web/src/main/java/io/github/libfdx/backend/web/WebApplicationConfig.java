@@ -1,6 +1,7 @@
 package io.github.libfdx.backend.web;
 
 import io.github.libfdx.application.ApplicationConfig;
+import io.github.libfdx.application.ApplicationListener;
 import io.github.libfdx.display.DisplayConfig;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 
@@ -13,6 +14,7 @@ public final class WebApplicationConfig extends ApplicationConfig {
     private DisplayConfig displayConfig = new DisplayConfig().size(640, 480);
     private GraphicsAttachmentProvider graphics;
     private WebPreloadApplicationListener preloadApplicationListener;
+    private ApplicationListener applicationPreloadListener;
     private String canvasId = "libfdx-canvas";
 
     /**
@@ -73,7 +75,37 @@ public final class WebApplicationConfig extends ApplicationConfig {
      */
     public WebApplicationConfig preloadApplicationListener(WebPreloadApplicationListener preloadApplicationListener) {
         this.preloadApplicationListener = preloadApplicationListener;
+        this.applicationPreloadListener = null;
         return this;
+    }
+
+    /**
+     * Sets a standard application listener that owns rendering during web preloading.
+     *
+     * <p>The listener receives the same typed {@code Fdx} root, display, graphics, and input services as the main
+     * application. Its first rendered frame is submitted before heavyweight asset and native-runtime preloading
+     * begins. Use {@link WebAssetPreloader} to query progress, or use the context-aware
+     * {@link #preloadApplicationListener(WebPreloadApplicationListener)} setter when direct access to a prepared
+     * UI Kit root is preferred.
+     * During startup the backend calls {@code create}, {@code resize}, {@code render}, {@code onFrameEnd}, and
+     * {@code dispose}; it does not call {@code pause} or {@code resume}.</p>
+     *
+     * @param preloadApplicationListener the preload application listener, or null for the default listener
+     * @return this web application config for chaining
+     */
+    public WebApplicationConfig preloadApplication(ApplicationListener preloadApplicationListener) {
+        this.applicationPreloadListener = preloadApplicationListener;
+        this.preloadApplicationListener = null;
+        return this;
+    }
+
+    /**
+     * Returns the standard application listener configured for web preloading.
+     *
+     * @return the standard preload application listener, or null when using the context-aware/default listener
+     */
+    public ApplicationListener applicationPreloadListener() {
+        return applicationPreloadListener;
     }
 
     /**

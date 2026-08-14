@@ -247,10 +247,18 @@ public final class WebAppWriter {
     private static void writeFdxLoader(Path root, WebApp app, int assetCount) throws IOException {
         Path scriptsRoot = root.resolve("scripts").toAbsolutePath().normalize();
         Files.createDirectories(scriptsRoot);
-        Files.writeString(scriptsRoot.resolve("fdx-loader.js"), fdxLoaderJs(app, assetCount), StandardCharsets.UTF_8);
+        long runtimeCoreScriptSize = publishedFileSize(scriptsRoot.resolve("fdx.js"));
+        long runtimeCoreWasmSize = publishedFileSize(scriptsRoot.resolve("fdx.wasm"));
+        Files.writeString(scriptsRoot.resolve("fdx-loader.js"),
+                fdxLoaderJs(app, assetCount, runtimeCoreScriptSize, runtimeCoreWasmSize), StandardCharsets.UTF_8);
     }
 
-    private static String fdxLoaderJs(WebApp app, int assetCount) {
+    private static long publishedFileSize(Path path) throws IOException {
+        return Files.isRegularFile(path) ? Files.size(path) : 0L;
+    }
+
+    private static String fdxLoaderJs(WebApp app, int assetCount, long runtimeCoreScriptSize,
+            long runtimeCoreWasmSize) {
         String source = """
                 (function(root) {
                     "use strict";
@@ -260,12 +268,20 @@ public final class WebAppWriter {
                         targetFileName: "__TARGET_FILE_NAME__",
                         entryPointName: "__ENTRY_POINT_NAME__",
                         mainClassArgs: [__MAIN_CLASS_ARGS__],
-                        assetCount: __ASSET_COUNT__
+                        assetCount: __ASSET_COUNT__,
+                        preloadLogoPath: "__PRELOAD_LOGO_PATH__",
+                        runtimeCoreScriptSize: __RUNTIME_CORE_SCRIPT_SIZE__,
+                        runtimeCoreWasmSize: __RUNTIME_CORE_WASM_SIZE__
                     };
                     var modulePromise = null;
                     var loadedScripts = {};
                     var scriptUrl = (document.currentScript && document.currentScript.src) || "scripts/fdx-loader.js";
                     var pageUrl = document.baseURI || window.location.href;
+                    var runtimePreload = {
+                        script: { size: config.runtimeCoreScriptSize, loadedBytes: 0, complete: false },
+                        wasm: { size: config.runtimeCoreWasmSize, loadedBytes: 0, complete: false }
+                    };
+                    root.libfdxRuntimePreload = runtimePreload;
 
                     function loaderBaseUrl(path) {
                         return new URL(path, scriptUrl).href;
@@ -273,6 +289,138 @@ public final class WebAppWriter {
 
                     function pageBaseUrl(path) {
                         return new URL(path, pageUrl).href;
+                    }
+
+                    function normalizeAssetPath(path) {
+                        path = (path || "").replace(/\\\\/g, "/");
+                        while (path.indexOf("./") === 0) path = path.substring(2);
+                        while (path.indexOf("/") === 0) path = path.substring(1);
+                        if (path.indexOf("assets/") === 0) path = path.substring(7);
+                        return path;
+                    }
+
+                    function loadImage(buffer) {
+                        var blob = new Blob([buffer]);
+                        if (root.createImageBitmap) {
+                            return root.createImageBitmap(blob);
+                        }
+                        return new Promise(function(resolve, reject) {
+                            var image = new Image();
+                            var url = URL.createObjectURL(blob);
+                            image.onload = function() {
+                                URL.revokeObjectURL(url);
+                                resolve(image);
+                            };
+                            image.onerror = function(error) {
+                                URL.revokeObjectURL(url);
+                                reject(error);
+                            };
+                            image.src = url;
+                        });
+                    }
+
+                    function decodeBootstrapImage(path, buffer) {
+                        return loadImage(buffer).then(function(image) {
+                            var canvas = document.createElement("canvas");
+                            canvas.width = image.width || image.naturalWidth;
+                            canvas.height = image.height || image.naturalHeight;
+                            var context = canvas.getContext("2d");
+                            context.drawImage(image, 0, 0);
+                            if (typeof image.close === "function") image.close();
+                            var rgba = context.getImageData(0, 0, canvas.width, canvas.height).data;
+                            var copy = new Uint8Array(rgba.length);
+                            copy.set(rgba);
+                            root.libfdxImageData = root.libfdxImageData || Object.create(null);
+                            root.libfdxImageData[path] = { width: canvas.width, height: canvas.height, rgba: copy };
+                            root.libfdxImageData["assets/" + path] = root.libfdxImageData[path];
+                        });
+                    }
+
+                    function preloadBootstrapLogo() {
+                        var path = normalizeAssetPath(config.preloadLogoPath);
+                        if (!path) {
+                            return Promise.resolve();
+                        }
+                        root.libfdxAssets = root.libfdxAssets || Object.create(null);
+                        var existing = root.libfdxAssets[path] || root.libfdxAssets["assets/" + path];
+                        if (existing && root.libfdxImageData && root.libfdxImageData[path]) {
+                            return Promise.resolve();
+                        }
+                        return fetch(pageBaseUrl("assets/" + path)).then(function(response) {
+                            if (!response.ok) {
+                                throw new Error("Could not preload bootstrap image " + path + ": " + response.status);
+                            }
+                            return response.arrayBuffer();
+                        }).then(function(buffer) {
+                            root.libfdxAssets[path] = buffer;
+                            root.libfdxAssets["assets/" + path] = buffer;
+                            return decodeBootstrapImage(path, buffer);
+                        });
+                    }
+
+                    function runtimeState() {
+                        return root.libfdxPreloadState || null;
+                    }
+
+                    function updateRuntimeBytes(entry, loadedBytes) {
+                        var state = runtimeState();
+                        var next = Math.max(entry.loadedBytes, Math.min(entry.size, loadedBytes));
+                        var delta = next - entry.loadedBytes;
+                        entry.loadedBytes = next;
+                        if (state && delta > 0) {
+                            state.loadedBytes = Math.min(state.totalBytes, state.loadedBytes + delta);
+                        }
+                    }
+
+                    function completeRuntimeFile(entry) {
+                        updateRuntimeBytes(entry, entry.size);
+                        if (entry.complete) {
+                            return;
+                        }
+                        entry.complete = true;
+                        var state = runtimeState();
+                        if (state && entry.size > 0) {
+                            state.loadedFiles = Math.min(state.totalFiles, state.loadedFiles + 1);
+                        }
+                    }
+
+                    function fetchRuntimeWasm() {
+                        var entry = runtimePreload.wasm;
+                        var url = loaderBaseUrl("fdx.wasm");
+                        return fetch(url).then(function(response) {
+                            if (!response.ok) {
+                                throw new Error("Could not preload runtime module " + url + ": " + response.status);
+                            }
+                            if (!response.body || typeof response.body.getReader !== "function") {
+                                return response.arrayBuffer().then(function(buffer) {
+                                    updateRuntimeBytes(entry, buffer.byteLength);
+                                    completeRuntimeFile(entry);
+                                    return new Uint8Array(buffer);
+                                });
+                            }
+                            var reader = response.body.getReader();
+                            var chunks = [];
+                            var received = 0;
+                            function read() {
+                                return reader.read().then(function(result) {
+                                    if (result.done) {
+                                        var bytes = new Uint8Array(received);
+                                        var offset = 0;
+                                        for (var i = 0; i < chunks.length; i++) {
+                                            bytes.set(chunks[i], offset);
+                                            offset += chunks[i].byteLength;
+                                        }
+                                        completeRuntimeFile(entry);
+                                        return bytes;
+                                    }
+                                    chunks.push(result.value);
+                                    received += result.value.byteLength;
+                                    updateRuntimeBytes(entry, received);
+                                    return read();
+                                });
+                            }
+                            return read();
+                        });
                     }
 
                     function loadScript(url) {
@@ -513,16 +661,51 @@ public final class WebAppWriter {
                         if (typeof root.FdxModule !== "function") {
                             return Promise.reject(new Error("libfdx core Emscripten module script was not loaded"));
                         }
-                        modulePromise = root.FdxModule({
-                            locateFile: function(path) {
-                                return path === "fdx.wasm" ? loaderBaseUrl(path) : path;
+                        var bytesPromise = runtimePreload.wasm.size > 0
+                                ? fetchRuntimeWasm()
+                                : Promise.resolve(null);
+                        modulePromise = bytesPromise.then(function(bytes) {
+                            if (!bytes) {
+                                return root.FdxModule({
+                                    locateFile: function(path) {
+                                        return path === "fdx.wasm" ? loaderBaseUrl(path) : path;
+                                    }
+                                });
                             }
+                            return new Promise(function(resolve, reject) {
+                                var factory;
+                                try {
+                                    factory = root.FdxModule({
+                                        instantiateWasm: function(imports, success) {
+                                            WebAssembly.instantiate(bytes, imports).then(function(result) {
+                                                try {
+                                                    success(result.instance);
+                                                } catch (error) {
+                                                    reject(error);
+                                                }
+                                            }, reject);
+                                            return {};
+                                        }
+                                    });
+                                } catch (error) {
+                                    reject(error);
+                                    return;
+                                }
+                                Promise.resolve(factory).then(resolve, reject);
+                            });
                         }).then(function(module) {
                             installShaderCompiler(module);
                             root.libfdxCoreModule = module;
                             return module;
                         });
                         return modulePromise;
+                    }
+
+                    function loadRuntimeCore() {
+                        return loadScript(loaderBaseUrl("fdx.js")).then(function() {
+                            completeRuntimeFile(runtimePreload.script);
+                            return ensureModule();
+                        });
                     }
 
                     function rasterize(fontBytes, codePoints, pixelSize, padding, atlasWidth) {
@@ -604,36 +787,43 @@ public final class WebAppWriter {
                         }
                     }
 
-                    function startTeaVmApp() {
+                    function prepareTeaVmApp() {
                         if (config.wasm) {
                             return loadScript(pageBaseUrl(config.targetFileName + "-runtime.js")).then(function() {
                                 return TeaVM.wasmGC.load(pageBaseUrl(config.targetFileName)).then(function(teavm) {
-                                    var entry = teavm.exports[config.entryPointName];
-                                    if (typeof entry !== "function") {
-                                        throw new Error("TeaVM Wasm entry point was not found: " + config.entryPointName);
-                                    }
-                                    return entry(config.mainClassArgs);
+                                    return function() {
+                                        var entry = teavm.exports[config.entryPointName];
+                                        if (typeof entry !== "function") {
+                                            throw new Error("TeaVM Wasm entry point was not found: "
+                                                    + config.entryPointName);
+                                        }
+                                        return entry(config.mainClassArgs);
+                                    };
                                 });
                             });
                         }
                         return loadScript(pageBaseUrl(config.targetFileName)).then(function() {
-                            var entry = root[config.entryPointName];
-                            if (typeof entry !== "function") {
-                                throw new Error("TeaVM JavaScript entry point was not found: " + config.entryPointName);
-                            }
-                            return entry.apply(root, config.mainClassArgs);
+                            return function() {
+                                var entry = root[config.entryPointName];
+                                if (typeof entry !== "function") {
+                                    throw new Error("TeaVM JavaScript entry point was not found: "
+                                            + config.entryPointName);
+                                }
+                                return entry(config.mainClassArgs);
+                            };
                         });
                     }
 
                     function start() {
                         var assetBase = pageBaseUrl("assets/");
                         console.log("%clibfdx assets: " + assetBase + " (" + config.assetCount + " files)", "color:#d50000;font-weight:bold");
-                        return loadScript(loaderBaseUrl("fdx.js"))
-                                .then(ensureModule)
-                                .then(startTeaVmApp);
+                        return Promise.all([preloadBootstrapLogo(), prepareTeaVmApp()])
+                                .then(function(prepared) {
+                                    return prepared[1]();
+                                });
                     }
 
-                    root.libfdxPreloadRuntimeCore = ensureModule;
+                    root.libfdxPreloadRuntimeCore = loadRuntimeCore;
                     root.libfdxFreeTypeRasterize = rasterize;
 
                     root.addEventListener("error", function(event) {
@@ -656,6 +846,9 @@ public final class WebAppWriter {
                 .replace("__ENTRY_POINT_NAME__", js(app.getEntryPointName()))
                 .replace("__MAIN_CLASS_ARGS__", app.getMainClassArgs())
                 .replace("__ASSET_COUNT__", Integer.toString(assetCount))
+                .replace("__PRELOAD_LOGO_PATH__", js(WebAssets.DEFAULT_PRELOAD_LOGO_PATH))
+                .replace("__RUNTIME_CORE_SCRIPT_SIZE__", Long.toString(runtimeCoreScriptSize))
+                .replace("__RUNTIME_CORE_WASM_SIZE__", Long.toString(runtimeCoreWasmSize))
                 .trim() + "\n";
     }
 

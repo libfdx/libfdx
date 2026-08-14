@@ -1,5 +1,6 @@
 package io.github.libfdx.backend.web;
 
+import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.runtime.core.FontRasterizer;
 import io.github.libfdx.runtime.core.RuntimeCoreProvider;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompiler;
@@ -12,6 +13,15 @@ import io.github.libfdx.runtime.core.shader.RuntimeShaderCompiler;
 final class WebRuntimeCoreProvider implements RuntimeCoreProvider {
     private final FontRasterizer fontRasterizer = new WebFreeTypeFontRasterizer();
     private final WebRuntimeShaderCompiler shaderCompiler = new WebRuntimeShaderCompiler();
+    private final boolean webGlBootstrapCompiler;
+
+    WebRuntimeCoreProvider(ProviderId graphicsProvider) {
+        webGlBootstrapCompiler = supportsBootstrapCompiler(graphicsProvider);
+    }
+
+    static boolean supportsBootstrapCompiler(ProviderId graphicsProvider) {
+        return graphicsProvider != null && "webgl".equals(graphicsProvider.value());
+    }
 
     /**
      * Returns the font rasterizer.
@@ -30,7 +40,8 @@ final class WebRuntimeCoreProvider implements RuntimeCoreProvider {
      */
     @Override
     public RuntimeShaderCompiler shaderCompiler() {
-        return shaderCompiler.available() ? shaderCompiler : null;
+        return webGlBootstrapCompiler || shaderCompiler.available()
+                ? shaderCompiler : null;
     }
 
     /**

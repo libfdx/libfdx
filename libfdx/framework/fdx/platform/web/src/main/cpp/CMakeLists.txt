@@ -27,9 +27,9 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${LIBFDX_WEB_OUTPUT_DIR}")
 
 if(LIBFDX_ENABLE_SHADER_COMPILER AND EMSCRIPTEN)
-    # Tint's Emscripten path is built conservatively; optimized Wasm has been unstable.
-    set(CMAKE_C_FLAGS_RELEASE "-O0 -DNDEBUG" CACHE STRING "" FORCE)
-    set(CMAKE_CXX_FLAGS_RELEASE "-O0 -DNDEBUG" CACHE STRING "" FORCE)
+    # Favor a smaller download and lower browser startup cost for the Tint-enabled runtime.
+    set(CMAKE_C_FLAGS_RELEASE "-Os -DNDEBUG" CACHE STRING "" FORCE)
+    set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG" CACHE STRING "" FORCE)
 endif()
 
 set(LIBFDX_RUNTIME_FDX_WEB_SOURCES
