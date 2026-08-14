@@ -210,12 +210,11 @@ Backends package it only when an active provider needs translation.
 - Failed translation returns diagnostics rather than a partial shader.
 - Providers that consume WGSL directly do not require the compiler capability.
 
-The web backend packages a small, generated, exact-source-keyed WebGL artifact
-cache for the fixed ShapeRenderer and SpriteBatch shaders used by the UI Kit
-startup screen. This lets UI Kit render before the larger native runtime
-compiler download begins. The owning renderer WGSL remains canonical, source
-drift is tested, and every shader outside that bootstrap set still requires the
-normal runtime compiler.
+The web loader installs the native compiler before invoking the Java application
+entry point. WebGL startup renderers therefore use the same runtime translation
+path as every other shader; the backend does not embed or source-match a second
+set of startup shaders. UI Kit preloading begins afterward and reports
+application-asset progress separately from this runtime bootstrap.
 
 Tint is the current implementation backend, but Tint types and generated
 languages are not common API. Changing compiler implementation does not change

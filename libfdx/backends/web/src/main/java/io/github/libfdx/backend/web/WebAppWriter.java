@@ -274,6 +274,7 @@ public final class WebAppWriter {
                         runtimeCoreWasmSize: __RUNTIME_CORE_WASM_SIZE__
                     };
                     var modulePromise = null;
+                    var runtimeWasmPromise = null;
                     var loadedScripts = {};
                     var scriptUrl = (document.currentScript && document.currentScript.src) || "scripts/fdx-loader.js";
                     var pageUrl = document.baseURI || window.location.href;
@@ -358,18 +359,9 @@ public final class WebAppWriter {
                         });
                     }
 
-                    function runtimeState() {
-                        return root.libfdxPreloadState || null;
-                    }
-
                     function updateRuntimeBytes(entry, loadedBytes) {
-                        var state = runtimeState();
                         var next = Math.max(entry.loadedBytes, Math.min(entry.size, loadedBytes));
-                        var delta = next - entry.loadedBytes;
                         entry.loadedBytes = next;
-                        if (state && delta > 0) {
-                            state.loadedBytes = Math.min(state.totalBytes, state.loadedBytes + delta);
-                        }
                     }
 
                     function completeRuntimeFile(entry) {
@@ -378,10 +370,6 @@ public final class WebAppWriter {
                             return;
                         }
                         entry.complete = true;
-                        var state = runtimeState();
-                        if (state && entry.size > 0) {
-                            state.loadedFiles = Math.min(state.totalFiles, state.loadedFiles + 1);
-                        }
                     }
 
                     function fetchRuntimeWasm() {
@@ -421,6 +409,15 @@ public final class WebAppWriter {
                             }
                             return read();
                         });
+                    }
+
+                    function loadRuntimeWasm() {
+                        if (!runtimeWasmPromise) {
+                            runtimeWasmPromise = runtimePreload.wasm.size > 0
+                                    ? fetchRuntimeWasm()
+                                    : Promise.resolve(null);
+                        }
+                        return runtimeWasmPromise;
                     }
 
                     function loadScript(url) {
@@ -661,10 +658,7 @@ public final class WebAppWriter {
                         if (typeof root.FdxModule !== "function") {
                             return Promise.reject(new Error("libfdx core Emscripten module script was not loaded"));
                         }
-                        var bytesPromise = runtimePreload.wasm.size > 0
-                                ? fetchRuntimeWasm()
-                                : Promise.resolve(null);
-                        modulePromise = bytesPromise.then(function(bytes) {
+                        modulePromise = loadRuntimeWasm().then(function(bytes) {
                             if (!bytes) {
                                 return root.FdxModule({
                                     locateFile: function(path) {
@@ -702,10 +696,10 @@ public final class WebAppWriter {
                     }
 
                     function loadRuntimeCore() {
-                        return loadScript(loaderBaseUrl("fdx.js")).then(function() {
+                        var scriptPromise = loadScript(loaderBaseUrl("fdx.js")).then(function() {
                             completeRuntimeFile(runtimePreload.script);
-                            return ensureModule();
                         });
+                        return Promise.all([scriptPromise, loadRuntimeWasm()]).then(ensureModule);
                     }
 
                     function rasterize(fontBytes, codePoints, pixelSize, padding, atlasWidth) {
@@ -817,9 +811,9 @@ public final class WebAppWriter {
                     function start() {
                         var assetBase = pageBaseUrl("assets/");
                         console.log("%clibfdx assets: " + assetBase + " (" + config.assetCount + " files)", "color:#d50000;font-weight:bold");
-                        return Promise.all([preloadBootstrapLogo(), prepareTeaVmApp()])
+                        return Promise.all([preloadBootstrapLogo(), loadRuntimeCore(), prepareTeaVmApp()])
                                 .then(function(prepared) {
-                                    return prepared[1]();
+                                    return prepared[2]();
                                 });
                     }
 

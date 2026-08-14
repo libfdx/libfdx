@@ -48,7 +48,7 @@ final class WebAppWriterTest {
     }
 
     @Test
-    void startsWithCanvasAndUiKitRuntimeBeforeDeferredNativePreloading() throws Exception {
+    void preparesNativeCompilerAndApplicationInParallelBeforeUiKitStartup() throws Exception {
         Path runtime = Files.createDirectories(temporaryDirectory.resolve("runtime"));
         byte[] runtimeScript = "runtime-core-script".getBytes(StandardCharsets.UTF_8);
         byte[] runtimeWasm = new byte[] { 0, 97, 115, 109, 1, 0, 0, 0 };
@@ -69,8 +69,12 @@ final class WebAppWriterTest {
         assertTrue(loader.contains("runtimeCoreScriptSize: " + runtimeScript.length));
         assertTrue(loader.contains("runtimeCoreWasmSize: " + runtimeWasm.length));
         assertTrue(startup.contains("preloadBootstrapLogo()"));
+        assertTrue(startup.contains("loadRuntimeCore()"));
         assertTrue(startup.contains("prepareTeaVmApp()"));
-        assertFalse(startup.contains("fdx.js"));
+        assertTrue(startup.contains(
+                "Promise.all([preloadBootstrapLogo(), loadRuntimeCore(), prepareTeaVmApp()])"));
+        assertTrue(startup.contains("return prepared[2]();"));
+        assertTrue(loader.contains("Promise.all([scriptPromise, loadRuntimeWasm()]).then(ensureModule)"));
         assertTrue(loader.contains("root.libfdxPreloadRuntimeCore = loadRuntimeCore"));
         assertTrue(loader.contains("WebAssembly.instantiate(bytes, imports)"));
         assertFalse(loader.contains("new WebAssembly.Instance"));

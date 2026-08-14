@@ -7,7 +7,7 @@ import org.teavm.jso.core.JSUndefined;
 import org.teavm.platform.metadata.ResourceArray;
 
 /**
- * Coordinates web startup asset and native-runtime preloading.
+ * Coordinates web startup asset preloading.
  *
  * @author xpenatan
  */
@@ -137,12 +137,6 @@ public final class WebAssetPreloader {
             "  loadedBytes: 0,\n" +
             "  totalBytes: 0\n" +
             "};\n" +
-            "var runtime = root.libfdxRuntimePreload || {};\n" +
-            "[runtime.script, runtime.wasm].forEach(function(entry) {\n" +
-            "  if (!entry || !(entry.size > 0)) return;\n" +
-            "  root.libfdxPreloadState.totalFiles += 1;\n" +
-            "  root.libfdxPreloadState.totalBytes += entry.size;\n" +
-            "});\n" +
             "function normalize(path) {\n" +
             "  path = (path || '').replace(/\\\\/g, '/');\n" +
             "  while (path.indexOf('./') === 0) path = path.substring(2);\n" +
@@ -275,11 +269,7 @@ public final class WebAssetPreloader {
             "  return root.libfdxPreloadPromise.then(function() { return undefined; });\n" +
             "}\n" +
             "var preloadAssets = root.libfdxPreloadAssets || function() { return Promise.resolve(); };\n" +
-            "var preloadRuntime = root.libfdxPreloadRuntimeCore || function() { return Promise.resolve(); };\n" +
-            "root.libfdxPreloadPromise = Promise.all([\n" +
-            "  preloadAssets(root.libfdxAssetPaths || []),\n" +
-            "  preloadRuntime()\n" +
-            "]).then(function() {\n" +
+            "root.libfdxPreloadPromise = preloadAssets(root.libfdxAssetPaths || []).then(function() {\n" +
             "  state.loadedFiles = state.totalFiles;\n" +
             "  state.loadedBytes = state.totalBytes;\n" +
             "  state.complete = true;\n" +

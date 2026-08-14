@@ -150,7 +150,7 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                     NativeWindow.web(canvas, "#" + actualConfig.canvasId())));
             fdx = new DefaultFdx(this, new DefaultDisplays(display), new DefaultGraphics(graphics), input,
                     new WebFileSystem(), new DefaultStorage(new WebStorageBackend()), logger);
-            RuntimeCore.registerProvider(new WebRuntimeCoreProvider(graphics.providerId()));
+            RuntimeCore.registerProvider(new WebRuntimeCoreProvider());
             applicationPreloadListener = actualConfig.applicationPreloadListener();
             preloadApplicationListener = applicationPreloadListener == null
                     ? (actualConfig.preloadApplicationListener() != null

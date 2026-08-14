@@ -83,8 +83,8 @@ public final class WebApplicationConfig extends ApplicationConfig {
      * Sets a standard application listener that owns rendering during web preloading.
      *
      * <p>The listener receives the same typed {@code Fdx} root, display, graphics, and input services as the main
-     * application. Its first rendered frame is submitted before heavyweight asset and native-runtime preloading
-     * begins. Use {@link WebAssetPreloader} to query progress, or use the context-aware
+     * application. Its first rendered frame is submitted before application asset preloading begins. Use
+     * {@link WebAssetPreloader} to query progress, or use the context-aware
      * {@link #preloadApplicationListener(WebPreloadApplicationListener)} setter when direct access to a prepared
      * UI Kit root is preferred.
      * During startup the backend calls {@code create}, {@code resize}, {@code render}, {@code onFrameEnd}, and
