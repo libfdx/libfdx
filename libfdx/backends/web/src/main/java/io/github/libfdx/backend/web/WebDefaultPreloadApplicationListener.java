@@ -37,6 +37,8 @@ public final class WebDefaultPreloadApplicationListener implements WebPreloadApp
     private static final float PROGRESS_HEIGHT = PROGRESS_TRACK_HEIGHT + 2.0f;
     private static final float PROGRESS_OFFSET_Y = 0.0f;
     private static final float LOGO_ASPECT = 512.0f / 341.0f;
+    private static final float PROGRESS_RESPONSE_PER_SECOND = 10.0f;
+    private static final float PROGRESS_SNAP_EPSILON = 0.001f;
 
     private Texture logoTexture;
     private TextureRegion logoRegion;
@@ -143,15 +145,18 @@ public final class WebDefaultPreloadApplicationListener implements WebPreloadApp
     }
 
     private void updateProgress(WebPreloadContext context) {
-        float target = context.progress().progress();
-        float delta = Math.max(0.0f, context.deltaTime());
-        if (context.progress().isComplete()) {
-            displayedProgress = context.progress().isFailed() ? target : 1.0f;
-        } else if (target <= displayedProgress) {
-            displayedProgress = target;
-        } else {
-            displayedProgress += (target - displayedProgress) * Math.min(1.0f, delta * 10.0f);
+        displayedProgress = advanceDisplayedProgress(displayedProgress, context.progress().progress(),
+                context.deltaTime(), context.progress().isFailed());
+    }
+
+    static float advanceDisplayedProgress(float displayed, float target, float delta, boolean failed) {
+        target = clamp01(target);
+        if (failed || target <= displayed) {
+            return target;
         }
+        float response = Math.min(1.0f, Math.max(0.0f, delta) * PROGRESS_RESPONSE_PER_SECOND);
+        float next = displayed + (target - displayed) * response;
+        return target - next <= PROGRESS_SNAP_EPSILON ? target : next;
     }
 
     private void drawLogo(UiDrawContext draw, UiRect bounds) {
