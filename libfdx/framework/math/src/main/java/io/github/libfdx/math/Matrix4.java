@@ -13,6 +13,7 @@ public final class Matrix4 {
     public static final Matrix4 IDENTITY = identity();
 
     private final float[] values = new float[VALUE_COUNT];
+    private float[] inversionScratch;
 
     /**
      * Creates a matrix4.
@@ -678,59 +679,175 @@ public final class Matrix4 {
      * @throws FdxException when this matrix is singular
      */
     public Matrix4 invert() {
+        // Keep the calculation in float while expanding the determinant and cofactors directly.
+        // This ordering avoids the premature 2x2-cofactor cancellation that can classify valid
+        // projection-view matrices with large translations as singular.
         float a00 = values[0];
-        float a01 = values[1];
-        float a02 = values[2];
-        float a03 = values[3];
-        float a10 = values[4];
+        float a01 = values[4];
+        float a02 = values[8];
+        float a03 = values[12];
+        float a10 = values[1];
         float a11 = values[5];
-        float a12 = values[6];
-        float a13 = values[7];
-        float a20 = values[8];
-        float a21 = values[9];
+        float a12 = values[9];
+        float a13 = values[13];
+        float a20 = values[2];
+        float a21 = values[6];
         float a22 = values[10];
-        float a23 = values[11];
-        float a30 = values[12];
-        float a31 = values[13];
-        float a32 = values[14];
+        float a23 = values[14];
+        float a30 = values[3];
+        float a31 = values[7];
+        float a32 = values[11];
         float a33 = values[15];
 
-        float b00 = a00 * a11 - a01 * a10;
-        float b01 = a00 * a12 - a02 * a10;
-        float b02 = a00 * a13 - a03 * a10;
-        float b03 = a01 * a12 - a02 * a11;
-        float b04 = a01 * a13 - a03 * a11;
-        float b05 = a02 * a13 - a03 * a12;
-        float b06 = a20 * a31 - a21 * a30;
-        float b07 = a20 * a32 - a22 * a30;
-        float b08 = a20 * a33 - a23 * a30;
-        float b09 = a21 * a32 - a22 * a31;
-        float b10 = a21 * a33 - a23 * a31;
-        float b11 = a22 * a33 - a23 * a32;
-
-        float determinant = b00 * b11 - b01 * b10 + b02 * b09
-                + b03 * b08 - b04 * b07 + b05 * b06;
+        float determinant = a30 * a21 * a12 * a03 - a20 * a31 * a12 * a03
+                - a30 * a11 * a22 * a03 + a10 * a31 * a22 * a03
+                + a20 * a11 * a32 * a03 - a10 * a21 * a32 * a03
+                - a30 * a21 * a02 * a13 + a20 * a31 * a02 * a13
+                + a30 * a01 * a22 * a13 - a00 * a31 * a22 * a13
+                - a20 * a01 * a32 * a13 + a00 * a21 * a32 * a13
+                + a30 * a11 * a02 * a23 - a10 * a31 * a02 * a23
+                - a30 * a01 * a12 * a23 + a00 * a31 * a12 * a23
+                + a10 * a01 * a32 * a23 - a00 * a11 * a32 * a23
+                - a20 * a11 * a02 * a33 + a10 * a21 * a02 * a33
+                + a20 * a01 * a12 * a33 - a00 * a21 * a12 * a33
+                - a10 * a01 * a22 * a33 + a00 * a11 * a22 * a33;
         if (determinant == 0.0f || !Float.isFinite(determinant)) {
-            throw new FdxException("Matrix4 is not invertible");
+            return invertWithPivoting();
         }
         float inverseDeterminant = 1.0f / determinant;
 
-        values[0] = (a11 * b11 - a12 * b10 + a13 * b09) * inverseDeterminant;
-        values[1] = (a02 * b10 - a01 * b11 - a03 * b09) * inverseDeterminant;
-        values[2] = (a31 * b05 - a32 * b04 + a33 * b03) * inverseDeterminant;
-        values[3] = (a22 * b04 - a21 * b05 - a23 * b03) * inverseDeterminant;
-        values[4] = (a12 * b08 - a10 * b11 - a13 * b07) * inverseDeterminant;
-        values[5] = (a00 * b11 - a02 * b08 + a03 * b07) * inverseDeterminant;
-        values[6] = (a32 * b02 - a30 * b05 - a33 * b01) * inverseDeterminant;
-        values[7] = (a20 * b05 - a22 * b02 + a23 * b01) * inverseDeterminant;
-        values[8] = (a10 * b10 - a11 * b08 + a13 * b06) * inverseDeterminant;
-        values[9] = (a01 * b08 - a00 * b10 - a03 * b06) * inverseDeterminant;
-        values[10] = (a30 * b04 - a31 * b02 + a33 * b00) * inverseDeterminant;
-        values[11] = (a21 * b02 - a20 * b04 - a23 * b00) * inverseDeterminant;
-        values[12] = (a11 * b07 - a10 * b09 - a12 * b06) * inverseDeterminant;
-        values[13] = (a00 * b09 - a01 * b07 + a02 * b06) * inverseDeterminant;
-        values[14] = (a31 * b01 - a30 * b03 - a32 * b00) * inverseDeterminant;
-        values[15] = (a20 * b03 - a21 * b01 + a22 * b00) * inverseDeterminant;
+        float r00 = a12 * a23 * a31 - a13 * a22 * a31 + a13 * a21 * a32
+                - a11 * a23 * a32 - a12 * a21 * a33 + a11 * a22 * a33;
+        float r01 = a03 * a22 * a31 - a02 * a23 * a31 - a03 * a21 * a32
+                + a01 * a23 * a32 + a02 * a21 * a33 - a01 * a22 * a33;
+        float r02 = a02 * a13 * a31 - a03 * a12 * a31 + a03 * a11 * a32
+                - a01 * a13 * a32 - a02 * a11 * a33 + a01 * a12 * a33;
+        float r03 = a03 * a12 * a21 - a02 * a13 * a21 - a03 * a11 * a22
+                + a01 * a13 * a22 + a02 * a11 * a23 - a01 * a12 * a23;
+        float r10 = a13 * a22 * a30 - a12 * a23 * a30 - a13 * a20 * a32
+                + a10 * a23 * a32 + a12 * a20 * a33 - a10 * a22 * a33;
+        float r11 = a02 * a23 * a30 - a03 * a22 * a30 + a03 * a20 * a32
+                - a00 * a23 * a32 - a02 * a20 * a33 + a00 * a22 * a33;
+        float r12 = a03 * a12 * a30 - a02 * a13 * a30 - a03 * a10 * a32
+                + a00 * a13 * a32 + a02 * a10 * a33 - a00 * a12 * a33;
+        float r13 = a02 * a13 * a20 - a03 * a12 * a20 + a03 * a10 * a22
+                - a00 * a13 * a22 - a02 * a10 * a23 + a00 * a12 * a23;
+        float r20 = a11 * a23 * a30 - a13 * a21 * a30 + a13 * a20 * a31
+                - a10 * a23 * a31 - a11 * a20 * a33 + a10 * a21 * a33;
+        float r21 = a03 * a21 * a30 - a01 * a23 * a30 - a03 * a20 * a31
+                + a00 * a23 * a31 + a01 * a20 * a33 - a00 * a21 * a33;
+        float r22 = a01 * a13 * a30 - a03 * a11 * a30 + a03 * a10 * a31
+                - a00 * a13 * a31 - a01 * a10 * a33 + a00 * a11 * a33;
+        float r23 = a03 * a11 * a20 - a01 * a13 * a20 - a03 * a10 * a21
+                + a00 * a13 * a21 + a01 * a10 * a23 - a00 * a11 * a23;
+        float r30 = a12 * a21 * a30 - a11 * a22 * a30 - a12 * a20 * a31
+                + a10 * a22 * a31 + a11 * a20 * a32 - a10 * a21 * a32;
+        float r31 = a01 * a22 * a30 - a02 * a21 * a30 + a02 * a20 * a31
+                - a00 * a22 * a31 - a01 * a20 * a32 + a00 * a21 * a32;
+        float r32 = a02 * a11 * a30 - a01 * a12 * a30 - a02 * a10 * a31
+                + a00 * a12 * a31 + a01 * a10 * a32 - a00 * a11 * a32;
+        float r33 = a01 * a12 * a20 - a02 * a11 * a20 + a02 * a10 * a21
+                - a00 * a12 * a21 - a01 * a10 * a22 + a00 * a11 * a22;
+
+        values[0] = r00 * inverseDeterminant;
+        values[1] = r10 * inverseDeterminant;
+        values[2] = r20 * inverseDeterminant;
+        values[3] = r30 * inverseDeterminant;
+        values[4] = r01 * inverseDeterminant;
+        values[5] = r11 * inverseDeterminant;
+        values[6] = r21 * inverseDeterminant;
+        values[7] = r31 * inverseDeterminant;
+        values[8] = r02 * inverseDeterminant;
+        values[9] = r12 * inverseDeterminant;
+        values[10] = r22 * inverseDeterminant;
+        values[11] = r32 * inverseDeterminant;
+        values[12] = r03 * inverseDeterminant;
+        values[13] = r13 * inverseDeterminant;
+        values[14] = r23 * inverseDeterminant;
+        values[15] = r33 * inverseDeterminant;
+        return this;
+    }
+
+    /**
+     * Uses float-only Gauss-Jordan elimination when the expanded determinant loses all significant bits. The scratch
+     * storage is retained by this mutable matrix so repeated camera updates do not allocate each frame.
+     */
+    private Matrix4 invertWithPivoting() {
+        if (inversionScratch == null) {
+            inversionScratch = new float[32];
+        }
+
+        for (int row = 0; row < 4; row++) {
+            int rowOffset = row * 8;
+            for (int column = 0; column < 4; column++) {
+                inversionScratch[rowOffset + column] = values[column * 4 + row];
+                inversionScratch[rowOffset + 4 + column] = row == column ? 1.0f : 0.0f;
+            }
+        }
+
+        for (int column = 0; column < 4; column++) {
+            int pivotRow = column;
+            float pivotMagnitude = Math.abs(inversionScratch[pivotRow * 8 + column]);
+            for (int row = column + 1; row < 4; row++) {
+                float magnitude = Math.abs(inversionScratch[row * 8 + column]);
+                if (magnitude > pivotMagnitude) {
+                    pivotRow = row;
+                    pivotMagnitude = magnitude;
+                }
+            }
+            if (pivotMagnitude == 0.0f || !Float.isFinite(pivotMagnitude)) {
+                throw new FdxException("Matrix4 is not invertible");
+            }
+
+            int pivotOffset = pivotRow * 8;
+            int columnOffset = column * 8;
+            if (pivotRow != column) {
+                for (int index = 0; index < 8; index++) {
+                    float value = inversionScratch[columnOffset + index];
+                    inversionScratch[columnOffset + index] = inversionScratch[pivotOffset + index];
+                    inversionScratch[pivotOffset + index] = value;
+                }
+            }
+
+            float inversePivot = 1.0f / inversionScratch[columnOffset + column];
+            if (!Float.isFinite(inversePivot)) {
+                throw new FdxException("Matrix4 is not invertible");
+            }
+            for (int index = 0; index < 8; index++) {
+                inversionScratch[columnOffset + index] *= inversePivot;
+            }
+            inversionScratch[columnOffset + column] = 1.0f;
+
+            for (int row = 0; row < 4; row++) {
+                if (row == column) {
+                    continue;
+                }
+                int rowOffset = row * 8;
+                float factor = inversionScratch[rowOffset + column];
+                if (factor == 0.0f) {
+                    continue;
+                }
+                for (int index = 0; index < 8; index++) {
+                    inversionScratch[rowOffset + index] -= factor * inversionScratch[columnOffset + index];
+                }
+                inversionScratch[rowOffset + column] = 0.0f;
+            }
+        }
+
+        for (int row = 0; row < 4; row++) {
+            int rowOffset = row * 8 + 4;
+            for (int column = 0; column < 4; column++) {
+                if (!Float.isFinite(inversionScratch[rowOffset + column])) {
+                    throw new FdxException("Matrix4 is not invertible");
+                }
+            }
+        }
+        for (int row = 0; row < 4; row++) {
+            int rowOffset = row * 8 + 4;
+            for (int column = 0; column < 4; column++) {
+                values[column * 4 + row] = inversionScratch[rowOffset + column];
+            }
+        }
         return this;
     }
 

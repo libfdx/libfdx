@@ -1,6 +1,7 @@
 package io.github.libfdx.graphics.camera;
 
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.graphics.camera.controller.FreeCameraController3D;
 import io.github.libfdx.math.Ray;
 import io.github.libfdx.math.Vector3;
 import org.junit.jupiter.api.Test;
@@ -110,6 +111,25 @@ class CameraTest {
         assertThrows(FdxException.class, () -> camera.unproject(coordinates, null));
         assertThrows(FdxException.class,
                 () -> camera.unproject(coordinates, 0.0f, 0.0f, 800.0f, 0.0f, coordinates));
+    }
+
+    @Test
+    void updatesPerspectiveCameraAtLargeWorldCoordinates() {
+        float targetX = 10_000_000.0f;
+        float targetY = 20.0f;
+        float positionX = 10_000_038.0f;
+        float positionY = 9.581109f;
+        float positionZ = 45.26439f;
+
+        Camera camera = new Camera()
+                .projection(CameraProjection.PERSPECTIVE)
+                .viewport(2549.0f, 1352.0f)
+                .fieldOfView(60.0f)
+                .nearFar(0.1f, 1000.0f)
+                .position(positionX, positionY, positionZ)
+                .lookAt(targetX, targetY, 0.0f);
+
+        new FreeCameraController3D(null, camera).update(0.0f);
     }
 
     private static Camera perspectiveCamera(float viewportWidth, float viewportHeight) {

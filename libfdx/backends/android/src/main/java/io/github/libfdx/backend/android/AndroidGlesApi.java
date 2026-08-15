@@ -733,6 +733,17 @@ final class AndroidGlesApi implements GLApi {
     }
 
     /**
+     * Sets the instance divisor for a vertex attribute.
+     *
+     * @param index the attribute index
+     * @param divisor the instance divisor
+     */
+    @Override
+    public void vertexAttribDivisor(int index, int divisor) {
+        GLES30.glVertexAttribDivisor(index, divisor);
+    }
+
+    /**
      * Runs the viewport step.
      *
      * @param x the x coordinate
