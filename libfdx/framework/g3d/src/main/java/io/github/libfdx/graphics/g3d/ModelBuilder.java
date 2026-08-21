@@ -287,6 +287,421 @@ public final class ModelBuilder {
     }
 
     /**
+     * Builds a Y-axis cylinder with the default vertex usages.
+     *
+     * @param radius the cylinder radius
+     * @param height the total cylinder height
+     * @param divisions the radial divisions
+     * @return the cylinder
+     */
+    public Model cylinder(float radius, float height, int divisions) {
+        return cylinder("cylinder", radius, height, divisions,
+                ModelVertexUsage.DEFAULT);
+    }
+
+    /**
+     * Builds a Y-axis cylinder with the requested vertex usages.
+     *
+     * @param radius the cylinder radius
+     * @param height the total cylinder height
+     * @param divisions the radial divisions
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the cylinder
+     */
+    public Model cylinder(float radius, float height, int divisions,
+            long usage) {
+        return cylinder("cylinder", radius, height, divisions, usage);
+    }
+
+    /**
+     * Builds a named Y-axis cylinder with the requested vertex usages.
+     *
+     * @param id the identifier
+     * @param radius the cylinder radius
+     * @param height the total cylinder height
+     * @param divisions the radial divisions
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the cylinder
+     */
+    public Model cylinder(String id, float radius, float height,
+            int divisions, long usage) {
+        validateRoundPrimitive(radius, divisions, "Cylinder");
+        if (height <= 0.0f) {
+            throw new FdxException(
+                    "Cylinder height must be greater than zero");
+        }
+        int columns = divisions + 1;
+        int sideLowerStart = 0;
+        int sideUpperStart = columns;
+        int bottomCenter = columns * 2;
+        int bottomRingStart = bottomCenter + 1;
+        int topCenter = bottomRingStart + columns;
+        int topRingStart = topCenter + 1;
+        int vertexCount = topRingStart + columns;
+        float[] positions = new float[vertexCount * 3];
+        float[] normals = new float[vertexCount * 3];
+        float halfHeight = height * 0.5f;
+        for (int slice = 0; slice <= divisions; slice++) {
+            float angle = fullCircle(slice, divisions);
+            float normalX = (float) Math.cos(angle);
+            float normalZ = (float) Math.sin(angle);
+            float x = normalX * radius;
+            float z = normalZ * radius;
+            putVertex(positions, normals, sideLowerStart + slice,
+                    x, -halfHeight, z, normalX, 0.0f, normalZ);
+            putVertex(positions, normals, sideUpperStart + slice,
+                    x, halfHeight, z, normalX, 0.0f, normalZ);
+            putVertex(positions, normals, bottomRingStart + slice,
+                    x, -halfHeight, z, 0.0f, -1.0f, 0.0f);
+            putVertex(positions, normals, topRingStart + slice,
+                    x, halfHeight, z, 0.0f, 1.0f, 0.0f);
+        }
+        putVertex(positions, normals, bottomCenter,
+                0.0f, -halfHeight, 0.0f, 0.0f, -1.0f, 0.0f);
+        putVertex(positions, normals, topCenter,
+                0.0f, halfHeight, 0.0f, 0.0f, 1.0f, 0.0f);
+
+        int[] indices = new int[divisions * 12];
+        int index = 0;
+        for (int slice = 0; slice < divisions; slice++) {
+            int lower = sideLowerStart + slice;
+            int nextLower = lower + 1;
+            int upper = sideUpperStart + slice;
+            int nextUpper = upper + 1;
+            indices[index++] = lower;
+            indices[index++] = upper;
+            indices[index++] = nextLower;
+            indices[index++] = upper;
+            indices[index++] = nextUpper;
+            indices[index++] = nextLower;
+            indices[index++] = bottomCenter;
+            indices[index++] = bottomRingStart + slice;
+            indices[index++] = bottomRingStart + slice + 1;
+            indices[index++] = topCenter;
+            indices[index++] = topRingStart + slice + 1;
+            indices[index++] = topRingStart + slice;
+        }
+        return triangles(id, positions, indices, null, normals, usage);
+    }
+
+    /**
+     * Builds a Y-axis cone with the default vertex usages.
+     *
+     * @param radius the base radius
+     * @param height the total cone height
+     * @param divisions the radial divisions
+     * @return the cone
+     */
+    public Model cone(float radius, float height, int divisions) {
+        return cone("cone", radius, height, divisions,
+                ModelVertexUsage.DEFAULT);
+    }
+
+    /**
+     * Builds a Y-axis cone with the requested vertex usages.
+     *
+     * @param radius the base radius
+     * @param height the total cone height
+     * @param divisions the radial divisions
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the cone
+     */
+    public Model cone(float radius, float height, int divisions,
+            long usage) {
+        return cone("cone", radius, height, divisions, usage);
+    }
+
+    /**
+     * Builds a named Y-axis cone with the requested vertex usages.
+     *
+     * @param id the identifier
+     * @param radius the base radius
+     * @param height the total cone height
+     * @param divisions the radial divisions
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the cone
+     */
+    public Model cone(String id, float radius, float height, int divisions,
+            long usage) {
+        validateRoundPrimitive(radius, divisions, "Cone");
+        if (height <= 0.0f) {
+            throw new FdxException("Cone height must be greater than zero");
+        }
+        int columns = divisions + 1;
+        int sideBaseStart = 0;
+        int sideApexStart = columns;
+        int bottomCenter = columns * 2;
+        int bottomRingStart = bottomCenter + 1;
+        int vertexCount = bottomRingStart + columns;
+        float[] positions = new float[vertexCount * 3];
+        float[] normals = new float[vertexCount * 3];
+        float halfHeight = height * 0.5f;
+        float inverseSlopeLength = 1.0f
+                / (float) Math.sqrt(height * height + radius * radius);
+        for (int slice = 0; slice <= divisions; slice++) {
+            float angle = fullCircle(slice, divisions);
+            float radialX = (float) Math.cos(angle);
+            float radialZ = (float) Math.sin(angle);
+            float x = radialX * radius;
+            float z = radialZ * radius;
+            float normalX = radialX * height * inverseSlopeLength;
+            float normalY = radius * inverseSlopeLength;
+            float normalZ = radialZ * height * inverseSlopeLength;
+            putVertex(positions, normals, sideBaseStart + slice,
+                    x, -halfHeight, z, normalX, normalY, normalZ);
+            putVertex(positions, normals, sideApexStart + slice,
+                    0.0f, halfHeight, 0.0f,
+                    normalX, normalY, normalZ);
+            putVertex(positions, normals, bottomRingStart + slice,
+                    x, -halfHeight, z, 0.0f, -1.0f, 0.0f);
+        }
+        putVertex(positions, normals, bottomCenter,
+                0.0f, -halfHeight, 0.0f, 0.0f, -1.0f, 0.0f);
+
+        int[] indices = new int[divisions * 6];
+        int index = 0;
+        for (int slice = 0; slice < divisions; slice++) {
+            indices[index++] = sideBaseStart + slice;
+            indices[index++] = sideApexStart + slice;
+            indices[index++] = sideBaseStart + slice + 1;
+            indices[index++] = bottomCenter;
+            indices[index++] = bottomRingStart + slice;
+            indices[index++] = bottomRingStart + slice + 1;
+        }
+        return triangles(id, positions, indices, null, normals, usage);
+    }
+
+    /**
+     * Builds a Y-axis capsule with the default vertex usages.
+     *
+     * @param radius the capsule radius
+     * @param height the total capsule height, including both rounded ends
+     * @param divisions the radial divisions
+     * @return the capsule
+     */
+    public Model capsule(float radius, float height, int divisions) {
+        return capsule("capsule", radius, height, divisions,
+                ModelVertexUsage.DEFAULT);
+    }
+
+    /**
+     * Builds a Y-axis capsule with the requested vertex usages.
+     *
+     * @param radius the capsule radius
+     * @param height the total capsule height, including both rounded ends
+     * @param divisions the radial divisions
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the capsule
+     */
+    public Model capsule(float radius, float height, int divisions,
+            long usage) {
+        return capsule("capsule", radius, height, divisions, usage);
+    }
+
+    /**
+     * Builds a named Y-axis capsule with the requested vertex usages.
+     *
+     * @param id the identifier
+     * @param radius the capsule radius
+     * @param height the total capsule height, including both rounded ends
+     * @param divisions the radial divisions
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the capsule
+     */
+    public Model capsule(String id, float radius, float height, int divisions,
+            long usage) {
+        validateRoundPrimitive(radius, divisions, "Capsule");
+        if (height < radius * 2.0f) {
+            throw new FdxException(
+                    "Capsule height must be at least twice its radius");
+        }
+        float cylinderHalfHeight = height * 0.5f - radius;
+        int hemisphereStacks = Math.max(2, divisions / 4);
+        if (cylinderHalfHeight == 0.0f) {
+            return sphere(id, radius, divisions, hemisphereStacks * 2,
+                    usage);
+        }
+        int columns = divisions + 1;
+        int ringCount = (hemisphereStacks + 1) * 2;
+        float[] positions = new float[ringCount * columns * 3];
+        float[] normals = new float[ringCount * columns * 3];
+        int ring = 0;
+        for (int stack = 0; stack <= hemisphereStacks; stack++) {
+            float progress = stack / (float) hemisphereStacks;
+            float latitude = (float) (-Math.PI * 0.5
+                    + Math.PI * 0.5 * progress);
+            putCapsuleRing(positions, normals, ring++, columns, divisions,
+                    radius, -cylinderHalfHeight, latitude);
+        }
+        for (int stack = 0; stack <= hemisphereStacks; stack++) {
+            float progress = stack / (float) hemisphereStacks;
+            float latitude = (float) (Math.PI * 0.5 * progress);
+            putCapsuleRing(positions, normals, ring++, columns, divisions,
+                    radius, cylinderHalfHeight, latitude);
+        }
+
+        int[] indices = new int[(ringCount - 1) * divisions * 6];
+        int index = 0;
+        for (int row = 0; row < ringCount - 1; row++) {
+            for (int slice = 0; slice < divisions; slice++) {
+                int a = row * columns + slice;
+                int b = a + 1;
+                int c = a + columns;
+                int d = c + 1;
+                indices[index++] = a;
+                indices[index++] = c;
+                indices[index++] = b;
+                indices[index++] = b;
+                indices[index++] = c;
+                indices[index++] = d;
+            }
+        }
+        return triangles(id, positions, indices, null, normals, usage);
+    }
+
+    /**
+     * Builds a horizontal XZ plane with the default vertex usages.
+     *
+     * @param width the size along the X axis
+     * @param depth the size along the Z axis
+     * @return the plane
+     */
+    public Model plane(float width, float depth) {
+        return plane("plane", width, depth, ModelVertexUsage.DEFAULT);
+    }
+
+    /**
+     * Builds a horizontal XZ plane with the requested vertex usages.
+     *
+     * @param width the size along the X axis
+     * @param depth the size along the Z axis
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the plane
+     */
+    public Model plane(float width, float depth, long usage) {
+        return plane("plane", width, depth, usage);
+    }
+
+    /**
+     * Builds a named horizontal XZ plane with the requested vertex usages.
+     *
+     * @param id the identifier
+     * @param width the size along the X axis
+     * @param depth the size along the Z axis
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the plane
+     */
+    public Model plane(String id, float width, float depth, long usage) {
+        if (width <= 0.0f || depth <= 0.0f) {
+            throw new FdxException(
+                    "Plane dimensions must be greater than zero");
+        }
+        float halfWidth = width * 0.5f;
+        float halfDepth = depth * 0.5f;
+        float[] positions = {
+                -halfWidth, 0.0f, -halfDepth,
+                -halfWidth, 0.0f, halfDepth,
+                halfWidth, 0.0f, halfDepth,
+                halfWidth, 0.0f, -halfDepth
+        };
+        float[] normals = {
+                0.0f, 1.0f, 0.0f,
+                0.0f, 1.0f, 0.0f,
+                0.0f, 1.0f, 0.0f,
+                0.0f, 1.0f, 0.0f
+        };
+        int[] indices = {0, 1, 2, 0, 2, 3};
+        return triangles(id, positions, indices, null, normals, usage);
+    }
+
+    /**
+     * Builds a Y-axis torus with the default vertex usages.
+     *
+     * @param majorRadius the distance from the origin to the tube center
+     * @param minorRadius the tube radius
+     * @param divisions the divisions around the major ring
+     * @return the torus
+     */
+    public Model torus(float majorRadius, float minorRadius, int divisions) {
+        return torus("torus", majorRadius, minorRadius, divisions,
+                ModelVertexUsage.DEFAULT);
+    }
+
+    /**
+     * Builds a Y-axis torus with the requested vertex usages.
+     *
+     * @param majorRadius the distance from the origin to the tube center
+     * @param minorRadius the tube radius
+     * @param divisions the divisions around the major ring
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the torus
+     */
+    public Model torus(float majorRadius, float minorRadius, int divisions,
+            long usage) {
+        return torus("torus", majorRadius, minorRadius, divisions, usage);
+    }
+
+    /**
+     * Builds a named Y-axis torus with the requested vertex usages.
+     *
+     * @param id the identifier
+     * @param majorRadius the distance from the origin to the tube center
+     * @param minorRadius the tube radius
+     * @param divisions the divisions around the major ring
+     * @param usage the requested {@link ModelVertexUsage} bits
+     * @return the torus
+     */
+    public Model torus(String id, float majorRadius, float minorRadius,
+            int divisions, long usage) {
+        validateRoundPrimitive(majorRadius, divisions, "Torus");
+        if (minorRadius <= 0.0f) {
+            throw new FdxException(
+                    "Torus minor radius must be greater than zero");
+        }
+        int tubeDivisions = Math.max(3, divisions / 2);
+        int columns = tubeDivisions + 1;
+        int rows = divisions + 1;
+        float[] positions = new float[rows * columns * 3];
+        float[] normals = new float[rows * columns * 3];
+        for (int ring = 0; ring <= divisions; ring++) {
+            float majorAngle = fullCircle(ring, divisions);
+            float majorCos = (float) Math.cos(majorAngle);
+            float majorSin = (float) Math.sin(majorAngle);
+            for (int tube = 0; tube <= tubeDivisions; tube++) {
+                float minorAngle = fullCircle(tube, tubeDivisions);
+                float minorCos = (float) Math.cos(minorAngle);
+                float minorSin = (float) Math.sin(minorAngle);
+                float radial = majorRadius + minorRadius * minorCos;
+                putVertex(positions, normals, ring * columns + tube,
+                        majorCos * radial,
+                        minorRadius * minorSin,
+                        majorSin * radial,
+                        majorCos * minorCos,
+                        minorSin,
+                        majorSin * minorCos);
+            }
+        }
+
+        int[] indices = new int[divisions * tubeDivisions * 6];
+        int index = 0;
+        for (int ring = 0; ring < divisions; ring++) {
+            for (int tube = 0; tube < tubeDivisions; tube++) {
+                int a = ring * columns + tube;
+                int b = a + 1;
+                int c = a + columns;
+                int d = c + 1;
+                indices[index++] = a;
+                indices[index++] = b;
+                indices[index++] = c;
+                indices[index++] = b;
+                indices[index++] = d;
+                indices[index++] = c;
+            }
+        }
+        return triangles(id, positions, indices, null, normals, usage);
+    }
+
+    /**
      * Runs the triangles step.
      *
      * @param id the identifier
@@ -564,6 +979,49 @@ public final class ModelBuilder {
 
     private static float clamp(float value, float minimum, float maximum) {
         return Math.max(minimum, Math.min(maximum, value));
+    }
+
+    private static void validateRoundPrimitive(float radius, int divisions,
+            String shape) {
+        if (radius <= 0.0f) {
+            throw new FdxException(
+                    shape + " radius must be greater than zero");
+        }
+        if (divisions < 3) {
+            throw new FdxException(shape + " divisions must be >= 3");
+        }
+    }
+
+    private static float fullCircle(int division, int divisionCount) {
+        return (float) (Math.PI * 2.0 * division / divisionCount);
+    }
+
+    private static void putCapsuleRing(float[] positions, float[] normals,
+            int ring, int columns, int divisions, float radius,
+            float centerY, float latitude) {
+        float normalY = (float) Math.sin(latitude);
+        float radialNormal = (float) Math.cos(latitude);
+        float y = centerY + normalY * radius;
+        for (int slice = 0; slice <= divisions; slice++) {
+            float angle = fullCircle(slice, divisions);
+            float normalX = (float) Math.cos(angle) * radialNormal;
+            float normalZ = (float) Math.sin(angle) * radialNormal;
+            putVertex(positions, normals, ring * columns + slice,
+                    normalX * radius, y, normalZ * radius,
+                    normalX, normalY, normalZ);
+        }
+    }
+
+    private static void putVertex(float[] positions, float[] normals,
+            int vertex, float x, float y, float z,
+            float normalX, float normalY, float normalZ) {
+        int offset = vertex * 3;
+        positions[offset] = x;
+        positions[offset + 1] = y;
+        positions[offset + 2] = z;
+        normals[offset] = normalX;
+        normals[offset + 1] = normalY;
+        normals[offset + 2] = normalZ;
     }
 
     private static int[] sequence(int count) {
