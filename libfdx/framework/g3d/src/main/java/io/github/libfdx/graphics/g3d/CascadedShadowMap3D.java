@@ -45,6 +45,7 @@ public final class CascadedShadowMap3D implements Disposable {
     private float lightUpZ = 1.0f;
     private float viewCameraNear = 0.1f;
     private float viewCameraFar = 1.0f;
+    private float viewCameraCoverageFar = 1.0f;
     private float viewCameraTanHalfFov;
     private float viewCameraAspect = 1.0f;
     private float splitLambda = 0.55f;
@@ -52,6 +53,7 @@ public final class CascadedShadowMap3D implements Disposable {
     private float maxDistance = Float.POSITIVE_INFINITY;
     private float baseBias = 0.30f;
     private float minTexelBias = DEFAULT_MIN_TEXEL_BIAS;
+    private float shadowFadeFraction = 0.20f;
     private final int width;
     private final int height;
     private boolean disposed;
@@ -180,6 +182,21 @@ public final class CascadedShadowMap3D implements Disposable {
     }
 
     /**
+     * Sets the fraction of the complete camera shadow range used to fade a
+     * model's entire shadow before that model reaches the final limit.
+     *
+     * @param fraction the fade fraction from 0 to 0.5
+     * @return this cascaded shadow map for chaining
+     */
+    public CascadedShadowMap3D shadowFadeFraction(float fraction) {
+        if (Float.isNaN(fraction)) {
+            throw new FdxException("Cascade shadow fade fraction cannot be NaN");
+        }
+        shadowFadeFraction = Math.max(0.0f, Math.min(0.5f, fraction));
+        return this;
+    }
+
+    /**
      * Updates cascade split distances and light-space bounds from the view camera.
      *
      * @param viewCamera the scene view camera
@@ -200,6 +217,8 @@ public final class CascadedShadowMap3D implements Disposable {
         viewCameraUp.set(viewCamera.up());
         viewCameraNear = near;
         viewCameraFar = far;
+        float fadeGuard = (far - near) * shadowFadeFraction;
+        viewCameraCoverageFar = Math.min(viewCamera.far(), far + fadeGuard);
         viewCameraAspect = Math.max(viewCamera.viewportWidth() / Math.max(viewCamera.viewportHeight(), EPSILON),
                 EPSILON);
         viewCameraTanHalfFov = viewCamera.projection() == CameraProjection.PERSPECTIVE
@@ -208,8 +227,11 @@ public final class CascadedShadowMap3D implements Disposable {
             float start = i == 0 ? near : splitDistances[i - 1];
             float end = i == cascades.length - 1 ? far : splitDistance(near, far, i + 1);
             splitDistances[i] = end;
-            updateCascadeBounds(viewCamera, i, start, end);
+            float coverageEnd = i == cascades.length - 1
+                    ? viewCameraCoverageFar : end;
+            updateCascadeBounds(viewCamera, i, start, end, coverageEnd);
         }
+        configureCasterFades();
         return this;
     }
 
@@ -437,6 +459,16 @@ public final class CascadedShadowMap3D implements Disposable {
     }
 
     /**
+     * Returns the farthest receiver distance retained as an invisible guard
+     * region while caster shadows fade to zero.
+     *
+     * @return the final cascade coverage distance
+     */
+    public float viewCameraCoverageFar() {
+        return viewCameraCoverageFar;
+    }
+
+    /**
      * Returns tan(fieldOfView / 2) for the camera used to split the cascades.
      *
      * @return the cascade view camera half-FOV tangent
@@ -490,6 +522,16 @@ public final class CascadedShadowMap3D implements Disposable {
         return minTexelBias;
     }
 
+    /**
+     * Returns the fraction of the complete camera shadow range used for
+     * whole-caster fading.
+     *
+     * @return the shadow fade fraction
+     */
+    public float shadowFadeFraction() {
+        return shadowFadeFraction;
+    }
+
     private float splitDistance(float near, float far, int splitIndex) {
         float ratio = (float)splitIndex / cascades.length;
         float uniform = near + (far - near) * ratio;
@@ -497,7 +539,8 @@ public final class CascadedShadowMap3D implements Disposable {
         return logarithmic * splitLambda + uniform * (1.0f - splitLambda);
     }
 
-    private void updateCascadeBounds(Camera viewCamera, int index, float start, float end) {
+    private void updateCascadeBounds(Camera viewCamera, int index, float start,
+            float end, float coverageEnd) {
         Vector3 position = viewCamera.position();
         Vector3 direction = viewCamera.direction();
         float centerDistance = (start + end) * 0.5f;
@@ -505,13 +548,14 @@ public final class CascadedShadowMap3D implements Disposable {
         centerY[index] = position.y() + direction.y() * centerDistance;
         centerZ[index] = position.z() + direction.z() * centerDistance;
 
-        float halfDepth = (end - start) * 0.5f;
+        float halfDepth = Math.max(centerDistance - start,
+                coverageEnd - centerDistance);
         float radius;
         if (viewCamera.projection() == CameraProjection.PERSPECTIVE) {
             float aspect = Math.max(viewCamera.viewportWidth() / Math.max(viewCamera.viewportHeight(), EPSILON),
                     EPSILON);
             float tangent = (float)Math.tan(Math.toRadians(viewCamera.fieldOfView()) * 0.5);
-            float farHalfHeight = tangent * end;
+            float farHalfHeight = tangent * coverageEnd;
             float farHalfWidth = farHalfHeight * aspect;
             radius = (float)Math.sqrt(farHalfWidth * farHalfWidth
                     + farHalfHeight * farHalfHeight
@@ -538,6 +582,21 @@ public final class CascadedShadowMap3D implements Disposable {
         updateLightSpaceBounds(light, renderables);
         for (int i = 0; i < cascades.length; i++) {
             cascades[i].renderRenderables(light, renderables);
+        }
+    }
+
+    private void configureCasterFades() {
+        int lastCascade = cascades.length - 1;
+        float fadeWidth = (viewCameraFar - viewCameraNear)
+                * shadowFadeFraction;
+        for (int i = 0; i < cascades.length; i++) {
+            if (i != lastCascade || fadeWidth <= EPSILON) {
+                cascades[i].disableCasterFade();
+                continue;
+            }
+            cascades[i].casterDistanceFade(viewCameraPosition,
+                    viewCameraDirection, viewCameraFar - fadeWidth,
+                    viewCameraFar);
         }
     }
 

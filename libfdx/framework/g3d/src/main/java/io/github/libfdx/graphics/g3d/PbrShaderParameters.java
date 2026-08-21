@@ -42,8 +42,8 @@ final class PbrShaderParameters {
     static final int MAX_SHADOW_CASCADES = 4;
     static final int MAX_BONES = 64;
 
-    private static final long STATIC_UNIFORM_SIZE = 1_232;
-    private static final long SKINNED_UNIFORM_SIZE = 5_344;
+    private static final long STATIC_UNIFORM_SIZE = 1_248;
+    private static final long SKINNED_UNIFORM_SIZE = 5_360;
     private static final ShaderValueType FLOAT2 =
             ShaderValueType.vector(ShaderScalarType.F32, 2);
     private static final ShaderValueType FLOAT3 =
@@ -116,6 +116,7 @@ final class PbrShaderParameters {
     final ShaderParameterHandle SHADOW_CAMERA_UP;
     final ShaderParameterHandle SHADOW_CAMERA_PARAMS;
     final ShaderParameterHandle SHADOW_FILTER_PARAMS;
+    final ShaderParameterHandle SHADOW_FILTER_SCALES;
     final ShaderParameterHandle SKINNING_PARAMS;
     final ShaderParameterHandle BONE_MATRICES;
 
@@ -197,7 +198,8 @@ final class PbrShaderParameters {
                 environmentParameter("shadowCameraDirection", NAMED_FLOAT4, 1_168, 16),
                 environmentParameter("shadowCameraUp", NAMED_FLOAT4, 1_184, 16),
                 environmentParameter("shadowCameraParams", NAMED_FLOAT4, 1_200, 16),
-                environmentParameter("shadowFilterParams", NAMED_FLOAT4, 1_216, 16)
+                environmentParameter("shadowFilterParams", NAMED_FLOAT4, 1_216, 16),
+                environmentParameter("shadowFilterScales", NAMED_FLOAT4, 1_232, 16)
         };
     }
 
@@ -208,7 +210,7 @@ final class PbrShaderParameters {
                 STATIC_UNIFORM_SIZE, 16,
                 ShaderParameterDomain.OBJECT_DRAW, ShaderUpdateFrequency.DRAW);
         parameters[BASE_PARAMETERS.length + 1] = parameter("boneMatrices", BONE_MATRIX_ARRAY,
-                1_248, MAX_BONES * 64L,
+                STATIC_UNIFORM_SIZE + 16, MAX_BONES * 64L,
                 ShaderParameterDomain.OBJECT_DRAW, ShaderUpdateFrequency.DRAW);
         return ShaderParameterLayout.of(SKINNED_UNIFORM_SIZE, 16, parameters);
     }
@@ -430,6 +432,7 @@ final class PbrShaderParameters {
         SHADOW_CAMERA_UP = layout.requireHandle("shadowCameraUp");
         SHADOW_CAMERA_PARAMS = layout.requireHandle("shadowCameraParams");
         SHADOW_FILTER_PARAMS = layout.requireHandle("shadowFilterParams");
+        SHADOW_FILTER_SCALES = layout.requireHandle("shadowFilterScales");
         SKINNING_PARAMS = layout.findHandle("skinningParams");
         BONE_MATRICES = layout.findHandle("boneMatrices");
 

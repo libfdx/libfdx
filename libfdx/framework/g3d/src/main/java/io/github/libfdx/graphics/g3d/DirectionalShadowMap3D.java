@@ -10,6 +10,7 @@ import io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.Buffer;
+import io.github.libfdx.graphics.ColorTargetState;
 import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.GraphicsContext;
@@ -48,6 +49,7 @@ import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.VertexAttribute;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
+import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Matrix4;
 
 import io.github.libfdx.math.Vector3;
@@ -65,6 +67,10 @@ public final class DirectionalShadowMap3D implements Disposable {
     }
 
     private static final int PRIMITIVE_TOPOLOGY_COUNT = PrimitiveTopology.values().length;
+    private static final int CASTER_FADE_VOLUME = 0;
+    private static final int CASTER_FADE_DISABLED = 1;
+    private static final int CASTER_FADE_DISTANCE = 2;
+    private static final float EPSILON = 0.000001f;
     private final GraphicsContext graphics;
     private final Texture texture;
     private final DefaultRenderTarget3D target;
@@ -72,6 +78,13 @@ public final class DirectionalShadowMap3D implements Disposable {
     private final ModelBatch batch;
     private final Camera camera = new Camera();
     private final Matrix4 lightViewProjection = new Matrix4();
+    private final float[] casterFadeViewProjectionValues =
+            new float[Matrix4.VALUE_COUNT];
+    private final float[] casterTransformValues =
+            new float[Matrix4.VALUE_COUNT];
+    private final Vector3 casterFadeCameraPosition = new Vector3();
+    private final Vector3 casterFadeCameraDirection =
+            new Vector3(0.0f, 0.0f, -1.0f);
     private float centerX;
     private float centerY;
     private float centerZ;
@@ -80,6 +93,10 @@ public final class DirectionalShadowMap3D implements Disposable {
     private float far = 18.0f;
     private float bias = 0.022f;
     private float strength = 0.62f;
+    private float shadowFadeFraction = 0.20f;
+    private float casterFadeStart;
+    private float casterFadeEnd;
+    private int casterFadeMode = CASTER_FADE_VOLUME;
     private boolean disposed;
 
     /**
@@ -152,6 +169,21 @@ public final class DirectionalShadowMap3D implements Disposable {
      */
     public DirectionalShadowMap3D strength(float strength) {
         this.strength = Math.max(0.0f, Math.min(1.0f, strength));
+        return this;
+    }
+
+    /**
+     * Sets the fraction of the shadow volume used to fade complete caster
+     * shadows before their bounds reach its limit.
+     *
+     * @param fraction the fade fraction from 0 to 0.5
+     * @return this shadow map for chaining
+     */
+    public DirectionalShadowMap3D shadowFadeFraction(float fraction) {
+        if (Float.isNaN(fraction)) {
+            throw new FdxException("Shadow fade fraction cannot be NaN");
+        }
+        shadowFadeFraction = Math.max(0.0f, Math.min(0.5f, fraction));
         return this;
     }
 
@@ -293,11 +325,47 @@ public final class DirectionalShadowMap3D implements Disposable {
         return strength;
     }
 
+    /**
+     * Returns the fraction of the shadow volume used for complete-caster
+     * fading.
+     *
+     * @return the shadow fade fraction
+     */
+    public float shadowFadeFraction() {
+        return shadowFadeFraction;
+    }
+
+    void disableCasterFade() {
+        casterFadeMode = CASTER_FADE_DISABLED;
+    }
+
+    void casterDistanceFade(Vector3 cameraPosition, Vector3 cameraDirection,
+            float fadeStart, float fadeEnd) {
+        if (cameraPosition == null || cameraDirection == null
+                || fadeEnd <= fadeStart) {
+            disableCasterFade();
+            return;
+        }
+        casterFadeCameraPosition.set(cameraPosition);
+        casterFadeCameraDirection.set(cameraDirection);
+        float directionLength = length(casterFadeCameraDirection.x(),
+                casterFadeCameraDirection.y(),
+                casterFadeCameraDirection.z());
+        if (directionLength <= EPSILON) {
+            disableCasterFade();
+            return;
+        }
+        casterFadeCameraDirection.scale(1.0f / directionLength);
+        casterFadeStart = fadeStart;
+        casterFadeEnd = fadeEnd;
+        casterFadeMode = CASTER_FADE_DISTANCE;
+    }
+
     private RenderPass beginPass(DirectionalLight light) {
         updateLightCamera(light);
         GraphicsFrame frame = graphics.currentFrame();
         return frame.commandEncoder().beginRenderPass(RenderPassDescriptor
-                .color(target.colorAttachment(0), LoadOp.clear(1.0f, 1.0f, 1.0f, 1.0f), StoreOp.store())
+                .color(target.colorAttachment(0), LoadOp.clear(1.0f, 1.0f, 1.0f, 0.0f), StoreOp.store())
                 .depthClear(1.0f)
                 .label("directional shadow map pass"));
     }
@@ -324,18 +392,149 @@ public final class DirectionalShadowMap3D implements Disposable {
             directionZ *= invLength;
         }
 
-        float distance = (near + far) * 0.5f;
+        configureLightCamera(directionX, directionY, directionZ,
+                halfSize, near, far);
+        lightViewProjection.set(camera.combined());
+        lightViewProjection.copyValues(casterFadeViewProjectionValues, 0);
+
+        // A regular shadow map needs real raster coverage outside the logical
+        // limit. Otherwise a long projected shadow can still hit the texture
+        // boundary while its caster is fading. The logical matrix above is
+        // retained for opacity calculation; this expanded matrix is the one
+        // used to render and sample the shadow map.
+        if (casterFadeMode == CASTER_FADE_VOLUME
+                && shadowFadeFraction > 0.0f) {
+            float lateralGuard = halfSize * 2.0f * shadowFadeFraction;
+            float depthGuard = (far - near) * shadowFadeFraction;
+            configureLightCamera(directionX, directionY, directionZ,
+                    halfSize + lateralGuard, near,
+                    far + depthGuard * 2.0f);
+            lightViewProjection.set(camera.combined());
+        }
+    }
+
+    private void configureLightCamera(float directionX, float directionY,
+            float directionZ, float cameraHalfSize, float cameraNear,
+            float cameraFar) {
+        float distance = (cameraNear + cameraFar) * 0.5f;
         float eyeX = centerX - directionX * distance;
         float eyeY = centerY - directionY * distance;
         float eyeZ = centerZ - directionZ * distance;
         camera.projection(CameraProjection.ORTHOGRAPHIC)
-                .viewport(halfSize * 2.0f, halfSize * 2.0f)
+                .viewport(cameraHalfSize * 2.0f,
+                        cameraHalfSize * 2.0f)
                 .zoom(1.0f)
-                .nearFar(near, far)
+                .nearFar(cameraNear, cameraFar)
                 .position(eyeX, eyeY, eyeZ)
                 .lookAt(centerX, centerY, centerZ);
         setStableLightUp(directionX, directionY, directionZ);
-        lightViewProjection.set(camera.combined());
+    }
+
+    private float casterOpacity(Renderable3D renderable) {
+        if (casterFadeMode == CASTER_FADE_DISABLED || renderable == null) {
+            return 1.0f;
+        }
+        BoundingBox bounds = renderable.bounds();
+        if (bounds == null) {
+            return 1.0f;
+        }
+        renderable.worldTransform().copyValues(casterTransformValues, 0);
+        Vector3 min = bounds.min();
+        Vector3 max = bounds.max();
+        if (casterFadeMode == CASTER_FADE_DISTANCE) {
+            // Drive the complete draw from one stable model-space point. Using
+            // the farthest bounds corner makes large casters finish their fade
+            // too early and causes separately rendered pieces of a model to
+            // disappear in a visible sequence. The expanded shadow-map guard
+            // keeps the complete projected bounds available while this
+            // center-based opacity reaches zero.
+            float localX = (min.x() + max.x()) * 0.5f;
+            float localY = (min.y() + max.y()) * 0.5f;
+            float localZ = (min.z() + max.z()) * 0.5f;
+            float worldX = transformX(casterTransformValues,
+                    localX, localY, localZ);
+            float worldY = transformY(casterTransformValues,
+                    localX, localY, localZ);
+            float worldZ = transformZ(casterTransformValues,
+                    localX, localY, localZ);
+            float centerDistance = dot(
+                    worldX - casterFadeCameraPosition.x(),
+                    worldY - casterFadeCameraPosition.y(),
+                    worldZ - casterFadeCameraPosition.z(),
+                    casterFadeCameraDirection.x(),
+                    casterFadeCameraDirection.y(),
+                    casterFadeCameraDirection.z());
+            return 1.0f - smoothstep(casterFadeStart, casterFadeEnd,
+                    centerDistance);
+        }
+        if (shadowFadeFraction <= 0.0f) {
+            return 1.0f;
+        }
+        float closestEdge = Float.POSITIVE_INFINITY;
+        for (int corner = 0; corner < 8; corner++) {
+            float localX = (corner & 1) == 0 ? min.x() : max.x();
+            float localY = (corner & 2) == 0 ? min.y() : max.y();
+            float localZ = (corner & 4) == 0 ? min.z() : max.z();
+            float worldX = transformX(casterTransformValues,
+                    localX, localY, localZ);
+            float worldY = transformY(casterTransformValues,
+                    localX, localY, localZ);
+            float worldZ = transformZ(casterTransformValues,
+                    localX, localY, localZ);
+            float clipX = transformX(casterFadeViewProjectionValues,
+                    worldX, worldY, worldZ);
+            float clipY = transformY(casterFadeViewProjectionValues,
+                    worldX, worldY, worldZ);
+            float clipZ = transformZ(casterFadeViewProjectionValues,
+                    worldX, worldY, worldZ);
+            float clipW = casterFadeViewProjectionValues[3] * worldX
+                    + casterFadeViewProjectionValues[7] * worldY
+                    + casterFadeViewProjectionValues[11] * worldZ
+                    + casterFadeViewProjectionValues[15];
+            if (Math.abs(clipW) <= EPSILON) {
+                return 0.0f;
+            }
+            float inverseW = 1.0f / clipW;
+            float edgeX = (1.0f - Math.abs(clipX * inverseW)) * 0.5f;
+            float edgeY = (1.0f - Math.abs(clipY * inverseW)) * 0.5f;
+            float edgeZ = (1.0f - Math.abs(clipZ * inverseW)) * 0.5f;
+            closestEdge = Math.min(closestEdge,
+                    Math.min(edgeX, Math.min(edgeY, edgeZ)));
+        }
+        return smoothstep(0.0f, shadowFadeFraction, closestEdge);
+    }
+
+    private static float transformX(float[] matrix, float x, float y,
+            float z) {
+        return matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12];
+    }
+
+    private static float transformY(float[] matrix, float x, float y,
+            float z) {
+        return matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
+    }
+
+    private static float transformZ(float[] matrix, float x, float y,
+            float z) {
+        return matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14];
+    }
+
+    private static float dot(float x, float y, float z,
+            float axisX, float axisY, float axisZ) {
+        return x * axisX + y * axisY + z * axisZ;
+    }
+
+    private static float length(float x, float y, float z) {
+        return (float)Math.sqrt(x * x + y * y + z * z);
+    }
+
+    private static float smoothstep(float edge0, float edge1, float value) {
+        if (edge1 <= edge0) {
+            return value >= edge1 ? 1.0f : 0.0f;
+        }
+        float t = Math.max(0.0f, Math.min(1.0f,
+                (value - edge0) / (edge1 - edge0)));
+        return t * t * (3.0f - 2.0f * t);
     }
 
     private void setStableLightUp(float directionX, float directionY, float directionZ) {
@@ -387,11 +586,12 @@ public final class DirectionalShadowMap3D implements Disposable {
         return disposed;
     }
 
-    private static final class ShadowDepthShaderProvider implements ShaderProvider3D, Disposable {
+    private final class ShadowDepthShaderProvider implements ShaderProvider3D, Disposable {
         private final ShadowDepthShader shader;
 
         ShadowDepthShaderProvider(GraphicsContext graphics) {
-            shader = new ShadowDepthShader(graphics);
+            shader = new ShadowDepthShader(graphics,
+                    DirectionalShadowMap3D.this);
         }
 
         @Override
@@ -425,6 +625,7 @@ public final class DirectionalShadowMap3D implements Disposable {
                 struct Uniforms {
                     model : mat4x4<f32>,
                     viewProjection : mat4x4<f32>,
+                    shadowParams : vec4f,
                 };
                 @group(0) @binding(0) var<uniform> uniforms : Uniforms;
                 @vertex
@@ -453,22 +654,29 @@ public final class DirectionalShadowMap3D implements Disposable {
                             raw.x - raw.y / 255.0,
                             raw.y,
                             0.0,
-                            1.0);
+                            uniforms.shadowParams.x);
                 }
                 """;
         private static final ShaderValueType MATRIX4 = ShaderValueType
                 .matrix(ShaderScalarType.F32, 4, 4, 16)
                 .named("mat4x4<f32>");
+        private static final ShaderValueType FLOAT4 = ShaderValueType
+                .vector(ShaderScalarType.F32, 4)
+                .named("vec4<f32>");
         private static final ShaderParameterLayout UNIFORM_LAYOUT =
-                ShaderParameterLayout.of(128, 16,
+                ShaderParameterLayout.of(144, 16,
                         ShaderParameter.of("model", MATRIX4, 0, 64, 16),
-                        ShaderParameter.of("viewProjection", MATRIX4, 64, 64, 16));
+                        ShaderParameter.of("viewProjection", MATRIX4, 64, 64, 16),
+                        ShaderParameter.of("shadowParams", FLOAT4, 128, 16, 16));
         private static final ShaderParameterHandle MODEL =
                 UNIFORM_LAYOUT.requireHandle("model");
         private static final ShaderParameterHandle VIEW_PROJECTION =
                 UNIFORM_LAYOUT.requireHandle("viewProjection");
+        private static final ShaderParameterHandle SHADOW_PARAMS =
+                UNIFORM_LAYOUT.requireHandle("shadowParams");
         private static final ShaderReflection REFLECTION = reflection();
         private final GraphicsContext graphics;
+        private final DirectionalShadowMap3D shadowMap;
         private final ShaderModule shaderModule;
         private final ObjectMap<VertexLayout, RenderPipeline[]> pipelines =
                 new ObjectMap<VertexLayout, RenderPipeline[]>(KeyComparison.IDENTITY);
@@ -479,8 +687,10 @@ public final class DirectionalShadowMap3D implements Disposable {
         private RenderContext3D context;
         private boolean disposed;
 
-        ShadowDepthShader(GraphicsContext graphics) {
+        ShadowDepthShader(GraphicsContext graphics,
+                DirectionalShadowMap3D shadowMap) {
             this.graphics = graphics;
+            this.shadowMap = shadowMap;
             shaderModule = graphics.device().createShaderModule(ShaderModuleDescriptor.wgsl(
                     "directional shadow depth", SOURCE));
         }
@@ -522,6 +732,8 @@ public final class DirectionalShadowMap3D implements Disposable {
             uniformBlock.setFloatMatrix(MODEL, modelMatrix, 0);
             uniformBlock.setFloatMatrix(VIEW_PROJECTION,
                     viewProjectionMatrix, 0);
+            uniformBlock.setFloat4(SHADOW_PARAMS,
+                    shadowMap.casterOpacity(renderable), 0.0f, 0.0f, 0.0f);
             pass.setParameterBlock(0, 0, uniformBlock);
             int indexCount = meshPart.indexCount() > 0 ? meshPart.indexCount() : mesh.indexCount();
             if (indexCount > 0) {
@@ -558,9 +770,10 @@ public final class DirectionalShadowMap3D implements Disposable {
                     io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling.CENTER);
             ShaderBinding uniforms = ShaderBinding.builder(0, 0,
                             "uniforms", ShaderResourceKind.UNIFORM_BUFFER)
-                    .visibility(ShaderStageVisibility.VERTEX)
+                    .visibility(ShaderStageVisibility.of(
+                            ShaderStage.VERTEX, ShaderStage.FRAGMENT))
                     .access(ShaderResourceAccess.READ)
-                    .buffer(128, 128, 16, UNIFORM_LAYOUT)
+                    .buffer(144, 144, 16, UNIFORM_LAYOUT)
                     .build();
             return ShaderReflection.complete(ShaderProfile.PORTABLE_WEBGPU,
                     new ShaderEntryPoint[] {
@@ -569,12 +782,13 @@ public final class DirectionalShadowMap3D implements Disposable {
                                     .builtins(ShaderBuiltinUsage.POSITION, -1)
                                     .inputs(vertexPosition)
                                     .outputs(vertexDepth)
-                                    .resources(ShaderResourceUse.of(0, 0, 128))
+                                    .resources(ShaderResourceUse.of(0, 0, 144))
                                     .build(),
                             ShaderEntryPoint.builder("fragmentMain",
                                             ShaderStage.FRAGMENT)
                                     .builtins(ShaderBuiltinUsage.POSITION, -1)
                                     .inputs(fragmentDepth)
+                                    .resources(ShaderResourceUse.of(0, 0, 144))
                                     .outputs(fragmentColor)
                                     .build()
                     },
@@ -600,6 +814,8 @@ public final class DirectionalShadowMap3D implements Disposable {
                         .shader(shaderModule, TextureFormat.RGBA8_UNORM)
                         .label("directional shadow depth")
                         .shaderReflection(REFLECTION)
+                        .colorTargets(ColorTargetState.opaque(
+                                TextureFormat.RGBA8_UNORM))
                         .primitiveTopology(actualTopology)
                         .depthTestEnabled(true)
                         .depthWriteEnabled(true)

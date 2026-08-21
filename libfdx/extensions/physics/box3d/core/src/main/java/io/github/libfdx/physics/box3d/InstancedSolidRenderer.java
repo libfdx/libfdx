@@ -5,6 +5,7 @@ import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
+import io.github.libfdx.graphics.ColorTargetState;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.GraphicsFeature;
 import io.github.libfdx.graphics.GraphicsFrame;
@@ -59,7 +60,7 @@ final class InstancedSolidRenderer implements Disposable {
     private static final ShaderValueType FLOAT4 = ShaderValueType
             .vector(ShaderScalarType.F32, 4)
             .named("vec4<f32>");
-    private static final ShaderParameterLayout MAIN_UNIFORM_LAYOUT = ShaderParameterLayout.of(416, 16,
+    private static final ShaderParameterLayout MAIN_UNIFORM_LAYOUT = ShaderParameterLayout.of(432, 16,
             ShaderParameter.of("viewProjection", MATRIX4, 0, 64, 16),
             ShaderParameter.of("lightViewProjection0", MATRIX4, 64, 64, 16),
             ShaderParameter.of("lightViewProjection1", MATRIX4, 128, 64, 16),
@@ -73,9 +74,13 @@ final class InstancedSolidRenderer implements Disposable {
             ShaderParameter.of("shadowCameraPosition", FLOAT4, 352, 16, 16),
             ShaderParameter.of("shadowCameraDirection", FLOAT4, 368, 16, 16),
             ShaderParameter.of("shadowFilterParams", FLOAT4, 384, 16, 16),
-            ShaderParameter.of("shadowFilterScales", FLOAT4, 400, 16, 16));
-    private static final ShaderParameterLayout SHADOW_UNIFORM_LAYOUT = ShaderParameterLayout.of(64, 16,
-            ShaderParameter.of("viewProjection", MATRIX4, 0, 64, 16));
+            ShaderParameter.of("shadowFilterScales", FLOAT4, 400, 16, 16),
+            ShaderParameter.of("shadowFadeParams", FLOAT4, 416, 16, 16));
+    private static final ShaderParameterLayout SHADOW_UNIFORM_LAYOUT = ShaderParameterLayout.of(112, 16,
+            ShaderParameter.of("viewProjection", MATRIX4, 0, 64, 16),
+            ShaderParameter.of("fadeCameraPosition", FLOAT4, 64, 16, 16),
+            ShaderParameter.of("fadeCameraDirection", FLOAT4, 80, 16, 16),
+            ShaderParameter.of("fadeParams", FLOAT4, 96, 16, 16));
     private static final ShaderParameterHandle MAIN_VIEW_PROJECTION =
             MAIN_UNIFORM_LAYOUT.requireHandle("viewProjection");
     private static final ShaderParameterHandle LIGHT_VIEW_PROJECTION_0 =
@@ -104,8 +109,16 @@ final class InstancedSolidRenderer implements Disposable {
             MAIN_UNIFORM_LAYOUT.requireHandle("shadowFilterParams");
     private static final ShaderParameterHandle SHADOW_FILTER_SCALES =
             MAIN_UNIFORM_LAYOUT.requireHandle("shadowFilterScales");
+    private static final ShaderParameterHandle SHADOW_FADE_PARAMS_MAIN =
+            MAIN_UNIFORM_LAYOUT.requireHandle("shadowFadeParams");
     private static final ShaderParameterHandle SHADOW_VIEW_PROJECTION =
             SHADOW_UNIFORM_LAYOUT.requireHandle("viewProjection");
+    private static final ShaderParameterHandle SHADOW_FADE_CAMERA_POSITION =
+            SHADOW_UNIFORM_LAYOUT.requireHandle("fadeCameraPosition");
+    private static final ShaderParameterHandle SHADOW_FADE_CAMERA_DIRECTION =
+            SHADOW_UNIFORM_LAYOUT.requireHandle("fadeCameraDirection");
+    private static final ShaderParameterHandle SHADOW_FADE_PARAMS =
+            SHADOW_UNIFORM_LAYOUT.requireHandle("fadeParams");
     private static final String MAIN_SHADER = """
             struct Uniforms {
                 viewProjection : mat4x4<f32>,
@@ -122,6 +135,7 @@ final class InstancedSolidRenderer implements Disposable {
                 shadowCameraDirection : vec4f,
                 shadowFilterParams : vec4f,
                 shadowFilterScales : vec4f,
+                shadowFadeParams : vec4f,
             };
             @group(0) @binding(0) var shadowTexture0 : texture_2d<f32>;
             @group(0) @binding(1) var shadowSampler0 : sampler;
@@ -195,17 +209,26 @@ final class InstancedSolidRenderer implements Disposable {
                 }
                 return uniforms.shadowFilterScales.x;
             }
-            fn sampleShadowDepth(cascadeIndex : i32, uv : vec2f) -> f32 {
+            fn shadowCascadeNear(cascadeIndex : i32) -> f32 {
                 if (cascadeIndex == 1) {
-                    return unpackShadowDepth(textureSampleLevel(
-                            shadowTexture1, shadowSampler1, uv, 0.0));
+                    return uniforms.shadowCascadeSplits.x;
                 }
                 if (cascadeIndex == 2) {
-                    return unpackShadowDepth(textureSampleLevel(
-                            shadowTexture2, shadowSampler2, uv, 0.0));
+                    return uniforms.shadowCascadeSplits.y;
                 }
-                return unpackShadowDepth(textureSampleLevel(
-                        shadowTexture0, shadowSampler0, uv, 0.0));
+                return 0.0;
+            }
+            fn sampleShadow(cascadeIndex : i32, uv : vec2f) -> vec4f {
+                if (cascadeIndex == 1) {
+                    return textureSampleLevel(shadowTexture1,
+                            shadowSampler1, uv, 0.0);
+                }
+                if (cascadeIndex == 2) {
+                    return textureSampleLevel(shadowTexture2,
+                            shadowSampler2, uv, 0.0);
+                }
+                return textureSampleLevel(shadowTexture0,
+                        shadowSampler0, uv, 0.0);
             }
             fn sampleVisibility(cascadeIndex : i32, uv : vec2f,
                     currentDepth : f32, receiverBias : f32, offset : vec2f) -> f32 {
@@ -214,9 +237,11 @@ final class InstancedSolidRenderer implements Disposable {
                         || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
                     return 1.0;
                 }
-                let closest = sampleShadowDepth(cascadeIndex, sampleUv);
+                let casterSample = sampleShadow(cascadeIndex, sampleUv);
+                let closest = unpackShadowDepth(casterSample);
                 if (currentDepth - receiverBias > closest) {
-                    return 1.0 - uniforms.shadowParams.y;
+                    return 1.0 - uniforms.shadowParams.y
+                            * casterSample.a;
                 }
                 return 1.0;
             }
@@ -281,26 +306,21 @@ final class InstancedSolidRenderer implements Disposable {
                 if (cascadeCount > 2 && viewDistance > uniforms.shadowCascadeSplits.y) {
                     cascadeIndex = 2;
                 }
-                if (viewDistance > shadowSplit(cascadeCount - 1)) {
+                if (viewDistance > uniforms.shadowFadeParams.z) {
                     return 1.0;
                 }
                 let normalDotLight = max(dot(normalize(normal),
                         normalize(-uniforms.lightDirection.xyz)), 0.0);
                 var visibility = cascadeVisibility(cascadeIndex, worldPosition, normalDotLight);
                 if (cascadeIndex + 1 < cascadeCount) {
-                    var splitNear = 0.0;
-                    if (cascadeIndex == 1) {
-                        splitNear = uniforms.shadowCascadeSplits.x;
-                    }
-                    if (cascadeIndex == 2) {
-                        splitNear = uniforms.shadowCascadeSplits.y;
-                    }
+                    let splitNear = shadowCascadeNear(cascadeIndex);
                     let splitFar = shadowSplit(cascadeIndex);
                     let blendWidth = max((splitFar - splitNear)
                             * uniforms.shadowFilterParams.w, 0.0001);
                     let blendStart = splitFar - blendWidth;
                     if (viewDistance > blendStart) {
-                        let blend = clamp((viewDistance - blendStart) / blendWidth, 0.0, 1.0);
+                        let blend = smoothstep(blendStart, splitFar,
+                                viewDistance);
                         visibility = mix(visibility,
                                 cascadeVisibility(cascadeIndex + 1, worldPosition,
                                         normalDotLight), blend);
@@ -326,6 +346,9 @@ final class InstancedSolidRenderer implements Disposable {
     private static final String SHADOW_SHADER = """
             struct Uniforms {
                 viewProjection : mat4x4<f32>,
+                fadeCameraPosition : vec4f,
+                fadeCameraDirection : vec4f,
+                fadeParams : vec4f,
             };
             @group(0) @binding(0) var<uniform> uniforms : Uniforms;
             struct VertexInput {
@@ -338,6 +361,7 @@ final class InstancedSolidRenderer implements Disposable {
             struct VertexOutput {
                 @builtin(position) position : vec4f,
                 @location(0) depth : f32,
+                @location(1) @interpolate(flat) casterOpacity : f32,
             };
             @vertex fn vertexMain(input : VertexInput) -> VertexOutput {
                 var output : VertexOutput;
@@ -346,12 +370,25 @@ final class InstancedSolidRenderer implements Disposable {
                 output.position = clip;
                 output.position.z = clip.z * 0.5 + clip.w * 0.5;
                 output.depth = (clip.z / clip.w) * 0.5 + 0.5;
+                output.casterOpacity = 1.0;
+                if (uniforms.fadeParams.z > 0.5) {
+                    let cameraDirection = normalize(
+                            uniforms.fadeCameraDirection.xyz);
+                    let instanceCenter = input.model3.xyz;
+                    let viewDistance = dot(instanceCenter
+                                    - uniforms.fadeCameraPosition.xyz,
+                            cameraDirection);
+                    output.casterOpacity = 1.0 - smoothstep(
+                            uniforms.fadeParams.x, uniforms.fadeParams.y,
+                            viewDistance);
+                }
                 return output;
             }
             @fragment fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
                 let depth = clamp(input.depth, 0.0, 0.999999);
                 let raw = fract(depth * vec2f(1.0, 255.0));
-                return vec4f(raw.x - raw.y / 255.0, raw.y, 0.0, 1.0);
+                return vec4f(raw.x - raw.y / 255.0, raw.y, 0.0,
+                        input.casterOpacity);
             }
             """;
 
@@ -399,6 +436,8 @@ final class InstancedSolidRenderer implements Disposable {
         shadowPipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
                 .shader(shadowShader, TextureFormat.RGBA8_UNORM)
                 .label("box3d instanced shadows")
+                .colorTargets(ColorTargetState.opaque(
+                        TextureFormat.RGBA8_UNORM))
                 .primitiveTopology(PrimitiveTopology.TRIANGLE_LIST)
                 .vertexLayouts(VERTEX_LAYOUT, INSTANCE_LAYOUT)
                 .depthTestEnabled(true)
@@ -441,11 +480,27 @@ final class InstancedSolidRenderer implements Disposable {
         if(!supported() || !hasInstances()) {
             return;
         }
+        Vector3 fadeCameraPosition = shadowMap.viewCameraPosition();
+        Vector3 fadeCameraDirection = shadowMap.viewCameraDirection();
+        float fadeEnd = shadowMap.viewCameraFar();
+        float fadeWidth = (fadeEnd - shadowMap.viewCameraNear())
+                * shadowMap.shadowFadeFraction();
         for(int cascadeIndex = 0; cascadeIndex < shadowMap.cascadeCount(); cascadeIndex++) {
+            boolean fadeCascade = cascadeIndex == shadowMap.cascadeCount() - 1
+                    && fadeWidth > 0.0f;
             DirectionalShadowMap3D cascade = shadowMap.cascade(cascadeIndex);
             cascade.render(light, (pass, viewProjection) -> {
                 viewProjection.copyValues(shadowPassMatrix, 0);
                 shadowUniformBlock.setFloatMatrix(SHADOW_VIEW_PROJECTION, shadowPassMatrix, 0);
+                shadowUniformBlock.setFloat4(SHADOW_FADE_CAMERA_POSITION,
+                        fadeCameraPosition.x(), fadeCameraPosition.y(),
+                        fadeCameraPosition.z(), 0.0f);
+                shadowUniformBlock.setFloat4(SHADOW_FADE_CAMERA_DIRECTION,
+                        fadeCameraDirection.x(), fadeCameraDirection.y(),
+                        fadeCameraDirection.z(), 0.0f);
+                shadowUniformBlock.setFloat4(SHADOW_FADE_PARAMS,
+                        fadeEnd - fadeWidth, fadeEnd,
+                        fadeCascade ? 1.0f : 0.0f, 0.0f);
                 pass.setPipeline(shadowPipeline);
                 pass.setParameterBlock(0, 0, shadowUniformBlock);
                 for(int i = 0; i < geometries.size(); i++) {
@@ -502,13 +557,19 @@ final class InstancedSolidRenderer implements Disposable {
         mainUniformBlock.setFloat4(SHADOW_FILTER_PARAMS,
                 1.0f / Math.max(1, cascade0.texture().width()),
                 1.0f / Math.max(1, cascade0.texture().height()),
-                1.2f, 0.10f);
+                1.2f, shadowMap.shadowFadeFraction());
         float firstHalfSize = shadowMap.cascadeHalfSize(0);
         mainUniformBlock.setFloat4(SHADOW_FILTER_SCALES,
                 1.0f,
                 filterScale(firstHalfSize, halfSize(shadowMap, 1)),
                 filterScale(firstHalfSize, halfSize(shadowMap, 2)),
                 0.0f);
+        float fadeEnd = shadowMap.viewCameraFar();
+        float fadeWidth = (fadeEnd - shadowMap.viewCameraNear())
+                * shadowMap.shadowFadeFraction();
+        mainUniformBlock.setFloat4(SHADOW_FADE_PARAMS_MAIN,
+                fadeEnd - fadeWidth, fadeEnd,
+                shadowMap.viewCameraCoverageFar(), 0.0f);
 
         GraphicsFrame frame = graphics.currentFrame();
         RenderPass pass = frame.commandEncoder().beginRenderPass(mainPassDescriptor

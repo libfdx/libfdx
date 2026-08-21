@@ -137,6 +137,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 shadowCameraUp : vec4f,
                 shadowCameraParams : vec4f,
                 shadowFilterParams : vec4f,
+                shadowFilterScales : vec4f,
                 //__PBR_SKINNED_UNIFORMS__
             };
             @group(0) @binding(0) var baseColorTexture : texture_2d<f32>;
@@ -292,29 +293,33 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             fn unpackShadowDepth(encodedDepth : vec4f) -> f32 {
                 return encodedDepth.r + encodedDepth.g / 255.0;
             }
-            fn shadowDepth(cascadeIndex : i32, uv : vec2f) -> f32 {
+            fn shadowSample(cascadeIndex : i32, uv : vec2f) -> vec4f {
                 if (cascadeIndex == 1) {
-                    return unpackShadowDepth(
-                            textureSampleLevel(shadowTexture1, shadowSampler1, uv, 0.0));
+                    return textureSampleLevel(shadowTexture1,
+                            shadowSampler1, uv, 0.0);
                 }
                 if (cascadeIndex == 2) {
-                    return unpackShadowDepth(
-                            textureSampleLevel(shadowTexture2, shadowSampler2, uv, 0.0));
+                    return textureSampleLevel(shadowTexture2,
+                            shadowSampler2, uv, 0.0);
                 }
                 if (cascadeIndex == 3) {
-                    return unpackShadowDepth(
-                            textureSampleLevel(shadowTexture3, shadowSampler3, uv, 0.0));
+                    return textureSampleLevel(shadowTexture3,
+                            shadowSampler3, uv, 0.0);
                 }
-                return unpackShadowDepth(
-                        textureSampleLevel(shadowTexture0, shadowSampler0, uv, 0.0));
+                return textureSampleLevel(shadowTexture0,
+                        shadowSampler0, uv, 0.0);
             }
             fn shadowViewDistance(worldPosition : vec3f) -> f32 {
                 return dot(worldPosition - uniforms.shadowCameraPosition.xyz,
                         normalize(uniforms.shadowCameraDirection.xyz));
             }
+            fn usesShadowViewCamera() -> bool {
+                return uniforms.shadowCameraParams.y
+                                > uniforms.shadowCameraParams.x
+                        && uniforms.shadowCameraParams.z > 0.0;
+            }
             fn insideShadowCameraFrustum(worldPosition : vec3f, viewDistance : f32) -> bool {
-                if (uniforms.shadowCameraParams.y <= uniforms.shadowCameraParams.x
-                        || uniforms.shadowCameraParams.z <= 0.0) {
+                if (!usesShadowViewCamera()) {
                     return true;
                 }
                 if (viewDistance < uniforms.shadowCameraParams.x || viewDistance > uniforms.shadowCameraParams.y) {
@@ -335,6 +340,13 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     return -1;
                 }
                 if (cascadeCount == 1) {
+                    if (usesShadowViewCamera()) {
+                        let viewDistance = shadowViewDistance(worldPosition);
+                        if (!insideShadowCameraFrustum(worldPosition,
+                                viewDistance)) {
+                            return -1;
+                        }
+                    }
                     return 0;
                 }
                 let viewDistance = shadowViewDistance(worldPosition);
@@ -377,26 +389,104 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 }
                 return uniforms.shadowBiases.x;
             }
-            fn shadowVisibility(cascadeIndex : i32, uv : vec2f, currentDepth : f32,
-                    bias : f32, offset : vec2f) -> f32 {
-                let sampleUv = uv + offset;
+            fn shadowSplit(cascadeIndex : i32) -> f32 {
+                if (cascadeIndex == 1) {
+                    return uniforms.shadowCascadeSplits.y;
+                }
+                if (cascadeIndex == 2) {
+                    return uniforms.shadowCascadeSplits.z;
+                }
+                if (cascadeIndex == 3) {
+                    return uniforms.shadowCascadeSplits.w;
+                }
+                return uniforms.shadowCascadeSplits.x;
+            }
+            fn shadowFilterScale(cascadeIndex : i32) -> f32 {
+                if (cascadeIndex == 1) {
+                    return uniforms.shadowFilterScales.y;
+                }
+                if (cascadeIndex == 2) {
+                    return uniforms.shadowFilterScales.z;
+                }
+                if (cascadeIndex == 3) {
+                    return uniforms.shadowFilterScales.w;
+                }
+                return uniforms.shadowFilterScales.x;
+            }
+            fn shadowCascadeNear(cascadeIndex : i32) -> f32 {
+                if (cascadeIndex == 1) {
+                    return uniforms.shadowCascadeSplits.x;
+                }
+                if (cascadeIndex == 2) {
+                    return uniforms.shadowCascadeSplits.y;
+                }
+                if (cascadeIndex == 3) {
+                    return uniforms.shadowCascadeSplits.z;
+                }
+                return uniforms.shadowCameraParams.x;
+            }
+            fn normalizedShadowVisibility(visibility : f32) -> f32 {
+                return visibility / 256.0;
+            }
+            fn shadowComparison(cascadeIndex : i32, receiverUv : vec2f,
+                    sampleUv : vec2f, receiverDepth : f32,
+                    depthGradient : vec2f, bias : f32) -> f32 {
                 // Samples beyond a cascade contain no shadow caster. Treat
                 // them as lit instead of repeating the texture's edge texel.
                 if (sampleUv.x < 0.0 || sampleUv.x > 1.0
                         || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
                     return 1.0;
                 }
-                let closestDepth = shadowDepth(cascadeIndex, sampleUv);
+                let casterSample = shadowSample(cascadeIndex, sampleUv);
+                let closestDepth = unpackShadowDepth(casterSample);
+                // PCF taps address neighboring positions on the receiver.
+                // Correct their comparison depth using the receiver plane;
+                // reusing the center depth produces long comb-shaped edges
+                // when a coarse cascade projects onto a sloped surface.
+                let currentDepth = receiverDepth
+                        + dot(depthGradient, sampleUv - receiverUv);
                 if (currentDepth - bias > closestDepth) {
-                    return 1.0 - uniforms.shadowParams.z;
+                    return 1.0 - uniforms.shadowParams.z
+                            * casterSample.a;
                 }
                 return 1.0;
             }
-            fn directionalShadow(worldPosition : vec3f) -> f32 {
-                let cascadeIndex = shadowCascadeIndex(worldPosition);
-                if (cascadeIndex < 0) {
+            fn shadowVisibility(cascadeIndex : i32, uv : vec2f, currentDepth : f32,
+                    depthGradient : vec2f, bias : f32, offset : vec2f) -> f32 {
+                let sampleUv = uv + offset;
+                if (sampleUv.x < 0.0 || sampleUv.x > 1.0
+                        || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
                     return 1.0;
                 }
+                // Depth is packed across RG, so native linear filtering would
+                // interpolate the encoded bytes and corrupt the value. Keep
+                // the texture nearest-filtered and bilinearly interpolate
+                // four comparison results instead. This matches linear PCF
+                // behavior and removes whole-texel stair steps in distant
+                // cascades without changing the stored depth representation.
+                let texelSize = max(uniforms.shadowFilterParams.xy,
+                        vec2f(0.000001));
+                let texelPosition = sampleUv / texelSize - vec2f(0.5);
+                let baseTexel = floor(texelPosition);
+                let blend = fract(texelPosition);
+                let uv00 = (baseTexel + vec2f(0.5, 0.5)) * texelSize;
+                let uv10 = (baseTexel + vec2f(1.5, 0.5)) * texelSize;
+                let uv01 = (baseTexel + vec2f(0.5, 1.5)) * texelSize;
+                let uv11 = (baseTexel + vec2f(1.5, 1.5)) * texelSize;
+                let visibility00 = shadowComparison(cascadeIndex, uv, uv00,
+                        currentDepth, depthGradient, bias);
+                let visibility10 = shadowComparison(cascadeIndex, uv, uv10,
+                        currentDepth, depthGradient, bias);
+                let visibility01 = shadowComparison(cascadeIndex, uv, uv01,
+                        currentDepth, depthGradient, bias);
+                let visibility11 = shadowComparison(cascadeIndex, uv, uv11,
+                        currentDepth, depthGradient, bias);
+                return mix(mix(visibility00, visibility10, blend.x),
+                        mix(visibility01, visibility11, blend.x), blend.y);
+            }
+            fn cascadeShadow(cascadeIndex : i32, worldPosition : vec3f,
+                    worldPositionDx : vec3f, worldPositionDy : vec3f,
+                    normalDotLight : f32) -> f32 {
                 let lightClip = shadowLightClip(cascadeIndex, worldPosition);
                 if (abs(lightClip.w) <= 0.000001) {
                     return 1.0;
@@ -413,11 +503,50 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     return 1.0;
                 }
                 let currentDepth = ndc.z * 0.5 + 0.5;
-                let bias = shadowBias(cascadeIndex);
+                // Convert screen-space world-position derivatives into a
+                // light-space depth gradient over shadow UV. This lets every
+                // PCF tap compare against the depth of the same receiver
+                // plane at that tap, which is essential for walls and other
+                // surfaces seen by the light at a grazing angle.
+                let lightClipDx = shadowLightClip(cascadeIndex,
+                        worldPosition + worldPositionDx);
+                let lightClipDy = shadowLightClip(cascadeIndex,
+                        worldPosition + worldPositionDy);
+                let ndcDx = lightClipDx.xyz / lightClipDx.w - ndc;
+                let ndcDy = lightClipDy.xyz / lightClipDy.w - ndc;
+                let uvDx = vec2f(ndcDx.x * 0.5,
+                        ndcDx.y * 0.5 * uniforms.shadowParams.w);
+                let uvDy = vec2f(ndcDy.x * 0.5,
+                        ndcDy.y * 0.5 * uniforms.shadowParams.w);
+                let depthDx = ndcDx.z * 0.5;
+                let depthDy = ndcDy.z * 0.5;
+                let gradientDeterminant = uvDx.x * uvDy.y
+                        - uvDx.y * uvDy.x;
+                var depthGradient = vec2f(0.0);
+                if (abs(gradientDeterminant) > 0.0000000001) {
+                    depthGradient = vec2f(
+                            (depthDx * uvDy.y - uvDx.y * depthDy)
+                                    / gradientDeterminant,
+                            (uvDx.x * depthDy - depthDx * uvDy.x)
+                                    / gradientDeterminant);
+                }
+                // Constant bias is not enough on receivers that are nearly
+                // parallel to the light direction. In a coarse cascade, a
+                // small depth quantization error otherwise stretches into
+                // long self-shadow teeth across walls and other steep faces.
+                // Keep the configured cascade bias as the floor, then apply
+                // the same resolution-aware slope bias used by the Box3D
+                // solid renderer.
+                let biasResolutionScale = max(
+                        uniforms.shadowFilterParams.x * 2048.0, 1.0);
+                let receiverBias = max(shadowBias(cascadeIndex),
+                        mix(0.0040, 0.0008, normalDotLight)
+                                * biasResolutionScale);
+                let filterScale = shadowFilterScale(cascadeIndex);
                 let radiusX = max(uniforms.shadowFilterParams.x, 0.000001)
-                        * uniforms.shadowFilterParams.z;
+                        * uniforms.shadowFilterParams.z * filterScale;
                 let radiusY = max(uniforms.shadowFilterParams.y, 0.000001)
-                        * uniforms.shadowFilterParams.z;
+                        * uniforms.shadowFilterParams.z * filterScale;
                 // Approximate the 1-4-6-4-1 Gaussian footprint with nine
                 // weighted taps instead of twenty-five texture fetches.
                 let x0 = -1.2 * radiusX;
@@ -426,25 +555,64 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 let y0 = -1.2 * radiusY;
                 let y1 = 0.0;
                 let y2 = 1.2 * radiusY;
-                var visibility = shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                var visibility = shadowVisibility(cascadeIndex, uv, currentDepth,
+                        depthGradient, receiverBias,
                         vec2f(x0, y0)) * 25.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
+                        depthGradient, receiverBias,
                         vec2f(x1, y0)) * 30.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
+                        depthGradient, receiverBias,
                         vec2f(x2, y0)) * 25.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
+                        depthGradient, receiverBias,
                         vec2f(x0, y1)) * 30.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
+                        depthGradient, receiverBias,
                         vec2f(x1, y1)) * 36.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
+                        depthGradient, receiverBias,
                         vec2f(x2, y1)) * 30.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
+                        depthGradient, receiverBias,
                         vec2f(x0, y2)) * 25.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
+                        depthGradient, receiverBias,
                         vec2f(x1, y2)) * 30.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth, bias,
+                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
+                        depthGradient, receiverBias,
                         vec2f(x2, y2)) * 25.0;
-                return visibility / 256.0;
+                return normalizedShadowVisibility(visibility);
+            }
+            fn directionalShadow(worldPosition : vec3f, normal : vec3f,
+                    worldPositionDx : vec3f, worldPositionDy : vec3f) -> f32 {
+                let cascadeIndex = shadowCascadeIndex(worldPosition);
+                if (cascadeIndex < 0) {
+                    return 1.0;
+                }
+                let normalDotLight = max(dot(normalize(normal),
+                        normalize(-uniforms.lightDirection.xyz)), 0.0);
+                var visibility = cascadeShadow(cascadeIndex, worldPosition,
+                        worldPositionDx, worldPositionDy, normalDotLight);
+                let cascadeCount = i32(clamp(uniforms.shadowParams.x, 0.0, 4.0));
+                if (usesShadowViewCamera()
+                        && cascadeIndex + 1 < cascadeCount) {
+                    let viewDistance = shadowViewDistance(worldPosition);
+                    let splitNear = shadowCascadeNear(cascadeIndex);
+                    let splitFar = shadowSplit(cascadeIndex);
+                    let blendWidth = max((splitFar - splitNear)
+                            * uniforms.shadowFilterParams.w, 0.0001);
+                    let blendStart = splitFar - blendWidth;
+                    if (viewDistance > blendStart) {
+                        let blend = smoothstep(blendStart, splitFar,
+                                viewDistance);
+                        visibility = mix(visibility,
+                                cascadeShadow(cascadeIndex + 1, worldPosition,
+                                        worldPositionDx, worldPositionDy,
+                                        normalDotLight), blend);
+                    }
+                }
+                return visibility;
             }
             //__PBR_SURFACE_GRAPH_DECLARATIONS__
             @fragment
@@ -472,6 +640,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     emissive *= srgbToLinear(textureSample(emissiveTexture, emissiveSampler, uv).rgb);
                 }
                 var n = mappedNormal(input.normal, input.worldPosition, uv);
+                let worldPositionDx = dpdx(input.worldPosition);
+                let worldPositionDy = dpdy(input.worldPosition);
                 //__PBR_SURFACE_GRAPH_EVALUATION__
                 let albedo = base.rgb;
                 let lightingInfluence = clamp(uniforms.materialParams.x,
@@ -482,7 +652,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 let l = normalize(-uniforms.lightDirection.xyz);
                 let radiance = uniforms.lightColorIntensity.rgb * uniforms.lightColorIntensity.a;
                 let shadowInfluence = clamp(uniforms.materialParams.y, 0.0, 1.0);
-                let shadow = mix(1.0, directionalShadow(input.worldPosition), shadowInfluence);
+                let shadow = mix(1.0,
+                        directionalShadow(input.worldPosition, n,
+                                worldPositionDx, worldPositionDy),
+                        shadowInfluence);
                 color = pbrLightContribution(n, v, l, albedo, metallic, roughness, radiance * shadow);
                 let fillRadiance = uniforms.fillLightColorIntensity.rgb
                         * uniforms.fillLightColorIntensity.a;
@@ -2335,6 +2508,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                         0.0f, 0.0f, 0.0f, 1.0f);
                 uniforms.setUniform4f(uniforms.SHADOW_FILTER_PARAMS,
                         0.0f, 0.0f, 0.0f, 0.0f);
+                uniforms.setUniform4f(uniforms.SHADOW_FILTER_SCALES,
+                        1.0f, 1.0f, 1.0f, 1.0f);
                 return;
             }
             shadowMap.lightViewProjection().copyValues(shadowMatrix, 0);
@@ -2360,7 +2535,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             uniforms.setUniform4f(uniforms.SHADOW_FILTER_PARAMS,
                     1.0f / Math.max(1, shadowMap.texture().width()),
                     1.0f / Math.max(1, shadowMap.texture().height()),
-                    1.35f, 0.0f);
+                    1.35f, shadowMap.shadowFadeFraction());
+            uniforms.setUniform4f(uniforms.SHADOW_FILTER_SCALES,
+                    1.0f, 1.0f, 1.0f, 1.0f);
         }
 
         private void applyCascadedDirectionalShadow(RenderPass pass, CascadedShadowMap3D cascaded) {
@@ -2415,13 +2592,38 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             uniforms.setUniform4f(uniforms.SHADOW_CAMERA_UP,
                     shadowCameraUp.x(), shadowCameraUp.y(), shadowCameraUp.z(), 0.0f);
             uniforms.setUniform4f(uniforms.SHADOW_CAMERA_PARAMS,
-                    cascaded.viewCameraNear(), cascaded.viewCameraFar(),
+                    cascaded.viewCameraNear(),
+                    cascaded.viewCameraCoverageFar(),
                     cascaded.viewCameraTanHalfFov(), cascaded.viewCameraAspect());
             DirectionalShadowMap3D firstCascade = cascadeCount > 0 ? cascaded.cascade(0) : null;
             uniforms.setUniform4f(uniforms.SHADOW_FILTER_PARAMS,
                     firstCascade != null ? 1.0f / Math.max(1, firstCascade.texture().width()) : 0.0f,
                     firstCascade != null ? 1.0f / Math.max(1, firstCascade.texture().height()) : 0.0f,
-                    1.35f, 0.0f);
+                    1.35f, cascaded.shadowFadeFraction());
+            float firstHalfSize = cascadeCount > 0
+                    ? cascaded.cascadeHalfSize(0) : 1.0f;
+            uniforms.setUniform4f(uniforms.SHADOW_FILTER_SCALES,
+                    cascadeFilterScale(cascaded, cascadeCount, firstHalfSize, 0),
+                    cascadeFilterScale(cascaded, cascadeCount, firstHalfSize, 1),
+                    cascadeFilterScale(cascaded, cascadeCount, firstHalfSize, 2),
+                    cascadeFilterScale(cascaded, cascadeCount, firstHalfSize, 3));
+        }
+
+        private static float cascadeFilterScale(CascadedShadowMap3D cascaded,
+                int cascadeCount, float firstHalfSize, int cascadeIndex) {
+            if (cascadeIndex <= 0 || cascadeIndex >= cascadeCount) {
+                return 1.0f;
+            }
+            float halfSize = cascaded.cascadeHalfSize(cascadeIndex);
+            if (halfSize <= 0.0f) {
+                return 1.0f;
+            }
+            // Keep approximately constant world-space softness across
+            // cascades. Manual bilinear comparison filtering keeps sub-texel
+            // footprints stable, so distant cascades no longer need the old
+            // large minimum that visibly blurred their shadow edges.
+            return Math.max(0.10f, Math.min(1.0f,
+                    firstHalfSize / halfSize));
         }
 
         private float shadowYSign() {

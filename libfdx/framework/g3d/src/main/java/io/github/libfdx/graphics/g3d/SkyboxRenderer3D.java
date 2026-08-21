@@ -75,31 +75,44 @@ public final class SkyboxRenderer3D implements Disposable {
                 return output;
             }
 
-            fn hashNoise(point : vec2f) -> f32 {
-                var value = fract(vec3f(point.x, point.y, point.x) * 0.1031);
+            fn hashNoise(point : vec3f) -> f32 {
+                var value = fract(point * 0.1031);
                 let offset = dot(value, value.yzx + vec3f(33.33));
                 value = value + vec3f(offset);
                 return fract((value.x + value.y) * value.z);
             }
 
-            fn valueNoise(point : vec2f) -> f32 {
+            fn valueNoise(point : vec3f) -> f32 {
                 let cell = floor(point);
                 let local = fract(point);
-                let blend = local * local * (vec2f(3.0) - 2.0 * local);
-                let low = mix(hashNoise(cell),
-                        hashNoise(cell + vec2f(1.0, 0.0)), blend.x);
-                let high = mix(hashNoise(cell + vec2f(0.0, 1.0)),
-                        hashNoise(cell + vec2f(1.0, 1.0)), blend.x);
-                return mix(low, high, blend.y);
+                let blend = local * local * (vec3f(3.0) - 2.0 * local);
+                let nearLow = mix(hashNoise(cell),
+                        hashNoise(cell + vec3f(1.0, 0.0, 0.0)), blend.x);
+                let nearHigh = mix(hashNoise(cell + vec3f(0.0, 1.0, 0.0)),
+                        hashNoise(cell + vec3f(1.0, 1.0, 0.0)), blend.x);
+                let farLow = mix(hashNoise(cell + vec3f(0.0, 0.0, 1.0)),
+                        hashNoise(cell + vec3f(1.0, 0.0, 1.0)), blend.x);
+                let farHigh = mix(hashNoise(cell + vec3f(0.0, 1.0, 1.0)),
+                        hashNoise(cell + vec3f(1.0, 1.0, 1.0)), blend.x);
+                return mix(mix(nearLow, nearHigh, blend.y),
+                        mix(farLow, farHigh, blend.y), blend.z);
             }
 
-            fn skyFbm(point : vec2f) -> f32 {
+            fn rotateCloudDomain(point : vec3f) -> vec3f {
+                return vec3f(dot(point, vec3f(0.0, 0.8, 0.6)),
+                        dot(point, vec3f(-0.8, 0.36, -0.48)),
+                        dot(point, vec3f(-0.6, -0.48, 0.64)));
+            }
+
+            fn skyFbm(point : vec3f) -> f32 {
                 var samplePoint = point;
-                var value = valueNoise(samplePoint) * 0.62;
-                samplePoint = samplePoint * 2.03 + vec2f(7.1, 3.7);
-                value = value + valueNoise(samplePoint) * 0.27;
-                samplePoint = samplePoint * 2.01 + vec2f(5.2, 8.3);
-                return value + valueNoise(samplePoint) * 0.11;
+                var value = valueNoise(samplePoint) * 0.58;
+                samplePoint = rotateCloudDomain(samplePoint) * 2.03
+                        + vec3f(7.1, 3.7, 5.9);
+                value = value + valueNoise(samplePoint) * 0.28;
+                samplePoint = rotateCloudDomain(samplePoint) * 2.01
+                        + vec3f(5.2, 8.3, 2.8);
+                return value + valueNoise(samplePoint) * 0.14;
             }
 
             @fragment
@@ -119,24 +132,16 @@ public final class SkyboxRenderer3D implements Disposable {
                 var rgb = mix(color.rgb, input.sunColor.rgb, disc * input.sunColor.a);
                 rgb = rgb + input.sunColor.rgb * glow * input.sunColor.a * 0.16;
 
-                let cloudFade = smoothstep(-0.02, 0.16, ray.y);
-                let cloudCoordinates = ray.xz * 4.1
-                        + vec2f(ray.y * 1.7, ray.y * -1.1);
-                let cloudBase = skyFbm(cloudCoordinates + vec2f(2.7, -1.8));
-                let cloudDetail = valueNoise(cloudCoordinates * 4.7
-                        + vec2f(-4.3, 6.1));
-                let cloudShape = smoothstep(0.54, 0.72,
-                        cloudBase + cloudDetail * 0.13) * cloudFade;
+                let cloudFade = smoothstep(-0.03, 0.16, ray.y);
+                let cloudBase = skyFbm(ray * 5.2 + vec3f(2.7, -1.8, 4.4));
+                let cloudShape = smoothstep(0.55, 0.71, cloudBase) * cloudFade;
+                let cloudCore = smoothstep(0.66, 0.82, cloudBase);
                 let sunLight = clamp(sunDirection.y * 0.55 + 0.45, 0.0, 1.0);
-                let cloudColor = mix(vec3f(0.58, 0.64, 0.72),
-                        vec3f(1.0, 0.97, 0.91), sunLight);
-                rgb = mix(rgb, cloudColor, cloudShape * 0.46);
-
-                let cirrusNoise = valueNoise(cloudCoordinates * 8.5
-                        + vec2f(8.4, 2.2));
-                let cirrus = smoothstep(0.66, 0.80, cirrusNoise)
-                        * smoothstep(0.05, 0.35, ray.y) * 0.14;
-                rgb = mix(rgb, vec3f(0.88, 0.92, 0.98), cirrus);
+                let cloudLighting = clamp(0.42 + sunLight * 0.38
+                        + cloudCore * 0.20, 0.0, 1.0);
+                let cloudColor = mix(vec3f(0.62, 0.68, 0.76),
+                        vec3f(1.0, 0.98, 0.94), cloudLighting);
+                rgb = mix(rgb, cloudColor, cloudShape * 0.34);
                 return vec4f(rgb, 1.0);
             }
             """;
