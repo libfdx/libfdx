@@ -22,7 +22,6 @@ import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
 import io.github.libfdx.graphics.g3d.SkyboxRenderer3D;
 import io.github.libfdx.math.Color;
-import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.tests.TestFpsLogger;
 
 import java.nio.ByteBuffer;
@@ -126,7 +125,7 @@ public final class Skybox3DTest extends ApplicationAdapter {
         camera.viewport(framebufferWidth(), framebufferHeight());
         float seconds = renderedFrames / 60.0f;
         cameraInput.update(deltaSeconds);
-        instance.transform(Matrix4.rotationY(seconds * 0.35f));
+        instance.transform().setToRotationY(seconds * 0.35f);
 
         skybox.begin(LoadOp.clear(0.0f, 0.0f, 0.0f, 1.0f));
         skybox.draw(camera);

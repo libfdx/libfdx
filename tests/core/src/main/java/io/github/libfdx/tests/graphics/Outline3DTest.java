@@ -24,7 +24,6 @@ import io.github.libfdx.graphics.g3d.Material;
 import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
-import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.math.Vector3;
 import io.github.libfdx.tests.TestFpsLogger;
 
@@ -166,16 +165,16 @@ public final class Outline3DTest extends ApplicationAdapter {
 
     private DefaultModelInstance[] createInstances(Model model) {
         DefaultModelInstance[] result = new DefaultModelInstance[3];
-        result[0] = new DefaultModelInstance(model)
-                .transform(Matrix4.translation(-0.95f, -0.05f, -0.65f)
-                        .multiply(Matrix4.rotationY(-0.42f)));
-        result[1] = new DefaultModelInstance(model)
-                .transform(Matrix4.translation(0.18f, 0.25f, -1.55f)
-                        .multiply(Matrix4.rotationY(0.38f))
-                        .multiply(Matrix4.rotationX(-0.18f)));
-        result[2] = new DefaultModelInstance(model)
-                .transform(Matrix4.translation(1.10f, -0.12f, -2.25f)
-                        .multiply(Matrix4.rotationY(0.72f)));
+        result[0] = new DefaultModelInstance(model);
+        result[0].transform().setToTranslation(-0.95f, -0.05f, -0.65f)
+                .rotateY(-0.42f);
+        result[1] = new DefaultModelInstance(model);
+        result[1].transform().setToTranslation(0.18f, 0.25f, -1.55f)
+                .rotateY(0.38f)
+                .rotateX(-0.18f);
+        result[2] = new DefaultModelInstance(model);
+        result[2].transform().setToTranslation(1.10f, -0.12f, -2.25f)
+                .rotateY(0.72f);
         return result;
     }
 

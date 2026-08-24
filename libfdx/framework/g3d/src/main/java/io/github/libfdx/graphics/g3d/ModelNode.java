@@ -11,7 +11,7 @@ import io.github.libfdx.math.Matrix4;
  */
 public final class ModelNode {
     private final String id;
-    private Matrix4 localTransform = Matrix4.IDENTITY;
+    private final Matrix4 localTransform = new Matrix4();
     private final Array<ModelNodePart> parts = new Array<ModelNodePart>();
     private final Array<ModelNode> children = new Array<ModelNode>();
     private final ArrayView<ModelNodePart> readOnlyParts = parts.view();
@@ -33,7 +33,12 @@ public final class ModelNode {
      * @return this model node for chaining
      */
     public ModelNode localTransform(Matrix4 localTransform) {
-        this.localTransform = localTransform != null ? localTransform : Matrix4.IDENTITY;
+        if (localTransform != null) {
+            this.localTransform.set(localTransform);
+        }
+        else {
+            this.localTransform.idt();
+        }
         return this;
     }
 

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CameraTest {
     private static final float EPSILON = 0.0001f;
@@ -130,6 +131,31 @@ class CameraTest {
                 .lookAt(targetX, targetY, 0.0f);
 
         new FreeCameraController3D(null, camera).update(0.0f);
+
+        Ray ray = camera.getPickRay(2549.0f * 0.5f, 1352.0f * 0.5f);
+        assertFinite(ray.origin());
+        assertFinite(ray.direction());
+    }
+
+    @Test
+    void updatesPerspectiveCameraAfterRotatingAtFarWorldCoordinates() {
+        float targetX = 1_000_000.0f;
+        float targetZ = 1_000_000.0f;
+
+        Camera camera = new Camera()
+                .projection(CameraProjection.PERSPECTIVE)
+                .viewport(2549.0f, 1352.0f)
+                .fieldOfView(60.0f)
+                .nearFar(0.1f, 1000.0f)
+                .position(1_000_006.8f, -2.0905693f, 1_000_018.7f)
+                .lookAt(targetX, 0.0f, targetZ);
+
+        new FreeCameraController3D(null, camera).update(0.0f);
+
+        Ray ray = camera.getPickRay(2549.0f * 0.5f, 1352.0f * 0.5f);
+        assertFinite(ray.origin());
+        assertFinite(ray.direction());
+        assertTrue(ray.direction().dot(camera.direction()) > 0.99f);
     }
 
     private static Camera perspectiveCamera(float viewportWidth, float viewportHeight) {
@@ -159,5 +185,11 @@ class CameraTest {
         assertEquals(expectedX, vector.x(), EPSILON);
         assertEquals(expectedY, vector.y(), EPSILON);
         assertEquals(expectedZ, vector.z(), EPSILON);
+    }
+
+    private static void assertFinite(Vector3 vector) {
+        assertTrue(Float.isFinite(vector.x()));
+        assertTrue(Float.isFinite(vector.y()));
+        assertTrue(Float.isFinite(vector.z()));
     }
 }

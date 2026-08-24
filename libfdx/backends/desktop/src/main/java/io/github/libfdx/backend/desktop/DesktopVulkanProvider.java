@@ -6,6 +6,7 @@ import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
 import io.github.libfdx.graphics.BufferUsage;
 import io.github.libfdx.graphics.CommandEncoder;
+import io.github.libfdx.graphics.ColorTargetState;
 import io.github.libfdx.graphics.FrameBuffer;
 import io.github.libfdx.graphics.GraphicsAttachment;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
@@ -392,13 +393,14 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
     private static final int MAX_TEXTURE_DESCRIPTOR_SLOTS = 16;
     private static final int MAX_UNIFORM_DESCRIPTOR_SETS = 4096;
     private static final int MAX_UNIFORM_BYTE_COUNT = 64 * 1024;
-    private static final GraphicsCapabilities CAPABILITIES = GraphicsCapabilities.builder()
+    static final GraphicsCapabilities CAPABILITIES = GraphicsCapabilities.builder()
             .profile(ShaderProfile.PORTABLE_WEBGL2)
             .profile(ShaderProfile.PORTABLE_WEBGPU)
             .profile(ShaderProfile.NATIVE)
             .feature(GraphicsFeature.INDEXED_DRAW)
             .feature(GraphicsFeature.INSTANCED_DRAW)
             .feature(GraphicsFeature.DEPTH_STENCIL_ATTACHMENTS)
+            .feature(GraphicsFeature.ALPHA_BLEND_CONTROL)
             .colorFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
                     TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB)
             .depthStencilFormats(TextureFormat.DEPTH32_FLOAT)
@@ -423,6 +425,10 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
     private static final long DEVICE_DISPOSE_FENCE_TIMEOUT_NS = 250_000_000L;
 
     private VulkanConfiguration configuration = new VulkanConfiguration();
+
+    static boolean blendEnabled(ColorTargetState colorTarget) {
+        return colorTarget.blend() != null;
+    }
 
     /**
      * Returns the identifier of the provider backing this object.
@@ -3406,7 +3412,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 VkPipelineColorBlendAttachmentState.Buffer colorBlendAttachment = VkPipelineColorBlendAttachmentState.calloc(1, stack)
                         .colorWriteMask(VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                                 | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT)
-                        .blendEnable(true)
+                        .blendEnable(blendEnabled(descriptor.colorTargets()[0]))
                         .srcColorBlendFactor(VK_BLEND_FACTOR_SRC_ALPHA)
                         .dstColorBlendFactor(VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA)
                         .colorBlendOp(VK_BLEND_OP_ADD)

@@ -18,6 +18,9 @@ public class FreeCameraController3D extends CameraInputController3D {
     private float positionX;
     private float positionY;
     private float positionZ;
+    private float movementRemainderX;
+    private float movementRemainderY;
+    private float movementRemainderZ;
     private float yawRadians;
     private float pitchRadians;
     private float moveSpeed = 3.4f;
@@ -39,6 +42,9 @@ public class FreeCameraController3D extends CameraInputController3D {
         positionX = x;
         positionY = y;
         positionZ = z;
+        movementRemainderX = 0.0f;
+        movementRemainderY = 0.0f;
+        movementRemainderZ = 0.0f;
         return apply();
     }
 
@@ -138,6 +144,9 @@ public class FreeCameraController3D extends CameraInputController3D {
         CameraMath.directionFromAngles(yawRadians, pitchRadians, up[0], up[1], up[2], direction, right, up);
         if (input != null) {
             float speed = moveSpeed * Math.max(0.0f, deltaSeconds);
+            float movementX = 0.0f;
+            float movementY = 0.0f;
+            float movementZ = 0.0f;
             if (fastActive()) {
                 speed *= fastMultiplier;
             }
@@ -145,22 +154,37 @@ public class FreeCameraController3D extends CameraInputController3D {
                 speed *= boostMultiplier;
             }
             if (key(bindings().forwardKey(), bindings().alternateForwardKey())) {
-                move(direction[0] * speed, direction[1] * speed, direction[2] * speed);
+                movementX += direction[0] * speed;
+                movementY += direction[1] * speed;
+                movementZ += direction[2] * speed;
             }
             if (key(bindings().backwardKey(), bindings().alternateBackwardKey())) {
-                move(-direction[0] * speed, -direction[1] * speed, -direction[2] * speed);
+                movementX -= direction[0] * speed;
+                movementY -= direction[1] * speed;
+                movementZ -= direction[2] * speed;
             }
             if (key(bindings().rightKey(), bindings().alternateRightKey())) {
-                move(right[0] * speed, right[1] * speed, right[2] * speed);
+                movementX += right[0] * speed;
+                movementY += right[1] * speed;
+                movementZ += right[2] * speed;
             }
             if (key(bindings().leftKey(), bindings().alternateLeftKey())) {
-                move(-right[0] * speed, -right[1] * speed, -right[2] * speed);
+                movementX -= right[0] * speed;
+                movementY -= right[1] * speed;
+                movementZ -= right[2] * speed;
             }
             if (key(bindings().upKey(), bindings().alternateUpKey())) {
-                move(up[0] * speed, up[1] * speed, up[2] * speed);
+                movementX += up[0] * speed;
+                movementY += up[1] * speed;
+                movementZ += up[2] * speed;
             }
             if (key(bindings().downKey(), bindings().alternateDownKey())) {
-                move(-up[0] * speed, -up[1] * speed, -up[2] * speed);
+                movementX -= up[0] * speed;
+                movementY -= up[1] * speed;
+                movementZ -= up[2] * speed;
+            }
+            if (movementX != 0.0f || movementY != 0.0f || movementZ != 0.0f) {
+                move(movementX, movementY, movementZ);
             }
         }
         updatePointerState();
@@ -177,9 +201,21 @@ public class FreeCameraController3D extends CameraInputController3D {
     }
 
     private void move(float x, float y, float z) {
-        positionX += x;
-        positionY += y;
-        positionZ += z;
+        // Carry sub-ULP movement forward until the float world position can represent it.
+        movementRemainderX += x;
+        float nextX = positionX + movementRemainderX;
+        movementRemainderX -= nextX - positionX;
+        positionX = nextX;
+
+        movementRemainderY += y;
+        float nextY = positionY + movementRemainderY;
+        movementRemainderY -= nextY - positionY;
+        positionY = nextY;
+
+        movementRemainderZ += z;
+        float nextZ = positionZ + movementRemainderZ;
+        movementRemainderZ -= nextZ - positionZ;
+        positionZ = nextZ;
     }
 
     private void syncAnglesFromCamera() {

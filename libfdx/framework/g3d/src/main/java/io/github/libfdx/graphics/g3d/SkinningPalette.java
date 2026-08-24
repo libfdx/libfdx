@@ -77,16 +77,6 @@ public final class SkinningPalette {
     }
 
     /**
-     * Returns a bone matrix copy.
-     *
-     * @param index the bone index
-     * @return the bone matrix
-     */
-    public Matrix4 boneMatrix(int index) {
-        return copyBoneMatrix(index, new Matrix4());
-    }
-
-    /**
      * Copies a bone matrix.
      *
      * @param index the bone index

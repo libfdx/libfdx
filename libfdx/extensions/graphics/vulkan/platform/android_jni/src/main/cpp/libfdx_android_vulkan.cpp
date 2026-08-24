@@ -2534,7 +2534,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createRenderPipeline(J
         jintArray vertexStridesArray, jintArray vertexStepModesArray, jintArray attributeBindingsArray,
         jintArray attributeLocationsArray, jintArray attributeFormatsArray, jintArray attributeOffsetsArray,
         jint sampledTextureCountValue, jboolean uniformBufferEnabled, jboolean depthTestEnabled,
-        jboolean depthWriteEnabled) {
+        jboolean blendEnabled, jboolean depthWriteEnabled) {
     Context* context = ptr<Context>(contextHandle);
     ShaderModule* shaderModule = ptr<ShaderModule>(shaderModuleHandle);
     Pipeline* pipeline = new Pipeline();
@@ -2641,7 +2641,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createRenderPipeline(J
         VkPipelineColorBlendAttachmentState colorBlendAttachment{};
         colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                 | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        colorBlendAttachment.blendEnable = VK_TRUE;
+        colorBlendAttachment.blendEnable = blendEnabled == JNI_TRUE ? VK_TRUE : VK_FALSE;
         colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
         colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;

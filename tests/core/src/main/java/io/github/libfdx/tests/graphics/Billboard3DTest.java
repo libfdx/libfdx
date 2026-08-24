@@ -29,7 +29,6 @@ import io.github.libfdx.graphics.g3d.MaterialAttributes;
 import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.graphics.g3d.SkyboxRenderer3D;
 import io.github.libfdx.math.Color;
-import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.tests.TestFpsLogger;
 
 import java.nio.ByteBuffer;
@@ -234,11 +233,11 @@ public final class Billboard3DTest extends ApplicationAdapter {
                                 0.54f, 0.49f, 0.44f, 1.0f))
                         .set(PbrAttributes.roughnessFactor(0.82f)))
                 .box("billboard pillar", 0.78f, 1.72f, 0.78f);
-        floorInstance = new DefaultModelInstance(floorModel)
-                .transform(Matrix4.translation(0.0f, -0.70f, -1.25f));
-        pillarInstance = new DefaultModelInstance(pillarModel)
-                .transform(Matrix4.translation(0.0f, 0.18f, -1.10f)
-                        .multiply(Matrix4.rotationY(0.32f)));
+        floorInstance = new DefaultModelInstance(floorModel);
+        floorInstance.transform().setToTranslation(0.0f, -0.70f, -1.25f);
+        pillarInstance = new DefaultModelInstance(pillarModel);
+        pillarInstance.transform().setToTranslation(0.0f, 0.18f, -1.10f)
+                .rotateY(0.32f);
     }
 
     private Texture createBillboardTexture() {

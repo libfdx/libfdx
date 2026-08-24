@@ -4,13 +4,19 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.math.internal.MathAcceleration;
 
 /**
- * Represents a matrix4.
+ * Represents a mutable matrix4.
+ *
+ * <p>Matrix operations mutate this instance and return it for chaining. Create
+ * and retain matrices at an ownership boundary, then reuse them with
+ * {@code set}, {@code setTo...}, and composition methods. The API intentionally
+ * provides no static factories that hide a matrix allocation.</p>
  *
  * @author xpenatan
  */
 public final class Matrix4 {
     public static final int VALUE_COUNT = 16;
-    public static final Matrix4 IDENTITY = identity();
+    /** Shared identity value for read-only use. */
+    public static final Matrix4 IDENTITY = new Matrix4();
 
     private final float[] values = new float[VALUE_COUNT];
     private float[] inversionScratch;
@@ -38,154 +44,6 @@ public final class Matrix4 {
      */
     public Matrix4(float[] values) {
         set(values);
-    }
-
-    /**
-     * Creates a matrix4 from the supplied values.
-     *
-     * @param values the values
-     * @return a new matrix4
-     */
-    public static Matrix4 of(float[] values) {
-        return new Matrix4(values);
-    }
-
-    /**
-     * Creates a matrix4.
-     *
-     * @return a new matrix4
-     */
-    public static Matrix4 identity() {
-        return new Matrix4();
-    }
-
-    /**
-     * Creates a matrix4.
-     *
-     * @param x the x coordinate
-     * @param y the y coordinate
-     * @param z the z coordinate
-     * @return a new matrix4
-     */
-    public static Matrix4 translation(float x, float y, float z) {
-        return new Matrix4().setToTranslation(x, y, z);
-    }
-
-    /**
-     * Creates a matrix4.
-     *
-     * @param x the x coordinate
-     * @param y the y coordinate
-     * @param z the z coordinate
-     * @return a new matrix4
-     */
-    public static Matrix4 scale(float x, float y, float z) {
-        return new Matrix4().setToScale(x, y, z);
-    }
-
-    /**
-     * Creates a matrix4.
-     *
-     * @param radians the radians
-     * @return a new matrix4
-     */
-    public static Matrix4 rotationX(float radians) {
-        return new Matrix4().setToRotationX(radians);
-    }
-
-    /**
-     * Creates a matrix4.
-     *
-     * @param radians the radians
-     * @return a new matrix4
-     */
-    public static Matrix4 rotationY(float radians) {
-        return new Matrix4().setToRotationY(radians);
-    }
-
-    /**
-     * Creates a matrix4.
-     *
-     * @param radians the radians
-     * @return a new matrix4
-     */
-    public static Matrix4 rotationZ(float radians) {
-        return new Matrix4().setToRotationZ(radians);
-    }
-
-    /**
-     * Creates a matrix4.
-     *
-     * @param x the x coordinate
-     * @param y the y coordinate
-     * @param z the z coordinate
-     * @param w the w
-     * @return a new matrix4
-     */
-    public static Matrix4 rotationQuaternion(float x, float y, float z, float w) {
-        return new Matrix4().setToRotationQuaternion(x, y, z, w);
-    }
-
-    /**
-     * Creates a translation, rotation, and scale matrix.
-     *
-     * @param translationX the translation x
-     * @param translationY the translation y
-     * @param translationZ the translation z
-     * @param rotationX the rotation quaternion x
-     * @param rotationY the rotation quaternion y
-     * @param rotationZ the rotation quaternion z
-     * @param rotationW the rotation quaternion w
-     * @param scaleX the scale x
-     * @param scaleY the scale y
-     * @param scaleZ the scale z
-     * @return a new matrix4
-     */
-    public static Matrix4 trs(float translationX, float translationY, float translationZ,
-            float rotationX, float rotationY, float rotationZ, float rotationW,
-            float scaleX, float scaleY, float scaleZ) {
-        return new Matrix4().setToTrs(translationX, translationY, translationZ,
-                rotationX, rotationY, rotationZ, rotationW, scaleX, scaleY, scaleZ);
-    }
-
-    /**
-     * Creates a matrix4.
-     *
-     * @param fieldOfViewDegrees the field of view degrees
-     * @param aspectRatio the aspect ratio
-     * @param near the near
-     * @param far the far
-     * @return a new matrix4
-     */
-    public static Matrix4 perspective(float fieldOfViewDegrees, float aspectRatio, float near, float far) {
-        return new Matrix4().setToPerspective(fieldOfViewDegrees, aspectRatio, near, far);
-    }
-
-    /**
-     * Creates a matrix4.
-     *
-     * @param left the left
-     * @param right the right
-     * @param bottom the bottom
-     * @param top the top
-     * @param near the near
-     * @param far the far
-     * @return a new matrix4
-     */
-    public static Matrix4 orthographic(float left, float right, float bottom, float top, float near, float far) {
-        return new Matrix4().setToOrthographic(left, right, bottom, top, near, far);
-    }
-
-    /**
-     * Creates a matrix4.
-     *
-     * @param eye the eye
-     * @param center the center
-     * @param up the up
-     * @return a new matrix4
-     */
-    public static Matrix4 lookAt(Vector3 eye, Vector3 center, Vector3 up) {
-        return new Matrix4().setToLookAt(eye, center, up);
     }
 
     /**
@@ -229,6 +87,28 @@ public final class Matrix4 {
             throw new FdxException("Matrix4 requires 16 values");
         }
         System.arraycopy(source, 0, values, 0, VALUE_COUNT);
+        return this;
+    }
+
+    /**
+     * Sets one column without allocating temporary storage.
+     *
+     * @param column the zero-based column index
+     * @param x the first row value
+     * @param y the second row value
+     * @param z the third row value
+     * @param w the fourth row value
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 setColumn(int column, float x, float y, float z, float w) {
+        if (column < 0 || column >= 4) {
+            throw new FdxException("Matrix4 column must be between 0 and 3");
+        }
+        int offset = column * 4;
+        values[offset] = x;
+        values[offset + 1] = y;
+        values[offset + 2] = z;
+        values[offset + 3] = w;
         return this;
     }
 
@@ -312,6 +192,43 @@ public final class Matrix4 {
         values[1] = sin;
         values[4] = -sin;
         values[5] = cos;
+        return this;
+    }
+
+    /**
+     * Sets this matrix to an axis-angle rotation.
+     *
+     * @param axisX the rotation-axis x coordinate
+     * @param axisY the rotation-axis y coordinate
+     * @param axisZ the rotation-axis z coordinate
+     * @param radians the rotation in radians
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 setToRotation(float axisX, float axisY, float axisZ,
+            float radians) {
+        float length = (float)Math.sqrt(axisX * axisX + axisY * axisY
+                + axisZ * axisZ);
+        if (length == 0.0f) {
+            return idt();
+        }
+        float inverseLength = 1.0f / length;
+        axisX *= inverseLength;
+        axisY *= inverseLength;
+        axisZ *= inverseLength;
+        float cos = (float)Math.cos(radians);
+        float sin = (float)Math.sin(radians);
+        float oneMinusCos = 1.0f - cos;
+
+        idt();
+        values[0] = oneMinusCos * axisX * axisX + cos;
+        values[1] = oneMinusCos * axisX * axisY + sin * axisZ;
+        values[2] = oneMinusCos * axisX * axisZ - sin * axisY;
+        values[4] = oneMinusCos * axisX * axisY - sin * axisZ;
+        values[5] = oneMinusCos * axisY * axisY + cos;
+        values[6] = oneMinusCos * axisY * axisZ + sin * axisX;
+        values[8] = oneMinusCos * axisX * axisZ + sin * axisY;
+        values[9] = oneMinusCos * axisY * axisZ - sin * axisX;
+        values[10] = oneMinusCos * axisZ * axisZ + cos;
         return this;
     }
 
@@ -559,13 +476,171 @@ public final class Matrix4 {
     }
 
     /**
-     * Sets the multiply and returns this matrix4.
+     * Post-multiplies this matrix by a translation without allocating a
+     * temporary matrix.
+     *
+     * @param x the x translation
+     * @param y the y translation
+     * @param z the z translation
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 translate(float x, float y, float z) {
+        values[12] += values[0] * x + values[4] * y + values[8] * z;
+        values[13] += values[1] * x + values[5] * y + values[9] * z;
+        values[14] += values[2] * x + values[6] * y + values[10] * z;
+        values[15] += values[3] * x + values[7] * y + values[11] * z;
+        return this;
+    }
+
+    /**
+     * Post-multiplies this matrix by a scale without allocating a temporary
+     * matrix.
+     *
+     * @param x the x scale
+     * @param y the y scale
+     * @param z the z scale
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 scale(float x, float y, float z) {
+        for (int row = 0; row < 4; row++) {
+            values[row] *= x;
+            values[4 + row] *= y;
+            values[8 + row] *= z;
+        }
+        return this;
+    }
+
+    /**
+     * Post-multiplies this matrix by an x-axis rotation without allocating a
+     * temporary matrix.
+     *
+     * @param radians the rotation in radians
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 rotateX(float radians) {
+        float cos = (float)Math.cos(radians);
+        float sin = (float)Math.sin(radians);
+        return mulRotation(1.0f, 0.0f, 0.0f,
+                0.0f, cos, sin,
+                0.0f, -sin, cos);
+    }
+
+    /**
+     * Post-multiplies this matrix by a y-axis rotation without allocating a
+     * temporary matrix.
+     *
+     * @param radians the rotation in radians
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 rotateY(float radians) {
+        float cos = (float)Math.cos(radians);
+        float sin = (float)Math.sin(radians);
+        return mulRotation(cos, 0.0f, -sin,
+                0.0f, 1.0f, 0.0f,
+                sin, 0.0f, cos);
+    }
+
+    /**
+     * Post-multiplies this matrix by a z-axis rotation without allocating a
+     * temporary matrix.
+     *
+     * @param radians the rotation in radians
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 rotateZ(float radians) {
+        float cos = (float)Math.cos(radians);
+        float sin = (float)Math.sin(radians);
+        return mulRotation(cos, sin, 0.0f,
+                -sin, cos, 0.0f,
+                0.0f, 0.0f, 1.0f);
+    }
+
+    /**
+     * Post-multiplies this matrix by an axis-angle rotation without allocating
+     * a temporary matrix.
+     *
+     * @param axisX the rotation-axis x coordinate
+     * @param axisY the rotation-axis y coordinate
+     * @param axisZ the rotation-axis z coordinate
+     * @param radians the rotation in radians
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 rotate(float axisX, float axisY, float axisZ,
+            float radians) {
+        float length = (float)Math.sqrt(axisX * axisX + axisY * axisY
+                + axisZ * axisZ);
+        if (length == 0.0f) {
+            return this;
+        }
+        float inverseLength = 1.0f / length;
+        axisX *= inverseLength;
+        axisY *= inverseLength;
+        axisZ *= inverseLength;
+        float cos = (float)Math.cos(radians);
+        float sin = (float)Math.sin(radians);
+        float oneMinusCos = 1.0f - cos;
+        return mulRotation(
+                oneMinusCos * axisX * axisX + cos,
+                oneMinusCos * axisX * axisY + sin * axisZ,
+                oneMinusCos * axisX * axisZ - sin * axisY,
+                oneMinusCos * axisX * axisY - sin * axisZ,
+                oneMinusCos * axisY * axisY + cos,
+                oneMinusCos * axisY * axisZ + sin * axisX,
+                oneMinusCos * axisX * axisZ + sin * axisY,
+                oneMinusCos * axisY * axisZ - sin * axisX,
+                oneMinusCos * axisZ * axisZ + cos);
+    }
+
+    /**
+     * Post-multiplies this matrix by a quaternion rotation without allocating
+     * a temporary matrix.
+     *
+     * @param x the quaternion x coordinate
+     * @param y the quaternion y coordinate
+     * @param z the quaternion z coordinate
+     * @param w the quaternion w coordinate
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 rotateQuaternion(float x, float y, float z, float w) {
+        float length = (float)Math.sqrt(x * x + y * y + z * z + w * w);
+        if (length == 0.0f) {
+            return this;
+        }
+        float inverseLength = 1.0f / length;
+        x *= inverseLength;
+        y *= inverseLength;
+        z *= inverseLength;
+        w *= inverseLength;
+
+        float xx = x * x;
+        float yy = y * y;
+        float zz = z * z;
+        float xy = x * y;
+        float xz = x * z;
+        float yz = y * z;
+        float wx = w * x;
+        float wy = w * y;
+        float wz = w * z;
+        return mulRotation(
+                1.0f - 2.0f * (yy + zz),
+                2.0f * (xy + wz),
+                2.0f * (xz - wy),
+                2.0f * (xy - wz),
+                1.0f - 2.0f * (xx + zz),
+                2.0f * (yz + wx),
+                2.0f * (xz + wy),
+                2.0f * (yz - wx),
+                1.0f - 2.0f * (xx + yy));
+    }
+
+    /**
+     * Multiplies this matrix by the supplied matrix in place.
      *
      * @param other the other
      * @return this matrix4 for chaining
      */
     public Matrix4 multiply(Matrix4 other) {
-        return new Matrix4(this).mul(other);
+        return mul(other);
     }
 
     /**
@@ -669,6 +744,48 @@ public final class Matrix4 {
         values[13] = m31;
         values[14] = m32;
         values[15] = m33;
+        return this;
+    }
+
+    private Matrix4 mulRotation(float r00, float r10, float r20,
+            float r01, float r11, float r21,
+            float r02, float r12, float r22) {
+        float m00 = values[0] * r00 + values[4] * r10
+                + values[8] * r20;
+        float m01 = values[1] * r00 + values[5] * r10
+                + values[9] * r20;
+        float m02 = values[2] * r00 + values[6] * r10
+                + values[10] * r20;
+        float m03 = values[3] * r00 + values[7] * r10
+                + values[11] * r20;
+        float m10 = values[0] * r01 + values[4] * r11
+                + values[8] * r21;
+        float m11 = values[1] * r01 + values[5] * r11
+                + values[9] * r21;
+        float m12 = values[2] * r01 + values[6] * r11
+                + values[10] * r21;
+        float m13 = values[3] * r01 + values[7] * r11
+                + values[11] * r21;
+        float m20 = values[0] * r02 + values[4] * r12
+                + values[8] * r22;
+        float m21 = values[1] * r02 + values[5] * r12
+                + values[9] * r22;
+        float m22 = values[2] * r02 + values[6] * r12
+                + values[10] * r22;
+        float m23 = values[3] * r02 + values[7] * r12
+                + values[11] * r22;
+        values[0] = m00;
+        values[1] = m01;
+        values[2] = m02;
+        values[3] = m03;
+        values[4] = m10;
+        values[5] = m11;
+        values[6] = m12;
+        values[7] = m13;
+        values[8] = m20;
+        values[9] = m21;
+        values[10] = m22;
+        values[11] = m23;
         return this;
     }
 

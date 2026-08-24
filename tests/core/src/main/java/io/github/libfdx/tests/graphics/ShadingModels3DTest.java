@@ -23,7 +23,6 @@ import io.github.libfdx.graphics.g3d.ModelVertexUsage;
 import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.graphics.g3d.ShadingModel;
 import io.github.libfdx.math.Color;
-import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.tests.TestFpsLogger;
 
 import java.nio.ByteBuffer;
@@ -193,9 +192,9 @@ public final class ShadingModels3DTest extends ApplicationAdapter {
             sphereModels[i] = builder.material(materials[i])
                     .sphere(id, 0.68f, 32, 20,
                             ModelVertexUsage.STANDARD_PBR);
-            sphereInstances[i] = new DefaultModelInstance(sphereModels[i])
-                    .transform(Matrix4.translation(
-                            SPHERE_X[i], 0.68f, -0.35f));
+            sphereInstances[i] = new DefaultModelInstance(sphereModels[i]);
+            sphereInstances[i].transform().setToTranslation(
+                    SPHERE_X[i], 0.68f, -0.35f);
         }
 
         Material floorMaterial = new Material("shading models floor material")
@@ -207,8 +206,8 @@ public final class ShadingModels3DTest extends ApplicationAdapter {
         floorModel = builder.material(floorMaterial)
                 .box("shading models floor", 6.2f, 0.08f, 3.5f,
                         ModelVertexUsage.STANDARD_PBR);
-        floorInstance = new DefaultModelInstance(floorModel)
-                .transform(Matrix4.translation(0.0f, -0.04f, -0.35f));
+        floorInstance = new DefaultModelInstance(floorModel);
+        floorInstance.transform().setToTranslation(0.0f, -0.04f, -0.35f);
     }
 
     private static Material sphereMaterial(String id,

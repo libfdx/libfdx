@@ -12,19 +12,12 @@ public final class JoltFdx {
     private JoltFdx() {
     }
 
-    public static Matrix4 toMatrix4(Mat44 in) {
-        return convert(in, new Matrix4());
-    }
-
     public static Matrix4 convert(Mat44 in, Matrix4 out) {
-        float[] values = new float[Matrix4.VALUE_COUNT];
         for (int col = 0; col < 4; col++) {
             Vec4 column = in.GetColumn4(col);
-            for (int row = 0; row < 4; row++) {
-                values[col * 4 + row] = column.GetComponent(row);
-            }
+            out.setColumn(col, column.GetX(), column.GetY(), column.GetZ(),
+                    column.GetW());
         }
-        out.set(values);
         return out;
     }
 

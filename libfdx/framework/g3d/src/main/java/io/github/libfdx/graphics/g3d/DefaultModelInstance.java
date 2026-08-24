@@ -151,36 +151,6 @@ public final class DefaultModelInstance implements ModelInstance {
     }
 
     /**
-     * Returns an instance-local node transform copy.
-     *
-     * @param nodeId the node identifier
-     * @return the local node transform
-     */
-    public Matrix4 nodeTransform(String nodeId) {
-        return copyNodeTransform(nodeId, new Matrix4());
-    }
-
-    /**
-     * Returns an instance-local model-space node transform copy.
-     *
-     * @param nodeId the node identifier
-     * @return the model-space node transform
-     */
-    public Matrix4 nodeModelTransform(String nodeId) {
-        return copyNodeModelTransform(nodeId, new Matrix4());
-    }
-
-    /**
-     * Returns an instance-local node world transform copy.
-     *
-     * @param nodeId the node identifier
-     * @return the world node transform
-     */
-    public Matrix4 nodeWorldTransform(String nodeId) {
-        return copyNodeWorldTransform(nodeId, new Matrix4());
-    }
-
-    /**
      * Resets instance-local node transforms from the shared model.
      *
      * @return this default model instance for chaining

@@ -23,7 +23,6 @@ import io.github.libfdx.graphics.g3d.Material;
 import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
-import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.math.Vector3;
 import io.github.libfdx.tests.TestFpsLogger;
 
@@ -170,8 +169,9 @@ public final class Fog3DTest extends ApplicationAdapter {
         float[] z = { -0.15f, -1.55f, -2.85f, -4.25f, -5.65f };
         float[] yaw = { -0.38f, 0.25f, -0.2f, 0.42f, -0.55f };
         for (int i = 0; i < result.length; i++) {
-            result[i] = new DefaultModelInstance(model)
-                    .transform(Matrix4.translation(x[i], y[i], z[i]).multiply(Matrix4.rotationY(yaw[i])));
+            result[i] = new DefaultModelInstance(model);
+            result[i].transform().setToTranslation(x[i], y[i], z[i])
+                    .rotateY(yaw[i]);
         }
         return result;
     }

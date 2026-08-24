@@ -70,7 +70,7 @@ final class AndroidVulkanNative {
     static native long createRenderPipeline(long context, long shaderModule, int colorFormat, int primitiveTopology,
             int[] vertexStrides, int[] vertexStepModes, int[] attributeBindings, int[] attributeLocations,
             int[] attributeFormats, int[] attributeOffsets, int sampledTextureCount, boolean uniformBufferEnabled,
-            boolean depthTestEnabled, boolean depthWriteEnabled);
+            boolean depthTestEnabled, boolean blendEnabled, boolean depthWriteEnabled);
 
     static native void beginRenderPass(long context, long colorTexture, int colorFormat, int width, int height,
             boolean clear, float red, float green, float blue, float alpha, boolean store, boolean depthClear,

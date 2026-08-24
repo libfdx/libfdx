@@ -354,7 +354,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
         for (int i = 0; i < count; i++) {
             float[] matrix = new float[Matrix4.VALUE_COUNT];
             System.arraycopy(values, i * Matrix4.VALUE_COUNT, matrix, 0, Matrix4.VALUE_COUNT);
-            matrices[i] = Matrix4.of(matrix);
+            matrices[i] = new Matrix4(matrix);
         }
         return matrices;
     }
@@ -394,7 +394,8 @@ final class GltfModelLoader implements AssetLoader<Model> {
             return null;
         }
         JsonValue node = object(array(document.root, "nodes").get(nodeIndex), "node");
-        ModelNode modelNode = new ModelNode(nodeId(document, nodeIndex)).localTransform(nodeTransform(node));
+        ModelNode modelNode = new ModelNode(nodeId(document, nodeIndex));
+        nodeTransform(node, modelNode.localTransform());
         int meshIndex = integer(node, "mesh", -1);
         if (meshIndex >= 0) {
             appendMeshParts(path, document, modelNode, meshIndex, skin(document, integer(node, "skin", -1)),
@@ -667,30 +668,41 @@ final class GltfModelLoader implements AssetLoader<Model> {
         throw new FdxException("Unsupported glTF animation target path: " + path);
     }
 
-    private Matrix4 nodeTransform(JsonValue node) {
+    private Matrix4 nodeTransform(JsonValue node, Matrix4 out) {
         ArrayView<JsonValue> matrix = array(node, "matrix");
         if (matrix.size() == Matrix4.VALUE_COUNT) {
             float[] values = new float[Matrix4.VALUE_COUNT];
             for (int i = 0; i < values.length; i++) {
                 values[i] = number(matrix.get(i), i % 5 == 0 ? 1.0f : 0.0f);
             }
-            return Matrix4.of(values);
+            return out.set(values);
         }
         ArrayView<JsonValue> translation = array(node, "translation");
         ArrayView<JsonValue> rotation = array(node, "rotation");
         ArrayView<JsonValue> scale = array(node, "scale");
-        Matrix4 translationMatrix = translation.size() >= 3
-                ? Matrix4.translation(number(translation.get(0), 0.0f), number(translation.get(1), 0.0f),
-                number(translation.get(2), 0.0f))
-                : Matrix4.IDENTITY;
-        Matrix4 rotationMatrix = rotation.size() >= 4
-                ? Matrix4.rotationQuaternion(number(rotation.get(0), 0.0f), number(rotation.get(1), 0.0f),
-                number(rotation.get(2), 0.0f), number(rotation.get(3), 1.0f))
-                : Matrix4.IDENTITY;
-        Matrix4 scaleMatrix = scale.size() >= 3
-                ? Matrix4.scale(number(scale.get(0), 1.0f), number(scale.get(1), 1.0f), number(scale.get(2), 1.0f))
-                : Matrix4.IDENTITY;
-        return translationMatrix.multiply(rotationMatrix).multiply(scaleMatrix);
+        float translationX = translation.size() >= 3
+                ? number(translation.get(0), 0.0f) : 0.0f;
+        float translationY = translation.size() >= 3
+                ? number(translation.get(1), 0.0f) : 0.0f;
+        float translationZ = translation.size() >= 3
+                ? number(translation.get(2), 0.0f) : 0.0f;
+        float rotationX = rotation.size() >= 4
+                ? number(rotation.get(0), 0.0f) : 0.0f;
+        float rotationY = rotation.size() >= 4
+                ? number(rotation.get(1), 0.0f) : 0.0f;
+        float rotationZ = rotation.size() >= 4
+                ? number(rotation.get(2), 0.0f) : 0.0f;
+        float rotationW = rotation.size() >= 4
+                ? number(rotation.get(3), 1.0f) : 1.0f;
+        float scaleX = scale.size() >= 3
+                ? number(scale.get(0), 1.0f) : 1.0f;
+        float scaleY = scale.size() >= 3
+                ? number(scale.get(1), 1.0f) : 1.0f;
+        float scaleZ = scale.size() >= 3
+                ? number(scale.get(2), 1.0f) : 1.0f;
+        return out.setToTrs(translationX, translationY,
+                translationZ, rotationX, rotationY, rotationZ, rotationW,
+                scaleX, scaleY, scaleZ);
     }
 
     private GltfMaterial material(GltfDocument document, int materialIndex) {

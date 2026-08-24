@@ -490,8 +490,9 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
                     continue;
                 }
                 float rotation = ((x + 32) * 19 + (z + 132) * 7) % 360;
-                DefaultModelInstance instance = new DefaultModelInstance(duck)
-                        .transform(sceneTransform(x, 0.0f, z, rotation, 1.5f, 1.5f, 1.5f));
+                DefaultModelInstance instance = new DefaultModelInstance(duck);
+                setSceneTransform(instance.transform(), x, 0.0f, z, rotation,
+                        1.5f, 1.5f, 1.5f);
                 result.add(instance);
                 addRotatingInstance(rotating, result.size() - 1, instance, x, 0.0f, z, rotation,
                         1.5f, 1.5f, 1.5f);
@@ -500,9 +501,9 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
 
         for (int i = 0; i < dragonPositions.length; i++) {
             float[] position = dragonPositions[i];
-            DefaultModelInstance instance = new DefaultModelInstance(dragon)
-                    .transform(sceneTransform(position[0], position[1], position[2], position[3],
-                            3.0f, 3.0f, 3.0f));
+            DefaultModelInstance instance = new DefaultModelInstance(dragon);
+            setSceneTransform(instance.transform(), position[0], position[1],
+                    position[2], position[3], 3.0f, 3.0f, 3.0f);
             result.add(instance);
             if (i < ROTATING_DRAGON_COUNT) {
                 addRotatingInstance(rotating, instance, position[0], position[1], position[2], position[3],
@@ -511,8 +512,10 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
         }
 
         for (int i = 0; i < spheres.length; i++) {
-            result.add(new DefaultModelInstance(spheres[i])
-                    .transform(Matrix4.translation(-8.0f + 4.0f * i, 1.0f, 8.0f)));
+            DefaultModelInstance instance = new DefaultModelInstance(spheres[i]);
+            instance.transform().setToTranslation(-8.0f + 4.0f * i,
+                    1.0f, 8.0f);
+            result.add(instance);
         }
 
         float[][] pillarPositions = {
@@ -523,8 +526,10 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
         };
         for (int i = 0; i < pillarPositions.length; i++) {
             float[] position = pillarPositions[i];
-            result.add(new DefaultModelInstance(pillar)
-                    .transform(Matrix4.translation(position[0], position[1], position[2])));
+            DefaultModelInstance instance = new DefaultModelInstance(pillar);
+            instance.transform().setToTranslation(position[0], position[1],
+                    position[2]);
+            result.add(instance);
         }
 
         return result.toArray(new DefaultModelInstance[result.size()]);
@@ -572,11 +577,12 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
         return false;
     }
 
-    private static Matrix4 sceneTransform(float x, float y, float z, float rotationDegrees,
+    private static Matrix4 setSceneTransform(Matrix4 out, float x, float y,
+            float z, float rotationDegrees,
             float scaleX, float scaleY, float scaleZ) {
-        return Matrix4.translation(x, y, z)
-                .multiply(Matrix4.rotationY((float)Math.toRadians(rotationDegrees)))
-                .multiply(Matrix4.scale(scaleX, scaleY, scaleZ));
+        return out.setToTranslation(x, y, z)
+                .rotateY((float)Math.toRadians(rotationDegrees))
+                .scale(scaleX, scaleY, scaleZ);
     }
 
     private static final class RotatingInstance {

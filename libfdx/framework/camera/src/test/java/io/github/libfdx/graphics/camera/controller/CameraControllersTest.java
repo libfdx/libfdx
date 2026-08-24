@@ -44,6 +44,29 @@ class CameraControllersTest {
     }
 
     @Test
+    void freeCameraPreservesDiagonalMovementAtFarWorldCoordinates() {
+        DefaultInput input = new DefaultInput();
+        float diagonal = 0.70710677f;
+        Camera camera = perspectiveCamera()
+                .position(1_000_000.0f, 0.0f, 1_000_000.0f)
+                .direction(-diagonal, 0.0f, -diagonal)
+                .update();
+        FreeCameraController3D controller = new FreeCameraController3D(input, camera)
+                .speed(10.0f);
+
+        input.dispatchKeyDown(Key.W);
+        input.dispatchKeyDown(Key.D);
+        for(int i = 0; i < 240; i++) {
+            controller.update(1.0f / 240.0f);
+        }
+        input.dispatchKeyUp(Key.W);
+        input.dispatchKeyUp(Key.D);
+
+        assertClose(1_000_000.0f, camera.position().x(), Math.ulp(1_000_000.0f));
+        assertClose(1_000_000.0f - diagonal * 20.0f, camera.position().z(), Math.ulp(1_000_000.0f));
+    }
+
+    @Test
     void disabledFreeCameraIgnoresKeyboardPointerAndScroll() {
         DefaultInput input = new DefaultInput();
         Camera camera = perspectiveCamera();

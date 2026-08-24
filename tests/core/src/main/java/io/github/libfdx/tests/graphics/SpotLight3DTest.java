@@ -24,7 +24,6 @@ import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.graphics.g3d.SpotLight;
 import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
-import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.math.Vector3;
 import io.github.libfdx.tests.TestFpsLogger;
 
@@ -184,8 +183,9 @@ public final class SpotLight3DTest extends ApplicationAdapter {
         float[] z = { -0.2f, -0.95f, -1.65f, -2.35f, -3.0f };
         float[] yaw = { -0.38f, 0.24f, -0.18f, 0.36f, -0.45f };
         for (int i = 0; i < result.length; i++) {
-            result[i] = new DefaultModelInstance(model)
-                    .transform(Matrix4.translation(x[i], y[i], z[i]).multiply(Matrix4.rotationY(yaw[i])));
+            result[i] = new DefaultModelInstance(model);
+            result[i].transform().setToTranslation(x[i], y[i], z[i])
+                    .rotateY(yaw[i]);
         }
         return result;
     }

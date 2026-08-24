@@ -16,7 +16,6 @@ import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
 import io.github.libfdx.math.Color;
-import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
 import io.github.libfdx.graphics.g3d.Environment3D;
@@ -149,7 +148,7 @@ public final class ModelBatchTest extends ApplicationAdapter {
         camera.viewport(framebufferWidth(), framebufferHeight());
         cameraInput.update(deltaSeconds);
         float seconds = renderedFrames / 60.0f;
-        instance.transform(Matrix4.rotationY(seconds * 0.45f));
+        instance.transform().setToRotationY(seconds * 0.45f);
         batch.begin(LoadOp.clear(0.04f, 0.045f, 0.06f, 1.0f), camera);
         try {
             batch.render(instance);

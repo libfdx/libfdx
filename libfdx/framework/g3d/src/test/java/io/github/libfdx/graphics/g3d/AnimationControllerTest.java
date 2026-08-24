@@ -39,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 final class AnimationControllerTest {
     private static final float EPSILON = 0.0001f;
+    private final Matrix4 matrixOut = new Matrix4();
 
     @Test
     void controllerAppliesInterpolatedNodeTransform() {
@@ -47,8 +48,10 @@ final class AnimationControllerTest {
 
         new AnimationController(instance).play(clip, false).time(1.0f);
 
-        assertTranslation(instance.nodeTransform("arm"), 0.0f, 2.0f, 0.0f);
-        assertTranslation(instance.nodeWorldTransform("arm"), 1.0f, 2.0f, 0.0f);
+        assertTranslation(instance.copyNodeTransform("arm", matrixOut),
+                0.0f, 2.0f, 0.0f);
+        assertTranslation(instance.copyNodeWorldTransform("arm", matrixOut),
+                1.0f, 2.0f, 0.0f);
     }
 
     @Test
@@ -59,7 +62,8 @@ final class AnimationControllerTest {
         looping.time(2.5f);
 
         assertEquals(0.5f, looping.timeSeconds(), EPSILON);
-        assertTranslation(loopingInstance.nodeTransform("arm"), 0.0f, 1.0f, 0.0f);
+        assertTranslation(loopingInstance.copyNodeTransform("arm", matrixOut),
+                0.0f, 1.0f, 0.0f);
 
         DefaultModelInstance clampedInstance = new DefaultModelInstance(model());
         AnimationController clamped = new AnimationController(clampedInstance).play(moveArmClip(), false);
@@ -67,7 +71,8 @@ final class AnimationControllerTest {
         clamped.time(9.0f);
 
         assertEquals(2.0f, clamped.timeSeconds(), EPSILON);
-        assertTranslation(clampedInstance.nodeTransform("arm"), 0.0f, 4.0f, 0.0f);
+        assertTranslation(clampedInstance.copyNodeTransform("arm", matrixOut),
+                0.0f, 4.0f, 0.0f);
     }
 
     @Test
@@ -78,26 +83,31 @@ final class AnimationControllerTest {
 
         new AnimationController(animated).play(moveArmClip(), false).time(1.5f);
 
-        assertTranslation(animated.nodeTransform("arm"), 0.0f, 3.0f, 0.0f);
-        assertTranslation(untouched.nodeTransform("arm"), 0.0f, 1.0f, 0.0f);
+        assertTranslation(animated.copyNodeTransform("arm", matrixOut),
+                0.0f, 3.0f, 0.0f);
+        assertTranslation(untouched.copyNodeTransform("arm", matrixOut),
+                0.0f, 1.0f, 0.0f);
         assertTranslation(model.nodes().get(0).children().get(0).localTransform(), 0.0f, 1.0f, 0.0f);
     }
 
     @Test
     void skinningPaletteUsesAnimatedModelSpaceNodeTransforms() {
-        DefaultModelInstance instance = new DefaultModelInstance(model())
-                .transform(Matrix4.translation(10.0f, 0.0f, 0.0f));
+        DefaultModelInstance instance = new DefaultModelInstance(model());
+        instance.transform().setToTranslation(10.0f, 0.0f, 0.0f);
         SkinningPalette palette = new SkinningPalette(skin());
 
         palette.update(instance);
 
-        assertTranslation(palette.boneMatrix(0), 0.0f, 0.0f, 0.0f);
+        assertTranslation(palette.copyBoneMatrix(0, matrixOut),
+                0.0f, 0.0f, 0.0f);
 
         new AnimationController(instance).play(moveArmClip(), false).time(1.5f);
         palette.update(instance);
 
-        assertTranslation(palette.boneMatrix(0), 0.0f, 2.0f, 0.0f);
-        assertTranslation(instance.nodeWorldTransform("arm"), 11.0f, 3.0f, 0.0f);
+        assertTranslation(palette.copyBoneMatrix(0, matrixOut),
+                0.0f, 2.0f, 0.0f);
+        assertTranslation(instance.copyNodeWorldTransform("arm", matrixOut),
+                11.0f, 3.0f, 0.0f);
 
         float[] values = new float[Matrix4.VALUE_COUNT];
         palette.copyValues(values);
@@ -117,7 +127,7 @@ final class AnimationControllerTest {
                     0.0f, 0.0f, 0.0f, 1.0f,
                     1.0f, 1.0f, 1.0f);
 
-            assertTranslation(instance.nodeWorldTransform("root"),
+            assertTranslation(instance.copyNodeWorldTransform("root", matrixOut),
                     3.0f, 3.0f, 4.0f);
 
             instance.transform().setToTrs(
@@ -149,10 +159,12 @@ final class AnimationControllerTest {
 
         new AnimationController(instance).play(clip, false).time(1.0f);
 
-        assertTranslation(instance.nodeModelTransform("wrist"), -1.0f, 1.0f, 0.0f);
+        assertTranslation(instance.copyNodeModelTransform("wrist", matrixOut),
+                -1.0f, 1.0f, 0.0f);
 
         SkinningPalette palette = new SkinningPalette(hierarchicalSkin()).update(instance);
-        Vector3 skinnedBindWrist = palette.boneMatrix(1).transformPosition(new Vector3(0.0f, 2.0f, 0.0f));
+        Vector3 skinnedBindWrist = palette.copyBoneMatrix(1, matrixOut)
+                .transformPosition(new Vector3(0.0f, 2.0f, 0.0f));
         assertPosition(skinnedBindWrist, -1.0f, 1.0f, 0.0f);
     }
 
@@ -219,7 +231,9 @@ final class AnimationControllerTest {
         ModelNode root = new ModelNode("root").addPart(new ModelNodePart(
                 new MeshPart("gpu-part", mesh, null, 0, mesh.vertexCount()), material, skin,
                 new int[] {0, 0, 0, 0}, new float[] {1.0f, 0.0f, 0.0f, 0.0f}));
-        root.addChild(new ModelNode("arm").localTransform(Matrix4.translation(0.0f, 1.0f, 0.0f)));
+        ModelNode arm = new ModelNode("arm");
+        arm.localTransform().setToTranslation(0.0f, 1.0f, 0.0f);
+        root.addChild(arm);
         Array<ModelNode> nodes = new Array<ModelNode>();
         nodes.add(root);
         Array<Material> materials = new Array<Material>();
@@ -265,8 +279,11 @@ final class AnimationControllerTest {
     }
 
     private static DefaultModel model() {
-        ModelNode root = new ModelNode("root").localTransform(Matrix4.translation(1.0f, 0.0f, 0.0f));
-        root.addChild(new ModelNode("arm").localTransform(Matrix4.translation(0.0f, 1.0f, 0.0f)));
+        ModelNode root = new ModelNode("root");
+        root.localTransform().setToTranslation(1.0f, 0.0f, 0.0f);
+        ModelNode arm = new ModelNode("arm");
+        arm.localTransform().setToTranslation(0.0f, 1.0f, 0.0f);
+        root.addChild(arm);
 
         Array<ModelNode> nodes = new Array<ModelNode>();
         nodes.add(root);
@@ -276,8 +293,10 @@ final class AnimationControllerTest {
 
     private static DefaultModel hierarchicalModel() {
         ModelNode root = new ModelNode("root");
-        ModelNode shoulder = new ModelNode("shoulder").localTransform(Matrix4.translation(0.0f, 1.0f, 0.0f));
-        ModelNode wrist = new ModelNode("wrist").localTransform(Matrix4.translation(0.0f, 1.0f, 0.0f));
+        ModelNode shoulder = new ModelNode("shoulder");
+        shoulder.localTransform().setToTranslation(0.0f, 1.0f, 0.0f);
+        ModelNode wrist = new ModelNode("wrist");
+        wrist.localTransform().setToTranslation(0.0f, 1.0f, 0.0f);
         root.addChild(shoulder);
         shoulder.addChild(wrist);
 
@@ -294,12 +313,15 @@ final class AnimationControllerTest {
         Material material = new Material("skin-material");
         Mesh firstMesh = skinnedMesh(graphics, "skinned-a", 0.0f);
         Mesh secondMesh = skinnedMesh(graphics, "skinned-b", 2.0f);
-        ModelNode root = new ModelNode("root").localTransform(Matrix4.translation(1.0f, 0.0f, 0.0f))
+        ModelNode root = new ModelNode("root")
                 .addPart(new ModelNodePart(new MeshPart("part-a", firstMesh, null, 0, firstMesh.vertexCount()),
                         material, skin, new int[] {0, 0, 0, 0}, new float[] {1.0f, 0.0f, 0.0f, 0.0f}))
                 .addPart(new ModelNodePart(new MeshPart("part-b", secondMesh, null, 0, secondMesh.vertexCount()),
                         material, skin, new int[] {0, 0, 0, 0}, new float[] {1.0f, 0.0f, 0.0f, 0.0f}));
-        root.addChild(new ModelNode("arm").localTransform(Matrix4.translation(0.0f, 1.0f, 0.0f)));
+        root.localTransform().setToTranslation(1.0f, 0.0f, 0.0f);
+        ModelNode arm = new ModelNode("arm");
+        arm.localTransform().setToTranslation(0.0f, 1.0f, 0.0f);
+        root.addChild(arm);
 
         Array<ModelNode> nodes = new Array<ModelNode>();
         nodes.add(root);
@@ -343,14 +365,17 @@ final class AnimationControllerTest {
 
     private static Skin skin() {
         Array<Bone> bones = new Array<Bone>();
-        bones.add(new Bone("arm", -1, Matrix4.translation(-1.0f, -1.0f, 0.0f)));
+        bones.add(new Bone("arm", -1,
+                new Matrix4().setToTranslation(-1.0f, -1.0f, 0.0f)));
         return new Skin("arm-skin", new Skeleton(bones));
     }
 
     private static Skin hierarchicalSkin() {
         Array<Bone> bones = new Array<Bone>();
-        bones.add(new Bone("shoulder", -1, Matrix4.translation(0.0f, -1.0f, 0.0f)));
-        bones.add(new Bone("wrist", 0, Matrix4.translation(0.0f, -2.0f, 0.0f)));
+        bones.add(new Bone("shoulder", -1,
+                new Matrix4().setToTranslation(0.0f, -1.0f, 0.0f)));
+        bones.add(new Bone("wrist", 0,
+                new Matrix4().setToTranslation(0.0f, -2.0f, 0.0f)));
         return new Skin("arm-chain-skin", new Skeleton(bones));
     }
 

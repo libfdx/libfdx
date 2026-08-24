@@ -10,6 +10,7 @@ import io.github.libfdx.tests.graphics.CircleTest;
 import io.github.libfdx.tests.graphics.ComputeBufferTest;
 import io.github.libfdx.tests.graphics.DepthPreserveTest;
 import io.github.libfdx.tests.graphics.DynamicTextureTest;
+import io.github.libfdx.tests.graphics.FarWorldCameraTest;
 import io.github.libfdx.tests.graphics.Fog2DTest;
 import io.github.libfdx.tests.graphics.Fog3DTest;
 import io.github.libfdx.tests.graphics.FogOfWar2DTest;
@@ -208,6 +209,7 @@ public final class TestSelector {
     private static final String SHADOW_MAP_3D = "shadow-map-3d";
     private static final String CASCADE_SHADOW_MAP_3D = "cascade-shadow-map-3d";
     private static final String CAMERA_CONTROLLERS = "camera-controllers";
+    private static final String FAR_WORLD_CAMERA = "far-world-camera";
     private static final String READBACK = "readback";
     private static final String COMPUTE_BUFFER = "compute-buffer";
     private static final String STORAGE_RUNTIME = "storage-runtime";
@@ -383,6 +385,12 @@ public final class TestSelector {
                 @Override
                 public ApplicationListener create(long exitAfterFrames) {
                     return new CameraControllersShowcaseTest(exitAfterFrames);
+                }
+            }),
+            descriptor(FAR_WORLD_CAMERA, "Far-world camera", "Graphics 3D", 900, 650, new TestFactory() {
+                @Override
+                public ApplicationListener create(long exitAfterFrames) {
+                    return new FarWorldCameraTest(exitAfterFrames);
                 }
             }),
             descriptor(READBACK, "Readback", "Graphics", 640, 480, new TestFactory() {

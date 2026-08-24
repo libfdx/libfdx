@@ -38,10 +38,11 @@ public final class DesktopMathAccelerationCheck {
 
     private static void checkMatrixMultiply(boolean nativeAvailable) {
         MathAcceleration.register(null);
-        Matrix4 left = Matrix4.translation(2.0f, -3.0f, 4.0f)
-                .mul(Matrix4.rotationQuaternion(0.2f, -0.3f, 0.4f, 0.8f))
-                .mul(Matrix4.scale(1.5f, 0.5f, -2.0f));
-        Matrix4 right = Matrix4.rotationY(0.35f).mul(Matrix4.translation(-7.0f, 2.0f, 5.0f));
+        Matrix4 left = new Matrix4().setToTranslation(2.0f, -3.0f, 4.0f)
+                .rotateQuaternion(0.2f, -0.3f, 0.4f, 0.8f)
+                .scale(1.5f, 0.5f, -2.0f);
+        Matrix4 right = new Matrix4().setToRotationY(0.35f)
+                .translate(-7.0f, 2.0f, 5.0f);
 
         float[] scalar = new Matrix4().setToMul(left, right).values();
 
@@ -56,9 +57,10 @@ public final class DesktopMathAccelerationCheck {
 
     private static void checkTransformPositions(boolean nativeAvailable) {
         MathAcceleration.register(null);
-        Matrix4 transform = Matrix4.translation(1.25f, -2.5f, 3.75f)
-                .mul(Matrix4.rotationZ(0.65f))
-                .mul(Matrix4.scale(0.75f, 1.5f, -1.25f));
+        Matrix4 transform = new Matrix4()
+                .setToTranslation(1.25f, -2.5f, 3.75f)
+                .rotateZ(0.65f)
+                .scale(0.75f, 1.5f, -1.25f);
         float[] source = new float[64];
         for (int i = 0; i < source.length; i++) {
             source[i] = (float)((i % 11) - 5) * 0.375f;

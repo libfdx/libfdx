@@ -86,6 +86,7 @@ public final class ShapeRenderer implements Disposable {
                     .depthEnabled(true);
     private final float[] projection = Matrix4.IDENTITY.values();
     private final float[] transform = Matrix4.IDENTITY.values();
+    private final Matrix4 transformScratch = new Matrix4();
 
     private float[] triangleVertices;
     private float[] lineVertices;
@@ -345,16 +346,34 @@ public final class ShapeRenderer implements Disposable {
         (matrix != null ? matrix : Matrix4.IDENTITY).copyValues(projection, 0);
     }
 
-    public Matrix4 getProjectionMatrix() {
-        return new Matrix4(projection);
+    /**
+     * Copies the projection matrix into caller-owned storage.
+     *
+     * @param out the output matrix
+     * @return the output matrix
+     */
+    public Matrix4 getProjectionMatrix(Matrix4 out) {
+        if (out == null) {
+            throw new FdxException("ShapeRenderer projection output cannot be null");
+        }
+        return out.set(projection);
     }
 
     public void setTransformMatrix(Matrix4 matrix) {
         (matrix != null ? matrix : Matrix4.IDENTITY).copyValues(transform, 0);
     }
 
-    public Matrix4 getTransformMatrix() {
-        return new Matrix4(transform);
+    /**
+     * Copies the transform matrix into caller-owned storage.
+     *
+     * @param out the output matrix
+     * @return the output matrix
+     */
+    public Matrix4 getTransformMatrix(Matrix4 out) {
+        if (out == null) {
+            throw new FdxException("ShapeRenderer transform output cannot be null");
+        }
+        return out.set(transform);
     }
 
     public void identity() {
@@ -362,17 +381,18 @@ public final class ShapeRenderer implements Disposable {
     }
 
     public void translate(float x, float y, float z) {
-        setTransformMatrix(new Matrix4(transform).mul(
-                Matrix4.translation(x, y, z)));
+        transformScratch.set(transform).translate(x, y, z)
+                .copyValues(transform, 0);
     }
 
     public void rotate(float axisX, float axisY, float axisZ, float degrees) {
-        setTransformMatrix(new Matrix4(transform).mul(axisRotation(axisX,
-                axisY, axisZ, (float)Math.toRadians(degrees))));
+        transformScratch.set(transform).rotate(axisX, axisY, axisZ,
+                (float)Math.toRadians(degrees)).copyValues(transform, 0);
     }
 
     public void scale(float x, float y, float z) {
-        setTransformMatrix(new Matrix4(transform).mul(Matrix4.scale(x, y, z)));
+        transformScratch.set(transform).scale(x, y, z)
+                .copyValues(transform, 0);
     }
 
     public void updateMatrices() {
@@ -788,29 +808,6 @@ public final class ShapeRenderer implements Disposable {
         if(disposed) {
             throw new FdxException("ShapeRenderer has been disposed");
         }
-    }
-
-    private static Matrix4 axisRotation(float x, float y, float z,
-            float radians) {
-        float length = (float)Math.sqrt(x * x + y * y + z * z);
-        if(length == 0.0f) {
-            return new Matrix4();
-        }
-        x /= length;
-        y /= length;
-        z /= length;
-        float c = (float)Math.cos(radians);
-        float s = (float)Math.sin(radians);
-        float t = 1.0f - c;
-        return new Matrix4(new float[] {
-                t * x * x + c, t * x * y + s * z,
-                t * x * z - s * y, 0.0f,
-                t * x * y - s * z, t * y * y + c,
-                t * y * z + s * x, 0.0f,
-                t * x * z + s * y, t * y * z - s * x,
-                t * z * z + c, 0.0f,
-                0.0f, 0.0f, 0.0f, 1.0f
-        });
     }
 
     @Override

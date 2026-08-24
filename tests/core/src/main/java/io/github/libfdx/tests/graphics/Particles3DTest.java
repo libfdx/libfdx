@@ -30,7 +30,6 @@ import io.github.libfdx.graphics.g3d.MaterialAttributes;
 import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.graphics.g3d.SkyboxRenderer3D;
 import io.github.libfdx.math.Color;
-import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.tests.TestFpsLogger;
 
 import java.nio.ByteBuffer;
@@ -229,11 +228,11 @@ public final class Particles3DTest extends ApplicationAdapter {
                                 0.70f, 0.25f, 0.20f, 1.0f))
                         .set(PbrAttributes.roughnessFactor(0.78f)))
                 .box("particles 3d emitter", 0.38f, 0.22f, 0.38f);
-        floorInstance = new DefaultModelInstance(floorModel)
-                .transform(Matrix4.translation(0.0f, -0.70f, -1.25f));
-        emitterInstance = new DefaultModelInstance(emitterModel)
-                .transform(Matrix4.translation(0.0f, -0.48f, -1.18f)
-                        .multiply(Matrix4.rotationY(0.42f)));
+        floorInstance = new DefaultModelInstance(floorModel);
+        floorInstance.transform().setToTranslation(0.0f, -0.70f, -1.25f);
+        emitterInstance = new DefaultModelInstance(emitterModel);
+        emitterInstance.transform().setToTranslation(0.0f, -0.48f, -1.18f)
+                .rotateY(0.42f);
     }
 
     private Texture createParticleTexture() {

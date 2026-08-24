@@ -174,8 +174,8 @@ public final class ShaderGraphSampleApplication extends ApplicationAdapter {
         rightModel = ShaderGraphSampleModelFactory.box(graphics,
                 "shader graph warm cube", 1.35f, 1.35f, 1.35f,
                 rightMaterial);
-        floor = new DefaultModelInstance(floorModel)
-                .transform(Matrix4.translation(0.0f, -1.05f, -1.2f));
+        floor = new DefaultModelInstance(floorModel);
+        floor.transform().setToTranslation(0.0f, -1.05f, -1.2f);
         left = new DefaultModelInstance(leftModel);
         right = new DefaultModelInstance(rightModel);
 

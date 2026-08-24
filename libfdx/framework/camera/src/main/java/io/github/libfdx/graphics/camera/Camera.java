@@ -18,7 +18,8 @@ public final class Camera {
     private final Matrix4 projectionMatrix = new Matrix4();
     private final Matrix4 viewMatrix = new Matrix4();
     private final Matrix4 combinedMatrix = new Matrix4();
-    private final Matrix4 inverseCombinedMatrix = new Matrix4();
+    private final Matrix4 inverseProjectionMatrix = new Matrix4();
+    private final Matrix4 inverseViewMatrix = new Matrix4();
     private final Vector3 pickNear = new Vector3();
     private final Vector3 pickFar = new Vector3();
     private CameraProjection projection = CameraProjection.ORTHOGRAPHIC;
@@ -189,10 +190,12 @@ public final class Camera {
             float height = viewportHeight * zoom;
             projectionMatrix.setToOrthographic(-width * 0.5f, width * 0.5f, -height * 0.5f, height * 0.5f, near, far);
         }
+        // Keep the inverse path in float without taking a determinant that mixes projection with far-world translation.
+        inverseProjectionMatrix.set(projectionMatrix).invert();
         target.set(position.x() + direction.x(), position.y() + direction.y(), position.z() + direction.z());
         viewMatrix.setToLookAt(position, target, up);
+        inverseViewMatrix.set(viewMatrix).invert();
         combinedMatrix.setToMul(projectionMatrix, viewMatrix);
-        inverseCombinedMatrix.set(combinedMatrix).invert();
         return this;
     }
 
@@ -382,7 +385,8 @@ public final class Camera {
 
     private Vector3 unprojectUpdated(float normalizedX, float normalizedY, float normalizedZ, Vector3 out) {
         out.set(normalizedX, normalizedY, normalizedZ);
-        return inverseCombinedMatrix.transformProjective(out, out);
+        inverseProjectionMatrix.transformProjective(out, out);
+        return inverseViewMatrix.transformPosition(out, out);
     }
 
     /**

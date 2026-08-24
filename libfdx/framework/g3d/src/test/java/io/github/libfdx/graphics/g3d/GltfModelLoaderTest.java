@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 final class GltfModelLoaderTest {
     private static final float EPSILON = 0.0001f;
+    private final Matrix4 matrixOut = new Matrix4();
 
     @Test
     void loadsHierarchySkinWeightsAndLinearAnimation() {
@@ -66,10 +67,12 @@ final class GltfModelLoaderTest {
         assertEquals(1, model.animations().size());
         DefaultModelInstance instance = new DefaultModelInstance(model);
         new AnimationController(instance).play(model.animations().get(0), false).time(0.5f);
-        assertTranslation(instance.nodeTransform("joint"), 0.0f, 2.0f, 0.0f);
+        assertTranslation(instance.copyNodeTransform("joint", matrixOut),
+                0.0f, 2.0f, 0.0f);
 
         SkinningPalette palette = new SkinningPalette(skin).update(instance);
-        assertTranslation(palette.boneMatrix(0), 0.0f, 1.0f, 0.0f);
+        assertTranslation(palette.copyBoneMatrix(0, matrixOut),
+                0.0f, 1.0f, 0.0f);
     }
 
     private static String skinnedGltf() {
@@ -134,7 +137,7 @@ final class GltfModelLoaderTest {
                 1.0f, 0.0f, 0.0f, 0.0f,
                 1.0f, 0.0f, 0.0f, 0.0f,
                 1.0f, 0.0f, 0.0f, 0.0f);
-        putFloats(buffer, Matrix4.translation(0.0f, -1.0f, 0.0f).values());
+        putFloats(buffer, new Matrix4().setToTranslation(0.0f, -1.0f, 0.0f).values());
         putFloats(buffer, 0.0f, 1.0f);
         putFloats(buffer,
                 0.0f, 1.0f, 0.0f,

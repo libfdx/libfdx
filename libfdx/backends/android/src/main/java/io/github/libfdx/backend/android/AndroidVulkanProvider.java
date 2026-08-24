@@ -73,6 +73,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             .feature(GraphicsFeature.INDEXED_DRAW)
             .feature(GraphicsFeature.INSTANCED_DRAW)
             .feature(GraphicsFeature.DEPTH_STENCIL_ATTACHMENTS)
+            .feature(GraphicsFeature.ALPHA_BLEND_CONTROL)
             .colorFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
                     TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB)
             .depthStencilFormats(TextureFormat.DEPTH32_FLOAT)
@@ -602,7 +603,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                     vertexStepModes(vertexLayouts), attributeBindings(vertexLayouts), attributeLocations(vertexLayouts),
                     attributeFormats(vertexLayouts), attributeOffsets(vertexLayouts),
                     descriptor.sampledTextureCount(), uniformBufferEnabled, descriptor.depthTestEnabled(),
-                    descriptor.depthWriteEnabled()),
+                    descriptor.colorTargets()[0].blend() != null, descriptor.depthWriteEnabled()),
                     descriptor.primitiveTopology(), descriptor.sampledTextureCount(),
                     resourceBindings, resourceBindings.uniformSetIndex(),
                     descriptor.renderTargetLayout());

@@ -251,11 +251,14 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
         ModelNode root = new ModelNode("root").addPart(new ModelNodePart(
                 new MeshPart("skinned ribbon part", mesh, null, 0, mesh.vertexCount()), material, skin,
                 joints, weights));
-        ModelNode base = new ModelNode("bone-base").localTransform(Matrix4.translation(0.0f, BONE_BASE_Y, 0.0f));
-        ModelNode middle = new ModelNode("bone-middle")
-                .localTransform(Matrix4.translation(0.0f, BONE_MIDDLE_Y - BONE_BASE_Y, 0.0f));
-        ModelNode tip = new ModelNode("bone-tip")
-                .localTransform(Matrix4.translation(0.0f, BONE_TIP_Y - BONE_MIDDLE_Y, 0.0f));
+        ModelNode base = new ModelNode("bone-base");
+        base.localTransform().setToTranslation(0.0f, BONE_BASE_Y, 0.0f);
+        ModelNode middle = new ModelNode("bone-middle");
+        middle.localTransform().setToTranslation(0.0f,
+                BONE_MIDDLE_Y - BONE_BASE_Y, 0.0f);
+        ModelNode tip = new ModelNode("bone-tip");
+        tip.localTransform().setToTranslation(0.0f,
+                BONE_TIP_Y - BONE_MIDDLE_Y, 0.0f);
         root.addChild(base);
         base.addChild(middle);
         middle.addChild(tip);
@@ -272,9 +275,12 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
 
     private Skin skin() {
         Array<Bone> bones = new Array<Bone>();
-        bones.add(new Bone("bone-base", -1, Matrix4.translation(0.0f, -BONE_BASE_Y, 0.0f)));
-        bones.add(new Bone("bone-middle", 0, Matrix4.translation(0.0f, -BONE_MIDDLE_Y, 0.0f)));
-        bones.add(new Bone("bone-tip", 1, Matrix4.translation(0.0f, -BONE_TIP_Y, 0.0f)));
+        bones.add(new Bone("bone-base", -1,
+                new Matrix4().setToTranslation(0.0f, -BONE_BASE_Y, 0.0f)));
+        bones.add(new Bone("bone-middle", 0,
+                new Matrix4().setToTranslation(0.0f, -BONE_MIDDLE_Y, 0.0f)));
+        bones.add(new Bone("bone-tip", 1,
+                new Matrix4().setToTranslation(0.0f, -BONE_TIP_Y, 0.0f)));
         return new Skin("skin", new Skeleton(bones));
     }
 

@@ -419,23 +419,24 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter {
         helmetModel = assets.get(HELMET_ASSET, Model.class);
 
         groundModel = createTexturedGroundModel();
+        DefaultModelInstance ground = new DefaultModelInstance(groundModel);
+        ground.transform().setToTranslation(0.0f, SCENE_GROUND_Y, -1.2f);
         sceneInstances = new DefaultModelInstance[] {
-                new DefaultModelInstance(groundModel)
-                        .transform(Matrix4.translation(0.0f, SCENE_GROUND_Y, -1.2f)),
-                new DefaultModelInstance(duckModel)
-                        .transform(sceneTransform(0.0f, 0.0f, 0.0f, 0.0f, 0.85f, 0.85f, 0.85f)),
-                new DefaultModelInstance(dragonModel)
-                        .transform(sceneTransform(-2.10f, 0.0f, -2.45f, 28.0f, 1.45f, 1.45f, 1.45f)),
-                new DefaultModelInstance(helmetModel)
-                        .transform(sceneTransform(1.90f, 0.58f, -2.35f, -24.0f, 0.72f, 0.72f, 0.72f)),
-                new DefaultModelInstance(duckModel)
-                        .transform(sceneTransform(2.20f, 0.0f, -0.60f, 22.0f, 0.48f, 0.48f, 0.48f)),
-                new DefaultModelInstance(duckModel)
-                        .transform(sceneTransform(3.05f, 0.0f, -0.95f, -32.0f, 0.42f, 0.42f, 0.42f)),
-                new DefaultModelInstance(dragonModel)
-                        .transform(sceneTransform(2.45f, 0.0f, -4.25f, -38.0f, 0.62f, 0.62f, 0.62f)),
-                new DefaultModelInstance(helmetModel)
-                        .transform(sceneTransform(-1.62f, 0.38f, -3.55f, 34.0f, 0.42f, 0.42f, 0.42f))
+                ground,
+                sceneInstance(duckModel, 0.0f, 0.0f, 0.0f, 0.0f,
+                        0.85f, 0.85f, 0.85f),
+                sceneInstance(dragonModel, -2.10f, 0.0f, -2.45f, 28.0f,
+                        1.45f, 1.45f, 1.45f),
+                sceneInstance(helmetModel, 1.90f, 0.58f, -2.35f, -24.0f,
+                        0.72f, 0.72f, 0.72f),
+                sceneInstance(duckModel, 2.20f, 0.0f, -0.60f, 22.0f,
+                        0.48f, 0.48f, 0.48f),
+                sceneInstance(duckModel, 3.05f, 0.0f, -0.95f, -32.0f,
+                        0.42f, 0.42f, 0.42f),
+                sceneInstance(dragonModel, 2.45f, 0.0f, -4.25f, -38.0f,
+                        0.62f, 0.62f, 0.62f),
+                sceneInstance(helmetModel, -1.62f, 0.38f, -3.55f, 34.0f,
+                        0.42f, 0.42f, 0.42f)
         };
         playerInstance = sceneInstances[PLAYER_INSTANCE_INDEX];
         updatePlayerTransform();
@@ -723,11 +724,15 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter {
         return values;
     }
 
-    private Matrix4 sceneTransform(float x, float y, float z, float yawDegrees,
+    private DefaultModelInstance sceneInstance(Model model, float x, float y,
+            float z, float yawDegrees,
             float scaleX, float scaleY, float scaleZ) {
         float halfYaw = (float)Math.toRadians(yawDegrees) * 0.5f;
-        return new Matrix4().setToTrs(x, y, z, 0.0f, (float)Math.sin(halfYaw), 0.0f,
+        DefaultModelInstance instance = new DefaultModelInstance(model);
+        instance.transform().setToTrs(x, y, z, 0.0f,
+                (float)Math.sin(halfYaw), 0.0f,
                 (float)Math.cos(halfYaw), scaleX, scaleY, scaleZ);
+        return instance;
     }
 
     private void createCamerasAndControllers(Fdx fdx) {

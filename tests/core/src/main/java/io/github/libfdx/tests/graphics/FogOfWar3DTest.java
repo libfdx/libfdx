@@ -21,7 +21,6 @@ import io.github.libfdx.graphics.g3d.ModelBuilder;
 import io.github.libfdx.graphics.g3d.Material;
 import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.math.Color;
-import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.tests.TestFpsLogger;
 
 import java.nio.ByteBuffer;
@@ -191,15 +190,16 @@ public final class FogOfWar3DTest extends ApplicationAdapter {
 
     private DefaultModelInstance[] createInstances(Model floor, Model cube) {
         DefaultModelInstance[] result = new DefaultModelInstance[6];
-        result[0] = new DefaultModelInstance(floor)
-                .transform(Matrix4.translation(0.0f, -0.46f, -2.78f));
+        result[0] = new DefaultModelInstance(floor);
+        result[0].transform().setToTranslation(0.0f, -0.46f, -2.78f);
         float[] x = { -1.65f, -0.42f, 1.18f, 1.72f, -1.05f };
         float[] y = { -0.03f, 0.24f, -0.02f, 0.35f, 0.16f };
         float[] z = { -1.18f, -2.18f, -2.92f, -4.14f, -4.98f };
         float[] yaw = { -0.34f, 0.22f, -0.42f, 0.55f, 0.36f };
         for (int i = 0; i < x.length; i++) {
-            result[i + 1] = new DefaultModelInstance(cube)
-                    .transform(Matrix4.translation(x[i], y[i], z[i]).multiply(Matrix4.rotationY(yaw[i])));
+            result[i + 1] = new DefaultModelInstance(cube);
+            result[i + 1].transform().setToTranslation(x[i], y[i], z[i])
+                    .rotateY(yaw[i]);
         }
         return result;
     }

@@ -27,6 +27,9 @@ public class FdxDebugRenderer extends DebugRendererEm {
 
     private final ImmediateModeRenderer renderer;
     private final boolean ownsRenderer;
+    private final Matrix4 modelTransform = new Matrix4();
+    private final float[] modelTransformValues = new float[Matrix4.VALUE_COUNT];
+    private final float[] viewProjectionValues = new float[Matrix4.VALUE_COUNT];
     private boolean enabled = true;
     private boolean drawShapeWireframe;
 
@@ -50,7 +53,8 @@ public class FdxDebugRenderer extends DebugRendererEm {
         if (viewProjection == null) {
             throw new FdxException("View-projection matrix cannot be null");
         }
-        render(viewProjection.values());
+        viewProjection.copyValues(viewProjectionValues, 0);
+        render(viewProjectionValues);
     }
 
     public void render(float[] viewProjection) {
@@ -103,7 +107,12 @@ public class FdxDebugRenderer extends DebugRendererEm {
         }
         int vertexCount = floatCount / JOLT_FLOATS_PER_VERTEX;
 
-        float[] transform = inModelMatrix != null ? JoltFdx.toMatrix4(inModelMatrix).values() : IDENTITY_MATRIX;
+        float[] transform = IDENTITY_MATRIX;
+        if (inModelMatrix != null) {
+            JoltFdx.convert(inModelMatrix, modelTransform)
+                    .copyValues(modelTransformValues, 0);
+            transform = modelTransformValues;
+        }
         float[] modelColor = color(inModelColor);
         if (inDrawMode == EDrawMode.EDrawMode_Wireframe) {
             for (int i = 0; i + 1 < vertexCount; i += 2) {
