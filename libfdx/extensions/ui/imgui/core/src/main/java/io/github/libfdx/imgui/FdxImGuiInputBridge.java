@@ -33,6 +33,7 @@ final class FdxImGuiInputBridge extends InputAdapter {
         }
         ImGui.SetCurrentContext(context);
         ImGuiIO io = ImGui.GetIO();
+        updateKeyModifiers(io);
         io.AddKeyEvent(key, true);
         return io.get_WantCaptureKeyboard();
     }
@@ -45,6 +46,7 @@ final class FdxImGuiInputBridge extends InputAdapter {
         }
         ImGui.SetCurrentContext(context);
         ImGuiIO io = ImGui.GetIO();
+        updateKeyModifiers(io);
         io.AddKeyEvent(key, false);
         return io.get_WantCaptureKeyboard();
     }
@@ -145,6 +147,18 @@ final class FdxImGuiInputBridge extends InputAdapter {
             return ImGuiMouseSource.Pen;
         }
         return ImGuiMouseSource.Mouse;
+    }
+
+    private void updateKeyModifiers(ImGuiIO io) {
+        io.AddKeyEvent(ImGuiKey.ImGuiMod_Ctrl,
+                input.isKeyPressed(Key.CONTROL_LEFT)
+                        || input.isKeyPressed(Key.CONTROL_RIGHT));
+        io.AddKeyEvent(ImGuiKey.ImGuiMod_Shift,
+                input.isKeyPressed(Key.SHIFT_LEFT)
+                        || input.isKeyPressed(Key.SHIFT_RIGHT));
+        io.AddKeyEvent(ImGuiKey.ImGuiMod_Alt,
+                input.isKeyPressed(Key.ALT_LEFT)
+                        || input.isKeyPressed(Key.ALT_RIGHT));
     }
 
     private ImGuiKey mapKey(Key key) {
