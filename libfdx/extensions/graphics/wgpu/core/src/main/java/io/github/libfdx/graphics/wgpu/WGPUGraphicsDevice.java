@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.wgpu;
 
+import io.github.libfdx.math.ClipDepthRange;
 import com.github.xpenatan.webgpu.WGPUBuffer;
 import com.github.xpenatan.webgpu.WGPUBufferDescriptor;
 import com.github.xpenatan.webgpu.WGPUBufferUsage;
@@ -152,6 +153,8 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
                     TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB,
                     TextureFormat.RGBA16_FLOAT, TextureFormat.R32_FLOAT)
             .depthStencilFormats(TextureFormat.DEPTH24_STENCIL8, TextureFormat.DEPTH32_FLOAT)
+            // WebGPU clips depth to 0..w.
+            .clipDepthRange(ClipDepthRange.ZERO_TO_ONE)
             .resolveFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
                     TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB,
                     TextureFormat.RGBA16_FLOAT)

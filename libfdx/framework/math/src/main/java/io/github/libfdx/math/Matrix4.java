@@ -348,11 +348,30 @@ public final class Matrix4 {
      * @return this matrix4 for chaining
      */
     public Matrix4 setToPerspective(float fieldOfViewDegrees, float aspectRatio, float near, float far) {
+        return setToPerspective(fieldOfViewDegrees, aspectRatio, near, far,
+                ClipDepthRange.ZERO_TO_ONE);
+    }
+
+    /**
+     * Sets a perspective projection for an explicit clip depth range.
+     *
+     * @param fieldOfViewDegrees the vertical field of view in degrees
+     * @param aspectRatio the width/height aspect ratio
+     * @param near the near plane distance
+     * @param far the far plane distance
+     * @param clipDepthRange the depth range the target API clips against
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 setToPerspective(float fieldOfViewDegrees, float aspectRatio, float near, float far,
+            ClipDepthRange clipDepthRange) {
         if (aspectRatio == 0.0f) {
             throw new FdxException("Perspective camera aspect ratio cannot be zero");
         }
         if (near <= 0.0f || far <= near) {
             throw new FdxException("Perspective camera near/far range is invalid");
+        }
+        if (clipDepthRange == null) {
+            throw new FdxException("Clip depth range cannot be null");
         }
         for (int i = 0; i < VALUE_COUNT; i++) {
             values[i] = 0.0f;
@@ -360,9 +379,14 @@ public final class Matrix4 {
         float f = (float)(1.0 / Math.tan(Math.toRadians(fieldOfViewDegrees) * 0.5));
         values[0] = f / aspectRatio;
         values[5] = f;
-        values[10] = (far + near) / (near - far);
+        // Built zero-to-one first because that is what every current API wants;
+        // the OpenGL family is then derived from it.
+        values[10] = far / (near - far);
         values[11] = -1.0f;
-        values[14] = (2.0f * far * near) / (near - far);
+        values[14] = (far * near) / (near - far);
+        if (clipDepthRange == ClipDepthRange.NEGATIVE_ONE_TO_ONE) {
+            toNegativeOneToOneDepth();
+        }
         return this;
     }
 
@@ -381,13 +405,55 @@ public final class Matrix4 {
         if (right == left || top == bottom || far == near) {
             throw new FdxException("Orthographic camera range is invalid");
         }
+        return setToOrthographic(left, right, bottom, top, near, far,
+                ClipDepthRange.ZERO_TO_ONE);
+    }
+
+    /**
+     * Sets an orthographic projection for an explicit clip depth range.
+     *
+     * @param left the left plane
+     * @param right the right plane
+     * @param bottom the bottom plane
+     * @param top the top plane
+     * @param near the near plane
+     * @param far the far plane
+     * @param clipDepthRange the depth range the target API clips against
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 setToOrthographic(float left, float right, float bottom, float top, float near, float far,
+            ClipDepthRange clipDepthRange) {
+        if (clipDepthRange == null) {
+            throw new FdxException("Clip depth range cannot be null");
+        }
         idt();
         values[0] = 2.0f / (right - left);
         values[5] = 2.0f / (top - bottom);
-        values[10] = -2.0f / (far - near);
+        values[10] = 1.0f / (near - far);
         values[12] = -(right + left) / (right - left);
         values[13] = -(top + bottom) / (top - bottom);
-        values[14] = -(far + near) / (far - near);
+        values[14] = near / (near - far);
+        if (clipDepthRange == ClipDepthRange.NEGATIVE_ONE_TO_ONE) {
+            toNegativeOneToOneDepth();
+        }
+        return this;
+    }
+
+    /**
+     * Rewrites a zero-to-one projection in place as a negative-one-to-one one.
+     *
+     * <p>Clip depth is remapped by {@code z' = 2z - w}, i.e. row 2 becomes
+     * {@code 2 * row2 - row3}. Exact for both perspective and orthographic
+     * projections; the result is bit-identical to building the OpenGL form
+     * directly.</p>
+     *
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 toNegativeOneToOneDepth() {
+        values[2] = 2.0f * values[2] - values[3];
+        values[6] = 2.0f * values[6] - values[7];
+        values[10] = 2.0f * values[10] - values[11];
+        values[14] = 2.0f * values[14] - values[15];
         return this;
     }
 
@@ -404,6 +470,35 @@ public final class Matrix4 {
                 eye.x(), eye.y(), eye.z(),
                 center.x(), center.y(), center.z(),
                 up.x(), up.y(), up.z());
+    }
+
+    /**
+     * Sets this matrix to a view looking along a direction, without an eye
+     * position.
+     *
+     * <p>Prefer this over {@link #setToLookAt(Vector3, Vector3, Vector3)} when
+     * the eye can be far from the origin. That overload derives the forward
+     * vector as {@code center - eye}; if a caller builds the centre as
+     * {@code eye + direction}, the unit direction falls below one float ULP
+     * once {@code |eye|} exceeds roughly 1.7e7, the subtraction returns zero,
+     * and the view silently degrades to looking down -Z. Passing the direction
+     * straight in keeps every operand at magnitude one, where float is exact.</p>
+     *
+     * <p>Apply the eye afterwards with {@code translate(-eyeX, -eyeY, -eyeZ)}
+     * to obtain the full view matrix.</p>
+     *
+     * @param directionX the direction x
+     * @param directionY the direction y
+     * @param directionZ the direction z
+     * @param upX the up x
+     * @param upY the up y
+     * @param upZ the up z
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 setToLookAlong(float directionX, float directionY, float directionZ,
+            float upX, float upY, float upZ) {
+        return setToLookAt(0.0f, 0.0f, 0.0f,
+                directionX, directionY, directionZ, upX, upY, upZ);
     }
 
     /**

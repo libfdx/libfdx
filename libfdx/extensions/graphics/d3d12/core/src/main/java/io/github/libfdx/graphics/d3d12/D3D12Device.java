@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.d3d12;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Buffer;
@@ -37,6 +38,8 @@ final class D3D12Device implements GraphicsDevice {
             .colorFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
                     TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB)
             .depthStencilFormats(TextureFormat.DEPTH24_STENCIL8, TextureFormat.DEPTH32_FLOAT)
+            // Direct3D 12 clips depth to 0..w.
+            .clipDepthRange(ClipDepthRange.ZERO_TO_ONE)
             .sampleCounts(1)
             .limits(GraphicsLimits.builder()
                     .maxBindGroups(2)

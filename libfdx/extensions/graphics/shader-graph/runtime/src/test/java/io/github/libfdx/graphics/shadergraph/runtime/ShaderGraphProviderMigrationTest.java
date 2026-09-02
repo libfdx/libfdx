@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.shadergraph.runtime;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.graphics.shader.reflection.ShaderBinding;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
@@ -397,6 +398,7 @@ final class ShaderGraphProviderMigrationTest {
             implements GraphicsDevice {
         private final GraphicsCapabilities capabilities =
                 GraphicsCapabilities.builder()
+                        .clipDepthRange(ClipDepthRange.ZERO_TO_ONE)
                         .profile(ShaderProfile.PORTABLE_WEBGPU)
                         .colorFormats(TextureFormat.RGBA8_UNORM)
                         .sampleCounts(1)

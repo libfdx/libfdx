@@ -1,5 +1,6 @@
 package io.github.libfdx.backend.android;
 
+import io.github.libfdx.math.ClipDepthRange;
 import android.view.Surface;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
@@ -77,6 +78,8 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             .colorFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
                     TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB)
             .depthStencilFormats(TextureFormat.DEPTH32_FLOAT)
+            // Vulkan clips depth to 0..w.
+            .clipDepthRange(ClipDepthRange.ZERO_TO_ONE)
             .sampleCounts(1)
             .limits(GraphicsLimits.builder()
                     .maxBindGroups(2)

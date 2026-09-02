@@ -1,6 +1,7 @@
 package io.github.libfdx.graphics;
 
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.math.ClipDepthRange;
 
 /**
  * Provides the default implementation of a graphics.
@@ -20,6 +21,13 @@ public final class DefaultGraphics implements Graphics {
             throw new FdxException("Main graphics context cannot be null");
         }
         this.main = main;
+        // Every backend builds this immediately before calling the application
+        // listener's create, so it is the one point that reliably runs after a
+        // device exists and before any camera can be constructed. Publishing
+        // the device's own declared range here keeps the OpenGL family out of
+        // Camera and Matrix4, and lets a later device correct the value rather
+        // than inheriting a stale one.
+        ClipDepthRange.setDefault(main.device().capabilities().clipDepthRange());
     }
 
     /**

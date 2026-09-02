@@ -2,6 +2,7 @@ package io.github.libfdx.graphics;
 
 import io.github.libfdx.graphics.shader.ShaderProfile;
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.math.ClipDepthRange;
 
 import java.util.Arrays;
 
@@ -16,6 +17,8 @@ public final class GraphicsCapabilities {
             .colorFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
                     TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB)
             .depthStencilFormats(TextureFormat.DEPTH24_STENCIL8, TextureFormat.DEPTH32_FLOAT)
+            // The conservative profile is WebGL2, so it clips the OpenGL way.
+            .clipDepthRange(ClipDepthRange.NEGATIVE_ONE_TO_ONE)
             .sampleCounts(1)
             .limits(GraphicsLimits.conservativeRender())
             .build();
@@ -28,6 +31,7 @@ public final class GraphicsCapabilities {
     private final int[] sampleCounts;
     private final int[][] formatSampleCounts;
     private final GraphicsLimits limits;
+    private final ClipDepthRange clipDepthRange;
 
     private GraphicsCapabilities(Builder builder) {
         profiles = builder.profiles.clone();
@@ -39,6 +43,15 @@ public final class GraphicsCapabilities {
         formatSampleCounts = normalizeFormatSampleCounts(builder.formatSampleCounts,
                 colorFormats, depthStencilFormats, sampleCounts);
         limits = builder.limits != null ? builder.limits : GraphicsLimits.conservativeRender();
+        // Deliberately has no default. A device that silently guessed here
+        // would build projections for the wrong clip volume and discard
+        // geometry with no error reported, which is exactly the failure this
+        // property exists to prevent.
+        if (builder.clipDepthRange == null) {
+            throw new FdxException(
+                    "Graphics capabilities must declare a clip depth range");
+        }
+        clipDepthRange = builder.clipDepthRange;
         if (!supports(ShaderProfile.PORTABLE_WEBGL2)
                 && !supports(ShaderProfile.PORTABLE_WEBGPU)
                 && !supports(ShaderProfile.NATIVE)) {
@@ -233,6 +246,20 @@ public final class GraphicsCapabilities {
     /**
      * Builds immutable device capabilities.
      */
+    /**
+     * Returns the depth range this device clips against in clip space.
+     *
+     * <p>{@link ClipDepthRange#ZERO_TO_ONE} for Vulkan, Direct3D 12, Metal and
+     * WebGPU; {@link ClipDepthRange#NEGATIVE_ONE_TO_ONE} for the OpenGL
+     * family. Projection matrices, frustum plane extraction and unprojection
+     * all have to agree with it.</p>
+     *
+     * @return the clip depth range
+     */
+    public ClipDepthRange clipDepthRange() {
+        return clipDepthRange;
+    }
+
     public static final class Builder {
         private final boolean[] profiles = new boolean[ShaderProfile.values().length];
         private final boolean[] features = new boolean[GraphicsFeature.values().length];
@@ -243,6 +270,21 @@ public final class GraphicsCapabilities {
         private final int[][] formatSampleCounts =
                 new int[TextureFormat.values().length][];
         private GraphicsLimits limits;
+        private ClipDepthRange clipDepthRange;
+
+        /**
+         * Declares the depth range this device clips against. Required.
+         *
+         * @param value the clip depth range
+         * @return this builder for chaining
+         */
+        public Builder clipDepthRange(ClipDepthRange value) {
+            if (value == null) {
+                throw new FdxException("Clip depth range cannot be null");
+            }
+            clipDepthRange = value;
+            return this;
+        }
 
         public Builder profile(ShaderProfile profile) {
             if (profile == null) {

@@ -115,7 +115,45 @@ class Matrix4Test {
         assertSame(position, result);
         assertEquals(0.5f, result.x(), EPSILON);
         assertEquals(0.0f, result.y(), EPSILON);
-        assertEquals(1.0f / 99.0f, result.z(), EPSILON);
+        // setToPerspective is ZERO_TO_ONE by default now, so a point two units
+        // out of a 1..100 range sits at 50/99, not the OpenGL 1/99.
+        assertEquals(50.0f / 99.0f, result.z(), EPSILON);
+    }
+
+    @Test
+    void perspectiveMapsNearAndFarPerClipDepthRange() {
+        Matrix4 zeroToOne = new Matrix4().setToPerspective(
+                90.0f, 1.0f, 1.0f, 100.0f, ClipDepthRange.ZERO_TO_ONE);
+        assertEquals(0.0f, zeroToOne.transformProjective(
+                new Vector3(0.0f, 0.0f, -1.0f)).z(), EPSILON);
+        assertEquals(1.0f, zeroToOne.transformProjective(
+                new Vector3(0.0f, 0.0f, -100.0f)).z(), EPSILON);
+
+        Matrix4 openGl = new Matrix4().setToPerspective(
+                90.0f, 1.0f, 1.0f, 100.0f, ClipDepthRange.NEGATIVE_ONE_TO_ONE);
+        assertEquals(-1.0f, openGl.transformProjective(
+                new Vector3(0.0f, 0.0f, -1.0f)).z(), EPSILON);
+        assertEquals(1.0f, openGl.transformProjective(
+                new Vector3(0.0f, 0.0f, -100.0f)).z(), EPSILON);
+    }
+
+    @Test
+    void orthographicMapsNearAndFarPerClipDepthRange() {
+        Matrix4 zeroToOne = new Matrix4().setToOrthographic(
+                -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 100.0f,
+                ClipDepthRange.ZERO_TO_ONE);
+        assertEquals(0.0f, zeroToOne.transformProjective(
+                new Vector3(0.0f, 0.0f, -1.0f)).z(), EPSILON);
+        assertEquals(1.0f, zeroToOne.transformProjective(
+                new Vector3(0.0f, 0.0f, -100.0f)).z(), EPSILON);
+
+        Matrix4 openGl = new Matrix4().setToOrthographic(
+                -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 100.0f,
+                ClipDepthRange.NEGATIVE_ONE_TO_ONE);
+        assertEquals(-1.0f, openGl.transformProjective(
+                new Vector3(0.0f, 0.0f, -1.0f)).z(), EPSILON);
+        assertEquals(1.0f, openGl.transformProjective(
+                new Vector3(0.0f, 0.0f, -100.0f)).z(), EPSILON);
     }
 
     @Test

@@ -1,6 +1,7 @@
 package io.github.libfdx.graphics.camera;
 
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.math.Ray;
 import io.github.libfdx.math.Vector3;
@@ -10,11 +11,10 @@ import io.github.libfdx.math.Vector3;
  *
  * @author xpenatan
  */
-public final class Camera {
+public class Camera {
     private final Vector3 position = new Vector3(0.0f, 0.0f, 1.0f);
     private final Vector3 direction = new Vector3(0.0f, 0.0f, -1.0f);
     private final Vector3 up = new Vector3(0.0f, 1.0f, 0.0f);
-    private final Vector3 target = new Vector3(0.0f, 0.0f, 0.0f);
     private final Matrix4 projectionMatrix = new Matrix4();
     private final Matrix4 viewMatrix = new Matrix4();
     private final Matrix4 combinedMatrix = new Matrix4();
@@ -29,6 +29,7 @@ public final class Camera {
     private float near = 0.1f;
     private float far = 100.0f;
     private float zoom = 1.0f;
+    private ClipDepthRange clipDepthRange = ClipDepthRange.getDefault();
 
     /**
      * Sets the projection and returns this camera.
@@ -91,7 +92,10 @@ public final class Camera {
      * @return this camera for chaining
      */
     public Camera nearFar(float near, float far) {
-        if (near <= 0.0f || far <= near) {
+        // near == 0 is legitimate for an orthographic projection; only a
+        // perspective divide needs a strictly positive near plane, and that is
+        // clamped in update().
+        if (near < 0.0f || far <= near) {
             throw new FdxException("Camera near/far range is invalid");
         }
         this.near = near;
@@ -141,12 +145,17 @@ public final class Camera {
         }
         float invLen = 1.0f / len;
         direction.set(x * invLen, y * invLen, z * invLen);
-        target.set(position.x() + direction.x(), position.y() + direction.y(), position.z() + direction.z());
         return this;
     }
 
     /**
      * Sets the look at and returns this camera.
+     *
+     * <p>The direction is derived as {@code target - position}. When both are
+     * far from the origin and close to each other the subtraction loses
+     * precision proportionally, so prefer
+     * {@link #direction(float, float, float)} with an already-relative vector
+     * in a large world.</p>
      *
      * @param x the x coordinate
      * @param y the y coordinate
@@ -154,7 +163,6 @@ public final class Camera {
      * @return this camera for chaining
      */
     public Camera lookAt(float x, float y, float z) {
-        target.set(x, y, z);
         return direction(x - position.x(), y - position.y(), z - position.z());
     }
 
@@ -183,19 +191,83 @@ public final class Camera {
      */
     public Camera update() {
         if (projection == CameraProjection.PERSPECTIVE) {
-            projectionMatrix.setToPerspective(fieldOfViewDegrees, viewportWidth / viewportHeight, near, far);
+            projectionMatrix.setToPerspective(fieldOfViewDegrees, viewportWidth / viewportHeight,
+                    Math.max(near, 0.0001f), far, clipDepthRange);
         }
         else {
             float width = viewportWidth * zoom;
             float height = viewportHeight * zoom;
-            projectionMatrix.setToOrthographic(-width * 0.5f, width * 0.5f, -height * 0.5f, height * 0.5f, near, far);
+            projectionMatrix.setToOrthographic(-width * 0.5f, width * 0.5f, -height * 0.5f, height * 0.5f, near, far,
+                    clipDepthRange);
         }
         // Keep the inverse path in float without taking a determinant that mixes projection with far-world translation.
         inverseProjectionMatrix.set(projectionMatrix).invert();
-        target.set(position.x() + direction.x(), position.y() + direction.y(), position.z() + direction.z());
-        viewMatrix.setToLookAt(position, target, up);
+        // Build the basis from the unit direction alone, then apply the eye.
+        //
+        // Deriving a look-at target as position + direction adds a unit vector
+        // to the eye coordinate. Once |position| passes about 1.7e7 the add
+        // rounds back to position, setToLookAt recovers a zero forward vector
+        // and silently substitutes forward = (0,0,-1), so the camera loses its
+        // orientation with no error reported. That is fatal for large worlds,
+        // where an eye at 1e11 has a float ULP of 16 km.
+        viewMatrix.setToLookAlong(
+                direction.x(), direction.y(), direction.z(),
+                up.x(), up.y(), up.z());
+        viewMatrix.translate(-position.x(), -position.y(), -position.z());
         inverseViewMatrix.set(viewMatrix).invert();
         combinedMatrix.setToMul(projectionMatrix, viewMatrix);
+        return this;
+    }
+
+    /**
+     * Returns the inverse projection matrix.
+     *
+     * <p>Exposed so callers can build an inverse projection-view as
+     * {@code inverseView * inverseProjection} rather than inverting the
+     * product. Inverting the product is not safe at large camera distances:
+     * once the projection's near term falls below one ULP of the view
+     * translation it is lost in the multiply, rows 2 and 3 of the product
+     * become parallel and the determinant collapses to zero. Each factor
+     * inverts stably on its own.</p>
+     *
+     * @return the inverse projection matrix
+     */
+    public Matrix4 inverseProjectionMatrix() {
+        update();
+        return inverseProjectionMatrix;
+    }
+
+    /**
+     * Returns the inverse view matrix. See {@link #inverseProjectionMatrix()}
+     * for why the two inverses are kept apart.
+     *
+     * @return the inverse view matrix
+     */
+    public Matrix4 inverseViewMatrix() {
+        update();
+        return inverseViewMatrix;
+    }
+
+    /**
+     * Returns this camera's clip depth range.
+     *
+     * @return the clip depth range
+     */
+    public ClipDepthRange clipDepthRange() {
+        return clipDepthRange;
+    }
+
+    /**
+     * Sets this camera's clip depth range, overriding the static default.
+     *
+     * @param clipDepthRange the range the target API clips against
+     * @return this camera for chaining
+     */
+    public Camera clipDepthRange(ClipDepthRange clipDepthRange) {
+        if (clipDepthRange == null) {
+            throw new FdxException("Clip depth range cannot be null");
+        }
+        this.clipDepthRange = clipDepthRange;
         return this;
     }
 
@@ -344,7 +416,8 @@ public final class Camera {
         return out.set(
                 screenViewportX + (out.x() + 1.0f) * screenViewportWidth * 0.5f,
                 screenViewportY + (1.0f - out.y()) * screenViewportHeight * 0.5f,
-                (out.z() + 1.0f) * 0.5f);
+                clipDepthRange == ClipDepthRange.ZERO_TO_ONE
+                        ? out.z() : (out.z() + 1.0f) * 0.5f);
     }
 
     /**
@@ -378,7 +451,9 @@ public final class Camera {
         validateProjectionArguments(screenCoordinates, out, screenViewportWidth, screenViewportHeight);
         float normalizedX = (screenCoordinates.x() - screenViewportX) * 2.0f / screenViewportWidth - 1.0f;
         float normalizedY = 1.0f - (screenCoordinates.y() - screenViewportY) * 2.0f / screenViewportHeight;
-        float normalizedZ = screenCoordinates.z() * 2.0f - 1.0f;
+        // Window depth is always 0..1; only the clip-space mapping differs.
+        float normalizedZ = clipDepthRange == ClipDepthRange.ZERO_TO_ONE
+                ? screenCoordinates.z() : screenCoordinates.z() * 2.0f - 1.0f;
         update();
         return unprojectUpdated(normalizedX, normalizedY, normalizedZ, out);
     }
@@ -387,18 +462,6 @@ public final class Camera {
         out.set(normalizedX, normalizedY, normalizedZ);
         inverseProjectionMatrix.transformProjective(out, out);
         return inverseViewMatrix.transformPosition(out, out);
-    }
-
-    /**
-     * Creates a pick ray for a top-left-origin screen coordinate. The coordinate must use the same units as this
-     * camera's viewport.
-     *
-     * @param screenX the screen x coordinate
-     * @param screenY the screen y coordinate
-     * @return a new pick ray
-     */
-    public Ray getPickRay(float screenX, float screenY) {
-        return getPickRay(screenX, screenY, new Ray());
     }
 
     /**
@@ -456,7 +519,11 @@ public final class Camera {
         float normalizedX = (screenX - screenViewportX) * 2.0f / screenViewportWidth - 1.0f;
         float normalizedY = 1.0f - (screenY - screenViewportY) * 2.0f / screenViewportHeight;
         update();
-        unprojectUpdated(normalizedX, normalizedY, -1.0f, pickNear);
+        // The near plane sits at clip z 0 under ZERO_TO_ONE and -1 under the
+        // OpenGL convention; the far plane is 1 in both.
+        float nearDepth = clipDepthRange == ClipDepthRange.ZERO_TO_ONE
+                ? 0.0f : -1.0f;
+        unprojectUpdated(normalizedX, normalizedY, nearDepth, pickNear);
         unprojectUpdated(normalizedX, normalizedY, 1.0f, pickFar);
         return out.set(
                 pickNear.x(), pickNear.y(), pickNear.z(),

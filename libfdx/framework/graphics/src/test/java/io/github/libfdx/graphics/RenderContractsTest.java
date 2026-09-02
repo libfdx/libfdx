@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.graphics.shader.ShaderLanguage;
 import io.github.libfdx.graphics.shader.ShaderModule;
 import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
@@ -14,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class RenderContractsTest {
     private static final ProviderId TEST_PROVIDER = ProviderId.of("render-contract-test");
@@ -116,6 +118,7 @@ final class RenderContractsTest {
     @Test
     void alphaBlendControlAllowsOpaqueColorTargetsWithoutCompleteState() {
         GraphicsCapabilities capabilities = GraphicsCapabilities.builder()
+                .clipDepthRange(ClipDepthRange.ZERO_TO_ONE)
                 .profile(ShaderProfile.PORTABLE_WEBGL2)
                 .feature(GraphicsFeature.ALPHA_BLEND_CONTROL)
                 .colorFormats(TextureFormat.RGBA8_UNORM)
@@ -158,6 +161,7 @@ final class RenderContractsTest {
 
     private static GraphicsCapabilities advancedCapabilities() {
         return GraphicsCapabilities.builder()
+                .clipDepthRange(ClipDepthRange.ZERO_TO_ONE)
                 .profile(ShaderProfile.PORTABLE_WEBGPU)
                 .feature(GraphicsFeature.MULTIPLE_COLOR_ATTACHMENTS)
                 .feature(GraphicsFeature.DEPTH_STENCIL_ATTACHMENTS)
@@ -265,5 +269,32 @@ final class RenderContractsTest {
         public <T> T as() {
             return (T) this;
         }
+    }
+
+    /**
+     * A device must state which depth range it clips against. Guessing is what
+     * made the original defect invisible: an OpenGL-convention projection fed
+     * to a zero-to-one clipper discards everything nearer than about twice the
+     * near plane, with no error anywhere.
+     */
+    @Test
+    void capabilitiesRequireAnExplicitClipDepthRange() {
+        FdxException failure = assertThrows(FdxException.class,
+                () -> GraphicsCapabilities.builder()
+                        .profile(ShaderProfile.PORTABLE_WEBGPU)
+                        .feature(GraphicsFeature.DEPTH_STENCIL_ATTACHMENTS)
+                        .colorFormats(TextureFormat.RGBA8_UNORM)
+                        .depthStencilFormats(TextureFormat.DEPTH32_FLOAT)
+                        .sampleCounts(1)
+                        .build());
+        assertTrue(failure.getMessage().contains("clip depth range"),
+                "expected a clip depth range message, got: " + failure.getMessage());
+    }
+
+    @Test
+    void conservativeCapabilitiesUseTheOpenGlConvention() {
+        // The conservative profile is WebGL2, which clips -w..w.
+        assertEquals(ClipDepthRange.NEGATIVE_ONE_TO_ONE,
+                GraphicsCapabilities.conservativeRender().clipDepthRange());
     }
 }

@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.shadergraph.ui;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.graphics.shadergraph.model.ShaderEdge;
 import io.github.libfdx.graphics.ColorTargetState;
 import io.github.libfdx.graphics.GraphicsCapabilities;
@@ -151,6 +152,7 @@ final class ShaderGraphEditorFixtures {
                 .feature(GraphicsFeature.DEPTH_STENCIL_ATTACHMENTS)
                 .colorFormats(TextureFormat.RGBA8_UNORM)
                 .depthStencilFormats(TextureFormat.DEPTH32_FLOAT)
+                .clipDepthRange(ClipDepthRange.ZERO_TO_ONE)
                 .sampleCounts(1)
                 .limits(GraphicsLimits.builder()
                         .maxBindGroups(4)

@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.shadergraph.technique;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompiledVariant;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphTechniqueCompileResult;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphTechniqueCompiler;
@@ -116,6 +117,7 @@ final class ShaderGraphTechniqueTest {
         ShaderGraphTechniquePass pass = pass(
                 ShaderPassId.FORWARD, nativeOnly, normal);
         GraphicsCapabilities webGpu = GraphicsCapabilities.builder()
+                .clipDepthRange(ClipDepthRange.ZERO_TO_ONE)
                 .profile(ShaderProfile.PORTABLE_WEBGPU)
                 .colorFormats(TextureFormat.RGBA8_UNORM)
                 .sampleCounts(1)

@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.gl;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Buffer;
@@ -44,6 +45,8 @@ final class GLGraphicsDevice implements GraphicsDevice {
             .colorFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
                     TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB)
             .depthStencilFormats(TextureFormat.DEPTH24_STENCIL8, TextureFormat.DEPTH32_FLOAT)
+            // Desktop GL, GLES and WebGL all clip depth to -w..w.
+            .clipDepthRange(ClipDepthRange.NEGATIVE_ONE_TO_ONE)
             .sampleCounts(1)
             .limits(GraphicsLimits.builder()
                     .maxBindGroups(2)

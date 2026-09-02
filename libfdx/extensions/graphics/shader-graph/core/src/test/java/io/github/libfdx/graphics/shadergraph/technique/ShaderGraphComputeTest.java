@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.shadergraph.technique;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompiledComputeVariant;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphComputeCompileResult;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphComputeTechniqueCompileResult;
@@ -294,6 +295,7 @@ final class ShaderGraphComputeTest {
 
     private static GraphicsCapabilities capabilities() {
         return GraphicsCapabilities.builder()
+                .clipDepthRange(ClipDepthRange.ZERO_TO_ONE)
                 .profile(ShaderProfile.PORTABLE_WEBGL2)
                 .profile(ShaderProfile.PORTABLE_WEBGPU)
                 .profile(ShaderProfile.NATIVE)

@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.shadergraph.compiler;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.graphics.shadergraph.ir.ShaderIrFunction;
 import io.github.libfdx.graphics.shadergraph.ir.ShaderIrInstruction;
 import io.github.libfdx.graphics.shadergraph.ir.ShaderIrOpcode;
@@ -267,6 +268,7 @@ final class ShaderGraphCoreTest {
                 "FDXG_NODE_PROFILE");
 
         GraphicsCapabilities noAtomics = GraphicsCapabilities.builder()
+                .clipDepthRange(ClipDepthRange.ZERO_TO_ONE)
                 .profile(ShaderProfile.NATIVE)
                 .feature(GraphicsFeature.COMPUTE)
                 .feature(GraphicsFeature.STORAGE_BUFFERS)
