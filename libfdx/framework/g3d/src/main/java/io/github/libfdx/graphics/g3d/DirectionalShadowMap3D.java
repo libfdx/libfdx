@@ -366,6 +366,11 @@ public final class DirectionalShadowMap3D implements Disposable {
         GraphicsFrame frame = graphics.currentFrame();
         return frame.commandEncoder().beginRenderPass(RenderPassDescriptor
                 .color(target.colorAttachment(0), LoadOp.clear(1.0f, 1.0f, 1.0f, 0.0f), StoreOp.store())
+                // Deliberately NOT the active clip depth range's clear value.
+                // A shadow map owns its own depth attachment, so it only has to
+                // be self-consistent, and its light-space range is small enough
+                // that reversed depth would buy nothing while forcing the
+                // shadow lookup's comparison to flip as well.
                 .depthClear(1.0f)
                 .label("directional shadow map pass"));
     }

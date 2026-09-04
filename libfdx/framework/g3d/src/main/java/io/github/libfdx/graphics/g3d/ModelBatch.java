@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.collections.ObjectIterable;
 import io.github.libfdx.collections.ObjectIterator;
@@ -28,12 +29,13 @@ public final class ModelBatch implements Batch3D {
     private final GraphicsContext graphics;
     private final DefaultRenderQueue3D queue = new DefaultRenderQueue3D();
     private final Environment3D defaultEnvironment = new Environment3D();
+    // The depth clear value is applied per pass in begin(), not here: it has
+    // to match the active clip depth range, and a field initializer would latch
+    // whatever was set when this batch happened to be constructed.
     private final RenderPassDescriptor framePassDescriptor = new RenderPassDescriptor()
-            .label("model batch pass")
-            .depthClear(1.0f);
+            .label("model batch pass");
     private final RenderPassDescriptor targetPassDescriptor = new RenderPassDescriptor()
-            .label("model batch target pass")
-            .depthClear(1.0f);
+            .label("model batch target pass");
     private final RenderContext3D context;
     private ShaderProvider3D ownedShaderProvider;
     private Disposable[] retiredOwnedProviders = new Disposable[2];
@@ -134,6 +136,7 @@ public final class ModelBatch implements Batch3D {
         ensureShaderPass(shaderPassId);
         GraphicsFrame frame = graphics.currentFrame();
         framePassDescriptor
+                .depthClear(ClipDepthRange.getDefault().depthClearValue())
                 .colorAttachment(frame.colorAttachment())
                 .colorLoadOp(loadOp != null ? loadOp : LoadOp.load())
                 .colorStoreOp(StoreOp.store());
@@ -217,6 +220,7 @@ public final class ModelBatch implements Batch3D {
         }
         GraphicsFrame frame = graphics.currentFrame();
         targetPassDescriptor
+                .depthClear(ClipDepthRange.getDefault().depthClearValue())
                 .colorAttachment(colorAttachment)
                 .colorLoadOp(LoadOp.load())
                 .colorStoreOp(StoreOp.store());

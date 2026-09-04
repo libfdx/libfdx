@@ -316,4 +316,54 @@ class CameraTest {
             assertEquals(-3.0f, back.z(), 1.0e-3f, range + " z");
         }
     }
+
+    @Test
+    public void reversedDepthMapsNearToOneAndFarToZero() {
+        Camera camera = new Camera()
+                .projection(CameraProjection.PERSPECTIVE)
+                .viewport(800.0f, 600.0f)
+                .nearFar(0.5f, 1000.0f)
+                .position(0.0f, 0.0f, 0.0f)
+                .direction(0.0f, 0.0f, -1.0f)
+                .up(0.0f, 1.0f, 0.0f);
+        camera.clipDepthRange(ClipDepthRange.ZERO_TO_ONE_REVERSED).update();
+
+        assertEquals(1.0f, camera.project(
+                new Vector3(0.0f, 0.0f, -0.5f), new Vector3()).z(), 1.0e-5f,
+                "near plane depth");
+        assertEquals(0.0f, camera.project(
+                new Vector3(0.0f, 0.0f, -1000.0f), new Vector3()).z(), 1.0e-5f,
+                "far plane depth");
+    }
+
+    /**
+     * far <= 0 opts into an infinite far plane. Nothing is clipped by distance,
+     * and the pick ray must stay finite even though the far plane it used to be
+     * derived from no longer exists.
+     */
+    @Test
+    public void infiniteFarPlaneKeepsPickRayFiniteAndCorrect() {
+        Camera camera = new Camera()
+                .projection(CameraProjection.PERSPECTIVE)
+                .viewport(800.0f, 600.0f)
+                .position(0.0f, 0.0f, 0.0f)
+                .direction(0.0f, 0.0f, -1.0f)
+                .up(0.0f, 1.0f, 0.0f);
+        camera.clipDepthRange(ClipDepthRange.ZERO_TO_ONE_REVERSED);
+        camera.nearFar(0.5f, 0.0f).update();
+        assertTrue(camera.hasInfiniteFarPlane(), "far <= 0 means infinite");
+
+        Ray ray = camera.getPickRay(400.0f, 300.0f, new Ray());
+        assertTrue(Float.isFinite(ray.direction().x())
+                        && Float.isFinite(ray.direction().y())
+                        && Float.isFinite(ray.direction().z()),
+                "pick ray direction must be finite, got " + ray.direction());
+        assertEquals(1.0f, ray.direction().length(), 1.0e-4f, "unit length");
+        assertEquals(-1.0f, ray.direction().z(), 1.0e-4f, "points forward");
+
+        // Depth stays inside 0..1 arbitrarily far out.
+        float z = camera.project(
+                new Vector3(0.0f, 0.0f, -1.496e11f), new Vector3()).z();
+        assertTrue(z >= 0.0f && z < 1.0f, "depth at 1 AU must be in 0..1: " + z);
+    }
 }

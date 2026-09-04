@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.CompareFunction;
@@ -144,7 +145,11 @@ public final class StandardPbrTechnique {
                 .label("standard graph "
                         + (skinned ? "skinned " : "")
                         + alphaLabel + " PBR " + passId)
-                .depth(depthWrite, CompareFunction.LESS_EQUAL)
+                // Not LESS_EQUAL: under reversed depth the nearer fragment is
+                // the one with the LARGER value, and this technique draws the
+                // scene's models - hardcoding the test would blank them.
+                .depth(depthWrite, CompareFunction.depthTestFor(
+                        ClipDepthRange.getDefault()))
                 // Providers without explicit blend-state control retain the
                 // historical always-blended pipeline as a safe fallback.
                 .alphaBlend(alphaBlend || !alphaBlendControl)

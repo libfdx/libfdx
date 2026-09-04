@@ -1,5 +1,7 @@
 package io.github.libfdx.backend.desktop;
 
+import io.github.libfdx.graphics.DepthStencilState;
+import io.github.libfdx.graphics.CompareFunction;
 import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
@@ -190,6 +192,13 @@ import static org.lwjgl.vulkan.VK10.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_
 import static org.lwjgl.vulkan.VK10.VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 import static org.lwjgl.vulkan.VK10.VK_CULL_MODE_NONE;
 import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_LESS_OR_EQUAL;
+import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_NEVER;
+import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_LESS;
+import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_EQUAL;
+import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_GREATER;
+import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_NOT_EQUAL;
+import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_GREATER_OR_EQUAL;
+import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_ALWAYS;
 import static org.lwjgl.vulkan.VK10.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 import static org.lwjgl.vulkan.VK10.VK_DEPENDENCY_BY_REGION_BIT;
 import static org.lwjgl.vulkan.VK10.VK_DYNAMIC_STATE_SCISSOR;
@@ -3482,13 +3491,37 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
+        /**
+         * Maps the descriptor's depth test to Vulkan. This used to be hardwired
+         * to LESS_OR_EQUAL, which silently discarded whatever the caller asked
+         * for - reversed depth needs GREATER, and getting it wrong renders a
+         * black screen rather than an artefact.
+         */
+        private static int toVulkanCompareOp(RenderPipelineDescriptor descriptor) {
+            DepthStencilState depth = descriptor.depthStencilState();
+            CompareFunction compare = depth != null ? depth.depthCompare()
+                    : CompareFunction.depthTestFor(ClipDepthRange.getDefault());
+            switch (compare) {
+                case NEVER: return VK_COMPARE_OP_NEVER;
+                case LESS: return VK_COMPARE_OP_LESS;
+                case EQUAL: return VK_COMPARE_OP_EQUAL;
+                case LESS_EQUAL: return VK_COMPARE_OP_LESS_OR_EQUAL;
+                case GREATER: return VK_COMPARE_OP_GREATER;
+                case NOT_EQUAL: return VK_COMPARE_OP_NOT_EQUAL;
+                case GREATER_EQUAL: return VK_COMPARE_OP_GREATER_OR_EQUAL;
+                case ALWAYS: return VK_COMPARE_OP_ALWAYS;
+                default:
+                    throw new FdxException("Unsupported depth compare function: " + compare);
+            }
+        }
+
         private VkPipelineDepthStencilStateCreateInfo createDepthStencilState(RenderPipelineDescriptor descriptor,
                 MemoryStack stack) {
             return VkPipelineDepthStencilStateCreateInfo.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO)
                     .depthTestEnable(descriptor.depthTestEnabled())
                     .depthWriteEnable(descriptor.depthWriteEnabled())
-                    .depthCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL)
+                    .depthCompareOp(toVulkanCompareOp(descriptor))
                     .depthBoundsTestEnable(false)
                     .stencilTestEnable(false)
                     .minDepthBounds(0.0f)

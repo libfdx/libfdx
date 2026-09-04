@@ -7,6 +7,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -171,5 +172,92 @@ class Matrix4Test {
         for (int i = 0; i < Matrix4.VALUE_COUNT; i++) {
             assertEquals(expectedValues[i], actualValues[i], EPSILON);
         }
+    }
+
+    @Test
+    void reverseZMapsNearToOneAndFarToZero() {
+        Matrix4 m = new Matrix4().setToPerspective(
+                90.0f, 1.0f, 1.0f, 100.0f, ClipDepthRange.ZERO_TO_ONE_REVERSED);
+        assertEquals(1.0f, m.transformProjective(
+                new Vector3(0.0f, 0.0f, -1.0f)).z(), EPSILON);
+        assertEquals(0.0f, m.transformProjective(
+                new Vector3(0.0f, 0.0f, -100.0f)).z(), EPSILON);
+    }
+
+    @Test
+    void reverseZOrthographicMapsNearToOneAndFarToZero() {
+        Matrix4 m = new Matrix4().setToOrthographic(
+                -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 100.0f,
+                ClipDepthRange.ZERO_TO_ONE_REVERSED);
+        assertEquals(1.0f, m.transformProjective(
+                new Vector3(0.0f, 0.0f, -1.0f)).z(), EPSILON);
+        assertEquals(0.0f, m.transformProjective(
+                new Vector3(0.0f, 0.0f, -100.0f)).z(), EPSILON);
+    }
+
+    /**
+     * The whole reason for reverse-Z: an infinite far plane has no far/near
+     * ratio, so the degeneracy that ratio causes cannot arise. Depth stays
+     * inside 0..1 no matter how far out the sample is taken.
+     */
+    @Test
+    void infiniteFarPlaneKeepsDepthInRangeAtAnyDistance() {
+        Matrix4 m = new Matrix4().setToPerspectiveInfinite(
+                60.0f, 16.0f / 9.0f, 1.0f, ClipDepthRange.ZERO_TO_ONE_REVERSED);
+        assertEquals(1.0f, m.transformProjective(
+                new Vector3(0.0f, 0.0f, -1.0f)).z(), EPSILON);
+        // One astronomical unit, and far beyond it.
+        for(float distance : new float[]{1.0e6f, 1.496e11f, 1.0e16f}) {
+            float z = m.transformProjective(
+                    new Vector3(0.0f, 0.0f, -distance)).z();
+            assertTrue(z >= 0.0f && z < 1.0f,
+                    "depth at " + distance + " m must stay in 0..1, got " + z);
+        }
+        // Monotonic: nearer must be greater under reversed depth.
+        float nearer = m.transformProjective(
+                new Vector3(0.0f, 0.0f, -1.0e6f)).z();
+        float farther = m.transformProjective(
+                new Vector3(0.0f, 0.0f, -1.496e11f)).z();
+        assertTrue(nearer > farther,
+                "reversed depth must decrease with distance");
+    }
+
+    /**
+     * Reverse-Z exists to keep precision usable across a range that the
+     * conventional mapping cannot express at all. At a 1e11 far/near ratio the
+     * conventional zero-to-one depth of two points a factor of ten apart
+     * collapses to the same float; reversed depth still separates them.
+     */
+    @Test
+    void reverseZSeparatesDistancesThatConventionalDepthCollapses() {
+        float near = 1.0f, far = 1.0e11f;
+        Matrix4 conventional = new Matrix4().setToPerspective(
+                60.0f, 1.0f, near, far, ClipDepthRange.ZERO_TO_ONE);
+        Matrix4 reversed = new Matrix4().setToPerspective(
+                60.0f, 1.0f, near, far, ClipDepthRange.ZERO_TO_ONE_REVERSED);
+
+        float a = 1.0e6f;
+        float b = 1.0e7f;
+        float ca = conventional.transformProjective(new Vector3(0, 0, -a)).z();
+        float cb = conventional.transformProjective(new Vector3(0, 0, -b)).z();
+        float ra = reversed.transformProjective(new Vector3(0, 0, -a)).z();
+        float rb = reversed.transformProjective(new Vector3(0, 0, -b)).z();
+
+        // Measured in float steps, which is what the depth buffer actually
+        // resolves. A factor of ten in distance should not come down to a
+        // single representable step.
+        float conventionalSteps = Math.abs(ca - cb)
+                / Math.ulp(Math.max(Math.abs(ca), Math.abs(cb)));
+        float reversedSteps = Math.abs(ra - rb)
+                / Math.ulp(Math.max(Math.abs(ra), Math.abs(rb)));
+        // Conventional keeps only a handful of steps across a whole decade of
+        // distance; reversed keeps millions. The ratio is the claim.
+        assertTrue(conventionalSteps < 100.0f,
+                "conventional depth should be nearly collapsed, got "
+                        + conventionalSteps + " float steps");
+        assertTrue(reversedSteps / conventionalSteps > 1.0e4f,
+                "reversed should resolve orders of magnitude finer: "
+                        + reversedSteps + " vs " + conventionalSteps
+                        + " float steps");
     }
 }

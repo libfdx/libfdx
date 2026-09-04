@@ -1,5 +1,6 @@
 package io.github.libfdx.backend.desktop;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.DefaultFdx;
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
@@ -157,6 +158,10 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         if (graphicsRequirements.clientApi() == GraphicsClientApi.OPENGL) {
             GLFW.glfwSwapInterval(displayConfig.vSync() ? 1 : 0);
         }
+        // Publish the range this device clips against. The other backends get
+        // this from DefaultGraphics; this one has its own Graphics, so it has
+        // to say so itself or the default is never corrected for OpenGL.
+        ClipDepthRange.setDefault(graphics.device().capabilities().clipDepthRange());
         fdx = new DefaultFdx(this, new DesktopDisplays(), new DesktopGraphics(), input, files, logger);
 
         disposed = false;

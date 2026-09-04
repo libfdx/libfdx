@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.shadergraph.runtime;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.CompareFunction;
 import io.github.libfdx.graphics.CullMode;
@@ -45,8 +46,11 @@ public final class ShaderGraphRenderProgram {
                 ? builder.frontFace : FrontFace.COUNTER_CLOCKWISE;
         cullMode = builder.cullMode != null ? builder.cullMode : CullMode.NONE;
         depthWrite = builder.depthWrite;
+        // Follows the active clip depth range rather than assuming smaller
+        // depths are nearer, which stops holding under reversed depth.
         depthCompare = builder.depthCompare != null
-                ? builder.depthCompare : CompareFunction.LESS_EQUAL;
+                ? builder.depthCompare
+                : CompareFunction.depthTestFor(ClipDepthRange.getDefault());
         alphaBlend = builder.alphaBlend;
         cacheCapacity = builder.cacheCapacity;
         vertexLayouts = builder.vertexLayouts != null

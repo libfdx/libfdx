@@ -379,14 +379,63 @@ public final class Matrix4 {
         float f = (float)(1.0 / Math.tan(Math.toRadians(fieldOfViewDegrees) * 0.5));
         values[0] = f / aspectRatio;
         values[5] = f;
-        // Built zero-to-one first because that is what every current API wants;
-        // the OpenGL family is then derived from it.
-        values[10] = far / (near - far);
         values[11] = -1.0f;
+        if (clipDepthRange == ClipDepthRange.ZERO_TO_ONE_REVERSED) {
+            // Near maps to 1, far maps to 0.
+            values[10] = near / (far - near);
+            values[14] = (far * near) / (far - near);
+            return this;
+        }
+        // Built zero-to-one otherwise, because that is what every current API
+        // wants; the OpenGL family is then derived from it.
+        values[10] = far / (near - far);
         values[14] = (far * near) / (near - far);
         if (clipDepthRange == ClipDepthRange.NEGATIVE_ONE_TO_ONE) {
             toNegativeOneToOneDepth();
         }
+        return this;
+    }
+
+    /**
+     * Sets a perspective projection whose far plane is at infinity.
+     *
+     * <p>Only meaningful for {@link ClipDepthRange#ZERO_TO_ONE_REVERSED}: near
+     * maps to 1 and infinity maps to 0, so nothing is ever clipped by
+     * distance. There is no far/near ratio, and therefore none of the
+     * degeneracy that ratio causes.</p>
+     *
+     * <p>The far-plane row of the resulting matrix is identically zero. That is
+     * correct - the far plane genuinely does not exist - so frustum extraction
+     * must treat an unnormalizable row as an absent constraint rather than an
+     * error.</p>
+     *
+     * @param fieldOfViewDegrees the vertical field of view in degrees
+     * @param aspectRatio the width/height aspect ratio
+     * @param near the near plane distance
+     * @param clipDepthRange must be {@link ClipDepthRange#ZERO_TO_ONE_REVERSED}
+     * @return this matrix4 for chaining
+     */
+    public Matrix4 setToPerspectiveInfinite(float fieldOfViewDegrees, float aspectRatio, float near,
+            ClipDepthRange clipDepthRange) {
+        if (aspectRatio == 0.0f) {
+            throw new FdxException("Perspective camera aspect ratio cannot be zero");
+        }
+        if (near <= 0.0f || !Float.isFinite(near)) {
+            throw new FdxException("Perspective camera near plane is invalid");
+        }
+        if (clipDepthRange != ClipDepthRange.ZERO_TO_ONE_REVERSED) {
+            throw new FdxException(
+                    "An infinite far plane requires ZERO_TO_ONE_REVERSED depth");
+        }
+        for (int i = 0; i < VALUE_COUNT; i++) {
+            values[i] = 0.0f;
+        }
+        float f = (float)(1.0 / Math.tan(Math.toRadians(fieldOfViewDegrees) * 0.5));
+        values[0] = f / aspectRatio;
+        values[5] = f;
+        values[10] = 0.0f;
+        values[11] = -1.0f;
+        values[14] = near;
         return this;
     }
 
@@ -429,9 +478,14 @@ public final class Matrix4 {
         idt();
         values[0] = 2.0f / (right - left);
         values[5] = 2.0f / (top - bottom);
-        values[10] = 1.0f / (near - far);
         values[12] = -(right + left) / (right - left);
         values[13] = -(top + bottom) / (top - bottom);
+        if (clipDepthRange == ClipDepthRange.ZERO_TO_ONE_REVERSED) {
+            values[10] = 1.0f / (far - near);
+            values[14] = far / (far - near);
+            return this;
+        }
+        values[10] = 1.0f / (near - far);
         values[14] = near / (near - far);
         if (clipDepthRange == ClipDepthRange.NEGATIVE_ONE_TO_ONE) {
             toNegativeOneToOneDepth();

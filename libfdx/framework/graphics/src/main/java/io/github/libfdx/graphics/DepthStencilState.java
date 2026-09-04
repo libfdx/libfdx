@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.core.FdxException;
 
 import java.util.Objects;
@@ -25,8 +26,11 @@ public final class DepthStencilState {
         }
         format = builder.format;
         depthWriteEnabled = builder.depthWriteEnabled;
+        // Defaults to whichever test keeps nearer fragments under the active
+        // clip depth range, so a pipeline that does not care never has to.
         depthCompare = builder.depthCompare != null
-                ? builder.depthCompare : CompareFunction.LESS_EQUAL;
+                ? builder.depthCompare
+                : CompareFunction.depthTestFor(ClipDepthRange.getDefault());
         stencilFront = builder.stencilFront != null
                 ? builder.stencilFront : StencilFaceState.disabled();
         stencilBack = builder.stencilBack != null
@@ -44,7 +48,8 @@ public final class DepthStencilState {
 
     public static DepthStencilState depth(TextureFormat format, boolean writeEnabled) {
         return builder(format).depthWriteEnabled(writeEnabled)
-                .depthCompare(CompareFunction.LESS_EQUAL).build();
+                .depthCompare(CompareFunction.depthTestFor(
+                        ClipDepthRange.getDefault())).build();
     }
 
     public TextureFormat format() {

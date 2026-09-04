@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.Buffer;
@@ -154,7 +155,7 @@ public final class BillboardRenderer3D implements Disposable {
                 .colorAttachment(frame.colorAttachment())
                 .colorLoadOp(loadOp != null ? loadOp : LoadOp.load())
                 .colorStoreOp(StoreOp.store())
-                .depthClear(1.0f));
+                .depthClear(ClipDepthRange.getDefault().depthClearValue()));
         ownsPass = true;
         drawing = true;
         resetBatch();

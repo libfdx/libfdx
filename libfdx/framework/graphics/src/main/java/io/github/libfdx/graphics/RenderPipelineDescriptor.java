@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.graphics.shader.ShaderModule;
 import io.github.libfdx.graphics.shader.reflection.ShaderBinding;
 import io.github.libfdx.graphics.shader.reflection.ShaderBindingType;
@@ -636,7 +637,7 @@ public final class RenderPipelineDescriptor {
             }
         }
         DepthStencilState depth = depthStencilState();
-        if (depth != null && (depth.depthCompare() != CompareFunction.LESS_EQUAL
+        if (depth != null && (depth.depthCompare() != CompareFunction.depthTestFor(ClipDepthRange.getDefault())
                 || !StencilFaceState.disabled().equals(depth.stencilFront())
                 || !StencilFaceState.disabled().equals(depth.stencilBack())
                 || depth.stencilReadMask() != -1 || depth.stencilWriteMask() != -1
@@ -667,7 +668,7 @@ public final class RenderPipelineDescriptor {
             }
         }
         DepthStencilState depth = depthStencilState();
-        if (depth != null && (depth.depthCompare() != CompareFunction.LESS_EQUAL
+        if (depth != null && (depth.depthCompare() != CompareFunction.depthTestFor(ClipDepthRange.getDefault())
                 || !StencilFaceState.disabled().equals(depth.stencilFront())
                 || !StencilFaceState.disabled().equals(depth.stencilBack())
                 || depth.stencilReadMask() != -1 || depth.stencilWriteMask() != -1

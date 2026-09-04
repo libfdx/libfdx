@@ -27,7 +27,8 @@ public final class DefaultGraphics implements Graphics {
         // the device's own declared range here keeps the OpenGL family out of
         // Camera and Matrix4, and lets a later device correct the value rather
         // than inheriting a stale one.
-        ClipDepthRange.setDefault(main.device().capabilities().clipDepthRange());
+        ClipDepthRange.setDefault(ClipDepthRange.resolveFor(
+                main.device().capabilities().clipDepthRange()));
     }
 
     /**

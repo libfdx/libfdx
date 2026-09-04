@@ -29,7 +29,13 @@ public class Camera {
     private float near = 0.1f;
     private float far = 100.0f;
     private float zoom = 1.0f;
-    private ClipDepthRange clipDepthRange = ClipDepthRange.getDefault();
+    /**
+     * Null means "follow the active default", resolved on read rather than at
+     * construction: an editor switches to reversed depth when a project loads,
+     * long after its cameras exist, and a camera that captured the old value
+     * would keep building a projection the depth test no longer agrees with.
+     */
+    private ClipDepthRange clipDepthRange;
 
     /**
      * Sets the projection and returns this camera.
@@ -95,7 +101,10 @@ public class Camera {
         // near == 0 is legitimate for an orthographic projection; only a
         // perspective divide needs a strictly positive near plane, and that is
         // clamped in update().
-        if (near < 0.0f || far <= near) {
+        //
+        // far <= 0 means "no far plane". It is the opt-in for an infinite
+        // projection, which needs reversed depth to be representable.
+        if (near < 0.0f || (far > 0.0f && far <= near)) {
             throw new FdxException("Camera near/far range is invalid");
         }
         this.near = near;
@@ -191,14 +200,28 @@ public class Camera {
      */
     public Camera update() {
         if (projection == CameraProjection.PERSPECTIVE) {
-            projectionMatrix.setToPerspective(fieldOfViewDegrees, viewportWidth / viewportHeight,
-                    Math.max(near, 0.0001f), far, clipDepthRange);
+            float effectiveNear = Math.max(near, 0.0001f);
+            if (hasInfiniteFarPlane()) {
+                projectionMatrix.setToPerspectiveInfinite(fieldOfViewDegrees,
+                        viewportWidth / viewportHeight, effectiveNear, clipDepthRange());
+            }
+            else {
+                // far <= 0 asked for no far plane, but this range cannot express
+                // one - the OpenGL family, most likely. Degrade to the widest
+                // finite range that still extracts sane frustum planes: a ratio
+                // of 1e6 stays an order of magnitude clear of the 2^24 point
+                // where the far plane row stops normalizing. The view distance
+                // is limited rather than the projection being invalid.
+                float effectiveFar = far > 0.0f ? far : effectiveNear * 1.0e6f;
+                projectionMatrix.setToPerspective(fieldOfViewDegrees, viewportWidth / viewportHeight,
+                        effectiveNear, effectiveFar, clipDepthRange());
+            }
         }
         else {
             float width = viewportWidth * zoom;
             float height = viewportHeight * zoom;
             projectionMatrix.setToOrthographic(-width * 0.5f, width * 0.5f, -height * 0.5f, height * 0.5f, near, far,
-                    clipDepthRange);
+                    clipDepthRange());
         }
         // Keep the inverse path in float without taking a determinant that mixes projection with far-world translation.
         inverseProjectionMatrix.set(projectionMatrix).invert();
@@ -254,7 +277,7 @@ public class Camera {
      * @return the clip depth range
      */
     public ClipDepthRange clipDepthRange() {
-        return clipDepthRange;
+        return clipDepthRange != null ? clipDepthRange : ClipDepthRange.getDefault();
     }
 
     /**
@@ -267,8 +290,27 @@ public class Camera {
         if (clipDepthRange == null) {
             throw new FdxException("Clip depth range cannot be null");
         }
+        if (clipDepthRange == ClipDepthRange.ZERO_TO_ONE_REVERSED
+                && !ClipDepthRange.getDefault().isZeroToOne()) {
+            // The OpenGL family cannot clip depth to 0..w at all, so reversed
+            // depth would render wrong with nothing to indicate it. Fail here
+            // instead.
+            throw new FdxException(
+                    "Reversed depth requires a zero-to-one graphics API; the active device uses "
+                            + ClipDepthRange.getDefault());
+        }
         this.clipDepthRange = clipDepthRange;
         return this;
+    }
+
+    /**
+     * Returns whether this camera has no far plane, i.e. nothing is clipped by
+     * distance. True when {@code far <= 0}, which requires reversed depth.
+     *
+     * @return true when the far plane is at infinity
+     */
+    public boolean hasInfiniteFarPlane() {
+        return far <= 0.0f && clipDepthRange().isReversed();
     }
 
     /**
@@ -416,7 +458,7 @@ public class Camera {
         return out.set(
                 screenViewportX + (out.x() + 1.0f) * screenViewportWidth * 0.5f,
                 screenViewportY + (1.0f - out.y()) * screenViewportHeight * 0.5f,
-                clipDepthRange == ClipDepthRange.ZERO_TO_ONE
+                clipDepthRange().isZeroToOne()
                         ? out.z() : (out.z() + 1.0f) * 0.5f);
     }
 
@@ -452,7 +494,7 @@ public class Camera {
         float normalizedX = (screenCoordinates.x() - screenViewportX) * 2.0f / screenViewportWidth - 1.0f;
         float normalizedY = 1.0f - (screenCoordinates.y() - screenViewportY) * 2.0f / screenViewportHeight;
         // Window depth is always 0..1; only the clip-space mapping differs.
-        float normalizedZ = clipDepthRange == ClipDepthRange.ZERO_TO_ONE
+        float normalizedZ = clipDepthRange().isZeroToOne()
                 ? screenCoordinates.z() : screenCoordinates.z() * 2.0f - 1.0f;
         update();
         return unprojectUpdated(normalizedX, normalizedY, normalizedZ, out);
@@ -519,17 +561,30 @@ public class Camera {
         float normalizedX = (screenX - screenViewportX) * 2.0f / screenViewportWidth - 1.0f;
         float normalizedY = 1.0f - (screenY - screenViewportY) * 2.0f / screenViewportHeight;
         update();
-        // The near plane sits at clip z 0 under ZERO_TO_ONE and -1 under the
-        // OpenGL convention; the far plane is 1 in both.
-        float nearDepth = clipDepthRange == ClipDepthRange.ZERO_TO_ONE
-                ? 0.0f : -1.0f;
+        float nearDepth = clipDepthRange().nearPlaneDepth();
         unprojectUpdated(normalizedX, normalizedY, nearDepth, pickNear);
-        unprojectUpdated(normalizedX, normalizedY, 1.0f, pickFar);
+        // The direction is NOT taken from a far-plane point. With an infinite
+        // far plane that point is at infinity, and even with a finite one the
+        // unprojection divides by a w that is a difference of two nearly equal
+        // terms, so a large far/near ratio leaves it with almost no precision.
+        //
+        // In view space the eye is the origin, so the near-plane point IS the
+        // direction. Rotating it into world space never touches the eye
+        // translation, making the result independent of far and of how far the
+        // camera has travelled.
+        if (projection == CameraProjection.PERSPECTIVE) {
+            pickFar.set(normalizedX, normalizedY, nearDepth);
+            inverseProjectionMatrix.transformProjective(pickFar, pickFar);
+        }
+        else {
+            // Orthographic rays are parallel: the screen position sets the
+            // origin, and every direction is the camera forward.
+            pickFar.set(0.0f, 0.0f, -1.0f);
+        }
+        inverseViewMatrix.transformDirection(pickFar, pickFar);
         return out.set(
                 pickNear.x(), pickNear.y(), pickNear.z(),
-                pickFar.x() - pickNear.x(),
-                pickFar.y() - pickNear.y(),
-                pickFar.z() - pickNear.z());
+                pickFar.x(), pickFar.y(), pickFar.z());
     }
 
     private static void validateProjectionArguments(Vector3 coordinates, Vector3 out,

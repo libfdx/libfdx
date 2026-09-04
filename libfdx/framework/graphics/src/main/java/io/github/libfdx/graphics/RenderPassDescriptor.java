@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics;
 
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.core.FdxException;
 
 /**
@@ -17,7 +18,19 @@ public final class RenderPassDescriptor {
     private RenderPassCompatibility compatibility;
     private boolean depthEnabled;
     private boolean depthClearEnabled;
-    private float depthClearValue = 1.0f;
+    /**
+     * NaN means "not set": resolve from the active clip depth range on read.
+     *
+     * <p>Resolved lazily rather than captured at construction because the range
+     * is not fixed for the life of the process. An editor publishes the
+     * device's range at startup and only switches to reversed depth when a
+     * project loads, by which time long-lived descriptors already exist. One
+     * built earlier would keep a clear value of 1 while the depth test had
+     * moved to GREATER, and no fragment would ever pass - a black viewport with
+     * nothing logged. {@link #depthClear(float)} rejects NaN, so the sentinel
+     * can never collide with a real value.</p>
+     */
+    private float depthClearValue = Float.NaN;
 
     /**
      * Creates a render pass descriptor.
@@ -254,7 +267,9 @@ public final class RenderPassDescriptor {
      * @return the depth clear value
      */
     public float depthClearValue() {
-        return depthClearValue;
+        return Float.isNaN(depthClearValue)
+                ? ClipDepthRange.getDefault().depthClearValue()
+                : depthClearValue;
     }
 
     /**

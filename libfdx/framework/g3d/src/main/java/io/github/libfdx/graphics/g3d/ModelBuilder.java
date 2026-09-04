@@ -917,9 +917,69 @@ public final class ModelBuilder {
             emissive[pbrOffset + 1] = emissiveFactor.green();
             emissive[pbrOffset + 2] = emissiveFactor.blue();
         }
+        generateSphericalTextureCoordinates(vertices.positions,
+                textureCoordinates);
         return Mesh.positionColor3D(graphics, id, vertices.positions,
                 colors, colors, vertices.normals, textureCoordinates,
                 pbr, pbr, emissive, emissive, null, null, meshBounds, true);
+    }
+
+    /**
+     * Fills the PBR texture-coordinate channel with an object-space spherical
+     * projection.
+     *
+     * <p>The channel has always been allocated and handed to the mesh, but
+     * never written, so every vertex of a generated primitive sampled texel
+     * (0, 0) and any base-colour texture came out a single flat colour. A
+     * spherical projection is exact for a sphere - the shape these builders are
+     * most often textured on - and remains continuous for the rounded
+     * primitives.</p>
+     *
+     * <p>Longitude wraps, so a triangle straddling the seam would otherwise
+     * interpolate u backwards from 0.99 to 0.01 and smear the whole texture
+     * across it. Vertices are triangle soup rather than indexed, so the seam is
+     * repaired per triangle by pushing the trailing corners past 1 instead.</p>
+     */
+    static void generateSphericalTextureCoordinates(float[] positions,
+            float[] textureCoordinates) {
+        int vertexCount = positions.length / 3;
+        for (int vertex = 0; vertex < vertexCount; vertex++) {
+            int p = vertex * 3;
+            float x = positions[p];
+            float y = positions[p + 1];
+            float z = positions[p + 2];
+            float length = (float)Math.sqrt(x * x + y * y + z * z);
+            int t = vertex * 2;
+            if (length == 0.0f) {
+                textureCoordinates[t] = 0.0f;
+                textureCoordinates[t + 1] = 0.0f;
+                continue;
+            }
+            textureCoordinates[t] = (float)(Math.atan2(z, x)
+                    / (2.0 * Math.PI)) + 0.5f;
+            textureCoordinates[t + 1] = (float)(Math.acos(
+                    Math.max(-1.0, Math.min(1.0, y / length))) / Math.PI);
+        }
+        for (int triangle = 0; triangle + 2 < vertexCount; triangle += 3) {
+            int a = triangle * 2;
+            int b = a + 2;
+            int c = a + 4;
+            float ua = textureCoordinates[a];
+            float ub = textureCoordinates[b];
+            float uc = textureCoordinates[c];
+            float minimum = Math.min(ua, Math.min(ub, uc));
+            if (Math.max(ua, Math.max(ub, uc)) - minimum <= 0.5f) {
+                continue;
+            }
+            if (ua - minimum > 0.5f) {
+                textureCoordinates[a] = ua;
+            }
+            else {
+                textureCoordinates[a] = ua + 1.0f;
+            }
+            textureCoordinates[b] = ub - minimum > 0.5f ? ub : ub + 1.0f;
+            textureCoordinates[c] = uc - minimum > 0.5f ? uc : uc + 1.0f;
+        }
     }
 
     private static void generateFlatNormals(float[] positions,

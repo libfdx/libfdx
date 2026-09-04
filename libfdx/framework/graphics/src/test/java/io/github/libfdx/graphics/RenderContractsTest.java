@@ -297,4 +297,71 @@ final class RenderContractsTest {
         assertEquals(ClipDepthRange.NEGATIVE_ONE_TO_ONE,
                 GraphicsCapabilities.conservativeRender().clipDepthRange());
     }
+
+    /**
+     * Clear value, depth test and projection must tell the same story. All
+     * three derive from the active clip depth range so the broken combinations
+     * cannot be expressed: clearing to 1 while testing GREATER passes no
+     * fragment at all, and clearing to 0 while testing LESS_EQUAL stops depth
+     * occluding anything.
+     */
+    @Test
+    void depthClearAndDepthTestFollowTheSameClipDepthRange() {
+        ClipDepthRange restore = ClipDepthRange.getDefault();
+        try {
+            ClipDepthRange.setDefault(ClipDepthRange.ZERO_TO_ONE);
+            assertEquals(1.0f, new RenderPassDescriptor().depthClearValue(),
+                    "conventional clears to the far value 1");
+            assertEquals(CompareFunction.LESS_EQUAL,
+                    DepthStencilState.depth(TextureFormat.DEPTH32_FLOAT, true)
+                            .depthCompare(),
+                    "conventional keeps the smaller depth");
+
+            ClipDepthRange.setDefault(ClipDepthRange.ZERO_TO_ONE_REVERSED);
+            assertEquals(0.0f, new RenderPassDescriptor().depthClearValue(),
+                    "reversed clears to the far value 0");
+            assertEquals(CompareFunction.GREATER,
+                    DepthStencilState.depth(TextureFormat.DEPTH32_FLOAT, true)
+                            .depthCompare(),
+                    "reversed keeps the larger depth");
+
+            // An explicit compare still wins - a shadow map keeps its own.
+            assertEquals(CompareFunction.LESS_EQUAL,
+                    DepthStencilState.builder(TextureFormat.DEPTH32_FLOAT)
+                            .depthCompare(CompareFunction.LESS_EQUAL).build()
+                            .depthCompare());
+        }
+        finally {
+            ClipDepthRange.setDefault(restore);
+        }
+    }
+
+    /**
+     * Reproduces the editor's ordering. The convention is not fixed at startup
+     * there: the device publishes zero-to-one, the editor builds its renderers
+     * and cameras, and only when a PROJECT LOADS does the engine switch to
+     * reversed depth. Anything that captured the value earlier is now stale,
+     * and a stale clear value against a reversed depth test passes no fragment
+     * at all.
+     */
+    @Test
+    void aPassDescriptorBuiltBeforeTheSwitchMustNotKeepAStaleClearValue() {
+        ClipDepthRange restore = ClipDepthRange.getDefault();
+        try {
+            ClipDepthRange.setDefault(ClipDepthRange.ZERO_TO_ONE);
+            RenderPassDescriptor built = new RenderPassDescriptor();
+
+            ClipDepthRange.setDefault(ClipDepthRange.ZERO_TO_ONE_REVERSED);
+            assertEquals(0.0f, built.depthClearValue(),
+                    "a descriptor built before the switch must follow the new range");
+
+            // An explicit choice must still be honoured - shadow maps rely on it.
+            RenderPassDescriptor explicit = new RenderPassDescriptor().depthClear(1.0f);
+            assertEquals(1.0f, explicit.depthClearValue(),
+                    "an explicit clear value must survive a range change");
+        }
+        finally {
+            ClipDepthRange.setDefault(restore);
+        }
+    }
 }
