@@ -154,7 +154,10 @@ public final class Mesh implements Disposable {
         this.vertexCount = vertexCount;
         this.indexCount = indexCount;
         this.bounds = bounds != null ? bounds : BoundingBox.empty();
-        this.sourcePositions = retainSourceData && sourcePositions != null ? sourcePositions.clone() : null;
+        // Geometry queries (for example editor picking) are independent of
+        // optional CPU shading attributes. Keep one mesh-owned position copy
+        // even when rendering uses only the uploaded GPU attributes.
+        this.sourcePositions = sourcePositions != null ? sourcePositions.clone() : null;
         this.sourceColors = retainSourceData && sourceColors != null ? sourceColors.clone() : null;
         this.sourceBakedColors = retainSourceData && sourceBakedColors != null ? sourceBakedColors.clone() : null;
         this.sourceNormals = retainSourceData && sourceNormals != null ? sourceNormals.clone() : null;
@@ -323,7 +326,8 @@ public final class Mesh implements Disposable {
      * @param sourceEmissive the source emissive
      * @param sourceBakedEmissive the source baked emissive
      * @param bounds the bounds
-     * @param retainSourceData the retain source data
+     * @param retainSourceData whether to retain CPU shading attributes;
+     *                         source positions are always retained
      * @return a new mesh
      */
     public static Mesh positionColor3D(GraphicsContext graphics, String id, float[] sourcePositions,
@@ -401,7 +405,8 @@ public final class Mesh implements Disposable {
      * @param sourceJoints four joint indices per vertex
      * @param sourceWeights four joint weights per vertex
      * @param bounds the bounds
-     * @param retainSourceData the retain source data
+     * @param retainSourceData whether to retain CPU shading attributes;
+     *                         source positions are always retained
      * @return a new mesh
      */
     public static Mesh positionColor3D(GraphicsContext graphics, String id, float[] sourcePositions,
@@ -575,9 +580,11 @@ public final class Mesh implements Disposable {
     }
 
     /**
-     * Returns the source positions.
+     * Returns the mesh-owned source positions, including when CPU shading
+     * attributes were not retained. Treat this array as read-only. Generic
+     * vertex-layout constructors without explicit source positions return null.
      *
-     * @return the source positions
+     * @return the borrowed source positions, or null when not supplied
      */
     public float[] sourcePositions() {
         return sourcePositions;

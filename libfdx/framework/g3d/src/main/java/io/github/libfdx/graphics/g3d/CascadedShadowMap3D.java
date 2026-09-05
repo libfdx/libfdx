@@ -132,6 +132,7 @@ public final class CascadedShadowMap3D implements Disposable {
 
     /**
      * Clears the maximum distance limit and returns this cascaded shadow map.
+     * The view camera must then provide a finite far plane when updating.
      *
      * @return this cascaded shadow map for chaining
      */
@@ -198,6 +199,8 @@ public final class CascadedShadowMap3D implements Disposable {
 
     /**
      * Updates cascade split distances and light-space bounds from the view camera.
+     * An infinite-far camera requires a finite {@link #maxDistance(float)};
+     * that limit bounds the shadows without changing the camera's projection.
      *
      * @param viewCamera the scene view camera
      * @return this cascaded shadow map for chaining
@@ -208,7 +211,14 @@ public final class CascadedShadowMap3D implements Disposable {
             throw new FdxException("View camera cannot be null");
         }
         float near = viewCamera.near();
-        float far = Math.min(viewCamera.far(), maxDistance);
+        // Infinite-far cameras encode infinity as a non-positive far value.
+        // Resolve that sentinel once for both split and fade-coverage limits.
+        float cameraFar = viewCamera.hasInfiniteFarPlane()
+                ? Float.POSITIVE_INFINITY : viewCamera.far();
+        float far = Math.min(cameraFar, maxDistance);
+        if (!Float.isFinite(far)) {
+            throw new FdxException("Cascaded shadows require a finite camera far plane or max distance");
+        }
         if (far <= near) {
             throw new FdxException("Cascade max distance must be greater than the camera near plane");
         }
@@ -218,7 +228,7 @@ public final class CascadedShadowMap3D implements Disposable {
         viewCameraNear = near;
         viewCameraFar = far;
         float fadeGuard = (far - near) * shadowFadeFraction;
-        viewCameraCoverageFar = Math.min(viewCamera.far(), far + fadeGuard);
+        viewCameraCoverageFar = Math.min(cameraFar, far + fadeGuard);
         viewCameraAspect = Math.max(viewCamera.viewportWidth() / Math.max(viewCamera.viewportHeight(), EPSILON),
                 EPSILON);
         viewCameraTanHalfFov = viewCamera.projection() == CameraProjection.PERSPECTIVE
