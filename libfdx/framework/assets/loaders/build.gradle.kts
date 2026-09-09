@@ -25,7 +25,11 @@ dependencies {
     compileOnly(libs.teavm.jso)
     compileOnly(libs.teavm.jso.apis)
     compileOnly("org.teavm:teavm-core:${libs.versions.teavm.get()}")
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
+
+tasks.named<Test>("test") { useJUnitPlatform() }
 
 configurations.compileClasspath {
     attributes {

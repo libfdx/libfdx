@@ -21,6 +21,9 @@ public final class Environment3D {
     private DirectionalShadowMap3D directionalShadowMap;
     private CascadedShadowMap3D cascadedShadowMap;
     private SkyEnvironment3D skyEnvironment;
+    private ImageBasedLighting3D imageBasedLighting;
+    private float iblIntensity = 1;
+    private float iblRotationCos = 1, iblRotationSin;
     private final Array<Light> lights = new Array<Light>();
     private final ArrayView<Light> readOnlyLights = lights.view();
 
@@ -60,6 +63,9 @@ public final class Environment3D {
 
     /**
      * Enables distance fog and returns this environment.
+     *
+     * <p>The fog color is an sRGB display color, blended after scene exposure and
+     * tone mapping. At full fog it matches a background cleared to the same color.</p>
      *
      * @param fogColor the fog color; alpha controls the maximum fog amount
      * @param startDistance the distance at which fog starts
@@ -147,6 +153,31 @@ public final class Environment3D {
         this.skyEnvironment = skyEnvironment;
         return this;
     }
+
+    /** Borrows an uploaded distant probe, or null to disable. Adds to existing ambient/procedural lighting.
+     * The resource must remain alive in the drawing context's resource domain until recorded draws finish. */
+    public Environment3D imageBasedLighting(ImageBasedLighting3D lighting) {
+        if (lighting != null && lighting.isDisposed()) throw new FdxException("Image-based lighting resource is disposed");
+        imageBasedLighting = lighting;
+        return this;
+    }
+
+    /** Sets the nonnegative linear radiance multiplier and world-space rotation about +Y, in radians.
+     * Rotation uses the right-hand rule. Call during application update, outside batch recording. */
+    public Environment3D imageBasedLightingTransform(float intensity, float rotationRadians) {
+        if (!Float.isFinite(intensity) || intensity < 0 || !Float.isFinite(rotationRadians)) {
+            throw new FdxException("IBL intensity and rotation must be finite; intensity cannot be negative");
+        }
+        iblIntensity = intensity;
+        iblRotationCos = (float) Math.cos(rotationRadians);
+        iblRotationSin = (float) Math.sin(rotationRadians);
+        return this;
+    }
+    /** Borrowed optional probe, or null when disabled. */
+    public ImageBasedLighting3D imageBasedLighting() { return imageBasedLighting; }
+    public float imageBasedLightingIntensity() { return iblIntensity; }
+    float iblRotationCos() { return iblRotationCos; }
+    float iblRotationSin() { return iblRotationSin; }
 
     /**
      * Clears sky environment lighting and returns this environment.

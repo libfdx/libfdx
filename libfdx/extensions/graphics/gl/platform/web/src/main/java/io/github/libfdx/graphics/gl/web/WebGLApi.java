@@ -4,6 +4,8 @@ import io.github.libfdx.collections.IntMap;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.TextureFilter;
+import io.github.libfdx.graphics.TextureFormat;
+import io.github.libfdx.graphics.TextureMipmapFilter;
 import io.github.libfdx.graphics.TextureWrap;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.gl.GLApi;
@@ -13,6 +15,7 @@ import org.teavm.jso.JSClass;
 import org.teavm.jso.JSObject;
 import org.teavm.jso.typedarrays.ArrayBufferView;
 import org.teavm.jso.typedarrays.Uint8Array;
+import org.teavm.jso.typedarrays.Uint16Array;
 import org.teavm.jso.webgl.WebGLBuffer;
 import org.teavm.jso.webgl.WebGLProgram;
 import org.teavm.jso.webgl.WebGLRenderingContext;
@@ -28,6 +31,60 @@ import java.nio.ByteBuffer;
  * @author xpenatan
  */
 final class WebGLApi implements GLApi {
+    private Boolean parallelCompilationSupported;
+    @Override public boolean supportsParallelShaderCompilation() {
+        if (parallelCompilationSupported == null)
+            parallelCompilationSupported = gl.getExtension("KHR_parallel_shader_compile") != null;
+        return parallelCompilationSupported;
+    }
+    @Override public boolean programCompilationComplete(int program) {
+        return gl.getProgramParameterb(programs.get(program), 0x91B1);
+    }
+
+    @Override public boolean isContextLost() {
+        if (handlesAbandoned) return true;
+        if (!contextLost(gl, lossObserver)) return false;
+        // Native objects were destroyed by the browser. Release retained JS references
+        // without deleting names that might belong to a subsequently restored context.
+        programs.clear(); shaders.clear(); buffers.clear(); textures.clear();
+        framebuffers.clear(); renderbuffers.clear(); uniforms.clear(); shaderTypes.clear();
+        currentProgram=0;
+        handlesAbandoned = true;
+        return true;
+    }
+
+    @Override public void closeShaderPreparation() { stopObservingLoss(gl, lossObserver); }
+
+    @JSBody(params = {"context", "observer"}, script = "return observer.lost || context.isContextLost();")
+    private static native boolean contextLost(WebGLRenderingContext context, JSObject observer);
+
+    @JSBody(params = "context", script = """
+            var observer = {lost: context.isContextLost()};
+            observer.listener = function() { observer.lost = true; };
+            context.canvas.addEventListener('webglcontextlost', observer.listener);
+            return observer;
+            """)
+    private static native JSObject observeLoss(WebGLRenderingContext context);
+
+    @JSBody(params = {"context", "observer"}, script = """
+            if (observer.listener) {
+                context.canvas.removeEventListener('webglcontextlost', observer.listener);
+                observer.listener = null;
+            }
+            """)
+    private static native void stopObservingLoss(WebGLRenderingContext context, JSObject observer);
+
+    @Override public boolean supportsDepthTextures() { return true; }
+    @Override public boolean supportsRgba16FloatTextures() {
+        return gl.getExtension("EXT_color_buffer_float") != null;
+    }
+    @Override public void texImageDepth32F(int width, int height) {
+        gl.texImage2D(TEXTURE_2D, 0, 0x8CAC, width, height, 0, 0x1902, 0x1406, (ArrayBufferView)null);
+    }
+    @Override public void framebufferDepthTexture2D(int texture) {
+        framebufferTexture2D(gl, FRAMEBUFFER, 0x8D00, TEXTURE_2D, textures.get(texture), 0);
+    }
+
     private static final int ARRAY_BUFFER = 0x8892;
     private static final int ELEMENT_ARRAY_BUFFER = 0x8893;
     private static final int UNIFORM_BUFFER = 0x8A11;
@@ -96,9 +153,15 @@ final class WebGLApi implements GLApi {
 
         @JSBody(params = { "key" }, script = "var value = this[key]; delete this[key]; return value;")
         native T remove(int key);
+
+        @JSBody(script = "this.length = 1;")
+        native void clear();
     }
 
     private final WebGLRenderingContext gl;
+    // Loss is permanent for this adapter, even when the browser restores its canvas before polling.
+    private final JSObject lossObserver;
+    private boolean handlesAbandoned;
     private final HandleMap<WebGLProgram> programs = HandleMap.create();
     private final HandleMap<WebGLShader> shaders = HandleMap.create();
     private final HandleMap<WebGLBuffer> buffers = HandleMap.create();
@@ -111,6 +174,7 @@ final class WebGLApi implements GLApi {
 
     WebGLApi(WebGLRenderingContext gl) {
         this.gl = gl;
+        lossObserver = observeLoss(gl);
         this.gl.pixelStorei(UNPACK_ALIGNMENT, 1);
         this.gl.pixelStorei(UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
     }
@@ -443,12 +507,22 @@ final class WebGLApi implements GLApi {
      */
     @Override
     public void texImage2D(int width, int height, ByteBuffer data) {
+        texImage2D(TextureFormat.RGBA8_UNORM, width, height, data);
+    }
+
+    @Override
+    public void framebufferSrgb(boolean enabled) {
+        // GLES 3/WebGL 2 always encode sRGB render attachments.
+    }
+
+    @Override
+    public void texImage2D(TextureFormat format, int width, int height, ByteBuffer data) {
         gl.texParameterf(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR);
         gl.texParameterf(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR);
         gl.texParameterf(TEXTURE_2D, TEXTURE_WRAP_S, CLAMP_TO_EDGE);
         gl.texParameterf(TEXTURE_2D, TEXTURE_WRAP_T, CLAMP_TO_EDGE);
-        gl.texImage2D(TEXTURE_2D, 0, RGBA, width, height, 0, RGBA, UNSIGNED_BYTE,
-                data != null ? activeBytes(data) : (ArrayBufferView) null);
+        gl.texImage2D(TEXTURE_2D, 0, GLApi.colorInternalFormat(format), width, height, 0, RGBA,
+                GLApi.colorTransferType(format), texturePixels(format, data));
     }
 
     /**
@@ -1157,4 +1231,49 @@ final class WebGLApi implements GLApi {
             "gl.readPixels(0, 0, width, height, 0x1908, 0x1401, target);")
     private static native void readPixelsRgba8(WebGLRenderingContext gl, int width, int height,
             ArrayBufferView target);
+    @Override public boolean supportsMipTextures() { return true; }
+
+    @Override public void textureFilters2D(TextureFilter min, TextureFilter mag, TextureMipmapFilter mip) {
+        gl.texParameterf(TEXTURE_2D, TEXTURE_MIN_FILTER, GLApi.minificationFilter(min, mip));
+        gl.texParameterf(TEXTURE_2D, TEXTURE_MAG_FILTER, toNative(mag));
+    }
+
+    @Override public void textureMipRange2D(int levels) {
+        gl.texParameterf(TEXTURE_2D, 0x813C, 0);
+        gl.texParameterf(TEXTURE_2D, 0x813D, levels-1);
+    }
+
+    @Override public void texImage2D(TextureFormat format, int level, int width, int height, ByteBuffer data) {
+        if (level == 0) { texImage2D(format, width, height, data); return; }
+        gl.texImage2D(TEXTURE_2D, level, GLApi.colorInternalFormat(format), width, height, 0, RGBA,
+                GLApi.colorTransferType(format), texturePixels(format, data));
+    }
+
+    @Override public void texSubImage2D(TextureFormat format, int level,
+            int width, int height, ByteBuffer data) {
+        gl.texSubImage2D(TEXTURE_2D, level, 0, 0, width, height, RGBA,
+                GLApi.colorTransferType(format), texturePixels(format, data));
+    }
+
+    private ArrayBufferView texturePixels(TextureFormat format, ByteBuffer data) {
+        if (data == null) return null;
+        Uint8Array bytes = activeBytes(data);
+        if (format != TextureFormat.RGBA16_FLOAT) return bytes;
+        // WebGL requires a Uint16Array for HALF_FLOAT, including a positioned input buffer.
+        if ((bytes.getByteOffset() & 1) != 0) {
+            Uint8Array aligned = Uint8Array.create(bytes.getByteLength());
+            aligned.set(bytes);
+            bytes = aligned;
+        }
+        return Uint16Array.create(bytes.getBuffer(), bytes.getByteOffset(), bytes.getByteLength() / 2);
+    }
+
+    @Override public void texSubImage2D(int level, int width, int height, ByteBuffer data) {
+        gl.texSubImage2D(TEXTURE_2D, level, 0, 0, width, height, RGBA, UNSIGNED_BYTE, activeBytes(data));
+    }
+
+    @Override public void framebufferTexture2D(int texture, int level) {
+        framebufferTexture2D(gl, FRAMEBUFFER, COLOR_ATTACHMENT0, TEXTURE_2D, textures.get(texture), level);
+    }
+
 }

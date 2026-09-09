@@ -43,6 +43,12 @@ final class VulkanShaderLayoutValidatorTest {
     }
 
     @Test
+    void acceptsSamplerlessImageAtTheSameCompactDescriptorSlot() {
+        assertDoesNotThrow(() -> VulkanShaderLayoutValidator.requireArtifact(artifact(1, 0, ShaderBindingRemapKind.DIRECT)));
+        assertThrows(FdxException.class, () -> VulkanShaderLayoutValidator.requireArtifact(artifact(4, 0, ShaderBindingRemapKind.DIRECT)));
+    }
+
+    @Test
     void rejectsSparseCombinedSamplerBindingsBeforePipelineCreation() {
         assertThrows(FdxException.class,
                 () -> VulkanShaderLayoutValidator.requireArtifact(
@@ -58,13 +64,18 @@ final class VulkanShaderLayoutValidatorTest {
 
     private static ShaderTargetArtifact artifact(int secondTextureTarget,
             int uniformTarget) {
+        return artifact(secondTextureTarget, uniformTarget, ShaderBindingRemapKind.COMBINED_TEXTURE);
+    }
+
+    private static ShaderTargetArtifact artifact(int secondTextureTarget,
+            int uniformTarget, ShaderBindingRemapKind textureKind) {
         ShaderBindingRemap[] remaps = {
                 remap(0, 0, "texture", 0,
-                        ShaderBindingRemapKind.COMBINED_TEXTURE),
+                        textureKind),
                 remap(0, 1, "sampler", 0,
                         ShaderBindingRemapKind.COMBINED_SAMPLER),
                 remap(0, 4, "texture", secondTextureTarget,
-                        ShaderBindingRemapKind.COMBINED_TEXTURE),
+                        textureKind),
                 remap(0, 7, "sampler", secondTextureTarget,
                         ShaderBindingRemapKind.COMBINED_SAMPLER),
                 remap(1, 3, "buffer", uniformTarget,

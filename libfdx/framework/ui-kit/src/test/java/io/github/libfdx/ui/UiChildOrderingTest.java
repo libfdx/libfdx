@@ -36,7 +36,7 @@ final class UiChildOrderingTest {
 
     @Test
     void ordersLayersAndInvalidatesWhenWindowMovesToFront() {
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         UiNode parent = node(UiNodeType.ROOT, "root");
         UiNode content = node(UiNodeType.PANEL, "content");
         UiWindowState firstState = new UiWindowState(0.0f, 0.0f, 100.0f, 100.0f);
@@ -67,7 +67,7 @@ final class UiChildOrderingTest {
 
     @Test
     void warmedCompositionOrderingAllocatesNoPerFrameObjects() {
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         UiNode parent = node(UiNodeType.ROOT, "root");
         UiNode content = node(UiNodeType.PANEL, "content");
         UiWindowState firstState = new UiWindowState(0.0f, 0.0f, 100.0f, 100.0f);
@@ -106,7 +106,7 @@ final class UiChildOrderingTest {
 
     @Test
     void warmedRootUpdateAllocatesNoIteratorObjects() {
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         root.animatable("object", "ready");
         root.floatAnimatable("float", 1.0f);
         for (int i = 0; i < 2_000; i++) {
@@ -135,7 +135,7 @@ final class UiChildOrderingTest {
 
     @Test
     void warmedStableRecompositionAllocatesNoFrameworkObjects() {
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         root.resize(800, 600);
         root.setContent(STABLE_ROOT_CONTENT);
         for (int i = 0; i < 10_000; i++) {
@@ -165,7 +165,7 @@ final class UiChildOrderingTest {
 
     @Test
     void warmedStableWidgetRecompositionAllocatesNoFrameworkObjects() {
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         root.resize(1280, 720);
         root.setContent(new StableWidgetContent());
         for (int i = 0; i < 10_000; i++) {
@@ -195,14 +195,9 @@ final class UiChildOrderingTest {
 
     @Test
     void warmedStableInfrastructureRecompositionAllocatesNoFrameworkObjects() {
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         root.resize(1280, 720);
         root.setContent(new StableInfrastructureContent());
-        for (int i = 0; i < 10_000; i++) {
-            root.requestCompose();
-            root.update(0.0f);
-        }
-
         java.lang.management.ThreadMXBean platformBean = ManagementFactory.getThreadMXBean();
         assumeTrue(platformBean instanceof ThreadMXBean);
         ThreadMXBean bean = (ThreadMXBean)platformBean;
@@ -210,22 +205,33 @@ final class UiChildOrderingTest {
         if (!bean.isThreadAllocatedMemoryEnabled()) {
             bean.setThreadAllocatedMemoryEnabled(true);
         }
-        long threadId = Thread.currentThread().threadId();
-        long before = bean.getThreadAllocatedBytes(threadId);
+        try {
+            long threadId = Thread.currentThread().threadId();
+            // Warm the measured helper and the counter, rather than a different inline loop.
+            for (int i = 0; i < 20; i++) {
+                bean.getThreadAllocatedBytes(threadId);
+                recomposeInfrastructure(root);
+            }
+            long before = bean.getThreadAllocatedBytes(threadId);
+            recomposeInfrastructure(root);
+            long allocated = bean.getThreadAllocatedBytes(threadId) - before;
+            assertTrue(allocated <= 512L, "Expected no post-warm-up UI infrastructure churn, allocated "
+                    + allocated + " bytes");
+        } finally {
+            root.dispose();
+        }
+    }
+
+    private static void recomposeInfrastructure(UiRoot root) {
         for (int i = 0; i < 2_000; i++) {
             root.requestCompose();
             root.update(0.0f);
         }
-        long allocated = bean.getThreadAllocatedBytes(threadId) - before;
-
-        assertTrue(allocated <= 512L, "Expected no post-warm-up UI infrastructure churn, allocated " + allocated
-                + " bytes");
-        root.dispose();
     }
 
     @Test
     void widgetDescriptorReuseTracksChangedInputs() {
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         root.resize(1280, 720);
         MutableWidgetContent content = new MutableWidgetContent();
         root.setContent(content);
@@ -302,7 +308,7 @@ final class UiChildOrderingTest {
 
     @Test
     void warmedHitTestingAllocatesNoResultObjects() {
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         root.resize(800, 600);
         root.setContent(HIT_CONTENT);
         root.update(0.0f);

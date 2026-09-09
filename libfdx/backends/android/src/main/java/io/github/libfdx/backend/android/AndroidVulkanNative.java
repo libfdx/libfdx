@@ -1,6 +1,7 @@
 package io.github.libfdx.backend.android;
 
 import android.view.Surface;
+import io.github.libfdx.graphics.GraphicsContextLostException;
 
 import java.nio.ByteBuffer;
 
@@ -43,6 +44,14 @@ final class AndroidVulkanNative {
 
     private static native String probeInstance();
 
+    /** JNI exception factory; invoked on the thread whose native call reported loss. */
+    private static RuntimeException deviceLostException() {
+        return new GraphicsContextLostException(AndroidVulkanProvider.ID);
+    }
+
+    /** Caller must retain the context; this does not query or wait for the driver. */
+    static native boolean isDeviceLost(long context);
+
     static native long create(Surface surface, int width, int height, boolean vSync,
             boolean preferMailboxPresentMode, int framesInFlight);
 
@@ -70,7 +79,17 @@ final class AndroidVulkanNative {
     static native long createRenderPipeline(long context, long shaderModule, int colorFormat, int primitiveTopology,
             int[] vertexStrides, int[] vertexStepModes, int[] attributeBindings, int[] attributeLocations,
             int[] attributeFormats, int[] attributeOffsets, int sampledTextureCount, boolean uniformBufferEnabled,
-            boolean depthTestEnabled, boolean blendEnabled, boolean depthWriteEnabled);
+            boolean depthTestEnabled, boolean blendEnabled, boolean depthWriteEnabled,
+            String vertexEntryPoint, String fragmentEntryPoint, boolean isolatedPreparation);
+
+    static native void retainPreparationDevice(long context);
+    static native void releasePreparationDevice(long context);
+    static native byte[] pipelineCacheIdentity(long context);
+    static native long[] pipelineCacheStatistics(long context);
+    static native int initializePipelineCache(long context, byte[] bytes);
+    static native byte[] snapshotPipelineCache(long context);
+    static native byte[] mergePipelineCaches(long context, byte[] current, byte[] incoming);
+    static native void discardPreparedPipeline(long pipeline);
 
     static native void beginRenderPass(long context, long colorTexture, int colorFormat, int width, int height,
             boolean clear, float red, float green, float blue, float alpha, boolean store, boolean depthClear,

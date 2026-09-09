@@ -1,6 +1,7 @@
 package io.github.libfdx.runtime.core.shader;
 
 import java.nio.ByteBuffer;
+import java.io.ByteArrayOutputStream;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 
@@ -111,6 +112,48 @@ public final class RuntimeShaderTargetInterface {
         return entryPoints.clone();
     }
 
+    /** Returns an owned FDXT v1 payload, including every entry-point and expanded binding remap. */
+    public byte[] bytes() {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        output.write('F'); output.write('D'); output.write('X'); output.write('T');
+        writeInt(output, VERSION);
+        writeInt(output, entryPoints.length);
+        for (RuntimeShaderEntryPointRemap entry : entryPoints) {
+            writeInt(output, switch (entry.stage()) {
+                case VERTEX -> 1;
+                case FRAGMENT -> 2;
+                case COMPUTE -> 3;
+                default -> throw new IllegalArgumentException("FDXT requires a shader entry-point stage");
+            });
+            writeString(output, entry.sourceName()); writeString(output, entry.targetName());
+        }
+        writeInt(output, bindings.length);
+        for (RuntimeShaderBindingRemap binding : bindings) {
+            writeInt(output, binding.sourceGroup()); writeInt(output, binding.sourceBinding());
+            writeInt(output, switch (binding.kind()) {
+                case DIRECT -> 0;
+                case COMBINED_TEXTURE -> 1;
+                case COMBINED_SAMPLER -> 2;
+            });
+            RuntimeShaderTargetBinding[] targets = binding.targets();
+            writeInt(output, targets.length);
+            for (RuntimeShaderTargetBinding target : targets) {
+                writeString(output, target.namespace());
+                writeInt(output, target.group()); writeInt(output, target.binding());
+                writeString(output, target.role()); writeString(output, target.name());
+            }
+        }
+        return output.toByteArray();
+    }
+
+    private static void writeInt(ByteArrayOutputStream output, int value) {
+        for (int shift = 0; shift < 32; shift += 8) output.write(value >>> shift);
+    }
+    private static void writeString(ByteArrayOutputStream output, String value) {
+        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+        writeInt(output, bytes.length); output.write(bytes, 0, bytes.length);
+    }
+
     public RuntimeShaderBindingRemap[] bindings() {
         return bindings.clone();
     }
@@ -149,7 +192,9 @@ public final class RuntimeShaderTargetInterface {
         }
 
         private int count(String label) {
-            return u32(label);
+            int count = u32(label);
+            if (count > buffer.remaining()) throw new IllegalArgumentException("FDXT " + label + " is out of bounds");
+            return count;
         }
 
         private int u32(String label) {

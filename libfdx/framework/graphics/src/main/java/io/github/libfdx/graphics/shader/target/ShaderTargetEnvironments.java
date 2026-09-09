@@ -46,11 +46,6 @@ public final class ShaderTargetEnvironments {
             .consumer("ios-metal", "2")
             .compiler("metal", "msl-2")
             .build();
-    public static final ShaderTargetEnvironment D3D12_FXC_SM_5_1 = ShaderTargetEnvironment.builder(
-                    "d3d12-fxc-sm-5.1", ShaderTargets.DIRECTX_HLSL, ShaderArtifactFormats.HLSL_TEXT)
-            .consumer("direct3d12", "12")
-            .compiler("fxc", "5.1")
-            .build();
     public static final ShaderTargetEnvironment D3D12_DXC_SM_6_0 = ShaderTargetEnvironment.builder(
                     "d3d12-dxc-sm-6.0", ShaderTargets.DIRECTX_HLSL, ShaderArtifactFormats.HLSL_TEXT)
             .consumer("direct3d12", "12")
@@ -58,7 +53,7 @@ public final class ShaderTargetEnvironments {
             .build();
 
     private static final ShaderTargetEnvironment[] STANDARD = {
-            D3D12_FXC_SM_5_1,
+            D3D12_DXC_SM_6_0,
             GLES3_GLSL_ES_300,
             IOS_METAL_2_MSL_2,
             OPENGL_33_GLSL_330,

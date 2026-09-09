@@ -28,10 +28,12 @@ public final class GraphicsCapabilities {
     private final TextureFormat[] colorFormats;
     private final TextureFormat[] depthStencilFormats;
     private final TextureFormat[] resolveFormats;
+    private final TextureFormat[] filterableColorFormats, blendableColorFormats;
     private final int[] sampleCounts;
     private final int[][] formatSampleCounts;
     private final GraphicsLimits limits;
     private final ClipDepthRange clipDepthRange;
+    private final TextureOrigin renderedTextureOrigin;
 
     private GraphicsCapabilities(Builder builder) {
         profiles = builder.profiles.clone();
@@ -39,6 +41,8 @@ public final class GraphicsCapabilities {
         colorFormats = normalizeFormats(builder.colorFormats, false);
         depthStencilFormats = normalizeFormats(builder.depthStencilFormats, true);
         resolveFormats = normalizeResolveFormats(builder.resolveFormats, colorFormats);
+        filterableColorFormats = colorFeatures(builder.filterableColorFormats, colorFormats);
+        blendableColorFormats = colorFeatures(builder.blendableColorFormats, colorFormats);
         sampleCounts = normalizeSampleCounts(builder.sampleCounts);
         formatSampleCounts = normalizeFormatSampleCounts(builder.formatSampleCounts,
                 colorFormats, depthStencilFormats, sampleCounts);
@@ -52,6 +56,7 @@ public final class GraphicsCapabilities {
                     "Graphics capabilities must declare a clip depth range");
         }
         clipDepthRange = builder.clipDepthRange;
+        renderedTextureOrigin = builder.renderedTextureOrigin;
         if (!supports(ShaderProfile.PORTABLE_WEBGL2)
                 && !supports(ShaderProfile.PORTABLE_WEBGPU)
                 && !supports(ShaderProfile.NATIVE)) {
@@ -91,6 +96,12 @@ public final class GraphicsCapabilities {
     public boolean supportsColorFormat(TextureFormat format) {
         return contains(colorFormats, format);
     }
+
+    /** Whether a color format supports linear texture filtering. Renderability alone does not imply this. */
+    public boolean supportsColorFiltering(TextureFormat format) { return contains(filterableColorFormats, format); }
+
+    /** Whether a color attachment format supports blending, independently of supported blend operations. */
+    public boolean supportsColorBlending(TextureFormat format) { return contains(blendableColorFormats, format); }
 
     public boolean supportsDepthStencilFormat(TextureFormat format) {
         return contains(depthStencilFormats, format);
@@ -177,6 +188,20 @@ public final class GraphicsCapabilities {
         return result;
     }
 
+    private static TextureFormat[] colorFeatures(TextureFormat[] explicit, TextureFormat[] supported) {
+        if (explicit != null) return normalizeResolveFormats(explicit, supported);
+        // Preserve the portable normalized eight-bit contract. Floating-point formats require an explicit declaration.
+        TextureFormat[] defaults = new TextureFormat[supported.length];
+        int count = 0;
+        for (TextureFormat format : supported) {
+            if (format == TextureFormat.RGBA8_UNORM || format == TextureFormat.RGBA8_UNORM_SRGB
+                    || format == TextureFormat.BGRA8_UNORM || format == TextureFormat.BGRA8_UNORM_SRGB) {
+                defaults[count++] = format;
+            }
+        }
+        return Arrays.copyOf(defaults, count);
+    }
+
     private static int[] normalizeSampleCounts(int[] values) {
         int[] result = values != null && values.length > 0 ? values.clone() : new int[] { 1 };
         for (int value : result) {
@@ -260,12 +285,24 @@ public final class GraphicsCapabilities {
         return clipDepthRange;
     }
 
+    /** Rendered attachment convention, independent from uploaded image row order. */
+    public TextureOrigin renderedTextureOrigin() { return renderedTextureOrigin; }
+
     public static final class Builder {
+        private TextureOrigin renderedTextureOrigin = TextureOrigin.UNKNOWN;
+
+        /** Declares where v=0 lies after rendering into a texture. Unknown is the conservative default. */
+        public Builder renderedTextureOrigin(TextureOrigin value) {
+            if (value == null) throw new FdxException("Rendered texture origin cannot be null");
+            renderedTextureOrigin = value;
+            return this;
+        }
         private final boolean[] profiles = new boolean[ShaderProfile.values().length];
         private final boolean[] features = new boolean[GraphicsFeature.values().length];
         private TextureFormat[] colorFormats = new TextureFormat[0];
         private TextureFormat[] depthStencilFormats = new TextureFormat[0];
         private TextureFormat[] resolveFormats = new TextureFormat[0];
+        private TextureFormat[] filterableColorFormats, blendableColorFormats;
         private int[] sampleCounts = { 1 };
         private final int[][] formatSampleCounts =
                 new int[TextureFormat.values().length][];
@@ -314,6 +351,18 @@ public final class GraphicsCapabilities {
 
         public Builder resolveFormats(TextureFormat... values) {
             resolveFormats = values;
+            return this;
+        }
+
+        /** Complete list; omitted defaults to supported normalized eight-bit formats only. */
+        public Builder filterableColorFormats(TextureFormat... values) {
+            filterableColorFormats = values;
+            return this;
+        }
+
+        /** Complete list; omitted defaults to supported normalized eight-bit formats only. */
+        public Builder blendableColorFormats(TextureFormat... values) {
+            blendableColorFormats = values;
             return this;
         }
 

@@ -14,6 +14,24 @@ public final class ResolvedShaderPass {
     private final ShaderResourceLayout resourceLayout;
     private final ShaderResourceBinding defaultResources;
     private final long providerRevision;
+    private Runnable firstDrawObserver;
+
+    void observeFirstDraw(Runnable observer) {
+        Runnable previous = firstDrawObserver;
+        firstDrawObserver = previous == null ? observer : () -> { previous.run(); observer.run(); };
+    }
+
+    /** Call on the preparation service's application thread immediately after successfully
+     * recording a nonempty draw using this pass. Readiness, skipped draws and polling do not
+     * count. This observes command recording, not GPU completion or presentation. Repeated
+     * calls after the first observation perform no allocation or clock read. */
+    public void recordDraw() {
+        Runnable observer = firstDrawObserver;
+        if (observer == null) return;
+        observer.run();
+        firstDrawObserver = null;
+    }
+
 
     private ResolvedShaderPass(ShaderPassId passId, RenderPipeline pipeline,
             ShaderResourceLayout resourceLayout,

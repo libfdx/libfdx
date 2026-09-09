@@ -1,0 +1,46 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "tiledversion": "1.10.2",
+  "name": "terrain",
+  "image": "../images/terrain.png",
+  "imagewidth": 100,
+  "imageheight": 67,
+  "tilewidth": 32,
+  "tileheight": 32,
+  "tilecount": 6,
+  "columns": 3,
+  "margin": 1,
+  "spacing": 1,
+  "properties": [
+    {
+      "name": "material",
+      "type": "string",
+      "value": "stone"
+    }
+  ],
+  "tiles": [
+    {
+      "id": 0,
+      "type": "orientation",
+      "properties": [
+        {
+          "name": "cost",
+          "type": "int",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "wall",
+      "properties": [
+        {
+          "name": "solid",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    }
+  ]
+}

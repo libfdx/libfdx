@@ -1,5 +1,8 @@
 package io.github.libfdx.graphics.wgpu;
 
+import com.github.xpenatan.jParser.api.NativeObject;
+
+import com.github.xpenatan.webgpu.WGPU;
 import com.github.xpenatan.webgpu.WGPUAdapter;
 import com.github.xpenatan.webgpu.WGPUBindGroup;
 import com.github.xpenatan.webgpu.WGPUBindGroupDescriptor;
@@ -18,8 +21,11 @@ import com.github.xpenatan.webgpu.WGPUCommandEncoderDescriptor;
 import com.github.xpenatan.webgpu.WGPUCompositeAlphaMode;
 import com.github.xpenatan.webgpu.WGPUDevice;
 import com.github.xpenatan.webgpu.WGPUDeviceDescriptor;
+import com.github.xpenatan.webgpu.WGPUDeviceLostCallback;
+import com.github.xpenatan.webgpu.WGPUDeviceLostReason;
 import com.github.xpenatan.webgpu.WGPUErrorType;
 import com.github.xpenatan.webgpu.WGPUExtent3D;
+import com.github.xpenatan.webgpu.WGPUFeatureName;
 import com.github.xpenatan.webgpu.WGPUInstance;
 import com.github.xpenatan.webgpu.WGPULoadOp;
 import com.github.xpenatan.webgpu.WGPUMapAsyncStatus;
@@ -58,6 +64,7 @@ import com.github.xpenatan.webgpu.WGPUTextureViewDimension;
 import com.github.xpenatan.webgpu.WGPUUncapturedErrorCallback;
 import com.github.xpenatan.webgpu.WGPUVectorRenderPassColorAttachment;
 import com.github.xpenatan.webgpu.WGPUVectorBindGroupEntry;
+import com.github.xpenatan.webgpu.WGPUVectorFeatureName;
 import com.github.xpenatan.webgpu.WGPUVectorTextureFormat;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
@@ -65,10 +72,12 @@ import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.GraphicsFrame;
+import io.github.libfdx.graphics.NativeWindow;
 import io.github.libfdx.graphics.TextureFormat;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.function.Consumer;
 import io.github.libfdx.collections.Array;
 
 /**
@@ -80,15 +89,21 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     private static final long INIT_TIMEOUT_NANOS = 10L * 1000L * 1000L * 1000L;
     private static final long READBACK_TIMEOUT_NANOS = 10L * 1000L * 1000L * 1000L;
     private static final int COPY_BYTES_PER_ROW_ALIGNMENT = 256;
+    // Dawn's published webgpu.h extension value. jWebGPU exposes extension enums through CUSTOM.
+    // https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/implicit_device_synchronization.md
+    private static final int DAWN_IMPLICIT_DEVICE_SYNCHRONIZATION = 0x00050004;
     static final WGPUTextureFormat DEPTH_FORMAT = WGPUTextureFormat.Depth32Float;
 
     private final WGPUConfiguration configuration;
     private final WGPUInstance instance;
-    private final WGPUSurface surface;
-    private final Object surfaceOwner;
+    private WGPUSurface surface;
+    private Object surfaceOwner;
+    private NativeWindow pendingWindow;
     private final boolean surfaceCopySrc;
     private final boolean ownsDevice;
     private final WGPUResourceDomain resourceDomain;
+    private final WGPUCreationErrors creationErrors;
+    private WGPUPreparation preparation;
     private WGPUAdapter adapter;
     private WGPUDevice device;
     private WGPUQueue queue;
@@ -116,11 +131,22 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     private WGPUGraphicsFrame currentFrame;
     private boolean surfaceConfigured;
     private boolean frameStarted;
+    private boolean frameTextureAcquired;
     private boolean pendingResize;
     private boolean disposed;
     private boolean initializationStarted;
     private boolean ready;
     private InitState initState;
+    private WGPURequestAdapterCallback adapterCallback;
+    private WGPURequestDeviceCallback deviceCallback;
+    private WGPUUncapturedErrorCallback errorCallback;
+    private WGPUDeviceLostCallback deviceLostCallback;
+    private Consumer<Runnable> deferDeviceLossRetirement;
+    private volatile boolean deviceLossNotified;
+    private boolean deviceLossRequested;
+    private boolean nativeDeviceReleased;
+    private boolean adapterCallbackComplete;
+    private boolean deviceCallbackComplete;
     private int width;
     private int height;
     private int pendingResizeWidth;
@@ -166,22 +192,33 @@ public final class WGPUContext implements GraphicsContext, Disposable {
 
     WGPUContext(WGPUConfiguration configuration, WGPUInstance instance, WGPUSurface surface,
             Object surfaceOwner, boolean surfaceCopySrc, WGPUContext sharedContext) {
+        this(configuration, instance, surface, surfaceOwner, surfaceCopySrc, sharedContext, null);
+    }
+
+    WGPUContext(WGPUConfiguration configuration, WGPUInstance instance, NativeWindow window, boolean surfaceCopySrc) {
+        this(configuration, instance, null, null, surfaceCopySrc, null, window);
+    }
+
+    private WGPUContext(WGPUConfiguration configuration, WGPUInstance instance, WGPUSurface surface,
+            Object surfaceOwner, boolean surfaceCopySrc, WGPUContext sharedContext, NativeWindow pendingWindow) {
         if (configuration == null) {
             throw new FdxException("WGPUConfiguration cannot be null");
         }
         if (instance == null || !instance.isValid()) {
             throw new FdxException("WGPU instance is not valid");
         }
-        if (surface == null) {
+        if (surface == null && pendingWindow == null) {
             throw new FdxException("WGPU surface is not valid");
         }
         this.configuration = configuration;
         this.instance = instance;
         this.surface = surface;
         this.surfaceOwner = surfaceOwner;
+        this.pendingWindow = pendingWindow;
         this.surfaceCopySrc = surfaceCopySrc;
         ownsDevice = sharedContext == null;
         resourceDomain = sharedContext != null ? sharedContext.resourceDomain : new WGPUResourceDomain();
+        creationErrors = sharedContext != null ? sharedContext.creationErrors : new WGPUCreationErrors();
         if (sharedContext != null) {
             if (sharedContext.disposed || !sharedContext.ready) {
                 throw new FdxException("The shared WGPU context is not ready");
@@ -201,9 +238,13 @@ public final class WGPUContext implements GraphicsContext, Disposable {
      */
     public void initializeBlocking() {
         requireNotDisposed("initialize");
-        startInitialization();
-        waitFor(initState);
-        finishInitialization();
+        try {
+            startInitialization();
+            waitFor(initState);
+            finishInitialization();
+        } finally {
+            releaseInitializationCallbacks();
+        }
     }
 
     /**
@@ -237,23 +278,29 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         WGPURequestAdapterOptions options = WGPURequestAdapterOptions.obtain();
         options.setPowerPreference(WGPUPowerPreference.HighPerformance);
         options.setBackendType(configuration.backend().toNative());
-        options.setCompatibleSurface(surface);
+        if (surface != null) {
+            options.setCompatibleSurface(surface);
+        }
 
-        instance.requestAdapter(options, WGPUCallbackMode.AllowProcessEvents, new WGPURequestAdapterCallback() {
+        adapterCallback = new WGPURequestAdapterCallback() {
             @Override
             protected void onCallback(WGPURequestAdapterStatus status, WGPUAdapter selectedAdapter, String message) {
+                adapterCallbackComplete = true;
                 debugInit("adapter-callback " + status + (message != null ? ": " + message : ""));
                 if (status != WGPURequestAdapterStatus.Success) {
+                    selectedAdapter.dispose();
                     initState.fail("Could not request WGPU adapter: " + message);
                     return;
                 }
                 adapter = selectedAdapter;
                 requestDevice(initState, selectedAdapter);
             }
-        });
+        };
+        instance.requestAdapter(options, WGPUCallbackMode.AllowProcessEvents, adapterCallback);
     }
 
     private void finishInitializationIfReady() {
+        releaseInitializationCallbacks();
         if (ready || initState == null || !initState.complete) {
             return;
         }
@@ -261,11 +308,18 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     }
 
     private void finishInitialization() {
+        checkDeviceLoss();
         if (ready) {
             return;
         }
         if (initState != null && initState.error != null) {
             throw new FdxException(initState.error);
+        }
+        if (pendingWindow != null) {
+            WGPUNativeSurface.SurfaceHandle created = WGPUNativeSurface.create(instance, pendingWindow);
+            surface = created.surface();
+            surfaceOwner = created.owner();
+            pendingWindow = null;
         }
         selectSurfaceFormat();
         frameEncoder = new WGPUCommandEncoder();
@@ -294,11 +348,13 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         descriptor.setLabel("libfdx WGPU Device");
         descriptor.getDefaultQueue().setLabel("libfdx WGPU Queue");
 
-        selectedAdapter.requestDevice(descriptor, WGPUCallbackMode.AllowProcessEvents, new WGPURequestDeviceCallback() {
+        deviceCallback = new WGPURequestDeviceCallback() {
             @Override
             protected void onCallback(WGPURequestDeviceStatus status, WGPUDevice selectedDevice, String message) {
+                deviceCallbackComplete = true;
                 debugInit("device-callback " + status + (message != null ? ": " + message : ""));
                 if (status != WGPURequestDeviceStatus.Success) {
+                    selectedDevice.dispose();
                     state.fail("Could not request WGPU device: " + message);
                     return;
                 }
@@ -306,18 +362,70 @@ public final class WGPUContext implements GraphicsContext, Disposable {
                 queue = selectedDevice.getQueue();
                 state.complete = true;
             }
-        }, new WGPUUncapturedErrorCallback() {
+        };
+        errorCallback = new WGPUUncapturedErrorCallback() {
             @Override
             protected void onCallback(WGPUErrorType errorType, String message) {
-                state.fail("Uncaptured WGPU error: " + errorType + ": " + message);
+                boolean recoverable = errorType == WGPUErrorType.Validation || errorType == WGPUErrorType.OutOfMemory;
+                if (!recoverable || !creationErrors.capture(errorType + ": " + message)) {
+                    state.fail("Uncaptured WGPU error: " + errorType + ": " + message);
+                }
             }
-        });
+        };
+        deviceLostCallback = new WGPUDeviceLostCallback() {
+            @Override protected void onCallback(WGPUDeviceLostReason reason, String message) {
+                resourceDomain.deviceLost("WGPU device lost (" + reason + "): " + message);
+                deviceLossNotified = true;
+                // Browser notifications can arrive after destroy/release and must return before disposal.
+                if (deferDeviceLossRetirement != null)
+                    deferDeviceLossRetirement.accept(WGPUContext.this::retireDeviceLossCallback);
+            }
+        };
+        WGPUVectorFeatureName features = null;
+        try {
+            if (configuration.loaderBackend() == WGPULoaderBackend.DAWN) {
+                features = new WGPUVectorFeatureName();
+                // CUSTOM is mutable shared storage. Copy the value into the native vector while
+                // locked, then restore it before invoking any asynchronous device callback.
+                synchronized (WGPUFeatureName.CUSTOM) {
+                    int previous = WGPUFeatureName.CUSTOM.getValue();
+                    try {
+                        WGPUFeatureName feature = WGPUFeatureName.CUSTOM.setValue(DAWN_IMPLICIT_DEVICE_SYNCHRONIZATION);
+                        if (!selectedAdapter.hasFeature(feature))
+                            throw new FdxException("Dawn requires implicit device synchronization for concurrent preparation");
+                        features.push_back(feature);
+                    } finally { WGPUFeatureName.CUSTOM.setValue(previous); }
+                }
+            }
+            descriptor.setRequiredFeatures(features != null ? features : WGPUVectorFeatureName.NULL);
+            descriptor.setDeviceLostCallback(deferDeviceLossRetirement != null
+                    ? WGPUCallbackMode.AllowSpontaneous : WGPUCallbackMode.AllowProcessEvents, deviceLostCallback);
+            deviceLossRequested = true;
+            selectedAdapter.requestDevice(descriptor, WGPUCallbackMode.AllowProcessEvents, deviceCallback, errorCallback);
+        } finally {
+            // requestDevice consumes its descriptor synchronously; the callback has separate ownership.
+            descriptor.setRequiredFeatures(WGPUVectorFeatureName.NULL);
+            descriptor.setDeviceLostCallback(WGPUCallbackMode.AllowProcessEvents, WGPUDeviceLostCallback.NULL);
+            if (features != null) features.dispose();
+        }
+    }
+
+    // Only called after the request/processEvents call has returned, never from inside a callback.
+    private void releaseInitializationCallbacks() {
+        if(adapterCallbackComplete && adapterCallback != null) {
+            adapterCallback.dispose();
+            adapterCallback = null;
+        }
+        if(deviceCallbackComplete && deviceCallback != null) {
+            deviceCallback.dispose();
+            deviceCallback = null;
+        }
     }
 
     private void waitFor(InitState state) {
         long deadline = System.nanoTime() + INIT_TIMEOUT_NANOS;
         while (!state.complete && state.error == null) {
-            instance.processEvents();
+            processNativeEvents();
             if (System.nanoTime() > deadline) {
                 throw new FdxException("Timed out while initializing WGPU");
             }
@@ -604,6 +712,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
      * @return true if begin frame succeeds or is active; false otherwise
      */
     public boolean beginFrame() {
+        checkDeviceLoss();
         if (disposed || !ready || !surfaceConfigured || width <= 0 || height <= 0) {
             return false;
         }
@@ -612,6 +721,21 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         }
         commandEncoder.beginFrame();
 
+        // Browser canvas textures expire when execution yields to the event loop.
+        if (WGPU.getPlatformType() != WGPUPlatformType.WGPU_Web && !acquireFrameTexture()) {
+            return false;
+        }
+
+        WGPUCommandEncoderDescriptor encoderDescriptor = WGPUCommandEncoderDescriptor.obtain();
+        encoderDescriptor.setLabel("libfdx frame command encoder");
+        device.createCommandEncoder(encoderDescriptor, frameEncoder);
+
+        uniformArena.beginFrame();
+        frameStarted = true;
+        return true;
+    }
+
+    private boolean acquireFrameTexture() {
         if (!usesOffscreenFrame()) {
             WGPUSurfaceTexture surfaceTexture = WGPUSurfaceTexture.obtain();
             surface.getCurrentTexture(surfaceTexture);
@@ -637,6 +761,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
                 throw new FdxException("WGPU surface acquisition " + status
                         + " returned an invalid texture (" + width + "x" + height + ")");
             }
+            frameTextureAcquired = true;
 
             if (status == WGPUSurfaceGetCurrentTextureStatus.SuccessSuboptimal
                     && !pendingResize) {
@@ -657,13 +782,14 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             frameTexture.createView(viewDescriptor, frameTextureView);
         }
 
-        WGPUCommandEncoderDescriptor encoderDescriptor = WGPUCommandEncoderDescriptor.obtain();
-        encoderDescriptor.setLabel("libfdx frame command encoder");
-        device.createCommandEncoder(encoderDescriptor, frameEncoder);
-
-        uniformArena.beginFrame();
-        frameStarted = true;
         return true;
+    }
+
+    void ensureFrameTexture() {
+        checkDeviceLoss();
+        if (frameStarted && !frameTextureAcquired && !usesOffscreenFrame() && !acquireFrameTexture()) {
+            throw new FdxException("WGPU surface texture is unavailable for the active frame");
+        }
     }
 
     /**
@@ -747,6 +873,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
      * Ends frame.
      */
     public void endFrame() {
+        checkDeviceLoss();
         if (!frameStarted) {
             return;
         }
@@ -757,10 +884,16 @@ public final class WGPUContext implements GraphicsContext, Disposable {
      * Returns the read pixels RGBA8.
      *
      * @return the read pixels RGBA8
+     * @throws UnsupportedOperationException when neither surface copies nor offscreen readback are enabled;
+     *         the active frame remains usable
      */
     public ByteBuffer readPixelsRgba8() {
         if (!frameStarted) {
             throw new FdxException("Cannot read pixels before beginFrame()");
+        }
+        if (!supportsReadPixelsRgba8()) {
+            throw new UnsupportedOperationException("WGPU surface readback requires CopySrc usage; "
+                    + "configure offscreenReadback(true) before attachment for offscreen capture");
         }
         WGPUTexture sourceTexture = readbackTexture();
 
@@ -783,6 +916,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     }
 
     private void submitCurrentFrame() {
+        checkDeviceLoss();
         commandEncoder.ensurePassesEnded();
         frameStarted = false;
         Throwable firstFailure = null;
@@ -831,7 +965,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             firstFailure = WGPUCleanup.merge(firstFailure, failure);
         }
 
-        if (!usesOffscreenFrame()) {
+        if (frameTextureAcquired) {
             try {
                 if (frameTextureView.isValid()) {
                     frameTextureView.release();
@@ -839,7 +973,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             } catch (RuntimeException | Error failure) {
                 firstFailure = WGPUCleanup.merge(firstFailure, failure);
             }
-            if (submitted && com.github.xpenatan.webgpu.WGPU.getPlatformType() != WGPUPlatformType.WGPU_Web) {
+            if (submitted && WGPU.getPlatformType() != WGPUPlatformType.WGPU_Web) {
                 try {
                     surface.present();
                 } catch (RuntimeException | Error failure) {
@@ -853,6 +987,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             } catch (RuntimeException | Error failure) {
                 firstFailure = WGPUCleanup.merge(firstFailure, failure);
             }
+            frameTextureAcquired = false;
         }
 
         if (submitted) {
@@ -914,14 +1049,17 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     }
 
     ByteBuffer mapReadbackBuffer(WGPUBuffer readbackBuffer, int offset, int readbackSize) {
+        if (frameTextureAcquired && WGPU.getPlatformType() == WGPUPlatformType.WGPU_Web) {
+            throw new FdxException("Browser WGPU buffer readback must occur before using the frame's surface attachment");
+        }
         final MapState state = new MapState();
         readbackBuffer.mapAsync(WGPUMapMode.Read, offset, readbackSize, WGPUCallbackMode.AllowProcessEvents,
                 new WGPUBufferMapCallback() {
                     @Override
                     protected void onCallback(WGPUMapAsyncStatus status, String message) {
-                        state.complete = true;
                         state.status = status;
                         state.message = message;
+                        state.complete = true;
                     }
                 });
         waitForMap(state);
@@ -940,7 +1078,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     private void waitForMap(MapState state) {
         long deadline = System.nanoTime() + READBACK_TIMEOUT_NANOS;
         while (!state.complete) {
-            instance.processEvents();
+            processNativeEvents();
             if (System.nanoTime() > deadline) {
                 throw new FdxException("Timed out while reading WGPU framebuffer");
             }
@@ -1005,6 +1143,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
      * @return the frame encoder
      */
     public WGPUCommandEncoder frameEncoder() {
+        requireDeviceUsable("record frame commands");
         return frameEncoder;
     }
 
@@ -1014,6 +1153,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
      * @return the frame texture view
      */
     public WGPUTextureView frameTextureView() {
+        ensureFrameTexture();
         return frameTextureView;
     }
 
@@ -1201,11 +1341,17 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         return !surfaceCopySrc && configuration.offscreenReadback();
     }
 
+    boolean supportsReadPixelsRgba8() {
+        return surfaceCopySrc || usesOffscreenFrame();
+    }
+
     private WGPUTextureView activeColorAttachmentView() {
+        ensureFrameTexture();
         return usesOffscreenFrame() ? offscreenColorRenderTextureView : frameTextureView;
     }
 
     private WGPUTexture readbackTexture() {
+        ensureFrameTexture();
         WGPUTexture texture = usesOffscreenFrame() ? offscreenColorTexture : frameTexture;
         if (texture == null || !texture.isValid()) {
             throw new FdxException("WGPU readback texture is not valid");
@@ -1286,8 +1432,11 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         if (disposed) {
             return;
         }
-        if (initializationStarted && (!ready || configuration.processEventsEachFrame())) {
-            instance.processEvents();
+        checkDeviceLoss();
+        if (initializationStarted && (!ready || configuration.processEventsEachFrame()
+                || deviceLostCallback != null || !ownsDevice)) {
+            processNativeEvents();
+            checkDeviceLoss();
             if (initState != null && initState.error != null) {
                 throw new FdxException(initState.error);
             }
@@ -1301,7 +1450,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
      * @return true if ready is enabled or true; false otherwise
      */
     public boolean isReady() {
-        return ready && !disposed;
+        return ready && !disposed && !resourceDomain.isClosed();
     }
 
     /**
@@ -1371,6 +1520,12 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         return instance;
     }
 
+    private void processNativeEvents() {
+        // Native Dawn preparation retires callbacks only after every concurrent event pump
+        // has returned. Shared contexts and the background drain use the same domain lock.
+        synchronized (resourceDomain) { instance.processEvents(); }
+    }
+
     /**
      * Returns the native surface format.
      *
@@ -1402,8 +1557,49 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         return resourceDomain;
     }
 
+    // Installed by the browser attachment before initialization; native event pumps retire inline after release.
+    void deferDeviceLossRetirement(Consumer<Runnable> defer) {
+        if (initializationStarted) throw new FdxException("Device loss dispatch must be set before initialization");
+        deferDeviceLossRetirement = defer;
+    }
+
+    void cancelLostDevicePreparation() {
+        ready = false;
+        if (preparation != null) preparation.close();
+    }
+
+    private void checkDeviceLoss() {
+        if (resourceDomain.deviceLoss() == null) return;
+        resourceDomain.handleDeviceLoss();
+        throw resourceDomain.lossException();
+    }
+
+    private void retireDeviceLossCallback() {
+        if (!nativeDeviceReleased || deviceLostCallback == null) return;
+        if (deferDeviceLossRetirement != null && deviceLossRequested && !deviceLossNotified) return;
+        deviceLostCallback.dispose();
+        deviceLostCallback = null;
+    }
+
+    void initializePreparation(WGPUPreparation value, int workers) {
+        requireDeviceUsable("initialize shader preparation");
+        value.initialize(this, workers);
+        preparation = value;
+    }
+
+    WGPUPreparation preparation() { return preparation; }
+
+    WGPUCreationErrors creationErrors() { return creationErrors; }
+
+    WGPUCreationErrors.Scope beginNativeCreation(String operation) {
+        return configuration.loaderBackend() == WGPULoaderBackend.WGPU
+                && WGPU.getPlatformType() != WGPUPlatformType.WGPU_Web
+                ? creationErrors.begin(operation) : null;
+    }
+
     void requireDeviceUsable(String action) {
-        if (disposed || !ready || resourceDomain.isClosed()) {
+        if (resourceDomain.deviceLoss() != null) throw resourceDomain.lossException();
+        if (disposed || !ready || resourceDomain.isClosed() || initState != null && initState.error != null) {
             throw new FdxException("Cannot " + action + " with an unavailable WGPU context");
         }
     }
@@ -1449,6 +1645,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         boolean abandoningFrame = frameStarted;
         frameStarted = false;
         WGPUCleanup cleanup = new WGPUCleanup();
+        if (preparation != null) cleanup.run(preparation::close);
         if (commandEncoder != null) {
             cleanup.run(commandEncoder::dispose);
             commandEncoder = null;
@@ -1483,7 +1680,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             cleanup.run(frameEncoder::dispose);
         }
         if (frameTextureView != null) {
-            if (abandoningFrame && !usesOffscreenFrame()) {
+            if (frameTextureAcquired) {
                 cleanup.run(() -> {
                     frameTextureView.release();
                 });
@@ -1494,16 +1691,20 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             cleanup.run(offscreenColorRenderTextureView::dispose);
         }
         if (frameTexture != null) {
-            if (abandoningFrame && !usesOffscreenFrame()) {
+            if (frameTextureAcquired) {
                 cleanup.run(() -> {
                     frameTexture.release();
                 });
             }
             cleanup.run(frameTexture::dispose);
         }
+        frameTextureAcquired = false;
         if (surface != null) {
             cleanup.run(surface::release);
             cleanup.run(surface::dispose);
+        }
+        if (surfaceOwner instanceof NativeObject owner) {
+            cleanup.run(owner::dispose);
         }
         cleanup.run(() -> resourceDomain.unregisterContext(this));
         cleanup.run(resourceDomain::releaseContext);
@@ -1512,16 +1713,31 @@ public final class WGPUContext implements GraphicsContext, Disposable {
 
     private void releaseOwnedDevice() {
         WGPUCleanup cleanup = new WGPUCleanup();
+        cleanup.run(this::releaseInitializationCallbacks);
         if (queue != null) {
             cleanup.run(queue::release);
         }
         if (device != null) {
             cleanup.run(device::destroy);
+            cleanup.run(device::release);
             cleanup.run(device::dispose);
+        }
+        if (adapter != null) {
+            cleanup.run(adapter::release);
+            cleanup.run(adapter::dispose);
         }
         if (instance != null) {
             cleanup.run(instance::release);
+            cleanup.run(instance::dispose);
         }
+        if (errorCallback != null) {
+            cleanup.run(errorCallback::dispose);
+            errorCallback = null;
+        }
+        nativeDeviceReleased = true;
+        if (deferDeviceLossRetirement != null) {
+            cleanup.run(() -> deferDeviceLossRetirement.accept(this::retireDeviceLossCallback));
+        } else cleanup.run(this::retireDeviceLossCallback);
         cleanup.throwIfFailed();
     }
 
@@ -1541,8 +1757,8 @@ public final class WGPUContext implements GraphicsContext, Disposable {
      * @author xpenatan
      */
     private static final class InitState {
-        boolean complete;
-        String error;
+        volatile boolean complete;
+        volatile String error;
 
         void fail(String error) {
             if (this.error != null) {
@@ -1559,7 +1775,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
      * @author xpenatan
      */
     private static final class MapState {
-        boolean complete;
+        volatile boolean complete;
         WGPUMapAsyncStatus status;
         String message;
     }

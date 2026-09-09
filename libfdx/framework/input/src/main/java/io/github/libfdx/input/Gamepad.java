@@ -51,7 +51,8 @@ public interface Gamepad extends ProviderHandle {
     GamepadState state();
 
     /**
-     * Runs the axis step.
+     * Returns standardized stick axes in [-1,1] (positive Y points down), or
+     * trigger axes in [0,1]. Disconnected backend-owned devices read neutral.
      *
      * @param axis the axis
      * @return the axis

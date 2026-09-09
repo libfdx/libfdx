@@ -1,13 +1,30 @@
 package io.github.libfdx.backend.desktop;
 
 import io.github.libfdx.core.FdxException;
-import io.github.libfdx.graphics.PrimitiveTopology;
+import io.github.libfdx.graphics.ColorTargetState;
+import io.github.libfdx.graphics.DepthStencilState;
+import io.github.libfdx.graphics.gl.GLApi;
+import io.github.libfdx.graphics.gl.GLProgramBinary;
+import io.github.libfdx.graphics.gl.GLShaderType;
 import io.github.libfdx.graphics.GraphicsFrameMetrics;
+import io.github.libfdx.graphics.MultisampleState;
+import io.github.libfdx.graphics.PrimitiveState;
+import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.TextureFilter;
+import io.github.libfdx.graphics.TextureFormat;
+import io.github.libfdx.graphics.TextureMipmapFilter;
 import io.github.libfdx.graphics.TextureWrap;
 import io.github.libfdx.graphics.VertexFormat;
-import io.github.libfdx.graphics.gl.GLApi;
-import io.github.libfdx.graphics.gl.GLShaderType;
+import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
+import java.util.Arrays;
+import org.lwjgl.opengl.ARBComputeShader;
+import org.lwjgl.opengl.ARBDrawBuffersBlend;
+import org.lwjgl.opengl.ARBGetProgramBinary;
+import org.lwjgl.opengl.ARBParallelShaderCompile;
+import org.lwjgl.opengl.ARBPipelineStatisticsQuery;
+import org.lwjgl.opengl.ARBRobustness;
+import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL13;
@@ -18,10 +35,13 @@ import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GL31;
 import org.lwjgl.opengl.GL32;
 import org.lwjgl.opengl.GL33;
-import org.lwjgl.opengl.GL;
-import org.lwjgl.opengl.ARBPipelineStatisticsQuery;
-
-import java.nio.ByteBuffer;
+import org.lwjgl.opengl.GL40;
+import org.lwjgl.opengl.GL42;
+import org.lwjgl.opengl.GL43;
+import org.lwjgl.opengl.KHRParallelShaderCompile;
+import org.lwjgl.opengl.KHRRobustness;
+import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 
 /**
  * Exposes API access for desktop GL.
@@ -29,6 +49,201 @@ import java.nio.ByteBuffer;
  * @author xpenatan
  */
 final class DesktopGLApi implements GLApi {
+    private Boolean computeSupported;
+    private final int preparationWorkers;
+    private DesktopAssetExecutor preparationExecutor;
+    private boolean preparationClosed;
+    private Boolean parallelCompilationSupported;
+    private int[] binaryFormats;
+    private String binaryIdentity;
+    private final boolean resetStatusCore, resetStatusArb;
+    private boolean contextLost;
+
+    DesktopGLApi(int preparationWorkers) {
+        this.preparationWorkers = preparationWorkers;
+        var capabilities = GL.getCapabilities();
+        resetStatusCore = capabilities.OpenGL45 || capabilities.GL_KHR_robustness;
+        resetStatusArb = capabilities.GL_ARB_robustness;
+    }
+
+    @Override public boolean isContextLost() {
+        if (!contextLost) {
+            int status = resetStatusCore ? KHRRobustness.glGetGraphicsResetStatus()
+                    : resetStatusArb ? ARBRobustness.glGetGraphicsResetStatusARB() : GL11.GL_NO_ERROR;
+            contextLost = status != GL11.GL_NO_ERROR;
+        }
+        return contextLost;
+    }
+
+    @Override public int shaderPreparationWorkers() { return preparationWorkers; }
+    @Override public synchronized void executeShaderPreparation(Runnable task) {
+        if (preparationClosed) throw new FdxException("GL shader preparation is closed");
+        if (preparationExecutor == null) preparationExecutor = new DesktopAssetExecutor(preparationWorkers, 256);
+        if (!preparationExecutor.submit(task)) throw new FdxException("GL shader preparation queue is full");
+    }
+    @Override public synchronized void closeShaderPreparation() {
+        preparationClosed = true;
+        if (preparationExecutor != null) preparationExecutor.dispose();
+    }
+    @Override public boolean supportsParallelShaderCompilation() {
+        if (parallelCompilationSupported != null) return parallelCompilationSupported;
+        var caps = GL.getCapabilities();
+        if (caps.GL_KHR_parallel_shader_compile) {
+            KHRParallelShaderCompile.glMaxShaderCompilerThreadsKHR(preparationWorkers);
+            return parallelCompilationSupported = true;
+        }
+        if (caps.GL_ARB_parallel_shader_compile) {
+            ARBParallelShaderCompile.glMaxShaderCompilerThreadsARB(preparationWorkers);
+            return parallelCompilationSupported = true;
+        }
+        return parallelCompilationSupported = false;
+    }
+    @Override public boolean programCompilationComplete(int program) {
+        return GL20.glGetProgrami(program, KHRParallelShaderCompile.GL_COMPLETION_STATUS_KHR) != 0;
+    }
+
+    @Override public String programBinaryIdentity() {
+        if (binaryFormats != null) return binaryIdentity;
+        binaryFormats = new int[0];
+        var caps = GL.getCapabilities();
+        if (!caps.OpenGL41 && !caps.GL_ARB_get_program_binary) return null;
+        int count = GL11.glGetInteger(ARBGetProgramBinary.GL_NUM_PROGRAM_BINARY_FORMATS);
+        if (count <= 0 || count > 256) return null;
+        binaryFormats = new int[count];
+        GL11.glGetIntegerv(ARBGetProgramBinary.GL_PROGRAM_BINARY_FORMATS, binaryFormats);
+        String vendor = GL11.glGetString(GL11.GL_VENDOR), renderer = GL11.glGetString(GL11.GL_RENDERER);
+        String version = GL11.glGetString(GL11.GL_VERSION), language = GL11.glGetString(GL20.GL_SHADING_LANGUAGE_VERSION);
+        if (vendor == null || renderer == null || version == null || language == null) return null;
+        binaryIdentity = String.join("\n", "desktop-gl-program:1", vendor, renderer, version, language,
+                System.getProperty("os.name", ""), System.getProperty("os.version", ""), System.getProperty("os.arch", ""),
+                Integer.toString(GL11.glGetInteger(GL30.GL_CONTEXT_FLAGS)),
+                Integer.toString(GL11.glGetInteger(GL32.GL_CONTEXT_PROFILE_MASK)), Arrays.toString(binaryFormats));
+        return binaryIdentity;
+    }
+
+    @Override public void hintProgramBinaryRetrievable(int program) {
+        ARBGetProgramBinary.glProgramParameteri(program, ARBGetProgramBinary.GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL11.GL_TRUE);
+    }
+
+    @Override public boolean restoreProgramBinary(int program, GLProgramBinary binary) {
+        boolean supported = false;
+        for (int format : binaryFormats) if (format == binary.format()) supported = true;
+        if (!supported) return false;
+        ByteBuffer bytes = MemoryUtil.memAlloc(binary.bytes().length);
+        try {
+            bytes.put(binary.bytes()).flip();
+            ARBGetProgramBinary.glProgramBinary(program, binary.format(), bytes);
+            return GL11.glGetError() == GL11.GL_NO_ERROR;
+        } finally { MemoryUtil.memFree(bytes); }
+    }
+
+    @Override public GLProgramBinary exportProgramBinary(int program, int maximumBytes) {
+        int size = GL20.glGetProgrami(program, ARBGetProgramBinary.GL_PROGRAM_BINARY_LENGTH);
+        if (size <= 0 || size > maximumBytes) return null;
+        ByteBuffer bytes = MemoryUtil.memAlloc(size);
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            IntBuffer length = stack.callocInt(1), format = stack.callocInt(1);
+            ARBGetProgramBinary.glGetProgramBinary(program, length, format, bytes);
+            if (GL11.glGetError() != GL11.GL_NO_ERROR || length.get(0) <= 0 || length.get(0) > size) return null;
+            byte[] result = new byte[length.get(0)]; bytes.get(result);
+            return new GLProgramBinary(format.get(0), result);
+        } finally { MemoryUtil.memFree(bytes); }
+    }
+
+    @Override public boolean supportsCompute() {
+        if (computeSupported != null) return computeSupported;
+        var caps = GL.getCapabilities();
+        if (!(caps.OpenGL43 || caps.GL_ARB_compute_shader && caps.GL_ARB_shader_storage_buffer_object
+                && caps.GL_ARB_shader_image_load_store)) return computeSupported = false;
+        // A 3.3 context can expose later functionality via extensions. Verify the exact
+        // language emitted by Tint rather than inferring it from the context version.
+        int shader = GL20.glCreateShader(GL43.GL_COMPUTE_SHADER);
+        try {
+            GL20.glShaderSource(shader, "#version 460\nlayout(local_size_x=1) in; void main() {}\n");
+            GL20.glCompileShader(shader);
+            return computeSupported = GL20.glGetShaderi(shader, GL20.GL_COMPILE_STATUS) != 0;
+        } finally { GL20.glDeleteShader(shader); }
+    }
+
+    @Override public int createComputeProgram(String source) {
+        int shader = GL20.glCreateShader(GL43.GL_COMPUTE_SHADER);
+        int program = 0;
+        try {
+            GL20.glShaderSource(shader, source);
+            GL20.glCompileShader(shader);
+            if (GL20.glGetShaderi(shader, GL20.GL_COMPILE_STATUS) == 0) {
+                throw new FdxException("Could not compile GL compute shader: " + GL20.glGetShaderInfoLog(shader));
+            }
+            program = GL20.glCreateProgram();
+            GL20.glAttachShader(program, shader);
+            GL20.glLinkProgram(program);
+            if (GL20.glGetProgrami(program, GL20.GL_LINK_STATUS) == 0) {
+                throw new FdxException("Could not link GL compute shader: " + GL20.glGetProgramInfoLog(program));
+            }
+            return program;
+        } catch (RuntimeException | Error failure) {
+            if (program != 0) GL20.glDeleteProgram(program);
+            throw failure;
+        } finally { GL20.glDeleteShader(shader); }
+    }
+
+    @Override public void bindComputeBuffer(int slot, int buffer, int offset, int size, boolean uniform) {
+        GL30.glBindBufferRange(uniform ? GL31.GL_UNIFORM_BUFFER : GL43.GL_SHADER_STORAGE_BUFFER,
+                slot, buffer, offset, size);
+    }
+
+    @Override public void bindStorageImage(int slot, int texture, TextureFormat format) {
+        GL42.glBindImageTexture(slot, texture, 0, false, 0, GL15.GL_READ_WRITE,
+                GLApi.colorInternalFormat(format));
+    }
+
+    @Override public void dispatchCompute(int x, int y, int z) {
+        ARBComputeShader.glDispatchCompute(x, y, z);
+    }
+
+    @Override public void computeMemoryBarrier() {
+        GL42.glMemoryBarrier(GL42.GL_ALL_BARRIER_BITS);
+    }
+
+    @Override public void copyBuffer(int source, int sourceOffset, int destination, int destinationOffset, int size) {
+        GL15.glBindBuffer(GL31.GL_COPY_READ_BUFFER, source);
+        GL15.glBindBuffer(GL31.GL_COPY_WRITE_BUFFER, destination);
+        GL31.glCopyBufferSubData(GL31.GL_COPY_READ_BUFFER, GL31.GL_COPY_WRITE_BUFFER, sourceOffset, destinationOffset, size);
+        GL15.glBindBuffer(GL31.GL_COPY_READ_BUFFER, 0);
+        GL15.glBindBuffer(GL31.GL_COPY_WRITE_BUFFER, 0);
+    }
+
+    @Override public void readBuffer(int source, int offset, ByteBuffer destination) {
+        GL15.glBindBuffer(GL31.GL_COPY_READ_BUFFER, source);
+        GL15.glGetBufferSubData(GL31.GL_COPY_READ_BUFFER, offset, destination);
+        GL15.glBindBuffer(GL31.GL_COPY_READ_BUFFER, 0);
+    }
+    @Override public boolean supportsCompletePipelineState() {
+        return GL.getCapabilities().OpenGL46 || GL.getCapabilities().GL_ARB_polygon_offset_clamp
+                || GL.getCapabilities().GL_EXT_polygon_offset_clamp;
+    }
+
+    @Override public void applyPipelineState(PrimitiveState primitive,
+            ColorTargetState color,
+            DepthStencilState depth,
+            MultisampleState samples) {
+        DesktopGLPipelineState.apply(primitive, color, depth, samples);
+    }
+
+    @Override public void resetAttachmentWriteMasks() {
+        GL11.glColorMask(true, true, true, true);
+        GL11.glDepthMask(true);
+        GL11.glStencilMask(-1);
+    }
+    @Override public boolean supportsDepthTextures() { return true; }
+    @Override public boolean supportsRgba16FloatTextures() { return true; }
+    @Override public void texImageDepth32F(int width, int height) {
+        GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, 0x8CAC, width, height, 0, 0x1902, GL11.GL_FLOAT, (ByteBuffer)null);
+    }
+    @Override public void framebufferDepthTexture2D(int texture) {
+        GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT, GL11.GL_TEXTURE_2D, texture, 0);
+    }
+
     private static final int QUERY_RING_SIZE = 4;
     private static final int[] PIPELINE_QUERY_TARGETS = {
             ARBPipelineStatisticsQuery.GL_VERTEX_SHADER_INVOCATIONS_ARB,
@@ -283,10 +498,14 @@ final class DesktopGLApi implements GLApi {
     }
 
     private void recordTextureUpload(int width, int height, ByteBuffer data) {
+        recordTextureUpload(width, height, 4, data);
+    }
+
+    private void recordTextureUpload(int width, int height, int bytesPerPixel, ByteBuffer data) {
         if (metricsEnabled && data != null) {
             textureUploads++;
             textureUploadBytes += Math.min(data.remaining(),
-                    Math.max(0L, (long) width * height * 4L));
+                    Math.max(0L, (long) width * height * bytesPerPixel));
         }
     }
 
@@ -671,13 +890,23 @@ final class DesktopGLApi implements GLApi {
      */
     @Override
     public void texImage2D(int width, int height, ByteBuffer data) {
-        recordTextureUpload(width, height, data);
+        texImage2D(TextureFormat.RGBA8_UNORM, width, height, data);
+    }
+
+    @Override
+    public void framebufferSrgb(boolean enabled) {
+        if (enabled) GL11.glEnable(0x8DB9); else GL11.glDisable(0x8DB9);
+    }
+
+    @Override
+    public void texImage2D(TextureFormat format, int width, int height, ByteBuffer data) {
+        recordTextureUpload(width, height, format.bytesPerPixel(), data);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
-        GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, width, height, 0,
-                GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, data);
+        GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GLApi.colorInternalFormat(format), width, height, 0,
+                GL11.GL_RGBA, GLApi.colorTransferType(format), data);
     }
 
     /**
@@ -1270,4 +1499,120 @@ final class DesktopGLApi implements GLApi {
     private int toNative(TextureFilter filter) {
         return filter == TextureFilter.NEAREST ? GL11.GL_NEAREST : GL11.GL_LINEAR;
     }
+    @Override public boolean supportsMipTextures() { return true; }
+
+    @Override public void textureFilters2D(TextureFilter min, TextureFilter mag, TextureMipmapFilter mip) {
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GLApi.minificationFilter(min, mip));
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, toNative(mag));
+    }
+
+    @Override public void textureMipRange2D(int levels) {
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, 0x813C, 0);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, 0x813D, levels-1);
+    }
+
+    @Override public void texImage2D(TextureFormat format, int level, int width, int height, ByteBuffer data) {
+        if (format == TextureFormat.R32_FLOAT) {
+            recordTextureUpload(width, height, format.bytesPerPixel(), data);
+            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, level, GL30.GL_R32F, width, height, 0, GL11.GL_RED, GL11.GL_FLOAT, data);
+            return;
+        }
+        if (level == 0) { texImage2D(format, width, height, data); return; }
+        recordTextureUpload(width, height, format.bytesPerPixel(), data);
+        GL11.glTexImage2D(GL11.GL_TEXTURE_2D, level, GLApi.colorInternalFormat(format),
+                width, height, 0, GL11.GL_RGBA, GLApi.colorTransferType(format), data);
+    }
+
+    @Override public void texSubImage2D(TextureFormat format, int level,
+            int width, int height, ByteBuffer data) {
+        recordTextureUpload(width, height, format.bytesPerPixel(), data);
+        GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, level, 0, 0, width, height,
+                format == TextureFormat.R32_FLOAT ? GL11.GL_RED : GL11.GL_RGBA,
+                GLApi.colorTransferType(format), data);
+    }
+
+    @Override public void texSubImage2D(int level, int width, int height, ByteBuffer data) {
+        if (level == 0) { texSubImage2D(width, height, data); return; }
+        GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, level, 0, 0, width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, data);
+    }
+
+    @Override public void framebufferTexture2D(int texture, int level) {
+        GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, texture, level);
+    }
+
+    @Override public boolean supportsMultipleTargets() {
+        return (GL.getCapabilities().OpenGL40 || GL.getCapabilities().GL_ARB_draw_buffers_blend)
+                && GL11.glGetInteger(GL32.GL_MAX_COLOR_TEXTURE_SAMPLES) >= 4
+                && GL11.glGetInteger(GL32.GL_MAX_DEPTH_TEXTURE_SAMPLES) >= 4;
+    }
+
+    @Override public void texImageMultisample(int texture, TextureFormat format,
+            int width, int height, int samples) {
+        int target = GL32.GL_TEXTURE_2D_MULTISAMPLE;
+        GL11.glBindTexture(target, texture);
+        GL32.glTexImage2DMultisample(target, samples,
+                format.isDepthStencil() ? GL30.GL_DEPTH_COMPONENT32F : GLApi.colorInternalFormat(format),
+                width, height, true);
+        GL11.glBindTexture(target, 0);
+    }
+
+    @Override public void framebufferTexture(int index, int texture, int level, int samples) {
+        GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER,
+                index < 0 ? GL30.GL_DEPTH_ATTACHMENT : GL30.GL_COLOR_ATTACHMENT0 + index,
+                samples > 1 ? GL32.GL_TEXTURE_2D_MULTISAMPLE : GL11.GL_TEXTURE_2D,
+                texture, level);
+    }
+
+    @Override public void drawBuffers(int count) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            IntBuffer buffers = stack.mallocInt(count);
+            for (int i = 0; i < count; i++) buffers.put(i, GL30.GL_COLOR_ATTACHMENT0 + i);
+            GL20.glDrawBuffers(buffers);
+        }
+    }
+
+    @Override public void clearColorAttachment(int index, float red, float green, float blue, float alpha) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            GL30.glClearBufferfv(GL11.GL_COLOR, index, stack.floats(red, green, blue, alpha));
+        }
+    }
+
+    @Override public void renderbufferStorageDepth(int width, int height, int samples) {
+        GL30.glRenderbufferStorageMultisample(GL30.GL_RENDERBUFFER, samples, GL30.GL_DEPTH_COMPONENT32F, width, height);
+    }
+
+    @Override public void resolveColorFramebuffer(int source, int index, int destination, int width, int height) {
+        GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, source);
+        GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, destination);
+        GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0 + index);
+        GL11.glDrawBuffer(GL30.GL_COLOR_ATTACHMENT0);
+        GL30.glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
+    }
+
+    @Override public void applyColorTargets(ColorTargetState[] targets) {
+        for (int i = 0; i < targets.length; i++) {
+            var color = targets[i];
+            int mask = color.writeMask();
+            GL30.glColorMaski(i, (mask & 1) != 0, (mask & 2) != 0, (mask & 4) != 0, (mask & 8) != 0);
+            var blend = color.blend();
+            if (blend == null) GL30.glDisablei(GL11.GL_BLEND, i);
+            else {
+                GL30.glEnablei(GL11.GL_BLEND, i);
+                int sourceColor = DesktopGLPipelineState.factor(blend.color().sourceFactor());
+                int destinationColor = DesktopGLPipelineState.factor(blend.color().destinationFactor());
+                int sourceAlpha = DesktopGLPipelineState.factor(blend.alpha().sourceFactor());
+                int destinationAlpha = DesktopGLPipelineState.factor(blend.alpha().destinationFactor());
+                int colorOperation = DesktopGLPipelineState.operation(blend.color().operation());
+                int alphaOperation = DesktopGLPipelineState.operation(blend.alpha().operation());
+                if (GL.getCapabilities().OpenGL40) {
+                    GL40.glBlendFuncSeparatei(i, sourceColor, destinationColor, sourceAlpha, destinationAlpha);
+                    GL40.glBlendEquationSeparatei(i, colorOperation, alphaOperation);
+                } else {
+                    ARBDrawBuffersBlend.glBlendFuncSeparateiARB(i, sourceColor, destinationColor, sourceAlpha, destinationAlpha);
+                    ARBDrawBuffersBlend.glBlendEquationSeparateiARB(i, colorOperation, alphaOperation);
+                }
+            }
+        }
+    }
+
 }

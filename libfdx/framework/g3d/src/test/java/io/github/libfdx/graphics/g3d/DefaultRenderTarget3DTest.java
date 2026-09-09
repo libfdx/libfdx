@@ -14,7 +14,7 @@ final class DefaultRenderTarget3DTest {
     private static final ProviderId PROVIDER_ID = ProviderId.of("test-render-target");
     private static final TextureView COLOR = textureView(TextureFormat.RGBA8_UNORM);
     private static final TextureView SECOND_COLOR = textureView(TextureFormat.BGRA8_UNORM);
-    private static final TextureView DEPTH = textureView(TextureFormat.UNKNOWN);
+    private static final TextureView DEPTH = textureView(TextureFormat.DEPTH32_FLOAT);
 
     @Test
     void supportsTheSingleColorAttachmentRepresentedByRenderPassDescriptor() {
@@ -27,15 +27,21 @@ final class DefaultRenderTarget3DTest {
     }
 
     @Test
-    void rejectsMultipleColorAttachmentsInsteadOfIgnoringThem() {
-        assertThrows(FdxException.class,
-                () -> new DefaultRenderTarget3D(64, 32, new TextureView[] { COLOR, SECOND_COLOR }, null));
+    void retainsMultipleBorrowedColorsAndDepthWithoutChangingTheCallersArray() {
+        TextureView[] colors = { COLOR, SECOND_COLOR };
+        var target = new DefaultRenderTarget3D(64,32,colors,DEPTH);
+        colors[0] = SECOND_COLOR;
+        assertEquals(2,target.colorAttachmentCount());
+        assertSame(COLOR,target.colorAttachment(0));
+        assertSame(SECOND_COLOR,target.colorAttachment(1));
+        assertSame(DEPTH,target.depthAttachment());
     }
 
     @Test
-    void rejectsExplicitDepthAttachmentInsteadOfIgnoringIt() {
+    void rejectsIncorrectAttachmentRoles() {
         assertThrows(FdxException.class,
-                () -> new DefaultRenderTarget3D(64, 32, new TextureView[] { COLOR }, DEPTH));
+                () -> new DefaultRenderTarget3D(64, 32, new TextureView[] { COLOR }, COLOR));
+        assertThrows(FdxException.class, () -> new DefaultRenderTarget3D(64,32,DEPTH));
     }
 
     private static TextureView textureView(TextureFormat format) {

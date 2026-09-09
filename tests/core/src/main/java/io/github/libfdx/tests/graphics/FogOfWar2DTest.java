@@ -1,238 +1,198 @@
 package io.github.libfdx.tests.graphics;
 
-import io.github.libfdx.Fdx;
-import io.github.libfdx.application.Application;
-import io.github.libfdx.application.ApplicationAdapter;
-import io.github.libfdx.core.FdxException;
-import io.github.libfdx.core.Logger;
-import io.github.libfdx.display.Display;
-import io.github.libfdx.graphics.GraphicsContext;
-import io.github.libfdx.graphics.LoadOp;
-import io.github.libfdx.graphics.Texture;
-import io.github.libfdx.graphics.TextureDescriptor;
-import io.github.libfdx.graphics.g2d.Batch2D;
-import io.github.libfdx.graphics.g2d.FogOfWarRenderer2D;
-import io.github.libfdx.graphics.g2d.SpriteBatch;
-import io.github.libfdx.graphics.g2d.TextureRegion;
-import io.github.libfdx.graphics.g2d.TileLayer;
-import io.github.libfdx.graphics.g2d.TileMap;
-import io.github.libfdx.graphics.g2d.TileMapRenderer;
-import io.github.libfdx.graphics.g2d.TileSet;
-import io.github.libfdx.tests.TestFpsLogger;
+import io.github.libfdx.testsupport.graphics.FogCourtyard2D;
+import io.github.libfdx.testsupport.graphics.FogExploration;
+import io.github.libfdx.testsupport.graphics.FogMovement;
+import io.github.libfdx.testsupport.graphics.FogSceneLayout;
+import io.github.libfdx.testsupport.graphics.GraphicsParityTest;
 
-import java.nio.ByteBuffer;
+import io.github.libfdx.Fdx;
+import io.github.libfdx.graphics.camera.Camera;
+import io.github.libfdx.graphics.camera.controller.CameraController2D;
+import io.github.libfdx.input.*;
+import io.github.libfdx.ui.*;
 
 /**
- * Runs the 2D fog-of-war shader test scenario.
- *
- * @author xpenatan
+ * Top-down counterpart of the 3D courtyard. Both scenes use the same map,
+ * solid obstacle bounds, walking route and continuous, persistent exploration.
+ * Scenery stays opaque beneath the fog; only the covering darkness changes.
  */
-public class FogOfWar2DTest extends ApplicationAdapter {
-    private static final int TILE_SIZE = 16;
-    private static final int TILE_COLUMNS = 4;
-    private static final int MAP_WIDTH = 11;
-    private static final int MAP_HEIGHT = 7;
-    private static final float TILE_WORLD_SIZE = 0.16f;
-    private static final int[] TILE_COLORS = {
-            0x335C67FF,
-            0x2E7D32FF,
-            0x8D6E63FF,
-            0xDDA15EFF
-    };
+public class FogOfWar2DTest extends GraphicsParityTest {
+    private static final float[][] ROUTE = FogSceneLayout.ROUTE;
+    private final FogExploration explored = new FogExploration();
+    private final UiBooleanState dimExplored = Ui.state(true);
+    private final FogMovement movement = new FogMovement();
+    private final Camera camera = new Camera().nearFar(.1f, 10);
+    private FogCourtyard2D scene;
+    private CameraController2D cameraInput;
+    private Input input;
+    private InputAdapter controls;
+    private UiRoot hud;
+    private int waypoint = 1, movementTaps, touchId = -1, viewHeight;
+    private float targetX, targetZ;
+    private boolean demo, walkingToTarget, following = true;
 
-    private final long exitAfterFrames;
-    private Application application;
-    private Display display;
-    private GraphicsContext graphics;
-    private Logger logger;
-    private TestFpsLogger fpsLogger;
-    private Batch2D batch;
-    private FogOfWarRenderer2D fogRenderer;
-    private TileMapRenderer mapRenderer;
-    private TileMap map;
-    private TileSet tileSet;
-    private Texture atlas;
-    private String capturePath;
-    private long captureFrame;
-    private boolean created;
-    private boolean captured;
-    private long renderedFrames;
+    public FogOfWar2DTest(long frames) { super(frames); }
 
-    /**
-     * Creates a 2D fog-of-war test.
-     *
-     * @param exitAfterFrames the exit after frames
-     */
-    public FogOfWar2DTest(long exitAfterFrames) {
-        this.exitAfterFrames = exitAfterFrames;
-    }
-
-    /**
-     * Initializes the application with the libFDX runtime root.
-     *
-     * @param fdx the libFDX runtime root
-     */
-    @Override
-    public void create(Fdx fdx) {
-        application = fdx.app();
-        display = fdx.displays().main();
-        graphics = fdx.graphics().main();
-        logger = fdx.logger();
-        fpsLogger = TestFpsLogger.create(logger, "FogOfWar2DTest");
-        batch = new SpriteBatch(graphics);
-        fogRenderer = new FogOfWarRenderer2D(graphics);
-        fogRenderer.color(0.0f, 0.025f, 0.055f, 0.88f);
-        mapRenderer = new TileMapRenderer();
-        atlas = createAtlas();
-        tileSet = TileSet.from(TextureRegion.split(atlas, TILE_SIZE, TILE_SIZE));
-        map = createMap();
-        capturePath = System.getProperty("libfdx.test.capture", "");
-        captureFrame = Long.parseLong(System.getProperty("libfdx.test.captureFrame", "2"));
-        created = true;
-        logger.info("FogOfWar2DTest created WGSL fog-of-war renderer over " + MAP_WIDTH + "x" + MAP_HEIGHT
-                + " generated tile map for provider " + graphics.providerId().value());
-    }
-
-    /**
-     * Renders the current content.
-     */
-    @Override
-    public void render() {
-        float deltaSeconds = application.deltaTime();
-        batch.begin(LoadOp.clear(0.03f, 0.04f, 0.055f, 1.0f));
-        mapRenderer.render(map, tileSet, batch, -map.worldWidth() * 0.5f, -map.worldHeight() * 0.5f);
-        batch.end();
-
-        fogRenderer.clearLights()
-                .light(-0.43f, 0.12f, 0.42f, 0.18f)
-                .light(0.32f, -0.26f, 0.36f, 0.16f)
-                .light(0.24f, 0.38f, 0.26f, 0.12f);
-        fogRenderer.begin(LoadOp.load());
-        fogRenderer.draw(-1.0f, -1.0f, 2.0f, 2.0f);
-        fogRenderer.end();
-
-        if (capturePath != null && capturePath.length() > 0 && !captured && renderedFrames >= captureFrame) {
-            captureFrame(capturePath);
-            captured = true;
-        }
-        renderedFrames++;
-        fpsLogger.frame(deltaSeconds, renderedFrames);
-        if (exitAfterFrames > 0L && renderedFrames >= exitAfterFrames) {
-            application.requestExit();
-        }
-    }
-
-    /**
-     * Releases resources held by this instance.
-     */
-    @Override
-    public void dispose() {
-        if (fogRenderer != null) {
-            fogRenderer.dispose();
-            fogRenderer = null;
-        }
-        if (batch != null) {
-            batch.dispose();
-            batch = null;
-        }
-        if (atlas != null) {
-            atlas.dispose();
-            atlas = null;
-        }
-        if (!created) {
-            throw new FdxException("FogOfWar2DTest did not create graphics resources");
-        }
-        if (exitAfterFrames > 0L && renderedFrames < exitAfterFrames) {
-            throw new FdxException("FogOfWar2DTest rendered " + renderedFrames + " of "
-                    + exitAfterFrames + " required frames");
-        }
-        if (capturePath != null && capturePath.length() > 0 && !captured) {
-            throw new FdxException("FogOfWar2DTest did not capture framebuffer to " + capturePath);
-        }
-        logger.info("FogOfWar2DTest rendered " + renderedFrames + " frames");
-    }
-
-    private Texture createAtlas() {
-        int width = TILE_SIZE * TILE_COLUMNS;
-        int height = TILE_SIZE;
-        Texture texture = graphics.device().createTexture(TextureDescriptor.rgba8("fog of war 2d tile atlas",
-                width, height));
-        graphics.device().writeTexture(texture, atlasPixels(width, height));
-        return texture;
-    }
-
-    private ByteBuffer atlasPixels(int width, int height) {
-        ByteBuffer pixels = ByteBuffer.allocateDirect(width * height * 4);
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int tile = x / TILE_SIZE;
-                int color = TILE_COLORS[tile];
-                boolean grid = x % TILE_SIZE == 0 || y % TILE_SIZE == 0
-                        || x % TILE_SIZE == TILE_SIZE - 1 || y % TILE_SIZE == TILE_SIZE - 1;
-                boolean marker = (x % TILE_SIZE == y % TILE_SIZE) || (x % TILE_SIZE + y % TILE_SIZE == TILE_SIZE - 1);
-                putRgba(pixels, grid ? brighten(color, 34) : marker ? brighten(color, 18) : color);
+    @Override public void create(Fdx fdx) {
+        initialize(fdx, "FogOfWar2DTest");
+        input = fdx.input();
+        demo = exitAfterFrames != 0;
+        scene = new FogCourtyard2D(graphics);
+        FogSceneLayout.populate((model, x, y, z, scale, halfWidth, halfDepth, radius) ->
+                movement.obstacle(x, z, halfWidth, halfDepth));
+        cameraInput = new CameraController2D(input, camera).touchEnabled(false)
+                .pointerRegion(this::insideScene).activationListener(() -> following = false);
+        controls = new InputAdapter() {
+            @Override public boolean keyDown(KeyEvent event) {
+                if (event.key() == Key.SPACE) { following = true; return true; }
+                int bit = movementBit(event.key());
+                movementTaps |= bit;
+                return bit != 0;
             }
-        }
-        pixels.flip();
-        return pixels;
-    }
-
-    private TileMap createMap() {
-        TileMap newMap = new TileMap(MAP_WIDTH, MAP_HEIGHT, TILE_WORLD_SIZE, TILE_WORLD_SIZE);
-        TileLayer ground = newMap.addLayer();
-        for (int y = 0; y < MAP_HEIGHT; y++) {
-            for (int x = 0; x < MAP_WIDTH; x++) {
-                int tile = 1 + (x * 2 + y) % TILE_COLUMNS;
-                if (x == 0 || y == 0 || x == MAP_WIDTH - 1 || y == MAP_HEIGHT - 1) {
-                    tile = 3;
-                }
-                ground.tile(x, y, tile);
+            @Override public boolean pointerDown(PointerEvent event) {
+                if (event.button() != MouseButton.LEFT || !insideScene(event.x(), event.y())) return false;
+                destination(event.x(), event.y());
+                return true;
             }
+            @Override public boolean touchDown(TouchEvent event) {
+                TouchPoint point = event.point();
+                if (point == null || touchId != -1 || !insideScene(point.x(), point.y())) return false;
+                touchId = point.id();
+                destination(point.x(), point.y());
+                return true;
+            }
+            @Override public boolean touchMoved(TouchEvent event) {
+                TouchPoint point = event.point();
+                if (point == null || point.id() != touchId) return false;
+                destination(point.x(), point.y());
+                return true;
+            }
+            @Override public boolean touchUp(TouchEvent event) {
+                if (event.point() == null || event.point().id() != touchId) return false;
+                touchId = -1;
+                return true;
+            }
+        };
+        input.addProcessor(controls);
+        UiTextStyle text = UiTextStyle.text().font(UiFont.freeType("font/freetype/lsans.ttf", 18))
+                .size(18).lineHeight(24).color(UiColor.rgba8888(0xe4edf5ff));
+        hud = new UiToolkit(fdx.files()).theme(Ui.darkTheme().text(UiStyle.style().text(text)))
+                .root(display, graphics).input(input);
+        hud.setContent(ui -> ui.column(Ui.modifier().fill().padding(22).gap(5), page -> {
+            page.text("THE HIDDEN COURTYARD  /  2D", Ui.modifier().fillWidth().height(28));
+            page.text(dimExplored.get() ? "Nearby: clear  ·  Explored: dim  ·  Unexplored: hidden"
+                    : "Explore the forest. Cleared ground stays visible.", Ui.modifier().fillWidth().minHeight(26));
+            page.text("WASD / arrows or click / tap to walk  ·  Right-drag to pan  ·  Wheel to zoom",
+                    Ui.modifier().fillWidth().minHeight(32));
+            page.spacer(Ui.modifier().weight(1));
+            page.row(Ui.modifier().fillWidth().gap(10).height(32), row -> {
+                row.checkbox(Ui.modifier().semanticLabel("Dim explored areas"), dimExplored);
+                row.text("Dim explored areas (50%)", Ui.modifier().fillWidth());
+            });
+            page.row(Ui.modifier().gap(12).height(42), row -> {
+                row.button("Auto walk / pause", Ui.modifier().width(180), () -> {
+                    demo = !demo; walkingToTarget = false;
+                    if (demo) following = true;
+                });
+                row.button("Restart", Ui.modifier().width(110), this::restart);
+                row.button("Follow player", Ui.modifier().width(145), () -> following = true);
+                row.button("Zoom +", Ui.modifier().width(100), () -> zoom(.8f));
+                row.button("Zoom -", Ui.modifier().width(100), () -> zoom(1.25f));
+            });
+        }));
+        updateViewport();
+        restart();
+        markCreated();
+        logger.info("FogOfWar2DTest: 48x40 courtyard, solid obstacles and persistent exploration; provider="
+                + graphics.providerId().value());
+    }
+
+    private boolean insideScene(int x, int y) {
+        return x >= 0 && x < display.width() && y > 120 && y < display.height() - 112;
+    }
+
+    private void destination(int x, int y) {
+        targetX = camera.position().x() + (x - display.width() * .5f) * camera.zoom();
+        targetZ = -camera.position().y() + (y - display.height() * .5f) * camera.zoom();
+        walkingToTarget = true;
+        demo = false;
+    }
+
+    private static int movementBit(Key key) {
+        return switch (key) {
+            case D, RIGHT -> 1; case A, LEFT -> 2; case W, UP -> 4; case S, DOWN -> 8; default -> 0;
+        };
+    }
+
+    private void restart() {
+        movement.x = ROUTE[0][0]; movement.z = ROUTE[0][1]; waypoint = 1;
+        movementTaps = 0; walkingToTarget = false; following = true;
+        explored.dimExplored(dimExplored.get());
+        explored.reset(); explored.reveal(movement.x, movement.z); explored.settle();
+        camera.position(movement.x, -movement.z + 1.6f, 1).update();
+    }
+
+    private void zoom(float factor) {
+        float height = Math.max(1, display.height());
+        camera.zoom(Math.max(12 / height, Math.min(38 / height, camera.zoom() * factor))).update();
+    }
+
+    private void updateViewport() {
+        int width = Math.max(1, display.width()), height = Math.max(1, display.height());
+        float worldHeight = viewHeight == 0 ? 20 : camera.zoom() * viewHeight;
+        if (height != viewHeight) camera.zoom(worldHeight / height);
+        viewHeight = height;
+        camera.viewport(width, height);
+        cameraInput.zoomRange(12f / height, 38f / height);
+    }
+
+    private boolean walkToward(float x, float z, float speed, float delta) {
+        float dx = x - movement.x, dz = z - movement.z;
+        float distance = (float)Math.sqrt(dx * dx + dz * dz);
+        if (distance < .08f) return true;
+        float step = Math.min(distance, speed * delta);
+        movement.move(dx / distance * step, dz / distance * step);
+        return false;
+    }
+
+    @Override public void render() {
+        float delta = Math.min(application.deltaTime(), .05f);
+        float sideways = (input.isKeyPressed(Key.D) || input.isKeyPressed(Key.RIGHT) || (movementTaps & 1) != 0 ? 1 : 0)
+                - (input.isKeyPressed(Key.A) || input.isKeyPressed(Key.LEFT) || (movementTaps & 2) != 0 ? 1 : 0);
+        float forward = (input.isKeyPressed(Key.W) || input.isKeyPressed(Key.UP) || (movementTaps & 4) != 0 ? 1 : 0)
+                - (input.isKeyPressed(Key.S) || input.isKeyPressed(Key.DOWN) || (movementTaps & 8) != 0 ? 1 : 0);
+        movementTaps = 0;
+        if (sideways != 0 || forward != 0) {
+            demo = false; walkingToTarget = false; following = true;
+            float distance = 3.6f * delta / Math.max(1, (float)Math.sqrt(sideways * sideways + forward * forward));
+            movement.move(sideways * distance, -forward * distance);
+        } else if (walkingToTarget) {
+            float previousX = movement.x, previousZ = movement.z;
+            if (walkToward(targetX, targetZ, 3.6f, delta)
+                    || (delta > 0 && previousX == movement.x && previousZ == movement.z)) walkingToTarget = false;
+        } else if (demo && walkToward(ROUTE[waypoint][0], ROUTE[waypoint][1], 2.7f, delta)) {
+            logger.info("FogOfWar2DTest patrol reached waypoint " + waypoint);
+            waypoint = (waypoint + 1) % ROUTE.length;
         }
-        TileLayer path = newMap.addLayer();
-        for (int x = 2; x < MAP_WIDTH - 2; x++) {
-            path.tile(x, 2, 4);
+        explored.dimExplored(dimExplored.get());
+        explored.reveal(movement.x, movement.z); explored.update(delta);
+        updateViewport();
+        if (following) {
+            float blend = 1 - (float)Math.exp(-delta * 9);
+            camera.position(camera.position().x() + (movement.x - camera.position().x()) * blend,
+                    camera.position().y() + (-movement.z + 1.6f - camera.position().y()) * blend, 1);
         }
-        for (int y = 2; y < MAP_HEIGHT - 1; y++) {
-            path.tile(7, y, 2);
-        }
-        path.tile(3, 4, 1);
-        path.tile(4, 4, 1);
-        path.tile(5, 4, 1);
-        return newMap;
+        cameraInput.update(delta);
+        scene.render(camera, explored, movement.x, movement.z, walkingToTarget, targetX, targetZ);
+        hud.update(delta); hud.render(); finishFrame();
     }
 
-    private void captureFrame(String path) {
-        try {
-            ByteBuffer pixels = FramebufferCapture.readPixelsRgba8(graphics);
-            FramebufferCapture.writePpm(path, framebufferWidth(), framebufferHeight(), pixels);
-            logger.info("FogOfWar2DTest captured framebuffer to " + path);
-        } catch (Exception e) {
-            throw new FdxException("Could not capture FogOfWar2DTest framebuffer", e);
-        }
-    }
+    @Override public void resize(int width, int height) { if (hud != null) hud.resize(width, height); }
 
-    private int framebufferWidth() {
-        int width = display.framebufferWidth() > 0 ? display.framebufferWidth() : display.width();
-        return width > 0 ? width : 640;
-    }
-
-    private int framebufferHeight() {
-        int height = display.framebufferHeight() > 0 ? display.framebufferHeight() : display.height();
-        return height > 0 ? height : 480;
-    }
-
-    private int brighten(int rgba, int amount) {
-        int red = Math.min(255, ((rgba >>> 24) & 0xFF) + amount);
-        int green = Math.min(255, ((rgba >>> 16) & 0xFF) + amount);
-        int blue = Math.min(255, ((rgba >>> 8) & 0xFF) + amount);
-        return red << 24 | green << 16 | blue << 8 | (rgba & 0xFF);
-    }
-
-    private void putRgba(ByteBuffer pixels, int rgba) {
-        pixels.put((byte)((rgba >>> 24) & 0xFF));
-        pixels.put((byte)((rgba >>> 16) & 0xFF));
-        pixels.put((byte)((rgba >>> 8) & 0xFF));
-        pixels.put((byte)(rgba & 0xFF));
+    @Override public void dispose() {
+        if (input != null && controls != null) input.removeProcessor(controls);
+        dispose(hud); dispose(cameraInput); dispose(scene);
+        verifyDisposed();
     }
 }

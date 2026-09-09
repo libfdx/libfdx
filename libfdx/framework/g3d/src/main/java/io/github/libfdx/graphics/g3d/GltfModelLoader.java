@@ -18,13 +18,10 @@ import io.github.libfdx.assets.loaders.ImageData;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.FdxFuture;
-import io.github.libfdx.core.FdxTask;
 import io.github.libfdx.files.FileHandle;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.Mesh;
 import io.github.libfdx.graphics.Texture;
-import io.github.libfdx.graphics.TextureDescriptor;
-import io.github.libfdx.graphics.TextureWrap;
 import io.github.libfdx.json.JsonReader;
 import io.github.libfdx.json.JsonValue;
 
@@ -44,9 +41,6 @@ final class GltfModelLoader implements AssetLoader<Model> {
     private static final int GLB_JSON_CHUNK = 0x4e4f534a;
     private static final int GLB_BIN_CHUNK = 0x004e4942;
     private static final int MODE_TRIANGLES = 4;
-    private static final int GLTF_CLAMP_TO_EDGE = 33071;
-    private static final int GLTF_MIRRORED_REPEAT = 33648;
-    private static final int GLTF_REPEAT = 10497;
     private static final ArrayView<JsonValue> EMPTY_JSON_ARRAY = new Array<JsonValue>(0).view();
 
     private final GraphicsContext graphics;
@@ -76,26 +70,26 @@ final class GltfModelLoader implements AssetLoader<Model> {
     public FdxFuture<Model> load(final AssetLoadContext context, final AssetDescriptor<Model> descriptor) {
         final FileHandle file = context.files().internal(descriptor.path());
         final FdxFuture<Model> future = FdxFuture.pending();
-        try {
-            final GltfDocument document = loadImages(file, loadDocument(file, file.readBytes().get()));
-            context.completeOnUpdate(new FdxTask<Model>() {
-                @Override
-                public Model run() {
-                    return buildModel(descriptor.path(), document);
-                }
-            }).onSuccess(future::complete).onFailure(future::completeExceptionally);
-        } catch (Throwable error) {
-            future.completeExceptionally(error);
-        }
+        context.readBytes(file).onSuccess(bytes -> context.async(() -> prepareDocument(bytes))
+                .onSuccess(document -> resolveDependencies(context, file, descriptor.path(), document, future))
+                .onFailure(future::completeExceptionally)).onFailure(future::completeExceptionally);
         return future;
     }
 
     Model loadModelBytes(String path, byte[] bytes) {
-        return buildModel(path, loadDocument(null, bytes));
+        GltfDocument document = prepareDocument(bytes);
+        for (byte[] buffer : document.buffers) {
+            if (buffer == null) {
+                throw new FdxException("External glTF buffers require a file handle");
+            }
+        }
+        return buildModel(path, decodeEmbeddedImages(document));
     }
 
-    private GltfDocument loadDocument(FileHandle file, byte[] bytes) {
+    private GltfDocument prepareDocument(byte[] bytes) {
         final GltfDocument document = parseDocument(bytes);
+        document.parents = GltfValidation.document(document.root);
+        document.textures = new GltfTextures(document.root);
         ArrayView<JsonValue> buffers = array(document.root, "buffers");
         if (buffers.isEmpty()) {
             document.buffers = new byte[0][];
@@ -114,23 +108,90 @@ final class GltfModelLoader implements AssetLoader<Model> {
             else if (uri.startsWith("data:")) {
                 document.buffers[i] = decodeDataUri(uri);
             }
-            else {
-                if (file == null) {
-                    throw new FdxException("External glTF buffers require a file handle");
-                }
-                document.buffers[i] = file.parent().child(uri).readBytes().get();
-            }
+            // External buffers remain unresolved until their managed dependencies load.
         }
         return document;
     }
 
-    private GltfDocument loadImages(FileHandle file, final GltfDocument document) {
+    private void resolveDependencies(AssetLoadContext context, FileHandle file, String path,
+            GltfDocument document, FdxFuture<Model> result) {
+        try {
+            Array<FdxFuture<?>> pending = new Array<FdxFuture<?>>();
+            ArrayView<JsonValue> buffers = array(document.root, "buffers");
+            for (int i = 0; i < document.buffers.length; i++) {
+                if (document.buffers[i] == null) {
+                    final int index = i;
+                    String uri = string(object(buffers.get(i), "buffer"), "uri", null);
+                    FdxFuture<byte[]> dependency = context.dependency(
+                            AssetDescriptor.of(file.parent().child(uri).path(), byte[].class));
+                    dependency.onSuccess(bytes -> document.buffers[index] = bytes);
+                    pending.add(dependency);
+                }
+            }
+            ArrayView<JsonValue> images = array(document.root, "images");
+            document.images = new ImageData[images.size()];
+            for (int i = 0; i < images.size(); i++) {
+                String uri = string(object(images.get(i), "image"), "uri", null);
+                if (uri != null && uri.length() > 0 && !uri.startsWith("data:")) {
+                    final int index = i;
+                    FdxFuture<ImageData> dependency = context.dependency(
+                            AssetDescriptor.of(file.parent().child(uri).path(), ImageData.class));
+                    dependency.onSuccess(image -> document.images[index] = image);
+                    pending.add(dependency);
+                }
+            }
+            all(pending).onSuccess(ignored -> {
+                try {
+                    context.async(() -> decodeEmbeddedImages(document)).onSuccess(prepared -> {
+                        try {
+                            context.completeOnUpdate(() -> buildModel(path, prepared))
+                                    .onSuccess(result::complete).onFailure(result::completeExceptionally);
+                        } catch (Throwable error) {
+                            result.completeExceptionally(error);
+                        }
+                    }).onFailure(result::completeExceptionally);
+                } catch (Throwable error) {
+                    result.completeExceptionally(error);
+                }
+            }).onFailure(result::completeExceptionally);
+        } catch (Throwable error) {
+            result.completeExceptionally(error);
+        }
+    }
+
+    private FdxFuture<Void> all(Array<FdxFuture<?>> futures) {
+        if (futures.isEmpty()) {
+            return FdxFuture.completed(null);
+        }
+        FdxFuture<Void> result = FdxFuture.pending();
+        int[] remaining = {futures.size()};
+        for (int i = 0; i < futures.size(); i++) {
+            futures.get(i).onSuccess(ignored -> {
+                if (--remaining[0] == 0) {
+                    result.complete(null);
+                }
+            }).onFailure(result::completeExceptionally);
+        }
+        return result;
+    }
+
+    private GltfDocument decodeEmbeddedImages(final GltfDocument document) {
+        document.accessors = new GltfAccessors(document.root, document.buffers);
+        validateGeometry(document);
+        document.nodeIds = nodeIds(document);
+        document.preparedSkins = skins(document);
+        document.skins = document.preparedSkins.toArray(new Skin[0]);
+        validateSkinInfluences(document);
+        document.animations = animations(document);
         ArrayView<JsonValue> images = array(document.root, "images");
         if (images.isEmpty()) {
             document.images = new ImageData[0];
+            document.textures.prepare(document.images);
             return document;
         }
-        document.images = new ImageData[images.size()];
+        if (document.images == null) {
+            document.images = new ImageData[images.size()];
+        }
         for (int i = 0; i < images.size(); i++) {
             JsonValue image = object(images.get(i), "image");
             String uri = string(image, "uri", null);
@@ -138,8 +199,9 @@ final class GltfModelLoader implements AssetLoader<Model> {
                 document.images[i] = ImageAssetLoader.decode(decodeDataUri(uri));
             }
             else if (uri != null && uri.length() > 0) {
-                FileHandle imageFile = file.parent().child(uri);
-                document.images[i] = ImageAssetLoader.decode(imageFile.path(), imageFile.readBytes().get());
+                if (document.images[i] == null) {
+                    throw new FdxException("External glTF image dependency is not ready: " + uri);
+                }
             }
             else {
                 int bufferView = integer(image, "bufferView", -1);
@@ -149,6 +211,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
                 document.images[i] = ImageAssetLoader.decode(bufferViewBytes(document, bufferView));
             }
         }
+        document.textures.prepare(document.images);
         return document;
     }
 
@@ -192,19 +255,45 @@ final class GltfModelLoader implements AssetLoader<Model> {
     }
 
     private Model buildModel(String path, GltfDocument document) {
+        Array<Mesh> meshResources = new Array<Mesh>();
+        try {
+            return buildModel(path, document, meshResources);
+        } catch (RuntimeException | Error error) {
+            for (int i = 0; i < meshResources.size(); i++) {
+                disposeAfterFailure(meshResources.get(i), error);
+            }
+            if (document.gpuTextures != null) {
+                for (Texture texture : document.gpuTextures) {
+                    disposeAfterFailure(texture, error);
+                }
+            }
+            throw error;
+        }
+    }
+
+    private static void disposeAfterFailure(Disposable resource, Throwable error) {
+        if (resource != null) {
+            try {
+                resource.dispose();
+            } catch (RuntimeException | Error cleanupError) {
+                if (cleanupError != error) {
+                    error.addSuppressed(cleanupError);
+                }
+            }
+        }
+    }
+
+    private Model buildModel(String path, GltfDocument document, Array<Mesh> meshResources) {
         uploadTextures(path, document);
         ArrayView<JsonValue> meshes = array(document.root, "meshes");
         if (meshes.isEmpty()) {
             throw new FdxException("glTF model contains no meshes: " + path);
         }
-        document.nodeIds = nodeIds(document);
-        Array<Skin> loadedSkins = skins(document);
-        document.skins = loadedSkins.toArray(new Skin[0]);
+        Array<Skin> loadedSkins = document.preparedSkins;
         Array<ModelNode> nodes = new Array<ModelNode>();
         Array<Material> materials = new Array<Material>();
-        Array<Mesh> meshResources = new Array<Mesh>();
         ArrayView<JsonValue> sceneNodes = sceneNodes(document);
-        if (sceneNodes.isEmpty()) {
+        if (array(document.root, "nodes").isEmpty() && array(document.root, "scenes").isEmpty()) {
             for (int meshIndex = 0; meshIndex < meshes.size(); meshIndex++) {
                 ModelNode node = new ModelNode(path + " mesh " + meshIndex);
                 appendMeshParts(path, document, node, meshIndex, null, materials, meshResources);
@@ -231,33 +320,13 @@ final class GltfModelLoader implements AssetLoader<Model> {
                 }
             }
         }
-        return new DefaultModel(nodes, materials, animations(document),
+        return new DefaultModel(nodes, materials, document.animations,
                 loadedSkins, meshResources, ownedResources);
     }
 
     private void uploadTextures(String path, GltfDocument document) {
-        if (document.images == null || document.images.length == 0 || document.gpuTextures != null) {
-            return;
-        }
-        ArrayView<JsonValue> textures = array(document.root, "textures");
-        document.gpuTextures = new Texture[textures.size()];
-        for (int i = 0; i < textures.size(); i++) {
-            JsonValue texture = object(textures.get(i), "texture");
-            int source = integer(texture, "source", -1);
-            if (source < 0 || source >= document.images.length) {
-                continue;
-            }
-            ImageData image = document.images[source];
-            if (image == null) {
-                continue;
-            }
-            Texture gpuTexture = graphics.device().createTexture(TextureDescriptor.rgba8(path + " texture " + i,
-                    image.width(), image.height()).wrap(wrapS(document, texture), wrapT(document, texture)));
-            ByteBuffer rgba = image.rgba().duplicate();
-            rgba.clear();
-            graphics.device().writeTexture(gpuTexture, rgba);
-            document.gpuTextures[i] = gpuTexture;
-        }
+        document.gpuTextures = document.textures.allocateHandles();
+        document.textures.upload(graphics.device(), path, document.gpuTextures);
     }
 
     private Material material(String id, GltfMaterial source) {
@@ -265,23 +334,99 @@ final class GltfModelLoader implements AssetLoader<Model> {
         return new Material(id)
                 .shadingModel(material.shadingModel)
                 .set(MaterialAttributes.baseColor(material.baseColor))
-                .set(MaterialAttributes.baseColorTexture(
-                        material.baseColorTexture))
+                .set(textureAttribute(MaterialAttributes.BASE_COLOR_TEXTURE, material.baseColorTexture, material, 0))
                 .set(PbrAttributes.metallicFactor(
                         material.metallicFactor))
                 .set(PbrAttributes.roughnessFactor(
                         material.roughnessFactor))
-                .set(PbrAttributes.metallicRoughnessTexture(
-                        material.metallicRoughnessTexture))
-                .set(MaterialAttributes.normalTexture(material.normalTexture))
-                .set(PbrAttributes.occlusionTexture(
-                        material.occlusionTexture))
+                .set(textureAttribute(PbrAttributes.METALLIC_ROUGHNESS_TEXTURE, material.metallicRoughnessTexture, material, 1))
+                .set(textureAttribute(MaterialAttributes.NORMAL_TEXTURE, material.normalTexture, material, 2))
+                .set(textureAttribute(PbrAttributes.OCCLUSION_TEXTURE, material.occlusionTexture, material, 3))
                 .set(MaterialAttributes.emissiveColor(material.emissiveFactor))
-                .set(MaterialAttributes.emissiveTexture(
-                        material.emissiveTexture))
+                .set(textureAttribute(MaterialAttributes.EMISSIVE_TEXTURE, material.emissiveTexture, material, 4))
+                .set(PbrAttributes.normalScale(material.normalScale))
+                .set(PbrAttributes.occlusionStrength(material.occlusionStrength))
                 .alphaMode(material.alphaMode)
                 .set(MaterialAttributes.alphaCutoff(material.alphaCutoff))
                 .doubleSided(material.doubleSided);
+    }
+
+    private TextureMaterialAttribute textureAttribute(MaterialAttributeType<TextureMaterialAttribute> type,
+            Texture texture, GltfMaterial material, int slot) {
+        return new TextureMaterialAttribute(type, texture, material.slots[slot] == null
+                ? TextureCoordinates.UV0 : material.slots[slot].coordinates);
+    }
+
+    private void validateGeometry(GltfDocument document) {
+        ArrayView<JsonValue> materials = array(document.root, "materials");
+        ArrayView<JsonValue> meshes = array(document.root, "meshes");
+        for (int m = 0; m < meshes.size(); m++) {
+          ArrayView<JsonValue> primitives = array(meshes.get(m), "primitives");
+          for (int p = 0; p < primitives.size(); p++) {
+            JsonValue primitive = primitives.get(p);
+            if (integer(primitive, "mode", MODE_TRIANGLES) != MODE_TRIANGLES)
+                throw new FdxException("Only glTF triangle primitives are supported");
+            if (!array(primitive, "targets").isEmpty()) throw new FdxException("glTF morph targets are unsupported");
+            JsonValue attributes = object(primitive.get("attributes"), "primitive attributes");
+            if (attributes.get("JOINTS_1") != null || attributes.get("WEIGHTS_1") != null)
+                throw new FdxException("glTF skinning supports one four-weight joint set");
+            int position = integer(attributes, "POSITION", -1);
+            document.accessors.attribute(position, "POSITION");
+            int count = document.accessors.count(position);
+            for (String semantic : new String[] {"NORMAL", "TANGENT", "TEXCOORD_0", "TEXCOORD_1", "WEIGHTS_0", "JOINTS_0", "COLOR_0"}) {
+                if (attributes.get(semantic) == null) continue;
+                int index = integer(attributes, semantic, -1);
+                if ("JOINTS_0".equals(semantic)) document.accessors.joints(index);
+                else if ("COLOR_0".equals(semantic)) document.accessors.colors(index);
+                else if ("WEIGHTS_0".equals(semantic)) document.accessors.skinWeights(index);
+                else document.accessors.attribute(index, semantic);
+                if (document.accessors.count(index) != count) throw new FdxException("glTF " + semantic + " count differs from POSITION");
+            }
+            if (attributes.get("TANGENT") != null && attributes.get("NORMAL") == null)
+                throw new FdxException("glTF supplied tangents require normals");
+            if ((attributes.get("JOINTS_0") == null) != (attributes.get("WEIGHTS_0") == null))
+                throw new FdxException("glTF skinning requires both JOINTS_0 and WEIGHTS_0");
+            if (primitive.get("indices") != null) {
+                int[] indices = readIndexAccessor(document, integer(primitive, "indices", -1));
+                if (indices.length % 3 != 0) throw new FdxException("glTF triangle index count must be a multiple of three");
+                for (int index : indices) validateGltfIndex(index, count);
+            } else if (count % 3 != 0) throw new FdxException("glTF unindexed triangles require a multiple of three vertices");
+            int materialIndex = integer(primitive, "material", -1);
+            if (materialIndex < -1 || primitive.get("material") != null && materialIndex < 0 || materialIndex >= materials.size())
+                throw new FdxException("glTF material index outside range");
+            if (materialIndex < 0) continue;
+            JsonValue material = materials.get(materialIndex), pbr = material.get("pbrMetallicRoughness");
+            JsonValue[] slots = {pbr == null ? null : pbr.get("baseColorTexture"),
+                    pbr == null ? null : pbr.get("metallicRoughnessTexture"), material.get("normalTexture"),
+                    material.get("occlusionTexture"), material.get("emissiveTexture")};
+            for (JsonValue slot : slots) if (slot != null
+                    && attributes.get("TEXCOORD_" + GltfTextures.coordinates(slot).set()) == null)
+                throw new FdxException("glTF material references a missing texture coordinate set");
+          }
+        }
+    }
+
+    private void validateSkinInfluences(GltfDocument document) {
+        ArrayView<JsonValue> nodes = array(document.root, "nodes"), meshes = array(document.root, "meshes");
+        for (int n = 0; n < nodes.size(); n++) {
+            JsonValue node = nodes.get(n);
+            int skinIndex = integer(node, "skin", -1);
+            if (skinIndex < 0) continue;
+            int jointCount = document.skins[skinIndex].skeleton().bones().size();
+            ArrayView<JsonValue> primitives = array(meshes.get(integer(node, "mesh", -1)), "primitives");
+            for (int p = 0; p < primitives.size(); p++) {
+                JsonValue attributes = primitives.get(p).require("attributes");
+                int[] joints = document.accessors.joints(integer(attributes, "JOINTS_0", -1));
+                float[] weights = document.accessors.skinWeights(integer(attributes, "WEIGHTS_0", -1));
+                for (int v = 0; v < joints.length; v += 4) for (int j = 0; j < 4; j++) {
+                    if (joints[v+j] < 0 || joints[v+j] >= jointCount)
+                        throw new FdxException("glTF node " + n + " joint index outside skin range");
+                    if (weights[v+j] > 0) for (int k = 0; k < j; k++)
+                        if (weights[v+k] > 0 && joints[v+k] == joints[v+j])
+                            throw new FdxException("glTF vertex repeats a weighted joint");
+                }
+            }
+        }
     }
 
     private String[] nodeIds(GltfDocument document) {
@@ -290,14 +435,13 @@ final class GltfModelLoader implements AssetLoader<Model> {
         ObjectMap<String, Integer> used = new ObjectMap<String, Integer>();
         for (int i = 0; i < nodes.size(); i++) {
             JsonValue node = object(nodes.get(i), "node");
-            String base = string(node, "name", "");
+            String base = string(node, "name", "").trim();
             if (base.length() == 0) {
                 base = "node-" + i;
             }
             String id = base;
-            if (used.containsKey(id)) {
-                id = base + "-" + i;
-            }
+            int suffix = i;
+            while (used.containsKey(id)) id = base + "-" + suffix++;
             used.put(id, i);
             ids[i] = id;
         }
@@ -347,10 +491,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
             }
             return matrices;
         }
-        float[] values = readFloatAccessor(document, accessorIndex, Matrix4.VALUE_COUNT);
-        if (values.length != count * Matrix4.VALUE_COUNT) {
-            throw new FdxException("glTF inverseBindMatrices count mismatch");
-        }
+        float[] values = document.accessors.inverseBindMatrices(accessorIndex, count);
         for (int i = 0; i < count; i++) {
             float[] matrix = new float[Matrix4.VALUE_COUNT];
             System.arraycopy(values, i * Matrix4.VALUE_COUNT, matrix, 0, Matrix4.VALUE_COUNT);
@@ -360,19 +501,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
     }
 
     private int[] parentNodes(GltfDocument document) {
-        ArrayView<JsonValue> nodes = array(document.root, "nodes");
-        int[] parents = new int[nodes.size()];
-        Arrays.fill(parents, -1);
-        for (int i = 0; i < nodes.size(); i++) {
-            ArrayView<JsonValue> children = array(object(nodes.get(i), "node"), "children");
-            for (int childIndex = 0; childIndex < children.size(); childIndex++) {
-                int child = integerValue(children.get(childIndex), -1);
-                if (child >= 0 && child < parents.length) {
-                    parents[child] = i;
-                }
-            }
-        }
-        return parents;
+        return document.parents;
     }
 
     private int indexOf(ArrayView<JsonValue> joints, int[] parentNodes, int nodeIndex) {
@@ -445,6 +574,10 @@ final class GltfModelLoader implements AssetLoader<Model> {
             if (texCoordAccessor >= 0) {
                 sourceTexCoords = readFloatAccessor(document, texCoordAccessor, 2);
             }
+            int uv1Accessor = integer(attributes, "TEXCOORD_1", -1);
+            float[] sourceTexCoords1 = uv1Accessor < 0 ? null : readFloatAccessor(document, uv1Accessor, 2);
+            int tangentAccessor = integer(attributes, "TANGENT", -1);
+            float[] sourceTangents = tangentAccessor < 0 ? null : readFloatAccessor(document, tangentAccessor, 4);
             float[] sourceColors = null;
             int colorAccessor = integer(attributes, "COLOR_0", -1);
             if (colorAccessor >= 0) {
@@ -459,16 +592,17 @@ final class GltfModelLoader implements AssetLoader<Model> {
                     throw new FdxException("glTF skinning requires both JOINTS_0 and WEIGHTS_0");
                 }
                 sourceJoints = readIntAccessor(document, jointAccessor, 4);
-                sourceWeights = readFloatAccessor(document, weightAccessor, 4);
+                sourceWeights = document.accessors.skinWeights(weightAccessor);
             }
             GltfMaterial material = material(document, integer(primitive, "material", -1));
+            geometry.extended = sourceTexCoords1 != null || sourceTangents != null || material.normalImage != null;
             geometry.material(material);
             geometry.doubleSided |= material.doubleSided;
             int[] indices = primitive.get("indices") != null
                     ? readIndexAccessor(document, integer(primitive, "indices", -1))
                     : sequence(sourcePositions.length / 3);
             appendPrimitive(geometry, sourcePositions, sourceNormals, sourceTexCoords, sourceColors, indices,
-                    sourceJoints, sourceWeights, material, Matrix4.IDENTITY);
+                    sourceJoints, sourceWeights, material, Matrix4.IDENTITY, sourceTexCoords1, sourceTangents);
         Material pbrMaterial = material(path + " material " + meshIndex + "." + primitiveIndex, geometry.material)
                 .doubleSided(geometry.doubleSided);
         materials.add(pbrMaterial);
@@ -480,7 +614,9 @@ final class GltfModelLoader implements AssetLoader<Model> {
         Mesh mesh = Mesh.positionColor3D(graphics, path + " mesh " + meshIndex + "." + primitiveIndex, positions,
                 geometry.colors(), bakedColors, geometry.normals(), geometry.texCoords(), geometry.pbr(), bakedPbr,
                 geometry.emissive(), bakedEmissive, geometry.hasSkinning() ? geometry.joints() : null,
-                geometry.hasSkinning() ? geometry.weights() : null, bounds(positions), retainSourceData);
+                geometry.hasSkinning() ? geometry.weights() : null, bounds(positions), retainSourceData,
+                geometry.extended ? geometry.texCoords1.toArray() : null,
+                geometry.extended ? geometry.tangents.toArray() : null);
         meshResources.add(mesh);
         MeshPart meshPart = new MeshPart(path + " part " + meshIndex + "." + primitiveIndex, mesh, null, 0,
                 mesh.vertexCount());
@@ -491,7 +627,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
 
     private void appendPrimitive(GeometryBuilder geometry, float[] sourcePositions, float[] sourceNormals,
             float[] sourceTexCoords, float[] sourceColors, int[] indices, int[] sourceJoints, float[] sourceWeights,
-            GltfMaterial material, Matrix4 transform) {
+            GltfMaterial material, Matrix4 transform, float[] sourceTexCoords1, float[] sourceTangents) {
         int vertexCount = sourcePositions.length / 3;
         int colorComponents = sourceColors != null && sourceColors.length == vertexCount * 3 ? 3 : 4;
         for (int i = 0; i < indices.length; i += 3) {
@@ -501,19 +637,22 @@ final class GltfModelLoader implements AssetLoader<Model> {
             validateGltfIndex(i0, vertexCount);
             validateGltfIndex(i1, vertexCount);
             validateGltfIndex(i2, vertexCount);
-            TriangleBasis basis = triangleBasis(sourcePositions, sourceNormals, sourceTexCoords, i0, i1, i2);
+            float[] normalUv = material.slots[2] != null && material.slots[2].coordinates.set() == 1
+                    ? sourceTexCoords1 : sourceTexCoords;
+            TriangleBasis basis = triangleBasis(sourcePositions, sourceNormals, normalUv, i0, i1, i2);
             appendVertex(geometry, sourcePositions, sourceNormals, sourceTexCoords, sourceColors, colorComponents,
-                    sourceJoints, sourceWeights, i0, material, transform, basis);
+                    sourceJoints, sourceWeights, i0, material, transform, basis, sourceTexCoords1, sourceTangents);
             appendVertex(geometry, sourcePositions, sourceNormals, sourceTexCoords, sourceColors, colorComponents,
-                    sourceJoints, sourceWeights, i1, material, transform, basis);
+                    sourceJoints, sourceWeights, i1, material, transform, basis, sourceTexCoords1, sourceTangents);
             appendVertex(geometry, sourcePositions, sourceNormals, sourceTexCoords, sourceColors, colorComponents,
-                    sourceJoints, sourceWeights, i2, material, transform, basis);
+                    sourceJoints, sourceWeights, i2, material, transform, basis, sourceTexCoords1, sourceTangents);
         }
     }
 
     private void appendVertex(GeometryBuilder geometry, float[] sourcePositions, float[] sourceNormals,
             float[] sourceTexCoords, float[] sourceColors, int colorComponents, int[] sourceJoints,
-            float[] sourceWeights, int index, GltfMaterial material, Matrix4 transform, TriangleBasis basis) {
+            float[] sourceWeights, int index, GltfMaterial material, Matrix4 transform, TriangleBasis basis,
+            float[] sourceTexCoords1, float[] sourceTangents) {
         Vector3 position = position(sourcePositions, index);
         Vector3 normal = sourceNormals != null ? position(sourceNormals, index) : basis.normal;
         float u = 0.0f;
@@ -523,8 +662,29 @@ final class GltfModelLoader implements AssetLoader<Model> {
             u = sourceTexCoords[texCoordOffset];
             v = sourceTexCoords[texCoordOffset + 1];
         }
-        if (!usesGpuPbrShader() && material.normalImage != null && sourceTexCoords != null) {
-            normal = normalFromTexture(material.normalImage, u, v, normal, basis.tangent, basis.bitangent);
+        float u1 = sourceTexCoords1 == null ? 0 : sourceTexCoords1[index*2];
+        float v1 = sourceTexCoords1 == null ? 0 : sourceTexCoords1[index*2+1];
+        Vector3 tangent = sourceTangents == null ? basis.tangent
+                : new Vector3(sourceTangents[index*4], sourceTangents[index*4+1], sourceTangents[index*4+2]);
+        tangent = tangent.subtract(normal.scale(tangent.dot(normal))).normalize();
+        if (tangent.dot(tangent) < .000001f) {
+            Vector3 axis = Math.abs(normal.x()) < .9f ? Vector3.X : Vector3.Y;
+            tangent = axis.subtract(normal.scale(axis.dot(normal))).normalize();
+        }
+        float handedness = sourceTangents == null ? (normal.cross(tangent).dot(basis.bitangent) < 0 ? -1 : 1)
+                : sourceTangents[index*4+3];
+        if (geometry.extended) {
+            geometry.texCoords1.add(u1); geometry.texCoords1.add(v1);
+            geometry.tangents.add(tangent.x()); geometry.tangents.add(tangent.y()); geometry.tangents.add(tangent.z());
+            geometry.tangents.add(sourceTangents != null || material.normalImage != null ? handedness : 0);
+        }
+        boolean bakeTextures = !usesGpuPbrShader();
+        if (bakeTextures && material.normalImage != null) {
+            Color sample = material.slots[2].sample(u, v, u1, v1, false);
+            Vector3 mapped = new Vector3((sample.red()*2-1)*material.normalScale,
+                    (sample.green()*2-1)*material.normalScale, sample.blue()*2-1);
+            normal = tangent.scale(mapped.x()).add(normal.cross(tangent).scale(handedness*mapped.y()))
+                    .add(normal.scale(mapped.z())).normalize();
         }
         Color color = material.baseColor;
         if (sourceColors != null) {
@@ -534,25 +694,26 @@ final class GltfModelLoader implements AssetLoader<Model> {
             color = multiply(color, vertexColor);
         }
         Color bakedColor = color;
-        if (material.baseColorImage != null && sourceTexCoords != null) {
-            bakedColor = multiply(bakedColor, srgbToLinear(sample(material.baseColorImage, u, v)));
+        if (bakeTextures && material.baseColorImage != null) {
+            bakedColor = multiply(bakedColor, material.slots[0].sample(u, v, u1, v1, true));
         }
         float ao = 1.0f;
-        float bakedAo = material.occlusionImage != null && sourceTexCoords != null ? sample(material.occlusionImage, u, v).red()
+        float bakedAo = bakeTextures && material.occlusionImage != null
+                ? 1 + material.occlusionStrength * (material.slots[3].sample(u, v, u1, v1, false).red()-1)
                 : 1.0f;
         float metallic = material.metallicFactor;
         float roughness = material.roughnessFactor;
         float bakedMetallic = metallic;
         float bakedRoughness = roughness;
-        if (material.metallicRoughnessImage != null && sourceTexCoords != null) {
-            Color mr = sample(material.metallicRoughnessImage, u, v);
+        if (bakeTextures && material.metallicRoughnessImage != null) {
+            Color mr = material.slots[1].sample(u, v, u1, v1, false);
             bakedRoughness *= mr.green();
             bakedMetallic *= mr.blue();
         }
         Color emissive = material.emissiveFactor;
         Color bakedEmissive = emissive;
-        if (material.emissiveImage != null && sourceTexCoords != null) {
-            bakedEmissive = multiply(bakedEmissive, srgbToLinear(sample(material.emissiveImage, u, v)));
+        if (bakeTextures && material.emissiveImage != null) {
+            bakedEmissive = multiply(bakedEmissive, material.slots[4].sample(u, v, u1, v1, true));
         }
 
         Vector3 transformedPosition = transform.transformPosition(position);
@@ -599,7 +760,9 @@ final class GltfModelLoader implements AssetLoader<Model> {
     private ArrayView<JsonValue> sceneNodes(GltfDocument document) {
         ArrayView<JsonValue> scenes = array(document.root, "scenes");
         if (scenes.isEmpty()) {
-            return EMPTY_JSON_ARRAY;
+            JsonValue roots = JsonValue.array();
+            for (int i = 0; i < document.parents.length; i++) if (document.parents[i] < 0) roots.add(i);
+            return roots.arrayValues();
         }
         int sceneIndex = integer(document.root, "scene", 0);
         if (sceneIndex < 0 || sceneIndex >= scenes.size()) {
@@ -621,29 +784,37 @@ final class GltfModelLoader implements AssetLoader<Model> {
             for (int channelIndex = 0; channelIndex < channels.size(); channelIndex++) {
                 JsonValue channel = object(channels.get(channelIndex), "animation channel");
                 JsonValue target = object(channel.get("target"), "animation target");
-                int nodeIndex = integer(target, "node", -1);
-                if (nodeIndex < 0 || nodeIndex >= nodes.size()) {
+                if (target.get("node") == null) {
                     continue;
                 }
+                int nodeIndex = integer(target, "node", -1);
+                if (nodeIndex < 0 || nodeIndex >= nodes.size()) {
+                    throw new FdxException("glTF animation target node outside range: " + nodeIndex);
+                }
                 String path = string(target, "path", "");
-                JsonValue sampler = object(samplers.get(integer(channel, "sampler", -1)), "animation sampler");
-                String interpolation = string(sampler, "interpolation", "LINEAR");
-                if (!"LINEAR".equals(interpolation)) {
-                    throw new FdxException("Only LINEAR glTF animation interpolation is supported");
+                int samplerIndex = integer(channel, "sampler", -1);
+                if (samplerIndex < 0 || samplerIndex >= samplers.size()) {
+                    throw new FdxException("glTF animation sampler outside range: " + samplerIndex);
                 }
-                float[] times = readFloatAccessor(document, integer(sampler, "input", -1), 1);
-                float[] values = readFloatAccessor(document, integer(sampler, "output", -1),
-                        animationComponents(path));
-                if (times.length > 0) {
-                    duration = Math.max(duration, times[times.length - 1]);
-                }
+                JsonValue sampler = object(samplers.get(samplerIndex), "animation sampler");
+                AnimationSampler.Interpolation interpolation = switch (string(sampler, "interpolation", "LINEAR")) {
+                    case "LINEAR" -> AnimationSampler.Interpolation.LINEAR;
+                    case "STEP" -> AnimationSampler.Interpolation.STEP;
+                    case "CUBICSPLINE" -> AnimationSampler.Interpolation.CUBICSPLINE;
+                    default -> throw new FdxException("Unsupported glTF animation interpolation");
+                };
+                float[] times = document.accessors.animationValues(integer(sampler, "input", -1), "SCALAR");
+                float[] values = document.accessors.animationValues(integer(sampler, "output", -1),
+                        animationComponents(path) == 4 ? "VEC4" : "VEC3");
+                AnimationSampler track = new AnimationSampler("rotation".equals(path), interpolation, times, values);
+                duration = Math.max(duration, track.lastTime());
                 GltfNodeAnimationBuilder builder = builders.get(nodeIndex);
                 if (builder == null) {
                     builder = new GltfNodeAnimationBuilder(nodeId(document, nodeIndex),
                             object(nodes.get(nodeIndex), "node"));
                     builders.put(nodeIndex, builder);
                 }
-                builder.channel(path, times, values);
+                builder.channel(path, track);
             }
             Array<AnimationClip.NodeTransformChannel> nodeChannels =
                     new Array<AnimationClip.NodeTransformChannel>();
@@ -726,24 +897,25 @@ final class GltfModelLoader implements AssetLoader<Model> {
         ImageData baseColorImage = textureImage(document, pbr != null ? object(pbr.get("baseColorTexture"),
                 "baseColorTexture", true) : null);
         Texture baseColorTexture = texture(document, pbr != null ? object(pbr.get("baseColorTexture"),
-                "baseColorTexture", true) : null);
+                "baseColorTexture", true) : null, GltfTextures.colorRole(material));
         float metallicFactor = pbr != null ? number(pbr.get("metallicFactor"), 1.0f) : 1.0f;
         float roughnessFactor = pbr != null ? number(pbr.get("roughnessFactor"), 1.0f) : 1.0f;
         ImageData metallicRoughnessImage = textureImage(document, pbr != null ? object(
                 pbr.get("metallicRoughnessTexture"), "metallicRoughnessTexture", true) : null);
         Texture metallicRoughnessTexture = texture(document, pbr != null ? object(
-                pbr.get("metallicRoughnessTexture"), "metallicRoughnessTexture", true) : null);
+                pbr.get("metallicRoughnessTexture"), "metallicRoughnessTexture", true) : null, GltfTextures.DATA);
         Color emissiveFactor = colorFactor(array(material, "emissiveFactor"), Color.BLACK);
         ImageData emissiveImage = textureImage(document, object(material.get("emissiveTexture"), "emissiveTexture",
                 true));
         Texture emissiveTexture = texture(document, object(material.get("emissiveTexture"), "emissiveTexture",
-                true));
+                true), GltfTextures.COLOR);
         ImageData occlusionImage = textureImage(document, object(material.get("occlusionTexture"), "occlusionTexture",
                 true));
         Texture occlusionTexture = texture(document, object(material.get("occlusionTexture"), "occlusionTexture",
-                true));
+                true), GltfTextures.DATA);
         ImageData normalImage = textureImage(document, object(material.get("normalTexture"), "normalTexture", true));
-        Texture normalTexture = texture(document, object(material.get("normalTexture"), "normalTexture", true));
+        Texture normalTexture = texture(document, object(material.get("normalTexture"), "normalTexture", true),
+                GltfTextures.DATA);
         MaterialAlphaMode alphaMode = alphaMode(string(material, "alphaMode", "OPAQUE"));
         float alphaCutoff = number(material.get("alphaCutoff"), 0.5f);
         boolean doubleSided = bool(material, "doubleSided", false);
@@ -757,60 +929,23 @@ final class GltfModelLoader implements AssetLoader<Model> {
                 emissiveFactor, emissiveImage, emissiveTexture, occlusionImage, occlusionTexture,
                 normalImage, normalTexture, alphaMode, alphaCutoff, doubleSided,
                 shadingModel);
+        GltfMaterial prepared = document.materials[materialIndex];
+        prepared.slots[0] = document.textures.binding(pbr == null ? null : pbr.get("baseColorTexture"));
+        prepared.slots[1] = document.textures.binding(pbr == null ? null : pbr.get("metallicRoughnessTexture"));
+        prepared.slots[2] = document.textures.binding(material.get("normalTexture"));
+        prepared.slots[3] = document.textures.binding(material.get("occlusionTexture"));
+        prepared.slots[4] = document.textures.binding(material.get("emissiveTexture"));
+        prepared.normalScale = GltfTextures.normalScale(material);
+        prepared.occlusionStrength = GltfTextures.occlusionStrength(material);
         return document.materials[materialIndex];
     }
 
     private ImageData textureImage(GltfDocument document, JsonValue textureInfo) {
-        if (textureInfo == null) {
-            return null;
-        }
-        int textureIndex = integer(textureInfo, "index", -1);
-        ArrayView<JsonValue> textures = array(document.root, "textures");
-        if (textureIndex < 0 || textureIndex >= textures.size()) {
-            return null;
-        }
-        JsonValue texture = object(textures.get(textureIndex), "texture");
-        int source = integer(texture, "source", -1);
-        if (source < 0 || document.images == null || source >= document.images.length) {
-            return null;
-        }
-        return document.images[source];
+        return document.textures.image(textureInfo);
     }
 
-    private Texture texture(GltfDocument document, JsonValue textureInfo) {
-        if (textureInfo == null || document.gpuTextures == null) {
-            return null;
-        }
-        int textureIndex = integer(textureInfo, "index", -1);
-        if (textureIndex < 0 || textureIndex >= document.gpuTextures.length) {
-            return null;
-        }
-        return document.gpuTextures[textureIndex];
-    }
-
-    private TextureWrap wrapS(GltfDocument document, JsonValue texture) {
-        return samplerWrap(document, texture, "wrapS");
-    }
-
-    private TextureWrap wrapT(GltfDocument document, JsonValue texture) {
-        return samplerWrap(document, texture, "wrapT");
-    }
-
-    private TextureWrap samplerWrap(GltfDocument document, JsonValue texture, String key) {
-        ArrayView<JsonValue> samplers = array(document.root, "samplers");
-        int samplerIndex = integer(texture, "sampler", -1);
-        if (samplerIndex < 0 || samplerIndex >= samplers.size()) {
-            return TextureWrap.REPEAT;
-        }
-        JsonValue sampler = object(samplers.get(samplerIndex), "sampler");
-        int wrap = integer(sampler, key, GLTF_REPEAT);
-        if (wrap == GLTF_CLAMP_TO_EDGE) {
-            return TextureWrap.CLAMP_TO_EDGE;
-        }
-        if (wrap == GLTF_MIRRORED_REPEAT) {
-            return TextureWrap.MIRRORED_REPEAT;
-        }
-        return TextureWrap.REPEAT;
+    private Texture texture(GltfDocument document, JsonValue textureInfo, int role) {
+        return document.textures.texture(document.gpuTextures, textureInfo, role);
     }
 
     private MaterialAlphaMode alphaMode(String value) {
@@ -824,9 +959,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
     }
 
     private boolean usesGpuPbrShader() {
-        String providerId = graphics.providerId().value();
-        return "gl".equals(providerId) || "gles".equals(providerId) || "webgl".equals(providerId)
-                || "wgpu".equals(providerId) || "vulkan".equals(providerId);
+        return PbrShaderProvider.usesGpuPbrShader(graphics.providerId().value());
     }
 
     private Color colorFactor(ArrayView<JsonValue> values, Color fallback) {
@@ -846,70 +979,9 @@ final class GltfModelLoader implements AssetLoader<Model> {
         return new Vector3(values[offset], values[offset + 1], values[offset + 2]);
     }
 
-    private Vector3 normalFromTexture(ImageData image, float u, float v, Vector3 normal, Vector3 tangent,
-            Vector3 bitangent) {
-        Color sample = sample(image, u, v);
-        Vector3 mapped = new Vector3(sample.red() * 2.0f - 1.0f, sample.green() * 2.0f - 1.0f,
-                sample.blue() * 2.0f - 1.0f).normalize();
-        return tangent.scale(mapped.x()).add(bitangent.scale(mapped.y())).add(normal.normalize().scale(mapped.z()))
-                .normalize();
-    }
-
-    private Color sample(ImageData image, float u, float v) {
-        if (image == null) {
-            return Color.WHITE;
-        }
-        float wrappedU = wrap(u);
-        float wrappedV = wrap(v);
-        float x = wrappedU * (image.width() - 1);
-        float y = wrappedV * (image.height() - 1);
-        int x0 = Math.min(image.width() - 1, Math.max(0, (int)Math.floor(x)));
-        int y0 = Math.min(image.height() - 1, Math.max(0, (int)Math.floor(y)));
-        int x1 = Math.min(image.width() - 1, x0 + 1);
-        int y1 = Math.min(image.height() - 1, y0 + 1);
-        float tx = x - x0;
-        float ty = y - y0;
-        ByteBuffer rgba = image.rgba().duplicate();
-        Color c00 = texel(rgba, image.width(), x0, y0);
-        Color c10 = texel(rgba, image.width(), x1, y0);
-        Color c01 = texel(rgba, image.width(), x0, y1);
-        Color c11 = texel(rgba, image.width(), x1, y1);
-        return lerp(lerp(c00, c10, tx), lerp(c01, c11, tx), ty);
-    }
-
-    private Color texel(ByteBuffer rgba, int width, int x, int y) {
-        int offset = (y * width + x) * 4;
-        return new Color((rgba.get(offset) & 0xff) / 255.0f,
-                (rgba.get(offset + 1) & 0xff) / 255.0f,
-                (rgba.get(offset + 2) & 0xff) / 255.0f,
-                (rgba.get(offset + 3) & 0xff) / 255.0f);
-    }
-
-    private Color lerp(Color left, Color right, float t) {
-        float inv = 1.0f - t;
-        return new Color(left.red() * inv + right.red() * t,
-                left.green() * inv + right.green() * t,
-                left.blue() * inv + right.blue() * t,
-                left.alpha() * inv + right.alpha() * t);
-    }
-
-    private float wrap(float value) {
-        float wrapped = value - (float)Math.floor(value);
-        return wrapped < 0.0f ? wrapped + 1.0f : wrapped;
-    }
-
     private Color multiply(Color left, Color right) {
         return new Color(left.red() * right.red(), left.green() * right.green(), left.blue() * right.blue(),
                 left.alpha() * right.alpha());
-    }
-
-    private Color srgbToLinear(Color color) {
-        return new Color(srgbToLinear(color.red()), srgbToLinear(color.green()), srgbToLinear(color.blue()),
-                color.alpha());
-    }
-
-    private float srgbToLinear(float value) {
-        return (float)Math.pow(Math.max(value, 0.0f), 2.2f);
     }
 
     private float clamp(float value, float min, float max) {
@@ -934,144 +1006,24 @@ final class GltfModelLoader implements AssetLoader<Model> {
         return BoundingBox.of(new Vector3(minX, minY, minZ), new Vector3(maxX, maxY, maxZ));
     }
 
-    private float[] readFloatAccessor(GltfDocument document, int accessorIndex, int expectedComponents) {
-        Accessor accessor = accessor(document, accessorIndex);
-        if (accessor.components != expectedComponents) {
-            throw new FdxException("glTF accessor component count mismatch");
-        }
-        float[] values = new float[accessor.count * accessor.components];
-        for (int i = 0; i < accessor.count; i++) {
-            int elementOffset = accessor.byteOffset + i * accessor.byteStride;
-            for (int c = 0; c < accessor.components; c++) {
-                values[i * accessor.components + c] = readComponent(accessor.buffer, elementOffset
-                        + c * componentSize(accessor.componentType), accessor.componentType, accessor.normalized);
-            }
-        }
-        return values;
+    private float[] readFloatAccessor(GltfDocument document, int index, int components) {
+        return document.accessors.floats(index, components);
     }
 
-    private float[] readColorAccessor(GltfDocument document, int accessorIndex) {
-        Accessor accessor = accessor(document, accessorIndex);
-        if (accessor.components != 3 && accessor.components != 4) {
-            throw new FdxException("glTF COLOR_0 must be VEC3 or VEC4");
-        }
-        float[] values = new float[accessor.count * accessor.components];
-        for (int i = 0; i < accessor.count; i++) {
-            int elementOffset = accessor.byteOffset + i * accessor.byteStride;
-            for (int c = 0; c < accessor.components; c++) {
-                values[i * accessor.components + c] = readComponent(accessor.buffer, elementOffset
-                        + c * componentSize(accessor.componentType), accessor.componentType, true);
-            }
-        }
-        return values;
+    private float[] readColorAccessor(GltfDocument document, int index) {
+        return document.accessors.colors(index);
     }
 
-    private int[] readIntAccessor(GltfDocument document, int accessorIndex, int expectedComponents) {
-        Accessor accessor = accessor(document, accessorIndex);
-        if (accessor.components != expectedComponents) {
-            throw new FdxException("glTF integer accessor component count mismatch");
-        }
-        int[] values = new int[accessor.count * accessor.components];
-        for (int i = 0; i < accessor.count; i++) {
-            int elementOffset = accessor.byteOffset + i * accessor.byteStride;
-            for (int c = 0; c < accessor.components; c++) {
-                values[i * accessor.components + c] = readIndex(accessor.buffer,
-                        elementOffset + c * componentSize(accessor.componentType), accessor.componentType);
-            }
-        }
-        return values;
+    private int[] readIntAccessor(GltfDocument document, int index, int components) {
+        return document.accessors.integers(index, components);
     }
 
-    private int[] readIndexAccessor(GltfDocument document, int accessorIndex) {
-        Accessor accessor = accessor(document, accessorIndex);
-        if (accessor.components != 1) {
-            throw new FdxException("glTF index accessor must be SCALAR");
-        }
-        int[] values = new int[accessor.count];
-        for (int i = 0; i < accessor.count; i++) {
-            int offset = accessor.byteOffset + i * accessor.byteStride;
-            values[i] = readIndex(accessor.buffer, offset, accessor.componentType);
-        }
-        return values;
+    private int[] readIndexAccessor(GltfDocument document, int index) {
+        return document.accessors.integers(index, 1);
     }
 
-    private Accessor accessor(GltfDocument document, int accessorIndex) {
-        JsonValue accessor = object(array(document.root, "accessors").get(accessorIndex), "accessor");
-        int bufferViewIndex = integer(accessor, "bufferView", -1);
-        if (bufferViewIndex < 0) {
-            throw new FdxException("Sparse or bufferless glTF accessors are not supported");
-        }
-        JsonValue bufferView = object(array(document.root, "bufferViews").get(bufferViewIndex), "bufferView");
-        int bufferIndex = integer(bufferView, "buffer", 0);
-        byte[] buffer = document.buffers[bufferIndex];
-        int componentType = integer(accessor, "componentType", -1);
-        int components = components(string(accessor, "type", ""));
-        int count = integer(accessor, "count", 0);
-        int viewOffset = integer(bufferView, "byteOffset", 0);
-        int accessorOffset = integer(accessor, "byteOffset", 0);
-        int byteStride = integer(bufferView, "byteStride", componentSize(componentType) * components);
-        boolean normalized = bool(accessor, "normalized", false);
-        return new Accessor(buffer, viewOffset + accessorOffset, byteStride, componentType, components, count,
-                normalized);
-    }
-
-    private byte[] bufferViewBytes(GltfDocument document, int bufferViewIndex) {
-        JsonValue bufferView = object(array(document.root, "bufferViews").get(bufferViewIndex), "bufferView");
-        int bufferIndex = integer(bufferView, "buffer", 0);
-        int byteOffset = integer(bufferView, "byteOffset", 0);
-        int byteLength = integer(bufferView, "byteLength", -1);
-        if (byteLength < 0) {
-            throw new FdxException("glTF bufferView byteLength is required");
-        }
-        byte[] source = document.buffers[bufferIndex];
-        if (byteOffset < 0 || byteOffset + byteLength > source.length) {
-            throw new FdxException("glTF bufferView range is invalid");
-        }
-        byte[] result = new byte[byteLength];
-        System.arraycopy(source, byteOffset, result, 0, byteLength);
-        return result;
-    }
-
-    private float readComponent(byte[] bytes, int offset, int componentType, boolean normalized) {
-        ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
-        if (componentType == 5126) {
-            return buffer.getFloat(offset);
-        }
-        if (componentType == 5121) {
-            int value = bytes[offset] & 0xff;
-            return normalized ? value / 255.0f : value;
-        }
-        if (componentType == 5123) {
-            int value = buffer.getShort(offset) & 0xffff;
-            return normalized ? value / 65535.0f : value;
-        }
-        if (componentType == 5120) {
-            int value = bytes[offset];
-            return normalized ? Math.max(value / 127.0f, -1.0f) : value;
-        }
-        if (componentType == 5122) {
-            int value = buffer.getShort(offset);
-            return normalized ? Math.max(value / 32767.0f, -1.0f) : value;
-        }
-        throw new FdxException("Unsupported glTF accessor component type: " + componentType);
-    }
-
-    private int readIndex(byte[] bytes, int offset, int componentType) {
-        ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
-        if (componentType == 5121) {
-            return bytes[offset] & 0xff;
-        }
-        if (componentType == 5123) {
-            return buffer.getShort(offset) & 0xffff;
-        }
-        if (componentType == 5125) {
-            long value = buffer.getInt(offset) & 0xffffffffL;
-            if (value > Integer.MAX_VALUE) {
-                throw new FdxException("glTF index exceeds Java int range");
-            }
-            return (int) value;
-        }
-        throw new FdxException("Unsupported glTF index component type: " + componentType);
+    private byte[] bufferViewBytes(GltfDocument document, int index) {
+        return document.accessors.viewBytes(index);
     }
 
     private Color materialColor(GltfDocument document, int materialIndex) {
@@ -1090,38 +1042,6 @@ final class GltfModelLoader implements AssetLoader<Model> {
                     number(factor.get(2), 1.0f), number(factor.get(3), 1.0f));
         }
         return Color.WHITE;
-    }
-
-    private int components(String type) {
-        if ("SCALAR".equals(type)) {
-            return 1;
-        }
-        if ("VEC2".equals(type)) {
-            return 2;
-        }
-        if ("VEC3".equals(type)) {
-            return 3;
-        }
-        if ("VEC4".equals(type)) {
-            return 4;
-        }
-        if ("MAT4".equals(type)) {
-            return Matrix4.VALUE_COUNT;
-        }
-        throw new FdxException("Unsupported glTF accessor type: " + type);
-    }
-
-    private int componentSize(int componentType) {
-        if (componentType == 5120 || componentType == 5121) {
-            return 1;
-        }
-        if (componentType == 5122 || componentType == 5123) {
-            return 2;
-        }
-        if (componentType == 5125 || componentType == 5126) {
-            return 4;
-        }
-        throw new FdxException("Unsupported glTF component type: " + componentType);
     }
 
     private static byte[] decodeDataUri(String uri) {
@@ -1171,12 +1091,11 @@ final class GltfModelLoader implements AssetLoader<Model> {
     }
 
     private static int integer(JsonValue object, String key, int fallback) {
-        JsonValue value = object.get(key);
-        return value != null ? value.intValue(fallback) : fallback;
+        return GltfAccessors.integer(object,key,fallback);
     }
 
     private static int integerValue(JsonValue value, int fallback) {
-        return value != null ? value.intValue(fallback) : fallback;
+        return value != null ? GltfAccessors.integerValue(value, "index") : fallback;
     }
 
     private static boolean bool(JsonValue object, String key, boolean fallback) {
@@ -1207,9 +1126,14 @@ final class GltfModelLoader implements AssetLoader<Model> {
         private byte[][] buffers;
         private ImageData[] images;
         private Texture[] gpuTextures;
+        private GltfTextures textures;
         private GltfMaterial[] materials;
         private String[] nodeIds;
         private Skin[] skins;
+        private Array<Skin> preparedSkins;
+        private int[] parents;
+        private GltfAccessors accessors;
+        private Array<AnimationClip> animations;
 
         GltfDocument(JsonValue root, byte[] binaryChunk) {
             this.root = root;
@@ -1223,6 +1147,8 @@ final class GltfModelLoader implements AssetLoader<Model> {
      * @author xpenatan
      */
     private static final class GltfMaterial {
+        private final GltfTextures.Binding[] slots = new GltfTextures.Binding[5];
+        private float normalScale = 1, occlusionStrength = 1;
         private static final GltfMaterial DEFAULT = new GltfMaterial(Color.WHITE, null, null, 1.0f, 1.0f,
                 null, null, Color.BLACK, null, null, null, null, null, null, MaterialAlphaMode.OPAQUE, 0.5f,
                 false, ShadingModel.PBR);
@@ -1298,193 +1224,54 @@ final class GltfModelLoader implements AssetLoader<Model> {
      */
     private static final class GltfNodeAnimationBuilder {
         private final String nodeId;
-        private final float[] baseTranslation;
-        private final float[] baseRotation;
-        private final float[] baseScale;
-        private float[] translationTimes;
-        private float[] translationValues;
-        private float[] rotationTimes;
-        private float[] rotationValues;
-        private float[] scaleTimes;
-        private float[] scaleValues;
+        private final AnimationClip.TransformKeyframe defaults;
+        private AnimationSampler translation;
+        private AnimationSampler rotation;
+        private AnimationSampler scale;
 
         GltfNodeAnimationBuilder(String nodeId, JsonValue node) {
             this.nodeId = nodeId;
-            baseTranslation = vector(node, "translation", 3, new float[] {0.0f, 0.0f, 0.0f});
-            baseRotation = vector(node, "rotation", 4, new float[] {0.0f, 0.0f, 0.0f, 1.0f});
-            baseScale = vector(node, "scale", 3, new float[] {1.0f, 1.0f, 1.0f});
+            if (node.get("matrix") != null) {
+                throw new FdxException("Animated glTF nodes must use TRS, not matrix: " + nodeId);
+            }
+            float[] t = vector(node, "translation", new float[] {0, 0, 0});
+            float[] r = vector(node, "rotation", new float[] {0, 0, 0, 1});
+            float[] s = vector(node, "scale", new float[] {1, 1, 1});
+            defaults = AnimationClip.keyframe(0, t[0], t[1], t[2], r[0], r[1], r[2], r[3], s[0], s[1], s[2]);
         }
 
-        void channel(String path, float[] times, float[] values) {
-            if ("translation".equals(path)) {
-                translationTimes = times;
-                translationValues = values;
+        void channel(String path, AnimationSampler sampler) {
+            AnimationSampler previous = switch (path) {
+                case "translation" -> translation;
+                case "rotation" -> rotation;
+                case "scale" -> scale;
+                default -> throw new FdxException("Unsupported glTF animation target path: " + path);
+            };
+            if (previous != null) {
+                throw new FdxException("Duplicate glTF animation target: " + nodeId + "." + path);
             }
-            else if ("rotation".equals(path)) {
-                rotationTimes = times;
-                rotationValues = values;
-            }
-            else if ("scale".equals(path)) {
-                scaleTimes = times;
-                scaleValues = values;
+            switch (path) {
+                case "translation" -> translation = sampler;
+                case "rotation" -> rotation = sampler;
+                case "scale" -> scale = sampler;
             }
         }
 
         AnimationClip.NodeTransformChannel build() {
-            float[] times = unionTimes();
-            AnimationClip.TransformKeyframe[] keyframes = new AnimationClip.TransformKeyframe[times.length];
-            float[] translation = new float[3];
-            float[] rotation = new float[4];
-            float[] scale = new float[3];
-            for (int i = 0; i < times.length; i++) {
-                float time = times[i];
-                sample3(translationTimes, translationValues, baseTranslation, time, translation);
-                sample4(rotationTimes, rotationValues, baseRotation, time, rotation);
-                sample3(scaleTimes, scaleValues, baseScale, time, scale);
-                keyframes[i] = AnimationClip.keyframe(time, translation[0], translation[1], translation[2],
-                        rotation[0], rotation[1], rotation[2], rotation[3], scale[0], scale[1], scale[2]);
-            }
-            return AnimationClip.nodeTransform(nodeId, keyframes);
+            return AnimationClip.sampledTransform(nodeId, defaults, translation, rotation, scale);
         }
 
-        private float[] unionTimes() {
-            FloatList times = new FloatList();
-            addTimes(times, translationTimes);
-            addTimes(times, rotationTimes);
-            addTimes(times, scaleTimes);
-            if (times.size() == 0) {
-                times.add(0.0f);
+        private static float[] vector(JsonValue object, String key, float[] fallback) {
+            if (object.get(key) == null) {
+                return fallback;
             }
-            float[] values = times.toArray();
-            Arrays.sort(values);
-            int uniqueCount = 0;
-            for (int i = 0; i < values.length; i++) {
-                if (uniqueCount == 0 || values[i] != values[uniqueCount - 1]) {
-                    values[uniqueCount++] = values[i];
-                }
-            }
-            return Arrays.copyOf(values, uniqueCount);
-        }
-
-        private static void addTimes(FloatList out, float[] values) {
-            if (values == null) {
-                return;
-            }
-            for (int i = 0; i < values.length; i++) {
-                out.add(values[i]);
-            }
-        }
-
-        private static void sample3(float[] times, float[] values, float[] fallback, float time, float[] out) {
-            if (times == null || values == null || times.length == 0) {
-                copy(fallback, out, 3);
-                return;
-            }
-            int index = sampleIndex(times, time);
-            if (index < 0) {
-                copy(values, out, 3);
-                return;
-            }
-            if (index >= times.length - 1) {
-                copy(values, index * 3, out, 3);
-                return;
-            }
-            float alpha = (time - times[index]) / Math.max(times[index + 1] - times[index], 0.000001f);
-            int left = index * 3;
-            int right = (index + 1) * 3;
-            out[0] = mix(values[left], values[right], alpha);
-            out[1] = mix(values[left + 1], values[right + 1], alpha);
-            out[2] = mix(values[left + 2], values[right + 2], alpha);
-        }
-
-        private static void sample4(float[] times, float[] values, float[] fallback, float time, float[] out) {
-            if (times == null || values == null || times.length == 0) {
-                copy(fallback, out, 4);
-                return;
-            }
-            int index = sampleIndex(times, time);
-            if (index < 0) {
-                copy(values, out, 4);
-                return;
-            }
-            if (index >= times.length - 1) {
-                copy(values, index * 4, out, 4);
-                return;
-            }
-            float alpha = (time - times[index]) / Math.max(times[index + 1] - times[index], 0.000001f);
-            slerp(values, index * 4, values, (index + 1) * 4, alpha, out);
-        }
-
-        private static int sampleIndex(float[] times, float time) {
-            if (time <= times[0]) {
-                return -1;
-            }
-            for (int i = 0; i < times.length - 1; i++) {
-                if (time >= times[i] && time <= times[i + 1]) {
-                    return i;
-                }
-            }
-            return times.length - 1;
-        }
-
-        private static void slerp(float[] left, int leftOffset, float[] right, int rightOffset, float alpha,
-                float[] out) {
-            float t = Math.max(0.0f, Math.min(1.0f, alpha));
-            float qx0 = left[leftOffset];
-            float qy0 = left[leftOffset + 1];
-            float qz0 = left[leftOffset + 2];
-            float qw0 = left[leftOffset + 3];
-            float qx1 = right[rightOffset];
-            float qy1 = right[rightOffset + 1];
-            float qz1 = right[rightOffset + 2];
-            float qw1 = right[rightOffset + 3];
-            float dot = qx0 * qx1 + qy0 * qy1 + qz0 * qz1 + qw0 * qw1;
-            if (dot < 0.0f) {
-                dot = -dot;
-                qx1 = -qx1;
-                qy1 = -qy1;
-                qz1 = -qz1;
-                qw1 = -qw1;
-            }
-            if (dot > 0.9995f) {
-                out[0] = mix(qx0, qx1, t);
-                out[1] = mix(qy0, qy1, t);
-                out[2] = mix(qz0, qz1, t);
-                out[3] = mix(qw0, qw1, t);
-                return;
-            }
-            float theta0 = (float)Math.acos(dot);
-            float theta = theta0 * t;
-            float sinTheta = (float)Math.sin(theta);
-            float sinTheta0 = (float)Math.sin(theta0);
-            float s0 = (float)Math.cos(theta) - dot * sinTheta / sinTheta0;
-            float s1 = sinTheta / sinTheta0;
-            out[0] = qx0 * s0 + qx1 * s1;
-            out[1] = qy0 * s0 + qy1 * s1;
-            out[2] = qz0 * s0 + qz1 * s1;
-            out[3] = qw0 * s0 + qw1 * s1;
-        }
-
-        private static float mix(float left, float right, float alpha) {
-            return left + (right - left) * alpha;
-        }
-
-        private static void copy(float[] source, float[] out, int count) {
-            copy(source, 0, out, count);
-        }
-
-        private static void copy(float[] source, int offset, float[] out, int count) {
-            System.arraycopy(source, offset, out, 0, count);
-        }
-
-        private static float[] vector(JsonValue object, String key, int expectedCount, float[] fallback) {
             ArrayView<JsonValue> values = array(object, key);
-            if (values.size() < expectedCount) {
-                return fallback.clone();
+            if (values.size() != fallback.length) {
+                throw new FdxException("glTF node " + key + " component count mismatch");
             }
-            float[] result = new float[expectedCount];
-            for (int i = 0; i < expectedCount; i++) {
-                result[i] = number(values.get(i), fallback[i]);
+            float[] result = new float[fallback.length];
+            for (int i = 0; i < result.length; i++) {
+                result[i] = values.get(i).floatValue();
             }
             return result;
         }
@@ -1496,6 +1283,9 @@ final class GltfModelLoader implements AssetLoader<Model> {
      * @author xpenatan
      */
     private static final class GeometryBuilder {
+        private boolean extended;
+        private final FloatList texCoords1 = new FloatList();
+        private final FloatList tangents = new FloatList();
         private final FloatList positions = new FloatList();
         private final FloatList normals = new FloatList();
         private final FloatList texCoords = new FloatList();
@@ -1674,29 +1464,4 @@ final class GltfModelLoader implements AssetLoader<Model> {
         }
     }
 
-    /**
-     * Represents an accessor.
-     *
-     * @author xpenatan
-     */
-    private static final class Accessor {
-        private final byte[] buffer;
-        private final int byteOffset;
-        private final int byteStride;
-        private final int componentType;
-        private final int components;
-        private final int count;
-        private final boolean normalized;
-
-        Accessor(byte[] buffer, int byteOffset, int byteStride, int componentType, int components, int count,
-                boolean normalized) {
-            this.buffer = buffer;
-            this.byteOffset = byteOffset;
-            this.byteStride = byteStride;
-            this.componentType = componentType;
-            this.components = components;
-            this.count = count;
-            this.normalized = normalized;
-        }
-    }
 }

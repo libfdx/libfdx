@@ -36,6 +36,25 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class ShaderModuleDescriptorsTest {
+    @Test
+    void computeTranslationPreservesStagesWithoutRequiringVertexAndFragmentEntries() {
+        RecordingCompiler compiler = new RecordingCompiler(request -> RuntimeShaderCompileResult.text(
+                "[numthreads(1,1,1)] void updateData() {}"));
+        RuntimeCore.registerProvider(new TestRuntimeCoreProvider(compiler));
+        ShaderReflection reflection = ShaderReflection.complete(ShaderProfile.PORTABLE_WEBGPU,
+                new ShaderEntryPoint[] {ShaderEntryPoint.builder("updateData", ShaderStage.COMPUTE)
+                        .fixedWorkgroupSize(1, 1, 1).build()}, new ShaderBinding[0], new String[0]);
+        ShaderModuleDescriptor ready = ShaderModuleDescriptors.requireTarget(
+                ShaderModuleDescriptor.wgsl("compute module", "@compute @workgroup_size(1) fn updateData() {}")
+                        .reflection(reflection), ShaderTarget.DIRECTX_HLSL, "test compute");
+        assertEquals(1, compiler.requests.size());
+        assertRequest(compiler.requests.get(0), RuntimeShaderCompileTarget.DIRECTX_HLSL,
+                RuntimeShaderCompileStage.COMPUTE, "updateData");
+        assertTrue(ready.reflection().complete());
+        assertTrue(ready.targetArtifact().find(
+                io.github.libfdx.graphics.shader.target.ShaderArtifactStage.COMPUTE, "updateData") != null);
+    }
+
     private RuntimeCoreProvider previousProvider;
 
     @BeforeEach
@@ -125,6 +144,25 @@ final class ShaderModuleDescriptorsTest {
         assertTrue(ready.hasSource(ShaderLanguage.SPIRV));
         assertArrayEquals(new int[] { 0x00010203 }, ready.spirvVertexWords());
         assertArrayEquals(new int[] { 0x04050607 }, ready.spirvFragmentWords());
+    }
+
+    @Test
+    void glesAndWebglRetainFlatVaryingsWhileRemovingOnlyTheirUnsupportedLocations() {
+        for (ShaderTarget target : new ShaderTarget[] {ShaderTarget.GLES_GLSL_ES, ShaderTarget.WEBGL_GLSL_ES}) {
+            RecordingCompiler compiler = new RecordingCompiler(request -> RuntimeShaderCompileResult.text(
+                    request.stage() == RuntimeShaderCompileStage.VERTEX
+                            ? "#version 300 es\nlayout(location = 0) in vec2 position;\n  layout(location = 1) flat out vec2 controls;\n"
+                            : "#version 300 es\nlayout(location = 1) flat in vec2 controls;\nlayout(location = 2) centroid in vec2 uv;\n"));
+            RuntimeCore.registerProvider(new TestRuntimeCoreProvider(compiler));
+            ShaderModuleDescriptor ready = ShaderModuleDescriptors.requireTarget(
+                    ShaderModuleDescriptor.wgsl("flat varyings", "wgsl source"), target, "test");
+            assertTrue(ready.glslVertexSource().contains("layout(location = 0) in vec2 position;"));
+            assertTrue(ready.glslVertexSource().contains("  flat out vec2 controls;"));
+            assertFalse(ready.glslVertexSource().contains("layout(location = 1)"));
+            assertTrue(ready.glslFragmentSource().contains("flat in vec2 controls;"));
+            assertTrue(ready.glslFragmentSource().contains("centroid in vec2 uv;"));
+            assertFalse(ready.glslFragmentSource().contains("layout(location"));
+        }
     }
 
     @Test

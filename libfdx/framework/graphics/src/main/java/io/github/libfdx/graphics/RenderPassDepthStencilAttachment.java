@@ -19,6 +19,10 @@ public final class RenderPassDepthStencilAttachment {
             throw new FdxException("Depth/stencil attachment requires a depth/stencil texture view");
         }
         this.view = view;
+        if (depthLoadOp != null && depthLoadOp.isClear()
+                && (!Float.isFinite(depthLoadOp.red()) || depthLoadOp.red() < 0 || depthLoadOp.red() > 1)) {
+            throw new FdxException("Depth clear must be in [0,1] (the red component of LoadOp.clear)");
+        }
         this.depthLoadOp = depthLoadOp != null ? depthLoadOp : LoadOp.load();
         this.depthStoreOp = depthStoreOp != null ? depthStoreOp : StoreOp.store();
         this.stencilLoadOp = stencilLoadOp != null ? stencilLoadOp : LoadOp.load();

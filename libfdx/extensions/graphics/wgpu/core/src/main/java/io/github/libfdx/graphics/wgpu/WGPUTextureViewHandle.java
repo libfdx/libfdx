@@ -16,6 +16,7 @@ final class WGPUTextureViewHandle implements TextureView {
     private final WGPUContext frameOwner;
     private final WGPUTextureView frameView;
     private final TextureFormat format;
+    private final int level;
 
     WGPUTextureViewHandle(WGPUContext frameOwner, WGPUTextureView frameView, TextureFormat format) {
         this.resourceDomain = frameOwner.resourceDomain();
@@ -23,29 +24,38 @@ final class WGPUTextureViewHandle implements TextureView {
         this.frameOwner = frameOwner;
         this.frameView = frameView;
         this.format = format;
+        level = 0;
     }
 
     WGPUTextureViewHandle(WGPUTextureHandle textureHandle) {
+        this(textureHandle, 0);
+    }
+
+    WGPUTextureViewHandle(WGPUTextureHandle textureHandle, int level) {
         this.resourceDomain = textureHandle.resourceDomain();
         this.textureHandle = textureHandle;
         this.frameOwner = null;
         this.frameView = null;
         this.format = textureHandle.format();
+        this.level = level;
     }
 
     WGPUTextureView nativeView() {
-        return textureHandle != null ? textureHandle.nativeView() : frameView;
+        if (frameOwner != null) frameOwner.ensureFrameTexture();
+        return textureHandle != null ? textureHandle.nativeAttachmentView(level) : frameView;
     }
 
     @Override
     public int width() {
-        return textureHandle != null ? textureHandle.width() : 0;
+        return textureHandle != null ? textureHandle.mipWidth(level) : 0;
     }
 
     @Override
     public int height() {
-        return textureHandle != null ? textureHandle.height() : 0;
+        return textureHandle != null ? textureHandle.mipHeight(level) : 0;
     }
+
+    @Override public int mipLevel() { return level; }
 
     WGPUResourceDomain resourceDomain() {
         return resourceDomain;

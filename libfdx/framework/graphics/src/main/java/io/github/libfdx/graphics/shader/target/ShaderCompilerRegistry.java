@@ -2,12 +2,15 @@ package io.github.libfdx.graphics.shader.target;
 
 import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.core.FdxFuture;
+import io.github.libfdx.graphics.shader.internal.ShaderCompilationTasks;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.Consumer;
 
 /**
  * Immutable explicitly composed target compiler and verifier registry.
@@ -85,6 +88,19 @@ public final class ShaderCompilerRegistry {
                     "shader.target.compiler-exception",
                     "Shader compiler " + compiler.id() + " failed: " + message(error)));
         }
+        return verifyCompiled(request, compiler, compiled);
+    }
+
+    /** Asynchronous equivalent of compile, preserving artifact checks and the selected verifier. */
+    public FdxFuture<ShaderTargetCompileResult> compileAsync(ShaderTargetCompileRequest request,
+            Consumer<Runnable> execute) {
+        return ShaderCompilationTasks.then(ShaderCompilationTasks.submit(execute, () -> compiler(request)),
+                execute, compiler -> ShaderCompilationTasks.then(compiler.compileAsync(request, execute), execute,
+                        compiled -> FdxFuture.completed(verifyCompiled(request, compiler, compiled))));
+    }
+
+    private ShaderTargetCompileResult verifyCompiled(ShaderTargetCompileRequest request,
+            ShaderTargetCompiler compiler, ShaderTargetCompileResult compiled) {
         if (compiled == null || !compiled.success()) {
             return compiled != null ? compiled : ShaderTargetCompileResult.failure(ShaderTargetDiagnostic.error(
                     "shader.target.compiler-null", "Shader compiler " + compiler.id() + " returned no result"));

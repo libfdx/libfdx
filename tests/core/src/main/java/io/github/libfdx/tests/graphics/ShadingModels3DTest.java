@@ -1,5 +1,8 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.FramebufferCapture;
+import io.github.libfdx.testsupport.graphics.TestCameraControllers;
+
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
@@ -23,7 +26,7 @@ import io.github.libfdx.graphics.g3d.ModelVertexUsage;
 import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.graphics.g3d.ShadingModel;
 import io.github.libfdx.math.Color;
-import io.github.libfdx.tests.TestFpsLogger;
+import io.github.libfdx.testsupport.TestFpsLogger;
 
 import java.nio.ByteBuffer;
 import java.util.Locale;

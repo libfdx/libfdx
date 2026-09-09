@@ -20,6 +20,27 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class DefaultAssetManagerTest {
     @Test
+    void updateReportsCompletionRatherThanSuccessfulLoading() {
+        DefaultAssetManager manager = new DefaultAssetManager(files());
+        assertTrue(manager.update());
+
+        FdxFuture<TestAsset> pending = FdxFuture.pending();
+        manager.registerLoader(TestAsset.class, loader(pending));
+        AssetHandle<TestAsset> handle = manager.load(AssetDescriptor.of("pending.asset", TestAsset.class));
+        assertFalse(manager.update());
+
+        RuntimeException failure = new RuntimeException("Cannot decode asset");
+        pending.completeExceptionally(failure);
+        assertTrue(manager.update());
+        assertEquals(AssetStatus.FAILED, handle.status());
+        assertSame(failure, assertThrows(RuntimeException.class, handle.future()::get));
+        manager.finishLoading();
+        assertSame(failure, assertThrows(RuntimeException.class,
+                () -> manager.get("pending.asset", TestAsset.class)).getCause());
+        manager.dispose();
+    }
+
+    @Test
     void handleListTracksDuplicateUnloadReloadAndWarmedUpdates() {
         DefaultAssetManager manager = new DefaultAssetManager(files());
         manager.registerLoader(TestAsset.class, new AssetLoader<TestAsset>() {

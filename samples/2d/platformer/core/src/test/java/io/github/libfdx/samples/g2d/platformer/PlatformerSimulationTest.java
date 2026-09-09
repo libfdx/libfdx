@@ -9,7 +9,43 @@ import io.github.libfdx.samples.g2d.platformer.render.PlatformerTextures;
 import org.junit.jupiter.api.Test;
 
 final class PlatformerSimulationTest {
+    @Test
+    void tapBetweenFixedStepsTriggersOneJumpAndRebindingWorks() {
+        var input = new io.github.libfdx.input.DefaultInput();
+        var controls = new io.github.libfdx.samples.g2d.platformer.input.BackendPlatformerInput(input);
+        PlatformerGame game = PlatformerLevel.create(controls);
+        input.dispatchKeyDown(io.github.libfdx.input.Key.SPACE);
+        input.dispatchKeyUp(io.github.libfdx.input.Key.SPACE);
+        for(int frame=0;frame<3;frame++) controls.update(640,480);
+        game.update(FRAME); assertTrue(game.playerVelocityY()>0);
+        float velocity=game.playerVelocityY(); game.update(FRAME); assertTrue(game.playerVelocityY()<velocity);
+        var jump=controls.actions().find("jump");
+        controls.actions().clearBindings(jump).bind(jump,io.github.libfdx.input.InputBinding.key(io.github.libfdx.input.Key.J));
+        input.dispatchKeyDown(io.github.libfdx.input.Key.SPACE); assertFalse(controls.consumeJumpPress());
+        input.dispatchKeyDown(io.github.libfdx.input.Key.J); assertTrue(controls.consumeJumpPress());
+        controls.dispose(); assertTrue(controls.isDisposed());
+    }
     private static final float FRAME = 1.0f / 60.0f;
+
+    @Test
+    void fixedStepClockKeepsHeldInputSimulationEqualAtDifferentRenderRates() {
+        PlatformerGame slow = fixedCadence(30), fast = fixedCadence(144);
+        assertEquals(slow.player().x(), fast.player().x(), 1e-7);
+        assertEquals(slow.player().y(), fast.player().y(), 1e-7);
+        assertEquals(slow.cameraX(), fast.cameraX(), 1e-7);
+        assertEquals(slow.coinsCollected(), fast.coinsCollected());
+    }
+
+    private PlatformerGame fixedCadence(int fps) {
+        TestPlatformerInput input = new TestPlatformerInput(); input.right = true;
+        PlatformerGame game = PlatformerLevel.create(input);
+        var clock = new io.github.libfdx.application.FixedStepClock(1.0 / 60, 8);
+        for (int frame = 0; frame < fps * 2; frame++) {
+            int steps = clock.advance(1.0 / fps);
+            for (int step = 0; step < steps; step++) game.update((float) clock.stepSeconds());
+        }
+        return game;
+    }
 
     @Test
     void rightInputMovesPlayer() {

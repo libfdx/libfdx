@@ -279,35 +279,9 @@ abstract class LibfdxRunWebTask : DefaultTask() {
     }
 
     private fun serve(root: File, exchange: HttpExchange) {
-        val rawPath = exchange.requestURI.path.trimStart('/')
-        val requested = File(root, if(rawPath.isEmpty()) "index.html" else rawPath).canonicalFile
-        val file = if(requested.isDirectory) File(requested, "index.html") else requested
-        if(!file.toPath().startsWith(root.toPath()) || !file.isFile) {
-            exchange.sendResponseHeaders(404, -1)
-            exchange.close()
-            return
-        }
-        val bytes = Files.readAllBytes(file.toPath())
-        exchange.responseHeaders.add("Content-Type", contentType(file.name))
-        exchange.sendResponseHeaders(200, bytes.size.toLong())
-        exchange.responseBody.use { it.write(bytes) }
+        serveWebFile(root, exchange)
     }
 
-    private fun contentType(name: String): String {
-        return when {
-            name.endsWith(".html") -> "text/html; charset=utf-8"
-            name.endsWith(".js") -> "text/javascript; charset=utf-8"
-            name.endsWith(".wasm") -> "application/wasm"
-            name.endsWith(".json") || name.endsWith(".gltf") -> "application/json; charset=utf-8"
-            name.endsWith(".glb") -> "model/gltf-binary"
-            name.endsWith(".bin") -> "application/octet-stream"
-            name.endsWith(".txt") -> "text/plain; charset=utf-8"
-            name.endsWith(".css") -> "text/css; charset=utf-8"
-            name.endsWith(".png") -> "image/png"
-            name.endsWith(".jpg") || name.endsWith(".jpeg") -> "image/jpeg"
-            else -> "application/octet-stream"
-        }
-    }
 }
 
 abstract class LibfdxDesktopCProjectTask @Inject constructor(

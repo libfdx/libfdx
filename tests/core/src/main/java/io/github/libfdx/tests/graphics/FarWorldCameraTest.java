@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.FramebufferCapture;
+
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
@@ -28,7 +30,7 @@ import io.github.libfdx.input.MouseButton;
 import io.github.libfdx.input.PointerEvent;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.math.Matrix4;
-import io.github.libfdx.tests.TestFpsLogger;
+import io.github.libfdx.testsupport.TestFpsLogger;
 import io.github.libfdx.ui.Ui;
 import io.github.libfdx.ui.UiColor;
 import io.github.libfdx.ui.UiDrawable;

@@ -20,6 +20,7 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags += listOf("-std=c++17", "-fexceptions")
+                arguments += "-DLIBFDX_VULKAN_LOSS_TESTS=${providers.gradleProperty("libfdxVulkanLossTests").getOrElse("false")}"
             }
         }
     }

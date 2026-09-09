@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.FramebufferCapture;
+
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
@@ -15,7 +17,7 @@ import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.g2d.Batch2D;
 import io.github.libfdx.graphics.g2d.G2DAssetLoaders;
 import io.github.libfdx.graphics.g2d.SpriteBatch;
-import io.github.libfdx.tests.TestFpsLogger;
+import io.github.libfdx.testsupport.TestFpsLogger;
 
 import java.nio.ByteBuffer;
 

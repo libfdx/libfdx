@@ -2,6 +2,10 @@
 
 #include <jni.h>
 
+#if defined(__ANDROID__)
+#include <dlfcn.h>
+#endif
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -185,3 +189,14 @@ extern "C" JNIEXPORT jboolean JNICALL
 Java_io_github_libfdx_backend_android_AndroidRuntimeShaderCompiler_isAvailableNative(JNIEnv*, jclass) {
     return JNI_TRUE;
 }
+
+#if defined(__ANDROID__)
+extern "C" JNIEXPORT jstring JNICALL
+Java_io_github_libfdx_backend_android_AndroidRuntimeShaderCompiler_loadedLibraryPathNative(JNIEnv* env, jclass) {
+    Dl_info library{};
+    if (dladdr(reinterpret_cast<const void*>(
+            &Java_io_github_libfdx_backend_android_AndroidRuntimeShaderCompiler_compileNative), &library) == 0
+            || library.dli_fname == nullptr) return nullptr;
+    return env->NewStringUTF(library.dli_fname);
+}
+#endif

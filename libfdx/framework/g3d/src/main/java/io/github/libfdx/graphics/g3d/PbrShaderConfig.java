@@ -1,15 +1,23 @@
 package io.github.libfdx.graphics.g3d;
 
 /**
- * Stores configuration values for a pbr shader.
+ * Configures the PBR provider. Shadow and IBL options are copied at construction. Lighting resources are
+ * borrowed from each render environment. Disabling a feature skips its resource sampling;
+ * it does not dispose resources or automatically stop application-owned shadow passes.
  *
  * @author xpenatan
  */
 public final class PbrShaderConfig {
+    private ModelShaderPlan shaderPlan;
+
+    /** Borrows definitions prepared by an async ModelBatch. Rendering requires its prepared
+     * context pass; no constructor or draw-time synchronous shader creation is permitted. */
+    public PbrShaderConfig shaderPlan(ModelShaderPlan value) { shaderPlan = value; return this; }
+    public ModelShaderPlan shaderPlan() { return shaderPlan; }
     private int maxLights = 8;
     private int maxBones = 64;
-    private boolean shadowsEnabled;
-    private boolean imageBasedLightingEnabled;
+    private boolean shadowsEnabled = true;
+    private boolean imageBasedLightingEnabled = true;
 
     /**
      * Sets the max lights and returns this PBR shader config.
@@ -34,7 +42,7 @@ public final class PbrShaderConfig {
     }
 
     /**
-     * Sets the enable shadows and returns this PBR shader config.
+     * Enables sampling the environment's shadow maps (default true).
      *
      * @param enabled the enabled
      * @return this PBR shader config for chaining
@@ -45,7 +53,7 @@ public final class PbrShaderConfig {
     }
 
     /**
-     * Sets the enable image based lighting and returns this PBR shader config.
+     * Enables sampling the environment's image-based lighting (default true).
      *
      * @param enabled the enabled
      * @return this PBR shader config for chaining

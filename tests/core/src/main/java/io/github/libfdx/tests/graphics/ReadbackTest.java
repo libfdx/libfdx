@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.FramebufferCapture;
+
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
@@ -10,7 +12,7 @@ import io.github.libfdx.files.FileHandle;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.ShapeRenderer;
-import io.github.libfdx.tests.TestFpsLogger;
+import io.github.libfdx.testsupport.TestFpsLogger;
 
 import java.io.File;
 import java.io.FileInputStream;

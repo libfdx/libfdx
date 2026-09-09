@@ -30,6 +30,9 @@ public interface RenderTarget3D {
      */
     TextureView colorAttachment(int index);
 
+    /** Borrowed single-sample resolve destination for a multisample color, or null when resolving is disabled. */
+    default TextureView resolveAttachment(int index) { return null; }
+
     /**
      * Returns the depth attachment.
      *

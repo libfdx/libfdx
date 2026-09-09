@@ -195,6 +195,9 @@ final class WGPURenderPass implements RenderPass {
             throw new FdxException("WGPU texture slot is outside the current pipeline texture range");
         }
         WGPUTextureHandle wgpuTexture = WGPUResources.requireTexture(texture, context.resourceDomain(), "Texture");
+        for (int i = 0; i < renderTargetCount; i++) {
+            if (renderTargets[i] == wgpuTexture) throw new FdxException("Cannot sample a texture attached to the active render pass");
+        }
         if (!wgpuTexture.usage().sampled()) {
             throw new FdxException("Texture was not created with sampled usage");
         }
@@ -641,6 +644,7 @@ final class WGPURenderPass implements RenderPass {
     }
 
     private void ensureOpen() {
+        context.requireDeviceUsable("record render commands");
         if (ended) {
             throw new FdxException("Render pass has already ended");
         }

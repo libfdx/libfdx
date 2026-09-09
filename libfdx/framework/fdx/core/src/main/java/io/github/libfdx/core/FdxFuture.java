@@ -1,7 +1,6 @@
 package io.github.libfdx.core;
 
 import io.github.libfdx.collections.Array;
-
 import java.util.function.Consumer;
 
 /**
@@ -18,8 +17,14 @@ public final class FdxFuture<T> {
     private boolean dispatchingCallbacks;
     private T value;
     private Throwable error;
+    private final Consumer<Runnable> callbackDispatcher;
 
     private FdxFuture() {
+        this(null);
+    }
+
+    private FdxFuture(Consumer<Runnable> callbackDispatcher) {
+        this.callbackDispatcher = callbackDispatcher;
     }
 
     /**
@@ -30,6 +35,18 @@ public final class FdxFuture<T> {
      */
     public static <T> FdxFuture<T> pending() {
         return new FdxFuture<T>();
+    }
+
+    /**
+     * Creates a future whose callbacks, including listeners registered after completion, are
+     * submitted to the supplied dispatcher. Completion/get do not wait for callback execution.
+     * The dispatcher must accept every callback exactly once and must not throw or drop work.
+     * It owns execution order, thread, and callback exception handling. This overload does not
+     * create threads; an application service can enqueue callbacks for its event-loop update.
+     */
+    public static <T> FdxFuture<T> pending(Consumer<Runnable> callbackDispatcher) {
+        if (callbackDispatcher == null) throw new NullPointerException("callbackDispatcher");
+        return new FdxFuture<T>(callbackDispatcher);
     }
 
     /**
@@ -86,16 +103,18 @@ public final class FdxFuture<T> {
         if (callback == null) {
             return this;
         }
+        Consumer<T> listener = callbackDispatcher == null ? callback
+                : result -> callbackDispatcher.accept(() -> callback.accept(result));
         T callbackValue = null;
         boolean callNow = false;
         synchronized (this) {
             if (!done) {
-                successCallbacks.add(callback);
+                successCallbacks.add(listener);
                 return this;
             }
             if (error == null) {
                 if (dispatchingCallbacks) {
-                    successCallbacks.add(callback);
+                    successCallbacks.add(listener);
                     return this;
                 }
                 callbackValue = value;
@@ -103,7 +122,7 @@ public final class FdxFuture<T> {
             }
         }
         if (callNow) {
-            callback.accept(callbackValue);
+            listener.accept(callbackValue);
         }
         return this;
     }
@@ -118,16 +137,18 @@ public final class FdxFuture<T> {
         if (callback == null) {
             return this;
         }
+        Consumer<Throwable> listener = callbackDispatcher == null ? callback
+                : result -> callbackDispatcher.accept(() -> callback.accept(result));
         Throwable callbackError = null;
         boolean callNow = false;
         synchronized (this) {
             if (!done) {
-                failureCallbacks.add(callback);
+                failureCallbacks.add(listener);
                 return this;
             }
             if (error != null) {
                 if (dispatchingCallbacks) {
-                    failureCallbacks.add(callback);
+                    failureCallbacks.add(listener);
                     return this;
                 }
                 callbackError = error;
@@ -135,7 +156,7 @@ public final class FdxFuture<T> {
             }
         }
         if (callNow) {
-            callback.accept(callbackError);
+            listener.accept(callbackError);
         }
         return this;
     }

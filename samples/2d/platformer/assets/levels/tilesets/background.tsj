@@ -1,0 +1,11 @@
+{
+  "type": "tileset",
+  "name": "background",
+  "tilewidth": 24,
+  "tileheight": 24,
+  "columns": 8,
+  "tilecount": 24,
+  "image": "../../kenney/pixel-platformer/Tilemap/tilemap-backgrounds_packed.png",
+  "imagewidth": 192,
+  "imageheight": 72
+}

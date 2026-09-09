@@ -26,7 +26,7 @@ public enum ShaderTarget {
     METAL_MSL(ShaderTargets.METAL_MSL, ShaderArtifactFormats.MSL_TEXT,
             ShaderTargetEnvironments.IOS_METAL_2_MSL_2),
     DIRECTX_HLSL(ShaderTargets.DIRECTX_HLSL, ShaderArtifactFormats.HLSL_TEXT,
-            ShaderTargetEnvironments.D3D12_FXC_SM_5_1);
+            ShaderTargetEnvironments.D3D12_DXC_SM_6_0);
 
     private final ShaderTargetId id;
     private final ShaderArtifactFormat format;
@@ -128,7 +128,7 @@ public enum ShaderTarget {
         if ("metal".equals(value)) {
             return METAL_MSL;
         }
-        if ("directx".equals(value) || "d3d".equals(value) || "d3d11".equals(value) || "d3d12".equals(value)) {
+        if ("directx".equals(value) || "d3d".equals(value) || "d3d12".equals(value)) {
             return DIRECTX_HLSL;
         }
         throw new FdxException("Unsupported shader provider id: " + providerId);

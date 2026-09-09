@@ -7,6 +7,14 @@ plugins {
     alias(libs.plugins.android.library) apply false
 }
 
+listOf("desktop", "android", "web").forEach { platform ->
+    tasks.register("validate_${platform}_graphics") {
+        group = "verification"
+        description = "Runs every test across the $platform graphics matrix and produces a checklist."
+        dependsOn(":tests:platform:$platform:validate_${platform}_graphics")
+    }
+}
+
 System.getProperty("libfdx.compositeBuildDir")
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
@@ -62,6 +70,8 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:framework:fdx:platform:android",
     ":libfdx:framework:fdx:platform:web",
     ":libfdx:framework:application",
+    ":libfdx:framework:audio",
+    ":libfdx:framework:maps",
     ":libfdx:framework:display",
     ":libfdx:framework:files",
     ":libfdx:framework:input",
@@ -81,6 +91,14 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:extensions:physics:jolt:core",
     ":libfdx:extensions:ui:imgui:core",
     ":libfdx:tools:font",
+    ":libfdx:tools:texturepacker",
+    ":libfdx:tools:ibl",
+    ":libfdx:extensions:audio:loaders",
+    ":libfdx:extensions:audio:openal",
+    ":libfdx:extensions:audio:web",
+    ":libfdx:extensions:maps:tiled",
+    ":libfdx:extensions:maps:streaming",
+    ":libfdx:extensions:graphics:effects",
     ":libfdx:tools:shader",
     ":libfdx:extensions:graphics:gl:core",
     ":libfdx:extensions:graphics:gl:platform:desktop",
@@ -158,6 +176,10 @@ allprojects {
 
     repositories {
         google()
+        maven {
+            url = uri("https://teavm.org/maven/repository")
+            content { includeGroupByRegex("org\\.teavm(\\..*)?") }
+        }
         mavenCentral()
         maven {
             url = uri("https://central.sonatype.com/repository/maven-snapshots/")

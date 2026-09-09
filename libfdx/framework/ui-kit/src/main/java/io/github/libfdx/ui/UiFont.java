@@ -115,7 +115,8 @@ public final class UiFont {
     }
 
     /**
-     * Sets the fallback and returns this UI font.
+     * Returns a copy with a fallback font. Resolution uses this chain only when
+     * {@link UiRoot#allowFontFallback(boolean) font fallback is enabled} on the root.
      *
      * @param fallback the fallback
      * @return this UI font for chaining

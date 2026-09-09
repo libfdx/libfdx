@@ -1,12 +1,12 @@
 package io.github.libfdx.graphics;
 
-import io.github.libfdx.math.ClipDepthRange;
-import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.shader.reflection.ShaderBinding;
 import io.github.libfdx.graphics.shader.reflection.ShaderBindingType;
 import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
 import io.github.libfdx.graphics.shader.reflection.ShaderResourceLayout;
-import io.github.libfdx.core.FdxException;
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.math.ClipDepthRange;
 
 /**
  * Describes the values used to create or identify a render pipeline.
@@ -33,6 +33,35 @@ public final class RenderPipelineDescriptor {
     private ColorTargetState[] colorTargets;
     private DepthStencilState depthStencilState;
     private MultisampleState multisampleState;
+
+    /**
+     * Captures pipeline state without retaining the shader module. Arrays are copied and
+     * derived fixed state is frozen. Existing module reflection, when present, is captured as
+     * immutable metadata. The returned descriptor is independently mutable and requires a
+     * module before native creation. Call on the descriptor/resource owning thread.
+     */
+    public RenderPipelineDescriptor snapshotState() {
+        RenderPipelineDescriptor copy = new RenderPipelineDescriptor();
+        copy.label = label;
+        copy.vertexEntryPoint = vertexEntryPoint;
+        copy.fragmentEntryPoint = fragmentEntryPoint;
+        copy.colorFormat = colorFormat;
+        copy.shaderReflection = shaderReflection();
+        copy.shaderReflectionExplicit = shaderReflectionExplicit || shaderModule != null;
+        copy.primitiveTopology = primitiveTopology;
+        copy.vertexLayouts = vertexLayouts.clone();
+        copy.sampledTextureCount = sampledTextureCount;
+        copy.sampledTextureCountExplicit = sampledTextureCountExplicit;
+        copy.depthTestEnabled = depthTestEnabled;
+        copy.depthWriteEnabled = depthWriteEnabled;
+        copy.renderTargetLayout = renderTargetLayout();
+        copy.resourceLayout = resourceLayout;
+        copy.primitiveState = primitiveState;
+        copy.colorTargets = colorTargets();
+        copy.depthStencilState = depthStencilState();
+        copy.multisampleState = multisampleState();
+        return copy;
+    }
 
     /**
      * Creates a render pipeline descriptor.
@@ -587,6 +616,9 @@ public final class RenderPipelineDescriptor {
         for (int i = 0; i < targets.length; i++) {
             if (targets[i].format() != renderTargetLayout().colorFormat(i)) {
                 throw new FdxException("Render pipeline color state format does not match target layout");
+            }
+            if (targets[i].blend() != null && !capabilities.supportsColorBlending(targets[i].format())) {
+                throw new FdxException("Graphics device does not support blending for " + targets[i].format());
             }
         }
         DepthStencilState depthStencil = depthStencilState();

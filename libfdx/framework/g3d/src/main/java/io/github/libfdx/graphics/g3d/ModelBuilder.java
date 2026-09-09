@@ -955,7 +955,8 @@ public final class ModelBuilder {
                 textureCoordinates[t + 1] = 0.0f;
                 continue;
             }
-            textureCoordinates[t] = (float)(Math.atan2(z, x)
+            // East-positive longitude in a right-handed Y-up frame points toward -Z.
+            textureCoordinates[t] = (float)(Math.atan2(-z, x)
                     / (2.0 * Math.PI)) + 0.5f;
             textureCoordinates[t + 1] = (float)(Math.acos(
                     Math.max(-1.0, Math.min(1.0, y / length))) / Math.PI);

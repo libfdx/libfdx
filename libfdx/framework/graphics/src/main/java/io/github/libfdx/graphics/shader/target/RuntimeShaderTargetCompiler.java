@@ -5,6 +5,10 @@ import io.github.libfdx.graphics.shader.reflection.ShaderBinding;
 import io.github.libfdx.graphics.shader.reflection.ShaderBindingType;
 import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.core.FdxFuture;
+import io.github.libfdx.graphics.shader.internal.ShaderCompilationTasks;
+import io.github.libfdx.graphics.shader.internal.ShaderTranslationCache;
+import io.github.libfdx.graphics.shader.runtime.ShaderArtifactCache;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileDiagnostic;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileOutputKind;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileRequest;
@@ -20,6 +24,7 @@ import io.github.libfdx.runtime.core.shader.RuntimeShaderTargetInterface;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Adapts the runtime Tint bridge to the extensible target compiler contract.
@@ -32,6 +37,7 @@ public final class RuntimeShaderTargetCompiler implements ShaderTargetCompiler {
 
     private final RuntimeShaderCompiler compiler;
     private final String version;
+    private final ShaderTranslationCache translationCache;
 
     /**
      * Creates a Tint-backed target compiler.
@@ -49,6 +55,11 @@ public final class RuntimeShaderTargetCompiler implements ShaderTargetCompiler {
      * @param version the compiler/cache version
      */
     public RuntimeShaderTargetCompiler(RuntimeShaderCompiler compiler, String version) {
+        this(compiler, version, null);
+    }
+
+    /** Optional borrowed cache is used only by async compilation and only with a known native identity. */
+    public RuntimeShaderTargetCompiler(RuntimeShaderCompiler compiler, String version, ShaderArtifactCache cache) {
         if (compiler == null) {
             throw new FdxException("Runtime shader compiler cannot be null");
         }
@@ -57,6 +68,7 @@ public final class RuntimeShaderTargetCompiler implements ShaderTargetCompiler {
         }
         this.compiler = compiler;
         this.version = version.trim();
+        translationCache = new ShaderTranslationCache(compiler, cache);
     }
 
     @Override
@@ -107,10 +119,48 @@ public final class RuntimeShaderTargetCompiler implements ShaderTargetCompiler {
     }
 
     private ShaderTargetCompileResult compileSupported(ShaderTargetCompileRequest request) {
+        RuntimeShaderCompileRequest[] inputs = compilationInputs(request);
+        RuntimeShaderCompileResult[] results = new RuntimeShaderCompileResult[inputs.length];
+        for (int i = 0; i < inputs.length; i++) {
+            results[i] = compiler.compile(inputs[i]);
+            if (results[i] == null || !results[i].success()) break;
+        }
+        return assemble(request, results);
+    }
+
+    @Override public FdxFuture<ShaderTargetCompileResult> compileAsync(ShaderTargetCompileRequest request,
+            Consumer<Runnable> execute) {
+        return ShaderCompilationTasks.then(ShaderCompilationTasks.submit(execute, () -> {
+            if (!supports(request)) throw new FdxException("Tint does not support the requested target");
+            return compilationInputs(request);
+        }), execute, inputs -> compileNext(request, inputs, new RuntimeShaderCompileResult[inputs.length], 0, execute));
+    }
+
+    private FdxFuture<ShaderTargetCompileResult> compileNext(ShaderTargetCompileRequest request,
+            RuntimeShaderCompileRequest[] inputs, RuntimeShaderCompileResult[] results, int index,
+            Consumer<Runnable> execute) {
+        if (index == inputs.length) return FdxFuture.completed(assemble(request, results));
+        return ShaderCompilationTasks.then(translationCache.compileAsync(inputs[index], execute), execute, result -> {
+            results[index] = result;
+            if (result == null || !result.success()) return FdxFuture.completed(assemble(request, results));
+            return compileNext(request, inputs, results, index + 1, execute);
+        });
+    }
+
+    private RuntimeShaderCompileRequest[] compilationInputs(ShaderTargetCompileRequest request) {
+        if (isWgsl(request.target())) return new RuntimeShaderCompileRequest[] {
+                runtimeRequest(request, RuntimeShaderCompileStage.MODULE, "") };
+        ShaderEntryPointSelection[] selections = request.entryPoints();
+        RuntimeShaderCompileRequest[] inputs = new RuntimeShaderCompileRequest[selections.length];
+        for (int i = 0; i < inputs.length; i++) inputs[i] = runtimeRequest(request,
+                runtimeStage(selections[i].stage()), selections[i].entryPoint());
+        return inputs;
+    }
+
+    private ShaderTargetCompileResult assemble(ShaderTargetCompileRequest request, RuntimeShaderCompileResult[] results) {
         ShaderEntryPointSelection[] selections = request.entryPoints();
         if (isWgsl(request.target())) {
-            RuntimeShaderCompileResult result = compiler.compile(runtimeRequest(request,
-                    RuntimeShaderCompileStage.MODULE, ""));
+            RuntimeShaderCompileResult result = results[0];
             ShaderTargetCompileResult failure = failure(result, ShaderArtifactStage.MODULE, "");
             if (failure != null) {
                 return failure;
@@ -132,12 +182,9 @@ public final class RuntimeShaderTargetCompiler implements ShaderTargetCompiler {
                     "Translated target " + request.target() + " requires at least one entry point"));
         }
         ShaderStageArtifact[] stages = new ShaderStageArtifact[selections.length];
-        RuntimeShaderCompileResult[] results = new RuntimeShaderCompileResult[selections.length];
         for (int i = 0; i < selections.length; i++) {
             ShaderEntryPointSelection selection = selections[i];
-            RuntimeShaderCompileResult result = compiler.compile(runtimeRequest(request,
-                    runtimeStage(selection.stage()), selection.entryPoint()));
-            results[i] = result;
+            RuntimeShaderCompileResult result = results[i];
             ShaderTargetCompileResult failure = failure(result, selection.stage(), selection.entryPoint());
             if (failure != null) {
                 return failure;
@@ -470,22 +517,36 @@ public final class RuntimeShaderTargetCompiler implements ShaderTargetCompiler {
 
     private static String removeGlslEsLocationQualifierLine(String line, String qualifier) {
         String prefix = "layout(location = ";
-        if (!line.startsWith(prefix)) {
+        int start = 0;
+        while (start < line.length() && Character.isWhitespace(line.charAt(start))) start++;
+        if (!line.startsWith(prefix, start)) {
             return line;
         }
         int closeIndex = line.indexOf(") ");
         if (closeIndex < 0) {
             return line;
         }
-        for (int i = prefix.length(); i < closeIndex; i++) {
+        for (int i = start + prefix.length(); i < closeIndex; i++) {
             char character = line.charAt(i);
             if ((character < '0' || character > '9') && character != ' ') {
                 return line;
             }
         }
         int qualifierStart = closeIndex + 2;
-        return line.startsWith(qualifier + " ", qualifierStart)
-                ? line.substring(qualifierStart) : line;
+        int tokenStart = qualifierStart;
+        while (tokenStart < line.length()) {
+            while (tokenStart < line.length() && Character.isWhitespace(line.charAt(tokenStart))) tokenStart++;
+            int end = tokenStart;
+            while (end < line.length() && !Character.isWhitespace(line.charAt(end))) end++;
+            String token = line.substring(tokenStart, end);
+            if (qualifier.equals(token)) return line.substring(0, start) + line.substring(qualifierStart);
+            // Tint may place interpolation/precision qualifiers before the in/out storage qualifier.
+            if (!token.equals("flat") && !token.equals("smooth") && !token.equals("centroid")
+                    && !token.equals("sample") && !token.equals("noperspective") && !token.equals("invariant")
+                    && !token.equals("highp") && !token.equals("mediump") && !token.equals("lowp")) return line;
+            tokenStart = end;
+        }
+        return line;
     }
 
     private static String normalizeGlslEsFloats(String source) {

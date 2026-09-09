@@ -40,10 +40,10 @@ final class PbrShaderParameters {
     static final int MAX_POINT_LIGHTS = 4;
     static final int MAX_SPOT_LIGHTS = 4;
     static final int MAX_SHADOW_CASCADES = 4;
-    static final int MAX_BONES = 64;
+    static final int MAX_BONES = SkinningShader3D.MAX_BONES;
 
-    private static final long STATIC_UNIFORM_SIZE = 1_248;
-    private static final long SKINNED_UNIFORM_SIZE = 5_360;
+    private static final long STATIC_UNIFORM_SIZE = 1_456;
+    private static final long SKINNED_UNIFORM_SIZE = 5_568;
     private static final ShaderValueType FLOAT2 =
             ShaderValueType.vector(ShaderScalarType.F32, 2);
     private static final ShaderValueType FLOAT3 =
@@ -69,6 +69,8 @@ final class PbrShaderParameters {
     private static final ShaderBinding[] RESOURCE_BINDINGS = resourceBindings();
     private static final ShaderReflection STATIC_REFLECTION = reflection(false);
     private static final ShaderReflection SKINNED_REFLECTION = reflection(true);
+    private static final ShaderReflection TEXTURED_REFLECTION = reflection(false, true);
+    private static final ShaderReflection TEXTURED_SKINNED_REFLECTION = reflection(true, true);
 
     private final ShaderParameterBlock block;
     private final ShaderBinding uniformBinding;
@@ -119,6 +121,9 @@ final class PbrShaderParameters {
     final ShaderParameterHandle SHADOW_FILTER_SCALES;
     final ShaderParameterHandle SKINNING_PARAMS;
     final ShaderParameterHandle BONE_MATRICES;
+    final ShaderParameterHandle NORMAL_OCCLUSION;
+    final ShaderParameterHandle IBL_PARAMS, IBL_ROTATION;
+    private final ShaderParameterHandle[] textureTransforms;
 
     final ShaderParameterHandle HAS_BASE_COLOR_TEXTURE;
     final ShaderParameterHandle HAS_METALLIC_ROUGHNESS_TEXTURE;
@@ -199,7 +204,12 @@ final class PbrShaderParameters {
                 environmentParameter("shadowCameraUp", NAMED_FLOAT4, 1_184, 16),
                 environmentParameter("shadowCameraParams", NAMED_FLOAT4, 1_200, 16),
                 environmentParameter("shadowFilterParams", NAMED_FLOAT4, 1_216, 16),
-                environmentParameter("shadowFilterScales", NAMED_FLOAT4, 1_232, 16)
+                environmentParameter("shadowFilterScales", NAMED_FLOAT4, 1_232, 16),
+                materialParameter("textureTransforms", ShaderValueType.array(NAMED_FLOAT4, 10, 16)
+                        .named("array<vec4<f32>, 10>"), 1_248, 160),
+                materialParameter("normalOcclusion", NAMED_FLOAT4, 1_408, 16),
+                environmentParameter("iblParams", NAMED_FLOAT4, 1_424, 16),
+                environmentParameter("iblRotation", NAMED_FLOAT4, 1_440, 16)
         };
     }
 
@@ -253,7 +263,13 @@ final class PbrShaderParameters {
                 environmentTexture(14, "shadowTexture2"),
                 environmentSampler(15, "shadowSampler2"),
                 environmentTexture(16, "shadowTexture3"),
-                environmentSampler(17, "shadowSampler3")
+                environmentSampler(17, "shadowSampler3"),
+                environmentTexture(18, "iblDiffuseTexture"),
+                environmentSampler(19, "iblDiffuseSampler"),
+                environmentTexture(20, "iblSpecularTexture"),
+                environmentSampler(21, "iblSpecularSampler"),
+                environmentTexture(22, "iblBrdfTexture"),
+                environmentSampler(23, "iblBrdfSampler")
         };
     }
 
@@ -300,6 +316,14 @@ final class PbrShaderParameters {
     }
 
     private static ShaderReflection reflection(boolean skinned) {
+        return reflection(skinned, false);
+    }
+
+    static ShaderReflection texturedReflection(boolean skinned) {
+        return skinned ? TEXTURED_SKINNED_REFLECTION : TEXTURED_REFLECTION;
+    }
+
+    private static ShaderReflection reflection(boolean skinned, boolean textured) {
         ShaderParameterLayout layout = skinned ? SKINNED_UNIFORM_LAYOUT : STATIC_UNIFORM_LAYOUT;
         long uniformSize = layout.minimumBindingSize();
         ShaderBinding uniform = ShaderBinding.builder(1, 0, "uniforms",
@@ -326,15 +350,24 @@ final class PbrShaderParameters {
                         input("uv", 2, FLOAT2), input("color", 3, FLOAT4),
                         input("pbr", 4, FLOAT3), input("emissive", 5, FLOAT3)
                 };
+        if (textured) {
+            ShaderStageVariable[] extended = new ShaderStageVariable[vertexInputs.length + 2];
+            System.arraycopy(vertexInputs, 0, extended, 0, vertexInputs.length);
+            extended[vertexInputs.length] = input("uv1", 8, FLOAT2);
+            extended[vertexInputs.length + 1] = input("tangent", 9, FLOAT4);
+            vertexInputs = extended;
+        }
         ShaderStageVariable[] vertexOutputs = new ShaderStageVariable[] {
                 output("worldPosition", 0, FLOAT3), output("normal", 1, FLOAT3),
                 output("uv", 2, FLOAT2), output("color", 3, FLOAT4),
-                output("pbr", 4, FLOAT3), output("emissive", 5, FLOAT3)
+                output("pbr", 4, FLOAT3), output("emissive", 5, FLOAT3),
+                output("uv1", 6, FLOAT2), output("tangent", 7, FLOAT4)
         };
         ShaderStageVariable[] fragmentInputs = new ShaderStageVariable[] {
                 input("worldPosition", 0, FLOAT3), input("normal", 1, FLOAT3),
                 input("uv", 2, FLOAT2), input("color", 3, FLOAT4),
-                input("pbr", 4, FLOAT3), input("emissive", 5, FLOAT3)
+                input("pbr", 4, FLOAT3), input("emissive", 5, FLOAT3),
+                input("uv1", 6, FLOAT2), input("tangent", 7, FLOAT4)
         };
         ShaderResourceUse[] fragmentResources = new ShaderResourceUse[bindings.length];
         for (int i = 0; i < RESOURCE_BINDINGS.length; i++) {
@@ -350,7 +383,7 @@ final class PbrShaderParameters {
                 .resources(ShaderResourceUse.of(1, 0, uniformSize))
                 .build();
         ShaderEntryPoint fragment = ShaderEntryPoint.builder("fragmentMain", ShaderStage.FRAGMENT)
-                .builtins(ShaderBuiltinUsage.POSITION, -1)
+                .builtins(ShaderBuiltinUsage.POSITION | ShaderBuiltinUsage.FRONT_FACING, -1)
                 .inputs(fragmentInputs)
                 .outputs(stageVariable("<retval>", "", 0, FLOAT4))
                 .resources(fragmentResources)
@@ -433,6 +466,10 @@ final class PbrShaderParameters {
         SHADOW_CAMERA_PARAMS = layout.requireHandle("shadowCameraParams");
         SHADOW_FILTER_PARAMS = layout.requireHandle("shadowFilterParams");
         SHADOW_FILTER_SCALES = layout.requireHandle("shadowFilterScales");
+        NORMAL_OCCLUSION = layout.requireHandle("normalOcclusion");
+        IBL_PARAMS = layout.requireHandle("iblParams");
+        IBL_ROTATION = layout.requireHandle("iblRotation");
+        textureTransforms = elements(layout, layout.requireHandle("textureTransforms"));
         SKINNING_PARAMS = layout.findHandle("skinningParams");
         BONE_MATRICES = layout.findHandle("boneMatrices");
 
@@ -561,6 +598,11 @@ final class PbrShaderParameters {
 
     void setUniform4f(ShaderParameterHandle handle, float x, float y, float z, float w) {
         block.setFloat4(handle, x, y, z, w);
+    }
+
+    void textureCoordinates(int slot, TextureCoordinates uv) {
+        block.setFloat4(textureTransforms[slot * 2], uv.m00(), uv.m01(), uv.m02(), uv.set());
+        block.setFloat4(textureTransforms[slot * 2 + 1], uv.m10(), uv.m11(), uv.m12(), 0);
     }
 
     void setUniformMatrix4(ShaderParameterHandle handle, float[] values) {

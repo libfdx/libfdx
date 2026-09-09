@@ -10,13 +10,36 @@ import io.github.libfdx.backend.android.AndroidGraphicsFailureMode;
 import io.github.libfdx.backend.android.AndroidGlesProvider;
 import io.github.libfdx.backend.android.AndroidTextEditorStyle;
 import io.github.libfdx.backend.android.AndroidVulkanProvider;
+import io.github.libfdx.backend.android.AndroidShaderCacheStore;
+import io.github.libfdx.backend.android.AndroidVulkanCacheMergeTest;
+import io.github.libfdx.backend.android.AndroidVulkanLifecycleTest;
+import io.github.libfdx.backend.android.AndroidGlesProgramBinaryTest;
+import io.github.libfdx.backend.android.AndroidGlesResetDetectionTest;
+import io.github.libfdx.backend.android.AndroidShaderPreloadDestination;
+import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
+import io.github.libfdx.graphics.shader.runtime.ShaderArtifactCache;
+import io.github.libfdx.graphics.shader.runtime.ShaderCacheLayer;
 import io.github.libfdx.graphics.wgpu.WGPUConfiguration;
+import io.github.libfdx.graphics.wgpu.WGPUBackend;
+import io.github.libfdx.graphics.wgpu.WGPULoaderBackend;
 import io.github.libfdx.graphics.wgpu.WGPUProvider;
-import io.github.libfdx.tests.AutoTestApplication;
-import io.github.libfdx.tests.TestChooserApplication;
-import io.github.libfdx.tests.TestSelector;
+import io.github.libfdx.graphics.wgpu.WGPUAndroidPreparationTest;
+import io.github.libfdx.graphics.wgpu.WGPUAndroidLifecycleTest;
+import io.github.libfdx.testsupport.AutoTestApplication;
+import io.github.libfdx.testsupport.ManagedTestApplication;
+import io.github.libfdx.testsupport.TestChooserApplication;
+import io.github.libfdx.testsupport.TestSelector;
+import io.github.libfdx.tests.graphics.ShaderPreloadingTest;
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
+import io.github.libfdx.backend.android.AndroidApplicationBackend;
+import io.github.libfdx.testsupport.android.WGPUStartupFaultProvider;
+import io.github.libfdx.testsupport.android.WGPUStartupFaultListener;
 
 /**
  * Represents an android test activity.
@@ -24,6 +47,9 @@ import java.io.File;
  * @author xpenatan
  */
 public class AndroidTestActivity extends AndroidApplicationActivity {
+    private ManagedTestApplication managedTest;
+    private AndroidShaderCacheStore shaderCacheStore;
+    private ShaderArtifactCache shaderCache;
     @Override
     protected AndroidApplicationConfig createApplicationConfig() {
         applyIntentTestProperties();
@@ -31,7 +57,7 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
         String testName = selectedTestName();
         int width = intProperty("libfdx.test.width", defaultWidth(testName));
         int height = intProperty("libfdx.test.height", defaultHeight(testName));
-        return new AndroidApplicationConfig()
+        AndroidApplicationConfig config = new AndroidApplicationConfig()
                 .title("libfdx Test: " + launchDisplayName(testName) + " - " + graphicsDisplayName())
                 .size(width, height)
                 .vSync(true)
@@ -39,6 +65,20 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
                 .nativeTextEditorStyle(nativeTextEditorStyle())
                 .graphicsFailureMode(AndroidGraphicsFailureMode.THROW)
                 .graphics(graphicsProvider());
+        if(Boolean.getBoolean("libfdx.test.wgpuStartupFallback")) {
+            String key = System.getProperty("libfdx.test.wgpuRecoveryKey", "wgpu-validation");
+            if(Boolean.getBoolean("libfdx.test.wgpuRecoveryReset")) {
+                AndroidApplicationBackend.clearGraphicsStartupRecovery(this, key);
+            }
+            WGPUProvider primary = new WGPUProvider().configuration(new WGPUConfiguration()
+                    .loaderBackend(wgpuLoader()).backend(WGPUBackend.VULKAN).offscreenReadback(captureRequested()));
+            String fault = System.getProperty("libfdx.test.wgpuStartupFault", "");
+            config.graphics(fault.isEmpty() ? primary : new WGPUStartupFaultProvider(primary, fault));
+            config.fallbackGraphics(new WGPUProvider().configuration(new WGPUConfiguration()
+                    .loaderBackend(wgpuLoader()).backend(WGPUBackend.OPENGL_ES).offscreenReadback(captureRequested())));
+            config.graphicsStartupRecoveryKey(key);
+        }
+        return config;
     }
 
     @Override
@@ -53,7 +93,52 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
         if (TestSelector.AUTO_TEST_NAME.equalsIgnoreCase(testName)) {
             return new AutoTestApplication();
         }
-        return TestSelector.create(testName, longProperty("libfdx.test.frames", 0L));
+        ApplicationListener test;
+        if ("WGPUAndroidDeviceLossTest".equalsIgnoreCase(testName)) return new WGPUAndroidDeviceLossTest();
+        if ("AndroidVulkanDeviceLossTest".equalsIgnoreCase(testName)) return new AndroidVulkanDeviceLossTest();
+        if ("AndroidNativeCompilationStressTest".equalsIgnoreCase(testName)) return new AndroidNativeCompilationStressTest();
+        if ("AndroidVulkanCacheMergeTest".equalsIgnoreCase(testName)) return new AndroidVulkanCacheMergeTest();
+        if ("AndroidVulkanLifecycleTest".equalsIgnoreCase(testName)) return new AndroidVulkanLifecycleTest();
+        if ("AndroidGlesProgramBinaryTest".equalsIgnoreCase(testName)) return new AndroidGlesProgramBinaryTest();
+        if ("AndroidGlesResetDetectionTest".equalsIgnoreCase(testName)) return new AndroidGlesResetDetectionTest();
+        if ("WGPUAndroidPreparationTest".equalsIgnoreCase(testName)) {
+            return new WGPUAndroidPreparationTest();
+        } else if ("WGPUReadbackTest".equalsIgnoreCase(testName)) {
+            return new WGPUReadbackTest();
+        } else if ("WGPUAndroidLifecycleTest".equalsIgnoreCase(testName)) {
+            return new WGPUAndroidLifecycleTest();
+        } else if ("ShaderPreloadingTest".equals(testName)) {
+            String manifest = System.getProperty("libfdx.test.shaderManifest", "");
+            String destination = System.getProperty("libfdx.test.shaderCaptureDir", "");
+            try {
+                String json = manifest.isEmpty() ? null : new String(Files.readAllBytes(shaderFile(manifest)), StandardCharsets.UTF_8);
+                test = new ShaderPreloadingTest(longProperty("libfdx.test.frames", 0L),
+                        destination.isEmpty() ? null : new AndroidShaderPreloadDestination(shaderFile(destination)), json);
+            } catch (IOException failure) { throw new FdxException("Could not load the shader preload manifest", failure); }
+        } else test = TestSelector.create(testName, longProperty("libfdx.test.frames", 0L));
+        String startupStage = System.getProperty("libfdx.test.wgpuStartupListenerFault", "");
+        if (!startupStage.isEmpty()) test = new WGPUStartupFaultListener(test, startupStage);
+        if (Boolean.getBoolean("libfdx.test.autoChild")) {
+            managedTest = new ManagedTestApplication(test);
+            return managedTest;
+        }
+        return test;
+    }
+
+    @Override protected void onDestroy() {
+        super.onDestroy();
+        if (shaderCacheStore != null) {
+            shaderCacheStore.flushAsync().onSuccess(ignored -> {
+                for (ShaderCacheLayer layer : ShaderCacheLayer.values()) {
+                    System.out.println("[info] SHADER_CACHE layer=" + layer + " " + shaderCache.metrics(layer));
+                }
+            }).onFailure(failure -> System.out.println("[info] SHADER_CACHE flush failed: " + failure));
+            shaderCacheStore.dispose();
+        }
+        if (managedTest != null) {
+            managedTest.verifyCompleted();
+            System.out.println("[libfdx-auto] PASS " + System.getProperty("libfdx.test.autoToken", ""));
+        }
     }
 
     private void applyIntentTestProperties() {
@@ -79,6 +164,13 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
         }
     }
 
+    private Path shaderFile(String relativePath) {
+        Path directory = getFilesDir().toPath().toAbsolutePath().normalize();
+        Path result = directory.resolve(relativePath).normalize();
+        if (!result.startsWith(directory)) throw new IllegalArgumentException("Shader capture/manifest paths must stay in app-private files");
+        return result;
+    }
+
     private void configurePlatformTestProperties() {
         if (System.getProperty("libfdx.test.desktopImageCapture") == null) {
             System.setProperty("libfdx.test.desktopImageCapture", "false");
@@ -90,16 +182,51 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
 
     private GraphicsAttachmentProvider graphicsProvider() {
         if ("gles".equalsIgnoreCase(graphicsName())) {
-            return new AndroidGlesProvider();
+            AndroidGlesProvider provider = new AndroidGlesProvider();
+            int workers = intProperty("libfdx.test.shaderWorkers", 0);
+            if (workers != 0) provider.preparationWorkerLimit(workers);
+            provider.shaderCache(createShaderCache());
+            return provider;
         }
         if ("vulkan".equalsIgnoreCase(graphicsName()) || "vk".equalsIgnoreCase(graphicsName())) {
-            return new AndroidVulkanProvider();
+            AndroidVulkanProvider provider = new AndroidVulkanProvider();
+            int workers = intProperty("libfdx.test.shaderWorkers", 0);
+            if (workers != 0) provider.configuration().preparationWorkerLimit(workers);
+            provider.configuration().shaderCache(createShaderCache());
+            return provider;
         }
         WGPUProvider provider = new WGPUProvider();
-        if (captureRequested()) {
-            provider.configuration(new WGPUConfiguration().offscreenReadback(true));
-        }
+        // Explicit selection lets emulator diagnostics distinguish Vulkan from a GL fallback.
+        String requestedBackend = System.getProperty("libfdx.test.wgpuBackend", "default");
+        WGPUBackend backend = switch (requestedBackend) {
+            case "default" -> WGPUBackend.DEFAULT;
+            case "vulkan" -> WGPUBackend.VULKAN;
+            case "gles" -> WGPUBackend.OPENGL_ES;
+            default -> throw new IllegalArgumentException("Unknown Android WGPU backend: " + requestedBackend
+                    + ". Expected default, vulkan or gles.");
+        };
+        System.out.println("[info] Android WGPU requested backend: " + requestedBackend);
+        System.out.println("[info] Android WGPU requested implementation: " + wgpuLoader());
+        provider.configuration(new WGPUConfiguration().loaderBackend(wgpuLoader()).backend(backend).offscreenReadback(captureRequested())
+                .shaderCache(createShaderCache()));
+        int workers = intProperty("libfdx.test.shaderWorkers", 0);
+        if (workers != 0) provider.configuration().preparationWorkerLimit(workers);
         return provider;
+    }
+
+    private static WGPULoaderBackend wgpuLoader() {
+        return WGPULoaderBackend.valueOf(System.getProperty("libfdx.test.wgpuLoader", "WGPU").toUpperCase(Locale.ROOT));
+    }
+
+    private ShaderArtifactCache createShaderCache() {
+        String directory = System.getProperty("libfdx.test.shaderCacheDirectory", "");
+        if (directory.isEmpty()) return null;
+        if (!directory.matches("[A-Za-z0-9_-]+")) {
+            throw new IllegalArgumentException("Android shaderCacheDirectory must be a name under the app's private cache directory");
+        }
+        shaderCacheStore = new AndroidShaderCacheStore(getCacheDir().toPath().resolve(directory), 128L * 1024 * 1024);
+        shaderCache = new ShaderArtifactCache(shaderCacheStore);
+        return shaderCache;
     }
 
     private boolean captureRequested() {
@@ -108,13 +235,13 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
     }
 
     private void configureAndroidCapturePath() {
-        String capture = System.getProperty("libfdx.test.capture", "");
-        if (capture == null || capture.trim().length() == 0) {
-            return;
-        }
-        File captureFile = new File(capture);
-        if (!captureFile.isAbsolute()) {
-            System.setProperty("libfdx.test.capture", new File(getFilesDir(), capture).getAbsolutePath());
+        for (String property : new String[]{"libfdx.test.capture", "libfdx.test.shaderCapturePending", "libfdx.test.shaderPendingCapture"}) {
+            String capture = System.getProperty(property, "");
+            if (capture == null || capture.trim().length() == 0) continue;
+            File captureFile = new File(capture);
+            if (!captureFile.isAbsolute()) {
+                System.setProperty(property, new File(getFilesDir(), capture).getAbsolutePath());
+            }
         }
     }
 
@@ -148,7 +275,7 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
             if (TestSelector.AUTO_TEST_NAME.equalsIgnoreCase(requested)) {
                 return TestSelector.AUTO_TEST_NAME;
             }
-            return requested;
+            return TestSelector.normalize(requested);
         }
         String mode = trim(System.getProperty("libfdx.test.mode"));
         if (TestSelector.AUTO_TEST_NAME.equalsIgnoreCase(mode)) {
@@ -157,7 +284,7 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
         if (isSelector(mode) || shouldOpenSelector()) {
             return TestSelector.SELECTOR_NAME;
         }
-        return TestSelector.DEFAULT_TEST_NAME;
+        return TestSelector.defaultTestName();
     }
 
     private String requestedTestName() {

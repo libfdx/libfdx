@@ -3,15 +3,48 @@ package io.github.libfdx.graphics.d3d12;
 import io.github.libfdx.collections.Array;
 import io.github.libfdx.collections.IntArray;
 import io.github.libfdx.core.FdxException;
-
+import io.github.libfdx.graphics.RenderPassDescriptor;
+import io.github.libfdx.graphics.RenderPipelineDescriptor;
+import io.github.libfdx.graphics.TextureUsage;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.concurrent.Callable;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 final class D3D12FfmContext implements AutoCloseable {
+    private static final int RGBA16_FLOAT_FORMAT = 10; // DXGI_FORMAT_R16G16B16A16_FLOAT
+
+    boolean supportsHdr() {
+        requireOpen();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment support = arena.allocate(12, 4); // D3D12_FEATURE_DATA_FORMAT_SUPPORT
+            support.set(D3D12Ffm.INT, 0, RGBA16_FLOAT_FORMAT);
+            int result = D3D12Ffm.comIntAIAI(device, D3D12Ffm.SLOT_DEVICE_CHECK_FEATURE_SUPPORT, 3, support, 12);
+            int required = 0x20 | 0x200 | 0x1000 | 0x4000 | 0x8000;
+            return result >= 0 && (support.get(D3D12Ffm.INT, 4) & required) == required;
+        }
+    }
     private static final int CPU_DESCRIPTOR_CAPACITY = 8192;
+    boolean supportsMultisample() {
+        requireOpen();
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment support = arena.allocate(16, 4);
+            for (int format : new int[] {28, 29, 87, 91, 10, 41, 40}) {
+                support.fill((byte) 0);
+                support.set(D3D12Ffm.INT, 0, format);
+                support.set(D3D12Ffm.INT, 4, 4);
+                if (D3D12Ffm.comIntAIAI(device, D3D12Ffm.SLOT_DEVICE_CHECK_FEATURE_SUPPORT, 4, support, 16) < 0
+                        || support.get(D3D12Ffm.INT, 12) == 0) return false;
+            }
+            return true;
+        }
+    }
     private static final int FRAME_DESCRIPTOR_CAPACITY = 8192;
     private static final int FRAME_SAMPLER_DESCRIPTOR_CAPACITY = 2048;
     private static final long UNIFORM_CAPACITY = 16L * 1024L * 1024L;
@@ -22,6 +55,7 @@ final class D3D12FfmContext implements AutoCloseable {
     private final MemorySegment window;
     private final boolean vSync;
     private final boolean validation;
+    private final boolean optimizeShaders;
     private final int frameCount;
     private final Arena nativeArena = Arena.ofShared();
     private final Array<FrameSlot> frames = new Array<FrameSlot>();
@@ -34,14 +68,30 @@ final class D3D12FfmContext implements AutoCloseable {
     private final Array<RetiredResource> retired = new Array<RetiredResource>();
     private final BufferAllocation[] vertexBuffers = new BufferAllocation[MAX_VERTEX_BUFFERS];
     private final Texture[] textures = new Texture[MAX_TEXTURES];
+    private final long[] textureDescriptorKeys = new long[MAX_TEXTURES];
+    private final long[] samplerDescriptorKeys = new long[MAX_TEXTURES];
     private final ResourceRegistry resources = new ResourceRegistry();
+    private final TextureAllocation[] multipleColors = new TextureAllocation[8];
+    private final TextureAllocation[] multipleResolves = new TextureAllocation[8];
+    private final int[] multipleColorLevels = new int[8];
+    private final int[] multipleResolveLevels = new int[8];
+    private final int[] multipleFormats = new int[8];
+    private int multipleColorCount;
+    private final LinkedHashMap<ShaderSource, MemorySegment> shaderBytecode =
+            new LinkedHashMap<>(32, 0.75f, true);
+
+    private D3D12DxcCompiler shaderCompiler;
+
+    // Compiler distribution and effective options are immutable for this cache's context lifetime.
+    private record ShaderSource(String source, String entryPoint, String target) { }
 
     private final MemorySegment frameBarrier = nativeArena.allocate(D3D12Ffm.SIZE_RESOURCE_BARRIER, 8);
     private final MemorySegment frameViewport = nativeArena.allocate(D3D12Ffm.SIZE_VIEWPORT, 4);
+    private final MemorySegment zeroBlendFactor = nativeArena.allocate(16, 4);
     private final MemorySegment frameRect = nativeArena.allocate(D3D12Ffm.SIZE_RECT, 4);
     private final MemorySegment frameColor = nativeArena.allocate(16, 4);
     private final MemorySegment framePointerArray = nativeArena.allocate(16, 8);
-    private final MemorySegment frameRtvHandle = nativeArena.allocate(8, 8);
+    private final MemorySegment frameRtvHandle = nativeArena.allocate(8 * 8, 8);
     private final MemorySegment frameDsvHandle = nativeArena.allocate(8, 8);
     private final MemorySegment frameVertexView = nativeArena.allocate(D3D12Ffm.SIZE_VERTEX_BUFFER_VIEW, 8);
     private final MemorySegment frameIndexView = nativeArena.allocate(D3D12Ffm.SIZE_INDEX_BUFFER_VIEW, 8);
@@ -50,6 +100,7 @@ final class D3D12FfmContext implements AutoCloseable {
     private int width;
     private int height;
     private String adapterName = "Unknown Direct3D 12 adapter";
+    private String pipelineCacheIdentity;
     private MemorySegment factory = D3D12Ffm.NULL;
     private MemorySegment adapter = D3D12Ffm.NULL;
     private MemorySegment device = D3D12Ffm.NULL;
@@ -76,6 +127,7 @@ final class D3D12FfmContext implements AutoCloseable {
     private boolean frameOpen;
     private boolean passOpen;
     private boolean closed;
+    private int removalReason;
     private Texture renderTarget;
     private TextureAllocation renderTargetAllocation;
     private int renderTargetHeight;
@@ -83,7 +135,7 @@ final class D3D12FfmContext implements AutoCloseable {
     private BufferAllocation indexBuffer;
 
     D3D12FfmContext(long windowHandle, int width, int height, boolean vSync,
-            boolean validation, int framesInFlight) {
+            boolean validation, boolean optimizeShaders, int framesInFlight) {
         if (windowHandle == 0L) {
             throw new FdxException("Direct3D 12 window handle is null");
         }
@@ -95,6 +147,7 @@ final class D3D12FfmContext implements AutoCloseable {
         this.height = Math.max(1, height);
         this.vSync = vSync;
         this.validation = validation;
+        this.optimizeShaders = optimizeShaders;
         frameCount = framesInFlight;
     }
 
@@ -119,6 +172,8 @@ final class D3D12FfmContext implements AutoCloseable {
                     "Could not create a DXGI factory");
             factory = D3D12Ffm.pointer(output);
             selectAdapter(arena);
+            shaderCompiler = new D3D12DxcCompiler();
+            System.out.println("[libfdx-d3d12] runtime compiler: DXC " + D3D12DxcCompiler.version() + " / Shader Model 6.0");
             createQueue(arena);
             createDescriptorHeaps(arena);
             createFrames();
@@ -156,6 +211,8 @@ final class D3D12FfmContext implements AutoCloseable {
         return adapterName;
     }
 
+    String pipelineCacheIdentity() { requireOpen(); return pipelineCacheIdentity; }
+
     void resize(int newWidth, int newHeight) {
         requireOpen();
         if (frameOpen) {
@@ -189,8 +246,7 @@ final class D3D12FfmContext implements AutoCloseable {
                 "Could not reset a Direct3D 12 command allocator");
         D3D12Ffm.check(D3D12Ffm.comIntAAA(commands, D3D12Ffm.SLOT_COMMANDS_RESET,
                 frame.allocator, D3D12Ffm.NULL), "Could not reset a Direct3D 12 command list");
-        frame.srvCursor = 0;
-        frame.samplerCursor = 0;
+        frame.descriptorTables.clear();
         frame.uniformCursor = 0L;
         pipeline = null;
         Arrays.fill(textures, null);
@@ -223,7 +279,7 @@ final class D3D12FfmContext implements AutoCloseable {
         submitFrame(true);
     }
 
-    void beginPass(long textureHandle, boolean clear, float red, float green, float blue, float alpha,
+    void beginPass(long textureHandle, int mipLevel, long depthTextureHandle, boolean clear, float red, float green, float blue, float alpha,
             boolean store, boolean depthEnabled, boolean depthClear, float depthClearValue) {
         requireOpen();
         if (!frameOpen || passOpen) {
@@ -232,7 +288,7 @@ final class D3D12FfmContext implements AutoCloseable {
         Texture target = textureHandle != 0L ? resource(textureHandle, Texture.class, "render texture") : null;
         renderTarget = target;
         renderTargetAllocation = null;
-        renderTargetHeight = target != null ? target.height : height;
+        renderTargetHeight = target != null ? Math.max(1, target.height >> mipLevel) : height;
         long rtv = frame.rtv;
         long dsv = frame.dsv;
         if (target != null) {
@@ -246,10 +302,17 @@ final class D3D12FfmContext implements AutoCloseable {
                 D3D12Ffm.comVoidAIA(commands, D3D12Ffm.SLOT_COMMANDS_RESOURCE_BARRIER, 1, frameBarrier);
                 allocation.state = D3D12Ffm.D3D12_RESOURCE_STATE_RENDER_TARGET;
             }
-            rtv = allocation.rtv;
+            rtv = allocation.mipRtvs[mipLevel];
             dsv = target.dsv;
             renderTargetAllocation = allocation;
             markRecorded(allocation);
+        }
+        if (depthTextureHandle != 0) {
+            Texture explicitDepth = resource(depthTextureHandle, Texture.class, "depth texture");
+            if (explicitDepth.format != D3D12Ffm.DXGI_FORMAT_D32_FLOAT || explicitDepth.dsvIndex == INVALID_DESCRIPTOR) {
+                throw new FdxException("Direct3D 12 depth attachment is not a depth texture");
+            }
+            dsv = explicitDepth.dsv;
         }
         frameRtvHandle.set(D3D12Ffm.LONG, 0, rtv);
         frameDsvHandle.set(D3D12Ffm.LONG, 0, dsv);
@@ -269,8 +332,8 @@ final class D3D12FfmContext implements AutoCloseable {
                     (byte)0, 0, D3D12Ffm.NULL);
         }
         setViewport(frameViewport, 0.0f, 0.0f,
-                target != null ? target.width : width, renderTargetHeight);
-        setRect(frameRect, 0, 0, target != null ? target.width : width, renderTargetHeight);
+                target != null ? Math.max(1, target.width >> mipLevel) : width, renderTargetHeight);
+        setRect(frameRect, 0, 0, target != null ? Math.max(1, target.width >> mipLevel) : width, renderTargetHeight);
         D3D12Ffm.comVoidAIA(commands, D3D12Ffm.SLOT_COMMANDS_RS_SET_VIEWPORTS, 1, frameViewport);
         D3D12Ffm.comVoidAIA(commands, D3D12Ffm.SLOT_COMMANDS_RS_SET_SCISSORS, 1, frameRect);
         pipeline = null;
@@ -281,10 +344,77 @@ final class D3D12FfmContext implements AutoCloseable {
         }
     }
 
+    void beginMultiplePass(RenderPassDescriptor descriptor) {
+        var colors = descriptor.colorAttachments();
+        D3D12TextureView first = (D3D12TextureView) colors[0].view();
+        var depth = descriptor.depthStencilAttachment();
+        long depthHandle = depth == null ? 0 : ((D3D12TextureView) depth.view()).nativeHandle();
+        var firstLoad = colors[0].loadOp();
+        beginPass(first.nativeHandle(), first.mipLevel, depthHandle, firstLoad.isClear(),
+                firstLoad.red(), firstLoad.green(), firstLoad.blue(), firstLoad.alpha(), colors[0].storeOp().isStore(),
+                descriptor.depthEnabled(), depth != null ? depth.depthLoadOp().isClear() : descriptor.depthClearEnabled(),
+                descriptor.depthClearValue());
+        multipleColorCount = colors.length;
+        for (int i = 0; i < colors.length; i++) {
+            D3D12TextureView view = (D3D12TextureView) colors[i].view();
+            Texture texture = resource(view.nativeHandle(), Texture.class, "color attachment");
+            TextureAllocation allocation = texture.allocations.get(texture.current);
+            multipleColors[i] = allocation;
+            multipleColorLevels[i] = view.mipLevel;
+            multipleFormats[i] = texture.format;
+            transitionTexture(allocation, D3D12Ffm.D3D12_RESOURCE_STATE_RENDER_TARGET);
+            markRecorded(allocation);
+            long rtv = allocation.mipRtvs[view.mipLevel];
+            frameRtvHandle.set(D3D12Ffm.LONG, 8L * i, rtv);
+            var load = colors[i].loadOp();
+            if (i > 0 && load.isClear()) {
+                frameColor.set(D3D12Ffm.FLOAT, 0, load.red());
+                frameColor.set(D3D12Ffm.FLOAT, 4, load.green());
+                frameColor.set(D3D12Ffm.FLOAT, 8, load.blue());
+                frameColor.set(D3D12Ffm.FLOAT, 12, load.alpha());
+                D3D12Ffm.comVoidALAIA(commands, D3D12Ffm.SLOT_COMMANDS_CLEAR_RENDER_TARGET, rtv, frameColor, 0, D3D12Ffm.NULL);
+            }
+            if (colors[i].resolveView() != null) {
+                D3D12TextureView resolve = (D3D12TextureView) colors[i].resolveView();
+                Texture resolveTexture = resource(resolve.nativeHandle(), Texture.class, "resolve attachment");
+                multipleResolves[i] = resolveTexture.allocations.get(resolveTexture.current);
+                multipleResolveLevels[i] = resolve.mipLevel;
+                markRecorded(multipleResolves[i]);
+            }
+        }
+        D3D12Ffm.comVoidAIAIA(commands, D3D12Ffm.SLOT_COMMANDS_OM_SET_RENDER_TARGETS,
+                colors.length, frameRtvHandle, 0, descriptor.depthEnabled() ? frameDsvHandle : D3D12Ffm.NULL);
+    }
+
+    private void transitionTexture(TextureAllocation allocation, int state) {
+        if (allocation.state == state) return;
+        transition(frameBarrier, allocation.resource, allocation.state, state);
+        D3D12Ffm.comVoidAIA(commands, D3D12Ffm.SLOT_COMMANDS_RESOURCE_BARRIER, 1, frameBarrier);
+        allocation.state = state;
+    }
+
     void endPass() {
         requireOpen();
         if (!passOpen) {
             return;
+        }
+        if (multipleColorCount > 0) {
+            for (int i = 0; i < multipleColorCount; i++) {
+                TextureAllocation color = multipleColors[i];
+                TextureAllocation resolve = multipleResolves[i];
+                if (resolve != null) {
+                    transitionTexture(color, 0x2000); // D3D12_RESOURCE_STATE_RESOLVE_SOURCE
+                    transitionTexture(resolve, 0x1000); // D3D12_RESOURCE_STATE_RESOLVE_DEST
+                    D3D12Ffm.comVoidAAIAII(commands, D3D12Ffm.SLOT_COMMANDS_RESOLVE_SUBRESOURCE,
+                            resolve.resource, multipleResolveLevels[i], color.resource, multipleColorLevels[i], multipleFormats[i]);
+                    transitionTexture(resolve, D3D12Ffm.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                }
+                transitionTexture(color, D3D12Ffm.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                multipleColors[i] = null;
+                multipleResolves[i] = null;
+            }
+            multipleColorCount = 0;
+            renderTargetAllocation = null;
         }
         if (renderTargetAllocation != null) {
             transition(frameBarrier, renderTargetAllocation.resource,
@@ -307,6 +437,7 @@ final class D3D12FfmContext implements AutoCloseable {
         pipeline = value;
         Arrays.fill(textures, null);
         D3D12Ffm.comVoidAA(commands, D3D12Ffm.SLOT_COMMANDS_SET_PIPELINE_STATE, value.state);
+        D3D12Ffm.comVoidAA(commands, D3D12Ffm.SLOT_COMMANDS_OM_SET_BLEND_FACTOR, zeroBlendFactor);
         D3D12Ffm.comVoidAA(commands, D3D12Ffm.SLOT_COMMANDS_SET_GRAPHICS_ROOT_SIGNATURE,
                 value.rootSignature);
         D3D12Ffm.comVoidAI(commands, D3D12Ffm.SLOT_COMMANDS_IA_SET_PRIMITIVE_TOPOLOGY,
@@ -441,9 +572,27 @@ final class D3D12FfmContext implements AutoCloseable {
                 if (D3D12Ffm.failed(createResult)) {
                     continue;
                 }
+                MemorySegment selectedDevice = D3D12Ffm.pointer(deviceOutput);
+                MemorySegment shaderModel = arena.allocate(D3D12Ffm.INT);
+                shaderModel.set(D3D12Ffm.INT, 0, 0x60);
+                int shaderModelResult = D3D12Ffm.comIntAIAI(selectedDevice,
+                        D3D12Ffm.SLOT_DEVICE_CHECK_FEATURE_SUPPORT, 7, shaderModel, 4);
+                if (!supportsShaderModel6(shaderModelResult, shaderModel.get(D3D12Ffm.INT, 0))) {
+                    D3D12Ffm.release(selectedDevice);
+                    continue;
+                }
                 adapter = candidate;
                 device = D3D12Ffm.pointer(deviceOutput);
                 adapterName = utf16(description, 0, 128);
+                MemorySegment driverVersion = arena.allocate(D3D12Ffm.LONG);
+                int driverResult = D3D12Ffm.comIntAAA(candidate,
+                        D3D12Ffm.SLOT_ADAPTER_CHECK_INTERFACE_SUPPORT, D3D12Ffm.IID_IDXGI_DEVICE, driverVersion);
+                if (!D3D12Ffm.failed(driverResult)) {
+                    pipelineCacheIdentity = description.get(D3D12Ffm.INT, 256) + ":"
+                            + description.get(D3D12Ffm.INT, 260) + ":" + description.get(D3D12Ffm.INT, 264)
+                            + ":" + description.get(D3D12Ffm.INT, 268) + ":" + description.get(D3D12Ffm.LONG, 296)
+                            + ":" + driverVersion.get(D3D12Ffm.LONG, 0);
+                }
                 accepted = true;
                 return;
             } finally {
@@ -452,7 +601,11 @@ final class D3D12FfmContext implements AutoCloseable {
                 }
             }
         }
-        throw new FdxException("No hardware adapter supports Direct3D 12 feature level 11_0");
+        throw new FdxException("No hardware adapter supports Direct3D 12 feature level 11_0 and Shader Model 6.0. Update the graphics driver or use another graphics provider");
+    }
+
+    static boolean supportsShaderModel6(int result, int highestShaderModel) {
+        return result >= 0 && highestShaderModel >= 0x60;
     }
 
     private void createQueue(Arena arena) {
@@ -596,9 +749,14 @@ final class D3D12FfmContext implements AutoCloseable {
     }
 
     private MemorySegment createDepth(Arena arena, int targetWidth, int targetHeight, long handle) {
+        return createDepth(arena, targetWidth, targetHeight, handle, 1);
+    }
+
+    private MemorySegment createDepth(Arena arena, int targetWidth, int targetHeight, long handle, int samples) {
         MemorySegment descriptor = textureDescriptor(arena, targetWidth, targetHeight,
                 D3D12Ffm.DXGI_FORMAT_D32_FLOAT,
                 D3D12Ffm.D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+        descriptor.set(D3D12Ffm.INT, D3D12Ffm.OFF_RESOURCE_DESC_SAMPLE_COUNT, samples);
         MemorySegment clear = arena.allocate(D3D12Ffm.SIZE_CLEAR_VALUE, 4);
         clear.set(D3D12Ffm.INT, 0, D3D12Ffm.DXGI_FORMAT_D32_FLOAT);
         clear.set(D3D12Ffm.FLOAT, 4, 1.0f);
@@ -607,7 +765,7 @@ final class D3D12FfmContext implements AutoCloseable {
                 "Could not create a Direct3D 12 depth texture");
         MemorySegment view = arena.allocate(D3D12Ffm.SIZE_DSV_DESC, 4);
         view.set(D3D12Ffm.INT, 0, D3D12Ffm.DXGI_FORMAT_D32_FLOAT);
-        view.set(D3D12Ffm.INT, 4, D3D12Ffm.D3D12_DSV_DIMENSION_TEXTURE2D);
+        view.set(D3D12Ffm.INT, 4, samples > 1 ? 5 : D3D12Ffm.D3D12_DSV_DIMENSION_TEXTURE2D);
         D3D12Ffm.comVoidAAAL(device, D3D12Ffm.SLOT_DEVICE_CREATE_DEPTH_STENCIL_VIEW,
                 depth, view, handle);
         return depth;
@@ -655,8 +813,9 @@ final class D3D12FfmContext implements AutoCloseable {
     }
 
     private void waitForFence(long value) {
-        if (value == 0L || D3D12Ffm.comLongA(fence,
-                D3D12Ffm.SLOT_FENCE_GET_COMPLETED_VALUE) >= value) {
+        long completed = D3D12Ffm.comLongA(fence, D3D12Ffm.SLOT_FENCE_GET_COMPLETED_VALUE);
+        if (completed == -1L) D3D12Ffm.check(deviceRemovedReason(), "Direct3D 12 device was removed");
+        if (value == 0L || completed >= value) {
             return;
         }
         D3D12Ffm.check(D3D12Ffm.comIntALA(fence,
@@ -671,6 +830,7 @@ final class D3D12FfmContext implements AutoCloseable {
         if (D3D12Ffm.isNull(queue) || D3D12Ffm.isNull(fence)) {
             return;
         }
+        if (deviceRemovedReason() != 0) return;
         long value = nextFence++;
         D3D12Ffm.check(D3D12Ffm.comIntAAL(queue, D3D12Ffm.SLOT_QUEUE_SIGNAL, fence, value),
                 "Could not signal the Direct3D 12 queue");
@@ -767,16 +927,6 @@ final class D3D12FfmContext implements AutoCloseable {
         }
         int textureCount = pipeline.sampledTextureCount;
         int samplerCount = pipeline.samplerCount;
-        if (frame.srvCursor + textureCount > FRAME_DESCRIPTOR_CAPACITY
-                || frame.samplerCursor + samplerCount > FRAME_SAMPLER_DESCRIPTOR_CAPACITY) {
-            throw new FdxException("Direct3D 12 frame descriptor heap is exhausted");
-        }
-        long srvCpu = descriptorHeapCpuHandle(frame.srvHeap) + (long)frame.srvCursor * srvSize;
-        long srvGpu = descriptorHeapGpuHandle(frame.srvHeap) + (long)frame.srvCursor * srvSize;
-        long samplerCpu = samplerCount == 0 ? 0L : descriptorHeapCpuHandle(frame.samplerHeap)
-                + (long)frame.samplerCursor * samplerSize;
-        long samplerGpu = samplerCount == 0 ? 0L : descriptorHeapGpuHandle(frame.samplerHeap)
-                + (long)frame.samplerCursor * samplerSize;
         for (int index = 0; index < textureCount; index++) {
             Texture texture = textures[index];
             if (texture == null) {
@@ -786,15 +936,28 @@ final class D3D12FfmContext implements AutoCloseable {
             if (allocation.srvIndex == INVALID_DESCRIPTOR) {
                 throw new FdxException("Direct3D 12 texture slot is not sampleable");
             }
+            textureDescriptorKeys[index] = allocation.srv;
+            samplerDescriptorKeys[index] = texture.sampler;
+            markRecorded(allocation);
+        }
+        int table = frame.descriptorTables.acquire(textureDescriptorKeys, textureCount, samplerDescriptorKeys, samplerCount);
+        int srvStart = frame.descriptorTables.textureStart(table);
+        int samplerStart = frame.descriptorTables.samplerStart(table);
+        long srvCpu = descriptorHeapCpuHandle(frame.srvHeap) + (long)srvStart * srvSize;
+        long srvGpu = descriptorHeapGpuHandle(frame.srvHeap) + (long)srvStart * srvSize;
+        long samplerCpu = samplerCount == 0 ? 0L : descriptorHeapCpuHandle(frame.samplerHeap)
+                + (long)samplerStart * samplerSize;
+        long samplerGpu = samplerCount == 0 ? 0L : descriptorHeapGpuHandle(frame.samplerHeap)
+                + (long)samplerStart * samplerSize;
+        for (int index = 0; frame.descriptorTables.inserted() && index < textureCount; index++) {
             D3D12Ffm.comVoidAILLI(device, D3D12Ffm.SLOT_DEVICE_COPY_DESCRIPTORS_SIMPLE,
-                    1, srvCpu + (long)index * srvSize, allocation.srv,
+                    1, srvCpu + (long)index * srvSize, textureDescriptorKeys[index],
                     D3D12Ffm.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
             if (index < samplerCount) {
                 D3D12Ffm.comVoidAILLI(device, D3D12Ffm.SLOT_DEVICE_COPY_DESCRIPTORS_SIMPLE,
-                        1, samplerCpu + (long)index * samplerSize, texture.sampler,
+                        1, samplerCpu + (long)index * samplerSize, samplerDescriptorKeys[index],
                         D3D12Ffm.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
             }
-            markRecorded(allocation);
         }
         D3D12Ffm.comVoidAIL(commands, D3D12Ffm.SLOT_COMMANDS_SET_GRAPHICS_ROOT_DESCRIPTOR_TABLE,
                 pipeline.textureRoot, srvGpu);
@@ -802,8 +965,6 @@ final class D3D12FfmContext implements AutoCloseable {
             D3D12Ffm.comVoidAIL(commands, D3D12Ffm.SLOT_COMMANDS_SET_GRAPHICS_ROOT_DESCRIPTOR_TABLE,
                     pipeline.samplerRoot, samplerGpu);
         }
-        frame.srvCursor += textureCount;
-        frame.samplerCursor += samplerCount;
     }
 
     private void transition(MemorySegment barrier, MemorySegment resource, int before, int after) {
@@ -928,17 +1089,161 @@ final class D3D12FfmContext implements AutoCloseable {
         }
     }
 
+    long createComputePipeline(String source, String entry, int[] types, int[] bindings, int[] groups) {
+        requireOpen();
+        ComputePipeline created = new ComputePipeline(types.clone());
+        MemorySegment bytecode = D3D12Ffm.NULL;
+        try (Arena arena = Arena.ofConfined()) {
+            bytecode = compileShader(source, entry, "cs_6_0", "compute");
+            int count = types.length;
+            MemorySegment parameters = count == 0 ? D3D12Ffm.NULL : arena.allocate((long)count * D3D12Ffm.SIZE_ROOT_PARAMETER, 8);
+            for (int i = 0; i < count; i++) {
+                var parameter = parameters.asSlice((long)i * D3D12Ffm.SIZE_ROOT_PARAMETER, D3D12Ffm.SIZE_ROOT_PARAMETER);
+                if (types[i] == 3) {
+                    var range = arena.allocate(20, 4);
+                    range.set(D3D12Ffm.INT, 0, 1); // UAV range
+                    range.set(D3D12Ffm.INT, 4, 1);
+                    range.set(D3D12Ffm.INT, 8, bindings[i]);
+                    range.set(D3D12Ffm.INT, 12, groups[i]);
+                    fillDescriptorTable(parameter, 1, range);
+                } else {
+                    parameter.set(D3D12Ffm.INT, 0, types[i] == 0 ? 4 : types[i] == 1 ? 3 : 2);
+                    parameter.set(D3D12Ffm.INT, D3D12Ffm.OFF_ROOT_PARAMETER_UNION, bindings[i]);
+                    parameter.set(D3D12Ffm.INT, D3D12Ffm.OFF_ROOT_PARAMETER_UNION + 4, groups[i]);
+                }
+                parameter.set(D3D12Ffm.INT, D3D12Ffm.OFF_ROOT_PARAMETER_VISIBILITY, 0);
+            }
+            var root = arena.allocate(D3D12Ffm.SIZE_ROOT_SIGNATURE_DESC, 8);
+            root.set(D3D12Ffm.INT, 0, count);
+            root.set(D3D12Ffm.ADDRESS, D3D12Ffm.OFF_ROOT_SIGNATURE_PARAMETERS, parameters);
+            var serializedOutput = pointerOutput(arena);
+            var errorsOutput = pointerOutput(arena);
+            int result = D3D12Ffm.serializeRootSignature(root, serializedOutput, errorsOutput);
+            var errors = D3D12Ffm.pointer(errorsOutput);
+            String details = blobText(errors);
+            D3D12Ffm.release(errors);
+            D3D12Ffm.check(result, "Could not serialize compute root signature: " + details);
+            var serialized = D3D12Ffm.pointer(serializedOutput);
+            var output = pointerOutput(arena);
+            try {
+                D3D12Ffm.check(D3D12Ffm.comIntAIALAA(device, D3D12Ffm.SLOT_DEVICE_CREATE_ROOT_SIGNATURE, 0,
+                        D3D12Ffm.comAddressA(serialized, D3D12Ffm.SLOT_BLOB_GET_BUFFER_POINTER),
+                        D3D12Ffm.comLongA(serialized, D3D12Ffm.SLOT_BLOB_GET_BUFFER_SIZE), D3D12Ffm.IID_ID3D12_ROOT_SIGNATURE, output),
+                        "Could not create compute root signature");
+                created.root = D3D12Ffm.pointer(output);
+            } finally { D3D12Ffm.release(serialized); }
+            var descriptor = arena.allocate(56, 8); // D3D12_COMPUTE_PIPELINE_STATE_DESC, Windows x64
+            descriptor.set(D3D12Ffm.ADDRESS, 0, created.root);
+            descriptor.set(D3D12Ffm.ADDRESS, 8, D3D12Ffm.comAddressA(bytecode, D3D12Ffm.SLOT_BLOB_GET_BUFFER_POINTER));
+            descriptor.set(D3D12Ffm.LONG, 16, D3D12Ffm.comLongA(bytecode, D3D12Ffm.SLOT_BLOB_GET_BUFFER_SIZE));
+            output.set(D3D12Ffm.ADDRESS, 0, D3D12Ffm.NULL);
+            D3D12Ffm.check(D3D12Ffm.comIntAAAA(device, 11, descriptor, D3D12Ffm.IID_ID3D12_PIPELINE_STATE, output), "Could not create compute pipeline");
+            created.state = D3D12Ffm.pointer(output);
+            return register(created);
+        } catch (RuntimeException | Error failure) { created.close(); throw failure; }
+        finally { D3D12Ffm.release(bytecode); }
+    }
+
+    void destroyComputePipeline(long handle) { retire(removeResource(handle, ComputePipeline.class, "compute pipeline")); }
+
+    void dispatchCompute(long handle, long[] handles, long[] offsets, int x, int y, int z) {
+        requireOpen();
+        if (!frameOpen || passOpen) throw new FdxException("D3D12 compute requires a frame outside a render pass");
+        ComputePipeline value = resource(handle, ComputePipeline.class, "compute pipeline");
+        D3D12Ffm.comVoidAA(commands, D3D12Ffm.SLOT_COMMANDS_SET_PIPELINE_STATE, value.state);
+        D3D12Ffm.comVoidAA(commands, 29, value.root);
+        int images = 0;
+        for (int i = 0; i < value.types.length; i++) {
+            if (value.types[i] == 3) {
+                Texture texture = resource(handles[i], Texture.class, "compute texture");
+                TextureAllocation allocation = texture.allocations.get(texture.current);
+                if (allocation.uavIndex == INVALID_DESCRIPTOR) throw new FdxException("Texture has no UAV binding");
+                textureDescriptorKeys[images++] = allocation.uav;
+                transitionTexture(allocation, 8); // UNORDERED_ACCESS
+                markRecorded(allocation);
+            } else {
+                Buffer buffer = resource(handles[i], Buffer.class, "compute buffer");
+                BufferAllocation allocation = buffer.allocations.get(buffer.current);
+                if (value.types[i] != 2 && buffer.usage != 3) throw new FdxException("Compute storage requires a storage buffer");
+                if (value.types[i] != 2) transitionBuffer(allocation, value.types[i] == 0 ? 8 : 64);
+                markRecorded(allocation);
+                long address = D3D12Ffm.comLongA(allocation.resource, D3D12Ffm.SLOT_RESOURCE_GET_GPU_VIRTUAL_ADDRESS) + offsets[i];
+                D3D12Ffm.comVoidAIL(commands, value.types[i] == 0 ? 41 : value.types[i] == 1 ? 39 : 37, i, address);
+            }
+        }
+        if (images > 0) {
+            int table = frame.descriptorTables.acquire(textureDescriptorKeys, images, samplerDescriptorKeys, 0);
+            int start = frame.descriptorTables.textureStart(table);
+            long cpu = descriptorHeapCpuHandle(frame.srvHeap) + (long)start * srvSize;
+            long gpu = descriptorHeapGpuHandle(frame.srvHeap) + (long)start * srvSize;
+            if (frame.descriptorTables.inserted()) for (int i = 0; i < images; i++) {
+                D3D12Ffm.comVoidAILLI(device, D3D12Ffm.SLOT_DEVICE_COPY_DESCRIPTORS_SIMPLE, 1,
+                        cpu + (long)i * srvSize, textureDescriptorKeys[i], D3D12Ffm.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            }
+            int image = 0;
+            for (int i = 0; i < value.types.length; i++) if (value.types[i] == 3) {
+                D3D12Ffm.comVoidAIL(commands, 31, i, gpu + (long)image++ * srvSize);
+            }
+        }
+        D3D12Ffm.comVoidAIII(commands, 14, x, y, z);
+        frameBarrier.fill((byte)0);
+        frameBarrier.set(D3D12Ffm.INT, 0, 2); // global UAV barrier
+        D3D12Ffm.comVoidAIA(commands, D3D12Ffm.SLOT_COMMANDS_RESOURCE_BARRIER, 1, frameBarrier);
+        for (int i = 0; i < value.types.length; i++) if (value.types[i] == 3) {
+            Texture texture = resource(handles[i], Texture.class, "compute texture");
+            if (texture.samplerIndex != INVALID_DESCRIPTOR) transitionTexture(texture.allocations.get(texture.current),
+                    D3D12Ffm.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        }
+    }
+
+    private void transitionBuffer(BufferAllocation allocation, int target) {
+        if (allocation.state == target) return;
+        transition(frameBarrier, allocation.resource, allocation.state, target);
+        D3D12Ffm.comVoidAIA(commands, D3D12Ffm.SLOT_COMMANDS_RESOURCE_BARRIER, 1, frameBarrier);
+        allocation.state = target;
+    }
+
+    void copyBuffer(long source, int sourceOffset, long destination, int destinationOffset, int size) {
+        requireOpen();
+        if (!frameOpen || passOpen) throw new FdxException("D3D12 buffer copies require a frame outside a render pass");
+        Buffer from = resource(source, Buffer.class, "source buffer");
+        Buffer to = resource(destination, Buffer.class, "destination buffer");
+        BufferAllocation fromAllocation = from.allocations.get(from.current);
+        BufferAllocation toAllocation = to.allocations.get(to.current);
+        if (from.usage == 3) transitionBuffer(fromAllocation, 2048); // COPY_SOURCE
+        else if (from.usage == 4) throw new FdxException("Cannot copy from a readback buffer");
+        if (to.usage == 3) transitionBuffer(toAllocation, 1024);
+        else if (to.usage != 4) throw new FdxException("D3D12 buffer copy destination must use storage or readback usage");
+        markRecorded(fromAllocation); markRecorded(toAllocation);
+        D3D12Ffm.comVoidAALALL(commands, 15, toAllocation.resource, (long)destinationOffset,
+                fromAllocation.resource, (long)sourceOffset, (long)size);
+    }
+
+    ByteBuffer readBuffer(long handle, int offset, int size) {
+        Buffer buffer = resource(handle, Buffer.class, "readback buffer");
+        if (buffer.usage != 4) throw new FdxException("D3D12 CPU reads require a readback buffer");
+        waitIdle();
+        return ByteBuffer.allocateDirect(size).put(buffer.allocations.get(buffer.current).mapped.asSlice(offset, size).asByteBuffer()).flip();
+    }
+
+    private static final class ComputePipeline implements Resource {
+        final int[] types;
+        MemorySegment root = D3D12Ffm.NULL, state = D3D12Ffm.NULL;
+        ComputePipeline(int[] types) { this.types = types; }
+        @Override public void close() { D3D12Ffm.release(state); D3D12Ffm.release(root); state = root = D3D12Ffm.NULL; }
+    }
+
     long createBuffer(int size, int usage) {
         requireOpen();
         if (size <= 0) {
             throw new FdxException("Direct3D 12 buffer size must be positive");
         }
-        if (usage < 0 || usage > 1) {
+        if (usage < 0 || usage > 4) {
             throw new FdxException("Unsupported Direct3D 12 buffer usage");
         }
         Buffer buffer = new Buffer(this, size, usage);
         try {
-            buffer.allocations.add(createBufferAllocation(size));
+            buffer.allocations.add(createBufferAllocation(size, usage));
             return register(buffer);
         } catch (RuntimeException | Error error) {
             buffer.close();
@@ -954,7 +1259,21 @@ final class D3D12FfmContext implements AutoCloseable {
         }
         MemorySegment data = dataSegment(source, size, "Buffer source");
         BufferAllocation allocation = writableAllocation(buffer);
-        MemorySegment.copy(data, 0, allocation.mapped, 0, size);
+        if (buffer.usage == 4) throw new FdxException("Cannot upload to a Direct3D 12 readback buffer");
+        if (buffer.usage == 3) {
+            try (BufferAllocation upload = createBufferAllocation(size, 0); Arena arena = Arena.ofConfined()) {
+                MemorySegment.copy(data, 0, upload.mapped, 0, size);
+                MemorySegment barrier = arena.allocate(D3D12Ffm.SIZE_RESOURCE_BARRIER, 8);
+                executeImmediate(list -> {
+                    if (allocation.state != D3D12Ffm.D3D12_RESOURCE_STATE_COPY_DEST) {
+                        transition(barrier, allocation.resource, allocation.state, D3D12Ffm.D3D12_RESOURCE_STATE_COPY_DEST);
+                        D3D12Ffm.comVoidAIA(list, D3D12Ffm.SLOT_COMMANDS_RESOURCE_BARRIER, 1, barrier);
+                    }
+                    D3D12Ffm.comVoidAALALL(list, 15, allocation.resource, 0L, upload.resource, 0L, (long)size);
+                });
+                allocation.state = D3D12Ffm.D3D12_RESOURCE_STATE_COPY_DEST;
+            }
+        } else MemorySegment.copy(data, 0, allocation.mapped, 0, size);
     }
 
     void destroyBuffer(long handle) {
@@ -962,32 +1281,31 @@ final class D3D12FfmContext implements AutoCloseable {
     }
 
     long createTexture(int textureWidth, int textureHeight, int format, int usage,
-            int filter, int wrapS, int wrapT) {
+            int filter, int wrapS, int wrapT, int magFilter, int mipFilter, int mipCount, int samples) {
         requireOpen();
         if (textureWidth <= 0 || textureHeight <= 0) {
             throw new FdxException("Direct3D 12 texture size must be positive");
         }
-        if (usage < 0 || usage > 2) {
+        if (usage < 0 || usage > 6) {
             throw new FdxException("Unsupported Direct3D 12 texture usage");
         }
-        Texture texture = new Texture(this, textureWidth, textureHeight, textureFormat(format), usage);
-        boolean sampled = usage == 0 || usage == 2;
-        boolean renderAttachment = usage == 1 || usage == 2;
+        Texture texture = new Texture(this, textureWidth, textureHeight, textureFormat(format), usage, mipCount, samples);
+        boolean sampled = TextureUsage.values()[usage].sampled();
+        boolean renderAttachment = TextureUsage.values()[usage].renderAttachment();
         try (Arena arena = Arena.ofConfined()) {
             if (sampled) {
                 texture.samplerIndex = allocateDescriptor(freeSamplers,
                         D3D12Ffm.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, "sampler");
                 texture.sampler = samplerHandle(texture.samplerIndex);
                 MemorySegment sampler = arena.allocate(D3D12Ffm.SIZE_SAMPLER_DESC, 4);
-                sampler.set(D3D12Ffm.INT, 0, filter == 0
-                        ? D3D12Ffm.D3D12_FILTER_MIN_MAG_MIP_POINT
-                        : D3D12Ffm.D3D12_FILTER_MIN_MAG_MIP_LINEAR);
+                sampler.set(D3D12Ffm.INT, 0, (filter == 0 ? 0 : 0x10)
+                        | (magFilter == 0 ? 0 : 0x4) | (mipFilter == 2 ? 1 : 0));
                 sampler.set(D3D12Ffm.INT, 4, addressMode(wrapS));
                 sampler.set(D3D12Ffm.INT, 8, addressMode(wrapT));
                 sampler.set(D3D12Ffm.INT, 12, D3D12Ffm.D3D12_TEXTURE_ADDRESS_MODE_CLAMP);
                 sampler.set(D3D12Ffm.INT, 20, 1);
                 sampler.set(D3D12Ffm.INT, 24, D3D12Ffm.D3D12_COMPARISON_FUNC_ALWAYS);
-                sampler.set(D3D12Ffm.FLOAT, 48, Float.MAX_VALUE);
+                sampler.set(D3D12Ffm.FLOAT, 48, mipFilter == 0 ? 0 : mipCount - 1);
                 D3D12Ffm.comVoidAAL(device, D3D12Ffm.SLOT_DEVICE_CREATE_SAMPLER,
                         sampler, texture.sampler);
             }
@@ -995,9 +1313,9 @@ final class D3D12FfmContext implements AutoCloseable {
                 texture.dsvIndex = allocateDescriptor(freeDsvs,
                         D3D12Ffm.D3D12_DESCRIPTOR_HEAP_TYPE_DSV, "DSV");
                 texture.dsv = dsvHandle(texture.dsvIndex);
-                texture.depth = createDepth(arena, textureWidth, textureHeight, texture.dsv);
+                texture.depth = createDepth(arena, textureWidth, textureHeight, texture.dsv, samples);
             }
-            texture.allocations.add(createTextureAllocation(texture));
+            if (texture.format != D3D12Ffm.DXGI_FORMAT_D32_FLOAT) texture.allocations.add(createTextureAllocation(texture));
             return register(texture);
         } catch (RuntimeException | Error error) {
             texture.close();
@@ -1011,7 +1329,10 @@ final class D3D12FfmContext implements AutoCloseable {
         if (size < 0) {
             throw new FdxException("Direct3D 12 texture upload size cannot be negative");
         }
-        long requiredSize = (long)texture.width * texture.height * 4L;
+        long requiredSize = 0;
+        for (int level = 0; level < texture.mipCount; level++) {
+            requiredSize += (long)Math.max(1, texture.width >> level) * Math.max(1, texture.height >> level) * texture.texelBytes();
+        }
         if (size < requiredSize) {
             throw new FdxException("Direct3D 12 texture upload is too small");
         }
@@ -1024,14 +1345,19 @@ final class D3D12FfmContext implements AutoCloseable {
         retire(removeResource(handle, Texture.class, "texture"));
     }
 
-    private BufferAllocation createBufferAllocation(int size) {
+    private BufferAllocation createBufferAllocation(int size, int usage) {
         BufferAllocation allocation = new BufferAllocation();
         try (Arena arena = Arena.ofConfined()) {
-            allocation.resource = createCommittedResource(arena, D3D12Ffm.D3D12_HEAP_TYPE_UPLOAD,
-                    bufferDescriptor(arena, size), D3D12Ffm.D3D12_RESOURCE_STATE_GENERIC_READ,
+            MemorySegment descriptor = bufferDescriptor(arena, size);
+            if (usage == 3) descriptor.set(D3D12Ffm.INT, D3D12Ffm.OFF_RESOURCE_DESC_FLAGS, 4); // ALLOW_UNORDERED_ACCESS
+            allocation.state = usage >= 3 ? D3D12Ffm.D3D12_RESOURCE_STATE_COPY_DEST : D3D12Ffm.D3D12_RESOURCE_STATE_GENERIC_READ;
+            allocation.resource = createCommittedResource(arena, usage == 3 ? D3D12Ffm.D3D12_HEAP_TYPE_DEFAULT
+                            : usage == 4 ? D3D12Ffm.D3D12_HEAP_TYPE_READBACK : D3D12Ffm.D3D12_HEAP_TYPE_UPLOAD,
+                    descriptor, allocation.state,
                     D3D12Ffm.NULL, "Could not create a Direct3D 12 buffer");
+            if (usage == 3) return allocation;
             MemorySegment output = pointerOutput(arena);
-            D3D12Ffm.check(D3D12Ffm.comMap(allocation.resource, 0, range(arena, 0, 0), output),
+            D3D12Ffm.check(D3D12Ffm.comMap(allocation.resource, 0, range(arena, 0, usage == 4 ? size : 0), output),
                     "Could not map a Direct3D 12 buffer");
             allocation.mapped = D3D12Ffm.pointer(output).reinterpret(size);
             return allocation;
@@ -1054,7 +1380,7 @@ final class D3D12FfmContext implements AutoCloseable {
                 return candidate;
             }
         }
-        BufferAllocation allocation = createBufferAllocation(buffer.size);
+        BufferAllocation allocation = createBufferAllocation(buffer.size, buffer.usage);
         buffer.allocations.add(allocation);
         buffer.current = buffer.allocations.size() - 1;
         return allocation;
@@ -1095,13 +1421,16 @@ final class D3D12FfmContext implements AutoCloseable {
 
     private TextureAllocation createTextureAllocation(Texture texture) {
         TextureAllocation allocation = new TextureAllocation();
-        boolean sampled = texture.usage == 0 || texture.usage == 2;
-        boolean renderAttachment = texture.usage == 1 || texture.usage == 2;
+        boolean sampled = TextureUsage.values()[texture.usage].sampled();
+        boolean renderAttachment = TextureUsage.values()[texture.usage].renderAttachment();
+        boolean storage = texture.usage >= 3;
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment descriptor = textureDescriptor(arena, texture.width, texture.height,
-                    texture.format, renderAttachment
+                    texture.format, (storage ? 4 : 0) | (renderAttachment
                             ? D3D12Ffm.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET
-                            : D3D12Ffm.D3D12_RESOURCE_FLAG_NONE);
+                            : D3D12Ffm.D3D12_RESOURCE_FLAG_NONE));
+            descriptor.set(D3D12Ffm.SHORT, D3D12Ffm.OFF_RESOURCE_DESC_MIP_LEVELS, (short)texture.mipCount);
+            descriptor.set(D3D12Ffm.INT, D3D12Ffm.OFF_RESOURCE_DESC_SAMPLE_COUNT, texture.samples);
             MemorySegment clear = D3D12Ffm.NULL;
             if (renderAttachment) {
                 clear = arena.allocate(D3D12Ffm.SIZE_CLEAR_VALUE, 4);
@@ -1111,35 +1440,58 @@ final class D3D12FfmContext implements AutoCloseable {
             allocation.resource = createCommittedResource(arena, D3D12Ffm.D3D12_HEAP_TYPE_DEFAULT,
                     descriptor, allocation.state, clear,
                     "Could not create a Direct3D 12 texture allocation");
+            if (storage) {
+                allocation.uavIndex = allocateDescriptor(freeSrvs, D3D12Ffm.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "UAV");
+                allocation.uav = srvHandle(allocation.uavIndex);
+                MemorySegment view = arena.allocate(40, 8);
+                view.set(D3D12Ffm.INT, 0, texture.format);
+                view.set(D3D12Ffm.INT, 4, 4); // D3D12_UAV_DIMENSION_TEXTURE2D
+                D3D12Ffm.comVoidAAAAL(device, 19, allocation.resource, D3D12Ffm.NULL, view, allocation.uav);
+            }
             if (sampled) {
                 allocation.srvIndex = allocateDescriptor(freeSrvs,
                         D3D12Ffm.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, "SRV");
                 allocation.srv = srvHandle(allocation.srvIndex);
                 MemorySegment view = arena.allocate(D3D12Ffm.SIZE_SRV_DESC, 8);
                 view.set(D3D12Ffm.INT, 0, texture.format);
-                view.set(D3D12Ffm.INT, 4, D3D12Ffm.D3D12_SRV_DIMENSION_TEXTURE2D);
+                view.set(D3D12Ffm.INT, 4, texture.samples > 1 ? 6 : D3D12Ffm.D3D12_SRV_DIMENSION_TEXTURE2D);
                 view.set(D3D12Ffm.INT, D3D12Ffm.OFF_SRV_COMPONENT_MAPPING,
                         D3D12Ffm.D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING);
-                view.set(D3D12Ffm.INT, D3D12Ffm.OFF_SRV_TEXTURE2D + 4, 1);
+                if (texture.samples == 1) view.set(D3D12Ffm.INT, D3D12Ffm.OFF_SRV_TEXTURE2D + 4, texture.mipCount);
                 D3D12Ffm.comVoidAAAL(device, D3D12Ffm.SLOT_DEVICE_CREATE_SHADER_RESOURCE_VIEW,
                         allocation.resource, view, allocation.srv);
             }
             if (renderAttachment) {
-                allocation.rtvIndex = allocateDescriptor(freeRtvs,
+                allocation.mipRtvIndices = new int[texture.mipCount];
+                Arrays.fill(allocation.mipRtvIndices, INVALID_DESCRIPTOR);
+                allocation.mipRtvs = new long[texture.mipCount];
+                for (int level = 0; level < texture.mipCount; level++) {
+                int rtvIndex = allocateDescriptor(freeRtvs,
                         D3D12Ffm.D3D12_DESCRIPTOR_HEAP_TYPE_RTV, "RTV");
-                allocation.rtv = rtvHandle(allocation.rtvIndex);
+                allocation.mipRtvIndices[level] = rtvIndex;
+                allocation.mipRtvs[level] = rtvHandle(rtvIndex);
+                MemorySegment view = arena.allocate(24, 8);
+                view.set(D3D12Ffm.INT, 0, texture.format);
+                view.set(D3D12Ffm.INT, 4, texture.samples > 1 ? 6 : 4); // TEXTURE2DMS or TEXTURE2D
+                view.set(D3D12Ffm.INT, 8, level);
                 D3D12Ffm.comVoidAAAL(device, D3D12Ffm.SLOT_DEVICE_CREATE_RENDER_TARGET_VIEW,
-                        allocation.resource, D3D12Ffm.NULL, allocation.rtv);
+                        allocation.resource, view, allocation.mipRtvs[level]);
+                }
+                allocation.rtvIndex = allocation.mipRtvIndices[0];
+                allocation.rtv = allocation.mipRtvs[0];
             }
             return allocation;
         } catch (RuntimeException | Error error) {
+            if (allocation.uavIndex != INVALID_DESCRIPTOR) {
+                freeSrvs.add(allocation.uavIndex);
+                allocation.uavIndex = INVALID_DESCRIPTOR;
+            }
             if (allocation.srvIndex != INVALID_DESCRIPTOR) {
                 freeSrvs.add(allocation.srvIndex);
                 allocation.srvIndex = INVALID_DESCRIPTOR;
             }
-            if (allocation.rtvIndex != INVALID_DESCRIPTOR) {
-                freeRtvs.add(allocation.rtvIndex);
-                allocation.rtvIndex = INVALID_DESCRIPTOR;
+            if (allocation.mipRtvIndices != null) for (int index : allocation.mipRtvIndices) {
+                if (index != INVALID_DESCRIPTOR) freeRtvs.add(index);
             }
             allocation.close();
             throw error;
@@ -1153,12 +1505,12 @@ final class D3D12FfmContext implements AutoCloseable {
             MemorySegment textureDescriptor = arena.allocate(D3D12Ffm.SIZE_RESOURCE_DESC, 8);
             D3D12Ffm.comAddressAA(allocation.resource, D3D12Ffm.SLOT_RESOURCE_GET_DESC,
                     textureDescriptor);
-            MemorySegment footprint = arena.allocate(D3D12Ffm.SIZE_PLACED_FOOTPRINT, 8);
-            MemorySegment rows = arena.allocate(D3D12Ffm.INT);
-            MemorySegment rowSize = arena.allocate(D3D12Ffm.LONG);
+            MemorySegment footprint = arena.allocate((long)D3D12Ffm.SIZE_PLACED_FOOTPRINT * texture.mipCount, 8);
+            MemorySegment rows = arena.allocate(D3D12Ffm.INT, texture.mipCount);
+            MemorySegment rowSize = arena.allocate(D3D12Ffm.LONG, texture.mipCount);
             MemorySegment uploadSizeOutput = arena.allocate(D3D12Ffm.LONG);
             D3D12Ffm.comVoidAAIILAAAA(device, D3D12Ffm.SLOT_DEVICE_GET_COPYABLE_FOOTPRINTS,
-                    textureDescriptor, 0, 1, 0L, footprint, rows, rowSize, uploadSizeOutput);
+                    textureDescriptor, 0, texture.mipCount, 0L, footprint, rows, rowSize, uploadSizeOutput);
             long uploadSize = uploadSizeOutput.get(D3D12Ffm.LONG, 0);
             upload = createCommittedResource(arena, D3D12Ffm.D3D12_HEAP_TYPE_UPLOAD,
                     bufferDescriptor(arena, uploadSize), D3D12Ffm.D3D12_RESOURCE_STATE_GENERIC_READ,
@@ -1168,12 +1520,18 @@ final class D3D12FfmContext implements AutoCloseable {
                     "Could not map a Direct3D 12 texture upload buffer");
             MemorySegment uploadData = D3D12Ffm.pointer(output).reinterpret(uploadSize);
             mapped = true;
-            long footprintOffset = footprint.get(D3D12Ffm.LONG, D3D12Ffm.OFF_FOOTPRINT_OFFSET);
-            int rowPitch = footprint.get(D3D12Ffm.INT, D3D12Ffm.OFF_FOOTPRINT_ROW_PITCH);
-            long tightRowSize = (long)texture.width * 4L;
-            for (int row = 0; row < texture.height; row++) {
-                MemorySegment.copy(source, (long)row * tightRowSize,
+            long sourceOffset = 0;
+            for (int level = 0; level < texture.mipCount; level++) {
+            long nativeOffset = (long)level * D3D12Ffm.SIZE_PLACED_FOOTPRINT;
+            long footprintOffset = footprint.get(D3D12Ffm.LONG, nativeOffset + D3D12Ffm.OFF_FOOTPRINT_OFFSET);
+            int rowPitch = footprint.get(D3D12Ffm.INT, nativeOffset + D3D12Ffm.OFF_FOOTPRINT_ROW_PITCH);
+            long tightRowSize = (long)Math.max(1, texture.width >> level) * texture.texelBytes();
+            int levelHeight = Math.max(1, texture.height >> level);
+            for (int row = 0; row < levelHeight; row++) {
+                MemorySegment.copy(source, sourceOffset + (long)row * tightRowSize,
                         uploadData, footprintOffset + (long)row * rowPitch, tightRowSize);
+            }
+            sourceOffset += tightRowSize * levelHeight;
             }
             D3D12Ffm.comUnmap(upload, 0, range(arena, 0, uploadSize));
             mapped = false;
@@ -1196,8 +1554,13 @@ final class D3D12FfmContext implements AutoCloseable {
                             D3D12Ffm.D3D12_RESOURCE_STATE_COPY_DEST);
                     D3D12Ffm.comVoidAIA(list, D3D12Ffm.SLOT_COMMANDS_RESOURCE_BARRIER, 1, barrier);
                 }
+                for (int level = 0; level < texture.mipCount; level++) {
+                target.set(D3D12Ffm.INT, D3D12Ffm.OFF_COPY_LOCATION_UNION, level);
+                MemorySegment.copy(footprint, (long)level * D3D12Ffm.SIZE_PLACED_FOOTPRINT,
+                        uploadLocation, D3D12Ffm.OFF_COPY_LOCATION_UNION, D3D12Ffm.SIZE_PLACED_FOOTPRINT);
                 D3D12Ffm.comVoidAAIIIAA(list, D3D12Ffm.SLOT_COMMANDS_COPY_TEXTURE_REGION,
                         target, 0, 0, 0, uploadLocation, D3D12Ffm.NULL);
+                }
                 transition(barrier, allocation.resource,
                         D3D12Ffm.D3D12_RESOURCE_STATE_COPY_DEST,
                         D3D12Ffm.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -1216,67 +1579,147 @@ final class D3D12FfmContext implements AutoCloseable {
             String vertexEntryPoint, String fragmentEntryPoint, String label) {
         requireOpen();
         Shader shader = new Shader();
-        String shaderLabel = label != null ? label : "Direct3D 12 shader";
-        try {
-            shader.vertex = compileShader(vertexSource, vertexEntryPoint, "vs_5_1", shaderLabel);
-            shader.fragment = compileShader(fragmentSource, fragmentEntryPoint, "ps_5_1", shaderLabel);
-            return register(shader);
-        } catch (RuntimeException | Error error) {
-            shader.close();
-            throw error;
-        }
+        shader.vertexSource = vertexSource;
+        shader.fragmentSource = fragmentSource;
+        shader.vertexEntry = vertexEntryPoint;
+        shader.fragmentEntry = fragmentEntryPoint;
+        shader.label = label != null ? label : "Direct3D 12 shader";
+        return register(shader);
     }
 
     void destroyShader(long handle) {
         retire(removeResource(handle, Shader.class, "shader"));
     }
 
-    private MemorySegment compileShader(String sourceValue, String entryPointValue,
-            String targetValue, String labelValue) {
-        String sourceText = sourceValue != null ? sourceValue : "";
-        String entryPointText = entryPointValue != null ? entryPointValue : "";
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment source = arena.allocateFrom(sourceText);
-            MemorySegment label = arena.allocateFrom(labelValue);
-            MemorySegment entryPoint = arena.allocateFrom(entryPointText);
-            MemorySegment target = arena.allocateFrom(targetValue);
-            MemorySegment output = pointerOutput(arena);
-            MemorySegment errors = pointerOutput(arena);
-            int flags = D3D12Ffm.D3DCOMPILE_ENABLE_STRICTNESS
-                    | (validation
-                            ? D3D12Ffm.D3DCOMPILE_DEBUG | D3D12Ffm.D3DCOMPILE_SKIP_OPTIMIZATION
-                            : D3D12Ffm.D3DCOMPILE_OPTIMIZATION_LEVEL3);
-            int result = D3D12Ffm.compile(source,
-                    sourceText.getBytes(StandardCharsets.UTF_8).length,
-                    label, entryPoint, target, flags, output, errors);
-            MemorySegment errorBlob = D3D12Ffm.pointer(errors);
-            if (D3D12Ffm.failed(result)) {
-                String details = blobText(errorBlob);
-                D3D12Ffm.release(errorBlob);
-                throw new FdxException("Could not compile " + labelValue + " " + targetValue
-                        + ": " + (details.isEmpty()
-                                ? "HRESULT 0x" + String.format("%08X", result)
-                                : details));
+    void prepareShaders(long[] handles) {
+        requireOpen();
+        var shaders = new Shader[handles.length];
+        var pending = new LinkedHashMap<ShaderSource, String>();
+        for (int i = 0; i < handles.length; i++) {
+            Shader shader = shaders[i] = resource(handles[i], Shader.class, "shader");
+            if (D3D12Ffm.isNull(shader.vertex)) {
+                queueStage(pending, shader.vertexSource, shader.vertexEntry, "vs_6_0", shader.label);
             }
-            D3D12Ffm.release(errorBlob);
-            MemorySegment shader = D3D12Ffm.pointer(output);
-            if (D3D12Ffm.isNull(shader)) {
-                throw new FdxException("Direct3D 12 shader compiler returned no bytecode");
+            if (D3D12Ffm.isNull(shader.fragment)) {
+                queueStage(pending, shader.fragmentSource, shader.fragmentEntry, "ps_6_0", shader.label);
             }
-            return shader;
+        }
+        var jobs = new ArrayList<Callable<MemorySegment>>(pending.size());
+        for (var entry : pending.entrySet()) {
+            ShaderSource source = entry.getKey();
+            String label = entry.getValue();
+            jobs.add(() -> D3D12DxcCompiler.workerCompiler().compile(source.source(), source.entryPoint(),
+                    source.target(), label, validation, optimizeShaders));
+        }
+        var bytecode = D3D12ShaderCompilationBatch.compile(jobs, D3D12Ffm::release,
+                D3D12DxcCompiler.workerThreads());
+        try {
+            var compiled = new HashMap<ShaderSource, MemorySegment>();
+            int index = 0;
+            for (ShaderSource source : pending.keySet()) compiled.put(source, bytecode.get(index++));
+            // Only the caller touches shader resources and the context cache. Adopt references
+            // before cache insertion can evict entries needed by another shader in this batch.
+            for (Shader shader : shaders) {
+                if (D3D12Ffm.isNull(shader.vertex)) shader.vertex = acquireStage(compiled,
+                        shader.vertexSource, shader.vertexEntry, "vs_6_0");
+                if (D3D12Ffm.isNull(shader.fragment)) shader.fragment = acquireStage(compiled,
+                        shader.fragmentSource, shader.fragmentEntry, "ps_6_0");
+            }
+            for (var entry : compiled.entrySet()) cacheBytecode(entry.getKey(), entry.getValue());
+        } finally {
+            for (MemorySegment blob : bytecode) D3D12Ffm.release(blob);
         }
     }
 
+    private void queueStage(Map<ShaderSource, String> pending,
+            String source, String entry, String target, String label) {
+        ShaderSource key = shaderSource(source, entry, target);
+        if (!shaderBytecode.containsKey(key)) pending.putIfAbsent(key, label);
+    }
+
+    private MemorySegment acquireStage(Map<ShaderSource, MemorySegment> compiled,
+            String source, String entry, String target) {
+        ShaderSource key = shaderSource(source, entry, target);
+        MemorySegment blob = compiled.get(key);
+        if (blob == null) blob = shaderBytecode.get(key);
+        if (blob == null) throw new FdxException("Missing compiled Direct3D 12 shader stage");
+        D3D12Ffm.comIntA(blob, 1);
+        return blob;
+    }
+
+    private static ShaderSource shaderSource(String source, String entry, String target) {
+        return new ShaderSource(source != null ? source : "", entry != null ? entry : "", target);
+    }
+
+    private MemorySegment compileShader(String sourceValue, String entryPointValue,
+            String targetValue, String labelValue) {
+        ShaderSource key = shaderSource(sourceValue, entryPointValue, targetValue);
+        MemorySegment cached = shaderBytecode.get(key);
+        if (cached != null) {
+            D3D12Ffm.comIntA(cached, 1); // IUnknown::AddRef: each shader owns its bytecode reference.
+            return cached;
+        }
+        MemorySegment shader = compileUncached(key.source(), key.entryPoint(), targetValue, labelValue);
+        try {
+            cacheBytecode(key, shader);
+            return shader;
+        } catch (RuntimeException | Error failure) {
+            D3D12Ffm.release(shader);
+            throw failure;
+        }
+    }
+
+    private void cacheBytecode(ShaderSource key, MemorySegment shader) {
+        D3D12Ffm.comIntA(shader, 1); // The bounded context cache owns an independent reference.
+        MemorySegment previous = shaderBytecode.put(key, shader);
+        if (previous != null) D3D12Ffm.release(previous);
+        if (shaderBytecode.size() > 32) {
+            var iterator = shaderBytecode.entrySet().iterator();
+            D3D12Ffm.release(iterator.next().getValue());
+            iterator.remove();
+        }
+    }
+
+    private MemorySegment compileUncached(String sourceText, String entryPointText,
+            String targetValue, String labelValue) {
+        return shaderCompiler.compile(sourceText, entryPointText, targetValue, labelValue, validation, optimizeShaders);
+    }
+
     long createPipeline(long shaderHandle, int colorFormat, int topology,
-            boolean depthTest, boolean depthWrite, int sampledTextureCount,
+            boolean depthTest, boolean depthWrite, boolean alphaBlend, int sampledTextureCount,
             int uniformGroup, int uniformBinding,
             int[] layoutStridesValue, int[] layoutStepModesValue,
             int[] attributeLocationsValue, int[] attributeFormatsValue,
             int[] attributeOffsetsValue, int[] attributeSlotsValue,
             int[] textureGroupsValue, int[] textureBindingsValue,
-            int[] samplerGroupsValue, int[] samplerBindingsValue) {
+            int[] samplerGroupsValue, int[] samplerBindingsValue,
+            RenderPipelineDescriptor state) {
         requireOpen();
         Shader shader = resource(shaderHandle, Shader.class, "shader");
+        // Reflection is available at module creation; compile only stages a pipeline actually uses.
+        if (D3D12Ffm.isNull(shader.vertex)) {
+            shader.vertex = compileShader(shader.vertexSource, shader.vertexEntry, "vs_6_0", shader.label);
+        }
+        if (D3D12Ffm.isNull(shader.fragment)) {
+            shader.fragment = compileShader(shader.fragmentSource, shader.fragmentEntry, "ps_6_0", shader.label);
+        }
+        return register(createPreparedPipeline(device, shader.vertex, shader.fragment, colorFormat, topology,
+                depthTest, depthWrite, alphaBlend, sampledTextureCount, uniformGroup, uniformBinding,
+                layoutStridesValue, layoutStepModesValue, attributeLocationsValue, attributeFormatsValue,
+                attributeOffsetsValue, attributeSlotsValue, textureGroupsValue, textureBindingsValue,
+                samplerGroupsValue, samplerBindingsValue, state, null));
+    }
+
+    /** Isolated COM creation. All native temporary storage belongs to this calling worker. */
+    static Pipeline createPreparedPipeline(MemorySegment device, MemorySegment vertex, MemorySegment fragment,
+            int colorFormat, int topology, boolean depthTest, boolean depthWrite, boolean alphaBlend,
+            int sampledTextureCount, int uniformGroup, int uniformBinding,
+            int[] layoutStridesValue, int[] layoutStepModesValue,
+            int[] attributeLocationsValue, int[] attributeFormatsValue,
+            int[] attributeOffsetsValue, int[] attributeSlotsValue,
+            int[] textureGroupsValue, int[] textureBindingsValue,
+            int[] samplerGroupsValue, int[] samplerBindingsValue,
+            RenderPipelineDescriptor state, D3D12PipelineCache.Entry cached) {
         int[] layoutStrides = array(layoutStridesValue);
         int[] layoutStepModes = array(layoutStepModesValue);
         int[] attributeLocations = array(attributeLocationsValue);
@@ -1432,10 +1875,10 @@ final class D3D12FfmContext implements AutoCloseable {
 
             MemorySegment descriptor = arena.allocate(D3D12Ffm.SIZE_GRAPHICS_PIPELINE_DESC, 8);
             descriptor.set(D3D12Ffm.ADDRESS, 0, created.rootSignature);
-            setShaderBytecode(descriptor, D3D12Ffm.OFF_PIPELINE_VS, shader.vertex);
-            setShaderBytecode(descriptor, D3D12Ffm.OFF_PIPELINE_PS, shader.fragment);
+            setShaderBytecode(descriptor, D3D12Ffm.OFF_PIPELINE_VS, vertex);
+            setShaderBytecode(descriptor, D3D12Ffm.OFF_PIPELINE_PS, fragment);
             long blend = D3D12Ffm.OFF_PIPELINE_BLEND + 8L;
-            descriptor.set(D3D12Ffm.INT, blend, 1);
+            descriptor.set(D3D12Ffm.INT, blend, alphaBlend ? 1 : 0);
             descriptor.set(D3D12Ffm.INT, blend + 8, D3D12Ffm.D3D12_BLEND_SRC_ALPHA);
             descriptor.set(D3D12Ffm.INT, blend + 12, D3D12Ffm.D3D12_BLEND_INV_SRC_ALPHA);
             descriptor.set(D3D12Ffm.INT, blend + 16, D3D12Ffm.D3D12_BLEND_OP_ADD);
@@ -1457,25 +1900,24 @@ final class D3D12FfmContext implements AutoCloseable {
             descriptor.set(D3D12Ffm.INT, depth + 8, D3D12Ffm.D3D12_COMPARISON_FUNC_LESS_EQUAL);
             descriptor.set(D3D12Ffm.BYTE, depth + 16, D3D12Ffm.D3D12_DEFAULT_STENCIL_READ_MASK);
             descriptor.set(D3D12Ffm.BYTE, depth + 17, D3D12Ffm.D3D12_DEFAULT_STENCIL_WRITE_MASK);
+            D3D12PipelineState.write(descriptor, state);
             descriptor.set(D3D12Ffm.ADDRESS, D3D12Ffm.OFF_PIPELINE_INPUT_LAYOUT, inputElements);
             descriptor.set(D3D12Ffm.INT, D3D12Ffm.OFF_PIPELINE_INPUT_LAYOUT + 8L, attributeCount);
             descriptor.set(D3D12Ffm.INT, D3D12Ffm.OFF_PIPELINE_PRIMITIVE_TOPOLOGY,
                     primitiveTopologyType(topology));
-            descriptor.set(D3D12Ffm.INT, D3D12Ffm.OFF_PIPELINE_NUM_RENDER_TARGETS, 1);
-            descriptor.set(D3D12Ffm.INT, D3D12Ffm.OFF_PIPELINE_RTV_FORMATS,
-                    textureFormat(colorFormat));
+            var colorTargets = state.colorTargets();
+            descriptor.set(D3D12Ffm.INT, D3D12Ffm.OFF_PIPELINE_NUM_RENDER_TARGETS, colorTargets.length);
+            for (int i = 0; i < colorTargets.length; i++) {
+                descriptor.set(D3D12Ffm.INT, D3D12Ffm.OFF_PIPELINE_RTV_FORMATS + 4L * i,
+                        textureFormat(colorTargets[i].format().ordinal()));
+            }
             descriptor.set(D3D12Ffm.INT, D3D12Ffm.OFF_PIPELINE_DSV_FORMAT,
                     D3D12Ffm.DXGI_FORMAT_D32_FLOAT);
-            descriptor.set(D3D12Ffm.INT, D3D12Ffm.OFF_PIPELINE_SAMPLE_DESC, 1);
+            descriptor.set(D3D12Ffm.INT, D3D12Ffm.OFF_PIPELINE_SAMPLE_DESC, state.multisampleState().count());
             descriptor.set(D3D12Ffm.INT, D3D12Ffm.OFF_PIPELINE_FLAGS,
                     D3D12Ffm.D3D12_PIPELINE_STATE_FLAG_NONE);
-            MemorySegment output = pointerOutput(arena);
-            D3D12Ffm.check(D3D12Ffm.comIntAAAA(device,
-                    D3D12Ffm.SLOT_DEVICE_CREATE_GRAPHICS_PIPELINE_STATE,
-                    descriptor, D3D12Ffm.IID_ID3D12_PIPELINE_STATE, output),
-                    "Could not create a Direct3D 12 graphics pipeline");
-            created.state = D3D12Ffm.pointer(output);
-            return register(created);
+            created.state = D3D12PipelineCache.create(device, descriptor, arena, cached);
+            return created;
         } catch (RuntimeException | Error error) {
             created.close();
             throw error;
@@ -1484,6 +1926,25 @@ final class D3D12FfmContext implements AutoCloseable {
 
     void destroyPipeline(long handle) {
         retire(removeResource(handle, Pipeline.class, "pipeline"));
+    }
+
+    MemorySegment retainPreparationDevice() {
+        requireOpen();
+        D3D12Ffm.comIntA(device, 1); // IUnknown.AddRef: lifetime extends past context teardown.
+        return MemorySegment.ofAddress(device.address());
+    }
+
+    long publishPreparedPipeline(Pipeline pipeline) {
+        requireOpen();
+        D3D12Ffm.check(deviceRemovedReason(), "Cannot publish a pipeline after Direct3D 12 device removal");
+        return register(pipeline);
+    }
+
+    int deviceRemovedReason() {
+        if (removalReason == 0 && !D3D12Ffm.isNull(device)) {
+            removalReason = D3D12Ffm.comIntA(device, D3D12Ffm.SLOT_DEVICE_GET_REMOVED_REASON);
+        }
+        return removalReason;
     }
 
     private static void fillDescriptorRange(MemorySegment range, int type,
@@ -1657,7 +2118,9 @@ final class D3D12FfmContext implements AutoCloseable {
     }
 
     private void retire(Resource resource) {
-        if (frameOpen) {
+        if (deviceRemovedReason() != 0) {
+            resource.close();
+        } else if (frameOpen) {
             retired.add(new RetiredResource(nextFence, resource));
         } else {
             waitIdle();
@@ -1675,6 +2138,9 @@ final class D3D12FfmContext implements AutoCloseable {
             case 2 -> D3D12Ffm.DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
             case 3 -> D3D12Ffm.DXGI_FORMAT_B8G8R8A8_UNORM;
             case 4 -> D3D12Ffm.DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+            case 5 -> RGBA16_FLOAT_FORMAT;
+            case 6 -> 41; // DXGI_FORMAT_R32_FLOAT
+            case 8 -> D3D12Ffm.DXGI_FORMAT_D32_FLOAT;
             default -> throw new FdxException("Unsupported Direct3D 12 texture format");
         };
     }
@@ -1717,6 +2183,10 @@ final class D3D12FfmContext implements AutoCloseable {
         if (closed) {
             return;
         }
+        if (deviceRemovedReason() != 0) {
+            passOpen = false;
+            frameOpen = false;
+        }
         try {
             if (passOpen) {
                 endPass();
@@ -1738,6 +2208,9 @@ final class D3D12FfmContext implements AutoCloseable {
         }
         retired.clear();
         resources.closeAll();
+        for (MemorySegment bytecode : shaderBytecode.values()) D3D12Ffm.release(bytecode);
+        shaderBytecode.clear();
+        if (shaderCompiler != null) { shaderCompiler.close(); shaderCompiler = null; }
         releaseFrameTargets();
         for (int index = frames.size() - 1; index >= 0; index--) {
             frames.get(index).close();
@@ -1861,8 +2334,8 @@ final class D3D12FfmContext implements AutoCloseable {
         private MemorySegment uniformMapped = D3D12Ffm.NULL;
         private long rtv;
         private long dsv;
-        private int srvCursor;
-        private int samplerCursor;
+        private final D3D12DescriptorTableCache descriptorTables = new D3D12DescriptorTableCache(
+                FRAME_DESCRIPTOR_CAPACITY, FRAME_SAMPLER_DESCRIPTOR_CAPACITY);
         private long uniformCursor;
         private long fenceValue;
 
@@ -1898,6 +2371,7 @@ final class D3D12FfmContext implements AutoCloseable {
     }
 
     private static final class BufferAllocation implements AutoCloseable {
+        private int state;
         private MemorySegment resource = D3D12Ffm.NULL;
         private MemorySegment mapped = D3D12Ffm.NULL;
         private long lastFence;
@@ -1937,6 +2411,10 @@ final class D3D12FfmContext implements AutoCloseable {
     }
 
     private static final class TextureAllocation implements AutoCloseable {
+        private int uavIndex = INVALID_DESCRIPTOR;
+        private long uav;
+        private int[] mipRtvIndices;
+        private long[] mipRtvs;
         private MemorySegment resource = D3D12Ffm.NULL;
         private int state = D3D12Ffm.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
         private int srvIndex = INVALID_DESCRIPTOR;
@@ -1954,10 +2432,13 @@ final class D3D12FfmContext implements AutoCloseable {
     }
 
     private static final class Texture implements Resource {
+        private int texelBytes() { return format == RGBA16_FLOAT_FORMAT ? 8 : 4; }
         private final D3D12FfmContext context;
         private final int width;
         private final int height;
         private final int format;
+        private final int mipCount;
+        private final int samples;
         private final int usage;
         private final Array<TextureAllocation> allocations = new Array<TextureAllocation>();
         private MemorySegment depth = D3D12Ffm.NULL;
@@ -1967,23 +2448,26 @@ final class D3D12FfmContext implements AutoCloseable {
         private long sampler;
         private long dsv;
 
-        private Texture(D3D12FfmContext context, int width, int height, int format, int usage) {
+        private Texture(D3D12FfmContext context, int width, int height, int format, int usage, int mipCount, int samples) {
             this.context = context;
             this.width = width;
             this.height = height;
             this.format = format;
             this.usage = usage;
+            this.mipCount = mipCount;
+            this.samples = samples;
         }
 
         @Override
         public void close() {
             for (int index = allocations.size() - 1; index >= 0; index--) {
                 TextureAllocation allocation = allocations.get(index);
+                if (allocation.uavIndex != INVALID_DESCRIPTOR) context.freeSrvs.add(allocation.uavIndex);
                 if (allocation.srvIndex != INVALID_DESCRIPTOR) {
                     context.freeSrvs.add(allocation.srvIndex);
                 }
-                if (allocation.rtvIndex != INVALID_DESCRIPTOR) {
-                    context.freeRtvs.add(allocation.rtvIndex);
+                if (allocation.mipRtvIndices != null) for (int rtv : allocation.mipRtvIndices) {
+                    if (rtv != INVALID_DESCRIPTOR) context.freeRtvs.add(rtv);
                 }
                 allocation.close();
             }
@@ -2002,6 +2486,7 @@ final class D3D12FfmContext implements AutoCloseable {
     }
 
     private static final class Shader implements Resource {
+        private String vertexSource, fragmentSource, vertexEntry, fragmentEntry, label;
         private MemorySegment vertex = D3D12Ffm.NULL;
         private MemorySegment fragment = D3D12Ffm.NULL;
 
@@ -2014,7 +2499,7 @@ final class D3D12FfmContext implements AutoCloseable {
         }
     }
 
-    private static final class Pipeline implements Resource {
+    static final class Pipeline implements Resource {
         private MemorySegment rootSignature = D3D12Ffm.NULL;
         private MemorySegment state = D3D12Ffm.NULL;
         private int topology = D3D12Ffm.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;

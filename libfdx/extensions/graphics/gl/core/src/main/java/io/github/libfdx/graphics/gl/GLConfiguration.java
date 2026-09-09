@@ -1,6 +1,8 @@
 package io.github.libfdx.graphics.gl;
 
+import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsContextProfile;
+import io.github.libfdx.graphics.shader.runtime.ShaderArtifactCache;
 
 /**
  * Stores configuration values for a GL.
@@ -12,6 +14,28 @@ public final class GLConfiguration {
     private int minorVersion = 3;
     private GraphicsContextProfile profile = GraphicsContextProfile.CORE;
     private boolean forwardCompatible;
+    private int preparationWorkerLimit;
+    private ShaderArtifactCache shaderCache;
+
+    /** Optional borrowed cache for source/reflection, GLSL and supported native program binaries.
+     * Native binary import/export is restricted to explicit updateLoading calls and may block;
+     * an operation that starts native binary work there must finish through loading updates.
+     * Ordinary runtime preparation uses source compilation/polling without binary import/export.
+     * The application owns its store and keeps it available until preparation drains. */
+    public ShaderArtifactCache shaderCache() { return shaderCache; }
+    public GLConfiguration shaderCache(ShaderArtifactCache value) { shaderCache = value; return this; }
+
+    /** Upper bound for platform CPU preparation workers and a hint to parallel GL compilers.
+     * Actual execution support is reported by the created graphics device. */
+    public int preparationWorkerLimit() {
+        // Only worker-capable providers query this default; TeaVM C cannot query processor counts.
+        return preparationWorkerLimit != 0 ? preparationWorkerLimit
+                : Math.max(1, Math.min(8, Runtime.getRuntime().availableProcessors()));
+    }
+    public GLConfiguration preparationWorkerLimit(int value) {
+        if (value < 1 || value > 64) throw new FdxException("GL preparation workers must be between 1 and 64");
+        preparationWorkerLimit = value; return this;
+    }
 
     /**
      * Returns the major version.

@@ -12,6 +12,7 @@ android {
 
     defaultConfig {
         minSdk = androidMinSdkVersion
+        consumerProguardFiles("consumer-rules.pro")
     }
 
     compileOptions {
@@ -44,7 +45,11 @@ dependencies {
     api(project(":libfdx:framework:graphics"))
     api(project(":libfdx:extensions:graphics:gl:core"))
     api(project(":libfdx:extensions:graphics:vulkan:core"))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
+
+tasks.withType<Test>().configureEach { useJUnitPlatform() }
 val androidJavadocJar = tasks.register("androidJavadocJar", org.gradle.api.tasks.bundling.Jar::class) {
     archiveClassifier.set("javadoc")
 }

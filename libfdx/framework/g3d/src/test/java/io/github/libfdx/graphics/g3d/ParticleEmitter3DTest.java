@@ -8,6 +8,70 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 final class ParticleEmitter3DTest {
     @Test
+    void turbulentVolumePresetExpiresAndAcceptsCustomMedium() {
+        ParticleEmitter3D emitter = ParticlePresets3D.volumetricFire(800,1).seed(19);
+        for(int i=0;i<180;i++) emitter.update(1f/60);
+        io.github.libfdx.graphics.particles.ParticleVolume volume =
+                new io.github.libfdx.graphics.particles.ParticleVolume(16,16,16).bounds(-2,-1,-2,4,4,4);
+        emitter.deposit(volume,io.github.libfdx.graphics.particles.ParticleVolume.Medium.FIRE);
+        org.junit.jupiter.api.Assertions.assertTrue(emitter.activeCount()>100);
+        emitter.emissionRate(0).update(2);
+        assertEquals(0,emitter.activeCount());
+        assertThrows(FdxException.class,()->emitter.turbulence(-1,1));
+        assertThrows(FdxException.class,()->emitter.turbulence(1,0));
+    }
+
+    @Test
+    void customCurvesControlGrowthAndFadeIn() {
+        ParticleEmitter3D emitter = new ParticleEmitter3D(1).lifetime(2f).size(1, 3)
+                .color(1, 1, 1, 1, 1, 1, 1, 1)
+                .curves(new io.github.libfdx.graphics.particles.ParticleCurve(0, 0, 0.5f, 1, 1, 0),
+                        io.github.libfdx.graphics.particles.ParticleCurve.LINEAR,
+                        io.github.libfdx.graphics.particles.ParticleCurve.FADE);
+        emitter.emit(1);
+        assertEquals(0, emitter.alpha(0));
+        emitter.update(1);
+        assertEquals(3, emitter.size(0));
+        org.junit.jupiter.api.Assertions.assertTrue(emitter.alpha(0) > 0.8f);
+        emitter.update(0.5f);
+        assertEquals(2, emitter.size(0));
+    }
+
+    @Test
+    void spawnBoundsAndDragAreDeterministic() {
+        ParticleEmitter3D a = new ParticleEmitter3D(32).seed(42).spawnArea(4, 2, 6).lifetime(5f)
+                .speed(2).direction(1, 0, 0, 0).drag(1);
+        ParticleEmitter3D b = new ParticleEmitter3D(32).seed(42).spawnArea(4, 2, 6).lifetime(5f)
+                .speed(2).direction(1, 0, 0, 0).drag(1);
+        a.emit(32); b.emit(32);
+        for (int i = 0; i < 32; i++) {
+            assertEquals(a.x(i), b.x(i));
+            org.junit.jupiter.api.Assertions.assertTrue(Math.abs(a.x(i)) <= 2 && Math.abs(a.y(i)) <= 1);
+            org.junit.jupiter.api.Assertions.assertTrue(Math.abs(a.z(i)) <= 3);
+        }
+        float x = a.x(0);
+        a.update(1);
+        assertEquals(x + 2 * (float)Math.exp(-1), a.x(0), 0.00001f);
+        assertThrows(FdxException.class, () -> a.drag(-1));
+        assertThrows(FdxException.class, () -> a.aspectRatio(0));
+        assertThrows(FdxException.class, () -> a.spawnArea(-1, 0, 0));
+    }
+
+    @Test
+    void presetsCanBeCustomizedAndRemainCapacityBounded() {
+        ParticleEmitter3D[] effects = { ParticlePresets3D.fire(64, 1), ParticlePresets3D.smoke(64, 1),
+                ParticlePresets3D.sparks(64, 1), ParticlePresets3D.snow(64, 1) };
+        for (ParticleEmitter3D effect : effects) {
+            effect.emissionRate(50).aspectRatio(0.5f);
+            for (int frame = 0; frame < 600; frame++) effect.update(1f / 60);
+            org.junit.jupiter.api.Assertions.assertTrue(effect.activeCount() > 0 && effect.activeCount() <= 64);
+            effect.emissionRate(0).update(6);
+            assertEquals(0, effect.activeCount());
+        }
+        assertThrows(FdxException.class, () -> ParticlePresets3D.fire(1, Float.NaN));
+    }
+
+    @Test
     void emitsUpdatesAndExpiresParticlesWithoutParticleObjects() {
         ParticleEmitter3D emitter = new ParticleEmitter3D(4)
                 .seed(12)

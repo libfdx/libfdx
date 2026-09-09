@@ -2,6 +2,7 @@ package io.github.libfdx.graphics.g3d;
 
 import io.github.libfdx.collections.Array;
 import io.github.libfdx.core.ProviderId;
+import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
 import io.github.libfdx.graphics.BufferUsage;
@@ -34,8 +35,7 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 final class AnimationControllerTest {
     private static final float EPSILON = 0.0001f;
@@ -139,9 +139,16 @@ final class AnimationControllerTest {
 
             assertEquals(2, queue.size());
             assertTranslation(queue.get(0).worldTransform(),
-                    6.0f, 6.0f, 7.0f);
+                    5.0f, 6.0f, 7.0f);
             assertTranslation(queue.get(1).worldTransform(),
-                    6.0f, 6.0f, 7.0f);
+                    5.0f, 6.0f, 7.0f);
+            // Inverse bind cancels the bind hierarchy; mesh-node translation must not reappear.
+            Vector3 skinned = queue.get(0).skinningPalette().copyBoneMatrix(0, matrixOut)
+                    .transformPosition(Vector3.ZERO);
+            assertPosition(queue.get(0).worldTransform().transformPosition(skinned), 5, 6, 7);
+            new AnimationController(instance).play(moveArmClip(), false).time(1.5f);
+            skinned = queue.get(0).skinningPalette().copyBoneMatrix(0, matrixOut).transformPosition(Vector3.ZERO);
+            assertPosition(queue.get(0).worldTransform().transformPosition(skinned), 5, 8, 7);
         }
         finally {
             model.dispose();
@@ -202,6 +209,30 @@ final class AnimationControllerTest {
         assertEquals(1.0f, written[11], EPSILON);
     }
 
+    @Test void cpuSkinningPreservesUv1AndTransformsMirroredTangentsAndNormals() {
+        FakeGraphicsContext graphics = new FakeGraphicsContext();
+        Mesh mesh = Mesh.positionColor3D(graphics, "extended",
+                new float[] {0,0,0}, new float[] {1,1,1,1}, null,
+                new float[] {.6f,.8f,0}, new float[] {.2f,.3f}, new float[] {1,0,.5f}, null,
+                new float[] {0,0,0}, null, new int[] {0,0,0,0}, new float[] {1,0,0,0},
+                BoundingBox.empty(), true, new float[] {.7f,.9f}, new float[] {.8f,-.6f,0,1});
+        DefaultModel model = model();
+        try {
+            DefaultModelInstance instance = new DefaultModelInstance(model);
+            instance.nodeTransform("arm", new Matrix4().setToTrs(0,0,0, 0,0,0,1, -2,3,1));
+            SkinningPalette palette = new SkinningPalette(skin()).update(instance);
+            new CpuSkinningMeshUpdater(graphics, mesh, new int[] {0,0,0,0}, new float[] {1,0,0,0}).update(palette);
+            float[] actual = graphics.device().lastFloats();
+            assertEquals(32, actual.length);
+            float length = (float)Math.sqrt(.3f*.3f + (.8f/3)*(.8f/3));
+            assertEquals(-.3f/length, actual[3], EPSILON);
+            assertEquals((.8f/3)/length, actual[4], EPSILON);
+            assertEquals(.7f, actual[26], EPSILON); assertEquals(.9f, actual[27], EPSILON);
+            assertEquals(-1.6f, actual[28], EPSILON); assertEquals(-1.8f, actual[29], EPSILON);
+            assertEquals(0, actual[30], EPSILON); assertEquals(-1, actual[31], EPSILON);
+        } finally { mesh.dispose(); model.dispose(); }
+    }
+
     @Test
     void cpuSkinnedModelAnimatorUpdatesAllSkinnedParts() {
         FakeGraphicsContext graphics = new FakeGraphicsContext();
@@ -220,6 +251,93 @@ final class AnimationControllerTest {
         assertEquals(2, graphics.device().writeCount());
         assertEquals(2.0f, graphics.device().writtenFloats(0)[1], EPSILON);
         assertEquals(4.0f, graphics.device().writtenFloats(1)[1], EPSILON);
+        animator.dispose(); model.dispose();
+    }
+
+    @Test void cpuAnimatorsOwnIndependentGeometryAndRestoreSharedMeshes() {
+        FakeGraphicsContext graphics=new FakeGraphicsContext();
+        DefaultModel model=skinnedModel(graphics);
+        DefaultModelInstance first=new DefaultModelInstance(model),second=new DefaultModelInstance(model);
+        Renderable3D shared=first.skinningRenderable(0);
+        float[] bind=shared.meshPart().mesh().sourcePositions().clone();
+        CpuSkinnedModelAnimator a=new CpuSkinnedModelAnimator(graphics,first),b=new CpuSkinnedModelAnimator(graphics,second);
+        Mesh copy=first.skinningRenderable(0).meshPart().mesh();
+        assertNotSame(shared.meshPart().mesh(),copy);
+        assertNotSame(copy,second.skinningRenderable(0).meshPart().mesh());
+        assertFalse(copy.hasPbrSkinning());
+        assertThrows(FdxException.class,()->new CpuSkinnedModelAnimator(graphics,first));
+        a.play(moveArmClip(),false).time(1.5f); b.play(moveArmClip(),false).time(.5f);
+        assertEquals(2,copy.sourcePositions()[1],EPSILON);
+        assertEquals(0,second.skinningRenderable(0).meshPart().mesh().sourcePositions()[1],EPSILON);
+        assertArrayEquals(bind,shared.meshPart().mesh().sourcePositions());
+        a.time(0); a.time(1.5f);
+        assertEquals(2,copy.sourcePositions()[1],EPSILON,"skinning must restart from the bind snapshot");
+        assertTrue(first.skinningRenderable(0).bounds().max().y()>=2);
+        assertTrue(first.skinningRenderable(0).bounds().min().y()<=2);
+        Material override=new Material("instance-override"); first.nodeMaterial("root",0,override);
+        a.dispose(); a.dispose();
+        assertSame(shared,first.skinningRenderable(0)); assertSame(override,shared.material());
+        assertTrue(copy.isDisposed()); assertFalse(shared.meshPart().mesh().isDisposed());
+        assertThrows(FdxException.class,()->a.update(.1f));
+        new CpuSkinnedModelAnimator(graphics,first).dispose();
+        b.dispose(); model.dispose();
+    }
+
+    @Test void cpuAnimatorUploadFailureReleasesEveryCopyAndLeavesInstanceUntouched() {
+        FakeGraphicsContext graphics=new FakeGraphicsContext(); DefaultModel model=skinnedModel(graphics);
+        DefaultModelInstance instance=new DefaultModelInstance(model); Renderable3D original=instance.skinningRenderable(0);
+        int before=graphics.device.buffers.size();
+        graphics.device.failWriteAt=graphics.device.writeAttempts+4;
+        assertThrows(FdxException.class,()->new CpuSkinnedModelAnimator(graphics,instance));
+        assertSame(original,instance.skinningRenderable(0));
+        assertEquals(before+2,graphics.device.buffers.size());
+        for (int i=before;i<graphics.device.buffers.size();i++) assertTrue(graphics.device.buffers.get(i).isDisposed());
+        graphics.device.failWriteAt=0;
+        new CpuSkinnedModelAnimator(graphics,instance).dispose(); model.dispose();
+    }
+
+    @Test void explicitCullingOverridesSurviveCpuBindingAndDisposal() {
+        FakeGraphicsContext graphics=new FakeGraphicsContext(); DefaultModel model=skinnedModel(graphics);
+        DefaultModelInstance instance=new DefaultModelInstance(model).nodeCullingBounds("root",0,null);
+        CpuSkinnedModelAnimator animator=new CpuSkinnedModelAnimator(graphics,instance);
+        assertNull(instance.nodeCullingBounds("root",0));
+        BoundingBox custom=new BoundingBox(new Vector3(-10,-10,-10),new Vector3(10,10,10));
+        instance.nodeCullingBounds("root",0,custom);
+        animator.time(1);
+        assertSame(custom,instance.nodeCullingBounds("root",0));
+        animator.dispose(); assertSame(custom,instance.nodeCullingBounds("root",0));
+        instance.resetNodeCullingBounds("root",0);
+        assertNull(instance.nodeCullingBounds("root",0),"CPU-only source has no GPU deformation bounds");
+        model.dispose();
+    }
+
+    @Test void throwingCpuAnimationCallbackLeavesGeometryAtTheCommittedPose() {
+        FakeGraphicsContext graphics=new FakeGraphicsContext(); DefaultModel model=skinnedModel(graphics);
+        DefaultModelInstance instance=new DefaultModelInstance(model);
+        CpuSkinnedModelAnimator animator=new CpuSkinnedModelAnimator(graphics,instance);
+        AnimationClip clip=new AnimationClip("marked",2,moveArmClip().nodeTransformChannels(),
+                new AnimationClip.Event[]{new AnimationClip.Event(1,"hit")});
+        animator.controller().listener((c,a,e)->{ throw new FdxException("listener failed"); });
+        animator.play(clip,false);
+        assertThrows(FdxException.class,()->animator.update(1.5f));
+        assertEquals(1.5f,animator.controller().timeSeconds());
+        assertEquals(2,instance.skinningRenderable(0).meshPart().mesh().sourcePositions()[1],EPSILON);
+        animator.dispose(); model.dispose();
+    }
+
+    @Test void cpuSkinningNormalizesLargeWeightsAndPublishesDeformedCpuAttributes() {
+        FakeGraphicsContext graphics=new FakeGraphicsContext(); Mesh mesh=skinnedGpuMesh(graphics,"large-weights");
+        DefaultModel model=model(); DefaultModelInstance instance=new DefaultModelInstance(model);
+        instance.nodeTransform("arm",new Matrix4().setToTranslation(0,3,0));
+        SkinningPalette palette=new SkinningPalette(skin()).update(instance);
+        CpuSkinningMeshUpdater updater=new CpuSkinningMeshUpdater(graphics,mesh,new int[]{0,0,0,0},
+                new float[]{Float.MAX_VALUE,Float.MAX_VALUE,0,0});
+        updater.update(palette); updater.update(palette);
+        assertEquals(2,mesh.sourcePositions()[1],EPSILON);
+        float[] written=graphics.device.lastFloats();
+        assertArrayEquals(mesh.sourcePositions(),java.util.Arrays.copyOf(written,3));
+        for (int i=18;i<26;i++) assertEquals(0,written[i],"CPU output disables GPU skinning");
+        mesh.dispose(); model.dispose();
     }
 
     @Test
@@ -448,14 +566,18 @@ final class AnimationControllerTest {
         private final ArrayList<ByteBuffer> writes = new ArrayList<ByteBuffer>();
         private ByteBuffer lastWrite;
         private RenderPipelineDescriptor lastPipelineDescriptor;
+        private final ArrayList<FakeBuffer> buffers=new ArrayList<>();
+        private int writeAttempts,failWriteAt;
 
         @Override
         public Buffer createBuffer(BufferDescriptor descriptor) {
-            return new FakeBuffer(descriptor.size(), descriptor.usage());
+            FakeBuffer buffer=new FakeBuffer(descriptor.size(), descriptor.usage());
+            buffers.add(buffer); return buffer;
         }
 
         @Override
         public void writeBuffer(Buffer buffer, ByteBuffer data) {
+            if (++writeAttempts==failWriteAt) throw new FdxException("injected upload failure");
             ByteBuffer duplicate = data.duplicate().order(ByteOrder.nativeOrder());
             lastWrite = ByteBuffer.allocateDirect(duplicate.remaining()).order(ByteOrder.nativeOrder());
             lastWrite.put(duplicate);

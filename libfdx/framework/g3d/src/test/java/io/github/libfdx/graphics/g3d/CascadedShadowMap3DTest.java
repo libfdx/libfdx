@@ -2,12 +2,18 @@ package io.github.libfdx.graphics.g3d;
 
 import com.sun.management.ThreadMXBean;
 import io.github.libfdx.core.ProviderId;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.core.FdxException;
+import io.github.libfdx.graphics.CommandEncoder;
+import io.github.libfdx.graphics.FrameBuffer;
+import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
 import io.github.libfdx.graphics.BufferUsage;
 import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.GraphicsContext;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparation;
 import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.Mesh;
@@ -33,18 +39,205 @@ import org.junit.jupiter.api.Test;
 import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Locale;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class CascadedShadowMap3DTest {
+    @Test void asyncCascadesShareDefinitionsWithoutCreatingAnyShaderModule() {
+        FakeGraphicsContext graphics = new FakeGraphicsContext(ProviderId.of("gl"));
+        graphics.device.failShader = true;
+        ShaderPreparation preparation = new ShaderPreparation(graphics);
+        CascadedShadowMap3D maps = new CascadedShadowMap3D(graphics, 3, 64, 64, preparation, null);
+        try {
+            for (int i = 0; i < maps.cascadeCount(); i++) {
+                assertSame(maps.shaderPlan(), maps.cascade(i).shaderPlan());
+                assertEquals(maps.preparationTarget(), maps.cascade(i).preparationTarget());
+            }
+        } finally { maps.dispose(); preparation.dispose(); }
+    }
+
+    @Test
+    void blendedCasterAlphaReachesTheShadowPassAndInvisibleCastersAreSkipped() {
+        FakeGraphicsContext graphics = new FakeGraphicsContext(ProviderId.of("gl"));
+        DirectionalShadowMap3D shadow = new DirectionalShadowMap3D(graphics, 64, 64)
+                .bounds(0, 0, 0, 20, .1f, 100).shadowFadeFraction(0);
+        Renderable3D caster = renderable(graphics);
+        caster.material().alphaMode(MaterialAlphaMode.BLEND);
+        var casters = new Array<Renderable3D>();
+        casters.add(caster);
+        DirectionalLight light = new DirectionalLight().direction(-1, -1, -.5f);
+        try {
+            for (float alpha : new float[]{.1f, .4f, .8f, 1}) {
+                caster.material().set(MaterialAttributes.baseColor(1, 1, 1, alpha));
+                shadow.renderRenderables(light, casters.view());
+                assertEquals(1, graphics.lastPass.drawCalls);
+                assertEquals(alpha, graphics.lastPass.shadowParams[0], .00001f,
+                        "The packed shadow must use the model's current opacity");
+            }
+            caster.material().set(MaterialAttributes.baseColor(1, 1, 1, 0));
+            shadow.renderRenderables(light, casters.view());
+            assertEquals(0, graphics.lastPass.drawCalls);
+            caster.material().alphaMode(MaterialAlphaMode.OPAQUE);
+            shadow.renderRenderables(light, casters.view());
+            assertEquals(1, graphics.lastPass.shadowParams[0], .00001f,
+                    "Opaque materials keep their opaque shadow contract");
+        } finally {
+            caster.meshPart().mesh().dispose();
+            shadow.dispose();
+        }
+    }
+
+    @Test
+    void automaticDirectionalBiasTracksResolutionAndBoundsWithoutChangingManualBias() {
+        FakeGraphicsContext graphics = new FakeGraphicsContext(ProviderId.of("gl"));
+        DirectionalShadowMap3D coarse = new DirectionalShadowMap3D(graphics, 1024, 1024)
+                .bounds(0, 0, 0, 20, 1, 101).bias(.03f).autoBias(true);
+        DirectionalShadowMap3D fine = new DirectionalShadowMap3D(graphics, 2048, 2048)
+                .bounds(0, 0, 0, 20, 1, 101).autoBias(true);
+        try {
+            assertEquals(coarse.bias() / 2, fine.bias(), .00000001f);
+            float initial = coarse.bias();
+            coarse.bounds(0, 0, 0, 40, 1, 201);
+            assertEquals(initial, coarse.bias(), .00000001f);
+            coarse.bounds(0, 0, 0, 40, 1, 101);
+            assertEquals(initial * 2, coarse.bias(), .00000001f);
+            coarse.autoBias(false);
+            assertEquals(.03f, coarse.bias());
+        } finally { coarse.dispose(); fine.dispose(); }
+    }
     private static final float EPSILON = 0.0001f;
     private static final int ALLOCATION_MEASUREMENT_ATTEMPTS = 5;
     private static final int ALLOCATION_OPERATIONS_PER_ATTEMPT = 2_000;
+
+    @Test
+    void cachedPassesTrackCameraLightCasterRevisionAndFailures() {
+        FakeGraphicsContext graphics = new FakeGraphicsContext(ProviderId.of("gl"));
+        CascadedShadowMap3D maps = new CascadedShadowMap3D(graphics, 2, 256, 256).shadowFadeFraction(0);
+        Camera camera = new Camera().viewport(64, 64).nearFar(1, 48)
+                .position(0, 0, 10).direction(0, 0, -1);
+        DirectionalLight light = new DirectionalLight().direction(-.5f, -1, -.25f);
+        ModelInstance[] casters = new ModelInstance[0];
+        try {
+            assertEquals(2, maps.renderIfNeeded(light, camera, casters, 1));
+            int recorded = graphics.passes;
+            for (int i = 0; i < 100; i++) assertEquals(0, maps.renderIfNeeded(light, camera, casters, 1));
+            assertEquals(recorded, graphics.passes);
+            // Receiver-only controls must take effect without rewriting depth maps.
+            maps.bias(.04f).strength(.5f).minTexelBias(1);
+            assertEquals(0, maps.renderIfNeeded(light, camera, casters, 1));
+            camera.position(2, 0, 10);
+            assertTrue(maps.renderIfNeeded(light, camera, casters, 1) > 0);
+            assertEquals(0, maps.renderIfNeeded(light, camera, casters, 1));
+            light.direction(.5f, -1, .25f);
+            assertEquals(2, maps.renderIfNeeded(light, camera, casters, 1));
+            assertEquals(2, maps.renderIfNeeded(light, camera, casters, 2));
+            assertEquals(2, maps.renderIfNeeded(light, camera, casters.clone(), 2));
+            assertEquals(2, maps.renderIfNeeded(light, camera, casters, 2));
+            maps.shadowFadeFraction(.2f);
+            assertTrue(maps.renderIfNeeded(light, camera, casters, 2) > 0);
+            assertEquals(0, maps.renderIfNeeded(light, camera, casters, 2));
+            maps.invalidateCache();
+            assertEquals(2, maps.renderIfNeeded(light, camera, casters, 2));
+            graphics.failPassAt = graphics.passes + 2;
+            assertThrows(FdxException.class, () -> maps.renderIfNeeded(light, camera, casters, 3));
+            assertEquals(1, maps.lastRenderedCascadeCount());
+            assertEquals(2, maps.renderIfNeeded(light, camera, casters, 3), "failed updates invalidate every cascade");
+            maps.render(light, camera, casters);
+            assertEquals(2, maps.lastRenderedCascadeCount());
+            assertEquals(2, maps.renderIfNeeded(light, camera, casters, 3), "forced drawing invalidates optional reuse");
+        } finally { maps.dispose(); }
+        assertThrows(FdxException.class, () -> maps.renderIfNeeded(light, camera, casters, 3));
+        assertTrue(graphics.device.textures.stream().allMatch(Texture::isDisposed));
+    }
+
+    @Test
+    void budgetRejectsExcessAndFailedAllocationReleasesPreviousMaps() {
+        assertEquals(2L << 20, ShadowBudget3D.LOW.estimatedBytes());
+        assertEquals(16L << 20, ShadowBudget3D.BALANCED.estimatedBytes());
+        assertEquals(128L << 20, ShadowBudget3D.HIGH.estimatedBytes());
+        assertThrows(FdxException.class, () -> new ShadowBudget3D(4, 2048, 100, 16L << 20));
+        assertThrows(FdxException.class, () -> new ShadowBudget3D(0, 512, 100, 16L << 20));
+        assertThrows(FdxException.class, () -> new ShadowBudget3D(1, 512, Float.NaN, 16L << 20));
+        FakeGraphicsContext graphics = new FakeGraphicsContext(ProviderId.of("gl"));
+        graphics.device.failTextureAt = 2;
+        assertThrows(FdxException.class, () -> new CascadedShadowMap3D(graphics, 3, 32, 32));
+        assertEquals(1, graphics.device.textures.size());
+        assertTrue(graphics.device.textures.get(0).isDisposed());
+        graphics.device.failTextureAt = 0;
+        graphics.device.failShader = true;
+        assertThrows(FdxException.class, () -> new DirectionalShadowMap3D(graphics, 32, 32));
+        assertTrue(graphics.device.textures.stream().allMatch(Texture::isDisposed));
+        graphics.device.failShader = false;
+        CascadedShadowMap3D maps = ShadowBudget3D.LOW.create(graphics);
+        assertEquals(ShadowBudget3D.LOW.estimatedBytes(), maps.estimatedBytes());
+        maps.dispose();
+        maps.dispose();
+    }
+
+    @Test
+    void subTexelMotionReusesStabilizedCascadesWithoutSteadyAllocations() {
+        FakeGraphicsContext graphics = new FakeGraphicsContext(ProviderId.of("gl"));
+        CascadedShadowMap3D maps = new CascadedShadowMap3D(graphics, 2, 256, 256).shadowFadeFraction(0);
+        Camera camera = new Camera().projection(CameraProjection.ORTHOGRAPHIC).viewport(10, 10)
+                .nearFar(1, 40).position(0, 0, 20).direction(0, 0, -1);
+        DirectionalLight light = new DirectionalLight().direction(0, -1, 0);
+        ModelInstance[] casters = new ModelInstance[0];
+        try {
+            assertEquals(2, maps.renderIfNeeded(light, camera, casters, 1));
+            float[] original = new float[16], shifted = new float[16];
+            maps.cascade(0).lightViewProjection().copyValues(original, 0);
+            camera.position(.0001f, 0, 20);
+            assertEquals(0, maps.renderIfNeeded(light, camera, casters, 1));
+            maps.cascade(0).lightViewProjection().copyValues(shifted, 0);
+            assertArrayEquals(original, shifted);
+            for (int i = 0; i < 2_000; i++) maps.renderIfNeeded(light, camera, casters, 1);
+            var platform = ManagementFactory.getThreadMXBean();
+            assumeTrue(platform instanceof ThreadMXBean);
+            ThreadMXBean bean = (ThreadMXBean)platform;
+            assumeTrue(bean.isThreadAllocatedMemorySupported());
+            bean.setThreadAllocatedMemoryEnabled(true);
+            long threadId = Thread.currentThread().threadId(), minimum = Long.MAX_VALUE;
+            for (int attempt = 0; attempt < 5; attempt++) {
+                long before = bean.getThreadAllocatedBytes(threadId);
+                for (int i = 0; i < 2_000; i++) maps.renderIfNeeded(light, camera, casters, 1);
+                minimum = Math.min(minimum, bean.getThreadAllocatedBytes(threadId) - before);
+            }
+            assertTrue(minimum <= 1024, "Cached shadow path allocated " + minimum + " bytes over 2000 calls");
+        } finally { maps.dispose(); }
+    }
+
+    @Test
+    void pbrFeatureSwitchesAreCopiedAndDisableBorrowedShadowMaps() {
+        FakeGraphicsContext graphics = new FakeGraphicsContext(ProviderId.of("gl"));
+        CascadedShadowMap3D maps = new CascadedShadowMap3D(graphics, 2, 16, 16);
+        Renderable3D renderable = renderable(graphics);
+        PbrShaderConfig config = new PbrShaderConfig().enableShadows(false).enableImageBasedLighting(false);
+        PbrShaderProvider provider = new PbrShaderProvider(graphics, config);
+        config.enableShadows(true).enableImageBasedLighting(true);
+        FakeRenderPass pass = new FakeRenderPass();
+        RenderContext3D context = new RenderContext3D(graphics, new Camera(),
+                new Environment3D().cascadedShadowMap(maps), null, pass);
+        try {
+            Shader3D shader = provider.shader(renderable, context);
+            shader.begin(context); shader.render(renderable); shader.end();
+            assertEquals(0, pass.shadowParams[0]);
+            assertEquals(0, pass.iblParams[0]);
+            assertFalse(maps.isDisposed());
+            assertTrue(new PbrShaderConfig().shadowsEnabled());
+            assertTrue(new PbrShaderConfig().imageBasedLightingEnabled());
+        } finally { provider.dispose(); maps.dispose(); renderable.meshPart().mesh().dispose(); }
+    }
 
     @Test
     void cpuProjectionAllocatesNoPerDrawObjectsAfterWarmup() {
@@ -69,7 +262,7 @@ final class CascadedShadowMap3DTest {
             shader.end();
         }
 
-        java.lang.management.ThreadMXBean platformBean = ManagementFactory.getThreadMXBean();
+        var platformBean = ManagementFactory.getThreadMXBean();
         assumeTrue(platformBean instanceof ThreadMXBean);
         ThreadMXBean bean = (ThreadMXBean)platformBean;
         assumeTrue(bean.isThreadAllocatedMemorySupported());
@@ -127,7 +320,7 @@ final class CascadedShadowMap3DTest {
             shader.end();
         }
 
-        java.lang.management.ThreadMXBean platformBean =
+        var platformBean =
                 ManagementFactory.getThreadMXBean();
         assumeTrue(platformBean instanceof ThreadMXBean);
         ThreadMXBean bean = (ThreadMXBean)platformBean;
@@ -182,7 +375,7 @@ final class CascadedShadowMap3DTest {
         assertTrue(lifecycleAllocated <= 4_096L,
                 "Expected no post-warm-up graph PBR lifecycle churn, minimum allocated "
                         + lifecycleAllocated + " bytes");
-        System.out.printf(java.util.Locale.ROOT,
+        System.out.printf(Locale.ROOT,
                 "SHADER_GRAPH_PERF pbr_draws=%d draw_ns_per_op=%.3f "
                         + "draw_bytes=%d lifecycle_ns_per_op=%.3f "
                         + "lifecycle_bytes=%d%n",
@@ -401,6 +594,25 @@ final class CascadedShadowMap3DTest {
     private static final class FakeGraphicsContext implements GraphicsContext {
         private final ProviderId providerId;
         private final FakeGraphicsDevice device = new FakeGraphicsDevice();
+        private int passes, failPassAt;
+        private FakeRenderPass lastPass;
+        private final CommandEncoder encoder = new CommandEncoder() {
+            @Override public RenderPass beginRenderPass(RenderPassDescriptor descriptor) {
+                if (++passes == failPassAt) throw new FdxException("injected pass failure");
+                return lastPass = new FakeRenderPass();
+            }
+            @Override public ProviderId providerId() { return providerId; }
+            @Override public <T> T as() { return null; }
+        };
+        private final GraphicsFrame frame = new GraphicsFrame() {
+            @Override public CommandEncoder commandEncoder() { return encoder; }
+            @Override public FrameBuffer frameBuffer() { throw new UnsupportedOperationException(); }
+            @Override public TextureView colorAttachment() { throw new UnsupportedOperationException(); }
+            @Override public int width() { return 64; }
+            @Override public int height() { return 64; }
+            @Override public ProviderId providerId() { return providerId; }
+            @Override public <T> T as() { return null; }
+        };
 
         FakeGraphicsContext(ProviderId providerId) {
             this.providerId = providerId;
@@ -418,7 +630,7 @@ final class CascadedShadowMap3DTest {
 
         @Override
         public GraphicsFrame currentFrame() {
-            throw new UnsupportedOperationException();
+            return frame;
         }
 
         @Override
@@ -439,6 +651,9 @@ final class CascadedShadowMap3DTest {
     private static final class FakeGraphicsDevice implements GraphicsDevice {
         private static final ProviderId PROVIDER_ID = ProviderId.of("test-device");
         private boolean graphPbrModuleCreated;
+        private final List<Texture> textures = new ArrayList<>();
+        private int textureAttempts, failTextureAt;
+        private boolean failShader;
 
         @Override
         public Buffer createBuffer(BufferDescriptor descriptor) {
@@ -451,7 +666,10 @@ final class CascadedShadowMap3DTest {
 
         @Override
         public Texture createTexture(TextureDescriptor descriptor) {
-            return new FakeTexture(descriptor.width(), descriptor.height(), descriptor.format(), descriptor.usage());
+            if (++textureAttempts == failTextureAt) throw new FdxException("injected texture allocation failure");
+            Texture texture = new FakeTexture(descriptor.width(), descriptor.height(), descriptor.format(), descriptor.usage());
+            textures.add(texture);
+            return texture;
         }
 
         @Override
@@ -460,6 +678,7 @@ final class CascadedShadowMap3DTest {
 
         @Override
         public ShaderModule createShaderModule(ShaderModuleDescriptor descriptor) {
+            if (failShader) throw new FdxException("injected shader allocation failure");
             if (descriptor.wgslSource().contains(
                     "fdx_graph_libfdx_standard_pbr_surface")) {
                 graphPbrModuleCreated = true;
@@ -689,21 +908,24 @@ final class CascadedShadowMap3DTest {
 
     private static final class FakeRenderPass implements RenderPass {
         private static final ProviderId PROVIDER_ID = ProviderId.of("test-pass");
-        private final Texture[] textureSlots = new Texture[9];
+        private final Texture[] textureSlots = new Texture[12];
         private final boolean[] shadowMatrices = new boolean[4];
         private float[] shadowParams;
+        private float[] iblParams;
         private float[] shadowCascadeSplits;
         private float[] shadowBiases;
         private float[] shadowCameraPosition;
         private float[] shadowCameraDirection;
         private int drawCalls;
 
-        @Override
-        public RenderPassCompatibility compatibility() {
-            return RenderPassCompatibility.of(
+        private final RenderPassCompatibility compatibility = RenderPassCompatibility.of(
                     RenderTargetLayout.color(
                             TextureFormat.RGBA8_UNORM),
                     64, 64);
+
+        @Override
+        public RenderPassCompatibility compatibility() {
+            return compatibility;
         }
 
         @Override
@@ -742,6 +964,7 @@ final class CascadedShadowMap3DTest {
         public void setParameterBlock(int group, int binding, ShaderParameterBlock block) {
             ByteBuffer data = block.readOnlyData().order(ByteOrder.nativeOrder());
             shadowParams = readFloat4(block, data, "shadowParams");
+            iblParams = readFloat4(block, data, "iblParams");
             shadowCascadeSplits = readFloat4(block, data, "shadowCascadeSplits");
             shadowBiases = readFloat4(block, data, "shadowBiases");
             shadowCameraPosition = readFloat4(block, data, "shadowCameraPosition");
@@ -840,7 +1063,8 @@ final class CascadedShadowMap3DTest {
         }
 
         private static float[] readFloat4(ShaderParameterBlock block, ByteBuffer data, String path) {
-            ShaderParameterHandle handle = block.layout().requireHandle(path);
+            ShaderParameterHandle handle = block.layout().findHandle(path);
+            if (handle == null) return null;
             int offset = handle.byteOffsetInt();
             return new float[] {
                     data.getFloat(offset),

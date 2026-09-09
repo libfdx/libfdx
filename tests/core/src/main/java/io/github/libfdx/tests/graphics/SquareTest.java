@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.ShapeRenderTest;
+
 import io.github.libfdx.graphics.ShapeRenderer;
 
 /**
@@ -25,7 +27,7 @@ public final class SquareTest extends ShapeRenderTest {
     }
 
     @Override
-    void renderShape(ShapeRenderer shapes) {
+    protected void renderShape(ShapeRenderer shapes) {
         shapes.filledRect(-0.55f, -0.55f, 1.10f, 1.10f, 0.20f, 0.78f, 0.48f, 1.0f);
     }
 }

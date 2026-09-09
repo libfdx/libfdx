@@ -79,32 +79,27 @@ public final class SpriteOutlineRenderer2D implements Disposable {
             @fragment
             fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
                 let base = textureSample(u_texture, u_sampler, input.texCoord) * input.color;
+                if (input.texelAndWidth.z <= 0.0) { return base; }
                 let sampleStep = input.texelAndWidth.xy * input.texelAndWidth.z;
                 let uvMin = input.uvBounds.xy;
                 let uvMax = input.uvBounds.zw;
                 var outlineAlpha = 0.0;
-                outlineAlpha = max(outlineAlpha, textureSample(u_texture, u_sampler,
-                    clamp(input.texCoord + vec2f(-sampleStep.x, 0.0), uvMin, uvMax)).a);
-                outlineAlpha = max(outlineAlpha, textureSample(u_texture, u_sampler,
-                    clamp(input.texCoord + vec2f(sampleStep.x, 0.0), uvMin, uvMax)).a);
-                outlineAlpha = max(outlineAlpha, textureSample(u_texture, u_sampler,
-                    clamp(input.texCoord + vec2f(0.0, -sampleStep.y), uvMin, uvMax)).a);
-                outlineAlpha = max(outlineAlpha, textureSample(u_texture, u_sampler,
-                    clamp(input.texCoord + vec2f(0.0, sampleStep.y), uvMin, uvMax)).a);
-                outlineAlpha = max(outlineAlpha, textureSample(u_texture, u_sampler,
-                    clamp(input.texCoord + vec2f(-sampleStep.x, -sampleStep.y), uvMin, uvMax)).a);
-                outlineAlpha = max(outlineAlpha, textureSample(u_texture, u_sampler,
-                    clamp(input.texCoord + vec2f(sampleStep.x, -sampleStep.y), uvMin, uvMax)).a);
-                outlineAlpha = max(outlineAlpha, textureSample(u_texture, u_sampler,
-                    clamp(input.texCoord + vec2f(-sampleStep.x, sampleStep.y), uvMin, uvMax)).a);
-                outlineAlpha = max(outlineAlpha, textureSample(u_texture, u_sampler,
-                    clamp(input.texCoord + vec2f(sampleStep.x, sampleStep.y), uvMin, uvMax)).a);
-                let outlineOnly = vec4f(input.outlineColor.rgb,
-                    max(outlineAlpha - base.a, 0.0) * input.outlineColor.a);
-                if (base.a > 0.01) {
-                    return base;
+                // Circular dilation avoids the enlarged diagonal corners of an eight-tap square.
+                for (var i = 0; i < 64; i = i + 1) {
+                    let angle = f32(i) * 0.09817477042;
+                    let offset = vec2f(cos(angle), sin(angle)) * sampleStep;
+                    outlineAlpha = max(outlineAlpha, textureSampleLevel(u_texture, u_sampler,
+                        clamp(input.texCoord + offset, uvMin, uvMax), 0.0).a);
+                    outlineAlpha = max(outlineAlpha, textureSampleLevel(u_texture, u_sampler,
+                        clamp(input.texCoord + offset * 0.5, uvMin, uvMax), 0.0).a);
                 }
-                return outlineOnly;
+                // Composite the sprite over its stroke, retaining fractional edge coverage.
+                let strokeAlpha = outlineAlpha * input.outlineColor.a * input.color.a
+                    * select(0.0, 1.0, input.texelAndWidth.z > 0.0);
+                let alpha = base.a + strokeAlpha * (1.0 - base.a);
+                let rgb = (base.rgb * base.a + input.outlineColor.rgb * strokeAlpha * (1.0 - base.a))
+                    / max(alpha, 0.00001);
+                return vec4f(rgb, alpha);
             }
             """;
 

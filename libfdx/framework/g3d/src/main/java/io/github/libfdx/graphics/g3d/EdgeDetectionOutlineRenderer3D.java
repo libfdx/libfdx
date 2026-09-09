@@ -511,7 +511,7 @@ public final class EdgeDetectionOutlineRenderer3D implements Disposable {
     private void drawMask(Renderable3D renderable) {
         MeshPart meshPart = renderable.meshPart();
         Mesh mesh = meshPart.mesh();
-        boolean skinned = Mesh.PBR_SKINNED_LAYOUT.equals(mesh.vertexLayout());
+        boolean skinned = mesh.hasPbrSkinning();
         RenderPipeline pipeline = maskPipeline(mesh.vertexLayout(),
                 meshPart.primitiveTopology(), skinned);
         maskPass.setPipeline(pipeline);
@@ -607,7 +607,7 @@ public final class EdgeDetectionOutlineRenderer3D implements Disposable {
             throw new FdxException(
                     "Edge-detection outline requires FLOAT32X3 position at location 0");
         }
-        if (skinned && !Mesh.PBR_SKINNED_LAYOUT.equals(layout)) {
+        if (skinned && !Mesh.PBR_SKINNED_LAYOUT.equals(layout) && !Mesh.PBR_TEXTURED_SKINNED_LAYOUT.equals(layout)) {
             throw new FdxException(
                     "Edge-detection outline only supports the standard PBR skinned layout");
         }

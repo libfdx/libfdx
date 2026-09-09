@@ -14,15 +14,19 @@ import io.github.libfdx.graphics.shadergraph.model.ShaderGraphType;
  * Framework-owned PBR local-space vertex transformation extension contract.
  *
  * <p>A replacement graph receives the post-skinning local position, local
- * normal, and primary UV. It must return {@code position} and {@code normal}
- * values. Model/view projection and renderer-owned skinning remain outside
- * this function graph.</p>
+ * normal, tangent XYZW, and UV0/UV1. It must return {@code position} and {@code normal}
+ * values. The optional {@code tangent} output replaces the tangent; omit it to retain
+ * the input. Deformations that change tangent directions should supply that output.
+ * Missing tangent/UV1 attributes arrive as zeros. Model/view projection and
+ * renderer-owned skinning remain outside this function graph.</p>
  */
 public final class StandardPbrVertexGraph {
     private static final ShaderGraphType VEC2 =
             ShaderGraphType.vector(ShaderScalarType.F32, 2);
     private static final ShaderGraphType VEC3 =
             ShaderGraphType.vector(ShaderScalarType.F32, 3);
+    private static final ShaderGraphType VEC4 =
+            ShaderGraphType.vector(ShaderScalarType.F32, 4);
 
     private StandardPbrVertexGraph() {
     }
@@ -38,13 +42,18 @@ public final class StandardPbrVertexGraph {
         input(graph, "local_position", VEC3, "localPosition");
         input(graph, "local_normal", VEC3, "localNormal");
         input(graph, "uv", VEC2, "uv0");
+        input(graph, "uv1", VEC2, "uv1");
+        input(graph, "local_tangent", VEC4, "localTangent");
         ShaderExpression position = graph.parameter(
                 "local_position_input", "local_position");
         ShaderExpression normal = graph.parameter(
                 "local_normal_input", "local_normal");
         graph.parameter("uv_input", "uv");
+        graph.parameter("uv1_input", "uv1");
+        ShaderExpression tangent = graph.parameter("local_tangent_input", "local_tangent");
         graph.output("position", "position", position);
         graph.output("normal", "normal", normal);
+        graph.output("tangent", "tangent", tangent);
         return graph.build();
     }
 

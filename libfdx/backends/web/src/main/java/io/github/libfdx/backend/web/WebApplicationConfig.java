@@ -13,9 +13,45 @@ import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 public final class WebApplicationConfig extends ApplicationConfig {
     private DisplayConfig displayConfig = new DisplayConfig().size(640, 480);
     private GraphicsAttachmentProvider graphics;
+    private io.github.libfdx.audio.AudioProvider audio;
+
+    /** Optional audio setup; null disables audio. */
+    public io.github.libfdx.audio.AudioProvider audio() { return audio; }
+    /** Configures backend-owned audio. Applications explicitly request gesture activation. */
+    public WebApplicationConfig audio(io.github.libfdx.audio.AudioProvider audio) {
+        this.audio = audio;
+        audioProvider(audio != null ? audio.providerId() : null);
+        return this;
+    }
     private WebPreloadApplicationListener preloadApplicationListener;
     private ApplicationListener applicationPreloadListener;
     private String canvasId = "libfdx-canvas";
+    private String[] deferredAssets = new String[0];
+
+    /**
+     * Excludes exact asset paths, or directory prefixes ending in '/', from startup
+     * downloads. They stay packaged and listed in the manifest. Load them explicitly
+     * through asynchronous file/asset APIs; synchronous font/skin helpers require
+     * already-preloaded inputs. Replaces the previous selection and copies the array.
+     */
+    public WebApplicationConfig deferAssets(String... paths) {
+        if (paths == null) { throw new IllegalArgumentException("Deferred asset paths cannot be null"); }
+        String[] normalized = paths.clone();
+        for (int i = 0; i < normalized.length; i++) {
+            String path = normalized[i];
+            if (path == null) { throw new IllegalArgumentException("Deferred asset path cannot be null"); }
+            path = path.replace('\\', '/').trim();
+            while (path.startsWith("./")) { path = path.substring(2); }
+            if (path.startsWith("assets/")) { path = path.substring(7); }
+            if (path.isEmpty() || path.startsWith("/") || path.contains("..") || path.contains(":")) {
+                throw new IllegalArgumentException("Deferred assets require relative paths: " + path);
+            }
+            normalized[i] = path;
+        }
+        deferredAssets = normalized; return this;
+    }
+    /** Returns a copy of the startup exclusion selection. */
+    public String[] deferredAssets() { return deferredAssets.clone(); }
 
     /**
      * Returns the display config.

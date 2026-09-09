@@ -61,6 +61,25 @@ public final class Mesh implements Disposable {
             VertexAttribute.of(6, VertexFormat.FLOAT32X4, 72),
             VertexAttribute.of(7, VertexFormat.FLOAT32X4, 88));
 
+    /** PBR layouts with secondary UV (location 8) and tangent XYZW (location 9) appended. */
+    public static final VertexLayout PBR_TEXTURED_LAYOUT = texturedLayout(PBR_LAYOUT);
+    public static final VertexLayout PBR_TEXTURED_SKINNED_LAYOUT = texturedLayout(PBR_SKINNED_LAYOUT);
+
+    private static VertexLayout texturedLayout(VertexLayout base) {
+        VertexAttribute[] attributes = new VertexAttribute[base.attributeCount() + 2];
+        for (int i = 0; i < base.attributeCount(); i++) attributes[i] = base.attribute(i);
+        attributes[base.attributeCount()] = VertexAttribute.of(8, VertexFormat.FLOAT32X2, base.arrayStride());
+        attributes[base.attributeCount()+1] = VertexAttribute.of(9, VertexFormat.FLOAT32X4, base.arrayStride()+8);
+        return VertexLayout.of(base.arrayStride()+24, attributes);
+    }
+
+    public boolean hasPbrTextureCoordinates() {
+        return vertexLayout == PBR_TEXTURED_LAYOUT || vertexLayout == PBR_TEXTURED_SKINNED_LAYOUT;
+    }
+    public boolean hasPbrSkinning() {
+        return vertexLayout == PBR_SKINNED_LAYOUT || vertexLayout == PBR_TEXTURED_SKINNED_LAYOUT;
+    }
+
     private final String id;
     private final VertexLayout vertexLayout;
     private final int vertexCount;
@@ -71,6 +90,8 @@ public final class Mesh implements Disposable {
     private final float[] sourceBakedColors;
     private final float[] sourceNormals;
     private final float[] sourceTexCoords;
+    private final float[] sourceTexCoords1;
+    private final float[] sourceTangents;
     private final float[] sourcePbr;
     private final float[] sourceBakedPbr;
     private final float[] sourceEmissive;
@@ -132,6 +153,17 @@ public final class Mesh implements Disposable {
             float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords, float[] sourcePbr,
             float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive, int[] sourceJoints,
             float[] sourceWeights, boolean retainSourceData) {
+        this(graphics, id, vertexLayout, vertices, vertexCount, indices, indexCount, bounds,
+                sourcePositions, sourceColors, sourceBakedColors, sourceNormals, sourceTexCoords,
+                sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, sourceJoints,
+                sourceWeights, retainSourceData, null, null);
+    }
+
+    private Mesh(GraphicsContext graphics, String id, VertexLayout vertexLayout, float[] vertices, int vertexCount,
+            short[] indices, int indexCount, BoundingBox bounds, float[] sourcePositions, float[] sourceColors,
+            float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords, float[] sourcePbr,
+            float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive, int[] sourceJoints,
+            float[] sourceWeights, boolean retainSourceData, float[] sourceTexCoords1, float[] sourceTangents) {
         if (graphics == null) {
             throw new FdxException("GraphicsContext cannot be null");
         }
@@ -146,6 +178,9 @@ public final class Mesh implements Disposable {
         }
         if (indexCount < 0) {
             throw new FdxException("Mesh index count cannot be negative");
+        }
+        if (indexCount > 0 && (indices == null || indices.length < indexCount)) {
+            throw new FdxException("Mesh indices cannot be empty when index count is greater than zero");
         }
         int vertexByteCount = vertexCount * vertexLayout.arrayStride();
         validateFloatVertexData(vertices, vertexByteCount);
@@ -162,6 +197,8 @@ public final class Mesh implements Disposable {
         this.sourceBakedColors = retainSourceData && sourceBakedColors != null ? sourceBakedColors.clone() : null;
         this.sourceNormals = retainSourceData && sourceNormals != null ? sourceNormals.clone() : null;
         this.sourceTexCoords = retainSourceData && sourceTexCoords != null ? sourceTexCoords.clone() : null;
+        this.sourceTexCoords1 = retainSourceData && sourceTexCoords1 != null ? sourceTexCoords1.clone() : null;
+        this.sourceTangents = retainSourceData && sourceTangents != null ? sourceTangents.clone() : null;
         this.sourcePbr = retainSourceData && sourcePbr != null ? sourcePbr.clone() : null;
         this.sourceBakedPbr = retainSourceData && sourceBakedPbr != null ? sourceBakedPbr.clone() : null;
         this.sourceEmissive = retainSourceData && sourceEmissive != null ? sourceEmissive.clone() : null;
@@ -169,17 +206,32 @@ public final class Mesh implements Disposable {
                 : null;
         this.sourceJoints = retainSourceData && sourceJoints != null ? sourceJoints.clone() : null;
         this.sourceWeights = retainSourceData && sourceWeights != null ? sourceWeights.clone() : null;
-        vertexBuffer = graphics.device().createBuffer(BufferDescriptor.staticVertex(this.id + " vertices",
-                vertexByteCount));
-        graphics.device().writeBuffer(vertexBuffer, floats(vertices, vertexByteCount));
-        if (indexCount > 0) {
-            if (indices == null || indices.length < indexCount) {
-                throw new FdxException("Mesh indices cannot be empty when index count is greater than zero");
+        try {
+            vertexBuffer = graphics.device().createBuffer(BufferDescriptor.staticVertex(this.id + " vertices",
+                    vertexByteCount));
+            graphics.device().writeBuffer(vertexBuffer, floats(vertices, vertexByteCount));
+            if (indexCount > 0) {
+                int indexByteCount = indexCount * 2;
+                indexBuffer = graphics.device().createBuffer(BufferDescriptor.staticIndex(this.id + " indices",
+                        indexByteCount));
+                graphics.device().writeBuffer(indexBuffer, shorts(indices, indexByteCount));
             }
-            int indexByteCount = indexCount * 2;
-            indexBuffer = graphics.device().createBuffer(BufferDescriptor.staticIndex(this.id + " indices",
-                    indexByteCount));
-            graphics.device().writeBuffer(indexBuffer, shorts(indices, indexByteCount));
+        } catch (RuntimeException | Error error) {
+            releaseFailedBuffer(indexBuffer, error);
+            releaseFailedBuffer(vertexBuffer, error);
+            throw error;
+        }
+    }
+
+    private static void releaseFailedBuffer(Buffer buffer, Throwable error) {
+        if (buffer != null) {
+            try {
+                buffer.dispose();
+            } catch (RuntimeException | Error cleanupError) {
+                if (cleanupError != error) {
+                    error.addSuppressed(cleanupError);
+                }
+            }
         }
     }
 
@@ -413,6 +465,21 @@ public final class Mesh implements Disposable {
             float[] sourceColors, float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords,
             float[] sourcePbr, float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive,
             int[] sourceJoints, float[] sourceWeights, BoundingBox bounds, boolean retainSourceData) {
+        return positionColor3D(graphics, id, sourcePositions, sourceColors, sourceBakedColors, sourceNormals,
+                sourceTexCoords, sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive,
+                sourceJoints, sourceWeights, bounds, retainSourceData, null, null);
+    }
+
+    /**
+     * Creates a PBR mesh with optional UV1 and tangent XYZW attributes. Arrays are copied on creation;
+     * retained shading arrays follow retainSourceData. Null extra attributes use zero values; tangent W
+     * zero requests a derivative basis. Existing overloads keep their compact layouts.
+     */
+    public static Mesh positionColor3D(GraphicsContext graphics, String id, float[] sourcePositions,
+            float[] sourceColors, float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords,
+            float[] sourcePbr, float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive,
+            int[] sourceJoints, float[] sourceWeights, BoundingBox bounds, boolean retainSourceData,
+            float[] sourceTexCoords1, float[] sourceTangents) {
         if (sourcePositions == null || sourcePositions.length == 0 || sourcePositions.length % 3 != 0) {
             throw new FdxException("3D position/color meshes require xyz source positions");
         }
@@ -444,6 +511,11 @@ public final class Mesh implements Disposable {
         boolean pbrLayout = sourceNormals != null && sourceTexCoords != null && sourcePbr != null
                 && sourceEmissive != null;
         boolean hasSkinning = sourceJoints != null || sourceWeights != null;
+        boolean textured = sourceTexCoords1 != null || sourceTangents != null;
+        if (textured && !pbrLayout) throw new FdxException("Extended texture attributes require a PBR mesh");
+        if (sourceTexCoords1 != null && sourceTexCoords1.length != vertexCount * 2
+                || sourceTangents != null && sourceTangents.length != vertexCount * 4)
+            throw new FdxException("Extended texture attribute count must match positions");
         if (hasSkinning && !pbrLayout) {
             throw new FdxException("Skinned 3D meshes require retained PBR vertex attributes");
         }
@@ -454,9 +526,15 @@ public final class Mesh implements Disposable {
             if (sourceWeights == null || sourceWeights.length != vertexCount * 4) {
                 throw new FdxException("Skinned 3D meshes require four joint weights per vertex");
             }
+            for (int i=0;i<sourceWeights.length;i++) {
+                if (!Float.isFinite(sourceWeights[i]) || sourceWeights[i] < 0 || sourceJoints[i] < 0
+                        || sourceJoints[i] > 16_777_216)
+                    throw new FdxException("Skinning requires finite nonnegative weights and exactly representable joint indices");
+            }
         }
         int floatsPerVertex = hasSkinning ? PBR_SKINNED_FLOATS_PER_VERTEX
                 : pbrLayout ? PBR_FLOATS_PER_VERTEX : POSITION_COLOR_FLOATS_PER_VERTEX;
+        if (textured) floatsPerVertex += 6;
         float[] vertices = new float[vertexCount * floatsPerVertex];
         int out = 0;
         for (int i = 0; i < vertexCount; i++) {
@@ -499,12 +577,18 @@ public final class Mesh implements Disposable {
                 vertices[out++] = sourceWeights[influenceOffset + 2];
                 vertices[out++] = sourceWeights[influenceOffset + 3];
             }
+            if (textured) {
+                vertices[out++] = sourceTexCoords1 == null ? 0 : sourceTexCoords1[i*2];
+                vertices[out++] = sourceTexCoords1 == null ? 0 : sourceTexCoords1[i*2+1];
+                for (int c = 0; c < 4; c++) vertices[out++] = sourceTangents == null ? 0 : sourceTangents[i*4+c];
+            }
         }
-        return new Mesh(graphics, id, hasSkinning ? PBR_SKINNED_LAYOUT : pbrLayout ? PBR_LAYOUT
+        return new Mesh(graphics, id, textured ? (hasSkinning ? PBR_TEXTURED_SKINNED_LAYOUT : PBR_TEXTURED_LAYOUT)
+                : hasSkinning ? PBR_SKINNED_LAYOUT : pbrLayout ? PBR_LAYOUT
                 : POSITION_COLOR_LAYOUT, vertices, vertexCount,
                 null, 0, bounds, sourcePositions, sourceColors, sourceBakedColors, sourceNormals, sourceTexCoords,
                 sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, sourceJoints, sourceWeights,
-                retainSourceData);
+                retainSourceData, sourceTexCoords1, sourceTangents);
     }
 
     /**
@@ -625,6 +709,11 @@ public final class Mesh implements Disposable {
     public float[] sourceTexCoords() {
         return sourceTexCoords;
     }
+
+    /** Borrowed retained UV1 data, or null when absent/not retained. Do not mutate. */
+    public float[] sourceTexCoords1() { return sourceTexCoords1; }
+    /** Borrowed retained tangent XYZW data, or null when absent/not retained. Do not mutate. */
+    public float[] sourceTangents() { return sourceTangents; }
 
     /**
      * Returns the source PBR.

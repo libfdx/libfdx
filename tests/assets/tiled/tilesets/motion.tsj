@@ -1,0 +1,31 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "name": "motion",
+  "image": "../images/motion.png",
+  "imagewidth": 128,
+  "imageheight": 32,
+  "tilewidth": 32,
+  "tileheight": 32,
+  "tilecount": 4,
+  "columns": 4,
+  "tileoffset": {
+    "x": 2,
+    "y": -1
+  },
+  "tiles": [
+    {
+      "id": 0,
+      "animation": [
+        {
+          "tileid": 0,
+          "duration": 100
+        },
+        {
+          "tileid": 1,
+          "duration": 200
+        }
+      ]
+    }
+  ]
+}

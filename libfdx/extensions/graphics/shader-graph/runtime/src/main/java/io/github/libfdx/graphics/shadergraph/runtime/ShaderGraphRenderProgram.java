@@ -1,15 +1,17 @@
 package io.github.libfdx.graphics.shadergraph.runtime;
 
-import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.CompareFunction;
 import io.github.libfdx.graphics.CullMode;
 import io.github.libfdx.graphics.FrontFace;
-import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
 import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
 import io.github.libfdx.graphics.shader.runtime.ShaderResourceBinding;
-import io.github.libfdx.graphics.VertexLayout;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.shader.ShaderModuleSource;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompileResult;
+import io.github.libfdx.graphics.VertexLayout;
+import io.github.libfdx.math.ClipDepthRange;
+import java.util.function.Supplier;
 
 /**
  * One immutable linked render-program definition consumed by the graph
@@ -18,7 +20,7 @@ import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompileResult;
 public final class ShaderGraphRenderProgram {
     private final String label;
     private final ShaderPassId passId;
-    private final ShaderModuleDescriptor shader;
+    private final ShaderModuleSource shader;
     private final String vertexEntryPoint;
     private final String fragmentEntryPoint;
     private final FrontFace frontFace;
@@ -29,6 +31,7 @@ public final class ShaderGraphRenderProgram {
     private final int cacheCapacity;
     private final VertexLayout[] vertexLayouts;
     private final ShaderResourceBinding defaultResources;
+    private final Supplier<ShaderResourceBinding> preparedDefaults;
 
     private ShaderGraphRenderProgram(Builder builder) {
         if (builder.passId == null || builder.shader == null
@@ -57,6 +60,7 @@ public final class ShaderGraphRenderProgram {
                 ? builder.vertexLayouts.clone()
                 : new VertexLayout[0];
         defaultResources = builder.defaultResources;
+        preparedDefaults = builder.preparedDefaults;
         for (VertexLayout layout : vertexLayouts) {
             if (layout == null) {
                 throw new FdxException(
@@ -67,6 +71,10 @@ public final class ShaderGraphRenderProgram {
 
     public static Builder builder(ShaderPassId passId,
             ShaderModuleDescriptor shader) {
+        return new Builder(passId, ShaderModuleSource.fixed(shader));
+    }
+
+    public static Builder builder(ShaderPassId passId, ShaderModuleSource shader) {
         return new Builder(passId, shader);
     }
 
@@ -91,8 +99,11 @@ public final class ShaderGraphRenderProgram {
     }
 
     public ShaderModuleDescriptor shader() {
-        return shader;
+        return shader.generate();
     }
+
+    /** Reading this immutable input does not generate or compile source. */
+    public ShaderModuleSource preparationSource() { return shader; }
 
     public String vertexEntryPoint() {
         return vertexEntryPoint;
@@ -147,7 +158,7 @@ public final class ShaderGraphRenderProgram {
      * @return borrowed default binding, or {@code null}
      */
     public ShaderResourceBinding defaultResources() {
-        return defaultResources;
+        return preparedDefaults != null ? preparedDefaults.get() : defaultResources;
     }
 
     /**
@@ -156,7 +167,7 @@ public final class ShaderGraphRenderProgram {
     public static final class Builder {
         private String label;
         private final ShaderPassId passId;
-        private final ShaderModuleDescriptor shader;
+        private final ShaderModuleSource shader;
         private String vertexEntryPoint;
         private String fragmentEntryPoint;
         private FrontFace frontFace;
@@ -167,8 +178,9 @@ public final class ShaderGraphRenderProgram {
         private int cacheCapacity = 64;
         private VertexLayout[] vertexLayouts = new VertexLayout[0];
         private ShaderResourceBinding defaultResources;
+        private Supplier<ShaderResourceBinding> preparedDefaults;
 
-        private Builder(ShaderPassId passId, ShaderModuleDescriptor shader) {
+        private Builder(ShaderPassId passId, ShaderModuleSource shader) {
             this.passId = passId;
             this.shader = shader;
         }
@@ -233,6 +245,15 @@ public final class ShaderGraphRenderProgram {
          */
         public Builder defaultResources(ShaderResourceBinding value) {
             defaultResources = value;
+            preparedDefaults = null;
+            return this;
+        }
+
+        /** Owner-thread nonblocking accessor for defaults produced by deferred CPU preparation.
+         * Returns null until generated; must not start work, wait, or call native APIs. */
+        public Builder preparedDefaults(Supplier<ShaderResourceBinding> accessor) {
+            preparedDefaults = accessor;
+            defaultResources = null;
             return this;
         }
 

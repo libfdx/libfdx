@@ -3174,7 +3174,7 @@ extern "C" void fdx_desktop_vulkan_destroy_shader_module(int64_t shaderModuleHan
         return;
     }
     if (module->context != nullptr && module->context->device != VK_NULL_HANDLE) {
-        waitDeviceIdleBeforeDestroy(module->context, "shader module");
+        // Pipeline creation has consumed these modules; GPU execution does not retain them.
         if (module->fragment != VK_NULL_HANDLE) {
             vkDestroyShaderModule(module->context->device, module->fragment, nullptr);
         }
@@ -3185,13 +3185,13 @@ extern "C" void fdx_desktop_vulkan_destroy_shader_module(int64_t shaderModuleHan
     delete module;
 }
 
-extern "C" void fdx_desktop_vulkan_destroy_render_pipeline(int64_t pipelineHandle) {
+extern "C" void fdx_desktop_vulkan_destroy_render_pipeline(int64_t pipelineHandle, int32_t published) {
     Pipeline* pipeline = ptr<Pipeline>(pipelineHandle);
     if (pipeline == nullptr) {
         return;
     }
     if (pipeline->context != nullptr && pipeline->context->device != VK_NULL_HANDLE) {
-        if (pipeline->context->frameStarted) {
+        if (published && pipeline->context->frameStarted) {
             RetiredPipeline retired{};
             retired.pipeline = pipeline->pipeline;
             retired.layout = pipeline->layout;
@@ -3199,7 +3199,8 @@ extern "C" void fdx_desktop_vulkan_destroy_render_pipeline(int64_t pipelineHandl
             retired.textureDescriptorSetLayout = pipeline->textureDescriptorSetLayout;
             currentFrame(pipeline->context).retiredPipelines.push_back(retired);
         } else {
-            waitDeviceIdleBeforeDestroy(pipeline->context, "render pipeline");
+            // An unpublished preparation result has never been recorded or submitted.
+            if (published) waitDeviceIdleBeforeDestroy(pipeline->context, "render pipeline");
             if (pipeline->pipeline != VK_NULL_HANDLE) {
                 vkDestroyPipeline(pipeline->context->device, pipeline->pipeline, nullptr);
             }

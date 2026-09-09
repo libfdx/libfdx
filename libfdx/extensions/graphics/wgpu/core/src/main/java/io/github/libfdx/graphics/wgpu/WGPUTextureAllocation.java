@@ -13,16 +13,24 @@ final class WGPUTextureAllocation extends WGPURecordedResource {
     private final WGPUTextureView nativeView;
     private final WGPUTextureView nativeStorageView;
     private final WGPUSampler nativeSampler;
+    private final WGPUTextureView[] attachmentViews;
     private Array<WGPUTextureBindGroupResource> textureBindGroups;
 
     WGPUTextureAllocation(WGPUResourceDomain resourceDomain,
             WGPUTexture nativeTexture, WGPUTextureView nativeView,
             WGPUTextureView nativeStorageView, WGPUSampler nativeSampler) {
+        this(resourceDomain, nativeTexture, nativeView, nativeStorageView, nativeSampler, null);
+    }
+
+    WGPUTextureAllocation(WGPUResourceDomain resourceDomain,
+            WGPUTexture nativeTexture, WGPUTextureView nativeView,
+            WGPUTextureView nativeStorageView, WGPUSampler nativeSampler, WGPUTextureView[] attachmentViews) {
         super(resourceDomain);
         this.nativeTexture = nativeTexture;
         this.nativeView = nativeView;
         this.nativeStorageView = nativeStorageView;
         this.nativeSampler = nativeSampler;
+        this.attachmentViews = attachmentViews;
     }
 
     WGPUTexture nativeTexture() {
@@ -31,6 +39,10 @@ final class WGPUTextureAllocation extends WGPURecordedResource {
 
     WGPUTextureView nativeView() {
         return nativeView;
+    }
+
+    WGPUTextureView nativeAttachmentView(int level) {
+        return attachmentViews == null ? nativeView : attachmentViews[level];
     }
 
     WGPUTextureView nativeStorageView() {
@@ -75,6 +87,12 @@ final class WGPUTextureAllocation extends WGPURecordedResource {
     @Override
     protected void releaseNative() {
         WGPUCleanup cleanup = new WGPUCleanup();
+        if (attachmentViews != null) for (WGPUTextureView view : attachmentViews) {
+            if (view != null) {
+                cleanup.run(() -> { if (view.isValid()) view.release(); });
+                cleanup.run(view::dispose);
+            }
+        }
         if (nativeSampler != null) {
             cleanup.run(() -> {
                 if (nativeSampler.isValid()) {

@@ -23,10 +23,12 @@ dependencies {
     implementation(libs.teavm.jso.impl)
     if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
         implementation("${libs.versions.libfdxGroup.get()}:backend_web:$libfdxDependencyVersion")
+        implementation("${libs.versions.libfdxGroup.get()}:audio_web:$libfdxDependencyVersion")
         implementation("${libs.versions.libfdxGroup.get()}:gl_web:$libfdxDependencyVersion")
         implementation("${libs.versions.libfdxGroup.get()}:wgpu_web:$libfdxDependencyVersion")
     } else {
         implementation(project(":libfdx:backends:web"))
+        implementation(project(":libfdx:extensions:audio:web"))
         implementation(project(":libfdx:extensions:graphics:gl:platform:web"))
         implementation(project(":libfdx:extensions:graphics:wgpu:platform:web"))
     }

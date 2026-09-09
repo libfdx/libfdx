@@ -5,7 +5,9 @@ import io.github.libfdx.collections.ObjectMapView;
 import io.github.libfdx.core.FdxException;
 
 /**
- * Describes the values used to create or identify an asset.
+ * Describes the values used to create or identify an asset. Option entries are
+ * copied, but their values are borrowed and must remain immutable for the load
+ * and cached asset lifetime.
  *
  * @param <T> the value type
  *

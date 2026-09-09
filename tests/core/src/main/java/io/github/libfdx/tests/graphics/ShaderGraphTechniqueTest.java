@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.GraphicsParityTest;
+
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphParameter;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphParameterKind;
 import io.github.libfdx.Fdx;

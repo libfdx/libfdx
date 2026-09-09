@@ -1,5 +1,7 @@
 package io.github.libfdx.graphics.gl;
 
+import io.github.libfdx.graphics.GraphicsContextLostException;
+
 /**
  * Defines the contract for GL surface implementations.
  *
@@ -7,12 +9,15 @@ package io.github.libfdx.graphics.gl;
  */
 public interface GLSurface {
     /**
-     * Runs the make current step.
+     * Makes the native context current. Report terminal native context loss with
+     * {@link GraphicsContextLostException}; ordinary
+     * surface errors must remain distinguishable from loss of the resource domain.
      */
     void makeCurrent();
 
     /**
-     * Runs the swap buffers step.
+     * Presents the surface. Report terminal native context loss with
+     * {@link GraphicsContextLostException}.
      */
     void swapBuffers();
 

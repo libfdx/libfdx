@@ -2,6 +2,8 @@ package io.github.libfdx.samples.g2d.platformer.desktop;
 
 import io.github.libfdx.backend.desktop.DesktopApplicationBackend;
 import io.github.libfdx.backend.desktop.DesktopApplicationConfig;
+import io.github.libfdx.backend.desktop.DesktopAssetExecutor;
+import io.github.libfdx.audio.openal.OpenALAudioProvider;
 import io.github.libfdx.backend.desktop.DesktopOpenGLProvider;
 import io.github.libfdx.backend.desktop.DesktopVulkanProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
@@ -37,11 +39,13 @@ public final class PlatformerDesktopLauncher {
                 .title("libfdx Platformer - " + graphicsDisplayName(args, graphics))
                 .size(960, 540)
                 .maximized(maximized)
+                .visible(Boolean.parseBoolean(System.getProperty("libfdx.sample.visible","true")))
                 .vSync(true)
                 .foregroundFps(60)
                 .graphics(graphicsProvider(graphics));
 
-        new DesktopApplicationBackend().start(config, new PlatformerApplication(exitAfterFrames(args)));
+        if (Boolean.parseBoolean(System.getProperty("libfdx.sample.audio","true"))) config.audio(new OpenALAudioProvider());
+        new DesktopApplicationBackend().start(config, new PlatformerApplication(exitAfterFrames(args),new DesktopAssetExecutor(2,8)));
     }
 
     private static GraphicsAttachmentProvider graphicsProvider(String graphics) {

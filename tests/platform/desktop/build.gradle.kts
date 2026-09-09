@@ -1,4 +1,5 @@
 import io.github.libfdx.gradle.LibfdxDesktopJvmTargetExtension
+import java.time.Duration
 import org.gradle.api.attributes.java.TargetJvmVersion
 import org.gradle.api.tasks.Delete
 
@@ -37,36 +38,91 @@ val runtimeFdxClasspath = configurations.create("runtimeFdxClasspath") {
     }
 }
 
+val wgpuJniRuntimeClasspath = configurations.create("wgpuJniRuntimeClasspath") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    attributes {
+        attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 25)
+    }
+}
+
 val interactiveGraphicsRuntimeClasspath = files(
     glRuntimeClasspath,
     vulkanRuntimeClasspath,
     wgpuRuntimeClasspath,
 )
 
-base {
-    archivesName.set("tests_desktop")
-}
+//base {
+//    archivesName.set("tests_desktop")
+//}
 
 dependencies {
+    implementation(project(":tests:runner"))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
     implementation(project(":tests:core"))
+    if (System.getProperty("libfdx.test.nativeWgpuAsync") == "true") {
+        val bridge = System.getProperty("libfdx.test.wgpuBridge", "ffm")
+        add(if (bridge == "jni") wgpuJniRuntimeClasspath.name else wgpuRuntimeClasspath.name,
+            "com.github.xpenatan.jWebGPU:webgpu-desktop-$bridge-dawn_windows_x64:${libs.versions.jwebgpu.get()}")
+    }
     if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
         implementation("${libs.versions.libfdxGroup.get()}:backend_desktop:${libs.versions.libfdxSnapshot.get()}")
+        implementation("${libs.versions.libfdxGroup.get()}:audio_openal:${libs.versions.libfdxSnapshot.get()}")
         implementation("${libs.versions.libfdxGroup.get()}:d3d12_core:${libs.versions.libfdxSnapshot.get()}")
         implementation("${libs.versions.libfdxGroup.get()}:wgpu_core:${libs.versions.libfdxSnapshot.get()}")
 
         glRuntimeClasspath("${libs.versions.libfdxGroup.get()}:gl_desktop:${libs.versions.libfdxSnapshot.get()}")
         vulkanRuntimeClasspath("${libs.versions.libfdxGroup.get()}:vulkan_desktop:${libs.versions.libfdxSnapshot.get()}")
         wgpuRuntimeClasspath("${libs.versions.libfdxGroup.get()}:wgpu_desktop_ffm:${libs.versions.libfdxSnapshot.get()}")
+        wgpuJniRuntimeClasspath("${libs.versions.libfdxGroup.get()}:wgpu_desktop_jni:${libs.versions.libfdxSnapshot.get()}")
         runtimeFdxClasspath("${libs.versions.libfdxGroup.get()}:fdx_desktop:${libs.versions.libfdxSnapshot.get()}")
     } else {
         implementation(project(":libfdx:backends:desktop"))
+        implementation(project(":libfdx:extensions:audio:openal"))
         implementation(project(":libfdx:extensions:graphics:d3d12:core"))
         implementation(project(":libfdx:extensions:graphics:wgpu:core"))
 
         glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
         vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
         wgpuRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
+        wgpuJniRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_jni"))
         runtimeFdxClasspath(project(":libfdx:framework:fdx:platform:desktop"))
+    }
+}
+
+tasks.named<Test>("test") {
+    useJUnitPlatform()
+    // Discover nested tests through their enclosing class, not callback/helper class files.
+    // Optional native callback parents must not be loaded by ordinary JVM test discovery.
+    exclude("**/*${'$'}*.class")
+    val temporaryDirectory = layout.buildDirectory.dir("tmp/tests")
+    systemProperty("java.io.tmpdir", temporaryDirectory.get().asFile.absolutePath)
+    doFirst { temporaryDirectory.get().asFile.mkdirs() }
+    if (System.getProperty("libfdx.test.nativeWgpuShaderFailure") == "true"
+            || System.getProperty("libfdx.test.nativeWgpuPreparation") == "true"
+            || System.getProperty("libfdx.test.nativeWgpuAsync") == "true") {
+        val bridge = System.getProperty("libfdx.test.wgpuBridge", "ffm")
+        classpath += when (bridge) {
+            "ffm" -> wgpuRuntimeClasspath
+            "jni" -> wgpuJniRuntimeClasspath
+            else -> throw GradleException("libfdx.test.wgpuBridge must be ffm or jni")
+        } + runtimeFdxClasspath
+        systemProperty("libfdx.test.wgpuBridge", bridge)
+        systemProperty("libfdx.test.nativeWgpuAsync", System.getProperty("libfdx.test.nativeWgpuAsync", "false"))
+        systemProperty("libfdx.test.wgpuLoader", System.getProperty("libfdx.test.wgpuLoader", "DAWN"))
+        val dawnPreparation = System.getProperty("libfdx.test.nativeDawnPreparation") == "true"
+        systemProperty("libfdx.test.wgpuAsyncOutput", rootProject.layout.buildDirectory.dir(
+            if (dawnPreparation) "native-dawn-preparation" else "dawn-snapshot-validation").get().asFile)
+        if (dawnPreparation) workingDir(rootProject.projectDir)
+        if (bridge == "jni") jvmArgs("-Xcheck:jni")
+        systemProperty("libfdx.test.nativeWgpuShaderFailure", System.getProperty("libfdx.test.nativeWgpuShaderFailure", "false"))
+        systemProperty("libfdx.test.nativeWgpuPreparation", System.getProperty("libfdx.test.nativeWgpuPreparation", "false"))
+        systemProperty("libfdx.test.nativeDawnPreparation", System.getProperty("libfdx.test.nativeDawnPreparation", "false"))
+        systemProperty("libfdx.test.wgpuFailureOutput", layout.buildDirectory.dir("wgpu-shader-failure").get().asFile)
+        jvmArgs("--enable-native-access=ALL-UNNAMED")
+        timeout.set(Duration.ofSeconds(60))
+        testLogging.showStandardStreams = true
     }
 }
 
@@ -76,45 +132,6 @@ fun LibfdxDesktopJvmTargetExtension.graphics(name: String, label: String) {
     launchProperty("graphics", name)
     launchProperty("graphicsLabel", label)
 }
-
-fun LibfdxDesktopJvmTargetExtension.headless(
-    testName: String,
-    frames: Int,
-    width: Int,
-    height: Int,
-    capture: String? = null,
-    captureFrame: Int? = null
-) {
-    systemProperty("libfdx.test.name", testName)
-    systemProperty("libfdx.test.frames", frames.toString())
-    systemProperty("libfdx.test.visible", "false")
-    systemProperty("libfdx.test.width", width.toString())
-    systemProperty("libfdx.test.height", height.toString())
-    systemProperty("libfdx.test.maximized", "false")
-    systemProperty("libfdx.test.vsync", "false")
-    capture?.let { systemProperty("libfdx.test.capture", it) }
-    captureFrame?.let { systemProperty("libfdx.test.captureFrame", it.toString()) }
-}
-
-val shaderGraphSpriteCapture =
-    layout.buildDirectory.file("captures/shader-graph-sprite.ppm").get().asFile.absolutePath
-val shaderGraphModelCapture =
-    layout.buildDirectory.file("captures/shader-graph-model.ppm").get().asFile.absolutePath
-val shaderGraphSkinnedModelCapture =
-    layout.buildDirectory.file("captures/shader-graph-model-skinned.ppm").get().asFile.absolutePath
-val shaderGraphComputeCapture =
-    layout.buildDirectory.file("captures/shader-graph-compute.ppm").get().asFile.absolutePath
-val uiCustomSurfaceCapture =
-    layout.buildDirectory.file("captures/ui-custom-surface.ppm").get().asFile.absolutePath
-val shaderGraphEditorCapture =
-    layout.buildDirectory.file("captures/shader-graph-editor.ppm").get().asFile.absolutePath
-val shadingModels3DCapture =
-    layout.buildDirectory.file("captures/shading-models-3d.ppm").get().asFile.absolutePath
-val d3d12PbrStaticCapture =
-    layout.buildDirectory.file("reports/shader-phase0/d3d12-smoke/static.ppm").get().asFile.absolutePath
-val d3d12PbrSkinnedCapture =
-    layout.buildDirectory.file("reports/shader-phase0/d3d12-smoke/skinned.ppm").get().asFile.absolutePath
-val isWindowsHost = System.getProperty("os.name").lowercase().contains("windows")
 
 libfdx {
     assets(rootProject.layout.projectDirectory.dir("tests/assets"))
@@ -126,154 +143,50 @@ libfdx {
         maxHeapSize.set("1g")
         forwardSystemPropertyPrefix("libfdx.test.")
         forwardSystemPropertyPrefix("libfdx.validation.")
+        forwardSystemProperty("libfdx.profileFrames")
 
-        target("d3d12") {
+        target("tests_d3d12") {
             displayName.set("Direct3D 12 graphics tests")
             runtimeClasspath(interactiveGraphicsRuntimeClasspath)
             graphics("d3d12", "Direct3D 12")
             runDescription.set("Runs graphics tests with Direct3D 12 through Java 25 FFM on Windows.")
         }
-        target("gl") {
+        target("tests_auto") {
+            displayName.set("All desktop graphics tests")
+            runtimeClasspath(interactiveGraphicsRuntimeClasspath)
+            systemProperty("libfdx.test.name", "auto")
+            runDescription.set("Runs every chooser test across all desktop graphics providers with isolated processes and a checklist.")
+        }
+        target("tests_gl") {
             displayName.set("GL graphics tests")
             runtimeClasspath(interactiveGraphicsRuntimeClasspath)
             graphics("gl", "GL")
             runDescription.set("Runs graphics tests with desktop GL.")
         }
-        target("wgpu") {
+        target("tests_wgpu") {
             displayName.set("WGPU graphics tests")
             runtimeClasspath(interactiveGraphicsRuntimeClasspath)
             graphics("wgpu", "WGPU")
             runDescription.set("Runs graphics tests with WGPU.")
         }
-        target("wgpu_shading_models_3d") {
-            displayName.set("WGPU shading-model comparison test")
-            runtimeClasspath(wgpuRuntimeClasspath)
-            graphics("wgpu", "WGPU")
-            headless("shading-models-3d", 8, 800, 600,
-                shadingModels3DCapture, 4)
-            runDescription.set(
-                "Renders full PBR, partial PBR lighting, and unlit materials in one ModelBatch."
-            )
-        }
-        target("wgpu_compute") {
-            displayName.set("WGPU handwritten compute test")
-            runtimeClasspath(wgpuRuntimeClasspath)
-            graphics("wgpu", "WGPU")
-            headless("compute-buffer", 4, 320, 240)
-            runDescription.set(
-                "Dispatches and verifies a handwritten compute shader through the common graphics API."
-            )
-        }
-        target("wgpu_render_targets") {
-            displayName.set("WGPU render-target compatibility test")
-            runtimeClasspath(wgpuRuntimeClasspath)
-            graphics("wgpu", "WGPU")
-            headless("render-target-compatibility", 3, 320, 240)
-            runDescription.set(
-                "Validates MRT, resolves, explicit depth, multisampling, and pipeline compatibility through WGPU."
-            )
-        }
-        target("wgpu_shader_graph_program") {
-            displayName.set("WGPU shader-graph program test")
-            runtimeClasspath(wgpuRuntimeClasspath)
-            graphics("wgpu", "WGPU")
-            headless("shader-graph-program", 3, 320, 240)
-            runDescription.set(
-                "Compiles and renders a graph-owned vertex/fragment MRT program through ShaderProvider and WGPU."
-            )
-        }
-        target("wgpu_shader_graph_technique") {
-            displayName.set("WGPU shader-graph technique test")
-            runtimeClasspath(wgpuRuntimeClasspath)
-            graphics("wgpu", "WGPU")
-            headless("shader-graph-technique", 3, 320, 240)
-            runDescription.set(
-                "Runs a multi-pass graph technique with variants, fallback, bounded caches, and atomic replacement."
-            )
-        }
-        target("wgpu_shader_graph_sprite") {
-            displayName.set("WGPU shader-graph sprite test")
-            runtimeClasspath(wgpuRuntimeClasspath)
-            graphics("wgpu", "WGPU")
-            headless("shader-graph-sprite", 4, 640, 480, shaderGraphSpriteCapture, 2)
-            runDescription.set(
-                "Renders SpriteBatch through ShaderGraphProvider and every negotiated WGPU sprite ABI."
-            )
-        }
-        target("wgpu_shader_graph_model") {
-            displayName.set("WGPU shader-graph model test")
-            runtimeClasspath(wgpuRuntimeClasspath)
-            graphics("wgpu", "WGPU")
-            headless("model", 32, 640, 480, shaderGraphModelCapture)
-            systemProperty("libfdx.test.shaderGraphPbr", "true")
-            runDescription.set("Renders static ModelBatch PBR through the common ShaderGraphProvider.")
-        }
-        target("wgpu_shader_graph_skinned_model") {
-            displayName.set("WGPU shader-graph skinned-model test")
-            runtimeClasspath(wgpuRuntimeClasspath)
-            graphics("wgpu", "WGPU")
-            headless("model-skinning", 46, 640, 480, shaderGraphSkinnedModelCapture, 44)
-            systemProperty("libfdx.test.shaderGraphPbr", "true")
-            runDescription.set("Renders skinned ModelBatch PBR through the common ShaderGraphProvider.")
-        }
-        target("wgpu_shader_graph_compute") {
-            displayName.set("WGPU shader-graph compute test")
-            runtimeClasspath(wgpuRuntimeClasspath)
-            graphics("wgpu", "WGPU")
-            headless("shader-graph-compute", 4, 320, 240, shaderGraphComputeCapture, 2)
-            runDescription.set(
-                "Dispatches graph-generated compute and compute-to-render programs through WGPU."
-            )
-        }
-        target("wgpu_ui_custom_surface") {
-            displayName.set("WGPU UI custom-surface test")
-            runtimeClasspath(wgpuRuntimeClasspath)
-            graphics("wgpu", "WGPU")
-            headless("ui-custom-surface", 4, 960, 600, uiCustomSurfaceCapture, 2)
-            runDescription.set(
-                "Renders and captures UI Kit custom surfaces, clipping, lines, and retained paths through WGPU."
-            )
-        }
-        target("wgpu_shader_graph_editor") {
-            displayName.set("WGPU shader-graph editor test")
-            runtimeClasspath(wgpuRuntimeClasspath)
-            graphics("wgpu", "WGPU")
-            headless("shader-graph-editor", 4, 1440, 900, shaderGraphEditorCapture, 2)
-            runDescription.set(
-                "Renders and captures the optional Shader Graph UI Kit editor through WGPU."
-            )
-        }
-        target("vulkan") {
+        target("tests_vulkan") {
             displayName.set("Vulkan graphics tests")
             runtimeClasspath(interactiveGraphicsRuntimeClasspath)
             graphics("vulkan", "Vulkan")
             runDescription.set("Runs graphics tests with desktop Vulkan.")
         }
-        target("d3d12_pbr_static_compile") {
-            displayName.set("Direct3D 12 static PBR compile test")
-            graphics("d3d12", "Direct3D 12")
-            headless("model", 32, 640, 480, d3d12PbrStaticCapture)
-            runDescription.set("Compiles and renders the static PBR shader through native D3D12 FXC.")
-        }
-        target("d3d12_pbr_skinned_compile") {
-            displayName.set("Direct3D 12 skinned PBR compile test")
-            graphics("d3d12", "Direct3D 12")
-            headless("model-skinning", 46, 640, 480, d3d12PbrSkinnedCapture, 44)
-            runDescription.set("Compiles and renders the skinned PBR shader through native D3D12 FXC.")
-        }
-        target("math_acceleration") {
-            displayName.set("desktop runtime FDX SIMD math acceleration test")
-            mainClass.set("io.github.libfdx.backend.desktop.DesktopMathAccelerationCheck")
-            runtimeClasspath(runtimeFdxClasspath)
-            systemProperty("libfdx.math.requireNative", "true")
-            runDescription.set("Validates desktop runtime FDX SIMD math acceleration against scalar math.")
-        }
     }
+}
+
+tasks.register("validate_desktop_graphics") {
+    group = "verification"
+    description = "Runs the desktop test/API matrix and writes an incremental checklist."
+    dependsOn("libfdx_desktop_jvm_tests_auto_run")
 }
 
 val cleanTestRuntimeStorage = tasks.register<Delete>("clean_test_runtime_storage") {
     group = "verification"
-    description = "Removes the default persistent store created by StorageRuntimeTest."
+    description = "Removes the default persistent store created by StorageTest."
     onlyIf {
         gradle.startParameter.systemPropertiesArgs["libfdx.test.storageName"].isNullOrBlank()
     }
@@ -289,12 +202,5 @@ val cleanTestRuntimeStorage = tasks.register<Delete>("clean_test_runtime_storage
 tasks.configureEach {
     if (name.startsWith("libfdx_desktop_jvm_") && name.endsWith("_run")) {
         finalizedBy(cleanTestRuntimeStorage)
-    }
-    if (name == "libfdx_desktop_jvm_d3d12_pbr_static_compile_run"
-        || name == "libfdx_desktop_jvm_d3d12_pbr_skinned_compile_run") {
-        onlyIf("Native D3D12 FXC is available only on Windows") { isWindowsHost }
-    }
-    if (name == "libfdx_desktop_jvm_d3d12_pbr_skinned_compile_run") {
-        mustRunAfter("libfdx_desktop_jvm_d3d12_pbr_static_compile_run")
     }
 }

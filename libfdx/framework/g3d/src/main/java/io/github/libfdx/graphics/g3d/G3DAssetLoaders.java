@@ -3,6 +3,7 @@ package io.github.libfdx.graphics.g3d;
 import io.github.libfdx.assets.AssetManager;
 import io.github.libfdx.assets.AssetLoader;
 import io.github.libfdx.assets.loaders.ImageAssetLoader;
+import io.github.libfdx.assets.loaders.BinaryAssetLoader;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsContext;
 
@@ -29,14 +30,17 @@ public final class G3DAssetLoaders {
             throw new FdxException("GraphicsContext cannot be null");
         }
         ImageAssetLoader.register(assets);
+        BinaryAssetLoader.register(assets);
         assets.registerLoader(Model.class, modelLoader(graphics));
+        assets.registerLoader(ImageBasedLighting3D.class, new ImageBasedLightingAssetLoader(graphics));
     }
 
     /**
      * Creates the standard glTF/GLB model loader without registering it.
      *
      * <p>This is useful for asset managers that dispatch between a default
-     * loader and more-specific suffix loaders.</p>
+     * loader and more-specific suffix loaders. Register BinaryAssetLoader and
+     * ImageAssetLoader in that manager for external buffer/image dependencies.</p>
      *
      * @param graphics the graphics context used for model uploads
      * @return the standard model loader

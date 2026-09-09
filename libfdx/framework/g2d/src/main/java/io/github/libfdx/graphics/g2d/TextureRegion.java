@@ -38,6 +38,26 @@ public final class TextureRegion {
      * @param height the height in pixels
      */
     public TextureRegion(Texture texture, int x, int y, int width, int height) {
+        this(texture, x, y, width, height, io.github.libfdx.graphics.TextureOrigin.TOP_LEFT);
+    }
+
+    /** Borrows the resolved rendered color with provider-declared origin; rebuild after target resize. */
+    public static TextureRegion rendered(io.github.libfdx.graphics.OffscreenTarget target) {
+        return rendered(target.color(), target.origin());
+    }
+
+    /** Borrows an entire rendered texture. An unknown origin is rejected rather than guessed. */
+    public static TextureRegion rendered(Texture texture, io.github.libfdx.graphics.TextureOrigin origin) {
+        if (texture == null || !texture.usage().renderAttachment() || !texture.usage().sampled() || texture.sampleCount() != 1) {
+            throw new FdxException("Rendered region requires a resolved sampled render attachment");
+        }
+        if (origin == null || origin == io.github.libfdx.graphics.TextureOrigin.UNKNOWN) {
+            throw new FdxException("Rendered region requires an explicit texture origin");
+        }
+        return new TextureRegion(texture, 0, 0, texture.width(), texture.height(), origin);
+    }
+
+    private TextureRegion(Texture texture, int x, int y, int width, int height, io.github.libfdx.graphics.TextureOrigin origin) {
         if (texture == null) {
             throw new FdxException("TextureRegion texture cannot be null");
         }
@@ -50,9 +70,25 @@ public final class TextureRegion {
         this.width = width;
         this.height = height;
         this.u = x / (float) texture.width();
-        this.v = y / (float) texture.height();
+        this.v = origin.v(y / (float) texture.height());
         this.u2 = (x + width) / (float) texture.width();
-        this.v2 = (y + height) / (float) texture.height();
+        this.v2 = origin.v((y + height) / (float) texture.height());
+    }
+
+    /** Tile-only sampling view; retains pixel metadata and the borrowed texture. */
+    TextureRegion tileSamplingRegion() {
+        return new TextureRegion(this);
+    }
+
+    private TextureRegion(TextureRegion source) {
+        texture = source.texture;
+        x = source.x; y = source.y; width = source.width; height = source.height;
+        // Keep the complete nearest/linear filter footprint inside this tile.
+        // Interpolating the existing UV direction also preserves rendered-texture origins.
+        float halfU = (source.u2 - source.u) / width * .5f;
+        float halfV = (source.v2 - source.v) / height * .5f;
+        u = source.u + halfU; u2 = source.u2 - halfU;
+        v = source.v + halfV; v2 = source.v2 - halfV;
     }
 
     /**

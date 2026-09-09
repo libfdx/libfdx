@@ -22,8 +22,7 @@ public final class ShaderGraphCompiledInterface {
             EntryPoint[] entryPoints, Binding[] bindings,
             Parameter[] parameters) {
         this.abiVersion = require(abiVersion, "ABI version");
-        this.entryPoints = copySort(entryPoints, EntryPoint[]::new,
-                "entry point");
+        this.entryPoints = copyEntryPoints(entryPoints);
         this.bindings = copySort(bindings, Binding[]::new,
                 "binding");
         this.parameters = copySort(parameters, Parameter[]::new,
@@ -52,8 +51,7 @@ public final class ShaderGraphCompiledInterface {
      * constructing a complete interface.
      */
     public static String entryPointsHash(EntryPoint... entryPoints) {
-        EntryPoint[] sorted = copySort(entryPoints, EntryPoint[]::new,
-                "entry point");
+        EntryPoint[] sorted = copyEntryPoints(entryPoints);
         rejectDuplicates(sorted, "entry point");
         return PortableSha256.hashUtf8(entryPointKey(sorted));
     }
@@ -129,6 +127,11 @@ public final class ShaderGraphCompiledInterface {
                     .append(parameter.size()).append('\n');
         }
         return value.toString();
+    }
+
+    private static EntryPoint[] copyEntryPoints(EntryPoint[] values) {
+        // A factory in entryPointsHash collides with EntryPoint in TeaVM's short C filenames on Windows.
+        return copySort(values, EntryPoint[]::new, "entry point");
     }
 
     private static <T extends Comparable<T>> T[] copySort(

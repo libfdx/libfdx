@@ -59,6 +59,7 @@ final class PbrGraphCustomization {
     private final String skinnedOpaqueSource;
     private final ShaderReflection staticReflection;
     private final ShaderReflection skinnedReflection;
+    private final ShaderModuleDescriptor[] texturedShaders = new ShaderModuleDescriptor[4];
 
     PbrGraphCustomization(ShaderGraphMaterialDefinition definition) {
         this(definition, ShaderProfile.PORTABLE_WEBGPU,
@@ -126,6 +127,13 @@ final class PbrGraphCustomization {
                 PbrShaderParameters.staticReflection());
         skinnedReflection = reflection(
                 PbrShaderParameters.skinnedReflection());
+        for (int i = 0; i < texturedShaders.length; i++) {
+            boolean skinned = (i & 1) != 0, alphaTest = (i & 2) != 0;
+            texturedShaders[i] = ShaderModuleDescriptor.wgsl("model batch textured PBR " + i,
+                    compose(PbrShaderProvider.pbrRendererTemplate(skinned, materialFields, alphaTest, true),
+                            declarations, surfaceEvaluation, vertexEvaluation, lightingEvaluation))
+                    .reflection(reflection(PbrShaderParameters.texturedReflection(skinned)));
+        }
     }
 
     ShaderGraphMaterialDefinition definition() {
@@ -159,6 +167,10 @@ final class PbrGraphCustomization {
                 source)
                 .reflection(skinned ? skinnedReflection
                         : staticReflection);
+    }
+
+    ShaderModuleDescriptor shader(boolean skinned, boolean alphaTest, boolean textured) {
+        return textured ? texturedShaders[(skinned ? 1 : 0) | (alphaTest ? 2 : 0)] : shader(skinned, alphaTest);
     }
 
     String staticSource() {
@@ -539,6 +551,8 @@ final class PbrGraphCustomization {
                             case "localnormal", "normal" ->
                                     "localNormal.xyz";
                             case "uv0", "uv" -> "input.uv";
+                            case "uv1" -> "uv1";
+                            case "localtangent", "tangent" -> "localTangent";
                             default -> defaultArgument(parameter);
                         };
                     }
@@ -551,6 +565,13 @@ final class PbrGraphCustomization {
                 .append(outputValue(vertexGraph, normal,
                         "fdx_vertex"))
                 .append("), 0.0);\n");
+        for (ShaderGraphOutput output : vertexGraph.outputs()) {
+            if ("tangent".equalsIgnoreCase(output.semantic()) || "tangent".equalsIgnoreCase(output.id().value())) {
+                ShaderGraphOutput tangent = requireOutput(vertexGraph, "tangent", "tangent", ShaderValueKind.VECTOR, 4);
+                source.append("localTangent = ").append(outputValue(vertexGraph, tangent, "fdx_vertex")).append(";\n");
+                break;
+            }
+        }
         return source.toString();
     }
 

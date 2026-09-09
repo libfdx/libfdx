@@ -1,6 +1,7 @@
 package io.github.libfdx.files;
 
 import io.github.libfdx.core.FdxFuture;
+import io.github.libfdx.core.FdxException;
 
 import java.nio.charset.Charset;
 
@@ -75,11 +76,26 @@ public interface FileHandle {
     FdxFuture<FileMetadata> metadata();
 
     /**
-     * Returns the read bytes.
+     * Reads an owned whole-file byte array. Completion may be inline or asynchronous;
+     * compose the future instead of assuming it is ready. Use bounded input for
+     * large files. This method does not itself promise a worker thread.
      *
      * @return the read bytes
      */
     FdxFuture<byte[]> readBytes();
+
+    /** Opens owned bounded input with a 64 KiB request limit. Support is provider-specific. */
+    default FdxFuture<FileDataSource> openRead() { return openRead(64 * 1024); }
+
+    /**
+     * Opens owned bounded input. The caller must close a successful result, including
+     * when a late open is no longer needed. Unsupported providers fail explicitly;
+     * no whole-file buffering fallback is supplied. See {@link FileDataSource}.
+     */
+    default FdxFuture<FileDataSource> openRead(int maxReadBytes) {
+        FileDataSource.validateLimit(maxReadBytes);
+        return FdxFuture.failed(new FdxException("Bounded input is unsupported for " + path()));
+    }
 
     /**
      * Runs the read string step.

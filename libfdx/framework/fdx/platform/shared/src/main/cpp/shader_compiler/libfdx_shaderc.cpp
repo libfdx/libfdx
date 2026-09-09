@@ -1593,9 +1593,9 @@ bool CompileParsedProgram(const tint::Program& program,
             gen_options.first_instance_offset = offset;
             offset += 4;
         }
-        if (entry.frag_depth_used) {
-            gen_options.depth_range_offsets = {offset + 0, offset + 4};
-        }
+        // GL uses its native depth range. Supplying Dawn's depth-range offsets
+        // introduces an immediate uniform that libFDX does not bind and requires
+        // explicit uniform locations unavailable in GLSL 330 / GLSL ES 300.
         auto bindings = tint::glsl::writer::GenerateBindings(ir.Get(), entry_point);
         gen_options.bindings = std::move(bindings.bindings);
         gen_options.texture_builtins_from_uniform =
@@ -1665,12 +1665,9 @@ bool CompileParsedProgram(const tint::Program& program,
 
     if (options.target == FDX_SHADERC_TARGET_DIRECTX_HLSL) {
         tint::hlsl::writer::Options gen_options;
-        // libFDX's current D3D12 consumer compiles shader model 5.1 with FXC.
-        // Selecting Tint's matching dialect lowers HLSL-2021-only constructs
-        // such as select() to FXC-compatible expressions before the artifact
-        // reaches the provider.
+        // Match the Direct3D 12 consumer's DXC -HV 2018 / Shader Model 6.0 contract.
         gen_options.compiler =
-            tint::hlsl::writer::Options::Compiler::kFXC;
+            tint::hlsl::writer::Options::Compiler::kDXC_2018;
         gen_options.entry_point_name = entry_point;
         gen_options.bindings = tint::GenerateBindings(ir.Get(), entry_point, false, false);
         gen_options.resource_table =

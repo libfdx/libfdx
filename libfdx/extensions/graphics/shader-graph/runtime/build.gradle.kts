@@ -3,6 +3,9 @@ plugins {
     id("java-library")
 }
 
+// Provider-neutral runtime; checked transitively with its framework consumers.
+extra["libfdx.portable"] = true
+
 java {
     sourceCompatibility = JavaVersion.toVersion(25)
     targetCompatibility = JavaVersion.toVersion(25)

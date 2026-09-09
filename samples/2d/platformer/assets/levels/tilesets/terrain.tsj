@@ -1,0 +1,11 @@
+{
+  "type": "tileset",
+  "name": "terrain",
+  "tilewidth": 18,
+  "tileheight": 18,
+  "columns": 20,
+  "tilecount": 180,
+  "image": "../../kenney/pixel-platformer/Tilemap/tilemap_packed.png",
+  "imagewidth": 360,
+  "imageheight": 162
+}

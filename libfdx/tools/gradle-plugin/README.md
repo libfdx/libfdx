@@ -52,6 +52,25 @@ one project declares several TeaVM C families, request tasks from only one
 native family in a Gradle invocation so the requested target determines TeaVM
 configuration.
 
+For desktop C builds with TeaVM `0.16.0-dev-5`, the tests configure these
+supported compiler options explicitly:
+
+```kotlin
+libfdx {
+    desktopC {
+        fastGlobalAnalysis.set(true)
+        shortFileNames.set(true)
+    }
+}
+```
+
+The fast analyzer avoids a failure in dev-5's precise analysis of static
+synchronized methods. Short filenames keep generated paths smaller for Windows
+builds; libFDX's shader-graph code avoids the two known case-insensitive filename
+collisions between nested classes and generated lambdas. These settings use the
+published compiler unchanged; they do not change the plugin defaults. Fast
+analysis is less precise and may retain more code.
+
 iOS targets generate an Xcode handoff project. `gles` selects an
 OpenGLES/GLKit project and `metal` selects Metal/MetalKit; building or running
 the generated project requires macOS and Xcode.
@@ -105,6 +124,15 @@ libfdx {
 Font generation is explicit; it does not run as a side effect of every
 platform build. The project owns the generated assets and decides when to
 commit or package them.
+
+## Local web serving
+
+The local web runner serves files with bounded buffers and supports GET, HEAD,
+and single HTTP byte ranges. This allows deferred assets and streamed audio to
+request small slices without loading whole files into the server. Unsatisfiable
+ranges return 416; multiple ranges are ignored and receive a full response.
+See [file input](../../framework/files/README.md) for the runtime contract and
+browser startup exclusions.
 
 ## Shaders
 

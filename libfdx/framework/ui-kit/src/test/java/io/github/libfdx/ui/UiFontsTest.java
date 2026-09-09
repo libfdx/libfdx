@@ -9,6 +9,15 @@ import org.junit.jupiter.api.Test;
 
 final class UiFontsTest {
     @Test
+    void plainAndNullFontStylesUseTheBundledTrueTypeSource() {
+        assertEquals(UiFonts.DEFAULT_TTF_PATH, UiTextStyle.text().font().path());
+        UiFont reset = UiTextStyle.text().size(18).font(null).font();
+        assertEquals(UiFontKind.FREETYPE_FILE, reset.kind());
+        assertEquals(UiFonts.DEFAULT_TTF_PATH, reset.path());
+        assertEquals(18, reset.size());
+    }
+
+    @Test
     void exposesBundledDefaultTrueTypeFont() throws Exception {
         UiFont font = UiFonts.defaultFont(18.0f);
 

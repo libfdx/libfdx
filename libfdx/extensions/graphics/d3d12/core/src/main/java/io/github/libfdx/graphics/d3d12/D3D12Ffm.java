@@ -123,10 +123,6 @@ final class D3D12Ffm {
     static final byte D3D12_DEFAULT_STENCIL_WRITE_MASK = (byte)0xff;
     static final int D3D12_PIPELINE_STATE_FLAG_NONE = 0;
 
-    static final int D3DCOMPILE_DEBUG = 1;
-    static final int D3DCOMPILE_SKIP_OPTIMIZATION = 4;
-    static final int D3DCOMPILE_ENABLE_STRICTNESS = 2048;
-    static final int D3DCOMPILE_OPTIMIZATION_LEVEL3 = 32768;
 
     static final int SIZE_GUID = 16;
     static final int SIZE_DXGI_ADAPTER_DESC1 = 312;
@@ -202,6 +198,7 @@ final class D3D12Ffm {
     static final int OFF_PIPELINE_RTV_FORMATS = 580;
     static final int OFF_PIPELINE_DSV_FORMAT = 612;
     static final int OFF_PIPELINE_SAMPLE_DESC = 616;
+    static final int OFF_PIPELINE_CACHED_PSO = 632;
     static final int OFF_PIPELINE_FLAGS = 648;
 
     static final int SLOT_RELEASE = 2;
@@ -210,6 +207,8 @@ final class D3D12Ffm {
     static final int SLOT_FACTORY_ENUM_ADAPTERS1 = 12;
     static final int SLOT_FACTORY_CREATE_SWAP_CHAIN_FOR_HWND = 15;
     static final int SLOT_ADAPTER_GET_DESC1 = 10;
+    static final int SLOT_ADAPTER_CHECK_INTERFACE_SUPPORT = 9;
+    static final int SLOT_PIPELINE_GET_CACHED_BLOB = 8;
     static final int SLOT_SWAP_PRESENT = 8;
     static final int SLOT_SWAP_GET_BUFFER = 9;
     static final int SLOT_SWAP_RESIZE_BUFFERS = 13;
@@ -218,6 +217,7 @@ final class D3D12Ffm {
     static final int SLOT_DEVICE_CREATE_COMMAND_ALLOCATOR = 9;
     static final int SLOT_DEVICE_CREATE_GRAPHICS_PIPELINE_STATE = 10;
     static final int SLOT_DEVICE_CREATE_COMMAND_LIST = 12;
+    static final int SLOT_DEVICE_CHECK_FEATURE_SUPPORT = 13;
     static final int SLOT_DEVICE_CREATE_DESCRIPTOR_HEAP = 14;
     static final int SLOT_DEVICE_GET_DESCRIPTOR_INCREMENT = 15;
     static final int SLOT_DEVICE_CREATE_ROOT_SIGNATURE = 16;
@@ -228,6 +228,7 @@ final class D3D12Ffm {
     static final int SLOT_DEVICE_COPY_DESCRIPTORS_SIMPLE = 24;
     static final int SLOT_DEVICE_CREATE_COMMITTED_RESOURCE = 27;
     static final int SLOT_DEVICE_CREATE_FENCE = 36;
+    static final int SLOT_DEVICE_GET_REMOVED_REASON = 37;
     static final int SLOT_DEVICE_GET_COPYABLE_FOOTPRINTS = 38;
     static final int SLOT_ALLOCATOR_RESET = 8;
     static final int SLOT_QUEUE_EXECUTE_COMMAND_LISTS = 10;
@@ -237,9 +238,11 @@ final class D3D12Ffm {
     static final int SLOT_COMMANDS_DRAW_INSTANCED = 12;
     static final int SLOT_COMMANDS_DRAW_INDEXED_INSTANCED = 13;
     static final int SLOT_COMMANDS_COPY_TEXTURE_REGION = 16;
+    static final int SLOT_COMMANDS_RESOLVE_SUBRESOURCE = 19;
     static final int SLOT_COMMANDS_IA_SET_PRIMITIVE_TOPOLOGY = 20;
     static final int SLOT_COMMANDS_RS_SET_VIEWPORTS = 21;
     static final int SLOT_COMMANDS_RS_SET_SCISSORS = 22;
+    static final int SLOT_COMMANDS_OM_SET_BLEND_FACTOR = 23;
     static final int SLOT_COMMANDS_SET_PIPELINE_STATE = 25;
     static final int SLOT_COMMANDS_RESOURCE_BARRIER = 26;
     static final int SLOT_COMMANDS_SET_DESCRIPTOR_HEAPS = 28;
@@ -266,12 +269,12 @@ final class D3D12Ffm {
     private static final Linker LINKER = Linker.nativeLinker();
     private static final SymbolLookup D3D12;
     private static final SymbolLookup DXGI;
-    private static final SymbolLookup COMPILER;
     private static final SymbolLookup KERNEL;
 
     static final MemorySegment IID_ID3D12_DEBUG;
     static final MemorySegment IID_IDXGI_FACTORY4;
     static final MemorySegment IID_IDXGI_ADAPTER1;
+    static final MemorySegment IID_IDXGI_DEVICE;
     static final MemorySegment IID_IDXGI_SWAP_CHAIN3;
     static final MemorySegment IID_ID3D12_DEVICE;
     static final MemorySegment IID_ID3D12_COMMAND_QUEUE;
@@ -287,7 +290,6 @@ final class D3D12Ffm {
     private static final MethodHandle D3D12_GET_DEBUG_INTERFACE;
     private static final MethodHandle D3D12_SERIALIZE_ROOT_SIGNATURE;
     private static final MethodHandle CREATE_DXGI_FACTORY2;
-    private static final MethodHandle D3D_COMPILE;
     private static final MethodHandle CREATE_EVENT;
     private static final MethodHandle WAIT_FOR_SINGLE_OBJECT;
     private static final MethodHandle CLOSE_HANDLE;
@@ -297,6 +299,7 @@ final class D3D12Ffm {
     private static final MethodHandle I_AA = down(FunctionDescriptor.of(INT, ADDRESS, ADDRESS));
     private static final MethodHandle I_AAA = down(FunctionDescriptor.of(INT, ADDRESS, ADDRESS, ADDRESS));
     private static final MethodHandle I_AIA = down(FunctionDescriptor.of(INT, ADDRESS, INT, ADDRESS));
+    private static final MethodHandle I_AIAI = down(FunctionDescriptor.of(INT, ADDRESS, INT, ADDRESS, INT));
     private static final MethodHandle I_AAI = down(FunctionDescriptor.of(INT, ADDRESS, ADDRESS, INT));
     private static final MethodHandle I_AAAA = down(FunctionDescriptor.of(INT, ADDRESS, ADDRESS, ADDRESS, ADDRESS));
     private static final MethodHandle I_AAAAAAA = down(FunctionDescriptor.of(INT,
@@ -322,6 +325,9 @@ final class D3D12Ffm {
             ADDRESS, INT, LONG, LONG, INT));
     private static final MethodHandle V_AAIILAAAA = down(FunctionDescriptor.ofVoid(
             ADDRESS, ADDRESS, INT, INT, LONG, ADDRESS, ADDRESS, ADDRESS, ADDRESS));
+    private static final MethodHandle V_AIII = down(FunctionDescriptor.ofVoid(ADDRESS, INT, INT, INT));
+    private static final MethodHandle V_AALALL = down(FunctionDescriptor.ofVoid(ADDRESS, ADDRESS, LONG, ADDRESS, LONG, LONG));
+    private static final MethodHandle V_AAAAL = down(FunctionDescriptor.ofVoid(ADDRESS, ADDRESS, ADDRESS, ADDRESS, LONG));
     private static final MethodHandle V_AIIII = down(FunctionDescriptor.ofVoid(
             ADDRESS, INT, INT, INT, INT));
     private static final MethodHandle V_AIIIII = down(FunctionDescriptor.ofVoid(
@@ -331,6 +337,7 @@ final class D3D12Ffm {
     private static final MethodHandle V_AI = down(FunctionDescriptor.ofVoid(ADDRESS, INT));
     private static final MethodHandle V_AIA = down(FunctionDescriptor.ofVoid(ADDRESS, INT, ADDRESS));
     private static final MethodHandle V_AA = down(FunctionDescriptor.ofVoid(ADDRESS, ADDRESS));
+    private static final MethodHandle V_AAIAII = down(FunctionDescriptor.ofVoid(ADDRESS, ADDRESS, INT, ADDRESS, INT, INT));
     private static final MethodHandle V_AIL = down(FunctionDescriptor.ofVoid(ADDRESS, INT, LONG));
     private static final MethodHandle V_AIIA = down(FunctionDescriptor.ofVoid(ADDRESS, INT, INT, ADDRESS));
     private static final MethodHandle V_AIAIA = down(FunctionDescriptor.ofVoid(
@@ -357,7 +364,6 @@ final class D3D12Ffm {
         try {
             D3D12 = SymbolLookup.libraryLookup("d3d12.dll", GLOBAL);
             DXGI = SymbolLookup.libraryLookup("dxgi.dll", GLOBAL);
-            COMPILER = SymbolLookup.libraryLookup("d3dcompiler_47.dll", GLOBAL);
             KERNEL = SymbolLookup.libraryLookup("kernel32.dll", GLOBAL);
             D3D12_CREATE_DEVICE = bound(D3D12, "D3D12CreateDevice",
                     FunctionDescriptor.of(INT, ADDRESS, INT, ADDRESS, ADDRESS));
@@ -367,9 +373,6 @@ final class D3D12Ffm {
                     FunctionDescriptor.of(INT, ADDRESS, INT, ADDRESS, ADDRESS));
             CREATE_DXGI_FACTORY2 = bound(DXGI, "CreateDXGIFactory2",
                     FunctionDescriptor.of(INT, INT, ADDRESS, ADDRESS));
-            D3D_COMPILE = bound(COMPILER, "D3DCompile", FunctionDescriptor.of(INT,
-                    ADDRESS, LONG, ADDRESS, ADDRESS, ADDRESS, ADDRESS, ADDRESS,
-                    INT, INT, ADDRESS, ADDRESS));
             CREATE_EVENT = bound(KERNEL, "CreateEventW",
                     FunctionDescriptor.of(ADDRESS, ADDRESS, INT, INT, ADDRESS));
             WAIT_FOR_SINGLE_OBJECT = bound(KERNEL, "WaitForSingleObject",
@@ -385,6 +388,8 @@ final class D3D12Ffm {
                 0xbf, 0x0c, 0x21, 0xca, 0x39, 0xe5, 0x16, 0x8a);
         IID_IDXGI_ADAPTER1 = guid(0x29038f61, 0x3839, 0x4626,
                 0x91, 0xfd, 0x08, 0x68, 0x79, 0x01, 0x1a, 0x05);
+        IID_IDXGI_DEVICE = guid(0x54ec77fa, 0x1377, 0x44e6,
+                0x8c, 0x32, 0x88, 0xfd, 0x5f, 0x44, 0xc8, 0x4c);
         IID_IDXGI_SWAP_CHAIN3 = guid(0x94d99bdb, 0xf1f8, 0x4ab0,
                 0xb2, 0x36, 0x7d, 0xa0, 0x17, 0x0e, 0xda, 0xb1);
         IID_ID3D12_DEVICE = guid(0x189819f1, 0x1db6, 0x4b57,
@@ -439,17 +444,6 @@ final class D3D12Ffm {
     static int createFactory(int flags, MemorySegment output) {
         try {
             return (int)CREATE_DXGI_FACTORY2.invokeExact(flags, IID_IDXGI_FACTORY4, output);
-        } catch (Throwable error) {
-            throw unchecked(error);
-        }
-    }
-
-    static int compile(MemorySegment source, long sourceSize, MemorySegment label,
-            MemorySegment entryPoint, MemorySegment target, int flags,
-            MemorySegment output, MemorySegment errors) {
-        try {
-            return (int)D3D_COMPILE.invokeExact(source, sourceSize, label, NULL, NULL,
-                    entryPoint, target, flags, 0, output, errors);
         } catch (Throwable error) {
             throw unchecked(error);
         }
@@ -517,6 +511,14 @@ final class D3D12Ffm {
     static int comIntAIA(MemorySegment object, int slot, int a, MemorySegment b) {
         try {
             return (int)I_AIA.invokeExact(function(object, slot), object, a, b);
+        } catch (Throwable error) {
+            throw unchecked(error);
+        }
+    }
+
+    static int comIntAIAI(MemorySegment object, int slot, int a, MemorySegment b, int c) {
+        try {
+            return (int)I_AIAI.invokeExact(function(object, slot), object, a, b, c);
         } catch (Throwable error) {
             throw unchecked(error);
         }
@@ -658,6 +660,21 @@ final class D3D12Ffm {
         }
     }
 
+    static void comVoidAIII(MemorySegment object, int slot, int a, int b, int c) {
+        try { V_AIII.invokeExact(function(object, slot), object, a, b, c); }
+        catch (Throwable error) { throw unchecked(error); }
+    }
+
+    static void comVoidAALALL(MemorySegment object, int slot, MemorySegment a, long b, MemorySegment c, long d, long e) {
+        try { V_AALALL.invokeExact(function(object, slot), object, a, b, c, d, e); }
+        catch (Throwable error) { throw unchecked(error); }
+    }
+
+    static void comVoidAAAAL(MemorySegment object, int slot, MemorySegment a, MemorySegment b, MemorySegment c, long d) {
+        try { V_AAAAL.invokeExact(function(object, slot), object, a, b, c, d); }
+        catch (Throwable error) { throw unchecked(error); }
+    }
+
     static void comVoidAIIII(MemorySegment object, int slot, int a, int b, int c, int d) {
         try {
             V_AIIII.invokeExact(function(object, slot), object, a, b, c, d);
@@ -705,6 +722,12 @@ final class D3D12Ffm {
         } catch (Throwable error) {
             throw unchecked(error);
         }
+    }
+
+    static void comVoidAAIAII(MemorySegment object, int slot, MemorySegment a, int b, MemorySegment c, int d, int e) {
+        try {
+            V_AAIAII.invokeExact(function(object, slot), object, a, b, c, d, e);
+        } catch (Throwable error) { throw unchecked(error); }
     }
 
     static void comVoidAIL(MemorySegment object, int slot, int a, long b) {

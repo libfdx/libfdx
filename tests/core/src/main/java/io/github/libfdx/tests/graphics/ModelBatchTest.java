@@ -1,21 +1,19 @@
 package io.github.libfdx.tests.graphics;
 
-import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
 import io.github.libfdx.assets.AssetDescriptor;
 import io.github.libfdx.assets.AssetManager;
 import io.github.libfdx.assets.DefaultAssetManager;
+import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.core.FdxFuture;
 import io.github.libfdx.core.Logger;
 import io.github.libfdx.display.Display;
+import io.github.libfdx.Fdx;
 import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.camera.controller.OrbitCameraController3D;
-import io.github.libfdx.graphics.GraphicsContext;
-import io.github.libfdx.graphics.LoadOp;
-import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
-import io.github.libfdx.math.Color;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
 import io.github.libfdx.graphics.g3d.Environment3D;
@@ -23,9 +21,22 @@ import io.github.libfdx.graphics.g3d.G3DAssetLoaders;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
 import io.github.libfdx.graphics.g3d.ModelBatchConfig;
+import io.github.libfdx.graphics.g3d.ModelShaderPlan;
 import io.github.libfdx.graphics.g3d.ShaderGraphPbrTestSupport;
-import io.github.libfdx.tests.TestFpsLogger;
-
+import io.github.libfdx.graphics.GraphicsContext;
+import io.github.libfdx.graphics.LoadOp;
+import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreloadCapture;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreloadDiscovery;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreloadManifest;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparation;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationReport;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationScope;
+import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
+import io.github.libfdx.math.Color;
+import io.github.libfdx.testsupport.graphics.FramebufferCapture;
+import io.github.libfdx.testsupport.graphics.TestCameraControllers;
+import io.github.libfdx.testsupport.TestFpsLogger;
 import java.nio.ByteBuffer;
 import java.util.Locale;
 
@@ -39,6 +50,11 @@ public final class ModelBatchTest extends ApplicationAdapter {
 
     private final long exitAfterFrames;
     private final String gltfAsset;
+    private final ShaderPreloadCapture.Destination exportDestination;
+    private final String preloadManifest;
+    private ShaderPreloadCapture shaderCapture;
+    private FdxFuture<Void> exportCompletion;
+    private FdxFuture<ShaderPreparationReport> preloadCompletion;
     private Application application;
     private Display display;
     private Logger logger;
@@ -46,6 +62,11 @@ public final class ModelBatchTest extends ApplicationAdapter {
     private AssetManager assets;
     private GraphicsContext graphics;
     private ModelBatch batch;
+    private ShaderPreparation preparation;
+    private ModelShaderPlan shaderPlan;
+    private ShaderPreparationScope preload;
+    private boolean preparationReported;
+    private long preparationStart, pendingFrames;
     private ShaderProvider graphShaderProvider;
     private Camera camera;
     private OrbitCameraController3D cameraInput;
@@ -74,7 +95,15 @@ public final class ModelBatchTest extends ApplicationAdapter {
      * @param gltfAsset the glTF asset
      */
     public ModelBatchTest(long exitAfterFrames, String gltfAsset) {
+        this(exitAfterFrames, gltfAsset, null, null);
+    }
+
+    /** Desktop/platform harness injection. Owns a disposable export destination; manifest text
+     * has already been loaded by the platform before shader recipe import. */
+    public ModelBatchTest(long exitAfterFrames, String gltfAsset, ShaderPreloadCapture.Destination exportDestination, String preloadManifest) {
         this.exitAfterFrames = exitAfterFrames;
+        this.exportDestination = exportDestination;
+        this.preloadManifest = preloadManifest;
         this.gltfAsset = gltfAsset != null && gltfAsset.trim().length() > 0
                 ? gltfAsset.trim()
                 : DEFAULT_GLTF_ASSET;
@@ -110,7 +139,14 @@ public final class ModelBatchTest extends ApplicationAdapter {
             environment.neutralToneMapping(Float.parseFloat(
                     System.getProperty("libfdx.test.pbrExposure", "1.35")));
         }
-        if (Boolean.getBoolean("libfdx.test.shaderGraphPbr")) {
+        if (Boolean.getBoolean("libfdx.test.shaderAsync")) {
+            preparation = new ShaderPreparation(graphics);
+            if (exportDestination != null || preloadManifest != null) shaderCapture = preparation.captureRuntime("ModelBatchTest");
+            shaderPlan = new ModelShaderPlan(graphics);
+            batch = new ModelBatch(graphics, new ModelBatchConfig()
+                    .preparation(preparation).shaderPlan(shaderPlan)).environment(environment);
+            preparationStart = System.nanoTime();
+        } else if (Boolean.getBoolean("libfdx.test.shaderGraphPbr")) {
             graphShaderProvider = ShaderGraphPbrTestSupport.provider(graphics);
             batch = new ModelBatch(graphics, new ModelBatchConfig()
                     .shaderProvider(graphShaderProvider)).environment(environment);
@@ -143,6 +179,31 @@ public final class ModelBatchTest extends ApplicationAdapter {
      */
     @Override
     public void render() {
+        if (preparation != null) {
+            if (preload == null && (preloadManifest != null || Boolean.getBoolean("libfdx.test.shaderPreload")
+                    || Boolean.getBoolean("libfdx.test.shaderLoadingOnly"))) {
+                preload = preparation.createScope("model level");
+                shaderPlan.surfaceTarget(graphics.currentFrame());
+                if (preloadManifest != null) {
+                    var imported = preload.include(ShaderPreloadManifest.fromJson(preloadManifest), recipe -> shaderPlan.resolve(recipe, shaderPlan.targets()));
+                    if (imported.hasUnresolvedEntries()) throw new FdxException("Shader manifest import failed: " + imported.items());
+                }
+                else {
+                    shaderPlan.include(preload, instance, ShaderPassId.FORWARD, shaderPlan.targets().apply("surface"));
+                }
+                preloadCompletion = preparation.prepareAsync(preload.seal());
+            }
+            if (preload != null && Boolean.getBoolean("libfdx.test.shaderLoadingOnly")) preparation.updateLoading();
+            else preparation.update();
+            if (preloadCompletion != null) {
+                if (!preloadCompletion.isDone()) {
+                    batch.begin(LoadOp.clear(0.04f, 0.045f, 0.06f, 1.0f), camera); batch.end();
+                    pendingFrames++;
+                    return;
+                }
+                if (!preloadCompletion.get().allReady()) throw new FdxException("Model preload failed: " + preloadCompletion.get().items());
+            }
+        }
         float deltaSeconds = application.deltaTime();
         assets.update();
         camera.viewport(framebufferWidth(), framebufferHeight());
@@ -163,6 +224,20 @@ public final class ModelBatchTest extends ApplicationAdapter {
                 throw failure;
             }
         }
+        if (preparation != null && (preparation.hasPendingWork() || batch.skippedDrawsLastFrame().total() > 0)) {
+            pendingFrames++;
+            if (preparation.failedCount() > 0 || preparation.unsupportedCount() > 0) {
+                for (var item : preparation.failures()) if (item.failure() != null) item.failure().printStackTrace(System.err);
+                throw new FdxException("Model shader preparation failed: failed=" + preparation.failedCount()
+                        + " unsupported=" + preparation.unsupportedCount());
+            }
+            return;
+        }
+        if (preparation != null && !preparationReported) {
+            preparationReported = true;
+            logger.info("ModelBatchTest ASYNC_READY ready=" + preparation.readyCount() + " pending_frames=" + pendingFrames
+                    + " prepare_wall_ms=" + (System.nanoTime() - preparationStart) / 1_000_000.0);
+        }
         if (capturePath != null && capturePath.length() > 0) {
             if (captureEvery > 0 && capturePath.indexOf('%') >= 0) {
                 if (renderedFrames % captureEvery == 0) {
@@ -178,6 +253,18 @@ public final class ModelBatchTest extends ApplicationAdapter {
         renderedFrames++;
         fpsLogger.frame(deltaSeconds, renderedFrames);
         if (exitAfterFrames > 0L && renderedFrames >= exitAfterFrames) {
+            if (shaderCapture != null) {
+                if (exportCompletion == null) {
+                    var snapshot = shaderCapture.snapshot();
+                    long misses = snapshot.discoveries().stream().filter(ShaderPreloadDiscovery::actionable).count();
+                    long skipped = snapshot.discoveries().stream().mapToLong(ShaderPreloadDiscovery::skippedDraws).sum();
+                    logger.info("ModelBatchTest SHADER_CAPTURE requirements=" + snapshot.discoveries().size() + " misses=" + misses + " skipped=" + skipped);
+                    if (preloadManifest != null && (misses != 0 || skipped != 0)) throw new FdxException("Manifest replay had runtime shader preparation misses");
+                    exportCompletion = exportDestination != null ? shaderCapture.exportAsync(exportDestination) : FdxFuture.completed(null);
+                }
+                if (!exportCompletion.isDone()) return;
+                exportCompletion.get();
+            }
             application.requestExit();
         }
     }
@@ -192,6 +279,11 @@ public final class ModelBatchTest extends ApplicationAdapter {
             batch = null;
         }
         ShaderGraphPbrTestSupport.dispose(graphShaderProvider);
+        if (preload != null) preload.dispose();
+        if (preparation != null) { preparation.disposeAsync(); preparation.update(); }
+        if (shaderPlan != null) shaderPlan.dispose();
+        if (shaderCapture != null) shaderCapture.dispose();
+        if (exportDestination instanceof Disposable disposable) disposable.dispose();
         graphShaderProvider = null;
         if (assets != null) {
             assets.dispose();

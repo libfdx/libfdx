@@ -5,6 +5,14 @@ project(fdx_android_vulkan)
 add_library(fdx_android_vulkan SHARED
         libfdx_android_vulkan.cpp)
 
+option(LIBFDX_VULKAN_LOSS_TESTS "Enable test-only Vulkan failure injection" OFF)
+if(LIBFDX_VULKAN_LOSS_TESTS)
+    if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        message(FATAL_ERROR "Vulkan failure injection is only supported in debug test builds")
+    endif()
+    target_compile_definitions(fdx_android_vulkan PRIVATE LIBFDX_VULKAN_LOSS_TESTS)
+endif()
+
 find_library(android-lib android)
 find_library(log-lib log)
 find_library(vulkan-lib vulkan)

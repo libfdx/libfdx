@@ -8,4 +8,9 @@ public interface PlatformerInput {
     boolean jumpDown();
 
     boolean restartDown();
+
+    /** Optional latched transition for taps occurring between simulation ticks. */
+    default boolean consumeJumpPress() { return false; }
+
+    default boolean consumeRestartPress() { return false; }
 }

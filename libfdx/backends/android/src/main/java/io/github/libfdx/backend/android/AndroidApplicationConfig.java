@@ -14,6 +14,7 @@ public final class AndroidApplicationConfig extends ApplicationConfig {
     private GraphicsAttachmentProvider graphics;
     private GraphicsAttachmentProvider[] fallbackGraphics = new GraphicsAttachmentProvider[0];
     private boolean graphicsFallbackEnabled;
+    private String graphicsStartupRecoveryKey;
     private AndroidGraphicsFailureMode graphicsFailureMode = AndroidGraphicsFailureMode.SHOW_ERROR;
     private AndroidTextEditorStyle nativeTextEditorStyle = new AndroidTextEditorStyle();
 
@@ -68,7 +69,11 @@ public final class AndroidApplicationConfig extends ApplicationConfig {
     }
 
     /**
-     * Sets the fallback graphics and returns this android application config.
+     * Sets ordered startup fallbacks and enables them when nonempty. Separate configurations of the same
+     * provider are allowed. Reported initialization errors, including listener creation/resize and the first
+     * frame, dispose the failed session before trying the next provider. The listener must support disposal
+     * after a partial create and creation again on the replacement graphics device. Later rendering errors
+     * do not restart the session. Fatal native crashes require a new process; see graphicsStartupRecoveryKey.
      *
      * @param fallbackGraphics the fallback graphics
      * @return this android application config for chaining
@@ -86,6 +91,31 @@ public final class AndroidApplicationConfig extends ApplicationConfig {
      */
     public boolean graphicsFallbackEnabled() {
         return graphicsFallbackEnabled && fallbackGraphics.length > 0;
+    }
+
+    /** Returns the optional application-owned preferences key for startup recovery; null disables persistence. */
+    public String graphicsStartupRecoveryKey() { return graphicsStartupRecoveryKey; }
+
+    /**
+     * Enables persisted recovery for this ordered graphics/fallback configuration. Use a new key when changing
+     * the order or meaning of its attempts. App/OS updates reset the saved choice. Android 11+ native exit records
+     * confirm startup crashes; ordinary termination and missing exit evidence never imply a crash.
+     * A successful fallback is remembered after its first frame. Pass null to disable persistence.
+     * Recovery covers initialization through the first frame, not subsequent device loss or crashes.
+     * For example, an application using the optional WGPU provider can configure:
+     * <pre>{@code
+     * new AndroidApplicationConfig()
+     *     .graphics(new WGPUProvider().backend(WGPUBackend.VULKAN))
+     *     .fallbackGraphics(new WGPUProvider().backend(WGPUBackend.OPENGL_ES))
+     *     .graphicsStartupRecoveryKey("wgpu-vulkan-gles-v1");
+     * }</pre>
+     * Exhausting the saved attempts reports startup failure until recovery is reset or the installation changes.
+     * @see AndroidApplicationBackend#clearGraphicsStartupRecovery(android.content.Context, String)
+     */
+    public AndroidApplicationConfig graphicsStartupRecoveryKey(String key) {
+        if(key != null) AndroidGraphicsStartupPreferences.name(key);
+        graphicsStartupRecoveryKey = key;
+        return this;
     }
 
     /**

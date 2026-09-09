@@ -2,7 +2,7 @@ package io.github.libfdx.tests.psp;
 
 import io.github.libfdx.backend.psp.PspApplicationBackend;
 import io.github.libfdx.backend.psp.PspApplicationConfig;
-import io.github.libfdx.tests.TestChooserApplication;
+import io.github.libfdx.testsupport.TestChooserApplication;
 
 /**
  * Launches the PSP test selector.

@@ -8,10 +8,13 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -52,7 +55,7 @@ public final class WebAppWriter {
         List<WebAsset> assets = new ArrayList<>(WebAssets.copy(app.getAssets(), root.resolve("assets")));
         copySharedAssets(root.resolve("assets"), app.getRuntimeClasspath(), assets);
         copyRuntimeScripts(root, app.getRuntimeClasspath());
-        writeFdxLoader(root, app, assets.size());
+        writeFdxLoader(root, app, assets);
         Files.writeString(root.resolve("index.html"), indexHtml(app, assets.size()), StandardCharsets.UTF_8);
         Files.writeString(webInf.resolve("web.xml"), "<web-app></web-app>\n", StandardCharsets.UTF_8);
         return assets;
@@ -244,21 +247,40 @@ public final class WebAppWriter {
                 .trim() + "\n";
     }
 
-    private static void writeFdxLoader(Path root, WebApp app, int assetCount) throws IOException {
+    private static void writeFdxLoader(Path root, WebApp app, List<WebAsset> assets) throws IOException {
         Path scriptsRoot = root.resolve("scripts").toAbsolutePath().normalize();
         Files.createDirectories(scriptsRoot);
         long runtimeCoreScriptSize = publishedFileSize(scriptsRoot.resolve("fdx.js"));
         long runtimeCoreWasmSize = publishedFileSize(scriptsRoot.resolve("fdx.wasm"));
         Files.writeString(scriptsRoot.resolve("fdx-loader.js"),
-                fdxLoaderJs(app, assetCount, runtimeCoreScriptSize, runtimeCoreWasmSize), StandardCharsets.UTF_8);
+                fdxLoaderJs(app, assets, runtimeCoreScriptSize, runtimeCoreWasmSize,
+                        shaderCompilerIdentity(scriptsRoot)), StandardCharsets.UTF_8);
     }
 
     private static long publishedFileSize(Path path) throws IOException {
         return Files.isRegularFile(path) ? Files.size(path) : 0L;
     }
 
-    private static String fdxLoaderJs(WebApp app, int assetCount, long runtimeCoreScriptSize,
-            long runtimeCoreWasmSize) {
+    private static String shaderCompilerIdentity(Path scriptsRoot) throws IOException {
+        if (!Files.isRegularFile(scriptsRoot.resolve("fdx.js"))
+                || !Files.isRegularFile(scriptsRoot.resolve("fdx.wasm"))) return "";
+        try {
+            StringBuilder identity = new StringBuilder("fdx-web-fdxr2-v1");
+            for (String name : List.of("fdx.js", "fdx.wasm")) {
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                try (InputStream input = Files.newInputStream(scriptsRoot.resolve(name))) {
+                    byte[] buffer = new byte[65536];
+                    int count;
+                    while ((count = input.read(buffer)) >= 0) if (count > 0) digest.update(buffer, 0, count);
+                }
+                identity.append(':').append(HexFormat.of().formatHex(digest.digest()));
+            }
+            return identity.toString();
+        } catch (NoSuchAlgorithmException error) { throw new IOException("SHA-256 unavailable", error); }
+    }
+
+    private static String fdxLoaderJs(WebApp app, List<WebAsset> assets, long runtimeCoreScriptSize,
+            long runtimeCoreWasmSize, String shaderCompilerIdentity) {
         String source = """
                 (function(root) {
                     "use strict";
@@ -273,6 +295,8 @@ public final class WebAppWriter {
                         runtimeCoreScriptSize: __RUNTIME_CORE_SCRIPT_SIZE__,
                         runtimeCoreWasmSize: __RUNTIME_CORE_WASM_SIZE__
                     };
+                    root.libfdxPublishedAssets = [__PUBLISHED_ASSETS__];
+                    root.libfdxShaderCompilerIdentity = "__SHADER_COMPILER_IDENTITY__";
                     var modulePromise = null;
                     var runtimeWasmPromise = null;
                     var loadedScripts = {};
@@ -839,11 +863,23 @@ public final class WebAppWriter {
                 .replace("__TARGET_FILE_NAME__", js(app.getTargetFileName()))
                 .replace("__ENTRY_POINT_NAME__", js(app.getEntryPointName()))
                 .replace("__MAIN_CLASS_ARGS__", app.getMainClassArgs())
-                .replace("__ASSET_COUNT__", Integer.toString(assetCount))
+                .replace("__ASSET_COUNT__", Integer.toString(assets.size()))
                 .replace("__PRELOAD_LOGO_PATH__", js(WebAssets.DEFAULT_PRELOAD_LOGO_PATH))
                 .replace("__RUNTIME_CORE_SCRIPT_SIZE__", Long.toString(runtimeCoreScriptSize))
                 .replace("__RUNTIME_CORE_WASM_SIZE__", Long.toString(runtimeCoreWasmSize))
+                .replace("__SHADER_COMPILER_IDENTITY__", js(shaderCompilerIdentity))
+                .replace("__PUBLISHED_ASSETS__", publishedAssetsJs(assets))
                 .trim() + "\n";
+    }
+
+    private static String publishedAssetsJs(List<WebAsset> assets) {
+        StringBuilder entries = new StringBuilder();
+        for (WebAsset asset : assets) {
+            if (!entries.isEmpty()) entries.append(',');
+            entries.append("{path:\"").append(js(asset.getPath())).append("\",size:")
+                    .append(asset.getSize()).append('}');
+        }
+        return entries.toString();
     }
 
     private static void copyRuntimeScripts(Path root, List<Path> runtimeClasspath) throws IOException {
@@ -1220,8 +1256,20 @@ public final class WebAppWriter {
      * @return the JS
      */
     public static String js(String value) {
-        return value
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"");
+        StringBuilder escaped = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '\\' || c == '"') {
+                escaped.append('\\').append(c);
+            } else if (c < 32 || c == 0x2028 || c == 0x2029) {
+                escaped.append("\\u");
+                for (int shift = 12; shift >= 0; shift -= 4) {
+                    escaped.append("0123456789abcdef".charAt((c >> shift) & 15));
+                }
+            } else {
+                escaped.append(c);
+            }
+        }
+        return escaped.toString();
     }
 }

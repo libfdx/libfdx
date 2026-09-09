@@ -14,7 +14,6 @@ import org.gradle.api.Project
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.execution.TaskExecutionGraph
 import org.gradle.api.plugins.JavaPlugin
-import org.gradle.api.provider.MapProperty
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.api.tasks.JavaExec
@@ -202,7 +201,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
     ) {
         validateNativeCTargets(extension, nativeTarget, requestedTasks)
         if(extension.isDeclared(LibfdxTarget.JS) || extension.isDeclared(LibfdxTarget.WASM)) {
-            configureWebAssets(extension)
+            configureWebAssets(project, extension)
         }
         if(nativeTarget == LibfdxTarget.DESKTOP_C) {
             configureDesktopC(project, extension, requestedTasks)
@@ -416,24 +415,31 @@ class LibfdxGradlePlugin : Plugin<Project> {
         return listOf("${prefix}_generate")
     }
 
-    private fun configureWebAssets(extension: LibfdxExtension) {
-        val entries = collectLibfdxWebAssets(extension.assets.files)
+    private fun configureWebAssets(project: Project, extension: LibfdxExtension) {
+        // Resolve after generated asset dependencies run, including on a clean build.
+        val entries = project.provider {
+            val assets = collectLibfdxWebAssets(extension.assets.files)
+            buildMap {
+                put(WEB_ASSET_COUNT_PROPERTY, assets.size.toString())
+                assets.forEachIndexed { index, entry ->
+                    put("$WEB_ASSET_ENTRY_PROPERTY_PREFIX$index.path", entry.path)
+                    put("$WEB_ASSET_ENTRY_PROPERTY_PREFIX$index.size", entry.size.toString())
+                }
+            }
+        }
         if(extension.isDeclared(LibfdxTarget.JS)) {
-            configureWebAssetProperties(extension.js.teavmConfig.properties, entries)
+            extension.js.teavmConfig.properties.putAll(entries)
+            project.tasks.named(TeaVMPlugin.JS_TASK_NAME).configure {
+                dependsOn(extension.assets)
+                inputs.files(extension.assets).withPropertyName("libfdxAssets").withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
+            }
         }
         if(extension.isDeclared(LibfdxTarget.WASM)) {
-            configureWebAssetProperties(extension.wasm.teavmConfig.properties, entries)
-        }
-    }
-
-    private fun configureWebAssetProperties(
-        properties: MapProperty<String, String>,
-        entries: List<LibfdxWebAsset>
-    ) {
-        properties.put(WEB_ASSET_COUNT_PROPERTY, entries.size.toString())
-        entries.forEachIndexed { index, entry ->
-            properties.put("$WEB_ASSET_ENTRY_PROPERTY_PREFIX$index.path", entry.path)
-            properties.put("$WEB_ASSET_ENTRY_PROPERTY_PREFIX$index.size", entry.size.toString())
+            extension.wasm.teavmConfig.properties.putAll(entries)
+            project.tasks.named(TeaVMPlugin.WASM_GC_TASK_NAME).configure {
+                dependsOn(extension.assets)
+                inputs.files(extension.assets).withPropertyName("libfdxAssets").withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
+            }
         }
     }
 
@@ -604,7 +610,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
         }
     }
 
-    private fun registerShaderTasks(
+    private fun registerShaderTasks( // TODO check if we need shader validation tasks
         project: Project,
         extension: LibfdxExtension,
         toolClasspath: FileCollection

@@ -9,12 +9,14 @@ import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.display.Display;
 import io.github.libfdx.input.Key;
 import io.github.libfdx.input.KeyEvent;
+import io.github.libfdx.input.MouseButton;
+import io.github.libfdx.input.PointerEvent;
 import org.junit.jupiter.api.Test;
 
 final class UiLayoutAndWidgetsTest {
     @Test
     void displayContentScaleIsAppliedByDefaultAndCanBeDisabled() {
-        UiRoot root = new UiRoot(null, new ScaledDisplay(1.5f), null, null);
+        UiRoot root = new UiRoot(null, new ScaledDisplay(1.5f), null, null).allowFontFallback(true);
 
         assertTrue(root.autoUiScale());
         assertEquals(1.5f, root.effectiveUiScale(), 0.001f);
@@ -24,14 +26,15 @@ final class UiLayoutAndWidgetsTest {
 
         assertFalse(root.autoUiScale());
         assertEquals(1.0f, root.effectiveUiScale(), 0.001f);
-        assertEquals(10, root.displayX(10.0f));
+        assertEquals(20, root.displayX(30.0f));
+        assertEquals(30.0f, root.uiX(20), 0.001f);
         root.dispose();
     }
 
     @Test
     void displayContentScaleChangePreservesLogicalLayoutWithoutWindowResize() {
         ScaledDisplay display = new ScaledDisplay(1.0f);
-        UiRoot root = new UiRoot(null, display, null, null);
+        UiRoot root = new UiRoot(null, display, null, null).allowFontFallback(true);
         root.setContent(scope -> scope.panel(Ui.modifier().fill(), null));
         root.update(0.0f);
 
@@ -48,21 +51,131 @@ final class UiLayoutAndWidgetsTest {
     }
 
     @Test
-    void desktopBitmapScalingDoesNotApplyContentScaleTwice() {
+    void desktopContentScaleAppliesWhenFramebufferMatchesWindowSize() {
         ScaledDisplay display = new ScaledDisplay(1.5f, false);
-        UiRoot root = new UiRoot(null, display, null, null);
+        UiRoot root = new UiRoot(null, display, null, null).allowFontFallback(true);
         root.setContent(scope -> scope.panel(Ui.modifier().fill(), null));
         root.update(0.0f);
 
-        assertEquals(1.0f, root.effectiveUiScale(), 0.001f);
-        assertEquals(800.0f, root.rootNode().bounds().width(), 0.001f);
-        assertEquals(600.0f, root.rootNode().bounds().height(), 0.001f);
+        assertEquals(1.5f, root.effectiveUiScale(), 0.001f);
+        assertEquals(534.0f, root.rootNode().bounds().width(), 0.001f);
+        assertEquals(400.0f, root.rootNode().bounds().height(), 0.001f);
+        assertEquals(30, root.displayX(20));
+        assertEquals(20.0f, root.uiX(30), 0.001f);
+        display.contentScale(2.0f);
+        root.update(0.0f);
+        assertEquals(400.0f, root.rootNode().bounds().width(), 0.001f);
+        assertEquals(40, root.displayX(20));
+        root.dispose();
+    }
+
+    @Test
+    void scalingModesKeepPointerHitsAlignedWithFramebufferRendering() {
+        for (boolean denseFramebuffer : new boolean[] {false, true}) {
+            ScaledDisplay display = new ScaledDisplay(1.5f, denseFramebuffer);
+            UiRoot root = new UiRoot(null, display, null, null).allowFontFallback(true);
+            int[] clicks = {0};
+            root.setContent(scope -> scope.button("Hit", Ui.modifier().size(100, 40), () -> clicks[0]++));
+            for (boolean automatic : new boolean[] {true, false, true}) {
+                root.autoUiScale(automatic).uiScale(1.25f);
+                root.update(0);
+                float expectedScale = automatic ? 1.875f : 1.25f;
+                assertEquals(expectedScale, root.effectiveUiScale(), 0.001f);
+                float density = denseFramebuffer ? 1.5f : 1.0f;
+                // Derive the pointer location from physical pixels, independently of UI conversion helpers.
+                int x = Math.round(90 * expectedScale / density);
+                int y = Math.round(20 * expectedScale / density);
+                int before = clicks[0];
+                root.handlePointerDown(PointerEvent.button(0, MouseButton.LEFT, x, y));
+                root.handlePointerUp(PointerEvent.button(1, MouseButton.LEFT, x, y));
+                assertEquals(before + 1, clicks[0]);
+                assertEquals(x, root.displayX(90));
+                assertEquals(y, root.displayY(20));
+            }
+            root.dispose();
+        }
+    }
+
+    @Test
+    void visibleExplicitHeightRowDoesNotScrollWhenRequestedIntoView() {
+        UiRoot root = new UiRoot(null, new ScaledDisplay(1.5f, false), null, null).allowFontFallback(true);
+        UiScrollState scroll = new UiScrollState();
+        UiNode[] rows = new UiNode[63];
+        root.setContent(scope -> scope.scroll(Ui.modifier().fillWidth().height(200), scroll, list -> {
+            for (int i = 0; i < rows.length; i++) {
+                rows[i] = list.stack(Ui.modifier().fillWidth().height(51).margin(2),
+                        item -> item.button("Test", Ui.modifier().fill(), () -> {}));
+            }
+        }));
+        root.update(0);
+        scroll.scrollTo(0, 58 * 51 - 70);
+        root.resize(800, 600);
+        float before = scroll.y();
+        assertEquals(51, rows[58].bounds().y() - rows[57].bounds().y(), 0.001f);
+        assertEquals(72, rows[58].bounds().y(), 0.001f);
+        assertTrue(rows[58].bounds().bottom() < scroll.viewportHeight());
+        assertFalse(root.ensureVisible(rows[58]));
+        assertFalse(root.ensureVisible(rows[58]));
+        assertEquals(before, scroll.y(), 0.001f);
+        assertTrue(root.ensureVisible(rows[62]));
+        assertEquals(200, rows[62].bounds().bottom(), 0.001f);
+        assertFalse(root.ensureVisible(rows[62]));
+        assertTrue(root.ensureVisible(rows[0]));
+        assertEquals(0, rows[0].bounds().y(), 0.001f);
+        root.dispose();
+    }
+
+    @Test
+    void ensureVisibleRevealsPartiallyClippedNodesThroughNestedPaddedScrolls() {
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
+        UiScrollState outer = new UiScrollState();
+        UiScrollState inner = new UiScrollState();
+        UiNode[] target = new UiNode[1];
+        root.resize(300, 300);
+        root.setContent(scope -> scope.scroll(Ui.modifier().size(120, 120).padding(10), outer, list -> {
+            list.panel(Ui.modifier().height(80), null);
+            list.scroll(Ui.modifier().size(100, 100), inner, nested -> {
+                nested.panel(Ui.modifier().height(80), null);
+                target[0] = nested.button("Target", Ui.modifier().size(80, 40), () -> {});
+            });
+        }));
+        root.update(0);
+        assertTrue(root.ensureVisible(target[0]));
+        assertEquals(20, inner.y(), 0.001f);
+        assertEquals(80, outer.y(), 0.001f);
+        assertEquals(110, target[0].bounds().bottom(), 0.001f);
+        assertFalse(root.ensureVisible(target[0]));
+        root.dispose();
+    }
+
+    @Test
+    void ensureVisibleHandlesHorizontalOversizedAndDetachedNodes() {
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
+        UiScrollState scroll = new UiScrollState();
+        UiNode[] nodes = new UiNode[2];
+        root.resize(300, 200);
+        root.setContent(scope -> scope.scroll(Ui.modifier().size(100, 100), scroll, list -> {
+            nodes[0] = list.stack(Ui.modifier().size(400, 80), content -> {
+                nodes[1] = content.button("Target", Ui.modifier().size(30, 40).offset(250, 0), () -> {});
+            });
+        }));
+        root.update(0);
+        assertFalse(root.ensureVisible(nodes[0]));
+        assertTrue(root.ensureVisible(nodes[1]));
+        assertEquals(180, scroll.x(), 0.001f);
+        assertEquals(100, nodes[1].bounds().right(), 0.001f);
+        assertFalse(root.ensureVisible(nodes[0]));
+        assertFalse(root.ensureVisible(nodes[1]));
+        assertFalse(root.ensureVisible(null));
+        root.setContent(scope -> {});
+        root.update(0);
+        assertFalse(root.ensureVisible(nodes[1]));
         root.dispose();
     }
 
     @Test
     void rowShrinksFixedChildrenInsideConstrainedSpace() {
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         UiNode[] children = new UiNode[2];
         root.resize(120, 40);
         root.setContent(scope -> scope.row(UiModifier.none().fillWidth().height(40.0f).gap(8.0f), row -> {
@@ -80,7 +193,7 @@ final class UiLayoutAndWidgetsTest {
 
     @Test
     void columnShrinksFixedChildrenWithoutNegativeOrOverflowingBounds() {
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         UiNode[] children = new UiNode[2];
         root.resize(80, 60);
         root.setContent(scope -> scope.column(UiModifier.none().fillWidth().fillHeight().gap(8.0f), column -> {
@@ -98,7 +211,7 @@ final class UiLayoutAndWidgetsTest {
 
     @Test
     void gridPreferredHeightUsesRowMaximumsInsteadOfStackingEveryChild() {
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         UiNode[] nodes = new UiNode[2];
         root.resize(600, 300);
         root.setContent(scope -> {
@@ -120,7 +233,7 @@ final class UiLayoutAndWidgetsTest {
 
     @Test
     void switchRadioAndCollapseActivationUpdateTheirState() {
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         UiBooleanState switched = Ui.state(false);
         UiIntState selected = Ui.state(1);
         UiBooleanState expanded = Ui.state(false);
@@ -157,7 +270,7 @@ final class UiLayoutAndWidgetsTest {
 
     @Test
     void radioGroupUsesOneTabStopAndArrowKeysChangeSelection() {
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         UiIntState selected = Ui.state(0);
         UiNode[] choices = new UiNode[3];
         UiNode[] after = new UiNode[1];
@@ -185,7 +298,7 @@ final class UiLayoutAndWidgetsTest {
         UiStyle custom = UiStyle.button()
                 .background(UiDrawable.color(UiColor.rgba8888(0x123456ff)))
                 .foreground(UiDrawable.color(UiColor.rgba8888(0xabcdefff)));
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         UiNode[] button = new UiNode[1];
         root.resize(200, 80);
         root.setContent(scope -> button[0] = scope.button("Custom",

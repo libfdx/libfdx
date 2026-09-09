@@ -35,11 +35,21 @@ import io.github.libfdx.graphics.shader.ShaderLanguage;
 import io.github.libfdx.graphics.shader.ShaderModule;
 import io.github.libfdx.graphics.shader.reflection.ShaderParameterHandle;
 import io.github.libfdx.graphics.shader.runtime.ShaderParameterBlock;
+import io.github.libfdx.graphics.shader.runtime.ResolvedShaderPass;
+import io.github.libfdx.graphics.shader.runtime.ShaderPipelineRequest;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationCapabilities;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationOperation;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationPhase;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparedResult;
 import io.github.libfdx.graphics.shader.ShaderProfile;
 import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
 import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
 import io.github.libfdx.graphics.shader.ShaderModuleDescriptors;
 import io.github.libfdx.graphics.shader.target.ShaderTarget;
+import io.github.libfdx.graphics.shader.target.ShaderCompilerRegistry;
+import io.github.libfdx.graphics.shader.target.RuntimeShaderTargetCompiler;
+import io.github.libfdx.graphics.shader.target.ShaderVerificationRequirement;
+import io.github.libfdx.runtime.core.RuntimeCore;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Sampler;
 import io.github.libfdx.graphics.Texture;
@@ -60,9 +70,13 @@ import io.github.libfdx.graphics.vulkan.internal.VulkanShaderLayoutValidator;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
+import java.util.Objects;
+import java.util.concurrent.CancellationException;
 
 /**
- * Provides desktop C vulkan services.
+ * Provides desktop C Vulkan services. Shader preparation runs on the application thread
+ * only during explicit loading updates; it reports no nonblocking runtime preparation.
  *
  * @author xpenatan
  */
@@ -412,6 +426,7 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
             if (disposed) {
                 return;
             }
+            device.closePreparation();
             disposed = true;
             try {
                 DesktopCVulkan.destroy(context);
@@ -459,10 +474,131 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
      * @author xpenatan
      */
     private static final class DesktopCVulkanGraphicsDevice implements GraphicsDevice {
+        private static final ShaderPreparationCapabilities PREPARATION_CAPABILITIES = new ShaderPreparationCapabilities(
+                ShaderPreparationCapabilities.Execution.OWNER_THREAD,
+                ShaderPreparationCapabilities.Execution.OWNER_THREAD, false, 0, false, false);
         private final DesktopCVulkanGraphicsAttachment attachment;
+        private final Thread owner = Thread.currentThread();
+        private final ArrayList<PreparationOperation> preparations = new ArrayList<>();
+        private ShaderCompilerRegistry preparationCompilers;
 
         DesktopCVulkanGraphicsDevice(DesktopCVulkanGraphicsAttachment attachment) {
             this.attachment = attachment;
+        }
+
+        @Override public ShaderPreparationCapabilities shaderPreparationCapabilities() { return PREPARATION_CAPABILITIES; }
+
+        @Override public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
+            requirePreparationOwner();
+            attachment.ensureNotDisposed("prepare a pipeline");
+            PreparationOperation operation = new PreparationOperation(Objects.requireNonNull(request, "request"));
+            preparations.add(operation);
+            return operation;
+        }
+
+        private void requirePreparationOwner() {
+            if (Thread.currentThread() != owner) throw new FdxException("Desktop C preparation requires the owner thread");
+        }
+
+        private void closePreparation() {
+            requirePreparationOwner();
+            while (!preparations.isEmpty()) preparations.get(preparations.size() - 1).dispose();
+        }
+
+        /** TeaVM C has no parallel Java execution: even source generation waits for explicit loading. */
+        private final class PreparationOperation implements ShaderPreparationOperation {
+            private final ShaderPipelineRequest request;
+            private ShaderPreparationPhase phase = ShaderPreparationPhase.QUEUED;
+            private DesktopCVulkanRenderPipelineHandle pipeline;
+            private Throwable failure;
+            private boolean done, cancelled, finished, disposed;
+
+            PreparationOperation(ShaderPipelineRequest request) { this.request = request; }
+
+            @Override public void advanceLoading() {
+                requirePreparationOwner();
+                if (done || disposed) return;
+                ShaderModule module = null;
+                try {
+                    requireActive();
+                    phase = ShaderPreparationPhase.SOURCE;
+                    ShaderModuleDescriptor source = request.sourceDescriptor();
+                    requireActive();
+                    phase = ShaderPreparationPhase.TRANSLATION;
+                    if (preparationCompilers == null) {
+                        preparationCompilers = ShaderCompilerRegistry.builder()
+                                .compiler(new RuntimeShaderTargetCompiler(RuntimeCore.shaderCompiler())).build();
+                    }
+                    ShaderTarget target = ShaderTarget.VULKAN_SPIRV;
+                    source = ShaderModuleDescriptors.requireTarget(source, target.id(), target.format(),
+                            target.environment(), preparationCompilers,
+                            ShaderVerificationRequirement.PROVIDER_PIPELINE, "desktop C Vulkan");
+                    requireActive();
+                    phase = ShaderPreparationPhase.COMPILATION;
+                    module = createShaderModule(source);
+                    phase = ShaderPreparationPhase.PIPELINE;
+                    pipeline = (DesktopCVulkanRenderPipelineHandle) createRenderPipeline(request.pipelineDescriptor(module));
+                    pipeline.published = false;
+                } catch (Throwable error) { failure = error; }
+                finally {
+                    try { if (module != null) module.dispose(); }
+                    catch (Throwable error) {
+                        if (failure == null) failure = error;
+                        else if (failure != error) failure.addSuppressed(error);
+                    }
+                    if (failure != null || cancelled) discard();
+                    phase = ShaderPreparationPhase.PUBLICATION;
+                    done = true;
+                }
+            }
+
+            private void requireActive() {
+                if (cancelled || disposed || attachment.isDisposed()) {
+                    throw new CancellationException("Desktop C Vulkan preparation cancelled");
+                }
+            }
+
+            @Override public boolean isDone() { return done; }
+            @Override public ShaderPreparationPhase phase() { return phase; }
+
+            @Override public ShaderPreparedResult finish() {
+                requirePreparationOwner();
+                if (!done || finished) throw new FdxException("Desktop C Vulkan preparation cannot be published now");
+                finished = true;
+                try {
+                    requireActive();
+                    if (failure instanceof Error error) throw error;
+                    if (failure instanceof RuntimeException error) throw error;
+                    if (failure != null) throw new FdxException("Desktop C Vulkan preparation failed", failure);
+                    ShaderPreparedResult result = new ShaderPreparedResult(ResolvedShaderPass.of(request.passId(),
+                            pipeline, pipeline.resourceBindings().layout(), request.providerRevision()), pipeline);
+                    pipeline.published = true;
+                    pipeline = null;
+                    return result;
+                } finally { discard(); preparations.remove(this); }
+            }
+
+            @Override public void cancel() {
+                requirePreparationOwner();
+                cancelled = true;
+                done = true;
+                discard();
+                phase = ShaderPreparationPhase.PUBLICATION;
+            }
+
+            private void discard() {
+                if (pipeline != null) { pipeline.dispose(); pipeline = null; }
+            }
+
+            @Override public void dispose() {
+                requirePreparationOwner();
+                if (disposed) return;
+                cancel();
+                disposed = true;
+                preparations.remove(this);
+            }
+
+            @Override public boolean isDisposed() { return disposed; }
         }
 
         /**
@@ -1865,6 +2001,7 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
      * @author xpenatan
      */
     private static final class DesktopCVulkanRenderPipelineHandle implements RenderPipeline {
+        private boolean published = true;
         private final DesktopCVulkanGraphicsAttachment attachment;
         private final long handle;
         private final PrimitiveTopology primitiveTopology;
@@ -1947,7 +2084,7 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
             }
             disposed = true;
             if (!attachment.isDisposed()) {
-                DesktopCVulkan.destroyRenderPipeline(handle);
+                DesktopCVulkan.destroyRenderPipeline(handle, published);
             }
         }
 

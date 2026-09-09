@@ -6,7 +6,7 @@ package io.github.libfdx.ui;
  * @author xpenatan
  */
 public final class UiTextStyle {
-    private static final UiTextStyle DEFAULT = new UiTextStyle(UiFont.family("default", 16.0f), 16.0f,
+    private static final UiTextStyle DEFAULT = new UiTextStyle(UiFonts.defaultFont(16.0f), 16.0f,
             UiColor.WHITE, 20.0f, UiTextAlign.START, true, false, UiColor.TRANSPARENT, 0.0f,
             UiColor.TRANSPARENT, 0.0f);
 
@@ -24,7 +24,7 @@ public final class UiTextStyle {
 
     private UiTextStyle(UiFont font, float size, UiColor color, float lineHeight, UiTextAlign align, boolean wrap,
             boolean ellipsis, UiColor shadowColor, float shadowOffset, UiColor outlineColor, float outlineWidth) {
-        this.font = font != null ? font : UiFont.family("default", size);
+        this.font = font != null ? font : UiFonts.defaultFont(size);
         this.size = size;
         this.color = color != null ? color : UiColor.WHITE;
         this.lineHeight = lineHeight;

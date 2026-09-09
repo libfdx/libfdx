@@ -280,6 +280,7 @@ final class WGPUComputePass implements ComputePass {
     }
 
     private void ensureOpen() {
+        context.requireDeviceUsable("record compute commands");
         if (ended) {
             throw new FdxException("Compute pass has already ended");
         }

@@ -23,9 +23,11 @@ final class PlatformerWebLauncherSupport {
                 .title("libfdx Platformer - " + graphicsName + " " + runtimeName)
                 .size(0, 0)
                 .canvasId(CANVAS_ID)
+                .deferAssets("levels/","audio/")
+                .audio(new io.github.libfdx.audio.web.WebAudioProvider())
                 .graphics(graphics);
 
-        new WebApplicationBackend().start(config, new PlatformerApplication());
+        new WebApplicationBackend().start(config, new PlatformerApplication(Long.parseLong(query("frames","0"))));
     }
 
     private static String graphics(String[] args) {

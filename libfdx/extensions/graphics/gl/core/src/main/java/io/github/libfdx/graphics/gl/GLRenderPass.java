@@ -31,6 +31,10 @@ final class GLRenderPass implements RenderPass {
     private final GLApi gl;
     private final GLResourceDomain resourceDomain;
     private GLTextureHandle renderTarget;
+    private GLTextureHandle renderDepth;
+    private GLMultipleTargets multipleTargets;
+
+    void multipleTargets(GLMultipleTargets targets) { multipleTargets = targets; }
     private GLRenderPipelineHandle pipeline;
     private GLBufferHandle[] vertexBuffers = new GLBufferHandle[2];
     private boolean[] enabledVertexAttributes = new boolean[16];
@@ -52,12 +56,14 @@ final class GLRenderPass implements RenderPass {
         this.resourceDomain = resourceDomain;
     }
 
-    void begin(GLTextureHandle renderTarget, boolean restoreDefaultFramebuffer, int restoreWidth,
+    void begin(GLTextureHandle renderTarget, GLTextureHandle renderDepth, boolean restoreDefaultFramebuffer, int restoreWidth,
             int restoreHeight, RenderPassCompatibility compatibility) {
         if (!ended) {
             throw new FdxException("Cannot reuse an active GL render pass");
         }
         this.renderTarget = renderTarget;
+        this.renderDepth = renderDepth;
+        multipleTargets = null;
         this.restoreDefaultFramebuffer = restoreDefaultFramebuffer;
         this.restoreWidth = restoreWidth;
         this.restoreHeight = restoreHeight;
@@ -112,6 +118,7 @@ final class GLRenderPass implements RenderPass {
         else {
             gl.disableAlphaBlending();
         }
+        this.pipeline.applyCompleteState();
         if (this.pipeline.sampledTextureCount() > 0) {
             setTextureUniform(0);
         }
@@ -193,6 +200,10 @@ final class GLRenderPass implements RenderPass {
             throw new FdxException("GL texture slot is outside the current pipeline texture range");
         }
         GLTextureHandle glTexture = GLResources.requireTexture(texture, resourceDomain, "Texture");
+        if (glTexture == renderTarget || glTexture == renderDepth
+                || multipleTargets != null && multipleTargets.contains(glTexture)) {
+            throw new FdxException("Cannot sample a texture attached to the active render pass");
+        }
         if (!glTexture.usage().sampled()) {
             throw new FdxException("Texture was not created with sampled usage");
         }
@@ -463,21 +474,24 @@ final class GLRenderPass implements RenderPass {
             return;
         }
         ended = true;
-        gl.enableScissorTest(false);
-        resetVertexAttributes();
-        gl.useProgram(0);
-        gl.bindArrayBuffer(0);
-        gl.bindElementArrayBuffer(0);
-        gl.bindUniformBuffer(0);
-        gl.viewport(0, 0, restoreWidth, restoreHeight);
-        if (restoreDefaultFramebuffer) {
-            gl.bindFramebuffer(0);
+        if (multipleTargets != null) multipleTargets.end();
+        multipleTargets = null;
+        if (!resourceDomain.isLost()) {
+            gl.enableScissorTest(false);
+            resetVertexAttributes();
+            gl.useProgram(0);
+            gl.bindArrayBuffer(0);
+            gl.bindElementArrayBuffer(0);
+            gl.bindUniformBuffer(0);
+            gl.viewport(0, 0, restoreWidth, restoreHeight);
+            if (restoreDefaultFramebuffer) gl.bindFramebuffer(0);
         }
         pipeline = null;
         Arrays.fill(vertexBuffers, null);
         Arrays.fill(textures, null);
         indexBuffer = null;
         renderTarget = null;
+        renderDepth = null;
         compatibility = null;
     }
 
@@ -608,10 +622,12 @@ final class GLRenderPass implements RenderPass {
     }
 
     private void ensureOpen() {
+        resourceDomain.requireUsable();
         if (ended) {
             throw new FdxException("Render pass has already ended");
         }
-        if (renderTarget != null && renderTarget.isDisposed()) {
+        if (multipleTargets != null) multipleTargets.requireLive();
+        if (renderTarget != null && renderTarget.isDisposed() || renderDepth != null && renderDepth.isDisposed()) {
             throw new FdxException("Render target texture has been disposed");
         }
     }

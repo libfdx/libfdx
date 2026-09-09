@@ -1,0 +1,103 @@
+{
+  "type": "map",
+  "version": "1.10",
+  "orientation": "orthogonal",
+  "width": 4,
+  "height": 3,
+  "tilewidth": 32,
+  "tileheight": 32,
+  "parallaxoriginx": 32,
+  "parallaxoriginy": 48,
+  "tilesets": [
+    {
+      "firstgid": 1,
+      "source": "tilesets/motion.tsj"
+    }
+  ],
+  "layers": [
+    {
+      "id": 1,
+      "name": "background",
+      "type": "group",
+      "offsetx": 4,
+      "offsety": -4,
+      "parallaxx": 0.5,
+      "layers": [
+        {
+          "id": 2,
+          "name": "nested",
+          "type": "group",
+          "parallaxx": 0.5,
+          "layers": [
+            {
+              "id": 3,
+              "name": "animated",
+              "type": "tilelayer",
+              "width": 4,
+              "height": 3,
+              "data": [
+                0,
+                0,
+                0,
+                0,
+                1,
+                0,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "id": 4,
+              "name": "objects",
+              "type": "objectgroup",
+              "opacity": 0.5,
+              "objects": [
+                {
+                  "id": 1,
+                  "name": "marker",
+                  "gid": 3,
+                  "x": 96,
+                  "y": 64,
+                  "width": 16,
+                  "height": 16
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "name": "hidden",
+          "type": "group",
+          "visible": false,
+          "layers": [
+            {
+              "id": 6,
+              "type": "tilelayer",
+              "width": 4,
+              "height": 3,
+              "data": [
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                4
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

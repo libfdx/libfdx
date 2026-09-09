@@ -8,6 +8,8 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.GraphicsContext;
+import io.github.libfdx.graphics.RenderTargetLayout;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparation;
 import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.math.Vector3;
@@ -56,6 +58,7 @@ public final class CascadedShadowMap3D implements Disposable {
     private float shadowFadeFraction = 0.20f;
     private final int width;
     private final int height;
+    private int lastRenderedCascadeCount;
     private boolean disposed;
 
     /**
@@ -67,12 +70,24 @@ public final class CascadedShadowMap3D implements Disposable {
      * @param height the height in pixels for each cascade
      */
     public CascadedShadowMap3D(GraphicsContext graphics, int cascadeCount, int width, int height) {
+        this(graphics, cascadeCount, width, height, null, null);
+    }
+
+    /**
+     * Borrows async preparation and an optional required-pass group. Cascades share one shadow
+     * shader plan and prepared pipeline identities; light matrices/targets remain independent.
+     * Register shaderPlan() for the group's SHADOW pass. Async maps clear/rebuild their targets
+     * while readiness can change instead of retaining shadow data from omitted casters.
+     */
+    public CascadedShadowMap3D(GraphicsContext graphics, int cascadeCount, int width, int height,
+            ShaderPreparation preparation, ModelShaderGroup group) {
         if (graphics == null) {
             throw new FdxException("GraphicsContext cannot be null");
         }
         if (cascadeCount <= 0 || cascadeCount > MAX_CASCADES) {
             throw new FdxException("Cascaded shadow map count must be between 1 and 4");
         }
+        if (width <= 0 || height <= 0) throw new FdxException("Cascade dimensions must be positive");
         cascades = new DirectionalShadowMap3D[cascadeCount];
         splitDistances = new float[cascadeCount];
         centerX = new float[cascadeCount];
@@ -83,8 +98,16 @@ public final class CascadedShadowMap3D implements Disposable {
         cascadeBiases = new float[cascadeCount];
         this.width = width;
         this.height = height;
-        for (int i = 0; i < cascades.length; i++) {
-            cascades[i] = new DirectionalShadowMap3D(graphics, width, height);
+        try {
+            for (int i = 0; i < cascades.length; i++) {
+                cascades[i] = new DirectionalShadowMap3D(graphics, width, height, preparation, group,
+                        i == 0 || preparation == null ? null : cascades[0].shaderPlan());
+            }
+        } catch (RuntimeException | Error failure) {
+            for (DirectionalShadowMap3D cascade : cascades) if (cascade != null) {
+                try { cascade.dispose(); } catch (RuntimeException | Error cleanup) { if (cleanup != failure) failure.addSuppressed(cleanup); }
+            }
+            throw failure;
         }
     }
 
@@ -95,8 +118,8 @@ public final class CascadedShadowMap3D implements Disposable {
      * @return this cascaded shadow map for chaining
      */
     public CascadedShadowMap3D splitLambda(float splitLambda) {
-        if (Float.isNaN(splitLambda)) {
-            throw new FdxException("Cascade split lambda cannot be NaN");
+        if (!Float.isFinite(splitLambda)) {
+            throw new FdxException("Cascade split lambda must be finite");
         }
         this.splitLambda = Math.max(0.0f, Math.min(1.0f, splitLambda));
         return this;
@@ -109,7 +132,7 @@ public final class CascadedShadowMap3D implements Disposable {
      * @return this cascaded shadow map for chaining
      */
     public CascadedShadowMap3D padding(float padding) {
-        if (padding <= 0.0f || Float.isNaN(padding)) {
+        if (padding <= 0.0f || !Float.isFinite(padding)) {
             throw new FdxException("Cascade padding must be greater than zero");
         }
         this.padding = padding;
@@ -148,6 +171,7 @@ public final class CascadedShadowMap3D implements Disposable {
      * @return this cascaded shadow map for chaining
      */
     public CascadedShadowMap3D bias(float bias) {
+        if (!Float.isFinite(bias)) throw new FdxException("Cascade bias must be finite");
         baseBias = Math.max(0.0f, bias);
         for (int i = 0; i < cascades.length; i++) {
             cascades[i].bias(bias);
@@ -162,8 +186,8 @@ public final class CascadedShadowMap3D implements Disposable {
      * @return this cascaded shadow map for chaining
      */
     public CascadedShadowMap3D minTexelBias(float texels) {
-        if (Float.isNaN(texels)) {
-            throw new FdxException("Cascade minimum texel bias cannot be NaN");
+        if (!Float.isFinite(texels)) {
+            throw new FdxException("Cascade minimum texel bias must be finite");
         }
         minTexelBias = Math.max(0.0f, texels);
         return this;
@@ -190,8 +214,8 @@ public final class CascadedShadowMap3D implements Disposable {
      * @return this cascaded shadow map for chaining
      */
     public CascadedShadowMap3D shadowFadeFraction(float fraction) {
-        if (Float.isNaN(fraction)) {
-            throw new FdxException("Cascade shadow fade fraction cannot be NaN");
+        if (!Float.isFinite(fraction)) {
+            throw new FdxException("Cascade shadow fade fraction must be finite");
         }
         shadowFadeFraction = Math.max(0.0f, Math.min(0.5f, fraction));
         return this;
@@ -268,6 +292,8 @@ public final class CascadedShadowMap3D implements Disposable {
      */
     public void render(DirectionalLight light, Camera viewCamera, ModelInstance[] instances) {
         ensureNotDisposed();
+        lastRenderedCascadeCount = 0;
+        invalidateCache();
         if (instances == null) {
             throw new FdxException("ModelInstance array cannot be null");
         }
@@ -285,6 +311,40 @@ public final class CascadedShadowMap3D implements Disposable {
         }
     }
 
+    /** Reuses unchanged cascade contents. The caller increments casterRevision whenever the array's
+     * contents, transforms, meshes, skin poses, materials or shadow-writing behavior change. Automatic
+     * checks cover fitted light matrices and caster fades, not arbitrary application mutations.
+     * Uses identity of the supplied array plus its revision; it remains borrowed until invalidation.
+     * Returns the number of passes recorded. Every changed cascade is updated together before return.
+     * Call on the graphics thread before scene drawing; no frame handles are retained.
+     * Invalidate after an abandoned frame: recorded work must be submitted before later frames reuse it. */
+    public int renderIfNeeded(DirectionalLight light, Camera viewCamera, ModelInstance[] instances, long casterRevision) {
+        ensureNotDisposed();
+        if (instances == null) throw new FdxException("ModelInstance array cannot be null");
+        shadowRenderables.clear();
+        lastRenderedCascadeCount=0;
+        try {
+            for (ModelInstance instance : instances) if (instance != null) instance.collectRenderables(shadowRenderables);
+            update(viewCamera);
+            ArrayView<Renderable3D> renderables=shadowRenderables.renderables();
+            updateLightSpaceBounds(light, renderables);
+            for (DirectionalShadowMap3D cascade : cascades) {
+                if (cascade.renderRenderablesIfNeeded(light, renderables, instances, casterRevision)) lastRenderedCascadeCount++;
+            }
+            return lastRenderedCascadeCount;
+        } catch (RuntimeException | Error failure) {
+            invalidateCache();
+            throw failure;
+        } finally { shadowRenderables.clear(); }
+    }
+
+    /** Forces the next optional cached render to refresh every cascade. */
+    public void invalidateCache() { for (DirectionalShadowMap3D cascade : cascades) cascade.invalidateCache(); }
+    /** Passes completed by the most recent render call; a failed call can report a partial count. */
+    public int lastRenderedCascadeCount() { return lastRenderedCascadeCount; }
+    /** Logical color plus depth texel estimate, excluding provider padding/retention and renderer storage. */
+    public long estimatedBytes() { return (long) cascades.length * width * height * 8; }
+
     /**
      * Renders model instances into every cascade.
      *
@@ -295,6 +355,8 @@ public final class CascadedShadowMap3D implements Disposable {
     public void render(DirectionalLight light, Camera viewCamera,
             ObjectIterable<? extends ModelInstance> instances) {
         ensureNotDisposed();
+        lastRenderedCascadeCount = 0;
+        invalidateCache();
         if (instances == null) {
             throw new FdxException("ModelInstance iterable cannot be null");
         }
@@ -333,6 +395,12 @@ public final class CascadedShadowMap3D implements Disposable {
     public int cascadeCount() {
         return cascades.length;
     }
+
+    /** Borrowed shared definitions; valid for the preparation constructor. */
+    public ModelShaderPlan shaderPlan() { return cascades[0].shaderPlan(); }
+
+    /** All cascades use this attachment layout for shader preparation. */
+    public RenderTargetLayout preparationTarget() { return cascades[0].preparationTarget(); }
 
     /**
      * Returns a cascade shadow map.
@@ -587,11 +655,13 @@ public final class CascadedShadowMap3D implements Disposable {
     }
 
     private void renderCollected(DirectionalLight light, Camera viewCamera) {
+        lastRenderedCascadeCount=0;
         update(viewCamera);
         ArrayView<Renderable3D> renderables = shadowRenderables.renderables();
         updateLightSpaceBounds(light, renderables);
         for (int i = 0; i < cascades.length; i++) {
             cascades[i].renderRenderables(light, renderables);
+            lastRenderedCascadeCount++;
         }
     }
 
@@ -673,7 +743,7 @@ public final class CascadedShadowMap3D implements Disposable {
     private float casterDepthMin(Renderable3D renderable,
             float areaMinRight, float areaMaxRight,
             float areaMinUp, float areaMaxUp, float receiverDepthMax) {
-        BoundingBox bounds = renderable.bounds();
+        BoundingBox bounds = renderable.cullingBounds() != null ? renderable.cullingBounds() : renderable.bounds();
         Matrix4 transform = renderable.worldTransform();
         transform.copyValues(transformValues, 0);
         Vector3 min = bounds.min();
@@ -836,9 +906,16 @@ public final class CascadedShadowMap3D implements Disposable {
             return;
         }
         disposed = true;
+        invalidateCache();
+        shadowRenderables.clear();
+        Throwable failure = null;
         for (int i = 0; i < cascades.length; i++) {
-            cascades[i].dispose();
+            try { cascades[i].dispose(); } catch (RuntimeException | Error ex) {
+                if (failure == null) failure = ex; else if (ex != failure) failure.addSuppressed(ex);
+            }
         }
+        if (failure instanceof RuntimeException ex) throw ex;
+        if (failure instanceof Error ex) throw ex;
     }
 
     /**

@@ -1,8 +1,8 @@
 package io.github.libfdx.graphics.shader;
 
+import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
 import io.github.libfdx.graphics.shader.target.ShaderTargetArtifact;
-import io.github.libfdx.core.FdxException;
 
 /**
  * Describes the values used to create or identify a shader module.
@@ -27,6 +27,30 @@ public final class ShaderModuleDescriptor {
     private String hlslFragmentSource;
     private ShaderReflection reflection = ShaderReflection.empty();
     private ShaderTargetArtifact targetArtifact;
+
+    /**
+     * Copies source and metadata into independently mutable storage. Immutable strings,
+     * reflection and target artifacts are shared; mutable SPIR-V arrays are copied. No native
+     * resource, translation, or I/O is created. Call while the source descriptor is stable.
+     */
+    public ShaderModuleDescriptor copy() {
+        ShaderModuleDescriptor copy = new ShaderModuleDescriptor();
+        copy.label = label;
+        copy.language = language;
+        copy.vertexEntryPoint = vertexEntryPoint;
+        copy.fragmentEntryPoint = fragmentEntryPoint;
+        copy.wgslSource = wgslSource;
+        copy.glslVertexSource = glslVertexSource;
+        copy.glslFragmentSource = glslFragmentSource;
+        copy.spirvVertexWords = spirvVertexWords == null ? null : spirvVertexWords.clone();
+        copy.spirvFragmentWords = spirvFragmentWords == null ? null : spirvFragmentWords.clone();
+        copy.mslSource = mslSource;
+        copy.hlslVertexSource = hlslVertexSource;
+        copy.hlslFragmentSource = hlslFragmentSource;
+        copy.reflection = reflection;
+        copy.targetArtifact = targetArtifact;
+        return copy;
+    }
 
     /**
      * Creates a shader module descriptor.

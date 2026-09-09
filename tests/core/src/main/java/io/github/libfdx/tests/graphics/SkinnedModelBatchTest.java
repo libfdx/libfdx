@@ -1,5 +1,8 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.FramebufferCapture;
+import io.github.libfdx.testsupport.graphics.TestCameraControllers;
+
 import io.github.libfdx.Fdx;
 import io.github.libfdx.collections.Array;
 import io.github.libfdx.application.Application;
@@ -39,7 +42,7 @@ import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.math.Vector3;
-import io.github.libfdx.tests.TestFpsLogger;
+import io.github.libfdx.testsupport.TestFpsLogger;
 
 import java.nio.ByteBuffer;
 
@@ -187,6 +190,10 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
         }
         ShaderGraphPbrTestSupport.dispose(graphShaderProvider);
         graphShaderProvider = null;
+        if (animation != null) {
+            animation.dispose();
+            animation = null;
+        }
         if (model != null) {
             model.dispose();
             model = null;

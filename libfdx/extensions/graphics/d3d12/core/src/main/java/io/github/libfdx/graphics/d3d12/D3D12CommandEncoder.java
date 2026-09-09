@@ -24,11 +24,13 @@ import java.util.Arrays;
 final class D3D12CommandEncoder implements CommandEncoder {
     private final D3D12Context context;
     private final D3D12RenderPass renderPass;
+    private final D3D12Compute.Pass computePass;
     private boolean passActive;
 
     D3D12CommandEncoder(D3D12Context context) {
         this.context = context;
         renderPass = new D3D12RenderPass(context, this);
+        computePass = new D3D12Compute.Pass(context, this);
     }
 
     void beginFrame() {
@@ -46,6 +48,21 @@ final class D3D12CommandEncoder implements CommandEncoder {
         passActive = false;
     }
 
+    @Override public io.github.libfdx.graphics.ComputePass beginComputePass(io.github.libfdx.graphics.ComputePassDescriptor descriptor) {
+        context.requireFrame("begin a compute pass"); requireEnded();
+        if (descriptor == null) throw new FdxException("Compute descriptor cannot be null");
+        passActive = true; computePass.begin(); return computePass;
+    }
+
+    @Override public void copyBufferToBuffer(Buffer source, int sourceOffset, Buffer destination, int destinationOffset, int size) {
+        context.requireFrame("copy buffers"); requireEnded();
+        var from = context.requireBuffer(source, "Copy source");
+        var to = context.requireBuffer(destination, "Copy destination");
+        if (size < 0 || sourceOffset < 0 || destinationOffset < 0 || sourceOffset > from.size() - size || destinationOffset > to.size() - size
+                || (from == to && sourceOffset < destinationOffset + size && destinationOffset < sourceOffset + size)) throw new FdxException("Invalid D3D12 buffer copy range");
+        if (size > 0) D3D12Native.copyBuffer(context.nativeHandle(), from.nativeHandle(), sourceOffset, to.nativeHandle(), destinationOffset, size);
+    }
+
     @Override
     public RenderPass beginRenderPass(RenderPassDescriptor descriptor) {
         if (descriptor == null) {
@@ -57,15 +74,45 @@ final class D3D12CommandEncoder implements CommandEncoder {
         }
         RenderPassCompatibility compatibility = descriptor.validate(context.device().capabilities());
         D3D12TextureView attachment = context.requireTextureView(descriptor.colorAttachment(), "Color attachment");
+        if (compatibility.targetLayout().colorAttachmentCount() > 1 || compatibility.targetLayout().sampleCount() > 1) {
+            var colors = descriptor.colorAttachments();
+            for (var color : colors) {
+                requireOffscreen(color.view());
+                if (color.resolveView() != null) requireOffscreen(color.resolveView());
+            }
+            if (descriptor.depthStencilAttachment() != null) requireOffscreen(descriptor.depthStencilAttachment().view());
+            D3D12Native.beginMultipleRenderPass(context.nativeHandle(), descriptor);
+            passActive = true;
+            renderPass.begin(attachment, compatibility);
+            renderPass.multipleAttachments = colors;
+            renderPass.explicitDepth = descriptor.depthStencilAttachment() == null ? null : descriptor.depthStencilAttachment().view();
+            return renderPass;
+        }
         LoadOp load = descriptor.colorLoadOp();
         StoreOp store = descriptor.colorStoreOp();
-        D3D12Native.beginRenderPass(context.nativeHandle(), attachment.nativeHandle(), load.isClear(),
+        var explicitDepth = descriptor.depthStencilAttachment();
+        long depthHandle = 0;
+        if (explicitDepth != null) {
+            D3D12TextureView depthView = context.requireTextureView(explicitDepth.view(), "Depth attachment");
+            if (depthView.texture() == null || !depthView.texture().usage().renderAttachment()) {
+                throw new FdxException("Direct3D 12 depth attachment requires a render-attachment texture");
+            }
+            depthHandle = depthView.nativeHandle();
+        }
+        D3D12Native.beginRenderPass(context.nativeHandle(), attachment.nativeHandle(), attachment.mipLevel, depthHandle, load.isClear(),
                 load.red(), load.green(), load.blue(), load.alpha(), store.isStore(), descriptor.depthEnabled(),
-                descriptor.depthClearEnabled(), descriptor.depthClearValue());
+                explicitDepth != null ? explicitDepth.depthLoadOp().isClear() : descriptor.depthClearEnabled(), descriptor.depthClearValue());
         passActive = true;
         renderPass.begin(attachment, RenderPassCompatibility.of(
                 compatibility.targetLayout(), attachment.width(), attachment.height()));
         return renderPass;
+    }
+
+    private void requireOffscreen(io.github.libfdx.graphics.TextureView view) {
+        D3D12TextureView target = context.requireTextureView(view, "Render attachment");
+        if (target.texture() == null || !target.texture().usage().renderAttachment()) {
+            throw new FdxException("Direct3D 12 multiple targets require offscreen attachment textures");
+        }
     }
 
     @Override
@@ -87,6 +134,8 @@ final class D3D12RenderPass implements RenderPass {
     private MemorySegment uniformMemory;
     private ShaderParameterBlock compatibilityUniformBlock;
     private D3D12TextureView colorAttachment;
+    io.github.libfdx.graphics.RenderPassColorAttachment[] multipleAttachments;
+    io.github.libfdx.graphics.TextureView explicitDepth;
     private D3D12Pipeline pipeline;
     private RenderPassCompatibility compatibility;
     private D3D12Buffer indexBuffer;
@@ -105,6 +154,8 @@ final class D3D12RenderPass implements RenderPass {
             throw new FdxException("Cannot reuse an active Direct3D 12 render pass");
         }
         this.colorAttachment = colorAttachment;
+        multipleAttachments = null;
+        explicitDepth = null;
         this.compatibility = compatibility;
         pipeline = null;
         indexBuffer = null;
@@ -179,6 +230,14 @@ final class D3D12RenderPass implements RenderPass {
             throw new FdxException("Texture slot is not declared by the active Direct3D 12 pipeline: " + slot);
         }
         textures[slot] = context.requireTexture(texture, "Texture");
+        if (colorAttachment != null && colorAttachment.texture() == texture) throw new FdxException("Cannot sample the active render target");
+        if (multipleAttachments != null) for (var target : multipleAttachments) {
+            if (((D3D12TextureView) target.view()).texture() == texture
+                    || target.resolveView() != null && ((D3D12TextureView) target.resolveView()).texture() == texture) {
+                textures[slot] = null;
+                throw new FdxException("Cannot sample an active color or resolve attachment");
+            }
+        }
     }
 
     @Override
@@ -330,6 +389,8 @@ final class D3D12RenderPass implements RenderPass {
         pipeline = null;
         indexBuffer = null;
         colorAttachment = null;
+        multipleAttachments = null;
+        explicitDepth = null;
         compatibility = null;
         Arrays.fill(vertexBuffers, null);
         Arrays.fill(textures, null);
@@ -383,6 +444,11 @@ final class D3D12RenderPass implements RenderPass {
             throw new FdxException("Render pass has already ended");
         }
         context.requireFrame("use a Direct3D 12 render pass");
+        if (multipleAttachments != null) for (var target : multipleAttachments) {
+            context.requireTextureView(target.view(), "Color attachment");
+            if (target.resolveView() != null) context.requireTextureView(target.resolveView(), "Resolve attachment");
+        }
+        if (explicitDepth != null) context.requireTextureView(explicitDepth, "Depth attachment");
         if (colorAttachment != null && colorAttachment.texture() != null && colorAttachment.texture().isDisposed()) {
             throw new FdxException("Render target texture has been disposed");
         }

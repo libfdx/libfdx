@@ -22,9 +22,20 @@ final class PbrShaderProviderTest {
     }
 
     @Test
+    void displayFogIsUnaffectedBySceneExposureAndToneMapping() {
+        String shader = PbrShaderProvider.PBR_RENDERER_TEMPLATE;
+        int exposure = shader.indexOf("color *= max(uniforms.postProcessing.y");
+        int toneMapping = shader.indexOf("color = neutralToneMapping(color)");
+        int fog = shader.indexOf("color = mix(color, srgbToLinear(uniforms.fogColor.rgb), fogAmount)");
+        int output = shader.indexOf("return vec4f(linearToSrgb(color), base.a)");
+        assertTrue(exposure >= 0 && toneMapping > exposure && fog > toneMapping && output > fog,
+                "Fully fogged surfaces must retain the specified display color, including with tone mapping enabled");
+    }
+
+    @Test
     void baseColorTextureIsLinearizedExactlyOnce() {
         assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains(
-                "base = vec4f(base.rgb * srgbToLinear(texel.rgb), base.a * texel.a);"));
+                "if (uniforms.textureFlags.x < 1.5) { sampledColor = srgbToLinear(sampledColor); }"));
         assertFalse(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains(
                 "let albedo = srgbToLinear(base.rgb);"));
     }
@@ -36,13 +47,13 @@ final class PbrShaderProviderTest {
         assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains("irradiance * albedo / PI"));
         assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains("fn unpackShadowDepth"));
         assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains(
-                "let x0 = -1.2 * radiusX;"));
+                "f32(x - 1) * 1.2 * radiusX"));
         assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains(
-                "vec2f(x1, y1)) * 36.0;"));
+                "if (x == 1) { weightX = 6.0; }"));
         assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains("return visibility / 256.0;"));
         assertFalse(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains("let x4 ="));
         assertTrue(PbrShaderProvider.PBR_RENDERER_TEMPLATE.contains(
-                "let uv = input.uv + uniforms.materialParams.zw;"));
+                "let uv = textureUv(input, 0);"));
     }
 
     @Test
@@ -77,7 +88,7 @@ final class PbrShaderProviderTest {
         assertFalse(skinnedSource.contains("//__PBR_SKINNED_"));
         assertFalse(skinnedSource.contains("//__PBR_SKINNING_TRANSFORM__"));
         assertTrue(skinnedSource.contains("@location(6) joints : vec4f"));
-        assertTrue(skinnedSource.contains("uniforms.boneMatrices[joint3]"));
+        assertTrue(skinnedSource.contains("skinTransform(input.joints, input.weights)"));
         assertWgslLayout(skinnedSource, PbrShaderParameters.skinnedReflection());
     }
 

@@ -1,199 +1,124 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.FramebufferCapture;
+import io.github.libfdx.testsupport.graphics.ParticleTestTiming;
+
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.Logger;
 import io.github.libfdx.display.Display;
-import io.github.libfdx.graphics.GraphicsContext;
-import io.github.libfdx.graphics.LoadOp;
-import io.github.libfdx.graphics.Texture;
-import io.github.libfdx.graphics.TextureDescriptor;
-import io.github.libfdx.graphics.g2d.Batch2D;
+import io.github.libfdx.graphics.*;
+import io.github.libfdx.graphics.camera.Camera;
+import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.g2d.ParticleEmitter2D;
-import io.github.libfdx.graphics.g2d.SpriteBatch;
-import io.github.libfdx.graphics.g2d.TextureRegion;
-import io.github.libfdx.tests.TestFpsLogger;
+import io.github.libfdx.graphics.g2d.ParticlePresets2D;
+import io.github.libfdx.graphics.particles.ParticleVolume;
+import io.github.libfdx.graphics.particles.ParticleSolidRenderer;
+import io.github.libfdx.graphics.particles.ParticleVolumeRenderer;
+import io.github.libfdx.math.Matrix4;
+import io.github.libfdx.math.ClipDepthRange;
+import io.github.libfdx.testsupport.TestFpsLogger;
 
-import java.nio.ByteBuffer;
-
-/**
- * Runs the 2D particle test scenario.
- *
- * @author xpenatan
- */
+/** 2D particles deposited into a density field and integrated without sprite artwork. */
 public final class Particles2DTest extends ApplicationAdapter {
-    private static final int PARTICLE_TEXTURE_SIZE = 32;
-    private static final float FIXED_DELTA_SECONDS = 1.0f / 60.0f;
-
     private final long exitAfterFrames;
     private Application application;
     private Display display;
     private GraphicsContext graphics;
     private Logger logger;
     private TestFpsLogger fpsLogger;
-    private Batch2D batch;
-    private ParticleEmitter2D emitter;
-    private Texture particleTexture;
-    private TextureRegion particleRegion;
-    private String capturePath;
+    private ParticleEmitter2D fire, smoke, sparks, snow;
+    private ParticleVolume volume, smokeVolume;
+    private ParticleSolidRenderer solids;
+    private ParticleVolumeRenderer renderer;
+    private Camera camera;
+    private final Matrix4 inverseViewProjection = new Matrix4();
+    private final ParticleTestTiming timing = new ParticleTestTiming();
+    private float time = 3;
+    private long frames;
+    private String capture;
     private long captureFrame;
-    private boolean created;
-    private boolean captured;
-    private long renderedFrames;
+    private boolean captured, created;
 
-    /**
-     * Creates a particles test.
-     *
-     * @param exitAfterFrames the exit after frames
-     */
-    public Particles2DTest(long exitAfterFrames) {
-        this.exitAfterFrames = exitAfterFrames;
-    }
+    public Particles2DTest(long exitAfterFrames) { this.exitAfterFrames = exitAfterFrames; }
 
-    /**
-     * Initializes the application with the libFDX runtime root.
-     *
-     * @param fdx the libFDX runtime root
-     */
-    @Override
-    public void create(Fdx fdx) {
-        application = fdx.app();
-        display = fdx.displays().main();
-        graphics = fdx.graphics().main();
-        logger = fdx.logger();
+    @Override public void create(Fdx fdx) {
+        application = fdx.app(); display = fdx.displays().main(); graphics = fdx.graphics().main(); logger = fdx.logger();
         fpsLogger = TestFpsLogger.create(logger, "Particles2DTest");
-        batch = new SpriteBatch(graphics);
-        particleTexture = createParticleTexture();
-        particleRegion = new TextureRegion(particleTexture);
-        emitter = new ParticleEmitter2D(160)
-                .seed(0x5EED1234)
-                .position(-0.05f, -0.55f)
-                .emissionRate(95.0f)
-                .lifetime(1.0f, 1.65f)
-                .speed(0.62f, 1.15f)
-                .direction(92.0f, 54.0f)
-                .gravity(0.0f, -0.72f)
-                .size(0.115f, 0.17f, 0.0f, 0.02f)
-                .color(1.0f, 0.78f, 0.22f, 0.92f, 0.22f, 0.52f, 1.0f, 0.0f)
-                .rotation(-35.0f, 35.0f, -90.0f, 90.0f);
-        emitter.emit(36);
-        capturePath = System.getProperty("libfdx.test.capture", "");
-        captureFrame = Long.parseLong(System.getProperty("libfdx.test.captureFrame", "28"));
+        volume = new ParticleVolume(96, 128, 64).bounds(-2.15f, -0.55f, -2.05f, 1.8f, 2.5f, 1.8f);
+        smokeVolume = new ParticleVolume(64, 96, 48).bounds(-1.15f, -0.55f, -2.15f, 2.3f, 3.1f, 2.2f);
+        renderer = new ParticleVolumeRenderer(graphics, volume, smokeVolume).steps(160).density(5);
+        solids = new ParticleSolidRenderer(graphics, 512, renderer);
+        fire = ParticlePresets2D.volumetricFire(800, 1).seed(0x5EED).position(-1.25f, -0.34f);
+        smoke = ParticlePresets2D.smoke(240, 1).seed(0x1234).position(-0.25f, -0.34f)
+                .emissionRate(65).turbulence(0.22f, 4);
+        sparks = ParticlePresets2D.sparks(100, 1).seed(0x5678).position(0.7f, -0.34f);
+        snow = ParticlePresets2D.snow(160, 1).seed(0xABCD).position(1.65f, 1.7f)
+                .spawnArea(0.6f, 0);
+        for (int i = 0; i < 360; i++) simulate(1f / 120);
+        camera = new Camera().projection(CameraProjection.ORTHOGRAPHIC)
+                .position(0, 0.75f, 4).direction(0, 0, -1).nearFar(0.1f, 20);
+        capture = System.getProperty("libfdx.test.capture", "");
+        captureFrame = Long.parseLong(System.getProperty("libfdx.test.captureFrame", "90"));
         created = true;
-        logger.info("Particles2DTest created fixed-capacity particle emitter for provider "
-                + graphics.providerId().value());
+        logger.info("Particles2DTest created world-space particle volume for " + graphics.providerId().value());
     }
 
-    /**
-     * Renders the current content.
-     */
-    @Override
-    public void render() {
-        float deltaSeconds = application.deltaTime();
-        emitter.update(FIXED_DELTA_SECONDS);
-        batch.begin(LoadOp.clear(0.015f, 0.018f, 0.035f, 1.0f));
-        drawEmitterBase();
-        emitter.render(particleRegion, batch);
-        batch.end();
+    private void simulate(float delta) { fire.update(delta); smoke.update(delta); sparks.update(delta); snow.update(delta); }
 
-        if (capturePath != null && capturePath.length() > 0 && !captured && renderedFrames >= captureFrame) {
-            captureFrame(capturePath);
-            captured = true;
+    @Override public void render() {
+        float elapsed = application.deltaTime();
+        float delta = timing.advance(elapsed);
+        time += delta;
+        int steps = Math.max(1, (int)Math.ceil(delta * 120));
+        for (int i = 0; i < steps; i++) simulate(delta / steps);
+        camera.viewport(4.8f, 4.8f * height() / width());
+
+        GraphicsFrame frame = graphics.currentFrame();
+        RenderPass pass = frame.commandEncoder().beginRenderPass(RenderPassDescriptor
+                .color(frame.colorAttachment(), LoadOp.clear(0.008f, 0.011f, 0.018f, 1), StoreOp.store())
+                .depthClear(ClipDepthRange.getDefault().depthClearValue()));
+
+        volume.clear(); smokeVolume.clear();
+        fire.deposit(volume, ParticleVolume.Medium.FIRE, -1.18f);
+        smoke.deposit(smokeVolume, ParticleVolume.Medium.SMOKE, -1.18f);
+        inverseViewProjection.setToMul(camera.inverseViewMatrix(), camera.inverseProjectionMatrix());
+        renderer.draw(pass, camera.combined(), inverseViewProjection, camera.clipDepthRange(), time);
+        solids.begin(pass, camera.combined(), camera.clipDepthRange());
+        drawSolids(sparks, 0.23f); drawSolids(snow, 0.18f);
+        solids.end();
+        pass.end();
+        if (!capture.isEmpty() && !captured && frames >= captureFrame) {
+            try {
+                FramebufferCapture.writePpm(capture, width(), height(), FramebufferCapture.readPixelsRgba8(graphics));
+                captured = true;
+                logger.info("Particles2DTest captured " + capture);
+            } catch (Exception error) { throw new FdxException("Particle capture failed", error); }
         }
-        renderedFrames++;
-        fpsLogger.frame(deltaSeconds, renderedFrames);
-        if (exitAfterFrames > 0L && renderedFrames >= exitAfterFrames) {
-            application.requestExit();
-        }
+        frames++;
+        fpsLogger.frame(elapsed, frames);
+        if (exitAfterFrames > 0 && frames >= exitAfterFrames) application.requestExit();
     }
 
-    /**
-     * Releases resources held by this instance.
-     */
-    @Override
-    public void dispose() {
-        if (batch != null) {
-            batch.dispose();
-            batch = null;
-        }
-        if (particleTexture != null) {
-            particleTexture.dispose();
-            particleTexture = null;
-        }
-        if (!created) {
-            throw new FdxException("Particles2DTest did not create graphics resources");
-        }
-        if (exitAfterFrames > 0L && renderedFrames < exitAfterFrames) {
-            throw new FdxException("Particles2DTest rendered " + renderedFrames + " of "
-                    + exitAfterFrames + " required frames");
-        }
-        if (capturePath != null && capturePath.length() > 0 && !captured) {
-            throw new FdxException("Particles2DTest did not capture framebuffer to " + capturePath);
-        }
-        logger.info("Particles2DTest rendered " + renderedFrames + " frames");
-    }
-
-    private void drawEmitterBase() {
-        batch.color(0.12f, 0.18f, 0.32f, 1.0f);
-        batch.draw(particleRegion, -0.18f, -0.68f, 0.26f, 0.06f);
-        batch.color(1.0f, 0.62f, 0.18f, 0.85f);
-        batch.draw(particleRegion, -0.09f, -0.62f, 0.08f, 0.08f);
-        batch.color(1.0f, 1.0f, 1.0f, 1.0f);
-    }
-
-    private Texture createParticleTexture() {
-        Texture texture = graphics.device().createTexture(TextureDescriptor.rgba8("particle sprite",
-                PARTICLE_TEXTURE_SIZE, PARTICLE_TEXTURE_SIZE));
-        graphics.device().writeTexture(texture, particlePixels());
-        return texture;
-    }
-
-    private ByteBuffer particlePixels() {
-        ByteBuffer pixels = ByteBuffer.allocateDirect(PARTICLE_TEXTURE_SIZE * PARTICLE_TEXTURE_SIZE * 4);
-        float center = (PARTICLE_TEXTURE_SIZE - 1) * 0.5f;
-        for (int y = 0; y < PARTICLE_TEXTURE_SIZE; y++) {
-            for (int x = 0; x < PARTICLE_TEXTURE_SIZE; x++) {
-                float dx = (x - center) / center;
-                float dy = (y - center) / center;
-                float distance = (float)Math.sqrt(dx * dx + dy * dy);
-                float alpha = clamp(1.0f - distance);
-                alpha = alpha * alpha * (3.0f - 2.0f * alpha);
-                pixels.put((byte)255);
-                pixels.put((byte)255);
-                pixels.put((byte)255);
-                pixels.put((byte)(int)(alpha * 255.0f));
-            }
-        }
-        pixels.flip();
-        return pixels;
-    }
-
-    private void captureFrame(String path) {
-        try {
-            ByteBuffer pixels = FramebufferCapture.readPixelsRgba8(graphics);
-            FramebufferCapture.writePpm(path, framebufferWidth(), framebufferHeight(), pixels);
-            logger.info("Particles2DTest captured framebuffer to " + path);
-        } catch (Exception e) {
-            throw new FdxException("Could not capture Particles2DTest framebuffer", e);
+    private void drawSolids(ParticleEmitter2D emitter, float sizeFactor) {
+        for (int i = 0; i < emitter.activeCount(); i++) {
+            float size = emitter.size(i) * sizeFactor;
+            if (size > 0) solids.add(emitter.x(i), emitter.y(i), -1.18f, size,
+                    emitter.red(i), emitter.green(i), emitter.blue(i), emitter.alpha(i));
         }
     }
 
-    private int framebufferWidth() {
-        int width = display.framebufferWidth() > 0 ? display.framebufferWidth() : display.width();
-        return width > 0 ? width : 640;
+    @Override public void dispose() {
+        if (solids != null) { solids.dispose(); solids = null; }
+        if (renderer != null) { renderer.dispose(); renderer = null; }
+        if (!created || (exitAfterFrames > 0 && frames < exitAfterFrames) || (!capture.isEmpty() && !captured))
+            throw new FdxException("Particle scenario did not complete");
+        logger.info(timing.report());
+        logger.info("Particles2DTest rendered " + frames + " frames");
     }
 
-    private int framebufferHeight() {
-        int height = display.framebufferHeight() > 0 ? display.framebufferHeight() : display.height();
-        return height > 0 ? height : 480;
-    }
-
-    private float clamp(float value) {
-        if (value <= 0.0f) {
-            return 0.0f;
-        }
-        return value >= 1.0f ? 1.0f : value;
-    }
+    private int width() { return Math.max(1, display.framebufferWidth()); }
+    private int height() { return Math.max(1, display.framebufferHeight()); }
 }

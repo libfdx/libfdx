@@ -18,6 +18,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class WGPURecordedResourceTest {
     @Test
+    void preparationKeepsDeviceAliveAfterContextsClose() {
+        WGPUResourceDomain domain = new WGPUResourceDomain();
+        int[] releases = {0};
+        domain.setNativeRelease(() -> releases[0]++);
+        domain.retainContext();
+        domain.retainPreparation();
+        domain.retainPreparation();
+        domain.releaseContext();
+        assertTrue(domain.isClosed());
+        assertEquals(0, releases[0]);
+        assertThrows(FdxException.class, domain::retainPreparation);
+        domain.releasePreparation();
+        assertEquals(0, releases[0]);
+        domain.releasePreparation();
+        assertEquals(1, releases[0]);
+        assertThrows(FdxException.class, domain::releasePreparation);
+    }
+
+    @Test
+    void completedPreparationDoesNotReleaseAnActiveDevice() {
+        WGPUResourceDomain domain = new WGPUResourceDomain();
+        int[] releases = {0};
+        domain.setNativeRelease(() -> releases[0]++);
+        domain.retainContext();
+        domain.retainPreparation();
+        domain.releasePreparation();
+        assertFalse(domain.isClosed());
+        assertEquals(0, releases[0]);
+        domain.releaseContext();
+        assertEquals(1, releases[0]);
+    }
+
+    @Test
     void resourceDomainKeepsNativeOwnerAliveUntilEveryContextCloses() {
         WGPUResourceDomain domain = new WGPUResourceDomain();
         int[] releaseCount = {0};

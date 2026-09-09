@@ -1,293 +1,207 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.FramebufferCapture;
+import io.github.libfdx.testsupport.graphics.ParticleAnchorFixture;
+import io.github.libfdx.testsupport.graphics.ParticleSolidOcclusionFixture;
+import io.github.libfdx.testsupport.graphics.ParticleTestTiming;
+import io.github.libfdx.testsupport.graphics.TestCameraControllers;
+
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.Logger;
 import io.github.libfdx.display.Display;
+import io.github.libfdx.graphics.*;
 import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.camera.controller.OrbitCameraController3D;
-import io.github.libfdx.graphics.GraphicsContext;
-import io.github.libfdx.graphics.GraphicsFrame;
-import io.github.libfdx.graphics.LoadOp;
-import io.github.libfdx.graphics.RenderPass;
-import io.github.libfdx.graphics.RenderPassDescriptor;
-import io.github.libfdx.graphics.StoreOp;
-import io.github.libfdx.graphics.Texture;
-import io.github.libfdx.graphics.TextureDescriptor;
-import io.github.libfdx.graphics.g3d.BillboardRenderer3D;
-import io.github.libfdx.graphics.g3d.DefaultModelInstance;
-import io.github.libfdx.graphics.g3d.DirectionalLight;
-import io.github.libfdx.graphics.g3d.Environment3D;
-import io.github.libfdx.graphics.g3d.Model;
-import io.github.libfdx.graphics.g3d.ModelBatch;
-import io.github.libfdx.graphics.g3d.ModelBuilder;
 import io.github.libfdx.graphics.g3d.ParticleEmitter3D;
-import io.github.libfdx.graphics.g3d.Material;
-import io.github.libfdx.graphics.g3d.MaterialAttributes;
-import io.github.libfdx.graphics.g3d.PbrAttributes;
-import io.github.libfdx.graphics.g3d.SkyboxRenderer3D;
-import io.github.libfdx.math.Color;
-import io.github.libfdx.tests.TestFpsLogger;
+import io.github.libfdx.graphics.g3d.ParticlePresets3D;
+import io.github.libfdx.graphics.g3d.*;
+import io.github.libfdx.graphics.particles.ParticleVolume;
+import io.github.libfdx.graphics.particles.ParticleSolidRenderer;
+import io.github.libfdx.graphics.particles.ParticleVolumeRenderer;
+import io.github.libfdx.math.Matrix4;
+import io.github.libfdx.math.ClipDepthRange;
+import io.github.libfdx.testsupport.TestFpsLogger;
 
-import java.nio.ByteBuffer;
-
-/**
- * Runs the 3D particle emitter test scenario.
- *
- * @author xpenatan
- */
+/** 3D particles deposited into a density field and integrated without sprite artwork. */
 public final class Particles3DTest extends ApplicationAdapter {
-    private static final int PARTICLE_TEXTURE_SIZE = 48;
-    private static final float FIXED_DELTA_SECONDS = 1.0f / 60.0f;
-    private static final Color CLEAR_COLOR = new Color(0.014f, 0.018f, 0.030f, 1.0f);
-
     private final long exitAfterFrames;
     private Application application;
     private Display display;
     private GraphicsContext graphics;
     private Logger logger;
     private TestFpsLogger fpsLogger;
-    private SkyboxRenderer3D skybox;
-    private ModelBatch batch;
-    private BillboardRenderer3D billboards;
-    private ParticleEmitter3D emitter;
+    private ParticleEmitter3D fire, smoke, sparks, snow;
+    private ParticleVolume volume, smokeVolume;
+    private ParticleSolidRenderer solids;
+    private ParticleVolumeRenderer renderer;
     private Camera camera;
-    private OrbitCameraController3D cameraInput;
-    private Model floorModel;
-    private Model emitterModel;
+    private OrbitCameraController3D controller;
+    private ModelBatch models;
+    private Model floor;
     private DefaultModelInstance floorInstance;
-    private DefaultModelInstance emitterInstance;
-    private Texture particleTexture;
-    private String capturePath;
+    private final Matrix4 inverseViewProjection = new Matrix4();
+    private final ParticleTestTiming timing = new ParticleTestTiming();
+    private float time = 3;
+    private long frames;
+    private String capture;
+    private String occlusionFixture;
+    private String solidOcclusion;
+    private boolean frozen;
+    private boolean anchorFixture;
     private long captureFrame;
-    private boolean created;
-    private boolean captured;
-    private long renderedFrames;
+    private boolean captured, created;
 
-    /**
-     * Creates a 3D particles test.
-     *
-     * @param exitAfterFrames the exit after frames
-     */
-    public Particles3DTest(long exitAfterFrames) {
-        this.exitAfterFrames = exitAfterFrames;
-    }
+    public Particles3DTest(long exitAfterFrames) { this.exitAfterFrames = exitAfterFrames; }
 
-    /**
-     * Initializes the application with the libFDX runtime root.
-     *
-     * @param fdx the libFDX runtime root
-     */
-    @Override
-    public void create(Fdx fdx) {
-        application = fdx.app();
-        display = fdx.displays().main();
-        graphics = fdx.graphics().main();
-        logger = fdx.logger();
+    @Override public void create(Fdx fdx) {
+        application = fdx.app(); display = fdx.displays().main(); graphics = fdx.graphics().main(); logger = fdx.logger();
         fpsLogger = TestFpsLogger.create(logger, "Particles3DTest");
-        skybox = new SkyboxRenderer3D(graphics)
-                .zenithColor(0.04f, 0.08f, 0.22f)
-                .horizonColor(0.58f, 0.42f, 0.28f)
-                .nadirColor(0.014f, 0.018f, 0.030f)
-                .sunColor(1.0f, 0.70f, 0.38f, 0.56f)
-                .sunPosition(0.63f, 0.68f)
-                .sunSize(0.12f);
-        batch = new ModelBatch(graphics).environment(new Environment3D()
-                .ambientColor(new Color(0.16f, 0.18f, 0.22f, 1.0f))
-                .add(new DirectionalLight()
-                        .direction(-0.45f, -0.78f, -0.38f)
-                        .color(new Color(1.0f, 0.84f, 0.66f, 1.0f))
-                        .intensity(1.35f)));
-        billboards = new BillboardRenderer3D(graphics, 384);
-        particleTexture = createParticleTexture();
-        createModels();
-        emitter = new ParticleEmitter3D(340)
-                .seed(0x3D5EED)
-                .position(0.0f, -0.34f, -1.18f)
-                .emissionRate(170.0f)
-                .lifetime(1.20f, 1.95f)
-                .speed(0.60f, 1.34f)
-                .direction(0.10f, 1.0f, -0.18f, 46.0f)
-                .gravity(0.0f, -0.48f, 0.04f)
-                .size(0.18f, 0.34f, 0.04f, 0.08f)
-                .color(1.0f, 0.78f, 0.30f, 1.0f, 0.18f, 0.66f, 1.0f, 0.12f)
-                .rotation(-30.0f, 30.0f, -115.0f, 115.0f);
-        emitter.emit(112);
-        camera = new Camera()
-                .projection(CameraProjection.PERSPECTIVE)
-                .fieldOfView(58.0f)
-                .viewport(framebufferWidth(), framebufferHeight())
-                .nearFar(0.1f, 32.0f);
-        cameraInput = new OrbitCameraController3D(fdx.input(), camera)
-                .position(3.45f, 2.18f, 4.05f, 0.0f, 0.26f, -1.16f)
+        occlusionFixture = System.getProperty("libfdx.test.particleOcclusion", "");
+        solidOcclusion = System.getProperty("libfdx.test.particleSolidOcclusion", "");
+        frozen = Boolean.getBoolean("libfdx.test.particlesFrozen");
+        anchorFixture = Boolean.getBoolean("libfdx.test.particleAnchors");
+        volume = new ParticleVolume(96, 128, 64).bounds(-2.15f, -0.55f, -2.05f, 1.8f, 2.5f, 1.8f);
+        smokeVolume = new ParticleVolume(64, 96, 48).bounds(-1.15f, -0.55f, -2.15f, 2.3f, 3.1f, 2.2f);
+        if (!occlusionFixture.isEmpty()) {
+            volume.bounds(-0.8f, -0.8f, -0.8f, 1.6f, 1.6f, 1.6f);
+            smokeVolume.bounds(-0.8f, -0.8f, 0.2f, 1.6f, 1.6f, 1.6f);
+        }
+        if (!solidOcclusion.isEmpty()) {
+            volume.bounds(-3.3f,-0.8f,-1.2f,6.6f,1.6f,2.4f);
+            smokeVolume.bounds(-3.3f,-0.8f,-1.2f,6.6f,1.6f,2.4f);
+        }
+        renderer = occlusionFixture.endsWith("swapped")
+                ? new ParticleVolumeRenderer(graphics, smokeVolume, volume).steps(160).density(5)
+                : new ParticleVolumeRenderer(graphics, volume, smokeVolume).steps(160).density(5);
+        solids = new ParticleSolidRenderer(graphics, solidOcclusion.startsWith("stack") ? 1 : 512, anchorFixture ? null : renderer);
+        fire = ParticlePresets3D.volumetricFire(800, 1).seed(0x5EED).position(-1.25f, -0.34f, -1.18f);
+        smoke = ParticlePresets3D.smoke(240, 1).seed(0x1234).position(-0.25f, -0.34f, -1.18f)
+                .emissionRate(65).turbulence(0.22f, 4);
+        sparks = ParticlePresets3D.sparks(100, 1).seed(0x5678).position(0.7f, -0.34f, -1.18f);
+        snow = ParticlePresets3D.snow(160, 1).seed(0xABCD).position(1.65f, 1.7f, -1.18f)
+                .spawnArea(0.6f, 0, 0.6f);
+        for (int i = 0; i < 360; i++) simulate(1f / 120);
+        camera = new Camera().projection(CameraProjection.PERSPECTIVE)
+                .position(0, 0.75f, 4).direction(0, 0, -1).nearFar(0.1f, 20);
+        controller = new OrbitCameraController3D(fdx.input(), camera)
+                .position(0, 1.4f, 2.5f, 0, 0.45f, -1.18f)
                 .autoOrbit(TestCameraControllers.autoOrbitEnabled(), 0.75f, exitAfterFrames,
                         TestCameraControllers.autoOrbitStartDegrees(), TestCameraControllers.autoOrbitDegrees());
-        capturePath = System.getProperty("libfdx.test.capture", "");
-        captureFrame = Long.parseLong(System.getProperty("libfdx.test.captureFrame", "44"));
+        if ("top".equals(System.getProperty("libfdx.test.particlesView"))) {
+            controller.position(0, 5.5f, -1.17f, 0, 0, -1.18f);
+        }
+        if ("side".equals(System.getProperty("libfdx.test.particlesView"))) {
+            controller.position(4, 1.4f, -1.18f, 0, 0.45f, -1.18f);
+        }
+        if ("left".equals(System.getProperty("libfdx.test.particlesView"))) {
+            controller.position(-4, 1.4f, -1.18f, 0, 0.45f, -1.18f);
+        }
+        if ("back".equals(System.getProperty("libfdx.test.particlesView"))) {
+            controller.position(0, 1.4f, -5, 0, 0.45f, -1.18f);
+        }
+        if ("translated".equals(System.getProperty("libfdx.test.particlesView"))) {
+            controller.position(1, 2, 3.5f, 1, 0.8f, -1.18f);
+        }
+        if (!occlusionFixture.isEmpty()) {
+            controller.position(0, 0, occlusionFixture.startsWith("back") ? -4 : 4, 0, 0, 0);
+        }
+        if (!solidOcclusion.isEmpty()) {
+            camera.projection(CameraProjection.ORTHOGRAPHIC);
+            controller.position(0,0,solidOcclusion.contains("reverse") ? -4 : 4,0,0,0);
+        }
+        models = new ModelBatch(graphics);
+        floor = new ModelBuilder(graphics).material(new Material("particle ground")
+                .set(MaterialAttributes.baseColor(0.10f, 0.12f, 0.15f, 1)))
+                .box("particle ground", 5, 0.06f, 3.5f);
+        floorInstance = new DefaultModelInstance(floor);
+        floorInstance.transform().setToTranslation(0, -0.65f, -1.2f);
+        capture = System.getProperty("libfdx.test.capture", "");
+        captureFrame = Long.parseLong(System.getProperty("libfdx.test.captureFrame", "90"));
         created = true;
-        logger.info("Particles3DTest created fixed-capacity 3D particle emitter for provider "
-                + graphics.providerId().value());
+        logger.info("Particles3DTest created world-space particle volume for " + graphics.providerId().value());
     }
 
-    /**
-     * Renders the current content.
-     */
-    @Override
-    public void render() {
-        float deltaSeconds = application.deltaTime();
-        emitter.update(FIXED_DELTA_SECONDS);
-        camera.viewport(framebufferWidth(), framebufferHeight());
-        cameraInput.update(deltaSeconds);
+    private void simulate(float delta) { fire.update(delta); smoke.update(delta); sparks.update(delta); snow.update(delta); }
 
+    @Override public void render() {
+        float elapsed = application.deltaTime();
+        float delta = frozen || anchorFixture || !solidOcclusion.isEmpty() ? 0 : timing.advance(elapsed);
+        time += delta;
+        int steps = Math.max(1, (int)Math.ceil(delta * 120));
+        for (int i = 0; i < steps; i++) simulate(delta / steps);
+        camera.viewport(width(), height());
+        if (!solidOcclusion.isEmpty()) camera.viewport(6.6f,6.6f*height()/width());
+        controller.update(Math.min(elapsed, 0.1f));
         GraphicsFrame frame = graphics.currentFrame();
-        skybox.begin(LoadOp.clear(CLEAR_COLOR.red(), CLEAR_COLOR.green(), CLEAR_COLOR.blue(), CLEAR_COLOR.alpha()));
-        skybox.draw(camera);
-        skybox.end();
-
         RenderPass pass = frame.commandEncoder().beginRenderPass(RenderPassDescriptor
-                .color(frame.colorAttachment(), LoadOp.load(), StoreOp.store())
-                .depthClear(1.0f)
-                .label("particles 3d test pass"));
-        batch.begin(pass, camera);
-        batch.render(floorInstance);
-        batch.render(emitterInstance);
-        batch.end();
-
-        billboards.begin(pass);
-        emitter.render(particleTexture, camera, billboards);
-        billboards.end();
-        pass.end();
-
-        if (capturePath != null && capturePath.length() > 0 && !captured && renderedFrames >= captureFrame) {
-            captureFrame(capturePath);
-            captured = true;
+                .color(frame.colorAttachment(), LoadOp.clear(0.008f, 0.011f, 0.018f, 1), StoreOp.store())
+                .depthClear(ClipDepthRange.getDefault().depthClearValue()));
+        if (occlusionFixture.isEmpty() && solidOcclusion.isEmpty()) {
+            models.begin(pass, camera); models.render(floorInstance); models.end();
         }
-        renderedFrames++;
-        fpsLogger.frame(deltaSeconds, renderedFrames);
-        if (exitAfterFrames > 0L && renderedFrames >= exitAfterFrames) {
-            application.requestExit();
-        }
-    }
-
-    /**
-     * Releases resources held by this instance.
-     */
-    @Override
-    public void dispose() {
-        if (billboards != null) {
-            billboards.dispose();
-            billboards = null;
-        }
-        if (batch != null) {
-            batch.dispose();
-            batch = null;
-        }
-        if (skybox != null) {
-            skybox.dispose();
-            skybox = null;
-        }
-        if (floorModel != null) {
-            floorModel.dispose();
-            floorModel = null;
-        }
-        if (emitterModel != null) {
-            emitterModel.dispose();
-            emitterModel = null;
-        }
-        if (particleTexture != null) {
-            particleTexture.dispose();
-            particleTexture = null;
-        }
-        if (!created) {
-            throw new FdxException("Particles3DTest did not create graphics resources");
-        }
-        if (exitAfterFrames > 0L && renderedFrames < exitAfterFrames) {
-            throw new FdxException("Particles3DTest rendered " + renderedFrames + " of "
-                    + exitAfterFrames + " required frames");
-        }
-        if (capturePath != null && capturePath.length() > 0 && !captured) {
-            throw new FdxException("Particles3DTest did not capture framebuffer to " + capturePath);
-        }
-        logger.info("Particles3DTest rendered " + renderedFrames + " frames");
-    }
-
-    private void createModels() {
-        ModelBuilder builder = new ModelBuilder(graphics);
-        floorModel = builder
-                .material(new Material("particles 3d floor material")
-                        .set(MaterialAttributes.baseColor(
-                                0.20f, 0.28f, 0.30f, 1.0f))
-                        .set(PbrAttributes.roughnessFactor(0.94f)))
-                .box("particles 3d floor", 5.0f, 0.08f, 4.4f);
-        emitterModel = builder
-                .material(new Material("particles 3d emitter material")
-                        .set(MaterialAttributes.baseColor(
-                                0.70f, 0.25f, 0.20f, 1.0f))
-                        .set(PbrAttributes.roughnessFactor(0.78f)))
-                .box("particles 3d emitter", 0.38f, 0.22f, 0.38f);
-        floorInstance = new DefaultModelInstance(floorModel);
-        floorInstance.transform().setToTranslation(0.0f, -0.70f, -1.25f);
-        emitterInstance = new DefaultModelInstance(emitterModel);
-        emitterInstance.transform().setToTranslation(0.0f, -0.48f, -1.18f)
-                .rotateY(0.42f);
-    }
-
-    private Texture createParticleTexture() {
-        Texture texture = graphics.device().createTexture(TextureDescriptor.rgba8("3d particle sprite",
-                PARTICLE_TEXTURE_SIZE, PARTICLE_TEXTURE_SIZE));
-        graphics.device().writeTexture(texture, particlePixels());
-        return texture;
-    }
-
-    private ByteBuffer particlePixels() {
-        ByteBuffer pixels = ByteBuffer.allocateDirect(PARTICLE_TEXTURE_SIZE * PARTICLE_TEXTURE_SIZE * 4);
-        float center = (PARTICLE_TEXTURE_SIZE - 1) * 0.5f;
-        for (int y = 0; y < PARTICLE_TEXTURE_SIZE; y++) {
-            for (int x = 0; x < PARTICLE_TEXTURE_SIZE; x++) {
-                float dx = (x - center) / center;
-                float dy = (y - center) / center;
-                float distance = (float)Math.sqrt(dx * dx + dy * dy);
-                float core = clamp(1.0f - distance * 1.65f);
-                float halo = clamp(1.0f - distance);
-                float alpha = halo * halo * (3.0f - 2.0f * halo) * 0.66f
-                        + core * core * (3.0f - 2.0f * core) * 0.34f;
-                pixels.put((byte)255);
-                pixels.put((byte)255);
-                pixels.put((byte)255);
-                pixels.put((byte)(int)(clamp(alpha) * 255.0f));
+        volume.clear(); smokeVolume.clear();
+        if (!solidOcclusion.isEmpty()) {
+            ParticleSolidOcclusionFixture.media(solidOcclusion,volume,smokeVolume);
+        } else if (occlusionFixture.isEmpty()) {
+            fire.deposit(volume, ParticleVolume.Medium.FIRE);
+            smoke.deposit(smokeVolume, ParticleVolume.Medium.SMOKE);
+        } else {
+            // Same world-space particles in every fixture; only camera/grid binding order changes.
+            volume.add(0, 0, 0, 0.6f, 4, 1, ParticleVolume.Medium.FIRE);
+            if (!occlusionFixture.startsWith("clear")) {
+                smokeVolume.add(0, 0, 1, 0.65f, 8, 0, ParticleVolume.Medium.SMOKE);
             }
         }
-        pixels.flip();
-        return pixels;
+        inverseViewProjection.setToMul(camera.inverseViewMatrix(), camera.inverseProjectionMatrix());
+        if (!anchorFixture) renderer.draw(pass, camera.combined(), inverseViewProjection, camera.clipDepthRange(), occlusionFixture.isEmpty() && solidOcclusion.isEmpty() ? time : 0);
+        solids.begin(pass, camera.combined(), camera.clipDepthRange());
+        if (!solidOcclusion.isEmpty()) {
+            ParticleSolidOcclusionFixture.solids(solidOcclusion,solids);
+        } else if (anchorFixture) {
+            ParticleAnchorFixture.draw(solids);
+        } else if (occlusionFixture.isEmpty()) { drawSolids(sparks, 0.23f); drawSolids(snow, 0.18f); }
+        solids.end();
+        pass.end();
+        if (!capture.isEmpty() && !captured && frames >= captureFrame) {
+            try {
+                java.nio.ByteBuffer pixels = FramebufferCapture.readPixelsRgba8(graphics);
+                FramebufferCapture.writePpm(capture, width(), height(), pixels);
+                if (anchorFixture) {
+                    ParticleAnchorFixture.validate(camera, width(), height(), pixels);
+                    logger.info("Particle anchors PASS: world projection within 2 pixels and floor occlusion");
+                }
+                captured = true;
+                logger.info("Particles3DTest captured " + capture);
+            } catch (Exception error) { throw new FdxException("Particle capture failed", error); }
+        }
+        frames++;
+        fpsLogger.frame(elapsed, frames);
+        if (exitAfterFrames > 0 && frames >= exitAfterFrames) application.requestExit();
     }
 
-    private void captureFrame(String path) {
-        try {
-            ByteBuffer pixels = FramebufferCapture.readPixelsRgba8(graphics);
-            FramebufferCapture.writePpm(path, framebufferWidth(), framebufferHeight(), pixels);
-            logger.info("Particles3DTest captured framebuffer to " + path);
-        } catch (Exception e) {
-            throw new FdxException("Could not capture Particles3DTest framebuffer", e);
+    private void drawSolids(ParticleEmitter3D emitter, float sizeFactor) {
+        for (int i = 0; i < emitter.activeCount(); i++) {
+            float size = emitter.size(i) * sizeFactor;
+            if (size > 0) solids.add(emitter.x(i), emitter.y(i), emitter.z(i), size,
+                    emitter.red(i), emitter.green(i), emitter.blue(i), emitter.alpha(i));
         }
     }
 
-    private int framebufferWidth() {
-        int width = display.framebufferWidth() > 0 ? display.framebufferWidth() : display.width();
-        return width > 0 ? width : 640;
+    @Override public void dispose() {
+        if (solids != null) { solids.dispose(); solids = null; }
+        if (renderer != null) { renderer.dispose(); renderer = null; }
+        if (models != null) { models.dispose(); models = null; }
+        if (floor != null) { floor.dispose(); floor = null; }
+        if (!created || (exitAfterFrames > 0 && frames < exitAfterFrames) || (!capture.isEmpty() && !captured))
+            throw new FdxException("Particle scenario did not complete");
+        logger.info(timing.report());
+        logger.info("Particles3DTest rendered " + frames + " frames");
     }
 
-    private int framebufferHeight() {
-        int height = display.framebufferHeight() > 0 ? display.framebufferHeight() : display.height();
-        return height > 0 ? height : 480;
-    }
-
-    private float clamp(float value) {
-        if (value <= 0.0f) {
-            return 0.0f;
-        }
-        return value >= 1.0f ? 1.0f : value;
-    }
+    private int width() { return Math.max(1, display.framebufferWidth()); }
+    private int height() { return Math.max(1, display.framebufferHeight()); }
 }

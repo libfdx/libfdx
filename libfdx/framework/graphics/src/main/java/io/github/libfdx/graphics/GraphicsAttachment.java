@@ -10,6 +10,8 @@ import io.github.libfdx.core.Disposable;
 public interface GraphicsAttachment extends GraphicsContext, Disposable {
     /**
      * Handles a size change.
+     * This is surface resizing within the current resource domain, not recovery
+     * of resources invalidated by context/device loss.
      *
      * @param framebufferWidth the framebuffer width
      * @param framebufferHeight the framebuffer height
@@ -18,6 +20,8 @@ public interface GraphicsAttachment extends GraphicsContext, Disposable {
 
     /**
      * Runs the process events step.
+     * Providers with loss detection may throw {@link GraphicsContextLostException};
+     * callers must stop using that resource domain and perform normal cleanup.
      */
     void processEvents();
 

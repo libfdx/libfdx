@@ -5,6 +5,24 @@ import io.github.libfdx.graphics.Texture;
 /** PBR-only attributes understood by the built-in PBR renderer. */
 public final class PbrAttributes {
     public static final MaterialAttributeType<FloatMaterialAttribute>
+            NORMAL_SCALE = floatType("pbr.normalScale");
+    public static final MaterialAttributeType<FloatMaterialAttribute>
+            OCCLUSION_STRENGTH = floatType("pbr.occlusionStrength");
+
+    /** Scales the tangent-space normal's X and Y components before normalization. */
+    public static FloatMaterialAttribute normalScale(float value) {
+        if (!Float.isFinite(value)) throw new IllegalArgumentException("Normal scale must be finite");
+        return new FloatMaterialAttribute(NORMAL_SCALE, value);
+    }
+    /** Blends occlusion from one (strength zero) to the sampled value (strength one). */
+    public static FloatMaterialAttribute occlusionStrength(float value) {
+        if (!Float.isFinite(value) || value < 0 || value > 1)
+            throw new IllegalArgumentException("Occlusion strength must be in [0, 1]");
+        return new FloatMaterialAttribute(OCCLUSION_STRENGTH, value);
+    }
+    public static float normalScale(Material material) { return value(material, NORMAL_SCALE, 1); }
+    public static float occlusionStrength(Material material) { return value(material, OCCLUSION_STRENGTH, 1); }
+    public static final MaterialAttributeType<FloatMaterialAttribute>
             METALLIC_FACTOR = floatType("pbr.metallicFactor");
     public static final MaterialAttributeType<FloatMaterialAttribute>
             ROUGHNESS_FACTOR = floatType("pbr.roughnessFactor");

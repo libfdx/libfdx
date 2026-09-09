@@ -21,7 +21,6 @@ import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.GraphicsEnvironment;
 import io.github.libfdx.graphics.GraphicsProviderSupport;
 import io.github.libfdx.graphics.NativeWindow;
-import io.github.libfdx.input.DefaultGamepads;
 import io.github.libfdx.input.DefaultInput;
 import io.github.libfdx.input.DefaultInputCapabilities;
 import io.github.libfdx.input.Key;
@@ -32,6 +31,7 @@ import io.github.libfdx.ui.UiRoot;
 import io.github.libfdx.ui.UiToolkit;
 import java.util.ArrayList;
 import java.util.List;
+import org.teavm.classlib.PlatformDetector;
 import org.teavm.jso.JSBody;
 import org.teavm.jso.browser.AnimationFrameCallback;
 import org.teavm.jso.browser.Window;
@@ -45,6 +45,8 @@ import org.teavm.jso.dom.events.TouchEvent;
 import org.teavm.jso.dom.events.WheelEvent;
 import org.teavm.jso.dom.html.HTMLCanvasElement;
 import org.teavm.jso.dom.html.HTMLDocument;
+import org.teavm.platform.Platform;
+import org.teavm.platform.PlatformRunnable;
 import org.teavm.runtime.Fiber;
 
 /**
@@ -64,13 +66,16 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             runAnimationFrame(frameTimestamp);
         }
     };
+    private final PlatformRunnable jsFrameRunner = frameRunner::run;
     private WebApplicationConfig config;
     private ApplicationListener listener;
     private Fdx fdx;
+    private io.github.libfdx.audio.Audio audio;
     private WebDisplay display;
     private HTMLCanvasElement canvas;
     private GraphicsAttachment graphics;
     private DefaultInput input;
+    private WebGamepads gamepads;
     private WebCursor cursor;
     private double mouseX;
     private double mouseY;
@@ -120,6 +125,10 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         disposed = false;
         try {
             WebApplicationConfig actualConfig = toWebConfig(config);
+            if (actualConfig.audioProvider() != null && (actualConfig.audio() == null
+                    || !actualConfig.audioProvider().equals(actualConfig.audio().providerId()))) {
+                throw new FdxException("Configured audio provider ID does not match attached AudioProvider");
+            }
             GraphicsAttachmentProvider graphicsProvider = actualConfig.graphics();
             if (graphicsProvider == null) {
                 throw new FdxException("No web graphics provider configured");
@@ -148,8 +157,9 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
 
             graphics = graphicsProvider.create(new WebGraphicsEnvironment(display,
                     NativeWindow.web(canvas, "#" + actualConfig.canvasId())));
+            if (actualConfig.audio() != null) audio = actualConfig.audio().create();
             fdx = new DefaultFdx(this, new DefaultDisplays(display), new DefaultGraphics(graphics), input,
-                    new WebFileSystem(), new DefaultStorage(new WebStorageBackend()), logger);
+                    new WebFileSystem(), new DefaultStorage(new WebStorageBackend()), null, audio, logger);
             RuntimeCore.registerProvider(new WebRuntimeCoreProvider());
             applicationPreloadListener = actualConfig.applicationPreloadListener();
             preloadApplicationListener = applicationPreloadListener == null
@@ -157,7 +167,7 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                             ? actualConfig.preloadApplicationListener()
                             : new WebDefaultPreloadApplicationListener())
                     : null;
-            WebAssetPreloader.install();
+            WebAssetPreloader.install(actualConfig.deferredAssets());
 
             running = true;
             lifecycle = ApplicationLifecycle.CREATED;
@@ -201,9 +211,10 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         textInputController = new WebTextInputController();
         textInputController.canvas(canvas);
         cursor = new WebCursor(canvas);
+        gamepads = new WebGamepads();
         DefaultInput createdInput = new DefaultInput(ProviderId.of("web_input"),
-                new DefaultInputCapabilities(true, true, true, true, false, false), cursor,
-                new DefaultGamepads(), textInputController, new WebClipboard());
+                new DefaultInputCapabilities(true, true, true, true, false, WebGamepads.available()), cursor,
+                gamepads.registry, textInputController, new WebClipboard());
         textInputController.input(createdInput);
         return createdInput;
     }
@@ -398,14 +409,19 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
     }
 
     /**
-     * Handles the animation frame event.
+     * Runs the frame in the target's TeaVM coroutine context so asynchronous
+     * operations can suspend and resume before the next frame is scheduled.
      *
      * @param timestamp the timestamp
      */
     @Override
     public void onAnimationFrame(double timestamp) {
         frameTimestamp = timestamp;
-        Fiber.start(frameRunner, true);
+        if (PlatformDetector.isJavaScript()) {
+            Platform.startThread(jsFrameRunner);
+        } else {
+            Fiber.start(frameRunner, true);
+        }
     }
 
     private void runAnimationFrame(double timestamp) {
@@ -418,6 +434,8 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                     graphics.processEvents();
                 }
                 if (isGraphicsReady()) {
+                    // Publish the ready device's camera convention before either listener is created.
+                    fdx.graphics().main();
                     createPreloadListener();
                     boolean preloadStepped = false;
                     if (!preloadStarted) {
@@ -472,6 +490,8 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
     }
 
     private void step() {
+        if (gamepads != null) gamepads.update();
+        if (audio != null) audio.update();
         boolean resized = refreshDisplaySize();
         if (resized && graphics != null) {
             graphics.resize(display.framebufferWidth(), display.framebufferHeight());
@@ -716,6 +736,11 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             }
         } finally {
             listenerCreated = false;
+            if (audio != null) {
+                try { audio.dispose(); }
+                catch (RuntimeException | Error failure) { logger.error("Audio shutdown failed", failure); }
+                audio = null;
+            }
             disposePreloadListener();
             if (graphics != null) {
                 graphics.dispose();
@@ -734,6 +759,10 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                 textInputController = null;
             }
             cursor = null;
+            if (gamepads != null) {
+                try { gamepads.dispose(); } catch (RuntimeException | Error failure) { logger.error("Gamepad shutdown failed",failure); }
+                gamepads = null;
+            }
             input = null;
             fdx = null;
             listener = null;

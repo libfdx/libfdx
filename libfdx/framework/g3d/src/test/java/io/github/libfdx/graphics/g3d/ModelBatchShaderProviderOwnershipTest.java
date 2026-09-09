@@ -34,6 +34,45 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class ModelBatchShaderProviderOwnershipTest {
     private static final ProviderId PROVIDER_ID = ProviderId.of("model-batch-ownership-test");
 
+    @Test void optionalCullingUsesFlushCameraAndTransformsBeforeShaderSelection() {
+        var graphics=new FakeGraphicsContext();var provider=new CountingShaderProvider();
+        var batch=new ModelBatch(graphics,new ModelBatchConfig().shaderProvider(provider));
+        Mesh mesh=Mesh.coloredTriangle(graphics,"culling");
+        var transform=new Matrix4().setToTranslation(100,0,-3);
+        var renderable=new Renderable3D(new MeshPart(mesh,0,3),new Material("culling"),transform,BoundingBox.empty());
+        var camera=new Camera().viewport(4,4).position(0,0,0);var pass=new FakeRenderPass();
+        batch.begin(pass,camera);batch.render(renderable);batch.end();assertEquals(1,provider.shaderRequestCount);
+        batch.frustumCulling(true);batch.begin(pass,camera);batch.render(renderable);
+        assertThrows(FdxException.class,()->batch.frustumCulling(false));
+        batch.end();assertEquals(1,batch.lastFlushCulledCount());assertEquals(0,batch.lastFlushVisibleCount());
+        assertEquals(1,provider.shaderRequestCount);
+        batch.begin(pass,camera);batch.render(renderable);transform.setToTranslation(0,0,-3);batch.end();
+        assertEquals(0,batch.lastFlushCulledCount());assertEquals(1,batch.lastFlushVisibleCount());assertEquals(2,provider.shaderRequestCount);
+        batch.begin(pass,camera);batch.render(renderable);camera.position(100,0,0);batch.end();
+        assertEquals(1,batch.lastFlushCulledCount());assertEquals(2,provider.shaderRequestCount);
+        batch.dispose();mesh.dispose();
+    }
+
+    @Test
+    void failedFlushEndsShaderClearsQueuedWorkAndAllowsTheNextFrame() {
+        var graphics = new FakeGraphicsContext(); var provider = new CountingShaderProvider();
+        var batch = new ModelBatch(graphics,new ModelBatchConfig().shaderProvider(provider));
+        Mesh mesh = Mesh.coloredTriangle(graphics,"failure cleanup");
+        var renderable = new Renderable3D(new MeshPart(mesh,0,3),new Material("failure cleanup"),Matrix4.IDENTITY,BoundingBox.empty());
+        var pass = new FakeRenderPass(); var camera = new Camera();
+        provider.shader.failure = new FdxException("Injected shader failure");
+        batch.begin(pass,camera); batch.render(renderable);
+        var error = assertThrows(FdxException.class,batch::end);
+        assertTrue(error == provider.shader.failure); assertEquals(1,provider.shader.endCount);
+        provider.shader.failure = null;
+        batch.shaderProvider(provider); // No stale drawing/frame state.
+        batch.begin(pass,camera); batch.end();
+        assertEquals(1,provider.shader.renderCount); // Failed queued work was discarded.
+        batch.begin(pass,camera); batch.render(renderable); batch.end();
+        assertEquals(2,provider.shader.renderCount); assertEquals(2,provider.shader.endCount);
+        batch.dispose(); mesh.dispose(); assertEquals(0,provider.disposeCount);
+    }
+
     @Test
     void disposesOwnedDefaultAfterReplacementWithoutDisposingBorrowedReplacement() {
         FakeGraphicsContext graphics = new FakeGraphicsContext();
@@ -138,6 +177,8 @@ final class ModelBatchShaderProviderOwnershipTest {
 
     private static final class CountingShader implements Shader3D {
         private int renderCount;
+        private int endCount;
+        private FdxException failure;
         private boolean disposed;
 
         @Override
@@ -152,10 +193,12 @@ final class ModelBatchShaderProviderOwnershipTest {
         @Override
         public void render(Renderable3D renderable) {
             renderCount++;
+            if (failure != null) throw failure;
         }
 
         @Override
         public void end() {
+            endCount++;
         }
 
         @Override

@@ -1,6 +1,7 @@
 package io.github.libfdx.backend.web;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -22,6 +23,42 @@ final class WebAppWriterTest {
     Path temporaryDirectory;
 
     @Test
+    void compilerCacheIdentityTracksBothPublishedBinariesAndDisablesMissingCompiler() throws Exception {
+        Path runtime = Files.createDirectories(temporaryDirectory.resolve("compiler"));
+        Path webapp = temporaryDirectory.resolve("compiler-webapp");
+        writeWebApp(webapp, runtime);
+        String missing = compilerIdentity(webapp);
+        assertEquals("", missing);
+        write(runtime.resolve("fdx.js"), new byte[]{1, 2});
+        write(runtime.resolve("fdx.wasm"), new byte[]{3, 4});
+        writeWebApp(webapp, runtime);
+        String original = compilerIdentity(webapp);
+        assertTrue(original.matches("fdx-web-fdxr2-v1:[0-9a-f]{64}:[0-9a-f]{64}"));
+        writeWebApp(webapp, runtime);
+        assertEquals(original, compilerIdentity(webapp));
+        write(runtime.resolve("fdx.js"), new byte[]{1, 5});
+        writeWebApp(webapp, runtime);
+        String scriptChanged = compilerIdentity(webapp);
+        assertNotEquals(original, scriptChanged);
+        write(runtime.resolve("fdx.wasm"), new byte[]{3, 6});
+        writeWebApp(webapp, runtime);
+        assertNotEquals(scriptChanged, compilerIdentity(webapp));
+    }
+
+    private static String compilerIdentity(Path webapp) throws IOException {
+        String loader = Files.readString(webapp.resolve("scripts/fdx-loader.js"));
+        String marker = "root.libfdxShaderCompilerIdentity = \"";
+        int start = loader.indexOf(marker) + marker.length();
+        return loader.substring(start, loader.indexOf('"', start));
+    }
+
+    @Test
+    void escapesAssetNamesForThePublishedJavaScriptInventory() {
+        org.junit.jupiter.api.Assertions.assertEquals("a\\\"b\\\\c\\u000a\\u000d\\u0009\\u2028\\u2029",
+                WebAppWriter.js("a\"b\\c\n\r\t\u2028\u2029"));
+    }
+
+    @Test
     void publishesSharedAssetsFromClasspathDirectory() throws Exception {
         Path runtime = Files.createDirectories(temporaryDirectory.resolve("runtime"));
         byte[] font = new byte[] { 0, 1, 0, 0, 7 };
@@ -32,6 +69,8 @@ final class WebAppWriterTest {
 
         assertArrayEquals(font,
                 Files.readAllBytes(webapp.resolve("assets/libfdx-assets/ui/font/default.ttf")));
+        assertTrue(Files.readString(webapp.resolve("scripts/fdx-loader.js"))
+                .contains("{path:\"libfdx-assets/ui/font/default.ttf\",size:5}"));
     }
 
     @Test
@@ -45,6 +84,8 @@ final class WebAppWriterTest {
 
         assertArrayEquals(license,
                 Files.readAllBytes(webapp.resolve("assets/libfdx-assets/ui/font/OFL.txt")));
+        assertTrue(Files.readString(webapp.resolve("scripts/fdx-loader.js"))
+                .contains("{path:\"libfdx-assets/ui/font/OFL.txt\",size:" + license.length + "}"));
     }
 
     @Test

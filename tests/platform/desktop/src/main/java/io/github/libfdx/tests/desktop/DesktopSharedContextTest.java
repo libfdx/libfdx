@@ -23,7 +23,7 @@ import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.VertexAttribute;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
-import io.github.libfdx.tests.graphics.FramebufferCapture;
+import io.github.libfdx.testsupport.graphics.FramebufferCapture;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;

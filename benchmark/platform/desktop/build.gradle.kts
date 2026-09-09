@@ -93,6 +93,10 @@ fun JavaExec.configureSpriteBatchStressRun(
     systemProperty("libfdx.benchmark.graphicsLabel", graphicsLabel)
     systemProperty("libfdx.benchmark.result", resultFile.absolutePath)
     systemProperty("libfdx.benchmark.seconds", System.getProperty("libfdx.benchmark.seconds", "8"))
+    systemProperty("libfdx.benchmark.warmupSeconds", System.getProperty("libfdx.benchmark.warmupSeconds", "2"))
+    listOf("device", "driver", "revision").forEach { field ->
+        systemProperty("libfdx.benchmark.$field", System.getProperty("libfdx.benchmark.$field", "unspecified"))
+    }
     systemProperty("libfdx.benchmark.visible", System.getProperty("libfdx.benchmark.visible", "true"))
     systemProperty("libfdx.benchmark.vsync", "false")
     systemProperty("libfdx.benchmark.foregroundFps", "0")
@@ -242,11 +246,15 @@ val generateSpriteBatchStressReport = tasks.register("generate_sprite_batch_stre
             }
             val properties = Properties()
             file.inputStream().use { properties.load(it) }
+            if (properties.getProperty("completed") != "true"
+                    || properties.getProperty("measuredIntervals", "0").toLong() == 0L) {
+                throw GradleException("Benchmark needs a completed run with measured intervals after warm-up: $file")
+            }
             properties
-        }.sortedByDescending { it.getProperty("averageFrameFps", "0").toDouble() }
+        }.sortedByDescending { it.getProperty("measuredFrameFps", "0").toDouble() }
 
         val fastest = results.firstOrNull()
-        val fastestFps = fastest?.getProperty("averageFrameFps", "0")?.toDouble() ?: 0.0
+        val fastestFps = fastest?.getProperty("measuredFrameFps", "0")?.toDouble() ?: 0.0
         val slowest = results.lastOrNull()
         reportFile.parentFile.mkdirs()
         reportFile.writeText(buildString {
@@ -256,20 +264,28 @@ val generateSpriteBatchStressReport = tasks.register("generate_sprite_batch_stre
             appendLine("- Report: `${reportFile.relativeTo(rootProject.projectDir).invariantSeparatorsPath}`")
             appendLine("- Benchmark: 8191 rotating/scaling sprites")
             appendLine("- Sprite: 32x32 from `benchmark/assets/fdx.png`")
-            appendLine("- Runtime: visible window, vSync off, foreground frame limiter off")
+            appendLine("- Runtime: vSync off, foreground frame limiter off; visibility is recorded per run")
             appendLine("- Backend tuning: Vulkan and Direct3D 12 use 3 frames in flight; WGPU skips per-frame instance event polling")
+            appendLine("- Ranking uses complete render-start intervals after warm-up, including presentation/pacing; CPU timings exclude presentation")
+            appendLine("- Percentiles are histogram upper bounds (less than 3.125% bucket error); hitches exceed 50 ms")
             appendLine()
-            appendLine("| Rank | Graphics Option | Provider | Java | Frames | Elapsed (s) | Avg FPS | Sprite Draws/s | Relative |")
+            appendLine("| Rank | Graphics Option | Provider | Java | Intervals | Measured (s) | FPS | Sprite Draws/s | Relative |")
             appendLine("| ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |")
             results.forEachIndexed { index, result ->
-                val fps = result.getProperty("averageFrameFps", "0").toDouble()
+                val fps = result.getProperty("measuredFrameFps", "0").toDouble()
                 val relative = if (fastestFps > 0.0) fps / fastestFps * 100.0 else 0.0
-                val spriteDrawsPerSecond = result.getProperty("averageSpriteDrawsPerSecond", "0")
-                appendLine("| ${index + 1} | ${result.getProperty("label")} | ${result.getProperty("graphicsProvider")} | ${result.getProperty("javaVersion")} | ${result.getProperty("frames")} | ${result.getProperty("elapsedSeconds")} | ${format(fps)} | $spriteDrawsPerSecond | ${format(relative)}% |")
+                val spriteDrawsPerSecond = result.getProperty("measuredSpriteDrawsPerSecond", "0")
+                appendLine("| ${index + 1} | ${result.getProperty("label")} | ${result.getProperty("graphicsProvider")} | ${result.getProperty("javaVersion")} | ${result.getProperty("measuredIntervals")} | ${result.getProperty("measuredSeconds")} | ${format(fps)} | $spriteDrawsPerSecond | ${format(relative)}% |")
+            }
+            appendLine()
+            appendLine("| Graphics Option | Visible | Resolution | Warm-up (s) | p50 (ms) | p95 (ms) | p99 (ms) | Worst (ms) | Hitches | CPU mean (ms) |")
+            appendLine("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+            results.forEach { result ->
+                appendLine("| ${result.getProperty("label")} | ${result.getProperty("visible")} | ${result.getProperty("framebufferWidth")}x${result.getProperty("framebufferHeight")} | ${result.getProperty("warmupSeconds")} | ${result.getProperty("frameTimeP50Millis")} | ${result.getProperty("frameTimeP95Millis")} | ${result.getProperty("frameTimeP99Millis")} | ${result.getProperty("frameTimeWorstMillis")} | ${result.getProperty("frameTimeHitches")} | ${result.getProperty("cpuRenderMeanMillis")} |")
             }
             appendLine()
             if (fastest != null && slowest != null) {
-                val slowestFps = slowest.getProperty("averageFrameFps", "0").toDouble()
+                val slowestFps = slowest.getProperty("measuredFrameFps", "0").toDouble()
                 val slowestRelative = if (fastestFps > 0.0) slowestFps / fastestFps * 100.0 else 0.0
                 appendLine("Fastest option: **${fastest.getProperty("label")}** at ${format(fastestFps)} FPS.")
                 appendLine()

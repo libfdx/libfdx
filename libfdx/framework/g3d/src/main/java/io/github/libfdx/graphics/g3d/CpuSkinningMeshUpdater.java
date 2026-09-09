@@ -11,7 +11,12 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
 /**
- * Updates retained mesh vertex data using CPU skinning.
+ * Updates exclusively owned mesh vertex data using CPU skinning. The mesh and graphics context
+ * are borrowed and must outlive this updater. Construction snapshots the bind positions, normals,
+ * tangents and influences; later updates replace both GPU vertices and retained CPU geometry.
+ * Do not use this low-level updater on a mesh shared by independently posed instances; use
+ * {@link CpuSkinnedModelAnimator} for instance-owned copies. Calls are confined to the graphics
+ * thread before recording draws. No resources are allocated after the first palette update.
  *
  * @author xpenatan
  */
@@ -22,9 +27,12 @@ public final class CpuSkinningMeshUpdater {
     private final Mesh mesh;
     private final int[] joints;
     private final float[] weights;
+    private final float[] bindPositions, bindNormals, bindTangents;
     private final int vertexCount;
     private final boolean pbrLayout;
     private final boolean skinnedPbrLayout;
+    private final boolean textured;
+    private final float[] linear = new float[9];
     private final ByteBuffer vertexBytes;
     private final FloatBuffer vertexFloats;
     private float[] paletteValues = new float[0];
@@ -50,20 +58,28 @@ public final class CpuSkinningMeshUpdater {
         validateInfluences(joints, weights, vertexCount);
         this.joints = joints.clone();
         this.weights = weights.clone();
+        normalizeWeights(this.weights);
         VertexLayout layout = mesh.vertexLayout();
-        skinnedPbrLayout = layout == Mesh.PBR_SKINNED_LAYOUT;
-        pbrLayout = layout == Mesh.PBR_LAYOUT || skinnedPbrLayout;
+        skinnedPbrLayout = mesh.hasPbrSkinning();
+        textured = mesh.hasPbrTextureCoordinates();
+        pbrLayout = layout == Mesh.PBR_LAYOUT || skinnedPbrLayout || textured;
         if (!pbrLayout && layout != Mesh.POSITION_COLOR_LAYOUT) {
             throw new FdxException("CpuSkinningMeshUpdater requires Mesh.PBR_LAYOUT, Mesh.PBR_SKINNED_LAYOUT, "
                     + "or Mesh.POSITION_COLOR_LAYOUT");
         }
         validateSourceData(mesh, pbrLayout, vertexCount);
+        bindPositions = mesh.sourcePositions().clone();
+        bindNormals = pbrLayout ? mesh.sourceNormals().clone() : null;
+        bindTangents = mesh.sourceTangents() == null ? null : mesh.sourceTangents().clone();
         vertexBytes = ByteBuffer.allocateDirect(vertexCount * layout.arrayStride()).order(ByteOrder.nativeOrder());
         vertexFloats = vertexBytes.asFloatBuffer();
     }
 
     /**
-     * Updates the mesh vertex buffer.
+     * Updates the mesh vertex buffer and retained positions/normals/tangents from the bind snapshot.
+     * Positive weights are normalized; zero-weight vertices keep their bind pose. Existing GPU
+     * skin attributes are zeroed so the standard PBR/shadow shaders do not apply the skin twice.
+     * Mesh bounds are borrowed and left unchanged; keep conservative bounds at the renderable.
      *
      * @param palette the skinning palette
      * @return this CPU skinning mesh updater for chaining
@@ -81,18 +97,20 @@ public final class CpuSkinningMeshUpdater {
         vertexBytes.position(0);
         vertexBytes.limit(vertexCount * mesh.vertexLayout().arrayStride());
         graphics.device().writeBuffer(mesh.vertexBuffer(), vertexBytes);
+        copyDeformedSource();
         return this;
     }
 
     private void writeVertices(SkinningPalette palette) {
-        float[] positions = mesh.sourcePositions();
+        float[] positions = bindPositions;
         float[] colors = mesh.sourceColors();
-        float[] normals = mesh.sourceNormals();
+        float[] normals = bindNormals;
         float[] texCoords = mesh.sourceTexCoords();
         float[] pbr = mesh.sourcePbr();
         float[] emissive = mesh.sourceEmissive();
         vertexFloats.clear();
         for (int vertex = 0; vertex < vertexCount; vertex++) {
+            if (pbrLayout) java.util.Arrays.fill(linear, 0);
             int positionOffset = vertex * 3;
             int colorOffset = vertex * 4;
             float sourceX = positions[positionOffset];
@@ -116,24 +134,15 @@ public final class CpuSkinningMeshUpdater {
                     throw new FdxException("CpuSkinningMeshUpdater joint index out of range: " + joint);
                 }
                 int matrixOffset = joint * Matrix4.VALUE_COUNT;
+                if (pbrLayout) for (int column = 0; column < 3; column++) for (int row = 0; row < 3; row++)
+                    linear[column*3+row] += weight * paletteValues[matrixOffset+column*4+row];
                 skinnedX += weight * transformPositionX(matrixOffset, sourceX, sourceY, sourceZ);
                 skinnedY += weight * transformPositionY(matrixOffset, sourceX, sourceY, sourceZ);
                 skinnedZ += weight * transformPositionZ(matrixOffset, sourceX, sourceY, sourceZ);
-                if (pbrLayout) {
-                    int normalOffset = vertex * 3;
-                    float sourceNormalX = normals[normalOffset];
-                    float sourceNormalY = normals[normalOffset + 1];
-                    float sourceNormalZ = normals[normalOffset + 2];
-                    normalX += weight * transformDirectionX(matrixOffset, sourceNormalX, sourceNormalY,
-                            sourceNormalZ);
-                    normalY += weight * transformDirectionY(matrixOffset, sourceNormalX, sourceNormalY,
-                            sourceNormalZ);
-                    normalZ += weight * transformDirectionZ(matrixOffset, sourceNormalX, sourceNormalY,
-                            sourceNormalZ);
-                }
                 totalWeight += weight;
             }
             if (totalWeight == 0.0f) {
+                linear[0] = linear[4] = linear[8] = 1;
                 skinnedX = sourceX;
                 skinnedY = sourceY;
                 skinnedZ = sourceZ;
@@ -148,7 +157,19 @@ public final class CpuSkinningMeshUpdater {
             vertexFloats.put(skinnedY);
             vertexFloats.put(skinnedZ);
             if (pbrLayout) {
-                float normalLength = (float)Math.sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+                float nx = normals[positionOffset], ny = normals[positionOffset+1], nz = normals[positionOffset+2];
+                normalX = (linear[4]*linear[8]-linear[5]*linear[7])*nx
+                        + (linear[7]*linear[2]-linear[8]*linear[1])*ny + (linear[1]*linear[5]-linear[2]*linear[4])*nz;
+                normalY = (linear[5]*linear[6]-linear[3]*linear[8])*nx
+                        + (linear[8]*linear[0]-linear[6]*linear[2])*ny + (linear[2]*linear[3]-linear[0]*linear[5])*nz;
+                normalZ = (linear[3]*linear[7]-linear[4]*linear[6])*nx
+                        + (linear[6]*linear[1]-linear[7]*linear[0])*ny + (linear[0]*linear[4]-linear[1]*linear[3])*nz;
+                float sign = determinantSign();
+                normalX *= sign; normalY *= sign; normalZ *= sign;
+                if (normalX*normalX+normalY*normalY+normalZ*normalZ < 1e-20f) {
+                    normalX = nx; normalY = ny; normalZ = nz;
+                }
+                float normalLength = (float)Math.sqrt(normalX*normalX+normalY*normalY+normalZ*normalZ);
                 if (normalLength > 0.000001f) {
                     float invNormalLength = 1.0f / normalLength;
                     normalX *= invNormalLength;
@@ -177,22 +198,55 @@ public final class CpuSkinningMeshUpdater {
                 vertexFloats.put(emissive[emissiveOffset + 2]);
             }
             if (skinnedPbrLayout) {
-                int influenceOffset = vertex * INFLUENCES_PER_VERTEX;
-                vertexFloats.put(joints[influenceOffset]);
-                vertexFloats.put(joints[influenceOffset + 1]);
-                vertexFloats.put(joints[influenceOffset + 2]);
-                vertexFloats.put(joints[influenceOffset + 3]);
-                vertexFloats.put(weights[influenceOffset]);
-                vertexFloats.put(weights[influenceOffset + 1]);
-                vertexFloats.put(weights[influenceOffset + 2]);
-                vertexFloats.put(weights[influenceOffset + 3]);
+                for (int i=0;i<8;i++) vertexFloats.put(0);
             }
+            if (textured) {
+                float[] uv1 = mesh.sourceTexCoords1(), tangents = bindTangents;
+                vertexFloats.put(uv1 == null ? 0 : uv1[vertex*2]);
+                vertexFloats.put(uv1 == null ? 0 : uv1[vertex*2+1]);
+                float x = tangents == null ? 0 : tangents[vertex*4];
+                float y = tangents == null ? 0 : tangents[vertex*4+1];
+                float z = tangents == null ? 0 : tangents[vertex*4+2];
+                vertexFloats.put(linear[0]*x+linear[3]*y+linear[6]*z);
+                vertexFloats.put(linear[1]*x+linear[4]*y+linear[7]*z);
+                vertexFloats.put(linear[2]*x+linear[5]*y+linear[8]*z);
+                vertexFloats.put(tangents == null ? 0 : tangents[vertex*4+3]*determinantSign());
+            }
+        }
+    }
+
+    private void copyDeformedSource() {
+        int stride=mesh.vertexLayout().arrayStride()/4;
+        float[] positions=mesh.sourcePositions(), normals=mesh.sourceNormals(), tangents=mesh.sourceTangents();
+        for (int vertex=0;vertex<vertexCount;vertex++) {
+            int offset=vertex*stride;
+            for (int axis=0;axis<3;axis++) positions[vertex*3+axis]=vertexFloats.get(offset+axis);
+            if (pbrLayout) for (int axis=0;axis<3;axis++) normals[vertex*3+axis]=vertexFloats.get(offset+3+axis);
+            if (textured && tangents != null) for (int axis=0;axis<4;axis++)
+                tangents[vertex*4+axis]=vertexFloats.get(offset+stride-4+axis);
+        }
+    }
+
+    private static void normalizeWeights(float[] weights) {
+        for (int i=0;i<weights.length;i+=4) {
+            float maximum=Math.max(Math.max(weights[i],weights[i+1]),Math.max(weights[i+2],weights[i+3]));
+            if (maximum == 0) continue;
+            float sum=0;
+            for (int j=0;j<4;j++) { weights[i+j]/=maximum; sum+=weights[i+j]; }
+            for (int j=0;j<4;j++) weights[i+j]/=sum;
         }
     }
 
     private float transformPositionX(int matrixOffset, float x, float y, float z) {
         return paletteValues[matrixOffset] * x + paletteValues[matrixOffset + 4] * y
                 + paletteValues[matrixOffset + 8] * z + paletteValues[matrixOffset + 12];
+    }
+
+    private float determinantSign() {
+        float determinant = linear[0]*(linear[4]*linear[8]-linear[5]*linear[7])
+                + linear[1]*(linear[5]*linear[6]-linear[3]*linear[8])
+                + linear[2]*(linear[3]*linear[7]-linear[4]*linear[6]);
+        return determinant < 0 ? -1 : 1;
     }
 
     private float transformPositionY(int matrixOffset, float x, float y, float z) {
@@ -205,21 +259,6 @@ public final class CpuSkinningMeshUpdater {
                 + paletteValues[matrixOffset + 10] * z + paletteValues[matrixOffset + 14];
     }
 
-    private float transformDirectionX(int matrixOffset, float x, float y, float z) {
-        return paletteValues[matrixOffset] * x + paletteValues[matrixOffset + 4] * y
-                + paletteValues[matrixOffset + 8] * z;
-    }
-
-    private float transformDirectionY(int matrixOffset, float x, float y, float z) {
-        return paletteValues[matrixOffset + 1] * x + paletteValues[matrixOffset + 5] * y
-                + paletteValues[matrixOffset + 9] * z;
-    }
-
-    private float transformDirectionZ(int matrixOffset, float x, float y, float z) {
-        return paletteValues[matrixOffset + 2] * x + paletteValues[matrixOffset + 6] * y
-                + paletteValues[matrixOffset + 10] * z;
-    }
-
     private static void validateInfluences(int[] joints, float[] weights, int vertexCount) {
         int expectedLength = vertexCount * INFLUENCES_PER_VERTEX;
         if (joints == null || joints.length != expectedLength) {
@@ -228,6 +267,8 @@ public final class CpuSkinningMeshUpdater {
         if (weights == null || weights.length != expectedLength) {
             throw new FdxException("CpuSkinningMeshUpdater requires four joint weights per vertex");
         }
+        for (int i=0;i<weights.length;i++) if (!Float.isFinite(weights[i]) || weights[i]<0 || weights[i]>0 && joints[i]<0)
+            throw new FdxException("CPU skinning requires finite nonnegative weights and valid active joints");
     }
 
     private static void validateSourceData(Mesh mesh, boolean pbrLayout, int vertexCount) {

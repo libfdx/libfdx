@@ -6,6 +6,7 @@ import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
 import io.github.libfdx.graphics.BufferUsage;
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.core.FdxFuture;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.CommandEncoder;
 import io.github.libfdx.graphics.FrameBuffer;
@@ -37,6 +38,8 @@ import io.github.libfdx.graphics.shader.ShaderProfile;
 import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
 import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
 import io.github.libfdx.graphics.shader.ShaderModuleDescriptors;
+import io.github.libfdx.graphics.shader.internal.ShaderCompilationTasks;
+import io.github.libfdx.graphics.shader.runtime.ShaderArtifactCache;
 import io.github.libfdx.graphics.shader.target.ShaderTarget;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Sampler;
@@ -44,6 +47,7 @@ import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureFormat;
+import io.github.libfdx.graphics.TextureOrigin;
 import io.github.libfdx.graphics.TextureUsage;
 import io.github.libfdx.graphics.TextureView;
 import io.github.libfdx.graphics.TextureWrap;
@@ -55,9 +59,28 @@ import io.github.libfdx.graphics.internal.ShaderRenderBindings;
 import io.github.libfdx.graphics.vulkan.VulkanConfiguration;
 import io.github.libfdx.graphics.vulkan.VulkanProvider;
 import io.github.libfdx.graphics.vulkan.internal.VulkanShaderLayoutValidator;
+import io.github.libfdx.graphics.shader.runtime.ResolvedShaderPass;
+import io.github.libfdx.graphics.shader.runtime.ShaderPipelineRequest;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationCapabilities;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationOperation;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationPhase;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationTrace;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparedResult;
+import io.github.libfdx.graphics.shader.target.RuntimeShaderTargetCompiler;
+import io.github.libfdx.graphics.shader.target.RuntimeWgslTargetVerifier;
+import io.github.libfdx.graphics.shader.target.ShaderCompilerRegistry;
+import io.github.libfdx.graphics.shader.target.ShaderTargetSupport;
+import io.github.libfdx.graphics.shader.target.ShaderVerificationRequirement;
+import io.github.libfdx.runtime.core.RuntimeCore;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /**
  * Provides android vulkan services.
@@ -80,6 +103,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             .depthStencilFormats(TextureFormat.DEPTH32_FLOAT)
             // Vulkan clips depth to 0..w.
             .clipDepthRange(ClipDepthRange.ZERO_TO_ONE)
+            .renderedTextureOrigin(TextureOrigin.TOP_LEFT)
             .sampleCounts(1)
             .limits(GraphicsLimits.builder()
                     .maxBindGroups(2)
@@ -94,7 +118,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                     .build())
             .build();
 
-    private VulkanConfiguration configuration = new VulkanConfiguration();
+    private VulkanConfiguration configuration = new VulkanConfiguration().preparationWorkerLimit(2);
 
     /**
      * Returns the identifier of the provider backing this object.
@@ -182,7 +206,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
      * @return this android vulkan provider for chaining
      */
     public AndroidVulkanProvider configuration(VulkanConfiguration configuration) {
-        this.configuration = configuration != null ? configuration : new VulkanConfiguration();
+        this.configuration = configuration != null ? configuration : new VulkanConfiguration().preparationWorkerLimit(2);
         return this;
     }
 
@@ -226,6 +250,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
      */
     private static final class AndroidVulkanGraphicsAttachment implements GraphicsAttachment {
         private final long context;
+        private final AndroidVulkanDeviceState deviceState;
         private final AndroidVulkanGraphicsDevice device = new AndroidVulkanGraphicsDevice(this);
         private final AndroidVulkanCommandEncoder commandEncoder = new AndroidVulkanCommandEncoder(this);
         private final AndroidVulkanTextureViewHandle colorAttachment = new AndroidVulkanTextureViewHandle(this);
@@ -233,20 +258,25 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         private final AndroidVulkanGraphicsFrame currentFrame = new AndroidVulkanGraphicsFrame(this,
                 commandEncoder, frameBuffer, colorAttachment);
         private final TextureFormat surfaceFormat;
+        private final int preparationWorkers;
+        private final ShaderArtifactCache shaderCache;
         private int width;
         private int height;
         private int pendingResizeWidth;
         private int pendingResizeHeight;
         private boolean frameStarted;
         private boolean pendingResize;
-        private boolean disposed;
+        private volatile boolean disposed;
 
         AndroidVulkanGraphicsAttachment(VulkanConfiguration configuration, Surface surface, int width, int height) {
             VulkanConfiguration actualConfiguration = configuration != null ? configuration : new VulkanConfiguration();
+            preparationWorkers = actualConfiguration.preparationWorkerLimit();
+            shaderCache = actualConfiguration.shaderCache();
             this.width = width;
             this.height = height;
             context = AndroidVulkanNative.create(surface, width, height, actualConfiguration.vSync(),
                     actualConfiguration.preferMailboxPresentMode(), actualConfiguration.framesInFlight());
+            deviceState = new AndroidVulkanDeviceState(() -> AndroidVulkanNative.isDeviceLost(context), device::closePreparation);
             surfaceFormat = toCommonFormat(AndroidVulkanNative.surfaceFormat(context));
         }
 
@@ -278,6 +308,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
          */
         @Override
         public void processEvents() {
+            if (!disposed) deviceState.requireUsable();
         }
 
         /**
@@ -290,6 +321,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (disposed || width <= 0 || height <= 0) {
                 return false;
             }
+            deviceState.requireUsable();
             if (frameStarted) {
                 throw new FdxException("Android Vulkan frame is already started");
             }
@@ -309,8 +341,9 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (!frameStarted) {
                 return;
             }
-            commandEncoder.ensurePassesEnded();
             try {
+                deviceState.requireUsable();
+                commandEncoder.ensurePassesEnded();
                 AndroidVulkanNative.endFrame(context);
                 applyPendingResizeDimensions();
             } finally {
@@ -412,7 +445,8 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             }
             disposed = true;
             try {
-                AndroidVulkanNative.destroy(context);
+                try { device.closePreparation(); }
+                finally { AndroidVulkanNative.destroy(context); }
             } finally {
                 frameStarted = false;
             }
@@ -441,6 +475,7 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (disposed) {
                 throw new FdxException("Cannot " + operation + " after the Android Vulkan context is disposed");
             }
+            deviceState.requireUsable();
         }
 
         private void ensureFrameStarted(String operation) {
@@ -458,10 +493,32 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
      */
     private static final class AndroidVulkanGraphicsDevice implements GraphicsDevice {
         private final AndroidVulkanGraphicsAttachment attachment;
+        private final Object closedDomain = new Object();
+        private ShaderPreparationCapabilities preparationCapabilities;
+        private volatile AndroidVulkanPreparationQueue preparation;
 
         AndroidVulkanGraphicsDevice(AndroidVulkanGraphicsAttachment attachment) {
             this.attachment = attachment;
         }
+
+        @Override public Object resourceDomain() {
+            return attachment.disposed || attachment.deviceState.poll() ? closedDomain : attachment;
+        }
+        @Override public ShaderPreparationCapabilities shaderPreparationCapabilities() {
+            if (preparationCapabilities == null) preparationCapabilities = new ShaderPreparationCapabilities(
+                    ShaderPreparationCapabilities.Execution.WORKERS, ShaderPreparationCapabilities.Execution.WORKERS,
+                    true, attachment.preparationWorkers,
+                    attachment.shaderCache != null && attachment.shaderCache.enabled(),
+                    attachment.shaderCache != null && attachment.shaderCache.supportsAtomicUpdate());
+            return preparationCapabilities;
+        }
+        @Override public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
+            attachment.ensureNotDisposed("prepare a pipeline");
+            if (request == null) throw new FdxException("Shader pipeline request cannot be null");
+            if (preparation == null) preparation = new AndroidVulkanPreparationQueue(attachment);
+            return preparation.submit(request);
+        }
+        void closePreparation() { if (preparation != null) preparation.close(); }
 
         /**
          * Creates a buffer.
@@ -606,7 +663,8 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                     vertexStepModes(vertexLayouts), attributeBindings(vertexLayouts), attributeLocations(vertexLayouts),
                     attributeFormats(vertexLayouts), attributeOffsets(vertexLayouts),
                     descriptor.sampledTextureCount(), uniformBufferEnabled, descriptor.depthTestEnabled(),
-                    descriptor.colorTargets()[0].blend() != null, descriptor.depthWriteEnabled()),
+                    descriptor.colorTargets()[0].blend() != null, descriptor.depthWriteEnabled(),
+                    descriptor.vertexEntryPoint(), descriptor.fragmentEntryPoint(), false),
                     descriptor.primitiveTopology(), descriptor.sampledTextureCount(),
                     resourceBindings, resourceBindings.uniformSetIndex(),
                     descriptor.renderTargetLayout());
@@ -637,6 +695,226 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
         @SuppressWarnings("unchecked")
         public <T> T as() {
             return (T) this;
+        }
+    }
+
+    /** CPU/native creation uses retained device access and private inputs. Only finish publishes
+     * an attachment-owned pipeline. Workers never access frames, surfaces or render-pass caches. */
+    private static final class AndroidVulkanPreparationQueue implements AutoCloseable {
+        private final AndroidVulkanGraphicsAttachment attachment;
+        private final long nativeContext;
+        private final AndroidShaderPreparationExecutor executor;
+        private final ShaderCompilerRegistry compilers;
+        private final ShaderCompilerRegistry refreshCompilers;
+        private final AndroidVulkanPipelineCache pipelineCache;
+        private final Set<Job> jobs = ConcurrentHashMap.newKeySet();
+        private volatile boolean closed;
+
+        AndroidVulkanPreparationQueue(AndroidVulkanGraphicsAttachment attachment) {
+            this.attachment = attachment;
+            nativeContext = attachment.context;
+            executor = new AndroidShaderPreparationExecutor(attachment.preparationWorkers);
+            pipelineCache = new AndroidVulkanPipelineCache(nativeContext, attachment.shaderCache, executor::execute, attachment.deviceState);
+            var compiler = RuntimeCore.shaderCompiler();
+            compilers = ShaderCompilerRegistry.builder().compiler(new RuntimeShaderTargetCompiler(compiler,
+                            RuntimeShaderTargetCompiler.VERSION, attachment.shaderCache))
+                    .verifier(new RuntimeWgslTargetVerifier(compiler)).build();
+            refreshCompilers = attachment.shaderCache == null || !attachment.shaderCache.enabled() ? compilers
+                    : ShaderCompilerRegistry.builder().compiler(new RuntimeShaderTargetCompiler(compiler,
+                            RuntimeShaderTargetCompiler.VERSION, attachment.shaderCache.refreshing()))
+                            .verifier(new RuntimeWgslTargetVerifier(compiler)).build();
+        }
+
+        ShaderPreparationOperation submit(ShaderPipelineRequest request) {
+            if (closed) throw new FdxException("Android Vulkan preparation is closed");
+            Job job = new Job(request);
+            AndroidVulkanNative.retainPreparationDevice(nativeContext);
+            try { jobs.add(job); executor.execute(job.trace.wrap(job)); }
+            catch (RuntimeException | Error failure) {
+                jobs.remove(job); AndroidVulkanNative.releasePreparationDevice(nativeContext); throw failure;
+            }
+            return job;
+        }
+        @Override public void close() {
+            if (closed) return;
+            closed = true;
+            Throwable first = null;
+            try {
+                for (Job job : jobs) try { job.cancel(); }
+                catch (RuntimeException | Error failure) {
+                    if (first == null) first = failure; else first.addSuppressed(failure);
+                }
+            } finally { executor.dispose(); }
+            if (first instanceof RuntimeException failure) throw failure;
+            if (first instanceof Error failure) throw failure;
+        }
+
+        private FdxFuture<ShaderModuleDescriptor> translateAsync(ShaderModuleDescriptor source,
+                ShaderCompilerRegistry registry, Consumer<Runnable> execute) {
+            FdxFuture<ShaderModuleDescriptor> reflected = FdxFuture.completed(source);
+            if (!source.reflection().complete()) {
+                reflected = ShaderModuleDescriptors.requireTargetAsync(source, ShaderTarget.WGPU_WGSL,
+                        registry, ShaderVerificationRequirement.REQUIRED, "Android Vulkan reflection", execute);
+            }
+            return ShaderCompilationTasks.then(reflected, execute, descriptor ->
+                    ShaderModuleDescriptors.requireTargetAsync(descriptor.entryPoints(source.vertexEntryPoint(), source.fragmentEntryPoint()),
+                            ShaderTarget.VULKAN_SPIRV, registry, ShaderVerificationRequirement.PROVIDER_PIPELINE,
+                            "Android Vulkan", execute));
+        }
+
+        private final class Job implements ShaderPreparationOperation, Runnable {
+            private final ShaderPipelineRequest request;
+            private final AtomicReference<Prepared> output = new AtomicReference<>();
+            private final AtomicBoolean completed = new AtomicBoolean();
+            private volatile boolean done, cancelled;
+            private final ShaderPreparationTrace trace = new ShaderPreparationTrace();
+            private Throwable failure;
+            private boolean finished, disposed;
+            private ShaderModuleDescriptor source;
+            private boolean refreshedTranslation;
+            private final Consumer<Runnable> execute = work -> { requireActive(); executor.execute(trace.wrap(work)); };
+
+            Job(ShaderPipelineRequest request) { this.request = request; }
+            private void requireActive() {
+                if (cancelled || closed) throw new CancellationException("Android Vulkan preparation cancelled");
+                attachment.deviceState.requireUsable();
+            }
+
+            @Override public void run() {
+                try {
+                    requireActive(); trace.enter(ShaderPreparationPhase.SOURCE);
+                    source = request.sourceDescriptor();
+                    requireActive(); trace.enter(ShaderPreparationPhase.TRANSLATION);
+                    beginTranslation(compilers);
+                } catch (Throwable error) { fail(error); }
+            }
+
+            private void beginTranslation(ShaderCompilerRegistry registry) {
+                ShaderCompilationTasks.then(translateAsync(source, registry, execute), execute, translated -> {
+                    trace.enter(ShaderPreparationPhase.CACHE_LOOKUP);
+                    return ShaderCompilationTasks.then(pipelineCache.initializeAsync(), execute, initialized -> {
+                        prepareNative(translated);
+                        return FdxFuture.completed(null);
+                    });
+                }).onFailure(this::fail);
+            }
+
+            private void fail(Throwable error) {
+                if (!completed.compareAndSet(false, true)) return;
+                attachment.deviceState.observe(error);
+                failure = error;
+                try { AndroidVulkanNative.releasePreparationDevice(nativeContext); }
+                catch (Throwable cleanup) { failure.addSuppressed(cleanup); }
+                trace.enter(ShaderPreparationPhase.PUBLICATION_WAIT); done = true;
+                jobs.remove(this);
+            }
+
+            private void prepareNative(ShaderModuleDescriptor translated) {
+                long module = 0, pipeline = 0;
+                Prepared prepared = null;
+                Throwable nativeFailure = null;
+                boolean nativeStarted = false;
+                try {
+                    requireActive();
+                    if (translated.targetArtifact() != null) {
+                        ShaderTargetSupport.forProvider(ID).require(translated.targetArtifact());
+                        VulkanShaderLayoutValidator.requireArtifact(translated.targetArtifact());
+                    }
+                    var descriptor = request.pipelineDescriptor(new PreparationModule(translated.reflection()));
+                    descriptor.validate(CAPABILITIES);
+                    if (descriptor.renderTargetLayout().colorAttachmentCount() != 1)
+                        throw new FdxException("Android Vulkan requires exactly one color attachment");
+                    ShaderRenderBindings bindings = ShaderRenderBindings.from(descriptor);
+                    VulkanShaderLayoutValidator.requireRenderLayout(bindings);
+                    requireActive(); trace.enter(ShaderPreparationPhase.COMPILATION);
+                    module = AndroidVulkanNative.createShaderModule(nativeContext,
+                            translated.spirvVertexWords(), translated.spirvFragmentWords());
+                    requireActive(); trace.enter(ShaderPreparationPhase.PIPELINE);
+                    VertexLayout[] layouts = descriptor.vertexLayouts();
+                    pipelineCache.beginNative(); nativeStarted = true;
+                    pipeline = AndroidVulkanNative.createRenderPipeline(nativeContext, module,
+                            toNativeTextureFormat(descriptor.colorFormat()), toNativeTopology(descriptor.primitiveTopology()),
+                            vertexStrides(layouts), vertexStepModes(layouts), attributeBindings(layouts), attributeLocations(layouts),
+                            attributeFormats(layouts), attributeOffsets(layouts), descriptor.sampledTextureCount(),
+                            bindings.hasUniformBuffer(), descriptor.depthTestEnabled(), descriptor.colorTargets()[0].blend() != null,
+                            descriptor.depthWriteEnabled(), descriptor.vertexEntryPoint(), descriptor.fragmentEntryPoint(), true);
+                    prepared = new Prepared(pipeline, descriptor, bindings);
+                } catch (Throwable error) { nativeFailure = error; }
+                finally {
+                    try { if (module != 0) AndroidVulkanNative.destroyShaderModule(module); }
+                    catch (Throwable error) {
+                        if (nativeFailure == null) nativeFailure = error;
+                        else nativeFailure.addSuppressed(error);
+                    }
+                    try { if (nativeStarted) pipelineCache.endNative(); }
+                    catch (Throwable error) {
+                        if (nativeFailure == null) nativeFailure = error;
+                        else nativeFailure.addSuppressed(error);
+                    }
+                }
+                if (nativeFailure != null) {
+                    attachment.deviceState.observe(nativeFailure);
+                    try { if (pipeline != 0) AndroidVulkanNative.discardPreparedPipeline(pipeline); }
+                    catch (Throwable cleanup) { nativeFailure.addSuppressed(cleanup); }
+                    if (!refreshedTranslation && compilers != refreshCompilers
+                            && nativeFailure instanceof RuntimeException && !(nativeFailure instanceof CancellationException)
+                            && !cancelled && !closed) {
+                        refreshedTranslation = true; trace.enter(ShaderPreparationPhase.TRANSLATION);
+                        beginTranslation(refreshCompilers);
+                    } else fail(nativeFailure);
+                    return;
+                }
+                output.set(prepared);
+                completed.set(true); trace.enter(ShaderPreparationPhase.PUBLICATION_WAIT); done = true;
+                if (cancelled || closed) discard();
+                if (output.get() == null) jobs.remove(this);
+            }
+            private void discard() {
+                Prepared prepared = output.getAndSet(null);
+                if (prepared != null) try { AndroidVulkanNative.discardPreparedPipeline(prepared.pipeline()); }
+                finally { AndroidVulkanNative.releasePreparationDevice(nativeContext); }
+            }
+            @Override public boolean isDone() { return done; }
+            @Override public ShaderPreparationPhase phase() { return trace.phase(); }
+            @Override public ShaderPreparationTrace trace() { return trace; }
+            @Override public ShaderPreparedResult finish() {
+                if (!done || finished) throw new FdxException("Android Vulkan preparation cannot be published now");
+                finished = true; requireActive();
+                attachment.ensureNotDisposed("publish a prepared pipeline");
+                if (failure instanceof Error error) throw error;
+                if (failure instanceof RuntimeException error) throw error;
+                if (failure != null) throw new FdxException("Android Vulkan preparation failed", failure);
+                Prepared prepared = output.getAndSet(null);
+                if (prepared == null) throw new CancellationException("Android Vulkan result was retired");
+                boolean published = false;
+                try {
+                    var descriptor = prepared.descriptor();
+                    RenderPipeline pipeline = new AndroidVulkanRenderPipelineHandle(attachment, prepared.pipeline(),
+                            descriptor.primitiveTopology(), descriptor.sampledTextureCount(), prepared.bindings(),
+                            prepared.bindings().uniformSetIndex(), descriptor.renderTargetLayout());
+                    ShaderPreparedResult result = new ShaderPreparedResult(ResolvedShaderPass.of(request.passId(), pipeline,
+                            prepared.bindings().layout(), request.providerRevision()), pipeline);
+                    published = true; return result;
+                } finally {
+                    try { if (!published) AndroidVulkanNative.discardPreparedPipeline(prepared.pipeline()); }
+                    finally { AndroidVulkanNative.releasePreparationDevice(nativeContext); jobs.remove(this); }
+                }
+            }
+            @Override public void cancel() { cancelled = true; if (done) { discard(); jobs.remove(this); } }
+            @Override public void dispose() {
+                if (disposed) return;
+                if (!done) throw new FdxException("Android Vulkan preparation has not drained");
+                disposed = true; discard(); jobs.remove(this);
+            }
+            @Override public boolean isDisposed() { return disposed; }
+        }
+        private record Prepared(long pipeline, RenderPipelineDescriptor descriptor, ShaderRenderBindings bindings) { }
+        private record PreparationModule(ShaderReflection reflection) implements ShaderModule {
+            @Override public ShaderLanguage language() { return ShaderLanguage.SPIRV; }
+            @Override public ProviderId providerId() { return ID; }
+            @Override public <T> T as() { throw new FdxException("Preparation metadata has no native module"); }
+            @Override public void dispose() { }
+            @Override public boolean isDisposed() { return false; }
         }
     }
 
@@ -1207,9 +1485,11 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             if (ended) {
                 return;
             }
-            attachment.ensureFrameStarted("end a render pass");
             ended = true;
-            AndroidVulkanNative.endRenderPass(attachment.context);
+            if (!attachment.disposed && !attachment.deviceState.poll()) {
+                attachment.ensureFrameStarted("end a render pass");
+                AndroidVulkanNative.endRenderPass(attachment.context);
+            }
             pipeline = null;
             indexBuffer = null;
             colorAttachment = null;

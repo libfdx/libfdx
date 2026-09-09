@@ -1,10 +1,14 @@
 package io.github.libfdx.graphics.g3d;
 
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.graphics.particles.ParticleCurve;
+import io.github.libfdx.graphics.particles.ParticleVolume;
 import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.graphics.Texture;
 
 /**
+ * Not thread-safe. Owns only CPU storage; textures and renderers are borrowed.
+ * Configuration of motion/curves affects live particles; spawn ranges affect future particles.
  * Updates and renders a fixed-capacity 3D particle emitter.
  *
  * @author xpenatan
@@ -15,6 +19,8 @@ public final class ParticleEmitter3D {
     private static final float PI2 = (float)(Math.PI * 2.0);
 
     private final int maxParticles;
+    private final int[] renderOrder;
+    private final float[] renderDepth;
     private final float[] x;
     private final float[] y;
     private final float[] z;
@@ -35,6 +41,13 @@ public final class ParticleEmitter3D {
     private final float[] endGreen;
     private final float[] endBlue;
     private final float[] endAlpha;
+    private float spawnWidth, spawnHeight, spawnDepth;
+    private float drag;
+    private float turbulenceStrength, turbulenceFrequency = 1, simulationTime;
+    private float aspectRatio = 1;
+    private ParticleCurve sizeCurve = ParticleCurve.LINEAR;
+    private ParticleCurve colorCurve = ParticleCurve.LINEAR;
+    private ParticleCurve opacityCurve;
     private int activeCount;
     private int rngState = 0x1234ABCD;
     private float emitX;
@@ -80,6 +93,8 @@ public final class ParticleEmitter3D {
             throw new FdxException("ParticleEmitter3D maxParticles must be greater than zero");
         }
         this.maxParticles = maxParticles;
+        renderOrder = new int[maxParticles];
+        renderDepth = new float[maxParticles];
         x = new float[maxParticles];
         y = new float[maxParticles];
         z = new float[maxParticles];
@@ -380,7 +395,8 @@ public final class ParticleEmitter3D {
     }
 
     /**
-     * Renders active particles through a caller-owned billboard renderer.
+     * Renders active particles back-to-front through a caller-owned billboard renderer.
+     * Sorting is within this emitter only; callers order separate emitters or layers themselves.
      *
      * @param texture the particle texture
      * @param camera the active camera
@@ -397,15 +413,23 @@ public final class ParticleEmitter3D {
         if (renderer == null) {
             throw new FdxException("ParticleEmitter3D renderer cannot be null");
         }
-        int drawn = 0;
+        // Sort only indices, preserving simulation identity and avoiding frame allocations.
         for (int i = 0; i < activeCount; i++) {
+            renderDepth[i] = (x[i] - camera.position().x()) * camera.direction().x()
+                    + (y[i] - camera.position().y()) * camera.direction().y()
+                    + (z[i] - camera.position().z()) * camera.direction().z();
+        }
+        ParticleDepthSort3D.sort(renderDepth, renderOrder, activeCount);
+        int drawn = 0;
+        for (int sorted = 0; sorted < activeCount; sorted++) {
+            int i = renderOrder[sorted];
             float size = size(i);
             float alpha = alpha(i);
             if (size <= 0.0f || alpha <= 0.0f) {
                 continue;
             }
             renderer.color(red(i), green(i), blue(i), alpha);
-            renderer.draw(texture, camera, x[i], y[i], z[i], size, size, rotationDegrees[i]);
+            renderer.draw(texture, camera, x[i], y[i], z[i], size * aspectRatio, size, rotationDegrees[i]);
             drawn++;
         }
         renderer.color(1.0f, 1.0f, 1.0f, 1.0f);
@@ -493,7 +517,7 @@ public final class ParticleEmitter3D {
      */
     public float size(int index) {
         checkIndex(index);
-        return lerp(startSize[index], endSize[index], progress(index));
+        return lerp(startSize[index], endSize[index], sizeCurve.sample(progress(index)));
     }
 
     /**
@@ -504,7 +528,7 @@ public final class ParticleEmitter3D {
      */
     public float red(int index) {
         checkIndex(index);
-        return lerp(startRed[index], endRed[index], progress(index));
+        return lerp(startRed[index], endRed[index], colorCurve.sample(progress(index)));
     }
 
     /**
@@ -515,7 +539,7 @@ public final class ParticleEmitter3D {
      */
     public float green(int index) {
         checkIndex(index);
-        return lerp(startGreen[index], endGreen[index], progress(index));
+        return lerp(startGreen[index], endGreen[index], colorCurve.sample(progress(index)));
     }
 
     /**
@@ -526,7 +550,7 @@ public final class ParticleEmitter3D {
      */
     public float blue(int index) {
         checkIndex(index);
-        return lerp(startBlue[index], endBlue[index], progress(index));
+        return lerp(startBlue[index], endBlue[index], colorCurve.sample(progress(index)));
     }
 
     /**
@@ -537,7 +561,7 @@ public final class ParticleEmitter3D {
      */
     public float alpha(int index) {
         checkIndex(index);
-        return lerp(startAlpha[index], endAlpha[index], progress(index));
+        return lerp(startAlpha[index], endAlpha[index], colorCurve.sample(progress(index))) * (opacityCurve == null ? 1 : opacityCurve.sample(progress(index)));
     }
 
     /**
@@ -551,14 +575,86 @@ public final class ParticleEmitter3D {
         return rotationDegrees[index];
     }
 
+    /** Sets the centered rectangular spawn volume for future particles. Full extents must be nonnegative. */
+    public ParticleEmitter3D spawnArea(float width, float height, float depth) {
+        validateRange(width, width, false, "spawn width");
+        validateRange(height, height, false, "spawn height");
+        validateRange(depth, depth, false, "spawn depth");
+        spawnWidth = width;
+        spawnHeight = height;
+        spawnDepth = depth;
+        return this;
+    }
+
+    /** Sets exponential velocity damping per second, applied to all live particles. Zero disables drag. */
+    public ParticleEmitter3D drag(float value) {
+        validateRange(value, value, false, "particle drag");
+        drag = value;
+        return this;
+    }
+
+    /** Sets rendered width / height for all live particles; size remains the height. */
+    public ParticleEmitter3D aspectRatio(float value) {
+        validateRange(value, value, true, "particle aspect ratio");
+        aspectRatio = value;
+        return this;
+    }
+
+    /**
+     * Borrows immutable curves for all live particles. Size/color curves control interpolation
+     * between spawn-sampled endpoints. Opacity multiplies interpolated alpha; null disables it.
+     * Custom curves allow pulses, delayed growth, and fade-in without per-frame allocation.
+     */
+    public ParticleEmitter3D curves(ParticleCurve size, ParticleCurve color, ParticleCurve opacity) {
+        if (size == null || color == null) throw new FdxException("Size and color curves cannot be null");
+        sizeCurve = size;
+        colorCurve = color;
+        opacityCurve = opacity;
+        return this;
+    }
+
+    /** Sets smooth world-space turbulent acceleration; strength >= 0 and frequency > 0. */
+    public ParticleEmitter3D turbulence(float strength, float frequency) {
+        validateRange(strength, strength, false, "turbulence strength");
+        validateRange(frequency, frequency, true, "turbulence frequency");
+        turbulenceStrength = strength; turbulenceFrequency = frequency; return this;
+    }
+
+    /**
+     * Deposits live particles into a borrowed density volume without drawing sprites or allocating.
+     * Particles retain world-space spherical support from every camera direction.
+     * Clear the volume once before depositing all emitters. Size is the kernel diameter.
+     */
+    public void deposit(ParticleVolume volume, ParticleVolume.Medium medium) {
+        if (volume == null || medium == null) throw new FdxException("Volume and medium are required");
+
+        for (int i = 0; i < activeCount; i++) {
+            float radius = size(i) * 0.5f;
+            float opacity = alpha(i);
+            if (radius > 0 && opacity > 0) volume.add(x[i], y[i], z[i], radius,
+                    opacity * 2, 1 - progress(i), medium);
+        }
+    }
+
     private void updateActive(float deltaSeconds) {
+        simulationTime += deltaSeconds;
+        float damping = (float)Math.exp(-drag * deltaSeconds);
         int i = 0;
         while (i < activeCount) {
+            float phase = simulationTime * 1.3f;
+            float fx = x[i] * turbulenceFrequency;
+            float fy = y[i] * turbulenceFrequency;
+            velocityX[i] += turbulenceStrength * (float)Math.sin(fy * 2.1f - phase) * deltaSeconds;
+            velocityY[i] += turbulenceStrength * 0.35f * (float)Math.sin(fx * 1.7f + phase) * deltaSeconds;
+            velocityZ[i] += turbulenceStrength * (float)Math.cos(fy * 1.9f + fx - phase) * deltaSeconds;
             velocityX[i] += gravityX * deltaSeconds;
             velocityY[i] += gravityY * deltaSeconds;
             velocityZ[i] += gravityZ * deltaSeconds;
+            velocityX[i] *= damping;
             x[i] += velocityX[i] * deltaSeconds;
+            velocityY[i] *= damping;
             y[i] += velocityY[i] * deltaSeconds;
+            velocityZ[i] *= damping;
             z[i] += velocityZ[i] * deltaSeconds;
             rotationDegrees[i] += angularVelocityDegrees[i] * deltaSeconds;
             age[i] += deltaSeconds;
@@ -571,9 +667,9 @@ public final class ParticleEmitter3D {
     }
 
     private void spawn(int index) {
-        x[index] = emitX;
-        y[index] = emitY;
-        z[index] = emitZ;
+        x[index] = emitX + random(-spawnWidth * 0.5f, spawnWidth * 0.5f);
+        y[index] = emitY + random(-spawnHeight * 0.5f, spawnHeight * 0.5f);
+        z[index] = emitZ + random(-spawnDepth * 0.5f, spawnDepth * 0.5f);
         age[index] = 0.0f;
         lifetime[index] = random(minLifetime, maxLifetimeValue);
         float speed = random(minSpeed, maxSpeed);

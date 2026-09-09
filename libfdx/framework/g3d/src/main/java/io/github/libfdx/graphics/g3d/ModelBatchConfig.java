@@ -1,5 +1,6 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparation;
 import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
 
 /**
@@ -14,6 +15,25 @@ public final class ModelBatchConfig {
     private boolean gpuSkinningEnabled = true;
     private ShaderProvider3D shaderProvider;
     private ShaderProvider commonShaderProvider;
+    private ShaderPreparation preparation;
+    private ModelShaderPlan shaderPlan;
+    private ModelShaderGroup shaderGroup;
+
+    /** Borrows a declared required-pass group and its service. Uses the group's default plan
+     * unless this batch already declares the plan for its particular dependent pass. */
+    public ModelBatchConfig shaderGroup(ModelShaderGroup value) {
+        shaderGroup = value;
+        if (value != null) { preparation = value.preparation(); if (shaderPlan == null) shaderPlan = value.plan(); }
+        return this;
+    }
+    public ModelShaderGroup shaderGroup() { return shaderGroup; }
+
+    /** Borrows the application-thread preparation service. Call update before opening passes. */
+    public ModelBatchConfig preparation(ShaderPreparation value) { preparation = value; return this; }
+    public ShaderPreparation preparation() { return preparation; }
+    /** Borrows the exact model definitions used for preload collection. */
+    public ModelBatchConfig shaderPlan(ModelShaderPlan value) { shaderPlan = value; return this; }
+    public ModelShaderPlan shaderPlan() { return shaderPlan; }
 
     /**
      * Sets the max lights and returns this model batch config.

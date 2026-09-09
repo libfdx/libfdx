@@ -26,7 +26,7 @@ provider. The launcher is the composition boundary.
 
 The backend constructs the typed `Fdx` root and passes it to
 `ApplicationListener.create(Fdx)`. `Fdx` contains backend-owned runtime roots
-such as application, displays, graphics, input, files, storage, networking, and
+such as application, displays, graphics, input, files, storage, networking, audio, and
 logging. Application-owned objects—including asset managers, batches, UI roots,
 and application state—are constructed explicitly.
 
@@ -78,6 +78,16 @@ backend. Higher-level rendering and UI modules build on common graphics.
 Source data and provider resources remain separate ownership domains. For
 example, decoded image data is not a texture; a loader that creates a GPU
 resource belongs in a module that already depends on graphics.
+
+Portable audio contracts separate immutable PCM from device sounds and bounded
+playback voices. Backends own optional audio services; applications own sounds,
+streamed music, mixers, and their asset scopes. Audio providers and decoding integration remain optional
+extensions. See [audio ownership and playback](../libfdx/framework/audio/README.md).
+
+Canonical CPU map data belongs to `framework/maps`. G2D binds borrowed map data
+to textures and draws it; format importers remain opt-in extensions. Existing
+G2D tile-map entry points are compatibility subclasses using the canonical data.
+See the [map model](../libfdx/framework/maps/README.md) for ownership and migration.
 
 Optional application features remain application-owned and opt-in. They may
 depend on the portable framework contracts their APIs require, but libFDX does

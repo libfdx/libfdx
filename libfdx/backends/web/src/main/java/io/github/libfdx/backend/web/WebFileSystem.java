@@ -4,11 +4,14 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.FdxFuture;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.files.FileHandle;
+import io.github.libfdx.files.FileDataSource;
 import io.github.libfdx.files.FileLocation;
 import io.github.libfdx.files.FileMetadata;
 import io.github.libfdx.files.FileSystem;
 import io.github.libfdx.files.FileWatch;
 import org.teavm.jso.JSBody;
+import org.teavm.jso.JSFunctor;
+import org.teavm.jso.JSObject;
 import org.teavm.jso.typedarrays.Int8Array;
 
 import java.nio.charset.Charset;
@@ -108,14 +111,38 @@ public final class WebFileSystem implements FileSystem {
 
     FdxFuture<byte[]> readBytes(WebFileHandle handle) {
         try {
-            byte[] bytes = readBytesNow(handle);
-            if (bytes == null) {
-                throw new FdxException("File not found: " + handle.path());
+            if (isWritable(handle.location)) {
+                byte[] bytes = writableFiles.get(handle.path);
+                if (bytes == null) { throw new FdxException("File not found: " + handle.path); }
+                return FdxFuture.completed(bytes.clone());
             }
-            return FdxFuture.completed(bytes);
-        } catch (Throwable error) {
-            return FdxFuture.failed(error);
-        }
+            if (handle.location == FileLocation.EXTERNAL) { throw new FdxException("External files are unavailable on web"); }
+            Int8Array cached = cachedAssetBytes(handle.path);
+            if (cached != null) { return FdxFuture.completed(cached.copyToJavaArray()); }
+            FdxFuture<byte[]> result = FdxFuture.pending();
+            fetchBytes(handle.path, bytes -> {
+                try { result.complete(bytes.copyToJavaArray()); }
+                catch (RuntimeException | Error error) { result.completeExceptionally(error); }
+            }, message -> result.completeExceptionally(new FdxException(handle.path + ": " + message)));
+            return result;
+        } catch (Throwable error) { return FdxFuture.failed(error); }
+    }
+
+    FdxFuture<FileDataSource> openRead(WebFileHandle handle, int maximum) {
+        try {
+            FileDataSource.validateLimit(maximum);
+            byte[] memory = isWritable(handle.location) ? writableFiles.get(handle.path) : null;
+            if (isWritable(handle.location) && memory == null) { throw new FdxException("File not found: " + handle.path); }
+            if (handle.location == FileLocation.EXTERNAL) { throw new FdxException("External files are unavailable on web"); }
+            Int8Array cached = memory == null ? cachedAssetBytes(handle.path) : null;
+            WebFileDataSource source = new WebFileDataSource(handle.path, maximum, memory, cached);
+            if (source.length() >= 0) { return FdxFuture.completed(source); }
+            FdxFuture<FileDataSource> result = FdxFuture.pending();
+            source.read(0, new byte[1], 0, 1).onSuccess(ignored -> result.complete(source)).onFailure(error -> {
+                source.dispose(); result.completeExceptionally(error);
+            });
+            return result;
+        } catch (Throwable error) { return FdxFuture.failed(error); }
     }
 
     FdxFuture<Void> writeBytes(WebFileHandle handle, byte[] bytes, boolean append) {
@@ -156,23 +183,6 @@ public final class WebFileSystem implements FileSystem {
         }
         int size = webAssetLength(handle.path);
         return new FileMetadata(size >= 0 ? size : -1L, 0L, false);
-    }
-
-    private byte[] readBytesNow(WebFileHandle handle) {
-        if (isWritable(handle.location)) {
-            byte[] bytes = writableFiles.get(handle.path);
-            if (bytes == null) {
-                return null;
-            }
-            byte[] copy = new byte[bytes.length];
-            System.arraycopy(bytes, 0, copy, 0, bytes.length);
-            return copy;
-        }
-        if (handle.location == FileLocation.EXTERNAL) {
-            return null;
-        }
-        Int8Array data = webAssetBytes(handle.path);
-        return data != null ? data.copyToJavaArray() : null;
     }
 
     private boolean isWritable(FileLocation location) {
@@ -218,24 +228,22 @@ public final class WebFileSystem implements FileSystem {
         return (T) this;
     }
 
+    @JSFunctor private interface ReadSuccess extends JSObject { void accept(Int8Array bytes); }
+    @JSFunctor private interface ReadFailure extends JSObject { void accept(String error); }
+    @JSBody(params = {"path", "ok", "fail"}, script = """
+        fetch('assets/' + path).then(function(response) {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.arrayBuffer();
+        }).then(function(buffer) { ok(new Int8Array(buffer)); })
+          .catch(function(error) { fail(String(error)); });
+        """)
+    private static native void fetchBytes(String path, ReadSuccess ok, ReadFailure fail);
+
     @JSBody(params = { "path" }, script =
             "path = normalizeLibfdxPath(path);\n" +
             "var cached = libfdxFindAsset(path);\n" +
             "if (cached) return cached;\n" +
-            "try {\n" +
-            "  var request = new XMLHttpRequest();\n" +
-            "  request.open('GET', 'assets/' + path, false);\n" +
-            "  request.overrideMimeType('text/plain; charset=x-user-defined');\n" +
-            "  request.send(null);\n" +
-            "  var ok = (request.status >= 200 && request.status < 300) || request.status === 0;\n" +
-            "  if (!ok || request.responseText == null) return null;\n" +
-            "  var text = request.responseText;\n" +
-            "  var data = new Int8Array(text.length);\n" +
-            "  for (var i = 0; i < text.length; i++) data[i] = text.charCodeAt(i) & 255;\n" +
-            "  return data;\n" +
-            "} catch (error) {\n" +
-            "  return null;\n" +
-            "}\n" +
+            "return null;\n" +
             "function normalizeLibfdxPath(value) {\n" +
             "  value = (value || '').replace(/\\\\/g, '/');\n" +
             "  while (value.indexOf('./') === 0) value = value.substring(2);\n" +
@@ -253,7 +261,7 @@ public final class WebFileSystem implements FileSystem {
             "  if (stored instanceof Uint8Array) return new Int8Array(stored.buffer, stored.byteOffset, stored.byteLength);\n" +
             "  return new Int8Array(stored);\n" +
             "}")
-    private static native Int8Array webAssetBytes(String path);
+    private static native Int8Array cachedAssetBytes(String path);
 
     @JSBody(params = { "path" }, script =
             "path = normalizeLibfdxPath(path);\n" +
@@ -421,6 +429,10 @@ public final class WebFileSystem implements FileSystem {
             return files.readBytes(this);
         }
 
+        @Override public FdxFuture<FileDataSource> openRead(int maxReadBytes) {
+            return files.openRead(this, maxReadBytes);
+        }
+
         /**
          * Runs the read string step.
          *
@@ -429,15 +441,12 @@ public final class WebFileSystem implements FileSystem {
          */
         @Override
         public FdxFuture<String> readString(Charset charset) {
-            FdxFuture<byte[]> bytes = readBytes();
-            if (bytes.isFailed()) {
-                try {
-                    bytes.get();
-                } catch (RuntimeException error) {
-                    return FdxFuture.failed(error);
-                }
-            }
-            return FdxFuture.completed(new String(bytes.get(), charset != null ? charset : Charset.defaultCharset()));
+            FdxFuture<String> result = FdxFuture.pending();
+            readBytes().onSuccess(bytes -> {
+                try { result.complete(new String(bytes, charset != null ? charset : Charset.defaultCharset())); }
+                catch (RuntimeException | Error error) { result.completeExceptionally(error); }
+            }).onFailure(result::completeExceptionally);
+            return result;
         }
 
         /**

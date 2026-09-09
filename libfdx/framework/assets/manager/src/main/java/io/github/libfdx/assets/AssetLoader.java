@@ -18,7 +18,12 @@ public interface AssetLoader<T> {
     Class<T> type();
 
     /**
-     * Loads the requested resource.
+     * Starts dependency discovery and returns a future for an owned result.
+     * The default manager invokes this method on the application thread. Use
+     * context.readBytes/async for queued acquisition and preparation, declare
+     * dependencies through the context, and use completeOnUpdate for resource
+     * creation. Arbitrary inline work in this method is outside update budgets.
+     * A loader must release resources it creates before throwing or failing.
      *
      * @param context the context
      * @param descriptor the descriptor

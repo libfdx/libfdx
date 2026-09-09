@@ -10,25 +10,24 @@ import io.github.libfdx.math.ClipDepthRange;
  */
 public final class DefaultGraphics implements Graphics {
     private final GraphicsContext main;
+    private boolean clipRangePublished;
 
     /**
      * Creates a default graphics.
      *
-     * @param main the main
+     * <p>The context is borrowed. An asynchronous attachment may still be
+     * initializing; its device is only queried after it reports readiness.
+     * Backends must access {@link #main()} once ready, before creating listeners,
+     * to publish the device's camera depth convention.</p>
+     *
+     * @param main the main context
      */
     public DefaultGraphics(GraphicsContext main) {
         if (main == null) {
             throw new FdxException("Main graphics context cannot be null");
         }
         this.main = main;
-        // Every backend builds this immediately before calling the application
-        // listener's create, so it is the one point that reliably runs after a
-        // device exists and before any camera can be constructed. Publishing
-        // the device's own declared range here keeps the OpenGL family out of
-        // Camera and Matrix4, and lets a later device correct the value rather
-        // than inheriting a stale one.
-        ClipDepthRange.setDefault(ClipDepthRange.resolveFor(
-                main.device().capabilities().clipDepthRange()));
+        publishClipRangeWhenReady();
     }
 
     /**
@@ -38,7 +37,16 @@ public final class DefaultGraphics implements Graphics {
      */
     @Override
     public GraphicsContext main() {
+        publishClipRangeWhenReady();
         return main;
+    }
+
+    private void publishClipRangeWhenReady() {
+        if (clipRangePublished || main instanceof GraphicsAttachmentReadiness readiness && !readiness.isReady()) return;
+        // WebGPU devices become available asynchronously. Never query their
+        // capabilities while the attachment is still waiting for an adapter.
+        ClipDepthRange.setDefault(ClipDepthRange.resolveFor(main.device().capabilities().clipDepthRange()));
+        clipRangePublished = true;
     }
 
     /**

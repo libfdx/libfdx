@@ -62,6 +62,14 @@ final class WGPUFrameBuffer implements FrameBuffer {
     }
 
     /**
+     * Whether the configured surface or offscreen color texture can be copied for readback.
+     */
+    @Override
+    public boolean supportsReadPixelsRgba8() {
+        return context.supportsReadPixelsRgba8();
+    }
+
+    /**
      * Returns the read pixels RGBA8.
      *
      * @return the read pixels RGBA8

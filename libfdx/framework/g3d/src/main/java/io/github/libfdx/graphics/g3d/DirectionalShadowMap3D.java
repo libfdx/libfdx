@@ -11,6 +11,8 @@ import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.ColorTargetState;
+import io.github.libfdx.graphics.CompareFunction;
+import io.github.libfdx.graphics.DepthStencilState;
 import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.GraphicsContext;
@@ -29,6 +31,21 @@ import io.github.libfdx.graphics.shader.ShaderModule;
 import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
 import io.github.libfdx.graphics.shader.reflection.ShaderParameter;
 import io.github.libfdx.graphics.shader.runtime.ShaderParameterBlock;
+import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
+import io.github.libfdx.graphics.shader.runtime.ShaderPipelineRequest;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparation;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationOperation;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreloadRecipe;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreloadResolver;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreloadVertexLayouts;
+import io.github.libfdx.graphics.shader.runtime.ShaderRequest;
+import io.github.libfdx.graphics.shader.runtime.ShaderSkippedDraws;
+import io.github.libfdx.graphics.shader.ShaderModuleSource;
+import io.github.libfdx.graphics.GraphicsDevice;
+import io.github.libfdx.graphics.RenderPassCompatibility;
+import io.github.libfdx.graphics.RenderTargetLayout;
+import java.util.Arrays;
+import java.util.Map;
 import io.github.libfdx.graphics.shader.reflection.ShaderParameterHandle;
 import io.github.libfdx.graphics.shader.reflection.ShaderParameterLayout;
 import io.github.libfdx.graphics.shader.ShaderProfile;
@@ -50,12 +67,18 @@ import io.github.libfdx.graphics.VertexAttribute;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
 import io.github.libfdx.math.BoundingBox;
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.math.Matrix4;
 
 import io.github.libfdx.math.Vector3;
 
 /**
  * Renders a directional-light shadow map into a sampled texture.
+ *
+ * <p>For {@link MaterialAlphaMode#BLEND} casters, the uniform
+ * {@link MaterialAttributes#BASE_COLOR} alpha scales shadow opacity. Keep it
+ * synchronized with a custom material's visual fade. This depth pass does not
+ * sample texture alpha or evaluate custom surface graphs.</p>
  *
  * @author xpenatan
  */
@@ -76,12 +99,23 @@ public final class DirectionalShadowMap3D implements Disposable {
     private final DefaultRenderTarget3D target;
     private final ShadowDepthShaderProvider shaderProvider;
     private final ModelBatch batch;
-    private final Camera camera = new Camera();
+    private final RenderPassDescriptor passDescriptor;
+    private final ShaderPreparation preparation;
+    private final float[] cachedInputs = new float[42], currentInputs = new float[42];
+    private long cachedCasterRevision;
+    private Object cachedCasterSet;
+    private boolean cacheValid;
+    // Packed shadow depth is always forward 0..1, independently of the
+    // view camera's reversed-depth setting. The shader remaps this GL clip range.
+    private final Camera camera = new Camera()
+            .clipDepthRange(ClipDepthRange.NEGATIVE_ONE_TO_ONE);
     private final Matrix4 lightViewProjection = new Matrix4();
     private final float[] casterFadeViewProjectionValues =
             new float[Matrix4.VALUE_COUNT];
     private final float[] casterTransformValues =
             new float[Matrix4.VALUE_COUNT];
+    private final Matrix4 casterCullTransform = new Matrix4();
+    private final float[] casterCullValues = new float[Matrix4.VALUE_COUNT];
     private final Vector3 casterFadeCameraPosition = new Vector3();
     private final Vector3 casterFadeCameraDirection =
             new Vector3(0.0f, 0.0f, -1.0f);
@@ -92,6 +126,7 @@ public final class DirectionalShadowMap3D implements Disposable {
     private float near = 0.1f;
     private float far = 18.0f;
     private float bias = 0.022f;
+    private boolean autoBias;
     private float strength = 0.62f;
     private float shadowFadeFraction = 0.20f;
     private float casterFadeStart;
@@ -107,19 +142,56 @@ public final class DirectionalShadowMap3D implements Disposable {
      * @param height the height in pixels
      */
     public DirectionalShadowMap3D(GraphicsContext graphics, int width, int height) {
+        this(graphics, width, height, null);
+    }
+
+    /**
+     * Borrows preparation for nonblocking shadow shaders. Collect shaderPlan() requirements for
+     * SHADOW and preparationTarget() before drawing. Call preparation.update before passes.
+     * Missing casters are omitted while the target is cleared normally.
+     */
+    public DirectionalShadowMap3D(GraphicsContext graphics, int width, int height, ShaderPreparation preparation) {
+        this(graphics, width, height, preparation, null);
+    }
+
+    /** Borrows a renderer-owned required-pass group. Register this map's shaderPlan with
+     * group.usePlan(SHADOW, plan), declare its casters and freeze the group before all passes. */
+    public DirectionalShadowMap3D(GraphicsContext graphics, int width, int height,
+            ShaderPreparation preparation, ModelShaderGroup group) {
+        this(graphics, width, height, preparation, group, null);
+    }
+
+    // Cascades share definitions but retain their own light matrices, targets and draw state.
+    DirectionalShadowMap3D(GraphicsContext graphics, int width, int height,
+            ShaderPreparation preparation, ModelShaderGroup group, ModelShaderPlan sharedPlan) {
         if (graphics == null) {
             throw new FdxException("GraphicsContext cannot be null");
         }
         if (width <= 0 || height <= 0) {
             throw new FdxException("Shadow map dimensions must be greater than zero");
         }
+        if (group != null && group.preparation() != preparation) throw new FdxException("Shadow group and preparation must match");
         this.graphics = graphics;
+        this.preparation = preparation;
         texture = graphics.device().createTexture(TextureDescriptor
                 .rgba8RenderTarget("directional shadow map", width, height)
                 .filter(TextureFilter.NEAREST));
-        target = new DefaultRenderTarget3D(width, height, texture.view());
-        shaderProvider = new ShadowDepthShaderProvider(graphics);
-        batch = new ModelBatch(graphics, new ModelBatchConfig().shaderProvider(shaderProvider));
+        ShadowDepthShaderProvider createdShader = null;
+        ModelBatch createdBatch = null;
+        try {
+            target = new DefaultRenderTarget3D(width, height, texture.view());
+            shaderProvider = createdShader = new ShadowDepthShaderProvider(graphics, sharedPlan);
+            batch = createdBatch = new ModelBatch(graphics, new ModelBatchConfig().shaderProvider(shaderProvider)
+                    .preparation(preparation).shaderPlan(shaderProvider.plan).shaderGroup(group));
+            passDescriptor = RenderPassDescriptor.color(target.colorAttachment(0),
+                    LoadOp.clear(1,1,1,0), StoreOp.store()).depthClear(1).label("directional shadow map pass");
+            if (preparation != null) shaderProvider.plan.targets().register("directional-shadow", preparationTarget());
+        } catch (RuntimeException | Error failure) {
+            if (createdBatch != null) closeAfterFailure(createdBatch, failure);
+            if (createdShader != null) closeAfterFailure(createdShader, failure);
+            closeAfterFailure(texture, failure);
+            throw failure;
+        }
     }
 
     /**
@@ -135,6 +207,10 @@ public final class DirectionalShadowMap3D implements Disposable {
      */
     public DirectionalShadowMap3D bounds(float centerX, float centerY, float centerZ,
             float halfSize, float near, float far) {
+        if (!Float.isFinite(centerX) || !Float.isFinite(centerY) || !Float.isFinite(centerZ)
+                || !Float.isFinite(halfSize) || !Float.isFinite(near) || !Float.isFinite(far)) {
+            throw new FdxException("Shadow bounds must be finite");
+        }
         if (halfSize <= 0.0f) {
             throw new FdxException("Shadow map half size must be greater than zero");
         }
@@ -157,7 +233,23 @@ public final class DirectionalShadowMap3D implements Disposable {
      * @return this shadow map for chaining
      */
     public DirectionalShadowMap3D bias(float bias) {
+        if (!Float.isFinite(bias)) throw new FdxException("Shadow bias must be finite");
         this.bias = Math.max(0.0f, bias);
+        return this;
+    }
+
+    /**
+     * Enables resolution-aware receiver bias. It uses half a light-space texel
+     * converted to normalized depth; the PBR receiver additionally compensates
+     * each filter tap for surface slope. Recomputed after bounds changes.
+     * Defaults to false, preserving the explicitly configured bias.
+     * This is a scale-aware starting point, not a guarantee for arbitrary geometry.
+     *
+     * @param enabled whether to derive bias from this map's resolution and bounds
+     * @return this shadow map for chaining
+     */
+    public DirectionalShadowMap3D autoBias(boolean enabled) {
+        autoBias = enabled;
         return this;
     }
 
@@ -168,6 +260,7 @@ public final class DirectionalShadowMap3D implements Disposable {
      * @return this shadow map for chaining
      */
     public DirectionalShadowMap3D strength(float strength) {
+        if (!Float.isFinite(strength)) throw new FdxException("Shadow strength must be finite");
         this.strength = Math.max(0.0f, Math.min(1.0f, strength));
         return this;
     }
@@ -180,8 +273,8 @@ public final class DirectionalShadowMap3D implements Disposable {
      * @return this shadow map for chaining
      */
     public DirectionalShadowMap3D shadowFadeFraction(float fraction) {
-        if (Float.isNaN(fraction)) {
-            throw new FdxException("Shadow fade fraction cannot be NaN");
+        if (!Float.isFinite(fraction)) {
+            throw new FdxException("Shadow fade fraction must be finite");
         }
         shadowFadeFraction = Math.max(0.0f, Math.min(0.5f, fraction));
         return this;
@@ -200,7 +293,7 @@ public final class DirectionalShadowMap3D implements Disposable {
         }
         RenderPass pass = beginPass(light);
         try {
-            batch.begin(pass, camera);
+            batch.begin(pass, camera, ShaderPassId.SHADOW);
             for (int i = 0; i < instances.length; i++) {
                 if (instances[i] != null) {
                     batch.render(instances[i]);
@@ -226,7 +319,7 @@ public final class DirectionalShadowMap3D implements Disposable {
         }
         RenderPass pass = beginPass(light);
         try {
-            batch.begin(pass, camera);
+            batch.begin(pass, camera, ShaderPassId.SHADOW);
             if (instances instanceof ArrayView<?>) {
                 ArrayView<?> values = (ArrayView<?>)instances;
                 for (int i = 0; i < values.size(); i++) {
@@ -278,15 +371,72 @@ public final class DirectionalShadowMap3D implements Disposable {
         ensureNotDisposed();
         RenderPass pass = beginPass(light);
         try {
-            batch.begin(pass, camera);
+            batch.begin(pass, camera, ShaderPassId.SHADOW);
             for (int i = 0; i < renderables.size(); i++) {
-                batch.render(renderables.get(i));
+                Renderable3D renderable = renderables.get(i);
+                if (intersectsLightVolume(renderable) && casterOpacity(renderable) > 0.0f) {
+                    batch.render(renderable);
+                }
             }
             batch.end();
         }
         finally {
             pass.end();
         }
+    }
+
+    boolean renderRenderablesIfNeeded(DirectionalLight light, ArrayView<Renderable3D> renderables,
+            Object casterSet, long casterRevision) {
+        ensureNotDisposed();
+        updateLightCamera(light);
+        lightViewProjection.copyValues(currentInputs, 0);
+        System.arraycopy(casterFadeViewProjectionValues, 0, currentInputs, 16, 16);
+        currentInputs[32]=casterFadeMode; currentInputs[33]=shadowFadeFraction;
+        currentInputs[34]=casterFadeStart; currentInputs[35]=casterFadeEnd;
+        currentInputs[36]=casterFadeCameraPosition.x(); currentInputs[37]=casterFadeCameraPosition.y();
+        currentInputs[38]=casterFadeCameraPosition.z(); currentInputs[39]=casterFadeCameraDirection.x();
+        currentInputs[40]=casterFadeCameraDirection.y(); currentInputs[41]=casterFadeCameraDirection.z();
+        if (preparation == null && cacheValid && cachedCasterSet == casterSet && cachedCasterRevision == casterRevision
+                && Arrays.equals(currentInputs, cachedInputs)) return false;
+        renderRenderables(light, renderables);
+        System.arraycopy(currentInputs, 0, cachedInputs, 0, currentInputs.length);
+        cachedCasterSet=casterSet; cachedCasterRevision=casterRevision; cacheValid=true;
+        return true;
+    }
+
+    /** Borrowed definitions for this map; valid only for the preparation constructor. */
+    public ModelShaderPlan shaderPlan() {
+        ensureNotDisposed();
+        if (preparation == null) throw new FdxException("This shadow map uses synchronous shader creation");
+        return shaderProvider.plan;
+    }
+
+    /** Attachment compatibility for collecting SHADOW requirements before drawing. */
+    public RenderTargetLayout preparationTarget() { return passDescriptor.compatibility().targetLayout(); }
+
+    /** Logical caster omissions in the current preparation frame, summed across this map's passes. */
+    public ShaderSkippedDraws skippedDrawsLastFrame() { return batch.skippedDrawsLastFrame(); }
+
+    /** Resolves this map's portable depth recipes; register current target roles on its shader plan first. */
+    public ShaderPreloadResolver.Resolution resolvePreload(ShaderPreloadRecipe recipe) {
+        ModelShaderPlan plan = shaderPlan();
+        if (!recipe.factory().equals("libfdx.directional-shadow")) return ShaderPreloadResolver.Resolution.requiresInput("Register factory " + recipe.factory());
+        if (recipe.version() != 1 || !recipe.conditions().isEmpty()) return ShaderPreloadResolver.Resolution.stale("Shadow recipe schema/conditions changed");
+        RenderTargetLayout target = plan.targets().apply(recipe.targetRole());
+        if (target == null) return ShaderPreloadResolver.Resolution.requiresInput("Map target role " + recipe.targetRole());
+        ShaderRequest request = ShaderRequest.builder(ShaderPassId.SHADOW).profile(ModelShaderPlan.profile(graphics.device()))
+                .renderPass(RenderPassCompatibility.layout(target)).variantKey(recipe.parameters().get("variant"))
+                .topology(PrimitiveTopology.valueOf(recipe.parameters().get("topology")))
+                .vertexLayouts(ShaderPreloadVertexLayouts.decode(recipe.parameters().get("vertexLayouts"))).build();
+        return shaderProvider.supports(request) ? ShaderPreloadResolver.Resolution.resolved(shaderProvider, request)
+                : ShaderPreloadResolver.Resolution.unsupported("Shadow recipe is incompatible with this target or mesh");
+    }
+
+    /** Invalidates optional cascade reuse after external/custom writes to this map. */
+    public void invalidateCache() { cacheValid=false; cachedCasterSet=null; }
+
+    private static void closeAfterFailure(Disposable owned, Throwable failure) {
+        try { owned.dispose(); } catch (RuntimeException | Error cleanup) { if (cleanup != failure) failure.addSuppressed(cleanup); }
     }
 
     /**
@@ -308,12 +458,14 @@ public final class DirectionalShadowMap3D implements Disposable {
     }
 
     /**
-     * Returns the depth comparison bias.
+     * Returns the effective normalized depth comparison bias. In automatic mode
+     * this is recalculated from the current bounds and texture resolution.
      *
      * @return the depth comparison bias
      */
     public float bias() {
-        return bias;
+        return autoBias ? Math.max(0.0000002f,
+                halfSize / Math.min(texture.width(), texture.height()) / (far - near)) : bias;
     }
 
     /**
@@ -362,17 +514,10 @@ public final class DirectionalShadowMap3D implements Disposable {
     }
 
     private RenderPass beginPass(DirectionalLight light) {
+        invalidateCache();
         updateLightCamera(light);
         GraphicsFrame frame = graphics.currentFrame();
-        return frame.commandEncoder().beginRenderPass(RenderPassDescriptor
-                .color(target.colorAttachment(0), LoadOp.clear(1.0f, 1.0f, 1.0f, 0.0f), StoreOp.store())
-                // Deliberately NOT the active clip depth range's clear value.
-                // A shadow map owns its own depth attachment, so it only has to
-                // be self-consistent, and its light-space range is small enough
-                // that reversed depth would buy nothing while forcing the
-                // shadow lookup's comparison to flip as well.
-                .depthClear(1.0f)
-                .label("directional shadow map pass"));
+        return frame.commandEncoder().beginRenderPass(passDescriptor);
     }
 
     private void updateLightCamera(DirectionalLight light) {
@@ -435,11 +580,50 @@ public final class DirectionalShadowMap3D implements Disposable {
         setStableLightUp(directionX, directionY, directionZ);
     }
 
+    /** Conservative per-cascade rejection in the fitted light camera, never the view camera. */
+    private boolean intersectsLightVolume(Renderable3D renderable) {
+        if (renderable.material().shaderProvider() != null
+                || renderable.material().shaderBinding() != null) return true;
+        BoundingBox bounds = renderable.cullingBounds();
+        if (bounds == null) return true;
+        Vector3 min = bounds.min(), max = bounds.max();
+        if (min.x() > max.x() || min.y() > max.y() || min.z() > max.z()) return true;
+        casterCullTransform.setToMul(lightViewProjection, renderable.worldTransform())
+                .copyValues(casterCullValues, 0);
+        int outside = 63;
+        for (int corner = 0; corner < 8; corner++) {
+            float x = (corner & 1) == 0 ? min.x() : max.x();
+            float y = (corner & 2) == 0 ? min.y() : max.y();
+            float z = (corner & 4) == 0 ? min.z() : max.z();
+            float px = transformX(casterCullValues, x, y, z);
+            float py = transformY(casterCullValues, x, y, z);
+            float pz = transformZ(casterCullValues, x, y, z);
+            float w = casterCullValues[3]*x + casterCullValues[7]*y
+                    + casterCullValues[11]*z + casterCullValues[15];
+            if (!Float.isFinite(px) || !Float.isFinite(py) || !Float.isFinite(pz) || !Float.isFinite(w)) return true;
+            outside &= (px < -w ? 1 : 0) | (px > w ? 2 : 0)
+                    | (py < -w ? 4 : 0) | (py > w ? 8 : 0)
+                    | (pz < -w ? 16 : 0) | (pz > w ? 32 : 0);
+            if (outside == 0) return true;
+        }
+        return false;
+    }
+
     private float casterOpacity(Renderable3D renderable) {
+        return materialCasterOpacity(renderable.material()) * casterVolumeOpacity(renderable);
+    }
+
+    /** Uniform base-color alpha fades BLEND casters; texture alpha is not sampled by this pass. */
+    static float materialCasterOpacity(Material material) {
+        return material.alphaMode() == MaterialAlphaMode.BLEND
+                ? Math.max(0, Math.min(1, MaterialAttributes.baseColor(material).alpha())) : 1;
+    }
+
+    private float casterVolumeOpacity(Renderable3D renderable) {
         if (casterFadeMode == CASTER_FADE_DISABLED || renderable == null) {
             return 1.0f;
         }
-        BoundingBox bounds = renderable.bounds();
+        BoundingBox bounds = renderable.cullingBounds() != null ? renderable.cullingBounds() : renderable.bounds();
         if (bounds == null) {
             return 1.0f;
         }
@@ -576,9 +760,17 @@ public final class DirectionalShadowMap3D implements Disposable {
             return;
         }
         disposed = true;
-        batch.dispose();
-        shaderProvider.dispose();
-        texture.dispose();
+        invalidateCache();
+        Throwable failure = null;
+        try { batch.dispose(); } catch (RuntimeException | Error ex) { failure = ex; }
+        try { shaderProvider.dispose(); } catch (RuntimeException | Error ex) {
+            if (failure == null) failure = ex; else if (ex != failure) failure.addSuppressed(ex);
+        }
+        try { texture.dispose(); } catch (RuntimeException | Error ex) {
+            if (failure == null) failure = ex; else if (ex != failure) failure.addSuppressed(ex);
+        }
+        if (failure instanceof RuntimeException ex) throw ex;
+        if (failure instanceof Error ex) throw ex;
     }
 
     /**
@@ -591,25 +783,70 @@ public final class DirectionalShadowMap3D implements Disposable {
         return disposed;
     }
 
-    private final class ShadowDepthShaderProvider implements ShaderProvider3D, Disposable {
+    private final class ShadowDepthShaderProvider implements PreparedShaderProvider3D, Disposable {
         private final ShadowDepthShader shader;
+        private ShadowDepthShader skinnedShader;
+        private final ModelShaderPlan plan;
+        private final boolean ownsPlan;
 
-        ShadowDepthShaderProvider(GraphicsContext graphics) {
+        ShadowDepthShaderProvider(GraphicsContext graphics, ModelShaderPlan sharedPlan) {
+            ownsPlan = preparation != null && sharedPlan == null;
+            plan = ownsPlan ? new ModelShaderPlan(graphics, this) : sharedPlan;
             shader = new ShadowDepthShader(graphics,
-                    DirectionalShadowMap3D.this);
+                    DirectionalShadowMap3D.this, false);
+        }
+
+        @Override public ModelShaderPlan preparationPlan() { return plan; }
+        @Override public GraphicsDevice preparationDevice() { return graphics.device(); }
+        @Override public boolean supports(ShaderRequest request) {
+            if (isDisposed() || !request.passId().equals(ShaderPassId.SHADOW) || request.renderPass() == null
+                    || !request.renderPass().targetLayout().hasDepthStencil()
+                    || request.renderPass().targetLayout().colorAttachmentCount() != 1
+                    || request.renderPass().targetLayout().colorFormat(0) != TextureFormat.RGBA8_UNORM) return false;
+            VertexLayout[] layouts = request.vertexLayouts();
+            return layouts.length == 1 && layouts[0].attributeCount() > 0
+                    && layouts[0].attribute(0).location() == 0 && layouts[0].attribute(0).format() == VertexFormat.FLOAT32X3;
+        }
+        @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+            boolean skinned = request.variantKey().startsWith("skinned");
+            return graphics.device().prepareRenderPipeline(new ShaderPipelineRequest(
+                    ShaderModuleSource.deferred("vertexMain", "fragmentMain", () -> ShaderModuleDescriptor.wgsl(
+                            "directional shadow depth", ShadowDepthShader.source(skinned))),
+                    new RenderPipelineDescriptor().label("directional shadow depth")
+                            .renderTargetLayout(request.renderPass().targetLayout()).primitiveTopology(request.topology())
+                            .depthStencilState(DepthStencilState.builder(TextureFormat.DEPTH32_FLOAT)
+                                    .depthWriteEnabled(true).depthCompare(CompareFunction.LESS_EQUAL).build())
+                            .vertexLayouts(request.vertexLayouts()), request.passId(), revision()));
+        }
+        @Override public ShaderPreloadRecipe preloadRecipe(ShaderRequest request, String role) {
+            return new ShaderPreloadRecipe("libfdx.directional-shadow", 1, role, Map.of(
+                    "variant", request.variantKey(), "topology", request.topology().name(),
+                    "vertexLayouts", ShaderPreloadVertexLayouts.encode(request.vertexLayouts())), Map.of());
         }
 
         @Override
         public Shader3D shader(Renderable3D renderable, RenderContext3D context) {
-            if (!shader.canRender(renderable)) {
+            ShadowDepthShader selected=shader;
+            if (renderable != null && renderable.meshPart().mesh().hasPbrSkinning()) {
+                if (skinnedShader == null) skinnedShader=new ShadowDepthShader(graphics,DirectionalShadowMap3D.this,true);
+                selected=skinnedShader;
+            }
+            if (!selected.canRender(renderable)) {
                 throw new FdxException("Shadow shader requires meshes with a position attribute at location 0");
             }
-            return shader;
+            return selected;
         }
 
         @Override
         public void dispose() {
-            shader.dispose();
+            Throwable first=null;
+            try { shader.dispose(); } catch (RuntimeException | Error failure) { first=failure; }
+            try { if (skinnedShader != null) skinnedShader.dispose(); }
+            catch (RuntimeException | Error failure) { if (first==null) first=failure; else first.addSuppressed(failure); }
+            try { if (ownsPlan) plan.dispose(); }
+            catch (RuntimeException | Error failure) { if (first==null) first=failure; else first.addSuppressed(failure); }
+            if (first instanceof RuntimeException) throw (RuntimeException)first;
+            if (first instanceof Error) throw (Error)first;
         }
 
         @Override
@@ -622,6 +859,7 @@ public final class DirectionalShadowMap3D implements Disposable {
         private static final String SOURCE = """
                 struct VertexInput {
                     @location(0) position : vec3f,
+                    //__SKIN_INPUTS__
                 };
                 struct VertexOutput {
                     @builtin(position) position : vec4f,
@@ -631,12 +869,15 @@ public final class DirectionalShadowMap3D implements Disposable {
                     model : mat4x4<f32>,
                     viewProjection : mat4x4<f32>,
                     shadowParams : vec4f,
+                    //__SKIN_UNIFORMS__
                 };
                 @group(0) @binding(0) var<uniform> uniforms : Uniforms;
                 @vertex
                 fn vertexMain(input : VertexInput) -> VertexOutput {
                     var output : VertexOutput;
-                    let clip = uniforms.viewProjection * uniforms.model * vec4f(input.position, 1.0);
+                    var localPosition = vec4f(input.position, 1.0);
+                    //__SKIN_TRANSFORM__
+                    let clip = uniforms.viewProjection * uniforms.model * localPosition;
                     output.position = clip;
                     // libFDX cameras use the portable OpenGL-style -w..w
                     // clip-depth convention. WGSL/WebGPU clips z to 0..w,
@@ -673,31 +914,54 @@ public final class DirectionalShadowMap3D implements Disposable {
                         ShaderParameter.of("model", MATRIX4, 0, 64, 16),
                         ShaderParameter.of("viewProjection", MATRIX4, 64, 64, 16),
                         ShaderParameter.of("shadowParams", FLOAT4, 128, 16, 16));
-        private static final ShaderParameterHandle MODEL =
-                UNIFORM_LAYOUT.requireHandle("model");
-        private static final ShaderParameterHandle VIEW_PROJECTION =
-                UNIFORM_LAYOUT.requireHandle("viewProjection");
-        private static final ShaderParameterHandle SHADOW_PARAMS =
-                UNIFORM_LAYOUT.requireHandle("shadowParams");
-        private static final ShaderReflection REFLECTION = reflection();
+        private static final int SKINNED_SIZE=160+SkinningShader3D.MAX_BONES*64;
+        private static final ShaderParameterLayout SKINNED_LAYOUT=ShaderParameterLayout.of(SKINNED_SIZE,16,
+                ShaderParameter.of("model",MATRIX4,0,64,16),
+                ShaderParameter.of("viewProjection",MATRIX4,64,64,16),
+                ShaderParameter.of("shadowParams",FLOAT4,128,16,16),
+                ShaderParameter.of("skinningParams",FLOAT4,144,16,16),
+                ShaderParameter.of("boneMatrices",ShaderValueType.array(MATRIX4,SkinningShader3D.MAX_BONES,64)
+                        .named("array<mat4x4<f32>, 64>"),160,SkinningShader3D.MAX_BONES*64,16));
+        private static final ShaderReflection REFLECTION = reflection(false);
+        private static final ShaderReflection SKINNED_REFLECTION = reflection(true);
         private final GraphicsContext graphics;
         private final DirectionalShadowMap3D shadowMap;
         private final ShaderModule shaderModule;
+        private final boolean skinned;
         private final ObjectMap<VertexLayout, RenderPipeline[]> pipelines =
                 new ObjectMap<VertexLayout, RenderPipeline[]>(KeyComparison.IDENTITY);
-        private final ShaderParameterBlock uniformBlock =
-                ShaderParameterBlock.allocate(UNIFORM_LAYOUT);
+        private final ShaderParameterBlock uniformBlock;
+        private final ShaderParameterHandle modelHandle,viewProjectionHandle,shadowParamsHandle,skinningHandle;
+        private final ShaderParameterHandle[] boneHandles;
+        private final float[] boneValues;
         private final float[] modelMatrix = new float[Matrix4.VALUE_COUNT];
         private final float[] viewProjectionMatrix = new float[Matrix4.VALUE_COUNT];
         private RenderContext3D context;
         private boolean disposed;
 
         ShadowDepthShader(GraphicsContext graphics,
-                DirectionalShadowMap3D shadowMap) {
+                DirectionalShadowMap3D shadowMap, boolean skinned) {
             this.graphics = graphics;
             this.shadowMap = shadowMap;
-            shaderModule = graphics.device().createShaderModule(ShaderModuleDescriptor.wgsl(
-                    "directional shadow depth", SOURCE));
+            this.skinned=skinned;
+            ShaderParameterLayout layout=skinned ? SKINNED_LAYOUT : UNIFORM_LAYOUT;
+            uniformBlock=ShaderParameterBlock.allocate(layout);
+            modelHandle=layout.requireHandle("model"); viewProjectionHandle=layout.requireHandle("viewProjection");
+            shadowParamsHandle=layout.requireHandle("shadowParams");
+            skinningHandle=skinned ? layout.requireHandle("skinningParams") : null;
+            boneHandles=new ShaderParameterHandle[skinned ? SkinningShader3D.MAX_BONES : 0];
+            boneValues=new float[boneHandles.length*16];
+            for (int i=0;i<boneHandles.length;i++) boneHandles[i]=layout.requireArrayElementHandle("boneMatrices",i);
+            shaderModule = shadowMap.preparation == null ? graphics.device().createShaderModule(ShaderModuleDescriptor.wgsl(
+                    "directional shadow depth", source(skinned))) : null;
+        }
+
+        private static String source(boolean skinned) {
+            if (!skinned) return SOURCE;
+            return SkinningShader3D.FUNCTION+SOURCE.replace("//__SKIN_INPUTS__",
+                    "@location(6) joints : vec4f, @location(7) weights : vec4f,")
+                    .replace("//__SKIN_UNIFORMS__","skinningParams : vec4f, boneMatrices : array<mat4x4<f32>, 64>,")
+                    .replace("//__SKIN_TRANSFORM__","localPosition = skinTransform(input.joints, input.weights) * localPosition;");
         }
 
         @Override
@@ -710,7 +974,7 @@ public final class DirectionalShadowMap3D implements Disposable {
                 return false;
             }
             VertexAttribute position = layout.attribute(0);
-            return position.location() == 0
+            return skinned == renderable.meshPart().mesh().hasPbrSkinning() && position.location() == 0
                     && position.format() == VertexFormat.FLOAT32X3;
         }
 
@@ -729,15 +993,29 @@ public final class DirectionalShadowMap3D implements Disposable {
             }
             MeshPart meshPart = renderable.meshPart();
             Mesh mesh = meshPart.mesh();
+            if (skinned) {
+                SkinningPalette palette=renderable.skinningPalette();
+                int count=palette == null ? 0 : palette.size();
+                if (count>SkinningShader3D.MAX_BONES)
+                    throw new FdxException("Shadow skin exceeds "+SkinningShader3D.MAX_BONES+" bones; use CPU skinning");
+                uniformBlock.setFloat4(skinningHandle,count,0,0,0);
+                if (count>0) {
+                    palette.copyValues(boneValues);
+                    for (int i=0;i<count;i++) uniformBlock.setFloatMatrix(boneHandles[i],boneValues,i*16);
+                }
+            }
             RenderPass pass = context.pass();
-            pass.setPipeline(pipeline(mesh.vertexLayout(), meshPart.primitiveTopology()));
+            if (shadowMap.preparation != null) {
+                if (context.preparedShaderPass() == null) throw new FdxException("Shadow renderer requires a prepared pass");
+                pass.setPipeline(context.preparedShaderPass().pipeline());
+            } else pass.setPipeline(pipeline(mesh.vertexLayout(), meshPart.primitiveTopology()));
             pass.setVertexBuffer(mesh.vertexBuffer());
             renderable.worldTransform().copyValues(modelMatrix, 0);
             context.camera().combined().copyValues(viewProjectionMatrix, 0);
-            uniformBlock.setFloatMatrix(MODEL, modelMatrix, 0);
-            uniformBlock.setFloatMatrix(VIEW_PROJECTION,
+            uniformBlock.setFloatMatrix(modelHandle, modelMatrix, 0);
+            uniformBlock.setFloatMatrix(viewProjectionHandle,
                     viewProjectionMatrix, 0);
-            uniformBlock.setFloat4(SHADOW_PARAMS,
+            uniformBlock.setFloat4(shadowParamsHandle,
                     shadowMap.casterOpacity(renderable), 0.0f, 0.0f, 0.0f);
             pass.setParameterBlock(0, 0, uniformBlock);
             int indexCount = meshPart.indexCount() > 0 ? meshPart.indexCount() : mesh.indexCount();
@@ -750,7 +1028,9 @@ public final class DirectionalShadowMap3D implements Disposable {
             pass.draw(vertexCount, 1, meshPart.firstVertex(), 0);
         }
 
-        private static ShaderReflection reflection() {
+        private static ShaderReflection reflection(boolean skinned) {
+            int size=skinned ? SKINNED_SIZE : 144;
+            ShaderParameterLayout layout=skinned ? SKINNED_LAYOUT : UNIFORM_LAYOUT;
             ShaderValueType f32 =
                     ShaderValueType.scalar(ShaderScalarType.F32);
             ShaderValueType float3 =
@@ -759,41 +1039,45 @@ public final class DirectionalShadowMap3D implements Disposable {
                     ShaderValueType.vector(ShaderScalarType.F32, 4);
             ShaderStageVariable vertexPosition = ShaderStageVariable.of(
                     "input.position", "position", 0, -1, -1, float3,
-                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolation.PERSPECTIVE,
-                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling.CENTER);
+                    ShaderInterpolation.PERSPECTIVE,
+                    ShaderInterpolationSampling.CENTER);
+            ShaderStageVariable[] inputs=skinned ? new ShaderStageVariable[]{vertexPosition,
+                    ShaderStageVariable.of("input.joints","joints",6,-1,-1,float4,ShaderInterpolation.PERSPECTIVE,ShaderInterpolationSampling.CENTER),
+                    ShaderStageVariable.of("input.weights","weights",7,-1,-1,float4,ShaderInterpolation.PERSPECTIVE,ShaderInterpolationSampling.CENTER)}
+                    : new ShaderStageVariable[]{vertexPosition};
             ShaderStageVariable vertexDepth = ShaderStageVariable.of(
                     "<retval>.depth", "depth", 0, -1, -1, f32,
-                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolation.PERSPECTIVE,
-                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling.CENTER);
+                    ShaderInterpolation.PERSPECTIVE,
+                    ShaderInterpolationSampling.CENTER);
             ShaderStageVariable fragmentDepth = ShaderStageVariable.of(
                     "input.depth", "depth", 0, -1, -1, f32,
-                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolation.PERSPECTIVE,
-                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling.CENTER);
+                    ShaderInterpolation.PERSPECTIVE,
+                    ShaderInterpolationSampling.CENTER);
             ShaderStageVariable fragmentColor = ShaderStageVariable.of(
                     "<retval>", "", 0, -1, -1, float4,
-                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolation.PERSPECTIVE,
-                    io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling.CENTER);
+                    ShaderInterpolation.PERSPECTIVE,
+                    ShaderInterpolationSampling.CENTER);
             ShaderBinding uniforms = ShaderBinding.builder(0, 0,
                             "uniforms", ShaderResourceKind.UNIFORM_BUFFER)
                     .visibility(ShaderStageVisibility.of(
                             ShaderStage.VERTEX, ShaderStage.FRAGMENT))
                     .access(ShaderResourceAccess.READ)
-                    .buffer(144, 144, 16, UNIFORM_LAYOUT)
+                    .buffer(size, size, 16, layout)
                     .build();
             return ShaderReflection.complete(ShaderProfile.PORTABLE_WEBGPU,
                     new ShaderEntryPoint[] {
                             ShaderEntryPoint.builder("vertexMain",
                                             ShaderStage.VERTEX)
                                     .builtins(ShaderBuiltinUsage.POSITION, -1)
-                                    .inputs(vertexPosition)
+                                    .inputs(inputs)
                                     .outputs(vertexDepth)
-                                    .resources(ShaderResourceUse.of(0, 0, 144))
+                                    .resources(ShaderResourceUse.of(0, 0, size))
                                     .build(),
                             ShaderEntryPoint.builder("fragmentMain",
                                             ShaderStage.FRAGMENT)
                                     .builtins(ShaderBuiltinUsage.POSITION, -1)
                                     .inputs(fragmentDepth)
-                                    .resources(ShaderResourceUse.of(0, 0, 144))
+                                    .resources(ShaderResourceUse.of(0, 0, size))
                                     .outputs(fragmentColor)
                                     .build()
                     },
@@ -818,12 +1102,13 @@ public final class DirectionalShadowMap3D implements Disposable {
                 pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
                         .shader(shaderModule, TextureFormat.RGBA8_UNORM)
                         .label("directional shadow depth")
-                        .shaderReflection(REFLECTION)
+                        .shaderReflection(skinned ? SKINNED_REFLECTION : REFLECTION)
                         .colorTargets(ColorTargetState.opaque(
                                 TextureFormat.RGBA8_UNORM))
                         .primitiveTopology(actualTopology)
-                        .depthTestEnabled(true)
-                        .depthWriteEnabled(true)
+                        .depthStencilState(DepthStencilState.builder(TextureFormat.DEPTH32_FLOAT)
+                                .depthWriteEnabled(true)
+                                .depthCompare(CompareFunction.LESS_EQUAL).build())
                         .vertexLayout(vertexLayout));
                 variants[slot] = pipeline;
             }
@@ -836,17 +1121,22 @@ public final class DirectionalShadowMap3D implements Disposable {
                 return;
             }
             disposed = true;
+            Throwable first=null;
             ObjectIterator<RenderPipeline[]> iterator = pipelines.values().iterator();
             while (iterator.hasNext()) {
                 RenderPipeline[] variants = iterator.next();
                 for (int i = 0; i < variants.length; i++) {
                     if (variants[i] != null) {
-                        variants[i].dispose();
+                        try { variants[i].dispose(); }
+                        catch (RuntimeException | Error failure) { if (first==null) first=failure; else first.addSuppressed(failure); }
                     }
                 }
             }
             pipelines.clear();
-            shaderModule.dispose();
+            try { if (shaderModule != null) shaderModule.dispose(); }
+            catch (RuntimeException | Error failure) { if (first==null) first=failure; else first.addSuppressed(failure); }
+            if (first instanceof RuntimeException) throw (RuntimeException)first;
+            if (first instanceof Error) throw (Error)first;
         }
 
         @Override

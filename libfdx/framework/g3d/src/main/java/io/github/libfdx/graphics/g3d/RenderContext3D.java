@@ -1,10 +1,11 @@
 package io.github.libfdx.graphics.g3d;
 
+import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.camera.Camera;
-
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassCompatibility;
+import io.github.libfdx.graphics.shader.runtime.ResolvedShaderPass;
 import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
 
 /**
@@ -19,6 +20,13 @@ public final class RenderContext3D {
     private RenderTarget3D target;
     private RenderPass pass;
     private ShaderPassId shaderPassId;
+    private ResolvedShaderPass preparedShaderPass;
+    private RenderPassCompatibility compatibility;
+
+    /** Borrowed pass for the current renderable on the async ModelBatch path, otherwise null.
+     * Valid only during that renderable's Shader3D.render invocation. Never dispose it. */
+    public ResolvedShaderPass preparedShaderPass() { return preparedShaderPass; }
+    void preparedShaderPass(ResolvedShaderPass value) { preparedShaderPass = value; }
 
     /**
      * Creates a render context3 d.
@@ -65,6 +73,7 @@ public final class RenderContext3D {
             RenderTarget3D target, RenderPass pass,
             ShaderPassId shaderPassId) {
         this.camera = camera;
+        compatibility = null;
         this.environment = environment;
         this.target = target;
         this.pass = pass;
@@ -73,6 +82,7 @@ public final class RenderContext3D {
     }
 
     void clear() {
+        preparedShaderPass = null;
         reset(null, null, null, null);
     }
 
@@ -137,9 +147,10 @@ public final class RenderContext3D {
      */
     public RenderPassCompatibility renderPassCompatibility() {
         if (pass == null) {
-            throw new io.github.libfdx.core.FdxException(
+            throw new FdxException(
                     "RenderContext3D has no active render pass");
         }
-        return pass.compatibility();
+        if (compatibility == null) compatibility = pass.compatibility();
+        return compatibility;
     }
 }

@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.FramebufferCapture;
+
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
@@ -21,7 +23,6 @@ import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.ShapeRenderer;
 import io.github.libfdx.graphics.g2d.SpriteBatch;
-import io.github.libfdx.graphics.g3d.CascadedShadowMap3D;
 import io.github.libfdx.graphics.camera.controller.FreeCameraController3D;
 import io.github.libfdx.graphics.ImmediateModeRenderer;
 import io.github.libfdx.graphics.g3d.DefaultModel;
@@ -42,7 +43,7 @@ import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.math.Matrix4;
 import io.github.libfdx.math.Vector3;
-import io.github.libfdx.tests.TestFpsLogger;
+import io.github.libfdx.testsupport.TestFpsLogger;
 import io.github.libfdx.ui.Ui;
 import io.github.libfdx.ui.UiBooleanState;
 import io.github.libfdx.ui.UiColor;
@@ -92,7 +93,6 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
     };
 
     private final long exitAfterFrames;
-    private final boolean cascaded;
     private Application application;
     private Display display;
     private Logger logger;
@@ -109,7 +109,6 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
     private FreeCameraController3D editorCameraController;
     private DirectionalLight sun;
     private DirectionalShadowMap3D shadowMap;
-    private CascadedShadowMap3D cascadedShadowMap;
     private SpriteBatch spriteBatch;
     private ShapeRenderer overlayShapes;
     private ImmediateModeRenderer debugLineRenderer;
@@ -117,9 +116,6 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
     private UiFloatState biasState;
     private UiFloatState strengthState;
     private UiFloatState shadowHalfSizeState;
-    private UiFloatState cascadeDistanceState;
-    private UiFloatState cascadeLambdaState;
-    private UiFloatState minTexelBiasState;
     private UiFloatState lightYawState;
     private UiFloatState lightPitchState;
     private UiBooleanState shadowPreviewState;
@@ -154,32 +150,16 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
      * @param exitAfterFrames the exit after frames
      */
     public ShadowMap3DTest(long exitAfterFrames) {
-        this(exitAfterFrames, false);
-    }
-
-    /**
-     * Creates a 3D shadow-map test.
-     *
-     * @param exitAfterFrames the exit after frames
-     * @param cascaded true to use cascaded shadow maps
-     */
-    public ShadowMap3DTest(long exitAfterFrames, boolean cascaded) {
         this.exitAfterFrames = exitAfterFrames;
-        this.cascaded = cascaded;
     }
 
-    /**
-     * Initializes the application with the libFDX runtime root.
-     *
-     * @param fdx the libFDX runtime root
-     */
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
         display = fdx.displays().main();
         graphics = fdx.graphics().main();
         logger = fdx.logger();
-        fpsLogger = TestFpsLogger.create(logger, "ShadowMap3DTest");
+        fpsLogger = TestFpsLogger.create(logger, getClass().getSimpleName());
         assets = new DefaultAssetManager(fdx.files());
         G3DAssetLoaders.register(assets, graphics);
 
@@ -187,12 +167,9 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
                 .direction(-0.43f, -0.87f, -0.25f)
                 .color(new Color(1.0f, 0.90f, 0.72f, 1.0f))
                 .intensity(2.18f);
-        biasState = Ui.state(floatProperty("libfdx.test.shadowBias", cascaded ? 0.34f : 0.026f));
+        biasState = Ui.state(floatProperty("libfdx.test.shadowBias", 0.026f));
         strengthState = Ui.state(floatProperty("libfdx.test.shadowStrength", 0.88f));
         shadowHalfSizeState = Ui.state(floatProperty("libfdx.test.shadowHalfSize", 74.0f));
-        cascadeDistanceState = Ui.state(floatProperty("libfdx.test.shadowCascadeDistance", 170.0f));
-        cascadeLambdaState = Ui.state(floatProperty("libfdx.test.shadowCascadeLambda", 0.75f));
-        minTexelBiasState = Ui.state(floatProperty("libfdx.test.shadowMinTexelBias", 2.5f));
         lightYawState = Ui.state(floatProperty("libfdx.test.shadowLightYaw", DEFAULT_LIGHT_YAW_DEGREES));
         lightPitchState = Ui.state(floatProperty("libfdx.test.shadowLightPitch", DEFAULT_LIGHT_PITCH_DEGREES));
         shadowPreviewState = Ui.state(Boolean.parseBoolean(System.getProperty("libfdx.test.shadowPreview", "false")));
@@ -260,24 +237,15 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
                 .position(editorCameraX, editorCameraY, editorCameraZ)
                 .lookAt(editorTargetX, editorTargetY, editorTargetZ)
                 .update();
-        if (cascaded) {
-            int width = framebufferWidth();
-            int height = framebufferHeight();
-            int leftWidth = Math.max(1, width / 2);
-            camera.viewport(leftWidth, height).update();
-            editorCamera.viewport(Math.max(1, width - leftWidth), height).update();
-            cascadedShadowMap.update(camera);
-        }
+
         capturePath = System.getProperty("libfdx.test.capture", "");
         captureEvery = Integer.parseInt(System.getProperty("libfdx.test.captureEvery", "0"));
         uiVisible = Boolean.parseBoolean(System.getProperty("libfdx.test.shadowUi", "true"));
         cameraController = new FreeCameraController3D(fdx.input(), camera)
                 .speedRange(0.001f, camera.far())
-                .pointerRegion((x, y) -> !cascaded || x < splitViewportX())
                 .activationListener(() -> editorCameraState.set(false));
         editorCameraController = new FreeCameraController3D(fdx.input(), editorCamera)
                 .speedRange(0.001f, editorCamera.far())
-                .pointerRegion((x, y) -> !cascaded || x >= splitViewportX())
                 .activationListener(() -> editorCameraState.set(true))
                 .enabled(false);
         root = new UiToolkit(fdx.files())
@@ -288,7 +256,7 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
 
         created = true;
         logger.info("ShadowMap3DTest created CSM reference-style scene with "
-                + (cascaded ? "cascaded directional shadows" : "directional shadows") + " for provider "
+                + ("directional shadows") + " for provider "
                 + graphics.providerId());
     }
 
@@ -297,13 +265,15 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
      */
     @Override
     public void render() {
+
         float deltaSeconds = application.deltaTime();
         int width = framebufferWidth();
         int height = framebufferHeight();
-        int leftWidth = cascaded ? Math.max(1, width / 2) : width;
+        int leftWidth = width;
         int rightWidth = Math.max(1, width - leftWidth);
         camera.viewport(leftWidth, height);
-        editorCamera.viewport(cascaded ? rightWidth : width, height);
+        editorCamera.viewport(width, height);
+
         if (uiVisible) {
             root.update(deltaSeconds);
         }
@@ -313,25 +283,9 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
         editorCameraController.update(deltaSeconds);
         updateAnimatedScene(deltaSeconds);
         applyShadowSettings();
-        if (cascaded) {
-            cascadedShadowMap.render(sun, camera, instances);
-        }
-        else {
-            shadowMap.render(sun, instances);
-        }
-        if (cascaded) {
-            renderSceneViewport(camera, 0, 0, leftWidth, height,
-                    LoadOp.clear(CLEAR_COLOR.red(), CLEAR_COLOR.green(), CLEAR_COLOR.blue(), 1.0f));
-            renderSceneViewport(editorCamera, leftWidth, 0, rightWidth, height, LoadOp.load());
-            renderLightArrow(camera, 0, 0, leftWidth, height);
-            if (frustumLinesState.get()) {
-                renderDebugLines(editorCamera, leftWidth, 0, rightWidth, height);
-            }
-        }
-        else {
-            renderSceneViewport(renderCamera, 0, 0, width, height,
-                    LoadOp.clear(CLEAR_COLOR.red(), CLEAR_COLOR.green(), CLEAR_COLOR.blue(), 1.0f));
-        }
+        shadowMap.render(sun, instances);
+        renderSceneViewport(renderCamera, 0, 0, width, height,
+                LoadOp.clear(CLEAR_COLOR.red(), CLEAR_COLOR.green(), CLEAR_COLOR.blue(), 1.0f));
         if (shadowPreviewState.get()) {
             renderShadowPreview();
         }
@@ -421,10 +375,7 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
             shadowMap.dispose();
             shadowMap = null;
         }
-        if (cascadedShadowMap != null) {
-            cascadedShadowMap.dispose();
-            cascadedShadowMap = null;
-        }
+
         if (floorModel != null) {
             floorModel.dispose();
             floorModel = null;
@@ -609,22 +560,9 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
     }
 
     private void buildUi(UiScope ui) {
-        if (cascaded) {
-            ui.row(Ui.modifier().fill().padding(8.0f).gap(8.0f), page -> {
-                page.column(Ui.modifier().width(272.0f).fillHeight(), column -> {
-                    column.spacer(Ui.modifier().weight(1.0f));
-                    buildCsmDebugPanel(column);
-                });
-                page.spacer(Ui.modifier().weight(1.0f));
-                page.column(Ui.modifier().width(260.0f).fillHeight(), column -> {
-                    column.spacer(Ui.modifier().weight(1.0f));
-                    buildGraphicsPanel(column);
-                });
-            });
-            return;
-        }
+
         ui.panel(Ui.modifier().width(342.0f).padding(10.0f).gap(7.0f), panel -> {
-            panel.text(cascaded ? "Cascade shadow map" : "Shadow map", Ui.modifier().style("title"));
+            panel.text("Shadow map", Ui.modifier().style("title"));
             panel.text("Camera: " + (editorCameraState.get() ? "editor" : "main"), Ui.modifier().style("small"));
             panel.row(Ui.modifier().fillWidth().gap(6.0f), row -> {
                 row.button("Main", Ui.modifier().fillWidth().weight(1.0f).style(buttonStyle(!editorCameraState.get())),
@@ -642,64 +580,17 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
                             () -> shadowResolutionIndexState.set(index));
                 }
             });
-            sliderRow(panel, cascaded ? "World bias" : "Bias", biasState, 0.0f, cascaded ? 0.80f : 0.08f);
+            sliderRow(panel, "Bias", biasState, 0.0f, 0.08f);
             sliderRow(panel, "Strength", strengthState, 0.0f, 1.0f);
             sliderRow(panel, "Sun yaw", lightYawState, -180.0f, 180.0f);
             sliderRow(panel, "Sun pitch", lightPitchState, -88.0f, -8.0f);
-            if (cascaded) {
-                sliderRow(panel, "Texel bias", minTexelBiasState, 0.0f, 5.0f);
-                sliderRow(panel, "Distance", cascadeDistanceState, 30.0f, 180.0f);
-                sliderRow(panel, "Split", cascadeLambdaState, 0.05f, 0.95f);
-            }
-            else {
-                sliderRow(panel, "Size", shadowHalfSizeState, 20.0f, 120.0f);
-            }
+            sliderRow(panel, "Size", shadowHalfSizeState, 20.0f, 120.0f);
             panel.row(Ui.modifier().fillWidth().gap(10.0f), row -> {
                 row.checkbox("Shadow preview", Ui.modifier().fillWidth().weight(1.0f), shadowPreviewState);
                 if (editorCameraState.get()) {
                     row.checkbox("Frustum lines", Ui.modifier().fillWidth().weight(1.0f), frustumLinesState);
                 }
             });
-        });
-    }
-
-    private void buildCsmDebugPanel(UiScope parent) {
-        parent.panel(Ui.modifier().width(272.0f).padding(6.0f).gap(4.0f), panel -> {
-            panel.text("CSM Debug", Ui.modifier().style("section"));
-            panel.text("Cascades: " + cascadedShadowMap.cascadeCount(), Ui.modifier().style("small"));
-            panel.text("Shadow map: " + activeShadowResolution + "px", Ui.modifier().style("small"));
-            panel.row(Ui.modifier().fillWidth().gap(6.0f), row -> {
-                row.checkbox("Frustum", Ui.modifier().fillWidth().weight(1.0f), frustumLinesState);
-            });
-            panel.text("--- Shadow Bias ---", Ui.modifier().style("muted"));
-            compactSliderRow(panel, "Base bias", biasState, 0.0f, 0.80f);
-            compactSliderRow(panel, "Min texel", minTexelBiasState, 0.0f, 5.0f);
-            compactSliderRow(panel, "Lambda", cascadeLambdaState, 0.05f, 0.95f);
-            panel.text("Distance: " + Math.round(cascadeDistanceState.get()), Ui.modifier().style("small"));
-            for (int i = 0; i < cascadedShadowMap.cascadeCount(); i++) {
-                float near = i == 0 ? camera.near() : cascadedShadowMap.splitDistance(i - 1);
-                float far = cascadedShadowMap.splitDistance(i);
-                panel.text("Cascade " + i + ": " + Math.round(near) + "-" + Math.round(far)
-                        + "  " + Math.round(cascadedShadowMap.cascadeHalfSize(i) * 2.0f) + "x"
-                        + Math.round(cascadedShadowMap.cascadeHalfSize(i) * 2.0f),
-                        Ui.modifier().style("small"));
-            }
-        });
-    }
-
-    private void buildGraphicsPanel(UiScope parent) {
-        parent.panel(Ui.modifier().width(260.0f).padding(6.0f).gap(4.0f), panel -> {
-            panel.text("Graphics", Ui.modifier().style("section"));
-            panel.text("--- Light Direction ---", Ui.modifier().style("muted"));
-            compactSliderRow(panel, "Azimuth", lightYawState, -180.0f, 180.0f);
-            compactSliderRow(panel, "Elevation", lightPitchState, -88.0f, -8.0f);
-            compactSliderRow(panel, "Intensity", strengthState, 0.0f, 1.0f);
-            panel.text("--- Ambient & IBL ---", Ui.modifier().style("muted"));
-            panel.text("IBL gradient sky enabled", Ui.modifier().style("small"));
-            panel.text("0.15 0.15 0.15", Ui.modifier().style("small"));
-            panel.text("--- CSM Tuning ---", Ui.modifier().style("muted"));
-            compactSliderRow(panel, "Distance", cascadeDistanceState, 30.0f, 180.0f);
-            compactSliderRow(panel, "Texel", minTexelBiasState, 0.0f, 5.0f);
         });
     }
 
@@ -719,22 +610,8 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
         });
     }
 
-    private void compactSliderRow(UiScope panel, String label, UiFloatState state, float minimum, float maximum) {
-        panel.row(Ui.modifier().fillWidth().gap(6.0f), row -> {
-            row.text(label, Ui.modifier().width(66.0f).style("muted"));
-            row.slider(Ui.modifier().fillWidth().weight(1.0f), state, minimum, maximum);
-            row.text(String.format(Locale.ROOT, "%.2f", state.get()), Ui.modifier().width(38.0f).style("metric"));
-        });
-    }
-
     private void applyControllerEnabledState(Camera renderCamera) {
-        if (cascaded) {
-            cameraController.enabled(true);
-            editorCameraController.enabled(true);
-            cameraController.keyboardEnabled(!editorCameraState.get());
-            editorCameraController.keyboardEnabled(editorCameraState.get());
-            return;
-        }
+
         boolean editorActive = renderCamera == editorCamera;
         cameraController.enabled(!editorActive);
         editorCameraController.enabled(editorActive);
@@ -743,9 +620,6 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
     }
 
     private Camera activeRenderCamera() {
-        if (cascaded) {
-            return editorCameraState.get() ? editorCamera : camera;
-        }
         return editorCameraState.get() ? editorCamera : camera;
     }
 
@@ -755,21 +629,11 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
         if (resolution != activeShadowResolution) {
             recreateShadowResources(resolution);
         }
-        if (cascaded) {
-            cascadedShadowMap
-                    .bias(biasState.get())
-                    .minTexelBias(minTexelBiasState.get())
-                    .strength(strengthState.get())
-                    .maxDistance(cascadeDistanceState.get())
-                    .splitLambda(cascadeLambdaState.get());
-        }
-        else {
-            shadowMap
-                    .bounds(SHADOW_CENTER_X, SHADOW_CENTER_Y, SHADOW_CENTER_Z,
-                            shadowHalfSizeState.get(), SHADOW_NEAR, SHADOW_FAR)
-                    .bias(biasState.get())
-                    .strength(strengthState.get());
-        }
+        shadowMap
+                .bounds(SHADOW_CENTER_X, SHADOW_CENTER_Y, SHADOW_CENTER_Z,
+                        shadowHalfSizeState.get(), SHADOW_NEAR, SHADOW_FAR)
+                .bias(biasState.get())
+                .strength(strengthState.get());
     }
 
     private void applyLightDirection() {
@@ -819,37 +683,21 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
 
     private void recreateShadowResources(int resolution) {
         DirectionalShadowMap3D oldShadowMap = shadowMap;
-        CascadedShadowMap3D oldCascadedShadowMap = cascadedShadowMap;
-        if (cascaded) {
-            shadowMap = null;
-            cascadedShadowMap = new CascadedShadowMap3D(graphics, 3, resolution, resolution)
-                    .maxDistance(cascadeDistanceState.get())
-                    .splitLambda(cascadeLambdaState.get())
-                    .bias(biasState.get())
-                    .minTexelBias(minTexelBiasState.get())
-                    .strength(strengthState.get());
-            environment.clearDirectionalShadowMap().cascadedShadowMap(cascadedShadowMap);
-        }
-        else {
-            cascadedShadowMap = null;
-            shadowMap = new DirectionalShadowMap3D(graphics, resolution, resolution)
-                    .bounds(SHADOW_CENTER_X, SHADOW_CENTER_Y, SHADOW_CENTER_Z,
-                            shadowHalfSizeState.get(), SHADOW_NEAR, SHADOW_FAR)
-                    .bias(biasState.get())
-                    .strength(strengthState.get());
-            environment.clearCascadedShadowMap().directionalShadowMap(shadowMap);
-        }
+        shadowMap = new DirectionalShadowMap3D(graphics, resolution, resolution)
+                .bounds(SHADOW_CENTER_X, SHADOW_CENTER_Y, SHADOW_CENTER_Z,
+                        shadowHalfSizeState.get(), SHADOW_NEAR, SHADOW_FAR)
+                .bias(biasState.get())
+                .strength(strengthState.get());
+        environment.clearCascadedShadowMap().directionalShadowMap(shadowMap);
         activeShadowResolution = resolution;
         if (oldShadowMap != null) {
             oldShadowMap.dispose();
         }
-        if (oldCascadedShadowMap != null) {
-            oldCascadedShadowMap.dispose();
-        }
+
     }
 
     private void renderShadowPreview() {
-        Texture texture = cascaded ? cascadedShadowMap.activeShadowMap().texture() : shadowMap.texture();
+        Texture texture = shadowMap.texture();
         float x = 0.57f;
         float y = 0.48f;
         float size = 0.38f;
@@ -863,67 +711,6 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
         spriteBatch.begin(LoadOp.load());
         spriteBatch.draw(texture, x, y + size, size, -size);
         spriteBatch.end();
-    }
-
-    private void renderDebugLines(Camera renderCamera, int x, int y, int width, int height) {
-        debugLineRenderer.clear();
-        if (cascaded) {
-            for (int i = 0; i < cascadedShadowMap.cascadeCount(); i++) {
-                float[] color = CASCADE_DEBUG_COLORS[i % CASCADE_DEBUG_COLORS.length];
-                float near = i == 0 ? camera.near() : cascadedShadowMap.splitDistance(i - 1);
-                float far = cascadedShadowMap.splitDistance(i);
-                addCameraFrustum(camera, near, far, color[0], color[1], color[2], color[3]);
-            }
-        }
-        else {
-            addBox(SHADOW_CENTER_X, SHADOW_CENTER_Y, SHADOW_CENTER_Z, shadowHalfSizeState.get(),
-                    1.0f, 0.82f, 0.20f, 0.95f);
-        }
-        addCameraFrustum(camera);
-        debugLineRenderer.render3D(renderCamera.combined().values(), x, y, width, height);
-    }
-
-    private void renderLightArrow(Camera renderCamera, int x, int y, int width, int height) {
-        debugLineRenderer.clear();
-        float dx = sun.direction().x();
-        float dy = sun.direction().y();
-        float dz = sun.direction().z();
-        float length = length(dx, dy, dz);
-        if (length <= 0.0001f) {
-            return;
-        }
-        dx /= length;
-        dy /= length;
-        dz /= length;
-        float endX = CAMERA_TARGET_X + 2.0f;
-        float endY = CAMERA_TARGET_Y + 3.2f;
-        float endZ = CAMERA_TARGET_Z + 2.5f;
-        float arrowLength = 13.0f;
-        float startX = endX - dx * arrowLength;
-        float startY = endY - dy * arrowLength;
-        float startZ = endZ - dz * arrowLength;
-        debugLineRenderer.line3D(startX, startY, startZ, endX, endY, endZ, 1.0f, 0.92f, 0.0f, 1.0f);
-
-        float rightX = dz;
-        float rightZ = -dx;
-        float rightLength = length(rightX, 0.0f, rightZ);
-        if (rightLength <= 0.0001f) {
-            rightX = 1.0f;
-            rightZ = 0.0f;
-            rightLength = 1.0f;
-        }
-        rightX /= rightLength;
-        rightZ /= rightLength;
-        float headLength = 2.2f;
-        float wing = 0.95f;
-        float backX = endX - dx * headLength;
-        float backY = endY - dy * headLength;
-        float backZ = endZ - dz * headLength;
-        debugLineRenderer.line3D(endX, endY, endZ, backX + rightX * wing, backY, backZ + rightZ * wing,
-                1.0f, 0.92f, 0.0f, 1.0f);
-        debugLineRenderer.line3D(endX, endY, endZ, backX - rightX * wing, backY, backZ - rightZ * wing,
-                1.0f, 0.92f, 0.0f, 1.0f);
-        debugLineRenderer.render3D(renderCamera.combined().values(), x, y, width, height);
     }
 
     private void addCameraFrustum(Camera sourceCamera) {
@@ -1030,28 +817,6 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
 
     private static float length(float x, float y, float z) {
         return (float)Math.sqrt(x * x + y * y + z * z);
-    }
-
-    private void addBox(float centerX, float centerY, float centerZ, float halfSize,
-            float red, float green, float blue, float alpha) {
-        float x0 = centerX - halfSize;
-        float x1 = centerX + halfSize;
-        float y0 = centerY - halfSize;
-        float y1 = centerY + halfSize;
-        float z0 = centerZ - halfSize;
-        float z1 = centerZ + halfSize;
-        debugLineRenderer.line3D(x0, y0, z0, x1, y0, z0, red, green, blue, alpha);
-        debugLineRenderer.line3D(x1, y0, z0, x1, y0, z1, red, green, blue, alpha);
-        debugLineRenderer.line3D(x1, y0, z1, x0, y0, z1, red, green, blue, alpha);
-        debugLineRenderer.line3D(x0, y0, z1, x0, y0, z0, red, green, blue, alpha);
-        debugLineRenderer.line3D(x0, y1, z0, x1, y1, z0, red, green, blue, alpha);
-        debugLineRenderer.line3D(x1, y1, z0, x1, y1, z1, red, green, blue, alpha);
-        debugLineRenderer.line3D(x1, y1, z1, x0, y1, z1, red, green, blue, alpha);
-        debugLineRenderer.line3D(x0, y1, z1, x0, y1, z0, red, green, blue, alpha);
-        debugLineRenderer.line3D(x0, y0, z0, x0, y1, z0, red, green, blue, alpha);
-        debugLineRenderer.line3D(x1, y0, z0, x1, y1, z0, red, green, blue, alpha);
-        debugLineRenderer.line3D(x1, y0, z1, x1, y1, z1, red, green, blue, alpha);
-        debugLineRenderer.line3D(x0, y0, z1, x0, y1, z1, red, green, blue, alpha);
     }
 
     private static String formatValue(float value) {
@@ -1358,10 +1123,6 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
     private int framebufferWidth() {
         int width = display.framebufferWidth() > 0 ? display.framebufferWidth() : display.width();
         return width > 0 ? width : 640;
-    }
-
-    private int splitViewportX() {
-        return cascaded ? Math.max(1, framebufferWidth() / 2) : framebufferWidth();
     }
 
     private int framebufferHeight() {

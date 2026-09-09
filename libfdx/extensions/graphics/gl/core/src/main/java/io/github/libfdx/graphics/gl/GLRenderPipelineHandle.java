@@ -32,6 +32,26 @@ final class GLRenderPipelineHandle implements RenderPipeline {
     private final RenderTargetLayout targetLayout;
     private final String[][] textureUniformNames;
     private boolean disposed;
+    private io.github.libfdx.graphics.PrimitiveState primitiveState;
+    private io.github.libfdx.graphics.ColorTargetState colorState;
+    private io.github.libfdx.graphics.ColorTargetState[] colorStates;
+    private io.github.libfdx.graphics.DepthStencilState depthState;
+    private io.github.libfdx.graphics.MultisampleState sampleState;
+
+    void captureState(io.github.libfdx.graphics.RenderPipelineDescriptor descriptor) {
+        primitiveState = descriptor.primitiveState();
+        colorState = descriptor.colorTargets()[0];
+        colorStates = descriptor.colorTargets().clone();
+        depthState = descriptor.depthStencilState();
+        sampleState = descriptor.multisampleState();
+    }
+
+    void applyCompleteState() {
+        if (primitiveState != null && gl.supportsCompletePipelineState()) {
+            gl.applyPipelineState(primitiveState, colorState, depthState, sampleState);
+            if (gl.supportsMultipleTargets()) gl.applyColorTargets(colorStates);
+        }
+    }
 
     GLRenderPipelineHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain,
             GLShaderModuleHandle shaderModule, PrimitiveTopology primitiveTopology,

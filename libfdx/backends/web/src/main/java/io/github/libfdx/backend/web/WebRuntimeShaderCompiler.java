@@ -15,6 +15,15 @@ import org.teavm.jso.JSBody;
  * @author xpenatan
  */
 final class WebRuntimeShaderCompiler implements RuntimeShaderCompiler {
+    /** Fingerprinted from the packaged compiler JS/Wasm by WebAppWriter, without runtime I/O. */
+    @Override public String cacheIdentity() {
+        String identity = publishedIdentity();
+        return identity == null || identity.isEmpty() ? null : identity;
+    }
+
+    @JSBody(script = "return globalThis.libfdxShaderCompilerIdentity || null;")
+    private static native String publishedIdentity();
+
     /**
      * Compiles the request.
      *

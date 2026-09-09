@@ -1,8 +1,10 @@
 package io.github.libfdx.graphics.wgpu;
 
+import com.github.xpenatan.jParser.api.NativeObject;
 import com.github.xpenatan.webgpu.JWebGPULoader;
 import com.github.xpenatan.webgpu.WGPU;
 import com.github.xpenatan.webgpu.WGPUInstance;
+import com.github.xpenatan.webgpu.WGPUInstanceDescriptor;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.GraphicsAttachment;
@@ -12,6 +14,7 @@ import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.GraphicsEnvironment;
 import io.github.libfdx.graphics.NativeWindow;
 import io.github.libfdx.graphics.NativeWindowPlatform;
+import java.util.ServiceLoader;
 
 /**
  * Provides WGPU services.
@@ -98,24 +101,71 @@ public final class WGPUProvider implements GraphicsAttachmentProvider {
         WGPUConfiguration actualConfiguration = configuration != null ? configuration : new WGPUConfiguration();
         loadNativeBackend(actualConfiguration);
 
-        WGPUInstance instance = sharedContext != null ? sharedContext.nativeInstance() : WGPU.setupInstance();
+        WGPUInstance instance = sharedContext != null ? sharedContext.nativeInstance() : createInstance(actualConfiguration);
         if (instance == null || !instance.isValid()) {
+            if (instance != null) instance.dispose();
             throw new FdxException("Could not create a valid WGPU instance");
         }
 
-        WGPUNativeSurface.SurfaceHandle surface = WGPUNativeSurface.create(instance, nativeWindow);
         boolean surfaceCopySrc = nativeWindow.platform() != NativeWindowPlatform.ANDROID;
-        WGPUContext context = sharedContext != null
-                ? new WGPUContext(actualConfiguration, instance, surface.surface(), surface.owner(), surfaceCopySrc,
-                        sharedContext)
-                : new WGPUContext(actualConfiguration, instance, surface.surface(), surface.owner(), surfaceCopySrc);
-        if (sharedContext != null) {
-            context.initializeShared();
-        } else {
-            context.initializeBlocking();
+        WGPUContext context = null;
+        WGPUNativeSurface.SurfaceHandle createdSurface = null;
+        try {
+            if (sharedContext != null || nativeWindow.platform() != NativeWindowPlatform.ANDROID) {
+                // Desktop adapter selection must retain its surface-compatibility constraint.
+                createdSurface = WGPUNativeSurface.create(instance, nativeWindow);
+                context = new WGPUContext(actualConfiguration, instance, createdSurface.surface(), createdSurface.owner(), surfaceCopySrc,
+                        sharedContext);
+            } else {
+                // Check the adapter/device before connecting the window to a native graphics API.
+                context = new WGPUContext(actualConfiguration, instance, nativeWindow, surfaceCopySrc);
+            }
+            if (sharedContext != null) {
+                context.initializeShared();
+            } else {
+                context.initializeBlocking();
+            }
+            context.resize(width, height);
+            for (WGPUPreparation preparation : ServiceLoader.load(WGPUPreparation.class)) {
+                if (!preparation.supports(actualConfiguration)) continue;
+                context.initializePreparation(preparation, actualConfiguration.preparationWorkerLimit());
+                break;
+            }
+            return context;
+        } catch (RuntimeException | Error failure) {
+            try {
+                if (context != null) context.dispose();
+                else {
+                    WGPUCleanup cleanup = new WGPUCleanup();
+                    if (createdSurface != null) {
+                        cleanup.run(createdSurface.surface()::release);
+                        cleanup.run(createdSurface.surface()::dispose);
+                        if (createdSurface.owner() instanceof NativeObject owner) cleanup.run(owner::dispose);
+                    }
+                    if (sharedContext == null) {
+                        cleanup.run(instance::release);
+                        cleanup.run(instance::dispose);
+                    }
+                    cleanup.throwIfFailed();
+                }
+            } catch (RuntimeException | Error cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+            throw failure;
         }
-        context.resize(width, height);
-        return context;
+    }
+
+    private static WGPUInstance createInstance(WGPUConfiguration configuration) {
+        if (configuration.loaderBackend() != WGPULoaderBackend.WGPU || configuration.backend() == WGPUBackend.DEFAULT) {
+            return WGPU.setupInstance();
+        }
+        WGPUInstanceDescriptor descriptor = new WGPUInstanceDescriptor();
+        try {
+            descriptor.setBackendType(configuration.backend().toNative());
+            return WGPU.setupInstance(descriptor);
+        } finally {
+            descriptor.dispose();
+        }
     }
 
     /**
@@ -150,7 +200,9 @@ public final class WGPUProvider implements GraphicsAttachmentProvider {
     }
 
     /**
-     * Sets the backend and returns this WGPU provider.
+     * Sets the backend and returns this WGPU provider. With the WGPU loader, an explicit backend also restricts
+     * instance creation to that backend, including native surfaces. DEFAULT retains the loader defaults.
+     * To retry another backend, configure a separate provider attempt in the application backend.
      *
      * @param backend the backend
      * @return this WGPU provider for chaining

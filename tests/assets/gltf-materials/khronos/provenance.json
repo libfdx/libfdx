@@ -1,0 +1,16 @@
+{
+  "revision": "81e8b567643b5166e6ff40024e4ff71ad4b18676",
+  "source": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/81e8b567643b5166e6ff40024e4ff71ad4b18676/Models/TextureTransformTest/",
+  "license": "CC0-1.0",
+  "copyright": "2018 Microsoft",
+  "sha256": {
+    "TextureTransformTest.gltf": "c22c8c6c96c0ea4bcbb9b47ea245a093c5ef59acc5fd425effa4c00da4cdf164",
+    "TextureTransformTest.bin": "d0cdd23f2fa0996a0db99d4932fb9912a51a34e27c8bf832d072dc856ee9a7af",
+    "UV.png": "ac37ff52fe06a4c8c35ad4e1e7e8da039dfa8afc9b629d40a44ca8b8cfe9d03d",
+    "Arrow.png": "5df5b251fed0ac306cf859a30b59a4953d152483a4bed2b84e5bba1c667a1e64",
+    "Correct.png": "3a14b12635ebbcee3ea427fbdb4d20da73e4740ec7a51683d700a2d6b4b7861a",
+    "NotSupported.png": "1fbdeca7e5c105d677a39578e4bab82b89c8aa9f406ee681ede05635ea0f8c74",
+    "Error.png": "8d1032ef535a5c379bf78f9f565d3180ee3fc2d1cfef6892dee6e567728b619c",
+    "UPSTREAM.txt": "1022ad635f6ead720586d36477a53843fcb4c3b8f543308b684ec21a83eb12b7"
+  }
+}

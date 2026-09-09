@@ -1,9 +1,10 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.FramebufferCapture;
+
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
-import io.github.libfdx.assets.AssetDescriptor;
 import io.github.libfdx.assets.AssetManager;
 import io.github.libfdx.assets.DefaultAssetManager;
 import io.github.libfdx.core.FdxException;
@@ -14,33 +15,26 @@ import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.g2d.Batch2D;
 import io.github.libfdx.graphics.g2d.G2DAssetLoaders;
-import io.github.libfdx.graphics.g2d.SpriteBatchConfig;
 import io.github.libfdx.graphics.g2d.SpriteBatch;
-import io.github.libfdx.graphics.g2d.StandardSpriteTechnique;
 import io.github.libfdx.graphics.g2d.TextureRegion;
-import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphProvider;
-import io.github.libfdx.tests.TestFpsLogger;
+import io.github.libfdx.graphics.g2d.TextureLoadOptions;
+import io.github.libfdx.testsupport.TestFpsLogger;
 
 import java.nio.ByteBuffer;
 
 /**
- * Runs the sprite batch test scenario.
+ * Renders an animated island harbor with layered, tinted texture-region sprites.
  *
  * @author xpenatan
  */
 public final class SpriteBatchTest extends ApplicationAdapter {
-    private static final String PLAYER_ASSET = "player.png";
-    private static final int PLAYER_FRAME_WIDTH = 256;
-    private static final int PLAYER_FRAME_HEIGHT = 256;
-    private static final float[] GRAPH_CENTERS_X = {
-            -0.55f, 0.0f, 0.55f
-    };
-    private static final float[] GRAPH_CENTERS_Y = {
-            0.45f, 0.45f, 0.45f
-    };
+    private static final String COAST_ASSET = "tiled/images/coast.png";
+    private static final int TILE_SIZE = 32;
+    private static final float SCENE_WIDTH = 960;
+    private static final float SCENE_HEIGHT = 600;
+    private static final LoadOp SEA_CLEAR = LoadOp.clear(32 / 255f, 106 / 255f, 132 / 255f, 1);
 
     private final long exitAfterFrames;
-    private final boolean graphShaders;
     private Application application;
     private Display display;
     private GraphicsContext graphics;
@@ -48,8 +42,10 @@ public final class SpriteBatchTest extends ApplicationAdapter {
     private Logger logger;
     private TestFpsLogger fpsLogger;
     private Batch2D batch;
-    private ShaderGraphProvider graphProvider;
-    private TextureRegion[][] playerFrames;
+    private TextureRegion[] sprites;
+    private float elapsed;
+    private float scaleX;
+    private float scaleY;
     private String capturePath;
     private long captureFrame;
     private boolean created;
@@ -62,25 +58,9 @@ public final class SpriteBatchTest extends ApplicationAdapter {
      * @param exitAfterFrames the exit after frames
      */
     public SpriteBatchTest(long exitAfterFrames) {
-        this(exitAfterFrames, false);
-    }
-
-    /**
-     * Creates a sprite batch test.
-     *
-     * @param exitAfterFrames the exit after frames
-     * @param graphShaders whether to use the standard graph technique
-     */
-    public SpriteBatchTest(long exitAfterFrames, boolean graphShaders) {
         this.exitAfterFrames = exitAfterFrames;
-        this.graphShaders = graphShaders;
     }
 
-    /**
-     * Initializes the application with the libFDX runtime root.
-     *
-     * @param fdx the libFDX runtime root
-     */
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
@@ -88,28 +68,22 @@ public final class SpriteBatchTest extends ApplicationAdapter {
         graphics = fdx.graphics().main();
         assets = new DefaultAssetManager(fdx.files());
         logger = fdx.logger();
-        fpsLogger = TestFpsLogger.create(logger, "SpriteBatchTest");
+        fpsLogger = TestFpsLogger.create(logger, getClass().getSimpleName());
         G2DAssetLoaders.register(assets, graphics);
-        if (graphShaders) {
-            graphProvider = new ShaderGraphProvider(graphics,
-                    StandardSpriteTechnique.compile(graphics));
-            batch = new SpriteBatch(graphics,
-                    new SpriteBatchConfig()
-                            .shaderProvider(graphProvider));
-        } else {
-            batch = new SpriteBatch(graphics);
-        }
-
-        assets.load(AssetDescriptor.of(PLAYER_ASSET, Texture.class));
+        batch = new SpriteBatch(graphics);
+        assets.load(TextureLoadOptions.PIXEL_ART.descriptor(COAST_ASSET, Texture.class));
         assets.finishLoading();
-        Texture player = assets.get(PLAYER_ASSET, Texture.class);
-        playerFrames = TextureRegion.split(player, PLAYER_FRAME_WIDTH, PLAYER_FRAME_HEIGHT);
+        Texture coast = assets.get(COAST_ASSET, Texture.class);
+        // This authored sheet contains twelve complete 32x32 sprites in one row.
+        if (coast.width() != 12 * TILE_SIZE || coast.height() != TILE_SIZE) {
+            throw new FdxException("Unexpected coastal sprite sheet dimensions");
+        }
+        sprites = TextureRegion.split(coast, TILE_SIZE, TILE_SIZE)[0];
         capturePath = System.getProperty("libfdx.test.capture", "");
         captureFrame = Long.parseLong(System.getProperty("libfdx.test.captureFrame", "2"));
 
         created = true;
-        logger.info("SpriteBatchTest created with " + player.width() + "x" + player.height()
-                + " player texture and " + frameCount() + " regions");
+        logger.info("SpriteBatchTest created: animated island harbor");
     }
 
     /**
@@ -118,17 +92,15 @@ public final class SpriteBatchTest extends ApplicationAdapter {
     @Override
     public void render() {
         float deltaSeconds = application.deltaTime();
-        assets.update();
-        batch.begin(LoadOp.clear(1.0f, 1.0f, 1.0f, 1.0f));
-        batch.draw(frame(0, 0), -0.90f, -0.25f, 0.35f, 0.35f);
-        batch.draw(frame(1, 1), -0.42f, -0.25f, 0.35f, 0.35f);
-        batch.draw(frame(2, 0), 0.06f, -0.25f, 0.35f, 0.35f);
-        batch.draw(frame(3, 2), 0.54f, -0.25f, 0.35f, 0.35f);
-        if (graphShaders) {
-            batch.draw(frame(0, 0), GRAPH_CENTERS_X,
-                    GRAPH_CENTERS_Y, GRAPH_CENTERS_X.length,
-                    0.24f, 0.24f, 0.12f, 0.12f, 0.0f);
-        }
+        elapsed += Math.max(0, Math.min(deltaSeconds, 0.1f));
+        int width = framebufferWidth();
+        int height = framebufferHeight();
+        float scale = Math.min(width / SCENE_WIDTH, height / SCENE_HEIGHT);
+        scaleX = 2 * scale / width;
+        scaleY = 2 * scale / height;
+        batch.viewport(width, height);
+        batch.begin(SEA_CLEAR);
+        drawHarbor();
         batch.end();
 
         if (capturePath != null && capturePath.length() > 0 && !captured && renderedFrames >= captureFrame) {
@@ -151,10 +123,7 @@ public final class SpriteBatchTest extends ApplicationAdapter {
             batch.dispose();
             batch = null;
         }
-        if (graphProvider != null) {
-            graphProvider.dispose();
-            graphProvider = null;
-        }
+
         if (assets != null) {
             assets.dispose();
             assets = null;
@@ -185,6 +154,7 @@ public final class SpriteBatchTest extends ApplicationAdapter {
     private void captureFrame(String path) {
         try {
             ByteBuffer pixels = FramebufferCapture.readPixelsRgba8(graphics);
+            FramebufferCapture.validateSceneFrame(framebufferWidth(), framebufferHeight(), pixels);
             FramebufferCapture.writePpm(path, framebufferWidth(), framebufferHeight(), pixels);
             logger.info("SpriteBatchTest captured framebuffer to " + path);
         } catch (Exception e) {
@@ -192,18 +162,66 @@ public final class SpriteBatchTest extends ApplicationAdapter {
         }
     }
 
-    private TextureRegion frame(int row, int column) {
-        if (row >= 0 && row < playerFrames.length && column >= 0 && column < playerFrames[row].length) {
-            return playerFrames[row][column];
+    private void drawHarbor() {
+        batch.color(1, 1, 1, 1);
+        // Water extends beyond the fitted scene so wide/tall windows have no hard border.
+        int waterFrame = (int) (elapsed * 2) % 2;
+        int left = (int) Math.floor((SCENE_WIDTH / 2 - 1 / scaleX) / TILE_SIZE) * TILE_SIZE;
+        int top = (int) Math.floor((SCENE_HEIGHT / 2 - 1 / scaleY) / TILE_SIZE) * TILE_SIZE;
+        float right = SCENE_WIDTH / 2 + 1 / scaleX;
+        float bottom = SCENE_HEIGHT / 2 + 1 / scaleY;
+        for (int y = top; y < bottom; y += TILE_SIZE) {
+            for (int x = left; x < right; x += TILE_SIZE) {
+                sprite(waterFrame, x, y, TILE_SIZE, TILE_SIZE);
+            }
         }
-        return playerFrames[0][0];
+        // A sandy rim surrounds the grass; a path joins the cottages to the pier.
+        for (int row = 0; row < 11; row++) {
+            for (int column = 0; column < 21; column++) {
+                float nx = (column - 10) / 10.5f;
+                float ny = (row - 5) / 5.5f;
+                float distance = nx * nx + ny * ny;
+                if (distance > 1) continue;
+                int tile = distance > 0.70f ? 2 : 3;
+                if (distance < 0.70f && (row == 5 || (column == 10 && row > 5))) tile = 4;
+                sprite(tile, 144 + column * 32, 124 + row * 32, 32, 32);
+            }
+        }
+        for (int y = 444; y < 556; y += 28) sprite(7, 464, y, 32, 28);
+        sprite(7, 432, 528, 32, 28);
+        sprite(7, 496, 528, 32, 28);
+
+        // Back-to-front submission gives the village a readable depth order.
+        sprite(5, 350, 132, 64, 80);
+        sprite(5, 430, 112, 72, 90);
+        sprite(5, 530, 128, 64, 80);
+        sprite(6, 298, 191, 96, 96);
+        batch.color(0.86f, 0.94f, 1, 1);
+        sprite(6, 530, 187, 96, 96);
+        batch.color(1, 1, 1, 1);
+        sprite(11, 687, 238, 80, 112);
+        sprite(8, 740, 334, 48, 48);
+        sprite(8, 202, 315, 56, 48);
+        for (int i = 0; i < 7; i++) {
+            sprite(9, 300 + i * 48, 308 + (i % 2) * 24, 32, 32);
+        }
+        sprite(5, 248, 315, 80, 100);
+        sprite(5, 330, 360, 64, 80);
+        sprite(5, 588, 341, 80, 100);
+        sprite(5, 670, 332, 64, 80);
+
+        // Whole cloud sprites overlap the island with alpha blending and gentle drift.
+        batch.color(1, 1, 1, 0.65f);
+        for (int i = 0; i < 4; i++) {
+            float x = ((i * 283 + elapsed * (9 + i * 2)) % 1240) - 140;
+            sprite(10, x, 45 + (i % 3) * 142, 160, 80);
+        }
+        batch.color(1, 1, 1, 1);
     }
 
-    private int frameCount() {
-        int count = 0;
-        for (int row = 0; row < playerFrames.length; row++) {
-            count += playerFrames[row].length;
-        }
-        return count;
+    /** Fits a centered, y-down scene without stretching the sprites on resize. */
+    private void sprite(int index, float x, float y, float width, float height) {
+        batch.draw(sprites[index], (x - SCENE_WIDTH / 2) * scaleX,
+                (SCENE_HEIGHT / 2 - y - height) * scaleY, width * scaleX, height * scaleY);
     }
 }

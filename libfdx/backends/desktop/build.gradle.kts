@@ -44,17 +44,25 @@ dependencies {
     compileOnly(libs.lwjgl.vulkan)
 
     testImplementation(libs.junit.jupiter)
+    testImplementation(project(":libfdx:extensions:graphics:d3d12:core"))
     testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.lwjgl.opengl)
+    testImplementation(libs.lwjgl.vulkan)
 
     lwjglNativeClassifiers.forEach { classifier ->
         api("org.lwjgl:lwjgl:$lwjglVersion:$classifier")
         api("org.lwjgl:lwjgl-freetype:$lwjglVersion:$classifier")
         api("org.lwjgl:lwjgl-glfw:$lwjglVersion:$classifier")
+        testRuntimeOnly("org.lwjgl:lwjgl-opengl:$lwjglVersion:$classifier")
     }
 }
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    if (System.getProperty("libfdx.test.nativePreparationLifecycle") == "true") {
+        systemProperty("libfdx.test.nativePreparationLifecycle", "true")
+        jvmArgs("--enable-native-access=ALL-UNNAMED")
+    }
 }
 java {
     withSourcesJar()

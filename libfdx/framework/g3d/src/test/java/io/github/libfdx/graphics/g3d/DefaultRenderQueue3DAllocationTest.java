@@ -36,6 +36,15 @@ final class DefaultRenderQueue3DAllocationTest {
 
     @Test
     void warmedSortAndReadOnlyAccessAllocateNoPerCallObjects() {
+        assertWarmedSortingAllocations(false);
+    }
+
+    @Test
+    void warmedBlendedSortAllocatesNoPerCallObjects() {
+        assertWarmedSortingAllocations(true);
+    }
+
+    private void assertWarmedSortingAllocations(boolean blended) {
         DefaultRenderQueue3D queue = new DefaultRenderQueue3D();
         Mesh mesh = new Mesh(new FakeGraphicsContext(), "allocation-mesh", Mesh.POSITION_COLOR_LAYOUT,
                 new float[] {
@@ -44,8 +53,10 @@ final class DefaultRenderQueue3DAllocationTest {
                         0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f
                 }, 3, BoundingBox.empty());
         for (int i = 63; i >= 0; i--) {
-            Material material = new Material(String.format("material-%02d", i));
-            queue.add(new Renderable3D(new MeshPart(mesh, 0, 3), material, Matrix4.IDENTITY,
+            Material material = new Material(String.format("material-%02d", i))
+                    .alphaMode(blended ? MaterialAlphaMode.BLEND : MaterialAlphaMode.OPAQUE);
+            queue.add(new Renderable3D(new MeshPart(mesh, 0, 3), material,
+                    new Matrix4().setToTranslation(0.0f, 0.0f, i - 63.0f),
                     BoundingBox.empty()));
         }
         Camera camera = new Camera();
@@ -89,7 +100,7 @@ final class DefaultRenderQueue3DAllocationTest {
         mesh.dispose();
     }
 
-    private static final class FakeGraphicsContext implements GraphicsContext {
+    static final class FakeGraphicsContext implements GraphicsContext {
         private final FakeGraphicsDevice device = new FakeGraphicsDevice();
 
         @Override

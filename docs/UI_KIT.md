@@ -94,15 +94,21 @@ lists preserve keyed item identity. Windows retain position, size, and
 z-order. Safe-area insets and parent constraints keep content inside the active
 display.
 
-`UiRoot` automatically derives its render scale from the framebuffer-to-logical
-display-size ratio, so platform DPI scaling works without application setup while
-layout and pointer coordinates remain in logical display units. This also avoids
-applying Windows bitmap scaling twice when the framebuffer is already expressed in
-logical pixels. `uiScale(...)` applies an additional application-selected scale.
-Applications that already convert UI units to framebuffer pixels can opt out with
-`autoUiScale(false)`. The root observes live logical-size, framebuffer-size, and
+`UiRoot` automatically uses `Display.contentScale()` for its render scale, including
+Windows display scaling when framebuffer and window sizes are equal. Framebuffer
+density is used to convert pointer coordinates, not multiplied into content scale
+again. `uiScale(...)` applies an additional application-selected scale.
+`autoUiScale(false)` disables automatic content scaling: rendering uses only the
+explicit `uiScale(...)`, while pointer conversion still accounts for framebuffer
+density. Invalid content scales fall back to framebuffer density. The root observes live logical-size, framebuffer-size, and
 render-scale changes, including moving a desktop window between monitors, and
 relayouts even when the platform does not emit a logical window resize.
+
+After `root.update(...)`, call `root.ensureVisible(node)` to reveal a laid-out
+node through ancestor scroll containers. It uses actual bounds, including padding,
+and scrolls only as far as needed on either axis. Fully visible nodes leave offsets
+unchanged; oversized nodes reveal the viewport-sized portion nearest the current
+view. It does not change focus. Do not call it inside a content builder.
 
 Themes provide reusable colors, spacing, fonts, drawables, widget states, and
 motion values. `UiDrawable` supports colors, textures/regions, and nine-patch
@@ -186,6 +192,12 @@ therefore respect deterministic update and animation timing.
 
 ## Text And Input
 
+For ordered UI/gameplay consumption, register an `InputRouter` with the input
+service, attach the root using `root.input(input, router)`, then add gameplay
+processors to the router. The root removes only its handler on detach/dispose.
+See [input actions and routing](../libfdx/framework/input/README.md) for release
+delivery, context gating, and ownership.
+
 Text measurement/rendering uses bitmap-font data. FreeType sources are
 rasterized into cached atlases during loading, not per frame. Generate or load
 fonts at a suitable effective UI scale to avoid blurry upscaling.
@@ -200,9 +212,28 @@ UiFont compact = UiFonts.defaultFont(13);
 
 The shared resource lives in the published UI-kit artifact under the reserved
 `libfdx-assets/` namespace. Desktop classpath loading and libFDX web/native
-packaging expose that namespace through the normal internal file system. The
-font license is shipped beside the font. Backends without runtime FreeType
-support continue to use UI Kit's built-in bitmap fallback.
+packaging expose that namespace through the normal internal file system. Standard
+web startup preloads the shared resources listed by the generated package, including
+this font. Custom or deliberately deferred font files must be ready before UI text
+is measured; alternatively load a managed `BitmapFont` and pass it to `UiFont.bitmap`.
+The font license is shipped beside the font. Plain `UiTextStyle.text()` and styles
+whose font is reset to null use this bundled source too.
+
+Font fallback is disabled by default. A missing/invalid font, unavailable runtime
+rasterizer, disposed bitmap font, or unsupported family lookup throws
+`FdxException` during measurement/rendering, identifying the requested source
+and retaining its cause. On backends without runtime FreeType support, supply a
+supported bitmap font. To deliberately allow substitution:
+
+```java
+root.allowFontFallback(true); // default: false
+```
+
+With this flag enabled, UI Kit logs each failed source/scale once, tries the
+requested `UiFont.fallback(...)` chain, then permits the built-in diagnostic
+bitmap text if that chain is unavailable. Configuring a fallback font alone does
+not enable the flag. Disabling it again rejects cached failures and invalidates
+text layouts. Fonts supplied through `UiFont.bitmap(...)` remain application-owned.
 
 Text measurement, wrapping, truncation, hit testing, selection, caret movement,
 insertion, backspace, and delete operate on Unicode code points. Supplementary

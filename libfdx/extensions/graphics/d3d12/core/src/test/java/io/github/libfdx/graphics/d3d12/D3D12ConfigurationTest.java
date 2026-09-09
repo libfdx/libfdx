@@ -15,6 +15,7 @@ final class D3D12ConfigurationTest {
         D3D12Configuration configuration = new D3D12Configuration();
 
         assertFalse(configuration.validation());
+        assertTrue(configuration.optimizeShaders());
         assertTrue(configuration.vSync());
         assertEquals(2, configuration.framesInFlight());
     }
@@ -44,5 +45,24 @@ final class D3D12ConfigurationTest {
         assertFalse(provider.configuration().validation());
         assertTrue(provider.configuration().vSync());
         assertEquals(2, provider.configuration().framesInFlight());
+    }
+
+    @Test
+    void runtimeCompilationOptimizesByDefaultAndValidationKeepsDebugBytecode() {
+        D3D12Configuration configuration = new D3D12Configuration();
+        assertTrue(D3D12DxcCompiler.arguments("main", "ps_6_0", false, true).contains("-O3"));
+        assertSame(configuration, configuration.optimizeShaders(false));
+        assertTrue(D3D12DxcCompiler.arguments("main", "ps_6_0", false, configuration.optimizeShaders()).contains("-Od"));
+        var debug = D3D12DxcCompiler.arguments("main", "ps_6_0", true, true);
+        assertTrue(debug.containsAll(java.util.List.of("-Od", "-Zi", "-Qembed_debug")));
+        assertFalse(debug.contains("-Vd"));
+    }
+
+    @Test
+    void shaderModelSixIsRequiredEvenWhenTheFeatureQueryFails() {
+        assertFalse(D3D12FfmContext.supportsShaderModel6(0x80070057, 0x60));
+        assertFalse(D3D12FfmContext.supportsShaderModel6(0, 0x51));
+        assertTrue(D3D12FfmContext.supportsShaderModel6(0, 0x60));
+        assertTrue(D3D12FfmContext.supportsShaderModel6(0, 0x69));
     }
 }

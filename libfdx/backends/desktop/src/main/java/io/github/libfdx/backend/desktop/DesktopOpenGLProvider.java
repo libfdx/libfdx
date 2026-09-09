@@ -75,9 +75,9 @@ public final class DesktopOpenGLProvider implements GraphicsAttachmentProvider {
         }
         GLFW.glfwMakeContextCurrent(windowHandle);
         GLCapabilities capabilities = GL.createCapabilities();
-        return new GLGraphicsAttachment(ID, new DesktopGLApi(), new DesktopGLSurface(windowHandle, capabilities),
+        return new GLGraphicsAttachment(ID, new DesktopGLApi(configuration.preparationWorkerLimit()), new DesktopGLSurface(windowHandle, capabilities),
                 environment.display().framebufferWidth(), environment.display().framebufferHeight(),
-                TextureFormat.RGBA8_UNORM, sharedAttachment);
+                TextureFormat.RGBA8_UNORM, sharedAttachment, configuration.shaderCache());
     }
 
     /**

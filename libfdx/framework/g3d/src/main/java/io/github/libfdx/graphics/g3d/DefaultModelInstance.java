@@ -5,22 +5,28 @@ import io.github.libfdx.collections.ArrayView;
 import io.github.libfdx.collections.ObjectMap;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.math.Matrix4;
+import io.github.libfdx.math.BoundingBox;
+import io.github.libfdx.math.Vector3;
 
 /**
- * Provides the default implementation of a model instance.
+ * Borrows a shared model and owns its node pose, materials and skinning palettes. GPU-skinned
+ * parts with retained source influences get conservative bounds updated with each pose.
+ * Instances do not own model meshes; CPU animation binds separately owned copies explicitly.
+ * Apply pose/material/bounds changes before queuing this instance for drawing.
  *
  * @author xpenatan
  */
 public final class DefaultModelInstance implements ModelInstance {
     private final Model model;
     private final Matrix4 transform = new Matrix4();
-    private final Array<Renderable3D> renderables = new Array<Renderable3D>();
+    private final Array<InstancePart> instanceParts = new Array<InstancePart>();
     private final Array<InstanceNode> rootNodes = new Array<InstanceNode>();
     private final Array<InstanceNode> instanceNodes = new Array<InstanceNode>();
     private final Array<SkinningPalette> skinningPalettes = new Array<SkinningPalette>();
     private final ObjectMap<String, InstanceNode> nodesById = new ObjectMap<String, InstanceNode>();
     private final float[] appliedTransformValues = new float[Matrix4.VALUE_COUNT];
     private final float[] currentTransformValues = new float[Matrix4.VALUE_COUNT];
+    private Object cpuSkinningOwner;
 
     /**
      * Creates a default model instance.
@@ -91,6 +97,29 @@ public final class DefaultModelInstance implements ModelInstance {
      */
     public Material nodeMaterial(String nodeId, int partIndex) {
         return part(nodeId, partIndex).renderable.material();
+    }
+
+    /** Overrides borrowed conservative bounds for one node part, after deformation and before
+     * its renderable world transform. Null disables frustum rejection. Keep custom bounds current
+     * through all scene/shadow submissions; custom shader displacement may need wider bounds.
+     * Does not change transparent sorting bounds. */
+    public DefaultModelInstance nodeCullingBounds(String nodeId,int partIndex,BoundingBox bounds) {
+        InstancePart part=part(nodeId,partIndex);
+        part.cullingOverride=true; part.renderable.cullingBounds(bounds); return this;
+    }
+
+    /** Returns the borrowed current culling bounds, or null for always visible. */
+    public BoundingBox nodeCullingBounds(String nodeId,int partIndex) {
+        return part(nodeId,partIndex).renderable.cullingBounds();
+    }
+
+    /** Restores automatic current-pose bounds, static bounds, or the always-visible fallback. */
+    public DefaultModelInstance resetNodeCullingBounds(String nodeId,int partIndex) {
+        InstancePart part=part(nodeId,partIndex); part.cullingOverride=false;
+        boolean deformed=part.source.meshPart().mesh().hasPbrSkinning() || cpuSkinningOwner != null;
+        part.renderable.cullingBounds(part.animatedBounds != null && deformed ? part.animatedBounds
+                : part.source.skin() == null ? part.renderable.bounds() : null);
+        return this;
     }
 
     /**
@@ -192,7 +221,7 @@ public final class DefaultModelInstance implements ModelInstance {
     }
 
     private void buildInstanceNodes() {
-        renderables.clear();
+        instanceParts.clear();
         rootNodes.clear();
         instanceNodes.clear();
         skinningPalettes.clear();
@@ -205,7 +234,7 @@ public final class DefaultModelInstance implements ModelInstance {
     }
 
     private InstanceNode copyNode(ModelNode source) {
-        InstanceNode node = new InstanceNode(source);
+        InstanceNode node = new InstanceNode(source, instanceNodes.size());
         instanceNodes.add(node);
         String id = trimNodeId(source.id());
         if (id != null && !nodesById.containsKey(id)) {
@@ -215,11 +244,18 @@ public final class DefaultModelInstance implements ModelInstance {
         for (int i = 0; i < parts.size(); i++) {
             ModelNodePart part = parts.get(i);
             SkinningPalette palette = part.skin() != null ? skinningPalette(part.skin()) : null;
+            BoundingBox animatedBounds=palette != null && part.skinBounds() != null
+                    ? new BoundingBox(new Vector3(),new Vector3()) : null;
+            boolean gpuSkinning=part.meshPart().mesh().hasPbrSkinning();
             Renderable3D renderable = new Renderable3D(part.meshPart(),
-                    part.material(), node.worldTransform,
-                    part.meshPart().mesh().bounds(), palette);
-            node.parts.add(new InstancePart(part, renderable));
-            renderables.add(renderable);
+                    // Palettes already include the model-space joint hierarchy. Applying the mesh
+                    // node again double-transforms skins parented beneath translated/scaled nodes.
+                    part.material(), palette == null ? node.worldTransform : transform,
+                    animatedBounds != null && gpuSkinning ? animatedBounds : part.meshPart().mesh().bounds(), palette);
+            if (animatedBounds != null && gpuSkinning) renderable.cullingBounds(animatedBounds);
+            InstancePart instancePart=new InstancePart(part, renderable, animatedBounds);
+            node.parts.add(instancePart);
+            instanceParts.add(instancePart);
         }
         ArrayView<ModelNode> children = source.children();
         for (int i = 0; i < children.size(); i++) {
@@ -235,6 +271,13 @@ public final class DefaultModelInstance implements ModelInstance {
         for (int i = 0; i < skinningPalettes.size(); i++) {
             skinningPalettes.get(i).update(this);
         }
+        for (int i=0;i<instanceNodes.size();i++) {
+            Array<InstancePart> parts=instanceNodes.get(i).parts;
+            for (int j=0;j<parts.size();j++) {
+                InstancePart part=parts.get(j);
+                if (part.animatedBounds != null) part.source.skinBounds().update(part.renderable.skinningPalette(),part.animatedBounds);
+            }
+        }
         transform.copyValues(appliedTransformValues, 0);
     }
 
@@ -248,6 +291,24 @@ public final class DefaultModelInstance implements ModelInstance {
             }
         }
     }
+
+    int animationNodeCount() { return instanceNodes.size(); }
+    int animationNodeIndex(String id) { return node(id).index; }
+    Matrix4 animationDefault(int index) { return instanceNodes.get(index).source.localTransform(); }
+    Matrix4 animationLocal(int index) { return instanceNodes.get(index).localTransform; }
+    void applyAnimationTransforms() { updateWorldTransforms(); }
+
+    void claimCpuSkinning(Object owner) {
+        if (cpuSkinningOwner != null) throw new FdxException("This instance already has a CPU skinning animator");
+        cpuSkinningOwner=owner;
+    }
+    void releaseCpuSkinning(Object owner) { if (cpuSkinningOwner == owner) cpuSkinningOwner=null; }
+    int skinningPartCount() { return instanceParts.size(); }
+    ModelNodePart skinningSourcePart(int index) { return instanceParts.get(index).source; }
+    Renderable3D skinningRenderable(int index) { return instanceParts.get(index).renderable; }
+    BoundingBox skinningBounds(int index) { return instanceParts.get(index).animatedBounds; }
+    boolean skinningCullingOverride(int index) { return instanceParts.get(index).cullingOverride; }
+    void skinningRenderable(int index,Renderable3D renderable) { instanceParts.get(index).renderable=renderable; }
 
     private void updateModelTransform(InstanceNode node, Matrix4 parentModelTransform) {
         node.modelTransform.setToMul(parentModelTransform, node.localTransform);
@@ -330,12 +391,13 @@ public final class DefaultModelInstance implements ModelInstance {
             throw new FdxException("RenderQueue3D cannot be null");
         }
         synchronizeMutableTransform();
-        for (int i = 0; i < renderables.size(); i++) {
-            queue.add(renderables.get(i));
+        for (int i = 0; i < instanceParts.size(); i++) {
+            queue.add(instanceParts.get(i).renderable);
         }
     }
 
     private static final class InstanceNode {
+        private final int index;
         private final ModelNode source;
         private final Matrix4 localTransform;
         private final Matrix4 modelTransform = new Matrix4();
@@ -343,7 +405,8 @@ public final class DefaultModelInstance implements ModelInstance {
         private final Array<InstancePart> parts = new Array<InstancePart>();
         private final Array<InstanceNode> children = new Array<InstanceNode>();
 
-        InstanceNode(ModelNode source) {
+        InstanceNode(ModelNode source, int index) {
+            this.index = index;
             this.source = source;
             localTransform = new Matrix4(source.localTransform());
         }
@@ -351,11 +414,14 @@ public final class DefaultModelInstance implements ModelInstance {
 
     private static final class InstancePart {
         private final ModelNodePart source;
-        private final Renderable3D renderable;
+        private Renderable3D renderable;
+        private final BoundingBox animatedBounds;
+        private boolean cullingOverride;
 
-        InstancePart(ModelNodePart source, Renderable3D renderable) {
+        InstancePart(ModelNodePart source, Renderable3D renderable, BoundingBox animatedBounds) {
             this.source = source;
             this.renderable = renderable;
+            this.animatedBounds = animatedBounds;
         }
     }
 }

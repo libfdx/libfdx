@@ -5,7 +5,9 @@ import io.github.libfdx.files.FileSystem;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Loads ui skin data.
+ * Loads UI skin data. The synchronous file helper requires completed reads (disk
+ * or preloaded browser assets). For deferred input, compose the file's text future
+ * and pass its result to {@link #parse(UiTheme, String)} on the application thread.
  *
  * @author xpenatan
  */

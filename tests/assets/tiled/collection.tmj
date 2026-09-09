@@ -1,0 +1,96 @@
+{
+  "type": "map",
+  "orientation": "orthogonal",
+  "width": 8,
+  "height": 4,
+  "tilewidth": 24,
+  "tileheight": 24,
+  "tilesets": [
+    {
+      "firstgid": 1,
+      "source": "tilesets/collection.tsj"
+    },
+    {
+      "firstgid": 100000002,
+      "name": "atlas after gap",
+      "image": "images/layers.png",
+      "tilewidth": 16,
+      "tileheight": 16,
+      "columns": 2,
+      "tilecount": 2,
+      "imagewidth": 32,
+      "imageheight": 16
+    }
+  ],
+  "layers": [
+    {
+      "id": 1,
+      "type": "tilelayer",
+      "width": 8,
+      "height": 4,
+      "data": [
+        1,
+        2147483649,
+        1073741825,
+        3221225473,
+        536870913,
+        2684354561,
+        1610612737,
+        3758096385,
+        8,
+        2147483656,
+        1073741832,
+        3221225480,
+        536870920,
+        2684354568,
+        1610612744,
+        3758096392,
+        100000001,
+        0,
+        100000002,
+        100000003,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": 2,
+      "type": "objectgroup",
+      "draworder": "index",
+      "objects": [
+        {
+          "id": 1,
+          "gid": 8,
+          "x": 8,
+          "y": 92,
+          "width": 40,
+          "height": 24
+        },
+        {
+          "id": 2,
+          "gid": 2247483649,
+          "x": 112,
+          "y": 92,
+          "width": 16,
+          "height": 16
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "imagelayer",
+      "image": "images/collection-a.png",
+      "visible": false
+    }
+  ]
+}

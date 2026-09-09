@@ -14,6 +14,7 @@ public final class ModelNodePart {
     private final Skin skin;
     private final int[] joints;
     private final float[] weights;
+    private final SkinnedBounds3D skinBounds;
 
     /**
      * Creates a model node part.
@@ -42,8 +43,8 @@ public final class ModelNodePart {
      * @param meshPart the mesh part
      * @param material the material
      * @param skin the skin
-     * @param joints four joint indices per vertex
-     * @param weights four joint weights per vertex
+     * @param joints copied four joint indices per vertex, matching mesh attributes; null uses retained mesh influences
+     * @param weights copied finite nonnegative weights per vertex, matching mesh attributes; null uses retained mesh influences
      */
     public ModelNodePart(MeshPart meshPart, Material material, Skin skin, int[] joints, float[] weights) {
         if (meshPart == null) {
@@ -55,10 +56,22 @@ public final class ModelNodePart {
         this.meshPart = meshPart;
         this.material = material;
         this.skin = skin;
-        this.joints = joints != null ? joints.clone() : new int[0];
-        this.weights = weights != null ? weights.clone() : new float[0];
+        int[] meshJoints=meshPart.mesh().sourceJoints();
+        float[] meshWeights=meshPart.mesh().sourceWeights();
+        if (skin != null && meshJoints != null && joints != null && !java.util.Arrays.equals(meshJoints,joints)
+                || skin != null && meshWeights != null && weights != null && !java.util.Arrays.equals(meshWeights,weights))
+            throw new FdxException("Model node skin influences must match the mesh vertex attributes");
+        int[] selectedJoints=joints != null ? joints : skin != null ? meshJoints : null;
+        float[] selectedWeights=weights != null ? weights : skin != null ? meshWeights : null;
+        this.joints = selectedJoints != null ? selectedJoints.clone() : new int[0];
+        this.weights = selectedWeights != null ? selectedWeights.clone() : new float[0];
         this.bones = this.joints;
+        float[] positions=meshPart.mesh().sourcePositions();
+        skinBounds=skin != null && positions != null && this.joints.length != 0 && this.weights.length != 0
+                ? new SkinnedBounds3D(positions,this.joints,this.weights,skin.skeleton().bones().size()) : null;
     }
+
+    SkinnedBounds3D skinBounds() { return skinBounds; }
 
     /**
      * Returns the mesh part.

@@ -3,6 +3,7 @@ package io.github.libfdx.backend.desktop;
 import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.DefaultFdx;
 import io.github.libfdx.Fdx;
+import io.github.libfdx.audio.Audio;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationBackend;
 import io.github.libfdx.application.ApplicationConfig;
@@ -32,13 +33,15 @@ import io.github.libfdx.input.Cursor;
 import io.github.libfdx.input.CursorShape;
 import io.github.libfdx.input.DefaultInput;
 import io.github.libfdx.input.DefaultInputCapabilities;
-import io.github.libfdx.input.DefaultGamepads;
 import io.github.libfdx.input.Key;
 import io.github.libfdx.input.MouseButton;
 import io.github.libfdx.math.internal.MathAcceleration;
 import io.github.libfdx.runtime.core.RuntimeCore;
+import io.github.libfdx.storage.DefaultStorage;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.GLFWVulkan;
+import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.glfw.GLFWCharCallback;
 import org.lwjgl.glfw.GLFWCursorPosCallback;
 import org.lwjgl.glfw.GLFWErrorCallback;
@@ -80,6 +83,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             logger, Boolean.parseBoolean(System.getProperty(
             "libfdx.profileFrames", "false")));
     private Fdx fdx;
+    private Audio audio;
     private ApplicationLifecycle lifecycle = ApplicationLifecycle.DISPOSED;
     private GLFWErrorCallback errorCallback;
     private GLFWFramebufferSizeCallback framebufferSizeCallback;
@@ -95,6 +99,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
     private GraphicsAttachmentProvider graphicsProvider;
     private GraphicsAttachmentRequirements graphicsRequirements;
     private DefaultInput input;
+    private DesktopGamepads gamepads;
     private DesktopCursor cursor;
     private final Map<DesktopDisplay, SecondaryWindowCallbacks> secondaryWindows =
             new LinkedHashMap<DesktopDisplay, SecondaryWindowCallbacks>();
@@ -128,6 +133,10 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             throw new FdxException("ApplicationListener cannot be null");
         }
         DesktopApplicationConfig actualConfig = toDesktopConfig(config);
+        if (actualConfig.audioProvider() != null && (actualConfig.audio() == null
+                || !actualConfig.audioProvider().equals(actualConfig.audio().providerId()))) {
+            throw new FdxException("Configured audio provider ID does not match attached AudioProvider");
+        }
         DisplayConfig displayConfig = actualConfig.displayConfig();
         GraphicsAttachmentProvider graphicsProvider = actualConfig.graphics();
         if (graphicsProvider == null) {
@@ -146,8 +155,9 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         display = new DesktopDisplay(windowHandle, displayConfig.title());
         display.refreshSizes();
         cursor = new DesktopCursor(windowHandle);
-        input = new DefaultInput(ProviderId.of("desktop_input"), DefaultInputCapabilities.desktop(),
-                cursor, new DefaultGamepads(), null, new DesktopClipboard(windowHandle));
+        gamepads = new DesktopGamepads();
+        input = new DefaultInput(ProviderId.of("desktop_input"), new DefaultInputCapabilities(true,true,false,true,true,true),
+                cursor, gamepads.registry, null, new DesktopClipboard(windowHandle));
         installCallbacks(listener);
 
         DefaultFileSystem files = new DefaultFileSystem()
@@ -162,7 +172,6 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         // this from DefaultGraphics; this one has its own Graphics, so it has
         // to say so itself or the default is never corrected for OpenGL.
         ClipDepthRange.setDefault(graphics.device().capabilities().clipDepthRange());
-        fdx = new DefaultFdx(this, new DesktopDisplays(), new DesktopGraphics(), input, files, logger);
 
         disposed = false;
         running = true;
@@ -173,6 +182,9 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         }
 
         try {
+            if (actualConfig.audio() != null) audio = actualConfig.audio().create();
+            fdx = new DefaultFdx(this, new DesktopDisplays(), new DesktopGraphics(), input, files,
+                    new DefaultStorage(files), null, audio, logger);
             listener.create(fdx);
             listenerCreated = true;
             listener.resize(display.width(), display.height());
@@ -310,7 +322,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             return;
         }
         if (graphicsRequirements.clientApi() == GraphicsClientApi.VULKAN) {
-            if (!org.lwjgl.glfw.GLFWVulkan.glfwVulkanSupported()) {
+            if (!GLFWVulkan.glfwVulkanSupported()) {
                 throw new FdxException("Vulkan is not supported by GLFW on this system");
             }
             GLFW.glfwWindowHint(GLFW.GLFW_CLIENT_API, GLFW.GLFW_NO_API);
@@ -320,6 +332,8 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             throw new FdxException("Unsupported desktop graphics client API: " + graphicsRequirements.clientApi());
         }
         GLFW.glfwWindowHint(GLFW.GLFW_CLIENT_API, GLFW.GLFW_OPENGL_API);
+        // A soft hint: unsupported window systems may return a context without notifications.
+        GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_ROBUSTNESS, GLFW.GLFW_LOSE_CONTEXT_ON_RESET);
         GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, graphicsRequirements.majorVersion());
         GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, graphicsRequirements.minorVersion());
         GLFW.glfwWindowHint(GLFW.GLFW_DEPTH_BITS, 24);
@@ -339,7 +353,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         if (monitor == 0L) {
             return;
         }
-        org.lwjgl.glfw.GLFWVidMode mode = GLFW.glfwGetVideoMode(monitor);
+        GLFWVidMode mode = GLFW.glfwGetVideoMode(monitor);
         if (mode == null) {
             return;
         }
@@ -471,6 +485,8 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
         while (running && !GLFW.glfwWindowShouldClose(display.windowHandle())) {
             long frameStart = System.nanoTime();
             GLFW.glfwPollEvents();
+            gamepads.update();
+            if (audio != null) audio.update();
             // GLFW normally reports both logical and framebuffer size changes,
             // but native maximize/restore transitions can coalesce a callback.
             // Reconcile cached dimensions every frame so graphics attachments
@@ -837,16 +853,19 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             return;
         }
         lifecycle = ApplicationLifecycle.PAUSED;
-        if (listenerCreated) {
-            listener.pause();
-        }
-        lifecycle = ApplicationLifecycle.DISPOSED;
         try {
             if (listenerCreated) {
-                listener.dispose();
+                try { listener.pause(); }
+                finally { listener.dispose(); }
             }
         } finally {
+            lifecycle = ApplicationLifecycle.DISPOSED;
             listenerCreated = false;
+            if (audio != null) {
+                try { audio.dispose(); }
+                catch (RuntimeException | Error failure) { logger.error("Audio shutdown failed", failure); }
+                audio = null;
+            }
             destroySecondaryResources();
             if (graphics != null) {
                 graphics.dispose();
@@ -896,12 +915,18 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
                 scrollCallback.free();
                 scrollCallback = null;
             }
+            if (gamepads != null) {
+                try { gamepads.dispose(); } catch (RuntimeException | Error failure) { logger.error("Gamepad shutdown failed",failure); }
+                gamepads = null;
+            }
             input = null;
             cursor = null;
             GLFW.glfwTerminate();
             RuntimeCore.registerProvider(null);
             MathAcceleration.register(null);
             if (errorCallback != null) {
+                // A subsequent backend can install another callback in this same process.
+                GLFW.glfwSetErrorCallback(null);
                 errorCallback.free();
                 errorCallback = null;
             }
@@ -1418,7 +1443,7 @@ public final class DesktopApplicationBackend implements ApplicationBackend, Appl
             GLFW.glfwGetMonitorPos(monitor, xBuffer, yBuffer);
             monitorX = xBuffer.get(0);
             monitorY = yBuffer.get(0);
-            org.lwjgl.glfw.GLFWVidMode mode = GLFW.glfwGetVideoMode(monitor);
+            GLFWVidMode mode = GLFW.glfwGetVideoMode(monitor);
             monitorWidth = mode != null ? mode.width() : width();
             monitorHeight = mode != null ? mode.height() : height();
             xBuffer.clear();

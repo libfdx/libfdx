@@ -1,7 +1,8 @@
 package io.github.libfdx.graphics.d3d12;
 
 import io.github.libfdx.core.FdxException;
-
+import io.github.libfdx.graphics.RenderPassDescriptor;
+import io.github.libfdx.graphics.RenderPipelineDescriptor;
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -17,9 +18,9 @@ final class D3D12Native {
     }
 
     static long createContext(long windowHandle, int width, int height, boolean vSync,
-            boolean validation, int framesInFlight) {
+            boolean validation, boolean optimizeShaders, int framesInFlight) {
         D3D12FfmContext context = new D3D12FfmContext(
-                windowHandle, width, height, vSync, validation, framesInFlight);
+                windowHandle, width, height, vSync, validation, optimizeShaders, framesInFlight);
         context.initialize();
         synchronized (CONTEXT_LOCK) {
             int index;
@@ -87,9 +88,42 @@ final class D3D12Native {
         return context(context).adapterName();
     }
 
+    static int deviceRemovedReason(long context) {
+        return context(context).deviceRemovedReason();
+    }
+
+    static String pipelineCacheIdentity(long context) { return context(context).pipelineCacheIdentity(); }
+
+    static boolean supportsHdr(long context) { return context(context).supportsHdr(); }
+    static boolean supportsMultisample(long context) { return context(context).supportsMultisample(); }
+
+    static MemorySegment retainPreparationDevice(long context) {
+        return context(context).retainPreparationDevice();
+    }
+
+    static long publishPreparedPipeline(long context, D3D12FfmContext.Pipeline pipeline) {
+        return context(context).publishPreparedPipeline(pipeline);
+    }
+
+    static void beginMultipleRenderPass(long context, RenderPassDescriptor descriptor) {
+        context(context).beginMultiplePass(descriptor);
+    }
+
     static long createBuffer(long context, int size, int usage) {
         return context(context).createBuffer(size, usage);
     }
+
+    static long createComputePipeline(long context, String source, String entry, int[] types, int[] bindings, int[] groups) {
+        return context(context).createComputePipeline(source, entry, types, bindings, groups);
+    }
+    static void destroyComputePipeline(long context, long pipeline) { context(context).destroyComputePipeline(pipeline); }
+    static void dispatchCompute(long context, long pipeline, long[] resources, long[] offsets, int x, int y, int z) {
+        context(context).dispatchCompute(pipeline, resources, offsets, x, y, z);
+    }
+    static void copyBuffer(long context, long source, int sourceOffset, long destination, int destinationOffset, int size) {
+        context(context).copyBuffer(source, sourceOffset, destination, destinationOffset, size);
+    }
+    static ByteBuffer readBuffer(long context, long buffer, int offset, int size) { return context(context).readBuffer(buffer, offset, size); }
 
     static void writeBuffer(long context, long buffer, MemorySegment source, int size) {
         context(context).writeBuffer(buffer, source, size);
@@ -100,8 +134,8 @@ final class D3D12Native {
     }
 
     static long createTexture(long context, int width, int height, int format, int usage,
-            int filter, int wrapS, int wrapT) {
-        return context(context).createTexture(width, height, format, usage, filter, wrapS, wrapT);
+            int filter, int wrapS, int wrapT, int magFilter, int mipFilter, int mipCount, int samples) {
+        return context(context).createTexture(width, height, format, usage, filter, wrapS, wrapT, magFilter, mipFilter, mipCount, samples);
     }
 
     static void writeTexture(long context, long texture, MemorySegment source, int size) {
@@ -122,27 +156,32 @@ final class D3D12Native {
         context(context).destroyShader(shader);
     }
 
+    static void prepareShaders(long context, long[] shaders) {
+        context(context).prepareShaders(shaders);
+    }
+
     static long createPipeline(long context, long shader, int colorFormat, int topology,
-            boolean depthTest, boolean depthWrite, int sampledTextureCount,
+            boolean depthTest, boolean depthWrite, boolean alphaBlend, int sampledTextureCount,
             int uniformGroup, int uniformBinding,
             int[] layoutStrides, int[] layoutStepModes,
             int[] attributeLocations, int[] attributeFormats, int[] attributeOffsets, int[] attributeSlots,
-            int[] textureGroups, int[] textureBindings, int[] samplerGroups, int[] samplerBindings) {
+            int[] textureGroups, int[] textureBindings, int[] samplerGroups, int[] samplerBindings,
+            RenderPipelineDescriptor state) {
         return context(context).createPipeline(shader, colorFormat, topology,
-                depthTest, depthWrite, sampledTextureCount, uniformGroup, uniformBinding,
+                depthTest, depthWrite, alphaBlend, sampledTextureCount, uniformGroup, uniformBinding,
                 layoutStrides, layoutStepModes, attributeLocations, attributeFormats,
                 attributeOffsets, attributeSlots, textureGroups, textureBindings,
-                samplerGroups, samplerBindings);
+                samplerGroups, samplerBindings, state);
     }
 
     static void destroyPipeline(long context, long pipeline) {
         context(context).destroyPipeline(pipeline);
     }
 
-    static void beginRenderPass(long context, long texture, boolean clear,
+    static void beginRenderPass(long context, long texture, int mipLevel, long depthTexture, boolean clear,
             float red, float green, float blue, float alpha, boolean store,
             boolean depthEnabled, boolean depthClear, float depthClearValue) {
-        context(context).beginPass(texture, clear, red, green, blue, alpha,
+        context(context).beginPass(texture, mipLevel, depthTexture, clear, red, green, blue, alpha,
                 store, depthEnabled, depthClear, depthClearValue);
     }
 

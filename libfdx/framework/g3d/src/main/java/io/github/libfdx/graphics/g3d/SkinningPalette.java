@@ -39,7 +39,10 @@ public final class SkinningPalette {
     }
 
     /**
-     * Updates this palette from an animated model instance.
+     * Updates this palette from an animated model instance. Each matrix maps bind-pose
+     * vertices to model space using the joint hierarchy and inverse bind transform.
+     * A draw using this palette applies the instance transform afterwards; it must
+     * not apply the skinned mesh node's model transform a second time.
      *
      * @param instance the model instance
      * @return this skinning palette for chaining
@@ -98,6 +101,8 @@ public final class SkinningPalette {
     public float[] values() {
         return values.clone();
     }
+
+    float[] valuesUnsafe() { return values; }
 
     /**
      * Copies packed matrix values.

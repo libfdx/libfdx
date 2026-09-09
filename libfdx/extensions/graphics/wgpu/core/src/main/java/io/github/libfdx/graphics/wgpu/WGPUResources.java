@@ -23,7 +23,7 @@ final class WGPUResources {
         if (!(value instanceof WGPUBufferHandle handle) || handle.resourceDomain() != domain) {
             throw new FdxException(name + " belongs to an incompatible WGPU resource domain");
         }
-        if (handle.isDisposed()) {
+        if (domain.isClosed() || handle.isDisposed()) {
             throw new FdxException(name + " has been disposed");
         }
         return handle;
@@ -47,7 +47,7 @@ final class WGPUResources {
         if (!(value instanceof WGPUSamplerHandle handle) || handle.resourceDomain() != domain) {
             throw incompatible(name);
         }
-        if (handle.isDisposed()) {
+        if (domain.isClosed() || handle.isDisposed()) {
             throw disposed(name);
         }
         return handle;
@@ -60,7 +60,7 @@ final class WGPUResources {
         if (!(value instanceof WGPUShaderModuleHandle handle) || handle.resourceDomain() != domain) {
             throw incompatible(name);
         }
-        if (handle.isDisposed()) {
+        if (domain.isClosed() || handle.isDisposed()) {
             throw disposed(name);
         }
         return handle;
@@ -86,7 +86,7 @@ final class WGPUResources {
                 || handle.resourceDomain() != domain) {
             throw incompatible(name);
         }
-        if (handle.isDisposed()) {
+        if (domain.isClosed() || handle.isDisposed()) {
             throw disposed(name);
         }
         return handle;
@@ -112,7 +112,7 @@ final class WGPUResources {
         if (handle == null || handle.resourceDomain() != domain) {
             throw incompatible(name);
         }
-        if (handle.isDisposed()) {
+        if (domain.isClosed() || handle.isDisposed()) {
             throw disposed(name);
         }
     }
@@ -121,7 +121,7 @@ final class WGPUResources {
         if (handle == null || handle.resourceDomain() != domain) {
             throw incompatible(name);
         }
-        if (handle.isDisposed()) {
+        if (domain.isClosed() || handle.isDisposed()) {
             throw disposed(name);
         }
     }
@@ -130,7 +130,7 @@ final class WGPUResources {
         if (handle == null || handle.resourceDomain() != domain) {
             throw incompatible(name);
         }
-        if (handle.isDisposed()) {
+        if (domain.isClosed() || handle.isDisposed()) {
             throw disposed(name);
         }
     }
@@ -140,6 +140,6 @@ final class WGPUResources {
     }
 
     private static FdxException disposed(String name) {
-        return new FdxException(name + " has been disposed");
+        return new FdxException(name + " has been disposed or its WGPU device is unavailable");
     }
 }

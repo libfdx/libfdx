@@ -1,0 +1,26 @@
+{
+  "type": "tileset",
+  "name": "Coast",
+  "tilewidth": 32,
+  "tileheight": 32,
+  "columns": 12,
+  "tilecount": 12,
+  "image": "../images/coast.png",
+  "imagewidth": 384,
+  "imageheight": 32,
+  "tiles": [
+    {
+      "id": 0,
+      "animation": [
+        {
+          "tileid": 0,
+          "duration": 350
+        },
+        {
+          "tileid": 1,
+          "duration": 350
+        }
+      ]
+    }
+  ]
+}

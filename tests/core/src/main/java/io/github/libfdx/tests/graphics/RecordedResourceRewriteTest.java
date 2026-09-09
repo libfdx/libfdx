@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.GraphicsParityTest;
+
 import io.github.libfdx.Fdx;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
@@ -59,7 +61,7 @@ public final class RecordedResourceRewriteTest extends GraphicsParityTest {
 
             @fragment
             fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
-                return textureSample(u_texture, u_sampler, input.texCoord);
+                return textureSampleLevel(u_texture, u_sampler, input.texCoord, 1.0);
             }
             """;
 
@@ -79,6 +81,7 @@ public final class RecordedResourceRewriteTest extends GraphicsParityTest {
     private ByteBuffer rightVertices;
     private ByteBuffer redPixels;
     private ByteBuffer bluePixels;
+    private ByteBuffer[] redLevels, blueLevels;
 
     /**
      * Creates the recorded-resource rewrite test.
@@ -92,15 +95,21 @@ public final class RecordedResourceRewriteTest extends GraphicsParityTest {
     @Override
     public void create(Fdx fdx) {
         initialize(fdx, "RecordedResourceRewriteTest");
-        leftVertices = floats(LEFT_VERTICES);
-        rightVertices = floats(RIGHT_VERTICES);
+        leftVertices = prefixed(floats(LEFT_VERTICES));
+        rightVertices = prefixed(floats(RIGHT_VERTICES));
         redPixels = solidPixels(232, 48, 58);
         bluePixels = solidPixels(46, 112, 232);
         vertexBuffer = graphics.device().createBuffer(BufferDescriptor.vertex(
                 "recorded rewrite vertices", VERTEX_COUNT * BYTES_PER_VERTEX));
-        texture = graphics.device().createTexture(TextureDescriptor
+        TextureDescriptor textureDescriptor = TextureDescriptor
                 .rgba8("recorded rewrite texture", TEXTURE_SIZE, TEXTURE_SIZE)
-                .filter(TextureFilter.NEAREST));
+                .filter(TextureFilter.NEAREST);
+        boolean mips = graphics.device().capabilities().supports(io.github.libfdx.graphics.GraphicsFeature.TEXTURE_MIP_LEVELS);
+        if (mips) textureDescriptor.mipLevelCount(2).filters(TextureFilter.NEAREST, TextureFilter.NEAREST,
+                io.github.libfdx.graphics.TextureMipmapFilter.NEAREST);
+        redLevels = mips ? new ByteBuffer[] {redPixels, redPixels.duplicate().limit(4)} : new ByteBuffer[] {redPixels};
+        blueLevels = mips ? new ByteBuffer[] {bluePixels, bluePixels.duplicate().limit(4)} : new ByteBuffer[] {bluePixels};
+        texture = graphics.device().createTexture(textureDescriptor);
         shaderModule = graphics.device().createShaderModule(ShaderModuleDescriptor
                 .wgsl("recorded rewrite shader", SHADER_SOURCE));
         pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
@@ -116,14 +125,14 @@ public final class RecordedResourceRewriteTest extends GraphicsParityTest {
     @Override
     public void render() {
         write(vertexBuffer, leftVertices);
-        write(texture, redPixels);
+        graphics.device().writeTextureMipLevels(texture, redLevels);
 
         GraphicsFrame frame = graphics.currentFrame();
         firstPassDescriptor.colorAttachment(frame.colorAttachment());
         draw(frame, firstPassDescriptor);
 
         write(vertexBuffer, rightVertices);
-        write(texture, bluePixels);
+        graphics.device().writeTextureMipLevels(texture, blueLevels);
 
         secondPassDescriptor.colorAttachment(frame.colorAttachment());
         draw(frame, secondPassDescriptor);
@@ -149,15 +158,15 @@ public final class RecordedResourceRewriteTest extends GraphicsParityTest {
     }
 
     private void write(Buffer buffer, ByteBuffer data) {
-        data.position(0);
-        data.limit(data.capacity());
         graphics.device().writeBuffer(buffer, data);
+        if (data.position() != 32) throw new io.github.libfdx.core.FdxException("Buffer upload changed the active source range");
     }
 
-    private void write(Texture texture, ByteBuffer data) {
-        data.position(0);
-        data.limit(data.capacity());
-        graphics.device().writeTexture(texture, data);
+    private static ByteBuffer prefixed(ByteBuffer data) {
+        ByteBuffer result = ByteBuffer.allocateDirect(data.remaining()+32);
+        result.position(32);
+        result.put(data).flip().position(32);
+        return result;
     }
 
     private static ByteBuffer solidPixels(int red, int green, int blue) {

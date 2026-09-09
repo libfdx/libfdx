@@ -16,6 +16,13 @@ import io.github.libfdx.storage.Storage;
  */
 public interface Fdx {
     /**
+     * Returns the optional backend-owned audio service, or null when no audio provider
+     * was configured. Application-owned sounds must be disposed before backend shutdown.
+     * Older/custom backends without audio integration retain the default null service.
+     */
+    default io.github.libfdx.audio.Audio audio() { return null; }
+
+    /**
      * Returns the app.
      *
      * @return the app

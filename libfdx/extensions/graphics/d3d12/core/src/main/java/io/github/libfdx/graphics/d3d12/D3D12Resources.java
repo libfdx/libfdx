@@ -1,4 +1,5 @@
 package io.github.libfdx.graphics.d3d12;
+import io.github.libfdx.core.FdxException;
 
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Buffer;
@@ -147,6 +148,8 @@ final class D3D12Texture extends D3D12Resource implements Texture {
     private final TextureWrap wrapS;
     private final TextureWrap wrapT;
     private final D3D12TextureView view;
+    private final D3D12TextureView[] mipViews;
+    private final int samples;
     private ByteBuffer staging;
     private MemorySegment stagingMemory;
     private ByteBuffer cachedDirectSource;
@@ -155,16 +158,43 @@ final class D3D12Texture extends D3D12Resource implements Texture {
     private int cachedDirectRemaining = -1;
 
     D3D12Texture(D3D12Context context, long nativeHandle, int width, int height, TextureFormat format,
-            TextureUsage usage, TextureFilter filter, TextureWrap wrapS, TextureWrap wrapT) {
+            TextureUsage usage, TextureFilter filter, TextureWrap wrapS, TextureWrap wrapT, int mipCount, int samples) {
         super(context, nativeHandle);
         this.width = width;
+        this.samples = samples;
         this.height = height;
         this.format = format;
         this.usage = usage;
         this.filter = filter;
         this.wrapS = wrapS;
         this.wrapT = wrapT;
-        view = D3D12TextureView.texture(context, this);
+        mipViews = new D3D12TextureView[mipCount];
+        for (int level = 0; level < mipCount; level++) mipViews[level] = new D3D12TextureView(context, this, level);
+        view = mipViews[0];
+    }
+
+    MemorySegment uploadMipSource(ByteBuffer[] levels) {
+        int bytes = 0;
+        for (int level = 0; level < levels.length; level++) bytes = Math.addExact(bytes,
+                io.github.libfdx.graphics.internal.TextureUploads.byteCount(this, level));
+        if (staging == null || staging.capacity() < bytes) {
+            staging = ByteBuffer.allocateDirect(bytes).order(ByteOrder.nativeOrder());
+            stagingMemory = MemorySegment.ofBuffer(staging);
+        }
+        int offset = 0;
+        for (int level = 0; level < levels.length; level++) {
+            int count = io.github.libfdx.graphics.internal.TextureUploads.byteCount(this, level);
+            staging.put(offset, levels[level], levels[level].position(), count);
+            offset += count;
+        }
+        return stagingMemory.asSlice(0, bytes);
+    }
+
+    @Override public int mipLevelCount() { return mipViews.length; }
+    @Override public int sampleCount() { return samples; }
+    @Override public TextureView view(int level) {
+        if (level < 0 || level >= mipViews.length) throw new FdxException("Texture mip level outside range");
+        return mipViews[level];
     }
 
     MemorySegment uploadSource(ByteBuffer source, int sourceSize) {
@@ -251,12 +281,19 @@ final class D3D12Texture extends D3D12Resource implements Texture {
 }
 
 final class D3D12TextureView implements TextureView {
+    @Override public int sampleCount() { return texture != null ? texture.sampleCount() : 1; }
     private final D3D12Context context;
     private final D3D12Texture texture;
+    final int mipLevel;
 
     private D3D12TextureView(D3D12Context context, D3D12Texture texture) {
+        this(context, texture, 0);
+    }
+
+    D3D12TextureView(D3D12Context context, D3D12Texture texture, int mipLevel) {
         this.context = context;
         this.texture = texture;
+        this.mipLevel = mipLevel;
     }
 
     static D3D12TextureView frame(D3D12Context context) {
@@ -281,12 +318,12 @@ final class D3D12TextureView implements TextureView {
 
     @Override
     public int width() {
-        return texture != null ? texture.width() : context.width();
+        return texture != null ? texture.mipWidth(mipLevel) : context.width();
     }
 
     @Override
     public int height() {
-        return texture != null ? texture.height() : context.height();
+        return texture != null ? texture.mipHeight(mipLevel) : context.height();
     }
 
     @Override

@@ -17,6 +17,7 @@ base {
 }
 
 dependencies {
+    api(project(":libfdx:framework:maps"))
     api(project(":libfdx:framework:graphics"))
     api(project(":libfdx:framework:assets:manager"))
     api(project(":libfdx:framework:assets:loaders"))

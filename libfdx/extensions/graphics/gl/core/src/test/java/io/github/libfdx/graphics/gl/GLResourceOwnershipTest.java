@@ -4,23 +4,20 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
+import io.github.libfdx.graphics.CullMode;
+import io.github.libfdx.graphics.FrontFace;
+import io.github.libfdx.graphics.GraphicsContextLostException;
 import io.github.libfdx.graphics.GraphicsDevice;
+import io.github.libfdx.graphics.internal.ShaderRenderBindings;
 import io.github.libfdx.graphics.LoadOp;
+import io.github.libfdx.graphics.OffscreenTarget;
+import io.github.libfdx.graphics.PrimitiveState;
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.RenderPass;
+import io.github.libfdx.graphics.RenderPassColorAttachment;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
 import io.github.libfdx.graphics.RenderTargetLayout;
-import io.github.libfdx.graphics.StoreOp;
-import io.github.libfdx.graphics.Texture;
-import io.github.libfdx.graphics.TextureDescriptor;
-import io.github.libfdx.graphics.TextureFormat;
-import io.github.libfdx.graphics.VertexAttribute;
-import io.github.libfdx.graphics.VertexFormat;
-import io.github.libfdx.graphics.VertexLayout;
-import io.github.libfdx.graphics.internal.ShaderRenderBindings;
-import io.github.libfdx.graphics.shader.ShaderProfile;
-import io.github.libfdx.graphics.shader.ShaderStage;
 import io.github.libfdx.graphics.shader.reflection.ShaderBinding;
 import io.github.libfdx.graphics.shader.reflection.ShaderEntryPoint;
 import io.github.libfdx.graphics.shader.reflection.ShaderParameter;
@@ -32,14 +29,24 @@ import io.github.libfdx.graphics.shader.reflection.ShaderResourceUse;
 import io.github.libfdx.graphics.shader.reflection.ShaderScalarType;
 import io.github.libfdx.graphics.shader.reflection.ShaderStageVisibility;
 import io.github.libfdx.graphics.shader.reflection.ShaderValueType;
-import org.junit.jupiter.api.Test;
-
+import io.github.libfdx.graphics.shader.ShaderProfile;
+import io.github.libfdx.graphics.shader.ShaderStage;
+import io.github.libfdx.graphics.StoreOp;
+import io.github.libfdx.graphics.Texture;
+import io.github.libfdx.graphics.TextureDescriptor;
+import io.github.libfdx.graphics.TextureFormat;
+import io.github.libfdx.graphics.TextureMipmaps;
+import io.github.libfdx.graphics.TextureUsage;
+import io.github.libfdx.graphics.VertexAttribute;
+import io.github.libfdx.graphics.VertexFormat;
+import io.github.libfdx.graphics.VertexLayout;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -50,6 +57,226 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class GLResourceOwnershipTest {
     private static final ProviderId PROVIDER_ID = ProviderId.of("gl-test");
     private static final ShaderReflection UNIFORM_REFLECTION = uniformReflection();
+
+    @Test
+    void resetQuerySelectsItsOwnContextBeforeInspectingTheDriver() {
+        FakeSurface surface = new FakeSurface();
+        FakeGL gl = new FakeGL();
+        GLGraphicsAttachment first = attachment(gl, surface);
+        GLGraphicsAttachment second = attachment(new FakeGL(), new FakeSurface());
+        gl.expectedSurface = surface;
+        try {
+            first.processEvents();
+            assertSame(surface, FakeSurface.current);
+        } finally { first.dispose(); second.dispose(); }
+    }
+
+    @Test
+    void bindingLossInvalidatesTheShareGroupWithoutQueryingOrCleaningNativeObjects() {
+        FakeSurface surface = new FakeSurface();
+        FakeGL gl = new FakeGL();
+        GLGraphicsAttachment first = attachment(gl, surface);
+        GLGraphicsAttachment shared = new GLGraphicsAttachment(PROVIDER_ID, gl.api(), new FakeSurface(),
+                64, 48, TextureFormat.RGBA8_UNORM, first);
+        surface.bindingFailure = new GraphicsContextLostException(PROVIDER_ID);
+        gl.resetCalls(); gl.lossQueries = 0;
+        try {
+            assertThrows(GraphicsContextLostException.class, first::processEvents);
+            assertTrue(first.resourceDomain().isLost());
+            assertThrows(GraphicsContextLostException.class, shared::beginFrame);
+            assertEquals(0, gl.lossQueries);
+        } finally { first.dispose(); shared.dispose(); }
+        assertEquals(0, gl.calls());
+    }
+
+    @Test
+    void swapLossClosesPreparationImmediatelyAndCannotReviveTheDomain() {
+        FakeSurface surface = new FakeSurface();
+        FakeGL gl = new FakeGL();
+        GLGraphicsAttachment attachment = attachment(gl, surface);
+        attachment.beginFrame();
+        surface.swapFailure = new GraphicsContextLostException(PROVIDER_ID);
+        assertThrows(GraphicsContextLostException.class, attachment::endFrame);
+        try {
+            assertTrue(attachment.resourceDomain().isLost());
+            assertEquals(1, gl.preparationCloses);
+            surface.swapFailure = null;
+            assertThrows(GraphicsContextLostException.class, attachment::beginFrame);
+        } finally { attachment.dispose(); }
+    }
+
+    @Test
+    void ordinarySurfaceErrorIsNotReportedAsDeviceLoss() {
+        FakeSurface surface = new FakeSurface();
+        GLGraphicsAttachment attachment = attachment(new FakeGL(), surface);
+        attachment.beginFrame();
+        FdxException failure = new FdxException("Surface unavailable");
+        surface.swapFailure = failure;
+        try {
+            assertSame(failure, assertThrows(FdxException.class, attachment::endFrame));
+            assertTrue(!attachment.resourceDomain().isLost());
+            surface.swapFailure = null;
+            assertTrue(attachment.beginFrame()); attachment.endFrame();
+        } finally { attachment.dispose(); }
+    }
+
+    @Test
+    void detectedContextLossRejectsStaleCommandsAndUploadsButCleanupIsSafeAfterNativeRestoration() {
+        FakeGL gl=new FakeGL();
+        GLGraphicsAttachment attachment=attachment(gl,new FakeSurface());
+        var device=attachment.device();
+        Buffer buffer=device.createBuffer(BufferDescriptor.vertex("old",16));
+        Texture texture=device.createTexture(TextureDescriptor.rgba8RenderTarget("old",8,8));
+        var shader=shader(attachment,gl,100);
+        var pipeline=pipeline(attachment,gl,shader,1);
+        attachment.beginFrame();
+        var frame=attachment.currentFrame();
+        RenderPass pass=frame.commandEncoder().beginRenderPass(RenderPassDescriptor.color(texture.view(),LoadOp.load(),StoreOp.store()));
+        gl.lost=true; gl.resetCalls();
+        var lost=assertThrows(GraphicsContextLostException.class,attachment::processEvents);
+        assertEquals(PROVIDER_ID,lost.providerId());
+        assertThrows(GraphicsContextLostException.class,()->pass.setViewport(0,0,8,8));
+        assertThrows(GraphicsContextLostException.class,()->device.writeBuffer(buffer,ByteBuffer.allocate(16)));
+        assertThrows(GraphicsContextLostException.class,()->device.createTexture(TextureDescriptor.rgba8("new",1,1)));
+        assertThrows(GraphicsContextLostException.class,attachment::currentFrame);
+        gl.lost=false; // Native restoration cannot revive old resource identities.
+        assertThrows(GraphicsContextLostException.class,attachment::beginFrame);
+        assertThrows(GraphicsContextLostException.class,()->frame.commandEncoder().beginRenderPass(
+                RenderPassDescriptor.color(texture.view(),LoadOp.load(),StoreOp.store())));
+        pass.end(); buffer.dispose(); texture.dispose(); pipeline.dispose(); shader.dispose(); attachment.dispose();
+        attachment.dispose();
+        assertTrue(buffer.isDisposed()); assertTrue(texture.isDisposed()); assertTrue(attachment.isDisposed());
+        assertEquals(0,gl.calls(),"Cleanup must not delete native names from a restored context");
+    }
+
+    @Test
+    void lossInvalidatesSharedDomainWhileFreshContextCanRebuildWithDifferentResourceIdentity() {
+        FakeGL gl=new FakeGL();
+        GLGraphicsAttachment first=attachment(gl,new FakeSurface());
+        GLGraphicsAttachment shared=new GLGraphicsAttachment(PROVIDER_ID,gl.api(),new FakeSurface(),64,48,TextureFormat.RGBA8_UNORM,first);
+        Texture stale=first.device().createTexture(TextureDescriptor.rgba8("stale",1,1));
+        gl.lost=true;
+        assertThrows(GraphicsContextLostException.class,first::beginFrame);
+        assertThrows(GraphicsContextLostException.class,shared::processEvents);
+        FakeGL restored=new FakeGL();
+        GLGraphicsAttachment fresh=attachment(restored,new FakeSurface());
+        try {
+            Texture rebuilt=fresh.device().createTexture(TextureDescriptor.rgba8("rebuilt",1,1));
+            fresh.device().writeTexture(rebuilt,ByteBuffer.allocate(4));
+            assertTrue(fresh.beginFrame()); fresh.endFrame();
+            restored.resetCalls();
+            assertThrows(FdxException.class,()->fresh.device().writeTexture(stale,ByteBuffer.allocate(4)));
+            assertEquals(0,restored.calls());
+            rebuilt.dispose();
+        } finally { stale.dispose(); first.dispose(); shared.dispose(); fresh.dispose(); }
+    }
+
+    @Test
+    void disposalCanDetectLossBeforeTheNextFrameAndRemainsIdempotent() {
+        FakeGL gl=new FakeGL(); GLGraphicsAttachment attachment=attachment(gl,new FakeSurface());
+        Buffer buffer=attachment.device().createBuffer(BufferDescriptor.vertex("old",4));
+        gl.lost=true; gl.resetCalls();
+        buffer.dispose(); buffer.dispose(); attachment.dispose(); attachment.dispose();
+        assertEquals(0,gl.calls());
+    }
+
+    @Test
+    void halfFloatUploadsPassFormatAndValidateEightBytesPerTexelBeforeNativeCalls() {
+        FakeGL gl = new FakeGL();
+        GLGraphicsAttachment attachment = attachment(gl, new FakeSurface());
+        Texture texture = attachment.device().createTexture(TextureDescriptor.rgba8("HDR", 3, 2).format(TextureFormat.RGBA16_FLOAT));
+        ByteBuffer pixels = ByteBuffer.allocateDirect(51);
+        pixels.position(3);
+        try {
+            attachment.device().writeTexture(texture, pixels);
+            assertEquals(TextureFormat.RGBA16_FLOAT, gl.uploadFormat);
+            assertEquals(48, gl.uploadRemaining);
+            assertEquals(3, pixels.position());
+            pixels.limit(50);
+            gl.resetCalls();
+            assertThrows(FdxException.class, () -> attachment.device().writeTexture(texture, pixels));
+            assertEquals(0, gl.calls("texSubImage2D"));
+            assertEquals(0x881a, GLApi.colorInternalFormat(TextureFormat.RGBA16_FLOAT));
+            assertEquals(0x140b, GLApi.colorTransferType(TextureFormat.RGBA16_FLOAT));
+        } finally { texture.dispose(); attachment.dispose(); }
+    }
+
+    @Test
+    void mipUploadsValidateAllLevelsAndAttachmentCacheDistinguishesMipLevels() {
+        FakeGL gl = new FakeGL();
+        GLGraphicsAttachment attachment = attachment(gl, new FakeSurface());
+        Texture texture = attachment.device().createTexture(TextureDescriptor.rgba8RenderTarget("mips", 19, 11).mipLevelCount(5));
+        try {
+            assertEquals(5, gl.calls("texImage2D"));
+            assertSame(texture.view(2), texture.view(2));
+            assertEquals(4, texture.view(2).width());
+            assertEquals(2, texture.view(2).height());
+            var levels = TextureMipmaps.rgba8(ByteBuffer.allocate(19*11*4), 19, 11, false, false);
+            levels[4].limit(3);
+            gl.resetCalls();
+            assertThrows(FdxException.class, () -> attachment.device().writeTextureMipLevels(texture, levels));
+            assertEquals(0, gl.calls("texSubImage2D"));
+            levels[4].limit(4);
+            attachment.device().writeTextureMipLevels(texture, levels);
+            assertEquals(5, gl.calls("texSubImage2D"));
+            assertThrows(FdxException.class, () -> attachment.device().writeTexture(texture, levels[0]));
+            assertEquals(5, gl.calls("texSubImage2D"));
+            attachment.beginFrame();
+            for (int level : new int[] {0, 1, 2, 1, 0}) {
+                attachment.currentFrame().commandEncoder().beginRenderPass(new RenderPassDescriptor()
+                        .colorAttachment(texture.view(level)).colorLoadOp(LoadOp.clear(0,0,0,1)).colorStoreOp(StoreOp.store())).end();
+            }
+            assertEquals(3, gl.calls("genFramebuffer"));
+            assertEquals(3, gl.calls("framebufferTexture2D"));
+            attachment.endFrame();
+        } finally { texture.dispose(); attachment.dispose(); }
+    }
+
+    @Test
+    void pipelineCannotSilentlySelectADifferentLinkedEntryPoint() {
+        FakeGL gl=new FakeGL(); GLGraphicsAttachment attachment=attachment(gl,new FakeSurface());
+        var shader=shader(attachment,gl,100); gl.resetCalls();
+        var error=assertThrows(FdxException.class,()->attachment.device().createRenderPipeline(
+                RenderPipelineDescriptor.shader(shader,TextureFormat.RGBA8_UNORM).fragmentEntryPoint("other")));
+        assertTrue(error.getMessage().contains("entry points")); assertEquals(0,gl.calls());
+        shader.dispose(); attachment.dispose();
+    }
+
+    @Test
+    void explicitDepthIsRetainedAcrossPassesAndFramebufferAllocationRollsBack() {
+        FakeGL gl = new FakeGL();
+        GLGraphicsAttachment attachment = attachment(gl,new FakeSurface());
+        var target = new OffscreenTarget(attachment.device(),true);
+        target.resize(32,16);
+        assertEquals(1,gl.calls("texImageDepth32F"));
+        attachment.beginFrame();
+        gl.resetCalls();
+        target.begin(attachment.currentFrame(),true).end();
+        target.begin(attachment.currentFrame(),false).end();
+        assertEquals(1,gl.calls("framebufferDepthTexture2D"));
+        assertEquals(1,gl.calls("clearDepthBuffer"));
+        assertEquals(0,gl.calls("genRenderbuffer"));
+        attachment.endFrame();
+        target.resize(64,32);
+        attachment.beginFrame(); gl.resetCalls(); gl.failOn("framebufferDepthTexture2D",1);
+        assertThrows(IllegalStateException.class,()->target.begin(attachment.currentFrame(),true));
+        assertEquals(1,gl.calls("genFramebuffer")); assertEquals(1,gl.calls("deleteFramebuffer"));
+        attachment.endFrame(); target.dispose(); attachment.dispose();
+    }
+
+    @Test
+    void feedbackSamplingFailsBeforeBindingTheActiveAttachment() {
+        FakeGL gl = new FakeGL(); GLGraphicsAttachment attachment = attachment(gl,new FakeSurface());
+        var target = new OffscreenTarget(attachment.device(),false);
+        target.resize(32,16);
+        var shader = shader(attachment,gl,100);
+        var pipeline = pipeline(attachment,gl,shader,1);
+        attachment.beginFrame(); RenderPass pass = target.begin(attachment.currentFrame(),true);
+        pass.setPipeline(pipeline); gl.resetCalls();
+        assertThrows(FdxException.class,()->pass.setTexture(0,target.color()));
+        assertEquals(0,gl.calls("bindTexture2D"));
+        pass.end(); attachment.endFrame(); pipeline.dispose(); shader.dispose(); target.dispose(); attachment.dispose();
+    }
 
     @Test
     void renderPassPoolReusesHighWaterSlotsAndRejectsOverlap() {
@@ -485,9 +712,54 @@ final class GLResourceOwnershipTest {
         attachment.dispose();
     }
 
+    @Test
+    void pipelineSnapshotsStateBeforeDescriptorIsReused() {
+        FakeGL fake = new FakeGL();
+        GLGraphicsAttachment attachment = attachment(fake, new FakeSurface());
+        GLShaderModuleHandle shader = shader(attachment, fake, 900);
+        var primitive = PrimitiveState.of(PrimitiveTopology.TRIANGLE_LIST,
+                FrontFace.CLOCKWISE, CullMode.FRONT);
+        RenderPipelineDescriptor descriptor = RenderPipelineDescriptor.shader(shader, TextureFormat.RGBA8_UNORM)
+                .primitiveState(primitive);
+        var pipeline = attachment.device().createRenderPipeline(descriptor);
+        descriptor.primitiveState(PrimitiveState.triangles());
+        RenderPass pass = beginSurfacePass(attachment);
+        pass.setPipeline(pipeline);
+        assertSame(primitive, fake.appliedPrimitive);
+        pass.end();
+        pipeline.dispose();
+        shader.dispose();
+        attachment.dispose();
+    }
+
     private static GLGraphicsAttachment attachment(FakeGL fakeGl, FakeSurface surface) {
         return new GLGraphicsAttachment(PROVIDER_ID, fakeGl.api(), surface, 64, 64,
                 TextureFormat.RGBA8_UNORM);
+    }
+
+    @Test
+    void multisampleUploadsAreRejectedAndResolveIsRecordedOnlyAtPassEnd() {
+        FakeGL fake = new FakeGL();
+        GLGraphicsAttachment attachment = attachment(fake, new FakeSurface());
+        Texture color = attachment.device().createTexture(new TextureDescriptor().size(8, 8)
+                .usage(TextureUsage.RENDER_ATTACHMENT).sampleCount(4));
+        Texture resolve = attachment.device().createTexture(new TextureDescriptor().size(8, 8)
+                .usage(TextureUsage.RENDER_ATTACHMENT));
+        fake.resetCalls();
+        assertThrows(FdxException.class, () -> attachment.device().writeTexture(color, ByteBuffer.allocateDirect(256)));
+        assertEquals(0, fake.calls());
+        assertTrue(attachment.beginFrame());
+        RenderPass pass = attachment.currentFrame().commandEncoder().beginRenderPass(new RenderPassDescriptor()
+                .colorAttachments(RenderPassColorAttachment.resolve(color.view(), resolve.view(),
+                        LoadOp.clear(0, 0, 0, 1), StoreOp.store())).depthEnabled(false));
+        assertEquals(0, fake.calls("resolveColorFramebuffer"));
+        assertEquals(4, pass.compatibility().targetLayout().sampleCount());
+        pass.end();
+        assertEquals(1, fake.calls("resolveColorFramebuffer"));
+        attachment.endFrame();
+        resolve.dispose();
+        color.dispose();
+        attachment.dispose();
     }
 
     private static ShaderReflection uniformReflection() {
@@ -562,15 +834,20 @@ final class GLResourceOwnershipTest {
     }
 
     private static final class FakeSurface implements GLSurface {
+        private static FakeSurface current;
         private int makeCurrentCalls;
+        private FdxException bindingFailure, swapFailure;
 
         @Override
         public void makeCurrent() {
             makeCurrentCalls++;
+            if (bindingFailure != null) throw bindingFailure;
+            current = this;
         }
 
         @Override
         public void swapBuffers() {
+            if (swapFailure != null) throw swapFailure;
         }
 
         @Override
@@ -587,6 +864,7 @@ final class GLResourceOwnershipTest {
     }
 
     private static final class FakeGL implements InvocationHandler {
+        private PrimitiveState appliedPrimitive;
         private final GLApi api = (GLApi) Proxy.newProxyInstance(
                 GLApi.class.getClassLoader(), new Class<?>[] { GLApi.class }, this);
         private int nextHandle = 1;
@@ -594,6 +872,11 @@ final class GLResourceOwnershipTest {
         private final Map<String, Integer> callsByMethod = new HashMap<>();
         private String failingMethod;
         private int failingCall;
+        private TextureFormat uploadFormat;
+        private int uploadRemaining;
+        private boolean lost;
+        private FakeSurface expectedSurface;
+        private int lossQueries, preparationCloses;
 
         GLApi api() {
             return api;
@@ -619,6 +902,17 @@ final class GLResourceOwnershipTest {
 
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) {
+            if (method.getName().equals("closeShaderPreparation")) { preparationCloses++; return null; }
+            if (method.getName().equals("applyPipelineState")) appliedPrimitive = (PrimitiveState)args[0];
+            if (method.getName().equals("isContextLost")) {
+                lossQueries++;
+                if (expectedSurface != null) assertSame(expectedSurface, FakeSurface.current);
+                return lost;
+            }
+            if (method.getName().equals("texSubImage2D") && args.length == 5) {
+                uploadFormat = (TextureFormat) args[0];
+                uploadRemaining = ((ByteBuffer) args[4]).remaining();
+            }
             calls++;
             callsByMethod.merge(method.getName(), 1, Integer::sum);
             if (method.getName().equals(failingMethod) && calls(method.getName()) == failingCall) {

@@ -54,9 +54,10 @@ final class WGPUNativeSurface {
     }
 
     private static SurfaceHandle createAndroidSurface(WGPUInstance instance, Object window) {
+        NativeObject androidWindow = null;
         try {
             Class<?> androidWindowClass = Class.forName("com.github.xpenatan.webgpu.WGPUAndroidWindow");
-            Object androidWindow = androidWindowClass.getConstructor().newInstance();
+            androidWindow = (NativeObject) androidWindowClass.getConstructor().newInstance();
             androidWindowClass.getMethod("initLogcat").invoke(androidWindow);
             androidWindowClass.getMethod("createAndroidSurface", Object.class).invoke(androidWindow, window);
             WGPUSurface surface = (WGPUSurface) WGPUInstance.class
@@ -64,6 +65,13 @@ final class WGPUNativeSurface {
                     .invoke(instance, androidWindow);
             return new SurfaceHandle(surface, androidWindow);
         } catch (Throwable error) {
+            if (androidWindow != null) {
+                try {
+                    androidWindow.dispose();
+                } catch (Throwable cleanupFailure) {
+                    error.addSuppressed(cleanupFailure);
+                }
+            }
             throw new FdxException("Could not create WGPU Android surface", error);
         }
     }

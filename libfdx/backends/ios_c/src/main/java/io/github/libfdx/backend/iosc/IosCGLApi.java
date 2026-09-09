@@ -359,6 +359,16 @@ final class IosCGLApi implements GLApi {
      */
     @Override
     public void texImage2D(int width, int height, ByteBuffer data) {
+        texImage2D(io.github.libfdx.graphics.TextureFormat.RGBA8_UNORM, width, height, data);
+    }
+
+    @Override
+    public void framebufferSrgb(boolean enabled) {
+        // GLES 3/WebGL 2 always encode sRGB render attachments.
+    }
+
+    @Override
+    public void texImage2D(io.github.libfdx.graphics.TextureFormat format, int width, int height, ByteBuffer data) {
         IosCOpenGLES.glPixelStorei(IosCOpenGLES.UNPACK_ALIGNMENT, 1);
         IosCOpenGLES.glTexParameteri(IosCOpenGLES.TEXTURE_2D, IosCOpenGLES.TEXTURE_MIN_FILTER,
                 IosCOpenGLES.LINEAR);
@@ -368,7 +378,7 @@ final class IosCGLApi implements GLApi {
                 IosCOpenGLES.CLAMP_TO_EDGE);
         IosCOpenGLES.glTexParameteri(IosCOpenGLES.TEXTURE_2D, IosCOpenGLES.TEXTURE_WRAP_T,
                 IosCOpenGLES.CLAMP_TO_EDGE);
-        IosCOpenGLES.glTexImage2D(IosCOpenGLES.TEXTURE_2D, 0, IosCOpenGLES.RGBA, width, height, 0,
+        IosCOpenGLES.glTexImage2D(IosCOpenGLES.TEXTURE_2D, 0, format.isSrgb() ? 0x8C43 : IosCOpenGLES.RGBA, width, height, 0,
                 IosCOpenGLES.RGBA, IosCOpenGLES.UNSIGNED_BYTE, Address.fromLong(0L));
         if (data != null) {
             texSubImage2D(width, height, data);

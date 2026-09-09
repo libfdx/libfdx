@@ -25,6 +25,12 @@ final class WGPURenderPipelineHandle extends WGPURecordedResource implements Ren
     private final ShaderRenderBindings resourceBindings;
     private final RenderTargetLayout targetLayout;
     private Array<WGPUTextureBindGroupResource> textureBindGroups;
+    private boolean published;
+
+    WGPURenderPipelineHandle publish() {
+        published = true;
+        return this;
+    }
 
     WGPURenderPipelineHandle(WGPUResourceDomain resourceDomain, WGPURenderPipeline nativePipeline,
             WGPUPipelineLayout nativeLayout,
@@ -157,7 +163,7 @@ final class WGPURenderPipelineHandle extends WGPURecordedResource implements Ren
     protected void releaseNative() {
         WGPUCleanup cleanup = new WGPUCleanup();
         for (WGPUBindGroupLayout layout : uniformBindGroupLayouts) {
-            if (layout != null) {
+            if (published && layout != null) {
                 cleanup.run(() -> resourceDomain().releaseUniformBindGroups(layout));
             }
         }

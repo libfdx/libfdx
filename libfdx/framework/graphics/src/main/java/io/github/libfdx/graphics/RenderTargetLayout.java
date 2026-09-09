@@ -4,7 +4,6 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.internal.PortableSha256;
 
 import java.util.Arrays;
-import java.util.Objects;
 
 /**
  * Immutable attachment formats and sample count required by a render pipeline
@@ -138,6 +137,8 @@ public final class RenderTargetLayout {
 
     @Override
     public int hashCode() {
-        return Objects.hash(Arrays.hashCode(colorFormats), depthStencilFormat, sampleCount);
+        int result = 31 + Arrays.hashCode(colorFormats);
+        result = 31 * result + depthStencilFormat.hashCode();
+        return 31 * result + sampleCount;
     }
 }

@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.ui;
 
+import io.github.libfdx.testsupport.ui.UiKitValidationScenarios;
+
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
@@ -58,7 +60,7 @@ import io.github.libfdx.ui.UiTheme;
 import io.github.libfdx.ui.UiToolkit;
 import io.github.libfdx.ui.UiTextInputFilter;
 import io.github.libfdx.ui.UiWindowState;
-import io.github.libfdx.tests.TestFpsLogger;
+import io.github.libfdx.testsupport.TestFpsLogger;
 import io.github.libfdx.validation.scenario.Scenario;
 import io.github.libfdx.validation.scenario.ScenarioActions;
 import io.github.libfdx.validation.scenario.ScenarioCapture;

@@ -5,6 +5,9 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 
 /**
  * Provides native bindings for desktop runtime core.
@@ -13,9 +16,13 @@ import java.nio.file.StandardCopyOption;
  */
 final class DesktopRuntimeCoreNative {
     private static final Object LOCK = new Object();
+    private static final Object IDENTITY_LOCK = new Object();
     private static boolean attempted;
     private static boolean loaded;
     private static String failureMessage;
+    private static Path loadedPath;
+    private static String binaryIdentity;
+    private static boolean identityAttempted;
 
     private DesktopRuntimeCoreNative() {
     }
@@ -37,6 +44,31 @@ final class DesktopRuntimeCoreNative {
         }
     }
 
+    /** Worker-only: hash the exact loaded library once; unidentified library-path loads stay uncached. */
+    static String binaryIdentity() {
+        Path path;
+        synchronized (LOCK) {
+            if (!load() || loadedPath == null) return null;
+            path = loadedPath;
+        }
+        // Runtime loading/math use LOCK; file hashing must never hold that shared lock.
+        synchronized (IDENTITY_LOCK) {
+            if (!identityAttempted) {
+                identityAttempted = true;
+                try (InputStream input = Files.newInputStream(path)) {
+                    MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                    byte[] buffer = new byte[65_536];
+                    int read;
+                    while ((read = input.read(buffer)) >= 0) if (read > 0) digest.update(buffer, 0, read);
+                    binaryIdentity = "fdx-shaderc-ffm-v2:" + HexFormat.of().formatHex(digest.digest());
+                } catch (IOException | NoSuchAlgorithmException | RuntimeException unavailable) {
+                    binaryIdentity = null;
+                }
+            }
+            return binaryIdentity;
+        }
+    }
+
     private static boolean tryLoadConfiguredPath() {
         String configured = trim(System.getProperty("libfdx.desktop.runtimeFdxNative"));
         if (configured == null) {
@@ -46,7 +78,9 @@ final class DesktopRuntimeCoreNative {
             return false;
         }
         try {
-            System.load(Path.of(configured).toAbsolutePath().toString());
+            Path path = Path.of(configured).toAbsolutePath();
+            System.load(path.toString());
+            loadedPath = path;
             return true;
         } catch (RuntimeException | UnsatisfiedLinkError error) {
             failureMessage = error.getMessage();
@@ -65,6 +99,7 @@ final class DesktopRuntimeCoreNative {
             Files.copy(input, extracted, StandardCopyOption.REPLACE_EXISTING);
             extracted.toFile().deleteOnExit();
             System.load(extracted.toAbsolutePath().toString());
+            loadedPath = extracted.toAbsolutePath();
             return true;
         } catch (IOException | RuntimeException | UnsatisfiedLinkError error) {
             failureMessage = error.getMessage();

@@ -1,48 +1,60 @@
 package io.github.libfdx.graphics.shadergraph.runtime;
 
 import io.github.libfdx.collections.Array;
-import io.github.libfdx.graphics.shader.runtime.ShaderResourceBinding;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.ColorTargetState;
 import io.github.libfdx.graphics.DepthStencilState;
 import io.github.libfdx.graphics.GraphicsContext;
+import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.MultisampleState;
 import io.github.libfdx.graphics.PrimitiveState;
+import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
 import io.github.libfdx.graphics.RenderTargetLayout;
+import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceLayout;
 import io.github.libfdx.graphics.shader.runtime.ResolvedShaderPass;
+import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
+import io.github.libfdx.graphics.shader.runtime.ShaderPipelineRequest;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationOperation;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationPhase;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationTrace;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparedResult;
+import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
+import io.github.libfdx.graphics.shader.runtime.ShaderRequest;
+import io.github.libfdx.graphics.shader.runtime.ShaderResourceBinding;
 import io.github.libfdx.graphics.shader.ShaderModule;
 import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
-import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
-import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
-import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
-import io.github.libfdx.graphics.shader.runtime.ShaderRequest;
-import io.github.libfdx.graphics.shader.reflection.ShaderResourceLayout;
-import io.github.libfdx.graphics.TextureFormat;
-import io.github.libfdx.graphics.VertexLayout;
+import io.github.libfdx.graphics.shader.ShaderModuleSource;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompiledPass;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompiledVariant;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphDiagnostic;
+import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphTechniqueCompileResult;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraph;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphParameter;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphParameterKind;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraphResource;
 import io.github.libfdx.graphics.shadergraph.technique.ShaderGraphPipelineState;
 import io.github.libfdx.graphics.shadergraph.technique.ShaderGraphProgram;
-import io.github.libfdx.graphics.shadergraph.model.ShaderGraphResource;
-import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphTechniqueCompileResult;
 import io.github.libfdx.graphics.shadergraph.technique.ShaderGraphVariant;
+import io.github.libfdx.graphics.TextureFormat;
+import io.github.libfdx.graphics.VertexLayout;
+import java.util.Arrays;
 
 /**
  * Provider-neutral graph runtime for a complete render technique.
  *
- * <p>The provider owns all shader modules and bounded pipeline caches. A
+ * <p>Construction records immutable sources without creating native modules. Explicit synchronous
+ * resolve owns its lazy shader modules and bounded pipeline cache. Async preparation entries own
+ * their results independently of that cache. A
  * renderer resolves exactly one requested {@link ShaderPassId}; this class
  * never schedules or submits a multi-pass technique.</p>
  *
- * <p>Whole-technique replacement builds every module/interface first and
- * publishes the replacement with one revision change. Replacement must be
+ * <p>Whole-technique replacement publishes source definitions with one revision change. Native
+ * validation failures settle individual preparation entries. Retained compatible ready entries
+ * can remain in use until their replacements succeed. Replacement must be
  * invoked at a renderer setup/frame boundary where previously borrowed
  * resolved passes are no longer in use.</p>
  */
@@ -53,11 +65,11 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
     private final int cacheCapacity;
     private TechniqueState state;
     private long clock;
-    private long revision = 1;
+    private long revision = 1, resourceRevision;
     private boolean disposed;
 
     /**
-     * Source-compatible single-program construction path.
+     * Records one immutable program without compiling a native shader.
      */
     public ShaderGraphProvider(GraphicsContext graphics,
             ShaderGraphRenderProgram program) {
@@ -123,6 +135,41 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
         return true;
     }
 
+    @Override public GraphicsDevice preparationDevice() { return graphics.device(); }
+
+    /** Snapshots definitions under the provider lock; expensive native work is outside it.
+     * The preparation entry owns its result independently of this provider's synchronous cache.
+     * Default resource bindings remain borrowed application-thread data and must outlive use. */
+    @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+        final ShaderPipelineRequest packet;
+        final RuntimeVariant preparedVariant;
+        synchronized (this) {
+            requireActive();
+            if (!supports(request)) throw new FdxException("Unsupported shader graph preparation request");
+            RuntimeVariant variant = select(state.pass(request.passId()), request);
+            packet = new ShaderPipelineRequest(variant.module.source,
+                    pipelineDescriptor(variant, request, request.vertexLayouts()), request.passId(), revision);
+            preparedVariant = variant;
+        }
+        ShaderPreparationOperation operation = graphics.device().prepareRenderPipeline(packet);
+        return new ShaderPreparationOperation() {
+            @Override public boolean isDone() { return operation.isDone(); }
+            @Override public ShaderPreparationPhase phase() { return operation.phase(); }
+            @Override public ShaderPreparationTrace trace() { return operation.trace(); }
+            @Override public void cancel() { operation.cancel(); }
+            @Override public void dispose() { operation.dispose(); }
+            @Override public boolean isDisposed() { return operation.isDisposed(); }
+            @Override public ShaderPreparedResult finish() {
+                ShaderPreparedResult result = operation.finish();
+                try {
+                    ResolvedShaderPass pass = result.pass();
+                    return new ShaderPreparedResult(ResolvedShaderPass.of(pass.passId(), pass.pipeline(),
+                            pass.resourceLayout(), preparedVariant.defaultResources(), pass.providerRevision()), result);
+                } catch (Throwable failure) { result.dispose(); throw failure; }
+            }
+        };
+    }
+
     /**
      * Checks request compatibility without creating or caching a native
      * pipeline.
@@ -146,6 +193,15 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
         } catch (FdxException unsupported) {
             return false;
         }
+    }
+
+    @Override public synchronized boolean canRenderPreparedRevision(ShaderRequest request, ResolvedShaderPass previous) {
+        if (previous == null || !supports(request)) return false;
+        if (previous.providerRevision() == revision) return true;
+        RuntimeVariant variant = select(state.pass(request.passId()), request);
+        var declared = variant.module.source.declaredReflection();
+        return declared != null && declared.complete()
+                && declared.physicalHash().equals(previous.resourceLayout().reflection().physicalHash());
     }
 
     @Override
@@ -172,13 +228,16 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
                     vertexLayouts)) {
                 entry.lastUse = ++clock;
                 return ResolvedShaderPass.of(pass.passId,
-                        entry.pipeline, variant.resourceLayout,
+                        entry.pipeline, variant.module.resourceLayout,
                         variant.defaultResources(), revision);
             }
         }
 
-        RenderPipeline pipeline = createPipeline(variant, request,
-                vertexLayouts);
+        requireModule(variant.module);
+        RenderPipelineDescriptor descriptor = pipelineDescriptor(variant, request, vertexLayouts);
+        descriptor.validate(graphics.device().capabilities());
+        RenderPipeline pipeline = graphics.device().createRenderPipeline(descriptor);
+
         int slot = emptyOrOldest(current.cache);
         if (current.cache[slot] != null) {
             current.cache[slot].pipeline.dispose();
@@ -186,15 +245,14 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
         current.cache[slot] = new CacheEntry(variant, request,
                 vertexLayouts, pipeline, ++clock);
         return ResolvedShaderPass.of(pass.passId, pipeline,
-                variant.resourceLayout, variant.defaultResources(),
+                variant.module.resourceLayout, variant.defaultResources(),
                 revision);
     }
 
     /**
-     * Atomically replaces every pass and variant after all replacement shader
-     * modules and interfaces have been created successfully.
+     * Atomically replaces every pass and variant definition without native compilation.
      *
-     * <p>If preparation throws, the current technique and revision remain
+     * <p>If definition validation throws, the current technique and revision remain
      * unchanged.</p>
      */
     public synchronized void replace(
@@ -209,8 +267,8 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
     }
 
     /**
-     * Atomically replaces a packaged render technique. All replacement shader
-     * modules and reflected interfaces are created before publication.
+     * Atomically replaces a packaged render technique's definitions. Native validation occurs
+     * during preparation or explicit synchronous resolution.
      *
      * @param technique complete replacement technique
      */
@@ -235,8 +293,12 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
 
     @Override
     public synchronized long revision() {
-        observeDefaultResourceRevisions();
         return revision;
+    }
+
+    @Override public synchronized long resourceRevision() {
+        observeDefaultResourceRevisions();
+        return resourceRevision;
     }
 
     public synchronized int cachedPipelineCount() {
@@ -265,7 +327,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
     private TechniqueState buildSingle(ShaderGraphRenderProgram program) {
         Array<ModuleEntry> modules = new Array<ModuleEntry>();
         try {
-            ModuleEntry module = module(modules, program.shader(),
+            ModuleEntry module = module(modules, program.preparationSource(),
                     program.vertexEntryPoint(),
                     program.fragmentEntryPoint());
             RuntimeVariant variant = RuntimeVariant.renderProgram(
@@ -314,7 +376,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
                                                     .vertexEntryPoint(),
                                             compiled.compilation()
                                                     .fragmentEntryPoint());
-                    ModuleEntry module = module(modules, descriptor,
+                    ModuleEntry module = module(modules, ShaderModuleSource.fixed(descriptor),
                             compiled.compilation().vertexEntryPoint(),
                             compiled.compilation().fragmentEntryPoint());
                     variants[variantIndex] = RuntimeVariant.compiled(
@@ -366,7 +428,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
                                         + sourcePass.passId());
                     }
                     ModuleEntry module = module(modules,
-                            program.shader(),
+                            program.preparationSource(),
                             program.vertexEntryPoint(),
                             program.fragmentEntryPoint());
                     variants[variantIndex] =
@@ -391,45 +453,41 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
     }
 
     private ModuleEntry module(Array<ModuleEntry> modules,
-            ShaderModuleDescriptor descriptor, String vertexEntryPoint,
+            ShaderModuleSource descriptor, String vertexEntryPoint,
             String fragmentEntryPoint) {
-        String key = descriptor.source() + '\0' + vertexEntryPoint
-                + '\0' + fragmentEntryPoint;
+        Object key = descriptor;
         for (int i = 0; i < modules.size(); i++) {
             ModuleEntry module = modules.get(i);
             if (module.key.equals(key)) {
                 return module;
             }
         }
-        ShaderModule shader = graphics.device().createShaderModule(
-                descriptor);
-        ShaderReflection moduleReflection = shader.reflection();
-        ShaderReflection descriptorReflection =
-                descriptor.reflection();
-        if (moduleReflection.complete()
-                && descriptorReflection.complete()
-                && !moduleReflection.physicallyEquivalent(
-                        descriptorReflection)) {
-            shader.dispose();
-            throw new FdxException(
-                    "Shader graph module reflection does not match its verified descriptor interface");
-        }
-        ShaderReflection reflection = moduleReflection.complete()
-                ? moduleReflection : descriptorReflection;
-        if (!reflection.complete()) {
-            shader.dispose();
-            throw new FdxException(
-                    "Shader graph runtime requires complete reflected shader interface");
-        }
-        ShaderResourceLayout layout = ShaderResourceLayout.render(
-                reflection, vertexEntryPoint,
-                fragmentEntryPoint);
-        layout.validate(graphics.device().capabilities());
-        ModuleEntry result = new ModuleEntry(key, shader, layout);
+        ModuleEntry result = new ModuleEntry(key, descriptor, vertexEntryPoint, fragmentEntryPoint);
         modules.add(result);
         return result;
     }
 
+    /** Explicit synchronous resolve creates the module lazily. Async preparation never enters here. */
+    private void requireModule(ModuleEntry module) {
+        if (module.shader != null) return;
+        ShaderModuleDescriptor descriptor = module.source.generate();
+        ShaderModule shader = graphics.device().createShaderModule(descriptor);
+        try {
+            ShaderReflection reflection = shader.reflection();
+            ShaderReflection declared = descriptor.reflection();
+            if (reflection.complete() && declared.complete() && !reflection.physicallyEquivalent(declared)) {
+                throw new FdxException("Shader graph module reflection does not match its verified descriptor interface");
+            }
+            ShaderResourceLayout layout = ShaderResourceLayout.render(reflection.complete() ? reflection : declared,
+                    module.vertexEntryPoint, module.fragmentEntryPoint);
+            layout.validate(graphics.device().capabilities());
+            module.resourceLayout = layout;
+            module.shader = shader;
+        } catch (Throwable failure) {
+            shader.dispose();
+            throw failure;
+        }
+    }
     private void validateProgramLimits(ShaderGraphProgram program) {
         validateGraphLimits(program.vertex());
         validateGraphLimits(program.fragment());
@@ -503,23 +561,22 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
                 "Shader variant fallback cycle reached runtime");
     }
 
-    private RenderPipeline createPipeline(RuntimeVariant variant,
+    private RenderPipelineDescriptor pipelineDescriptor(RuntimeVariant variant,
             ShaderRequest request, VertexLayout[] vertexLayouts) {
         if (variant.pipelineState == null) {
-            return createRenderProgramPipeline(variant, request,
+            return renderProgramDescriptor(variant, request,
                     vertexLayouts);
         }
         ShaderGraphPipelineState state = variant.pipelineState;
         RenderTargetLayout targets = request.renderPass().targetLayout();
         RenderPipelineDescriptor descriptor =
-                RenderPipelineDescriptor.shader(variant.module.shader,
+                new RenderPipelineDescriptor().colorFormat(
                                 targets.colorAttachmentCount() > 0
                                         ? targets.colorFormat(0)
                                         : TextureFormat.UNKNOWN)
                         .label(variant.label)
                         .vertexEntryPoint(variant.vertexEntryPoint)
                         .fragmentEntryPoint(variant.fragmentEntryPoint)
-                        .resourceLayout(variant.resourceLayout)
                         .renderTargetLayout(targets)
                         .primitiveState(state.primitive())
                         .vertexLayouts(vertexLayouts)
@@ -528,11 +585,12 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
         if (state.depthStencil() != null) {
             descriptor.depthStencilState(state.depthStencil());
         }
-        descriptor.validate(graphics.device().capabilities());
-        return graphics.device().createRenderPipeline(descriptor);
+        if (variant.module.shader != null) descriptor.shaderModule(variant.module.shader);
+        if (variant.module.resourceLayout != null) descriptor.resourceLayout(variant.module.resourceLayout);
+        return descriptor;
     }
 
-    private RenderPipeline createRenderProgramPipeline(
+    private RenderPipelineDescriptor renderProgramDescriptor(
             RuntimeVariant variant,
             ShaderRequest request, VertexLayout[] vertexLayouts) {
         ShaderGraphRenderProgram program = variant.renderProgram;
@@ -544,14 +602,13 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
                     ? ColorTargetState.alpha(targets.colorFormat(i))
                     : ColorTargetState.opaque(targets.colorFormat(i));
         }
-        RenderPipelineDescriptor descriptor = RenderPipelineDescriptor
-                .shader(variant.module.shader,
+        RenderPipelineDescriptor descriptor = new RenderPipelineDescriptor()
+                .colorFormat(
                         colors.length > 0 ? targets.colorFormat(0)
                                 : TextureFormat.UNKNOWN)
                 .label(program.label())
                 .vertexEntryPoint(program.vertexEntryPoint())
                 .fragmentEntryPoint(program.fragmentEntryPoint())
-                .resourceLayout(variant.resourceLayout)
                 .renderTargetLayout(targets)
                 .primitiveState(PrimitiveState.of(request.topology(),
                         program.frontFace(), program.cullMode()))
@@ -566,8 +623,9 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
                     .depthCompare(program.depthCompare())
                     .build());
         }
-        descriptor.validate(graphics.device().capabilities());
-        return graphics.device().createRenderPipeline(descriptor);
+        if (variant.module.shader != null) descriptor.shaderModule(variant.module.shader);
+        if (variant.module.resourceLayout != null) descriptor.resourceLayout(variant.module.resourceLayout);
+        return descriptor;
     }
 
     private static ShaderGraphTechniqueCompileResult requireSuccessful(
@@ -622,7 +680,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
             }
         }
         if (changed) {
-            revision++;
+            resourceRevision++;
         }
     }
 
@@ -643,7 +701,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
 
     private static void disposeModules(Array<ModuleEntry> modules) {
         for (int i = 0; i < modules.size(); i++) {
-            modules.get(i).shader.dispose();
+            if (modules.get(i).shader != null) modules.get(i).shader.dispose();
         }
         modules.clear();
     }
@@ -681,7 +739,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
                 }
             }
             for (ModuleEntry module : modules) {
-                module.shader.dispose();
+                if (module.shader != null) module.shader.dispose();
             }
         }
     }
@@ -715,7 +773,6 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
         final ShaderGraphPipelineState pipelineState;
         final ShaderGraphRenderProgram renderProgram;
         final ModuleEntry module;
-        final ShaderResourceLayout resourceLayout;
         final String label;
         final String vertexEntryPoint;
         final String fragmentEntryPoint;
@@ -736,7 +793,6 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
             this.pipelineState = pipelineState;
             this.renderProgram = renderProgram;
             this.module = module;
-            resourceLayout = module.resourceLayout;
             this.label = label;
             this.vertexEntryPoint = vertexEntryPoint;
             this.fragmentEntryPoint = fragmentEntryPoint;
@@ -796,7 +852,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
                     ? renderVariant.fallbackKey() : null;
         }
 
-        io.github.libfdx.graphics.shader.runtime.ShaderResourceBinding
+        ShaderResourceBinding
                 defaultResources() {
             return renderProgram != null
                     ? renderProgram.defaultResources() : null;
@@ -825,7 +881,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
                 VertexLayout[] expected =
                         renderProgram.vertexLayouts();
                 if (expected.length > 0
-                        && !java.util.Arrays.equals(expected,
+                        && !Arrays.equals(expected,
                                 vertexLayouts)) {
                     throw new FdxException(
                             "Shader render program vertex layout does not match request");
@@ -847,22 +903,23 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
     }
 
     private static final class ModuleEntry {
-        final String key;
-        final ShaderModule shader;
-        final ShaderResourceLayout resourceLayout;
+        final Object key;
+        final ShaderModuleSource source;
+        final String vertexEntryPoint, fragmentEntryPoint;
+        ShaderModule shader;
+        ShaderResourceLayout resourceLayout;
 
-        ModuleEntry(String key, ShaderModule shader,
-                ShaderResourceLayout resourceLayout) {
+        ModuleEntry(Object key, ShaderModuleSource source, String vertexEntryPoint, String fragmentEntryPoint) {
             this.key = key;
-            this.shader = shader;
-            this.resourceLayout = resourceLayout;
+            this.source = source;
+            this.vertexEntryPoint = vertexEntryPoint;
+            this.fragmentEntryPoint = fragmentEntryPoint;
         }
     }
-
     private static final class CacheEntry {
         final RuntimeVariant variant;
         final RenderTargetLayout targets;
-        final io.github.libfdx.graphics.PrimitiveTopology topology;
+        final PrimitiveTopology topology;
         final VertexLayout[] vertexLayouts;
         final RenderPipeline pipeline;
         long lastUse;

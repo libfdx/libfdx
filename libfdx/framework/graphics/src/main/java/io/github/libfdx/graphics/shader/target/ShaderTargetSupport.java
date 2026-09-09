@@ -80,8 +80,8 @@ public final class ShaderTargetSupport {
             return of(ShaderTargetEnvironments.IOS_METAL_2_MSL_2);
         }
         if ("directx".equals(value) || "d3d".equals(value)
-                || "d3d11".equals(value) || "d3d12".equals(value)) {
-            return of(ShaderTargetEnvironments.D3D12_FXC_SM_5_1);
+                || "d3d12".equals(value)) {
+            return of(ShaderTargetEnvironments.D3D12_DXC_SM_6_0);
         }
         return NONE;
     }

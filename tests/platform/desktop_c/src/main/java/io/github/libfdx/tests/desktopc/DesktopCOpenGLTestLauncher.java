@@ -1,10 +1,12 @@
 package io.github.libfdx.tests.desktopc;
 
+import io.github.libfdx.testsupport.desktopc.DesktopCTestLauncherArgs;
+
 import io.github.libfdx.application.ApplicationListener;
 import io.github.libfdx.backend.desktopc.DesktopCApplicationBackend;
 import io.github.libfdx.backend.desktopc.DesktopCApplicationConfig;
 import io.github.libfdx.backend.desktopc.DesktopCOpenGLProvider;
-import io.github.libfdx.tests.TestSelector;
+import io.github.libfdx.testsupport.TestSelector;
 
 /**
  * Launches the desktop C OpenGL test entry point.

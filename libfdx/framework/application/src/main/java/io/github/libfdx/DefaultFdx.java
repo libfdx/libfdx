@@ -26,6 +26,7 @@ public final class DefaultFdx implements Fdx {
     private final Storage storage;
     private final Network network;
     private final Logger logger;
+    private final io.github.libfdx.audio.Audio audio;
 
     /**
      * Creates a default fdx with a standalone default input service.
@@ -84,6 +85,12 @@ public final class DefaultFdx implements Fdx {
      */
     public DefaultFdx(Application app, Displays displays, Graphics graphics, Input input, FileSystem files,
             Storage storage, Network network, Logger logger) {
+        this(app, displays, graphics, input, files, storage, network, null, logger);
+    }
+
+    /** Creates runtime roots with optional backend-owned network and audio services. */
+    public DefaultFdx(Application app, Displays displays, Graphics graphics, Input input, FileSystem files,
+            Storage storage, Network network, io.github.libfdx.audio.Audio audio, Logger logger) {
         if (app == null) {
             throw new FdxException("Application cannot be null");
         }
@@ -112,6 +119,7 @@ public final class DefaultFdx implements Fdx {
         this.files = files;
         this.storage = storage;
         this.network = network;
+        this.audio = audio;
         this.logger = logger;
     }
 
@@ -184,6 +192,9 @@ public final class DefaultFdx implements Fdx {
     public Network network() {
         return network;
     }
+
+    @Override
+    public io.github.libfdx.audio.Audio audio() { return audio; }
 
     /**
      * Returns the logger.

@@ -4,7 +4,9 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.math.Matrix4;
 
 /**
- * Represents an animation clip.
+ * Immutable borrowed animation data shared by independent controllers. Constructors copy channel
+ * and event arrays; channels/samplers own their immutable inputs. Clip times are finite seconds.
+ * Application events are independent of glTF import. Playback and pose storage belong to a controller.
  *
  * @author xpenatan
  */
@@ -12,6 +14,7 @@ public final class AnimationClip {
     private final String id;
     private final float durationSeconds;
     private final NodeTransformChannel[] nodeTransformChannels;
+    private final Event[] events;
 
     /**
      * Creates an animation clip.
@@ -31,8 +34,14 @@ public final class AnimationClip {
      * @param nodeTransformChannels the node transform channels
      */
     public AnimationClip(String id, float durationSeconds, NodeTransformChannel[] nodeTransformChannels) {
-        if (Float.isNaN(durationSeconds) || durationSeconds < 0.0f) {
-            throw new FdxException("Animation duration cannot be negative");
+        this(id,durationSeconds,nodeTransformChannels,null);
+    }
+
+    /** Copies ordered application event markers. Equal-time markers retain caller order; times must
+     * lie in [0,duration]. Events are application metadata, independent of glTF import. */
+    public AnimationClip(String id, float durationSeconds, NodeTransformChannel[] nodeTransformChannels, Event[] events) {
+        if (!Float.isFinite(durationSeconds) || durationSeconds < 0.0f) {
+            throw new FdxException("Animation duration must be finite and nonnegative");
         }
         this.id = id != null ? id : "";
         this.durationSeconds = durationSeconds;
@@ -44,7 +53,30 @@ public final class AnimationClip {
                 throw new FdxException("Animation node transform channel cannot be null");
             }
         }
+        this.events=events == null ? new Event[0] : events.clone();
+        float previous=-1;
+        for (Event event : this.events) {
+            if (event == null || event.timeSeconds < previous || event.timeSeconds > durationSeconds)
+                throw new FdxException("Animation events must be ordered within the clip duration");
+            previous=event.timeSeconds;
+        }
     }
+
+    /** Immutable application marker. The id is returned verbatim to the playback listener. */
+    public static final class Event {
+        private final float timeSeconds;
+        private final String id;
+        public Event(float timeSeconds,String id) {
+            if (!Float.isFinite(timeSeconds) || timeSeconds < 0 || id == null || id.isEmpty())
+                throw new FdxException("Animation event requires a finite nonnegative time and nonempty id");
+            this.timeSeconds=timeSeconds; this.id=id;
+        }
+        public float timeSeconds() { return timeSeconds; }
+        public String id() { return id; }
+    }
+    /** Returns a copy of the ordered immutable markers. */
+    public Event[] events() { return events.clone(); }
+    Event[] eventsUnsafe() { return events; }
 
     /**
      * Creates a node transform channel.
@@ -55,6 +87,13 @@ public final class AnimationClip {
      */
     public static NodeTransformChannel nodeTransform(String nodeId, TransformKeyframe... keyframes) {
         return new NodeTransformChannel(nodeId, keyframes);
+    }
+
+    /** Creates independent immutable translation/rotation/scale tracks. A null track uses defaults;
+     * defaults' time is ignored. This representation retains mixed interpolation and separate key times. */
+    public static NodeTransformChannel sampledTransform(String nodeId,TransformKeyframe defaults,
+            AnimationSampler translation,AnimationSampler rotation,AnimationSampler scale) {
+        return new NodeTransformChannel(nodeId,defaults,translation,rotation,scale);
     }
 
     /**
@@ -134,6 +173,8 @@ public final class AnimationClip {
     public static final class NodeTransformChannel {
         private final String nodeId;
         private final TransformKeyframe[] keyframes;
+        private final TransformKeyframe defaults;
+        private final AnimationSampler translation,rotation,scale;
 
         /**
          * Creates a node transform channel.
@@ -150,6 +191,7 @@ public final class AnimationClip {
             }
             this.nodeId = nodeId;
             this.keyframes = keyframes.clone();
+            defaults=null;translation=rotation=scale=null;
             float previousTime = -1.0f;
             for (int i = 0; i < this.keyframes.length; i++) {
                 TransformKeyframe keyframe = this.keyframes[i];
@@ -163,6 +205,23 @@ public final class AnimationClip {
             }
         }
 
+        private NodeTransformChannel(String nodeId,TransformKeyframe defaults,AnimationSampler translation,
+                AnimationSampler rotation,AnimationSampler scale) {
+            if(nodeId==null||nodeId.trim().isEmpty()||defaults==null)throw new FdxException("Sampled transform requires a node and defaults");
+            defaults.validateDefaults();
+            if(translation!=null&&translation.isRotation()||scale!=null&&scale.isRotation()||rotation!=null&&!rotation.isRotation())
+                throw new FdxException("Transform sampler kind mismatch");
+            this.nodeId=nodeId;this.defaults=defaults;this.translation=translation;this.rotation=rotation;this.scale=scale;keyframes=null;
+        }
+        /** Whether this channel holds independent sampler tracks instead of combined linear keyframes. */
+        public boolean hasSamplers(){return keyframes==null;}
+        /** Borrowed immutable sampler, or null when the default component is used. */
+        public AnimationSampler translationSampler(){return translation;}
+        /** Borrowed immutable sampler, or null when the default component is used. */
+        public AnimationSampler rotationSampler(){return rotation;}
+        /** Borrowed immutable sampler, or null when the default component is used. */
+        public AnimationSampler scaleSampler(){return scale;}
+
         /**
          * Returns the node id.
          *
@@ -172,12 +231,49 @@ public final class AnimationClip {
             return nodeId;
         }
 
+        /** Samples translation XYZ, normalized quaternion XYZW and scale XYZ into ten caller-owned floats.
+         * Preserves authored signed/zero scale without decomposing a matrix. Allocates no storage. */
+        public void sampleTrs(float timeSeconds, float[] out, int offset) {
+            if (!Float.isFinite(timeSeconds) || out == null || offset < 0 || offset > out.length-10)
+                throw new FdxException("Animation TRS sample needs a finite time and ten output floats");
+            if (keyframes == null) {
+                defaults.copyTrs(out,offset);
+                if (translation != null) translation.sample(timeSeconds,out,offset);
+                if (rotation != null) rotation.sample(timeSeconds,out,offset+3);
+                if (scale != null) scale.sample(timeSeconds,out,offset+7);
+                return;
+            }
+            int low=0, high=keyframes.length;
+            while (low < high) { int mid=(low+high)>>>1; if (keyframes[mid].timeSeconds <= timeSeconds) low=mid+1; else high=mid; }
+            int index=Math.max(0,low-1);
+            TransformKeyframe a=keyframes[index];
+            a.copyTrs(out,offset);
+            if (index == keyframes.length-1 || timeSeconds <= a.timeSeconds) return;
+            TransformKeyframe b=keyframes[index+1];
+            double t=(timeSeconds-a.timeSeconds)/((double)b.timeSeconds-a.timeSeconds);
+            out[offset]=(float)((1-t)*a.translationX+t*b.translationX);
+            out[offset+1]=(float)((1-t)*a.translationY+t*b.translationY);
+            out[offset+2]=(float)((1-t)*a.translationZ+t*b.translationZ);
+            AnimationTransforms.rotation(a.rotationX,a.rotationY,a.rotationZ,a.rotationW,
+                    b.rotationX,b.rotationY,b.rotationZ,b.rotationW,t,out,offset+3);
+            out[offset+7]=(float)((1-t)*a.scaleX+t*b.scaleX);
+            out[offset+8]=(float)((1-t)*a.scaleY+t*b.scaleY);
+            out[offset+9]=(float)((1-t)*a.scaleZ+t*b.scaleZ);
+        }
+
+        boolean copyDefaults(float[] out, int offset) {
+            if (defaults == null) return false;
+            defaults.copyTrs(out,offset); return true;
+        }
+
         /**
-         * Returns the keyframes.
+         * Returns copied combined keyframes. Independent sampler channels have no combined linear
+         * representation and throw; use hasSamplers and the individual sampler accessors.
          *
          * @return the keyframes
          */
         public TransformKeyframe[] keyframes() {
+            if(keyframes==null)throw new FdxException("Independent sampler channels have no combined linear keyframes");
             return keyframes.clone();
         }
 
@@ -191,6 +287,18 @@ public final class AnimationClip {
         public Matrix4 sample(float timeSeconds, Matrix4 out) {
             if (out == null) {
                 throw new FdxException("Animation sample output cannot be null");
+            }
+            if(!Float.isFinite(timeSeconds))throw new FdxException("Animation sample time must be finite");
+            if(keyframes==null) {
+                int ti=translation==null?0:translation.interval(timeSeconds),si=scale==null?0:scale.interval(timeSeconds);
+                float x=translation==null?defaults.translationX:translation.component(ti,timeSeconds,0);
+                float y=translation==null?defaults.translationY:translation.component(ti,timeSeconds,1);
+                float z=translation==null?defaults.translationZ:translation.component(ti,timeSeconds,2);
+                float sx=scale==null?defaults.scaleX:scale.component(si,timeSeconds,0);
+                float sy=scale==null?defaults.scaleY:scale.component(si,timeSeconds,1);
+                float sz=scale==null?defaults.scaleZ:scale.component(si,timeSeconds,2);
+                if(rotation!=null)return rotation.compose(timeSeconds,out,x,y,z,sx,sy,sz);
+                return out.setToTrs(x,y,z,defaults.rotationX,defaults.rotationY,defaults.rotationZ,defaults.rotationW,sx,sy,sz);
             }
             if (keyframes.length == 1 || timeSeconds <= keyframes[0].timeSeconds()) {
                 return keyframes[0].toMatrix(out);
@@ -248,8 +356,8 @@ public final class AnimationClip {
         public TransformKeyframe(float timeSeconds, float translationX, float translationY, float translationZ,
                 float rotationX, float rotationY, float rotationZ, float rotationW,
                 float scaleX, float scaleY, float scaleZ) {
-            if (Float.isNaN(timeSeconds) || timeSeconds < 0.0f) {
-                throw new FdxException("Animation keyframe time cannot be negative");
+            if (!Float.isFinite(timeSeconds) || timeSeconds < 0.0f) {
+                throw new FdxException("Animation keyframe time must be finite and nonnegative");
             }
             this.timeSeconds = timeSeconds;
             this.translationX = translationX;
@@ -262,6 +370,26 @@ public final class AnimationClip {
             this.scaleX = scaleX;
             this.scaleY = scaleY;
             this.scaleZ = scaleZ;
+            validateDefaults();
+        }
+
+        private void copyTrs(float[] out, int offset) {
+            out[offset]=translationX; out[offset+1]=translationY; out[offset+2]=translationZ;
+            AnimationTransforms.rotation(rotationX,rotationY,rotationZ,rotationW,
+                    rotationX,rotationY,rotationZ,rotationW,0,out,offset+3);
+            out[offset+7]=scaleX; out[offset+8]=scaleY; out[offset+9]=scaleZ;
+        }
+
+        private void validateDefaults() {
+            if (!Float.isFinite(translationX) || !Float.isFinite(translationY) || !Float.isFinite(translationZ)
+                    || !Float.isFinite(scaleX) || !Float.isFinite(scaleY) || !Float.isFinite(scaleZ)) {
+                throw new FdxException("Sampled transform defaults must be finite");
+            }
+            double lengthSquared = (double)rotationX * rotationX + (double)rotationY * rotationY
+                    + (double)rotationZ * rotationZ + (double)rotationW * rotationW;
+            if (!Double.isFinite(lengthSquared) || Math.abs(lengthSquared - 1) > .001) {
+                throw new FdxException("Sampled transform default rotation must be a unit quaternion");
+            }
         }
 
         /**

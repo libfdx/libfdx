@@ -33,6 +33,15 @@ public enum TextureFormat {
         return color;
     }
 
+    /** Uncompressed texel size, excluding row padding and provider metadata. Unknown formats fail. */
+    public int bytesPerPixel() {
+        if (this == UNKNOWN) throw new IllegalStateException("Unknown texture format has no texel size");
+        return this == RGBA16_FLOAT ? 8 : 4;
+    }
+
+    /** True when sampling decodes RGB and render-target writes encode RGB using sRGB; alpha is unchanged. */
+    public boolean isSrgb() { return this == RGBA8_UNORM_SRGB || this == BGRA8_UNORM_SRGB; }
+
     /**
      * Returns whether this format contains depth and/or stencil data.
      *

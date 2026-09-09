@@ -29,6 +29,8 @@ final class DesktopRuntimeShaderCompiler implements RuntimeShaderCompiler {
     private volatile NativeApi api;
     private volatile String failureMessage;
 
+    @Override public String cacheIdentity() { return DesktopRuntimeCoreNative.binaryIdentity(); }
+
     @Override
     public RuntimeShaderCompileResult compile(RuntimeShaderCompileRequest request) {
         try {

@@ -41,20 +41,54 @@ public final class WebAssetPreloader {
      * Runs the install step.
      */
     public static void install() {
+        install(new String[0]);
+    }
+
+    /** Installs the manifest while leaving selected assets available for later bounded loading. */
+    static void install(String[] deferred) {
         if (installed) {
             return;
         }
-        ResourceArray<WebGeneratedAsset> assets = WebGeneratedAssets.assets();
         beginInstall();
-        if (assets != null) {
-            for (int index = 0; index < assets.size(); index++) {
-                WebGeneratedAsset asset = assets.get(index);
-                addAsset(asset.getPath(), asset.getSize());
+        // Packaging discovers shared classpath resources after TeaVM compilation.
+        // Prefer that complete inventory; custom hosts may still use compile metadata.
+        int publishedCount = publishedAssetCount();
+        if (publishedCount >= 0) {
+            for (int index = 0; index < publishedCount; index++) {
+                String path = publishedAssetPath(index);
+                addAsset(path, publishedAssetSize(index), !isDeferred(path, deferred));
+            }
+        } else {
+            ResourceArray<WebGeneratedAsset> assets = WebGeneratedAssets.assets();
+            if (assets != null) {
+                for (int index = 0; index < assets.size(); index++) {
+                    WebGeneratedAsset asset = assets.get(index);
+                    addAsset(asset.getPath(), asset.getSize(), !isDeferred(asset.getPath(), deferred));
+                }
             }
         }
-        addAsset(WebAssets.DEFAULT_PRELOAD_LOGO_PATH, WebAssets.DEFAULT_PRELOAD_LOGO_SIZE);
+        addAsset(WebAssets.DEFAULT_PRELOAD_LOGO_PATH, WebAssets.DEFAULT_PRELOAD_LOGO_SIZE, true);
         finishInstall();
         installed = true;
+    }
+
+    @JSBody(script = "var root = typeof window !== 'undefined' ? window : globalThis;"
+            + "return Array.isArray(root.libfdxPublishedAssets) ? root.libfdxPublishedAssets.length : -1;")
+    private static native int publishedAssetCount();
+
+    @JSBody(params = "index", script = "var root = typeof window !== 'undefined' ? window : globalThis;"
+            + "return root.libfdxPublishedAssets[index].path;")
+    private static native String publishedAssetPath(int index);
+
+    @JSBody(params = "index", script = "var root = typeof window !== 'undefined' ? window : globalThis;"
+            + "return root.libfdxPublishedAssets[index].size;")
+    private static native double publishedAssetSize(int index);
+
+    static boolean isDeferred(String path, String[] selections) {
+        for (String selection : selections) {
+            if (selection.endsWith("/") ? path.startsWith(selection) : path.equals(selection)) { return true; }
+        }
+        return false;
     }
 
     /**
@@ -235,7 +269,7 @@ public final class WebAssetPreloader {
             "};")
     private static native void beginInstall();
 
-    @JSBody(params = { "path", "size" }, script =
+    @JSBody(params = { "path", "size", "preload" }, script =
             "var root = typeof window !== 'undefined' ? window : globalThis;\n" +
             "var normalize = root.__libfdxAssetNormalize || function(value) {\n" +
             "  value = (value || '').replace(/\\\\/g, '/');\n" +
@@ -248,14 +282,15 @@ public final class WebAssetPreloader {
             "root.libfdxAssetManifest = root.libfdxAssetManifest || Object.create(null);\n" +
             "if (root.libfdxAssetManifest[normalized] || root.libfdxAssetManifest['assets/' + normalized]) return;\n" +
             "root.libfdxAssetPaths = root.libfdxAssetPaths || [];\n" +
-            "root.libfdxAssetPaths.push(normalized);\n" +
             "var entry = { size: size };\n" +
             "root.libfdxAssetManifest[normalized] = entry;\n" +
             "root.libfdxAssetManifest['assets/' + normalized] = entry;\n" +
+            "if (!preload) return;\n" +
+            "root.libfdxAssetPaths.push(normalized);\n" +
             "root.libfdxPreloadState = root.libfdxPreloadState || { active: false, complete: false, failed: false, errorMessage: '', loadedFiles: 0, totalFiles: 0, loadedBytes: 0, totalBytes: 0 };\n" +
             "root.libfdxPreloadState.totalFiles += 1;\n" +
             "root.libfdxPreloadState.totalBytes += Math.max(0, size || 0);")
-    private static native void addAsset(String path, double size);
+    private static native void addAsset(String path, double size, boolean preload);
 
     @JSBody(params = {}, script =
             "var root = typeof window !== 'undefined' ? window : globalThis;\n" +

@@ -8,6 +8,8 @@ import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
 import io.github.libfdx.graphics.shader.reflection.ShaderReflectionDecoderTest;
 import io.github.libfdx.graphics.shader.reflection.ShaderResourceUse;
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.core.ProviderId;
+import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileTarget;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileRequest;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileResult;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileStage;
@@ -20,6 +22,7 @@ import io.github.libfdx.runtime.core.shader.RuntimeShaderTargetInterface;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -47,6 +50,24 @@ final class ShaderCompilerRegistryTest {
             .consumer("test-console", "1")
             .compiler("test-assembler", "1")
             .build();
+
+    @Test void asynchronousCompilationUsesTheSameArtifactAndVerifierChecks() {
+        ShaderCompilerRegistry registry = ShaderCompilerRegistry.builder()
+                .compiler(new CustomCompiler("1")).verifier(new CustomVerifier("1")).build();
+        ShaderTargetCompileRequest request = customRequest(CUSTOM_ENVIRONMENT, ShaderTargetOptions.empty(),
+                ShaderVerificationRequirement.REQUIRED);
+        ArrayDeque<Runnable> tasks = new ArrayDeque<>();
+        var asynchronous = registry.compileAsync(request, tasks::add);
+        assertFalse(asynchronous.isDone());
+        while (!tasks.isEmpty()) tasks.remove().run();
+        assertTrue(asynchronous.get().success());
+        assertTrue(asynchronous.get().artifact().verified());
+        assertEquals(registry.compile(request).artifact().cacheKey(), asynchronous.get().artifact().cacheKey());
+        ShaderCompilerRegistry missingVerifier = ShaderCompilerRegistry.builder().compiler(new CustomCompiler("1")).build();
+        var rejected = missingVerifier.compileAsync(request, tasks::add);
+        while (!tasks.isEmpty()) tasks.remove().run();
+        assertFalse(rejected.get().success());
+    }
 
     @Test
     void customTargetCompilerAndVerifierExtendWithoutEnumOrStandardSwitch() {
@@ -186,7 +207,15 @@ final class ShaderCompilerRegistryTest {
                     .verification(requirement)
                     .build();
 
-            ShaderTargetCompileResult result = builder.build().compile(request);
+            ShaderCompilerRegistry registry = builder.build();
+            ShaderTargetCompileResult result = registry.compile(request);
+            ArrayDeque<Runnable> tasks = new ArrayDeque<>();
+            var asynchronous = registry.compileAsync(request, tasks::add);
+            while (!tasks.isEmpty()) tasks.remove().run();
+            assertTrue(asynchronous.get().success(), target + " async " + diagnostics(asynchronous.get()));
+            assertEquals(result.artifact().cacheKey(), asynchronous.get().artifact().cacheKey());
+            assertEquals(result.artifact().translatedInterface().canonical().physicalHash(),
+                    asynchronous.get().artifact().translatedInterface().canonical().physicalHash());
 
             assertTrue(result.success(), target + " " + diagnostics(result));
             ShaderTargetArtifact artifact = result.artifact();
@@ -209,23 +238,29 @@ final class ShaderCompilerRegistryTest {
                 assertEquals(2, artifact.stages().length);
             }
         }
-        assertEquals(8 + 6, runtime.requests.size());
+        assertEquals((8 + 6) * 2, runtime.requests.size());
     }
 
     @Test
-    void exactHlslConsumerEnvironmentDistinguishesFxcFromDxc() {
-        assertEquals("fxc", ShaderTargetEnvironments.D3D12_FXC_SM_5_1.compilerFamily());
-        assertEquals("5.1", ShaderTargetEnvironments.D3D12_FXC_SM_5_1.shaderModel());
+    void direct3dDefaultsToDxcAndRejectsLegacyArtifacts() {
         assertEquals("dxc", ShaderTargetEnvironments.D3D12_DXC_SM_6_0.compilerFamily());
         assertEquals("6.0", ShaderTargetEnvironments.D3D12_DXC_SM_6_0.shaderModel());
-        assertNotEquals(ShaderTargetEnvironments.D3D12_FXC_SM_5_1.cacheKey(),
-                ShaderTargetEnvironments.D3D12_DXC_SM_6_0.cacheKey());
+        assertEquals(ShaderTargetEnvironments.D3D12_DXC_SM_6_0,
+                ShaderTargetEnvironments.forTarget(ShaderTargets.DIRECTX_HLSL));
+        var legacy = ShaderTargetEnvironment.builder("d3d12-fxc-sm-5.1",
+                        ShaderTargets.DIRECTX_HLSL, ShaderArtifactFormats.HLSL_TEXT)
+                .consumer("direct3d12", "12").compiler("fxc", "5.1").build();
+        var support = ShaderTargetSupport.forProvider(ProviderId.of("d3d12"));
+        assertFalse(support.accepts(legacy));
+        assertTrue(support.accepts(ShaderTargetEnvironments.D3D12_DXC_SM_6_0));
+        assertFalse(ShaderTargetSupport.forProvider(ProviderId.of("d3d11"))
+                .accepts(ShaderTargetEnvironments.D3D12_DXC_SM_6_0));
     }
 
     @Test
     void providerSupportRejectsUnsupportedTargetAndEnvironmentPairs() {
         ShaderTargetSupport web = ShaderTargetSupport.forProvider(
-                io.github.libfdx.core.ProviderId.of("webgpu"));
+                ProviderId.of("webgpu"));
         assertTrue(web.accepts(ShaderTargetEnvironments.WEBGPU_WGSL_1));
         assertFalse(web.accepts(ShaderTargetEnvironments.WGPU_WGSL_1));
         assertFalse(web.accepts(ShaderTargets.VULKAN_SPIRV, ShaderArtifactFormats.SPIRV_BINARY));
@@ -383,7 +418,7 @@ final class ShaderCompilerRegistryTest {
                         ShaderReflectionDecoderTest.runtimeFixture());
             }
             RuntimeShaderTargetInterface targetInterface = targetInterface(request);
-            if (request.target() == io.github.libfdx.runtime.core.shader.RuntimeShaderCompileTarget.VULKAN_SPIRV) {
+            if (request.target() == RuntimeShaderCompileTarget.VULKAN_SPIRV) {
                 return RuntimeShaderCompileResult.spirv(new byte[] { 3, 2, 35, 7 },
                         ShaderReflectionDecoderTest.runtimeFixture(), targetInterface);
             }

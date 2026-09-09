@@ -60,6 +60,7 @@ final class GLResources {
 
     static GLTextureViewHandle requireTextureView(TextureView value, GLResourceDomain domain, Object frameOwner,
             String name) {
+        domain.requireUsable();
         if (value == null) {
             throw new FdxException(name + " cannot be null");
         }
@@ -103,6 +104,7 @@ final class GLResources {
     }
 
     private static void requireDomain(GLResourceDomain actual, GLResourceDomain expected, String name) {
+        expected.requireUsable();
         if (actual != expected) {
             throw incompatible(name, expected);
         }

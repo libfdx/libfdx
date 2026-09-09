@@ -20,7 +20,9 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Represents a bitmap font files.
+ * Synchronous font construction helpers. File reads must complete inline, such as
+ * disk files or preloaded browser assets. Deferred browser files must be acquired
+ * asynchronously before using these helpers; a pending future is not awaited.
  *
  * @author xpenatan
  */
@@ -61,25 +63,35 @@ public final class BitmapFontFiles {
         ensure(graphics, files, path);
         String text = files.internal(path).readString(StandardCharsets.UTF_8).get();
         BitmapFontDefinition definition = BitmapFontDefinition.parse(text);
+        if (definition.pageFiles.size() == 0 || definition.glyphs.size() == 0) {
+            throw new FdxException("Bitmap font has no pages or glyphs: " + path);
+        }
         Array<Texture> pages = new Array<Texture>();
-        for (int i = 0; i < definition.pageFiles.size(); i++) {
-            String pagePath = resolveSibling(path, definition.pageFiles.get(Integer.valueOf(i)));
-            ImageData image = ImageAssetLoader.decode(pagePath, files.internal(pagePath).readBytes().get());
-            pages.add(createTexture(graphics, pagePath, image));
-        }
-        IntMap<BitmapFontGlyph> glyphs = new IntMap<BitmapFontGlyph>();
-        ObjectIterator<BitmapFontDefinition.Glyph> glyphIterator = definition.glyphs.values().iterator();
-        while (glyphIterator.hasNext()) {
-            BitmapFontDefinition.Glyph glyph = glyphIterator.next();
-            if (glyph.page >= 0 && glyph.page < pages.size() && glyph.width > 0 && glyph.height > 0) {
-                Texture page = pages.get(glyph.page);
-                TextureRegion region = new TextureRegion(page, glyph.x, glyph.y, glyph.width, glyph.height);
-                glyphs.put(glyph.id, new BitmapFontGlyph(glyph.id, region, glyph.xOffset,
-                        glyph.yOffset, glyph.xAdvance));
+        try {
+            for (int i = 0; i < definition.pageFiles.size(); i++) {
+                String pagePath = resolveSibling(path, definition.pageFiles.get(Integer.valueOf(i)));
+                ImageData image = ImageAssetLoader.decode(pagePath, files.internal(pagePath).readBytes().get());
+                pages.add(createTexture(graphics, pagePath, image));
             }
+            IntMap<BitmapFontGlyph> glyphs = new IntMap<BitmapFontGlyph>();
+            ObjectIterator<BitmapFontDefinition.Glyph> glyphIterator = definition.glyphs.values().iterator();
+            while (glyphIterator.hasNext()) {
+                BitmapFontDefinition.Glyph glyph = glyphIterator.next();
+                if (glyph.page >= 0 && glyph.page < pages.size() && glyph.width > 0 && glyph.height > 0) {
+                    Texture page = pages.get(glyph.page);
+                    TextureRegion region = new TextureRegion(page, glyph.x, glyph.y, glyph.width, glyph.height);
+                    glyphs.put(glyph.id, new BitmapFontGlyph(glyph.id, region, glyph.xOffset,
+                            glyph.yOffset, glyph.xAdvance));
+                }
+            }
+            return new BitmapFont(definition.face, definition.size, definition.lineHeight, definition.base,
+                    glyphs, definition.kernings, pages, true);
+        } catch (RuntimeException | Error failure) {
+            for (int i = 0; i < pages.size(); i++) {
+                try { pages.get(i).dispose(); } catch (RuntimeException | Error cleanup) { failure.addSuppressed(cleanup); }
+            }
+            throw failure;
         }
-        return new BitmapFont(definition.face, definition.size, definition.lineHeight, definition.base,
-                glyphs, definition.kernings, pages, true);
     }
 
     /**
@@ -94,11 +106,14 @@ public final class BitmapFontFiles {
     public static BitmapFont loadFreeType(GraphicsContext graphics, FileSystem files, String path,
             FreeTypeFontOptions options) {
         ensure(graphics, files, path);
+        return createFont(graphics, path, rasterize(files.internal(path).readBytes().get(), options));
+    }
+
+    static RasterizedFont rasterize(byte[] bytes, FreeTypeFontOptions options) {
         FreeTypeFontOptions actualOptions = options != null ? options : FreeTypeFontOptions.defaults(16.0f);
-        RasterizedFont rasterized = RuntimeCore.fontRasterizer().rasterize(files.internal(path).readBytes().get(),
+        return RuntimeCore.fontRasterizer().rasterize(bytes,
                 new FontRasterizerOptions(actualOptions.size(), actualOptions.characters(), actualOptions.padding(),
                         actualOptions.atlasWidth()));
-        return createFont(graphics, path, rasterized);
     }
 
     /**
@@ -117,8 +132,13 @@ public final class BitmapFontFiles {
         ImageData uploadImage = isPsp(graphics) ? powerOfTwoImage(image) : image;
         Texture texture = graphics.device().createTexture(TextureDescriptor.rgba8(label, uploadImage.width(),
                 uploadImage.height()));
-        graphics.device().writeTexture(texture, uploadImage.rgba());
-        return texture;
+        try {
+            graphics.device().writeTexture(texture, uploadImage.rgba());
+            return texture;
+        } catch (RuntimeException | Error failure) {
+            try { texture.dispose(); } catch (RuntimeException | Error cleanup) { failure.addSuppressed(cleanup); }
+            throw failure;
+        }
     }
 
     private static ImageData powerOfTwoImage(ImageData image) {
@@ -167,22 +187,27 @@ public final class BitmapFontFiles {
         return power;
     }
 
-    private static BitmapFont createFont(GraphicsContext graphics, String label, RasterizedFont rasterized) {
+    static BitmapFont createFont(GraphicsContext graphics, String label, RasterizedFont rasterized) {
         Texture texture = graphics.device().createTexture(TextureDescriptor.rgba8(label + " atlas",
                 rasterized.atlasWidth(), rasterized.atlasHeight()));
-        graphics.device().writeTexture(texture, rasterized.rgba());
-        Array<Texture> pages = new Array<Texture>();
-        pages.add(texture);
-        IntMap<BitmapFontGlyph> glyphs = new IntMap<BitmapFontGlyph>();
-        ObjectIterator<RasterizedGlyph> glyphIterator = rasterized.glyphs().values().iterator();
-        while (glyphIterator.hasNext()) {
-            RasterizedGlyph glyph = glyphIterator.next();
-            TextureRegion region = new TextureRegion(texture, glyph.x(), glyph.y(), glyph.width(), glyph.height());
-            glyphs.put(glyph.codePoint(), new BitmapFontGlyph(glyph.codePoint(), region,
-                    glyph.xOffset(), glyph.yOffset(), glyph.xAdvance()));
+        try {
+            graphics.device().writeTexture(texture, rasterized.rgba());
+            Array<Texture> pages = new Array<Texture>();
+            pages.add(texture);
+            IntMap<BitmapFontGlyph> glyphs = new IntMap<BitmapFontGlyph>();
+            ObjectIterator<RasterizedGlyph> glyphIterator = rasterized.glyphs().values().iterator();
+            while (glyphIterator.hasNext()) {
+                RasterizedGlyph glyph = glyphIterator.next();
+                TextureRegion region = new TextureRegion(texture, glyph.x(), glyph.y(), glyph.width(), glyph.height());
+                glyphs.put(glyph.codePoint(), new BitmapFontGlyph(glyph.codePoint(), region,
+                        glyph.xOffset(), glyph.yOffset(), glyph.xAdvance()));
+            }
+            return new BitmapFont(rasterized.name(), rasterized.nativeSize(), rasterized.lineHeight(),
+                    rasterized.baseLine(), glyphs, rasterized.kernings(), pages, true);
+        } catch (RuntimeException | Error failure) {
+            try { texture.dispose(); } catch (RuntimeException | Error cleanup) { failure.addSuppressed(cleanup); }
+            throw failure;
         }
-        return new BitmapFont(rasterized.name(), rasterized.nativeSize(), rasterized.lineHeight(),
-                rasterized.baseLine(), glyphs, rasterized.kernings(), pages, true);
     }
 
     private static void ensure(GraphicsContext graphics, FileSystem files, String path) {

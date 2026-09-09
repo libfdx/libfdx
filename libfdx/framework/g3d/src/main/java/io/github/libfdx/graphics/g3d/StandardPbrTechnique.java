@@ -1,24 +1,26 @@
 package io.github.libfdx.graphics.g3d;
 
-import io.github.libfdx.math.ClipDepthRange;
-import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.CompareFunction;
+import io.github.libfdx.graphics.GraphicsCapabilities;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.GraphicsFeature;
 import io.github.libfdx.graphics.Mesh;
 import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
+import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
+import io.github.libfdx.graphics.shader.ShaderModuleSource;
 import io.github.libfdx.graphics.shader.ShaderProfile;
-import io.github.libfdx.graphics.shadergraph.model.ShaderGraph;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompileOptions;
-import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompileResult;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompiler;
+import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompileResult;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraph;
 import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphMaterialDefinition;
-import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphRuntimeGraph;
 import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphRenderProgram;
 import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphRenderTechnique;
 import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphRenderTechniquePass;
 import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphRenderVariant;
+import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphRuntimeGraph;
+import io.github.libfdx.math.ClipDepthRange;
 
 /**
  * Framework-owned graph-composed PBR technique for ModelBatch's common
@@ -38,6 +40,7 @@ public final class StandardPbrTechnique {
     };
 
     private final PbrGraphCustomization customization;
+    private final DeferredCustomization deferred;
     private final ShaderGraphRenderTechnique technique;
     private final ShaderGraph surfaceGraph;
     private final ShaderGraph vertexGraph;
@@ -55,6 +58,12 @@ public final class StandardPbrTechnique {
             ShaderGraph surfaceGraph, ShaderGraph vertexGraph,
             ShaderGraph lightingGraph,
             ShaderGraphRuntimeGraph surfaceCompilation) {
+        this(graphics, surfaceGraph, vertexGraph, lightingGraph, surfaceCompilation, false);
+    }
+
+    private StandardPbrTechnique(GraphicsContext graphics, ShaderGraph surfaceGraph,
+            ShaderGraph vertexGraph, ShaderGraph lightingGraph,
+            ShaderGraphRuntimeGraph surfaceCompilation, boolean prepareSources) {
         if (graphics == null || surfaceGraph == null
                 || vertexGraph == null || lightingGraph == null) {
             throw new FdxException(
@@ -68,36 +77,9 @@ public final class StandardPbrTechnique {
                 GraphicsFeature.ALPHA_BLEND_CONTROL)
                 || graphics.device().capabilities().supports(
                         GraphicsFeature.COMPLETE_RENDER_PIPELINE_STATE);
-        ShaderProfile profile = graphics.device().capabilities()
-                .supports(ShaderProfile.PORTABLE_WEBGPU)
-                        ? ShaderProfile.PORTABLE_WEBGPU
-                        : graphics.device().capabilities().supports(
-                                ShaderProfile.PORTABLE_WEBGL2)
-                                        ? ShaderProfile.PORTABLE_WEBGL2
-                                        : ShaderProfile.NATIVE;
-        ShaderGraphCompiler compiler = new ShaderGraphCompiler();
-        ShaderGraphCompileOptions options =
-                ShaderGraphCompileOptions.builder()
-                        .profile(profile)
-                        .capabilities(graphics.device()
-                                .capabilities())
-                        .build();
-        ShaderGraphMaterialDefinition definition =
-                surfaceCompilation != null
-                        ? ShaderGraphMaterialDefinition.compiled(
-                                surfaceCompilation)
-                        : ShaderGraphMaterialDefinition.compile(
-                                surfaceGraph, compiler, options);
-        ShaderGraphCompileResult vertexCompilation =
-                requireSuccessful("vertex",
-                        compiler.compile(vertexGraph, options));
-        ShaderGraphCompileResult lightingCompilation =
-                requireSuccessful("lighting",
-                        compiler.compile(lightingGraph, options));
-        customization = new PbrGraphCustomization(definition,
-                profile,
-                vertexGraph, vertexCompilation, lightingGraph,
-                lightingCompilation);
+        GraphicsCapabilities capabilities = graphics.device().capabilities();
+        deferred = prepareSources ? new DeferredCustomization(capabilities, surfaceGraph, vertexGraph, lightingGraph) : null;
+        customization = prepareSources ? null : compileCustomization(capabilities, surfaceGraph, vertexGraph, lightingGraph, surfaceCompilation);
         ShaderGraphRenderTechniquePass[] passes =
                 new ShaderGraphRenderTechniquePass[
                         STANDARD_PASSES.length];
@@ -130,18 +112,100 @@ public final class StandardPbrTechnique {
                             ShaderGraphRenderVariant.builder(
                                     "blend", staticBlend).build(),
                             ShaderGraphRenderVariant.builder(
-                                    "skinned-blend", skinnedBlend).build())
+                                    "skinned-blend", skinnedBlend).build(),
+                            ShaderGraphRenderVariant.builder("textured", program(passId, false, false, false, true, "opaque", true)).build(),
+                            ShaderGraphRenderVariant.builder("textured-skinned", program(passId, true, false, false, true, "opaque", true)).build(),
+                            ShaderGraphRenderVariant.builder("textured-mask", program(passId, false, true, false, true, "mask", true)).build(),
+                            ShaderGraphRenderVariant.builder("textured-skinned-mask", program(passId, true, true, false, true, "mask", true)).build(),
+                            ShaderGraphRenderVariant.builder("textured-blend", program(passId, false, true, true, false, "blend", true)).build(),
+                            ShaderGraphRenderVariant.builder("textured-skinned-blend", program(passId, true, true, true, false, "blend", true)).build())
                     .build();
         }
         technique = ShaderGraphRenderTechnique.of(
                 "libfdx.standard.pbr", passes);
     }
 
+    /** Creates standard source definitions without compiling graphs, generating WGSL or creating
+     * native modules. Source generation runs inside the provider's preparation operation. */
+    static ShaderGraphRenderTechnique preparationTechnique(GraphicsContext graphics) {
+        return new StandardPbrTechnique(graphics, StandardPbrSurfaceGraph.create(), StandardPbrVertexGraph.create(),
+                StandardPbrLightingGraph.create(), null, true).technique();
+    }
+
+    private ShaderModuleSource source(boolean skinned, boolean alphaTest, boolean textured) {
+        return deferred != null ? deferred.sources[(skinned ? 1 : 0) | (alphaTest ? 2 : 0) | (textured ? 4 : 0)]
+                : ShaderModuleSource.fixed(customization.shader(skinned, alphaTest, textured));
+    }
+
+    private static final class DeferredCustomization {
+        final GraphicsCapabilities capabilities;
+        final ShaderGraph surface, vertex, lighting;
+        final ShaderModuleSource[] sources = new ShaderModuleSource[8];
+        volatile PbrGraphCustomization ready;
+        DeferredCustomization(GraphicsCapabilities capabilities, ShaderGraph surface, ShaderGraph vertex, ShaderGraph lighting) {
+            this.capabilities = capabilities; this.surface = surface; this.vertex = vertex; this.lighting = lighting;
+            for (int i = 0; i < sources.length; i++) {
+                final int variant = i;
+                sources[i] = ShaderModuleSource.deferred("vertexMain", "fragmentMain",
+                        () -> generate().shader((variant & 1) != 0, (variant & 2) != 0, (variant & 4) != 0));
+            }
+        }
+        // Only CPU preparation workers call this monitor. Owner-thread default lookup never waits.
+        synchronized PbrGraphCustomization generate() {
+            if (ready == null) ready = compileCustomization(capabilities, surface, vertex, lighting, null);
+            return ready;
+        }
+        GraphMaterial defaults() {
+            PbrGraphCustomization value = ready;
+            return value != null ? value.defaultMaterial() : null;
+        }
+    }
+
+    private static PbrGraphCustomization compileCustomization(GraphicsCapabilities capabilities,
+            ShaderGraph surfaceGraph, ShaderGraph vertexGraph, ShaderGraph lightingGraph,
+            ShaderGraphRuntimeGraph surfaceCompilation) {
+        ShaderProfile profile = capabilities
+                .supports(ShaderProfile.PORTABLE_WEBGPU)
+                        ? ShaderProfile.PORTABLE_WEBGPU
+                        : capabilities.supports(
+                                ShaderProfile.PORTABLE_WEBGL2)
+                                        ? ShaderProfile.PORTABLE_WEBGL2
+                                        : ShaderProfile.NATIVE;
+        ShaderGraphCompiler compiler = new ShaderGraphCompiler();
+        ShaderGraphCompileOptions options =
+                ShaderGraphCompileOptions.builder()
+                        .profile(profile)
+                        .capabilities(capabilities)
+                        .build();
+        ShaderGraphMaterialDefinition definition =
+                surfaceCompilation != null
+                        ? ShaderGraphMaterialDefinition.compiled(
+                                surfaceCompilation)
+                        : ShaderGraphMaterialDefinition.compile(
+                                surfaceGraph, compiler, options);
+        ShaderGraphCompileResult vertexCompilation =
+                requireSuccessful("vertex",
+                        compiler.compile(vertexGraph, options));
+        ShaderGraphCompileResult lightingCompilation =
+                requireSuccessful("lighting",
+                        compiler.compile(lightingGraph, options));
+        return new PbrGraphCustomization(definition,
+                profile,
+                vertexGraph, vertexCompilation, lightingGraph,
+                lightingCompilation);
+    }
+
     private ShaderGraphRenderProgram program(ShaderPassId passId,
             boolean skinned, boolean alphaTest, boolean alphaBlend,
             boolean depthWrite, String alphaLabel) {
+        return program(passId, skinned, alphaTest, alphaBlend, depthWrite, alphaLabel, false);
+    }
+
+    private ShaderGraphRenderProgram program(ShaderPassId passId,
+            boolean skinned, boolean alphaTest, boolean alphaBlend,
+            boolean depthWrite, String alphaLabel, boolean textured) {
         return ShaderGraphRenderProgram.builder(passId,
-                        customization.shader(skinned, alphaTest))
+                        source(skinned, alphaTest, textured))
                 .label("standard graph "
                         + (skinned ? "skinned " : "")
                         + alphaLabel + " PBR " + passId)
@@ -153,9 +217,9 @@ public final class StandardPbrTechnique {
                 // Providers without explicit blend-state control retain the
                 // historical always-blended pipeline as a safe fallback.
                 .alphaBlend(alphaBlend || !alphaBlendControl)
-                .vertexLayouts(skinned
+                .vertexLayouts(textured ? (skinned ? Mesh.PBR_TEXTURED_SKINNED_LAYOUT : Mesh.PBR_TEXTURED_LAYOUT) : skinned
                         ? Mesh.PBR_SKINNED_LAYOUT : Mesh.PBR_LAYOUT)
-                .defaultResources(customization.defaultMaterial())
+                .preparedDefaults(deferred != null ? deferred::defaults : customization::defaultMaterial)
                 .build();
     }
 

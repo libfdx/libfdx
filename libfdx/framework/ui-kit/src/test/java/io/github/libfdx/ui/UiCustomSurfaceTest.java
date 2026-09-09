@@ -17,6 +17,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class UiCustomSurfaceTest {
+    @Test
+    void orderedUiInputConsumesPressesAndDetachesWithoutRemovingGameplay() {
+        var input = new io.github.libfdx.input.DefaultInput();
+        var router = new io.github.libfdx.input.InputRouter();
+        var actions = new io.github.libfdx.input.InputActions(input);
+        var jump = actions.define("jump"); actions.bind(jump,io.github.libfdx.input.InputBinding.key(Key.A));
+        RecordingSurfaceInput surfaceInput = new RecordingSurfaceInput();
+        UiRoot root = new UiRoot(null,null,null,null).allowFontFallback(true);
+        root.resize(200,100); root.setContent(new StableSurfaceContent(surfaceInput)); root.update(0);
+        input.addProcessor(router); root.input(input,router); router.add(actions);
+        input.dispatchPointerDown(MouseButton.LEFT,10,10); input.dispatchPointerUp(MouseButton.LEFT,10,10);
+        input.dispatchKeyDown(Key.A); actions.update();
+        assertEquals(1,surfaceInput.keyDownCount); assertFalse(jump.down());
+        input.dispatchKeyUp(Key.A); root.dispose();
+        input.dispatchKeyDown(Key.A); assertTrue(jump.consumePressed());
+        input.dispatchKeyUp(Key.A); actions.dispose(); input.removeProcessor(router);
+    }
     private static final UiModifier SURFACE_MODIFIER = UiModifier.none()
             .size(100.0f, 60.0f)
             .focusable(true)
@@ -30,7 +47,7 @@ final class UiCustomSurfaceTest {
     void customSurfaceCapturesPointerAndReceivesFocusedInput() {
         RecordingSurfaceInput input = new RecordingSurfaceInput();
         StableSurfaceContent content = new StableSurfaceContent(input);
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         root.resize(200, 100);
         root.setContent(content);
         root.update(0.0f);
@@ -70,7 +87,7 @@ final class UiCustomSurfaceTest {
     void removingCapturedSurfaceDeliversCancelAndFocusLoss() {
         RecordingSurfaceInput input = new RecordingSurfaceInput();
         StableSurfaceContent content = new StableSurfaceContent(input);
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         root.resize(200, 100);
         root.setContent(content);
         root.update(0.0f);
@@ -90,7 +107,7 @@ final class UiCustomSurfaceTest {
         RecordingSurfaceInput input = new RecordingSurfaceInput();
         UiNode[] parent = new UiNode[1];
         UiNode[] surface = new UiNode[1];
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         root.resize(200, 100);
         root.setContent(scope -> parent[0] = scope.stack(
                 UiModifier.none().size(50.0f, 50.0f).clip(),
@@ -136,7 +153,7 @@ final class UiCustomSurfaceTest {
     void warmedSurfaceInputRoutingAllocatesNoFrameworkObjects() {
         RecordingSurfaceInput input = new RecordingSurfaceInput();
         StableSurfaceContent content = new StableSurfaceContent(input);
-        UiRoot root = new UiRoot(null, null, null, null);
+        UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         root.resize(200, 100);
         root.setContent(content);
         root.update(0.0f);

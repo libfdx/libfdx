@@ -6,12 +6,18 @@
 #include <vulkan/vulkan.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
+
+#ifdef LIBFDX_VULKAN_LOSS_TESTS
+#include "../../test/cpp/vulkan_loss_calls.h"
+#endif
 
 #define LOG_TAG "libfdx-vulkan"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -132,6 +138,17 @@ struct TextureRenderPass {
 };
 
 struct Context {
+    // One owner reference plus one for every unpublished preparation result/job.
+    // Only the owner mutates frame/surface state; workers read device and use private inputs.
+    std::atomic<uint32_t> deviceReferences{1};
+    std::atomic<bool> deviceLost{false};
+    // Published once by preparation initialization. Vulkan internally synchronizes this cache.
+    std::atomic<VkPipelineCache> preparationPipelineCache{VK_NULL_HANDLE};
+    bool pipelineCreationFeedback = false;
+    // This lock protects counters only, never native compilation or owner rendering.
+    std::mutex preparationCacheMetricsMutex;
+    uint64_t preparationPipelineCreations = 0, preparationPipelineFeedbacks = 0;
+    uint64_t preparationPipelineCacheHits = 0, preparationPipelineMutations = 0;
     ANativeWindow* window = nullptr;
     VkInstance instance = VK_NULL_HANDLE;
     VkSurfaceKHR surface = VK_NULL_HANDLE;
@@ -196,13 +213,36 @@ void check(VkResult result, const char* message) {
     }
 }
 
+struct DeviceLost : std::runtime_error {
+    DeviceLost() : std::runtime_error("Android Vulkan device lost") { }
+};
+
+void requireDevice(Context* context) {
+    if (context->deviceLost.load(std::memory_order_acquire)) throw DeviceLost();
+}
+
+VkResult observeResult(Context* context, VkResult result) {
+    if (result == VK_ERROR_DEVICE_LOST) context->deviceLost.store(true, std::memory_order_release);
+    return result;
+}
+
+VkResult optionalResult(Context* context, VkResult result) {
+    if (observeResult(context, result) == VK_ERROR_DEVICE_LOST) throw DeviceLost();
+    return result;
+}
+
+void check(Context* context, VkResult result, const char* message) {
+    if (observeResult(context, result) == VK_ERROR_DEVICE_LOST) throw DeviceLost();
+    check(result, message);
+}
+
 bool waitForFenceOrTimeout(Context* context, VkFence fence, uint64_t timeoutNs, const char* reason) {
     VkResult waitResult = vkWaitForFences(context->device, 1, &fence, VK_TRUE, timeoutNs);
     if (waitResult == VK_TIMEOUT) {
         LOGW("Android Vulkan timed out waiting for %s", reason);
         return false;
     }
-    check(waitResult, "Could not wait for Android Vulkan in-flight fence");
+    check(context, waitResult, "Could not wait for Android Vulkan in-flight fence");
     return true;
 }
 
@@ -210,6 +250,7 @@ bool waitForActiveFramesOrTimeout(Context* context, uint64_t timeoutNs, const ch
     if (context == nullptr || context->device == VK_NULL_HANDLE || context->frames.empty()) {
         return true;
     }
+    if (context->deviceLost.load(std::memory_order_acquire)) return true;
     for (FrameSync& frame : context->frames) {
         if (frame.inFlight == VK_NULL_HANDLE) {
             continue;
@@ -246,7 +287,7 @@ void recreateSignaledFrameFence(Context* context, FrameSync& frame) {
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
     VkFence replacement = VK_NULL_HANDLE;
-    check(vkCreateFence(context->device, &fenceInfo, nullptr, &replacement),
+    check(context, vkCreateFence(context->device, &fenceInfo, nullptr, &replacement),
             "Could not recreate Android Vulkan in-flight fence");
     if (frame.inFlight != VK_NULL_HANDLE) {
         vkDestroyFence(context->device, frame.inFlight, nullptr);
@@ -316,7 +357,18 @@ const char* vkResultName(VkResult result) {
     }
 }
 
-void throwFdx(JNIEnv* env, const std::string& message) {
+void throwFdx(JNIEnv* env, const std::exception& error) {
+    if (env->ExceptionCheck()) return;
+    if (dynamic_cast<const DeviceLost*>(&error) != nullptr) {
+        jclass bridge = env->FindClass("io/github/libfdx/backend/android/AndroidVulkanNative");
+        if (bridge == nullptr) return;
+        jmethodID factory = env->GetStaticMethodID(bridge, "deviceLostException", "()Ljava/lang/RuntimeException;");
+        if (factory == nullptr) return;
+        auto exception = static_cast<jthrowable>(env->CallStaticObjectMethod(bridge, factory));
+        if (!env->ExceptionCheck() && exception != nullptr) env->Throw(exception);
+        return;
+    }
+    std::string message = error.what();
     LOGE("%s", message.c_str());
     jclass exceptionClass = env->FindClass("io/github/libfdx/core/FdxException");
     if (exceptionClass == nullptr) {
@@ -647,7 +699,7 @@ VkRenderPass createRenderPass(Context* context, VkFormat colorFormat, VkAttachme
     renderPassInfo.pDependencies = dependencies;
 
     VkRenderPass renderPass = VK_NULL_HANDLE;
-    check(vkCreateRenderPass(context->device, &renderPassInfo, nullptr, &renderPass),
+    check(context, vkCreateRenderPass(context->device, &renderPassInfo, nullptr, &renderPass),
             "Could not create Android Vulkan render pass");
     return renderPass;
 }
@@ -667,7 +719,7 @@ DepthAttachment createDepthAttachment(Context* context, uint32_t width, uint32_t
     imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    check(vkCreateImage(context->device, &imageInfo, nullptr, &depth.image),
+    check(context, vkCreateImage(context->device, &imageInfo, nullptr, &depth.image),
             "Could not create Android Vulkan depth image");
 
     VkMemoryRequirements memoryRequirements;
@@ -680,9 +732,9 @@ DepthAttachment createDepthAttachment(Context* context, uint32_t width, uint32_t
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     try {
-        check(vkAllocateMemory(context->device, &allocationInfo, nullptr, &depth.memory),
+        check(context, vkAllocateMemory(context->device, &allocationInfo, nullptr, &depth.memory),
                 "Could not allocate Android Vulkan depth memory");
-        check(vkBindImageMemory(context->device, depth.image, depth.memory, 0),
+        check(context, vkBindImageMemory(context->device, depth.image, depth.memory, 0),
                 "Could not bind Android Vulkan depth memory");
 
         VkImageViewCreateInfo viewInfo{};
@@ -695,7 +747,7 @@ DepthAttachment createDepthAttachment(Context* context, uint32_t width, uint32_t
         viewInfo.subresourceRange.levelCount = 1;
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 1;
-        check(vkCreateImageView(context->device, &viewInfo, nullptr, &depth.imageView),
+        check(context, vkCreateImageView(context->device, &viewInfo, nullptr, &depth.imageView),
                 "Could not create Android Vulkan depth image view");
         return depth;
     } catch (...) {
@@ -768,19 +820,20 @@ void destroySwapchainResources(Context* context) {
 }
 
 void createSwapchain(Context* context) {
+    requireDevice(context);
     ensureNoActiveFramesOrThrow(context, FRAME_FENCE_TIMEOUT_NS, "Android Vulkan swapchain recreation");
     destroySwapchainResources(context);
 
     VkSurfaceCapabilitiesKHR capabilities{};
-    check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context->physicalDevice, context->surface, &capabilities),
+    check(context, vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context->physicalDevice, context->surface, &capabilities),
             "Could not get Android Vulkan surface capabilities");
 
     uint32_t formatCount = 0;
-    check(vkGetPhysicalDeviceSurfaceFormatsKHR(context->physicalDevice, context->surface, &formatCount, nullptr),
+    check(context, vkGetPhysicalDeviceSurfaceFormatsKHR(context->physicalDevice, context->surface, &formatCount, nullptr),
             "Could not get Android Vulkan surface format count");
     std::vector<VkSurfaceFormatKHR> formats(formatCount);
     if (formatCount > 0) {
-        check(vkGetPhysicalDeviceSurfaceFormatsKHR(context->physicalDevice, context->surface, &formatCount,
+        check(context, vkGetPhysicalDeviceSurfaceFormatsKHR(context->physicalDevice, context->surface, &formatCount,
                 formats.data()), "Could not get Android Vulkan surface formats");
     }
 
@@ -833,15 +886,15 @@ void createSwapchain(Context* context) {
     createInfo.clipped = VK_TRUE;
     createInfo.oldSwapchain = VK_NULL_HANDLE;
 
-    check(vkCreateSwapchainKHR(context->device, &createInfo, nullptr, &context->swapchain),
+    check(context, vkCreateSwapchainKHR(context->device, &createInfo, nullptr, &context->swapchain),
             "Could not create Android Vulkan swapchain");
 
     uint32_t swapchainImageCount = 0;
-    check(vkGetSwapchainImagesKHR(context->device, context->swapchain, &swapchainImageCount, nullptr),
+    check(context, vkGetSwapchainImagesKHR(context->device, context->swapchain, &swapchainImageCount, nullptr),
             "Could not get Android Vulkan swapchain image count");
     LOGI("Android Vulkan swapchain created with %u images", swapchainImageCount);
     context->swapchainImages.resize(swapchainImageCount);
-    check(vkGetSwapchainImagesKHR(context->device, context->swapchain, &swapchainImageCount,
+    check(context, vkGetSwapchainImagesKHR(context->device, context->swapchain, &swapchainImageCount,
             context->swapchainImages.data()), "Could not get Android Vulkan swapchain images");
 
     context->imageViews.resize(context->swapchainImages.size());
@@ -856,7 +909,7 @@ void createSwapchain(Context* context) {
         imageViewInfo.subresourceRange.levelCount = 1;
         imageViewInfo.subresourceRange.baseArrayLayer = 0;
         imageViewInfo.subresourceRange.layerCount = 1;
-        check(vkCreateImageView(context->device, &imageViewInfo, nullptr, &context->imageViews[i]),
+        check(context, vkCreateImageView(context->device, &imageViewInfo, nullptr, &context->imageViews[i]),
                 "Could not create Android Vulkan swapchain image view");
     }
 
@@ -891,7 +944,7 @@ void createSwapchain(Context* context) {
         framebufferInfo.width = context->extent.width;
         framebufferInfo.height = context->extent.height;
         framebufferInfo.layers = 1;
-        check(vkCreateFramebuffer(context->device, &framebufferInfo, nullptr, &context->framebuffers[i]),
+        check(context, vkCreateFramebuffer(context->device, &framebufferInfo, nullptr, &context->framebuffers[i]),
                 "Could not create Android Vulkan framebuffer");
     }
     context->pendingResize = false;
@@ -903,6 +956,7 @@ void recoverFailedFrame(Context* context, const char* operation) {
     }
     context->frameStarted = false;
     context->renderPassStarted = false;
+    if (context->deviceLost.load(std::memory_order_acquire)) return;
     if (context->device == VK_NULL_HANDLE || context->swapchain == VK_NULL_HANDLE) {
         return;
     }
@@ -920,7 +974,8 @@ void recoverFailedFrame(Context* context, const char* operation) {
     context->activeRenderTargetFinalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     if (!context->frames.empty()) {
         FrameSync& frame = context->frames[context->frameIndex % context->frames.size()];
-        VkResult resetResult = vkResetCommandBuffer(frame.commandBuffer, 0);
+        VkResult resetResult = observeResult(context, vkResetCommandBuffer(frame.commandBuffer, 0));
+        if (context->deviceLost.load(std::memory_order_acquire)) return;
         if (resetResult != VK_SUCCESS) {
             LOGW("Could not reset Android Vulkan command buffer after failed %s: %d",
                     operation, resetResult);
@@ -969,21 +1024,21 @@ void createSurface(Context* context) {
     VkAndroidSurfaceCreateInfoKHR surfaceInfo{};
     surfaceInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
     surfaceInfo.window = context->window;
-    check(vkCreateAndroidSurfaceKHR(context->instance, &surfaceInfo, nullptr, &context->surface),
+    check(context, vkCreateAndroidSurfaceKHR(context->instance, &surfaceInfo, nullptr, &context->surface),
             "Could not create Android Vulkan surface");
     LOGI("Android Vulkan surface created");
 }
 
 void pickPhysicalDevice(Context* context) {
     uint32_t count = 0;
-    check(vkEnumeratePhysicalDevices(context->instance, &count, nullptr),
+    check(context, vkEnumeratePhysicalDevices(context->instance, &count, nullptr),
             "Could not enumerate Android Vulkan physical device count");
     if (count == 0) {
         throw std::runtime_error("No Android Vulkan physical devices are available");
     }
     LOGI("Android Vulkan physical devices available: %u", count);
     std::vector<VkPhysicalDevice> devices(count);
-    check(vkEnumeratePhysicalDevices(context->instance, &count, devices.data()),
+    check(context, vkEnumeratePhysicalDevices(context->instance, &count, devices.data()),
             "Could not enumerate Android Vulkan physical devices");
 
     for (VkPhysicalDevice device : devices) {
@@ -1053,6 +1108,9 @@ void createDevice(Context* context) {
     if (!deviceIsVulkan11) {
         extensions.push_back(VK_KHR_MAINTENANCE1_EXTENSION_NAME);
     }
+    context->pipelineCreationFeedback = containsExtension(enumerateDeviceExtensions(context->physicalDevice),
+            VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME);
+    if (context->pipelineCreationFeedback) extensions.push_back(VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME);
     LOGI("Android Vulkan requested device extensions: %s", requestedExtensionNames(extensions).c_str());
 
     VkPhysicalDeviceFeatures features{};
@@ -1089,7 +1147,7 @@ VkDescriptorPool createFrameDescriptorPool(Context* context) {
     poolInfo.pPoolSizes = poolSizes;
 
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-    check(vkCreateDescriptorPool(context->device, &poolInfo, nullptr, &descriptorPool),
+    check(context, vkCreateDescriptorPool(context->device, &poolInfo, nullptr, &descriptorPool),
             "Could not create Android Vulkan frame descriptor pool");
     return descriptorPool;
 }
@@ -1170,7 +1228,7 @@ void createCommandResources(Context* context, int framesInFlight) {
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     poolInfo.queueFamilyIndex = context->graphicsQueueFamily;
-    check(vkCreateCommandPool(context->device, &poolInfo, nullptr, &context->commandPool),
+    check(context, vkCreateCommandPool(context->device, &poolInfo, nullptr, &context->commandPool),
             "Could not create Android Vulkan command pool");
 
     int actualFramesInFlight = std::max(1, std::min(3, framesInFlight));
@@ -1182,7 +1240,7 @@ void createCommandResources(Context* context, int framesInFlight) {
     allocateInfo.commandPool = context->commandPool;
     allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocateInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers.size());
-    check(vkAllocateCommandBuffers(context->device, &allocateInfo, commandBuffers.data()),
+    check(context, vkAllocateCommandBuffers(context->device, &allocateInfo, commandBuffers.data()),
             "Could not allocate Android Vulkan command buffers");
 
     VkSemaphoreCreateInfo semaphoreInfo{};
@@ -1193,11 +1251,11 @@ void createCommandResources(Context* context, int framesInFlight) {
 
     for (size_t i = 0; i < context->frames.size(); i++) {
         context->frames[i].commandBuffer = commandBuffers[i];
-        check(vkCreateSemaphore(context->device, &semaphoreInfo, nullptr, &context->frames[i].imageAvailable),
+        check(context, vkCreateSemaphore(context->device, &semaphoreInfo, nullptr, &context->frames[i].imageAvailable),
                 "Could not create Android Vulkan image-available semaphore");
-        check(vkCreateSemaphore(context->device, &semaphoreInfo, nullptr, &context->frames[i].renderFinished),
+        check(context, vkCreateSemaphore(context->device, &semaphoreInfo, nullptr, &context->frames[i].renderFinished),
                 "Could not create Android Vulkan render-finished semaphore");
-        check(vkCreateFence(context->device, &fenceInfo, nullptr, &context->frames[i].inFlight),
+        check(context, vkCreateFence(context->device, &fenceInfo, nullptr, &context->frames[i].inFlight),
                 "Could not create Android Vulkan in-flight fence");
         context->frames[i].descriptorPool = createFrameDescriptorPool(context);
     }
@@ -1205,12 +1263,22 @@ void createCommandResources(Context* context, int framesInFlight) {
 
 void destroyTextureRenderPasses(Context* context);
 
+void releasePreparationDevice(Context* context) {
+    if (context->deviceReferences.fetch_sub(1, std::memory_order_acq_rel) != 1) return;
+    VkPipelineCache cache = context->preparationPipelineCache.load(std::memory_order_acquire);
+    if (cache != VK_NULL_HANDLE) vkDestroyPipelineCache(context->device, cache, nullptr);
+    if (context->device != VK_NULL_HANDLE) vkDestroyDevice(context->device, nullptr);
+    if (context->instance != VK_NULL_HANDLE) vkDestroyInstance(context->instance, nullptr);
+    delete context;
+}
+
 void destroyContext(Context* context) {
     if (context == nullptr) {
         return;
     }
     if (context->device != VK_NULL_HANDLE) {
-        ensureNoActiveFramesOrThrow(context, FRAME_FENCE_TIMEOUT_NS, "Android Vulkan context destroy");
+        try { ensureNoActiveFramesOrThrow(context, FRAME_FENCE_TIMEOUT_NS, "Android Vulkan context destroy"); }
+        catch (const DeviceLost&) { /* Loss ends GPU use; child objects still require destruction. */ }
         destroySwapchainResources(context);
         destroyTextureRenderPasses(context);
         for (FrameSync& frame : context->frames) {
@@ -1232,18 +1300,14 @@ void destroyContext(Context* context) {
         if (context->commandPool != VK_NULL_HANDLE) {
             vkDestroyCommandPool(context->device, context->commandPool, nullptr);
         }
-        vkDestroyDevice(context->device, nullptr);
     }
     if (context->surface != VK_NULL_HANDLE && context->instance != VK_NULL_HANDLE) {
         vkDestroySurfaceKHR(context->instance, context->surface, nullptr);
     }
-    if (context->instance != VK_NULL_HANDLE) {
-        vkDestroyInstance(context->instance, nullptr);
-    }
     if (context->window != nullptr) {
         ANativeWindow_release(context->window);
     }
-    delete context;
+    releasePreparationDevice(context);
 }
 
 VkRenderPass selectRenderPass(Context* context, bool clear, bool store, bool depthClear) {
@@ -1319,7 +1383,7 @@ VkFramebuffer textureFramebuffer(Context* context, Texture* texture, VkRenderPas
     framebufferInfo.layers = 1;
 
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
-    check(vkCreateFramebuffer(context->device, &framebufferInfo, nullptr, &framebuffer),
+    check(context, vkCreateFramebuffer(context->device, &framebufferInfo, nullptr, &framebuffer),
             "Could not create Android Vulkan texture framebuffer");
     texture->framebuffers.push_back(std::make_pair(renderPass, framebuffer));
     return framebuffer;
@@ -1366,7 +1430,7 @@ ReadbackBuffer createReadbackBuffer(Context* context, VkDeviceSize size) {
     bufferInfo.size = size;
     bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    check(vkCreateBuffer(context->device, &bufferInfo, nullptr, &readback.buffer),
+    check(context, vkCreateBuffer(context->device, &bufferInfo, nullptr, &readback.buffer),
             "Could not create Android Vulkan readback buffer");
 
     VkMemoryRequirements memoryRequirements;
@@ -1378,9 +1442,9 @@ ReadbackBuffer createReadbackBuffer(Context* context, VkDeviceSize size) {
     allocationInfo.memoryTypeIndex = findMemoryType(context, memoryRequirements.memoryTypeBits,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     try {
-        check(vkAllocateMemory(context->device, &allocationInfo, nullptr, &readback.memory),
+        check(context, vkAllocateMemory(context->device, &allocationInfo, nullptr, &readback.memory),
                 "Could not allocate Android Vulkan readback memory");
-        check(vkBindBufferMemory(context->device, readback.buffer, readback.memory, 0),
+        check(context, vkBindBufferMemory(context->device, readback.buffer, readback.memory, 0),
                 "Could not bind Android Vulkan readback memory");
         return readback;
     } catch (...) {
@@ -1472,13 +1536,14 @@ void finishActiveRenderTarget(Context* context) {
 }
 
 void submitAndPresentFrame(Context* context, bool waitForCompletion) {
+    requireDevice(context);
     if (context->renderPassStarted) {
         vkCmdEndRenderPass(currentFrame(context).commandBuffer);
         finishActiveRenderTarget(context);
         context->renderPassStarted = false;
     }
     FrameSync& frame = currentFrame(context);
-    check(vkEndCommandBuffer(frame.commandBuffer), "Could not end Android Vulkan command buffer");
+    check(context, vkEndCommandBuffer(frame.commandBuffer), "Could not end Android Vulkan command buffer");
 
     VkSemaphore waitSemaphores[] = {frame.imageAvailable};
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -1494,10 +1559,11 @@ void submitAndPresentFrame(Context* context, bool waitForCompletion) {
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    check(vkResetFences(context->device, 1, &frame.inFlight),
+    check(context, vkResetFences(context->device, 1, &frame.inFlight),
             "Could not reset Android Vulkan in-flight fence before submit");
     VkResult submitResult = vkQueueSubmit(context->graphicsQueue, 1, &submitInfo, frame.inFlight);
     if (submitResult != VK_SUCCESS) {
+        if (submitResult == VK_ERROR_DEVICE_LOST) check(context, submitResult, "Android Vulkan submit");
         recreateSignaledFrameFence(context, frame);
         throw std::runtime_error("Could not submit Android Vulkan command buffer: "
                 + std::to_string(submitResult));
@@ -1524,7 +1590,7 @@ void submitAndPresentFrame(Context* context, bool waitForCompletion) {
 
     if (presentResult != VK_SUCCESS && presentResult != VK_ERROR_OUT_OF_DATE_KHR
             && presentResult != VK_SUBOPTIMAL_KHR) {
-        throw std::runtime_error("Could not present Android Vulkan frame: " + std::to_string(presentResult));
+        check(context, presentResult, "Could not present Android Vulkan frame");
     }
     if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || context->pendingResize) {
         createSwapchain(context);
@@ -1539,7 +1605,7 @@ void copyReadbackToJava(Context* context, ReadbackBuffer* readback, void* target
         throw std::runtime_error("Android Vulkan readback target buffer is too small");
     }
     void* mapped = nullptr;
-    check(vkMapMemory(context->device, readback->memory, 0, readback->size, 0, &mapped),
+    check(context, vkMapMemory(context->device, readback->memory, 0, readback->size, 0, &mapped),
             "Could not map Android Vulkan readback memory");
     try {
         const uint8_t* source = static_cast<const uint8_t*>(mapped);
@@ -1619,7 +1685,7 @@ VkShaderModule createShaderModule(Context* context, const std::vector<uint32_t>&
     createInfo.pCode = words.data();
 
     VkShaderModule shaderModule = VK_NULL_HANDLE;
-    check(vkCreateShaderModule(context->device, &createInfo, nullptr, &shaderModule),
+    check(context, vkCreateShaderModule(context->device, &createInfo, nullptr, &shaderModule),
             "Could not create Android Vulkan shader module");
     return shaderModule;
 }
@@ -1639,7 +1705,7 @@ Buffer* createBuffer(Context* context, int size, int usage) {
     bufferInfo.size = buffer->size;
     bufferInfo.usage = usage == 1 ? VK_BUFFER_USAGE_INDEX_BUFFER_BIT : VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    check(vkCreateBuffer(context->device, &bufferInfo, nullptr, &buffer->buffer),
+    check(context, vkCreateBuffer(context->device, &bufferInfo, nullptr, &buffer->buffer),
             usage == 1 ? "Could not create Android Vulkan index buffer"
                     : "Could not create Android Vulkan vertex buffer");
 
@@ -1653,9 +1719,9 @@ Buffer* createBuffer(Context* context, int size, int usage) {
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
     try {
-        check(vkAllocateMemory(context->device, &allocationInfo, nullptr, &buffer->memory),
+        check(context, vkAllocateMemory(context->device, &allocationInfo, nullptr, &buffer->memory),
                 "Could not allocate Android Vulkan vertex buffer memory");
-        check(vkBindBufferMemory(context->device, buffer->buffer, buffer->memory, 0),
+        check(context, vkBindBufferMemory(context->device, buffer->buffer, buffer->memory, 0),
                 "Could not bind Android Vulkan vertex buffer memory");
         return buffer;
     } catch (const std::exception&) {
@@ -1700,7 +1766,7 @@ TransientBuffer createHostVisibleBuffer(Context* context, VkDeviceSize size, VkB
     bufferInfo.size = size;
     bufferInfo.usage = usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    check(vkCreateBuffer(context->device, &bufferInfo, nullptr, &allocation.buffer), label);
+    check(context, vkCreateBuffer(context->device, &bufferInfo, nullptr, &allocation.buffer), label);
 
     VkMemoryRequirements memoryRequirements;
     vkGetBufferMemoryRequirements(context->device, allocation.buffer, &memoryRequirements);
@@ -1712,9 +1778,9 @@ TransientBuffer createHostVisibleBuffer(Context* context, VkDeviceSize size, VkB
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
     try {
-        check(vkAllocateMemory(context->device, &allocationInfo, nullptr, &allocation.memory),
+        check(context, vkAllocateMemory(context->device, &allocationInfo, nullptr, &allocation.memory),
                 "Could not allocate Android Vulkan host-visible buffer memory");
-        check(vkBindBufferMemory(context->device, allocation.buffer, allocation.memory, 0),
+        check(context, vkBindBufferMemory(context->device, allocation.buffer, allocation.memory, 0),
                 "Could not bind Android Vulkan host-visible buffer memory");
         return allocation;
     } catch (...) {
@@ -1742,7 +1808,7 @@ void destroyHostVisibleBuffer(Context* context, TransientBuffer* allocation) {
 void copyToHostVisibleBuffer(Context* context, TransientBuffer* allocation, const void* source,
         VkDeviceSize size) {
     void* mapped = nullptr;
-    check(vkMapMemory(context->device, allocation->memory, 0, size, 0, &mapped),
+    check(context, vkMapMemory(context->device, allocation->memory, 0, size, 0, &mapped),
             "Could not map Android Vulkan host-visible buffer memory");
     std::memcpy(mapped, source, static_cast<size_t>(size));
     vkUnmapMemory(context->device, allocation->memory);
@@ -1756,19 +1822,19 @@ VkCommandBuffer beginSingleTimeCommands(Context* context) {
     allocateInfo.commandBufferCount = 1;
 
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-    check(vkAllocateCommandBuffers(context->device, &allocateInfo, &commandBuffer),
+    check(context, vkAllocateCommandBuffers(context->device, &allocateInfo, &commandBuffer),
             "Could not allocate Android Vulkan one-time command buffer");
 
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    check(vkBeginCommandBuffer(commandBuffer, &beginInfo),
+    check(context, vkBeginCommandBuffer(commandBuffer, &beginInfo),
             "Could not begin Android Vulkan one-time command buffer");
     return commandBuffer;
 }
 
 void endSingleTimeCommands(Context* context, VkCommandBuffer commandBuffer) {
-    check(vkEndCommandBuffer(commandBuffer), "Could not end Android Vulkan one-time command buffer");
+    check(context, vkEndCommandBuffer(commandBuffer), "Could not end Android Vulkan one-time command buffer");
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1777,10 +1843,10 @@ void endSingleTimeCommands(Context* context, VkCommandBuffer commandBuffer) {
     VkFence fence = VK_NULL_HANDLE;
     VkFenceCreateInfo fenceInfo{};
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    check(vkCreateFence(context->device, &fenceInfo, nullptr, &fence),
+    check(context, vkCreateFence(context->device, &fenceInfo, nullptr, &fence),
             "Could not create Android Vulkan one-time command fence");
     try {
-        check(vkQueueSubmit(context->graphicsQueue, 1, &submitInfo, fence),
+        check(context, vkQueueSubmit(context->graphicsQueue, 1, &submitInfo, fence),
                 "Could not submit Android Vulkan one-time command buffer");
         if (!waitForFenceOrTimeout(context, fence, SINGLE_COMMAND_TIMEOUT_NS,
                 "Android Vulkan one-time command fence")) {
@@ -1808,7 +1874,7 @@ VkImageView createTextureImageView(Context* context, VkImage image, VkFormat for
     viewInfo.subresourceRange.layerCount = 1;
 
     VkImageView imageView = VK_NULL_HANDLE;
-    check(vkCreateImageView(context->device, &viewInfo, nullptr, &imageView),
+    check(context, vkCreateImageView(context->device, &viewInfo, nullptr, &imageView),
             "Could not create Android Vulkan texture image view");
     return imageView;
 }
@@ -1851,7 +1917,7 @@ VkSampler createTextureSampler(Context* context, int wrapS, int wrapT, int filte
     samplerInfo.maxLod = 0.0f;
 
     VkSampler sampler = VK_NULL_HANDLE;
-    check(vkCreateSampler(context->device, &samplerInfo, nullptr, &sampler),
+    check(context, vkCreateSampler(context->device, &samplerInfo, nullptr, &sampler),
             "Could not create Android Vulkan texture sampler");
     return sampler;
 }
@@ -1899,7 +1965,7 @@ Texture* createTextureResource(Context* context, int width, int height, VkFormat
         }
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        check(vkCreateImage(context->device, &imageInfo, nullptr, &texture->image),
+        check(context, vkCreateImage(context->device, &imageInfo, nullptr, &texture->image),
                 "Could not create Android Vulkan texture image");
 
         VkMemoryRequirements memoryRequirements;
@@ -1910,9 +1976,9 @@ Texture* createTextureResource(Context* context, int width, int height, VkFormat
         allocationInfo.allocationSize = memoryRequirements.size;
         allocationInfo.memoryTypeIndex = findMemoryType(context, memoryRequirements.memoryTypeBits,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        check(vkAllocateMemory(context->device, &allocationInfo, nullptr, &texture->memory),
+        check(context, vkAllocateMemory(context->device, &allocationInfo, nullptr, &texture->memory),
                 "Could not allocate Android Vulkan texture memory");
-        check(vkBindImageMemory(context->device, texture->image, texture->memory, 0),
+        check(context, vkBindImageMemory(context->device, texture->image, texture->memory, 0),
                 "Could not bind Android Vulkan texture memory");
 
         texture->imageView = createTextureImageView(context, texture->image, format);
@@ -2103,7 +2169,7 @@ VkDescriptorSet allocateDescriptorSet(Context* context, VkDescriptorSetLayout la
     allocateInfo.pSetLayouts = &layout;
 
     VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
-    check(vkAllocateDescriptorSets(context->device, &allocateInfo, &descriptorSet),
+    check(context, vkAllocateDescriptorSets(context->device, &allocateInfo, &descriptorSet),
             "Could not allocate Android Vulkan descriptor set");
     return descriptorSet;
 }
@@ -2123,7 +2189,7 @@ VkDescriptorSetLayout createTextureDescriptorSetLayout(Context* context, int sam
     layoutInfo.pBindings = bindings.data();
 
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
-    check(vkCreateDescriptorSetLayout(context->device, &layoutInfo, nullptr, &layout),
+    check(context, vkCreateDescriptorSetLayout(context->device, &layoutInfo, nullptr, &layout),
             "Could not create Android Vulkan texture descriptor set layout");
     return layout;
 }
@@ -2141,7 +2207,7 @@ VkDescriptorSetLayout createUniformDescriptorSetLayout(Context* context) {
     layoutInfo.pBindings = &binding;
 
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
-    check(vkCreateDescriptorSetLayout(context->device, &layoutInfo, nullptr, &layout),
+    check(context, vkCreateDescriptorSetLayout(context->device, &layoutInfo, nullptr, &layout),
             "Could not create Android Vulkan uniform descriptor set layout");
     return layout;
 }
@@ -2264,7 +2330,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_create(JNIEnv* env, jc
         return handle(context);
     } catch (const std::exception& error) {
         destroyContext(context);
-        throwFdx(env, error.what());
+        throwFdx(env, error);
         return 0;
     }
 }
@@ -2282,7 +2348,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_resize(JNIEnv* env, jc
             createSwapchain(context);
         }
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2291,6 +2357,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_beginFrame(JNIEnv* env
     Context* context = ptr<Context>(contextHandle);
     bool imageAcquired = false;
     try {
+        requireDevice(context);
         if (context->frames.empty()) {
             return JNI_FALSE;
         }
@@ -2305,7 +2372,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_beginFrame(JNIEnv* env
         destroyTransientBuffers(context, frame);
         destroyRetiredResources(context, frame);
         if (frame.descriptorPool != VK_NULL_HANDLE) {
-            check(vkResetDescriptorPool(context->device, frame.descriptorPool, 0),
+            check(context, vkResetDescriptorPool(context->device, frame.descriptorPool, 0),
                     "Could not reset Android Vulkan frame descriptor pool");
         }
 
@@ -2320,16 +2387,15 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_beginFrame(JNIEnv* env
             return JNI_FALSE;
         }
         if (acquireResult != VK_SUCCESS && acquireResult != VK_SUBOPTIMAL_KHR) {
-            throw std::runtime_error("Could not acquire Android Vulkan swapchain image: "
-                    + std::to_string(acquireResult));
+            check(context, acquireResult, "Could not acquire Android Vulkan swapchain image");
         }
         imageAcquired = true;
 
-        check(vkResetCommandBuffer(frame.commandBuffer, 0), "Could not reset Android Vulkan command buffer");
+        check(context, vkResetCommandBuffer(frame.commandBuffer, 0), "Could not reset Android Vulkan command buffer");
 
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        check(vkBeginCommandBuffer(frame.commandBuffer, &beginInfo),
+        check(context, vkBeginCommandBuffer(frame.commandBuffer, &beginInfo),
                 "Could not begin Android Vulkan command buffer");
 
         context->frameStarted = true;
@@ -2341,7 +2407,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_beginFrame(JNIEnv* env
         if (imageAcquired) {
             recoverFailedFrame(context, "beginFrame");
         }
-        throwFdx(env, error.what());
+        throwFdx(env, error);
         return JNI_FALSE;
     }
 }
@@ -2356,7 +2422,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_endFrame(JNIEnv* env, 
         submitAndPresentFrame(context, false);
     } catch (const std::exception& error) {
         recoverFailedFrame(context, "endFrame");
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2398,7 +2464,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_readPixelsRgba8(JNIEnv
         if (context != nullptr) {
             recoverFailedFrame(context, "readPixelsRgba8");
         }
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2427,7 +2493,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_clear(JNIEnv* env, jcl
         vkCmdBeginRenderPass(currentFrame(context).commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdEndRenderPass(currentFrame(context).commandBuffer);
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2438,7 +2504,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createBuffer(JNIEnv* e
     try {
         return handle(createBuffer(context, static_cast<int>(size), static_cast<int>(usage)));
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
         return 0;
     }
 }
@@ -2465,12 +2531,12 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_writeBuffer(JNIEnv* en
                     "Android Vulkan buffer write");
         }
         void* mapped = nullptr;
-        check(vkMapMemory(buffer->context->device, buffer->memory, 0, static_cast<VkDeviceSize>(size), 0,
+        check(buffer->context, vkMapMemory(buffer->context->device, buffer->memory, 0, static_cast<VkDeviceSize>(size), 0,
                 &mapped), "Could not map Android Vulkan vertex buffer memory");
         std::memcpy(mapped, source, static_cast<size_t>(size));
         vkUnmapMemory(buffer->context->device, buffer->memory);
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2485,7 +2551,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createTexture(JNIEnv* 
                 static_cast<int>(filter),
                 sampled == JNI_TRUE, renderAttachment == JNI_TRUE));
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
         return 0;
     }
 }
@@ -2501,7 +2567,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_writeTexture(JNIEnv* e
         }
         writeTextureData(texture, source, static_cast<int>(size));
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2523,7 +2589,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createShaderModule(JNI
             vkDestroyShaderModule(context->device, module->fragment, nullptr);
         }
         delete module;
-        throwFdx(env, error.what());
+        throwFdx(env, error);
         return 0;
     }
 }
@@ -2534,7 +2600,8 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createRenderPipeline(J
         jintArray vertexStridesArray, jintArray vertexStepModesArray, jintArray attributeBindingsArray,
         jintArray attributeLocationsArray, jintArray attributeFormatsArray, jintArray attributeOffsetsArray,
         jint sampledTextureCountValue, jboolean uniformBufferEnabled, jboolean depthTestEnabled,
-        jboolean blendEnabled, jboolean depthWriteEnabled) {
+        jboolean blendEnabled, jboolean depthWriteEnabled, jstring vertexEntry, jstring fragmentEntry,
+        jboolean isolatedPreparation) {
     Context* context = ptr<Context>(contextHandle);
     ShaderModule* shaderModule = ptr<ShaderModule>(shaderModuleHandle);
     Pipeline* pipeline = new Pipeline();
@@ -2542,8 +2609,19 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createRenderPipeline(J
     pipeline->sampledTextureCount = static_cast<int>(sampledTextureCountValue);
     pipeline->uniformBufferEnabled = uniformBufferEnabled == JNI_TRUE;
     pipeline->uniformDescriptorSetIndex = pipeline->sampledTextureCount > 0 ? 1 : 0;
+    VkRenderPass ownedRenderPass = VK_NULL_HANDLE;
 
     try {
+        auto entryName = [env](jstring value) {
+            const char* chars = value != nullptr ? env->GetStringUTFChars(value, nullptr) : nullptr;
+            if (chars == nullptr) throw std::runtime_error("Missing Vulkan shader entry point");
+            try {
+                std::string result(chars);
+                env->ReleaseStringUTFChars(value, chars);
+                return result;
+            } catch (...) { env->ReleaseStringUTFChars(value, chars); throw; }
+        };
+        std::string vertexName = entryName(vertexEntry), fragmentName = entryName(fragmentEntry);
         if (pipeline->sampledTextureCount < 0 || pipeline->sampledTextureCount > MAX_TEXTURE_DESCRIPTOR_SLOTS) {
             throw std::runtime_error("Android Vulkan sampled texture count exceeds the descriptor slot limit");
         }
@@ -2551,11 +2629,11 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createRenderPipeline(J
         shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
         shaderStages[0].module = shaderModule->vertex;
-        shaderStages[0].pName = "vertexMain";
+        shaderStages[0].pName = vertexName.c_str();
         shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
         shaderStages[1].module = shaderModule->fragment;
-        shaderStages[1].pName = "fragmentMain";
+        shaderStages[1].pName = fragmentName.c_str();
 
         std::vector<int> vertexStrides = intsFromJava(env, vertexStridesArray,
                 "Vertex layout strides", true);
@@ -2685,7 +2763,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createRenderPipeline(J
         layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         layoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
         layoutInfo.pSetLayouts = setLayouts.empty() ? nullptr : setLayouts.data();
-        check(vkCreatePipelineLayout(context->device, &layoutInfo, nullptr, &pipeline->layout),
+        check(context, vkCreatePipelineLayout(context->device, &layoutInfo, nullptr, &pipeline->layout),
                 "Could not create Android Vulkan pipeline layout");
 
         VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -2701,13 +2779,44 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createRenderPipeline(J
         pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.layout = pipeline->layout;
-        pipelineInfo.renderPass = pipelineRenderPass(context, static_cast<VkFormat>(colorFormat));
+        if (isolatedPreparation == JNI_TRUE) {
+            // Never access the owner's swapchain passes or mutable render-pass cache.
+            ownedRenderPass = createRenderPass(context, static_cast<VkFormat>(colorFormat),
+                    VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_LOAD,
+                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            pipelineInfo.renderPass = ownedRenderPass;
+        } else pipelineInfo.renderPass = pipelineRenderPass(context, static_cast<VkFormat>(colorFormat));
         pipelineInfo.subpass = 0;
 
-        check(vkCreateGraphicsPipelines(context->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
-                &pipeline->pipeline), "Could not create Android Vulkan graphics pipeline");
+        VkPipelineCache preparationCache = isolatedPreparation == JNI_TRUE
+                ? context->preparationPipelineCache.load(std::memory_order_acquire) : VK_NULL_HANDLE;
+        VkPipelineCreationFeedbackEXT feedback{};
+        VkPipelineCreationFeedbackCreateInfoEXT feedbackInfo{VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO_EXT};
+        if (isolatedPreparation == JNI_TRUE) {
+            if (context->pipelineCreationFeedback) {
+                feedbackInfo.pPipelineCreationFeedback = &feedback;
+                feedbackInfo.pNext = pipelineInfo.pNext;
+                pipelineInfo.pNext = &feedbackInfo;
+            }
+            std::lock_guard<std::mutex> lock(context->preparationCacheMetricsMutex);
+            ++context->preparationPipelineCreations;
+        }
+        VkResult pipelineStatus = vkCreateGraphicsPipelines(context->device, preparationCache, 1, &pipelineInfo, nullptr,
+                &pipeline->pipeline);
+        if (isolatedPreparation == JNI_TRUE) {
+            bool valid = pipelineStatus == VK_SUCCESS
+                    && (feedback.flags & VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT_EXT) != 0;
+            bool hit = valid && (feedback.flags & VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT_EXT) != 0;
+            std::lock_guard<std::mutex> lock(context->preparationCacheMetricsMutex);
+            if (valid) ++context->preparationPipelineFeedbacks;
+            if (hit) ++context->preparationPipelineCacheHits;
+            else ++context->preparationPipelineMutations;
+        }
+        check(context, pipelineStatus, "Could not create Android Vulkan graphics pipeline");
+        if (ownedRenderPass != VK_NULL_HANDLE) vkDestroyRenderPass(context->device, ownedRenderPass, nullptr);
         return handle(pipeline);
     } catch (const std::exception& error) {
+        if (ownedRenderPass != VK_NULL_HANDLE) vkDestroyRenderPass(context->device, ownedRenderPass, nullptr);
         if (pipeline->pipeline != VK_NULL_HANDLE) {
             vkDestroyPipeline(context->device, pipeline->pipeline, nullptr);
         }
@@ -2721,7 +2830,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_createRenderPipeline(J
             vkDestroyDescriptorSetLayout(context->device, pipeline->textureDescriptorSetLayout, nullptr);
         }
         delete pipeline;
-        throwFdx(env, error.what());
+        throwFdx(env, error);
         return 0;
     }
 }
@@ -2794,7 +2903,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_beginRenderPass(JNIEnv
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
         context->renderPassStarted = true;
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2810,7 +2919,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_setPipeline(JNIEnv* en
         vkCmdBindPipeline(currentFrame(context).commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                 pipeline->pipeline);
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2830,7 +2939,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_setVertexBuffer(JNIEnv
         uint32_t binding = static_cast<uint32_t>(slot);
         vkCmdBindVertexBuffers(currentFrame(context).commandBuffer, binding, 1, &buffer->buffer, &offset);
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2845,7 +2954,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_setIndexBuffer(JNIEnv*
         }
         vkCmdBindIndexBuffer(currentFrame(context).commandBuffer, buffer->buffer, 0, VK_INDEX_TYPE_UINT16);
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2865,7 +2974,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_setScissor(JNIEnv* env
         scissor.extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
         vkCmdSetScissor(currentFrame(context).commandBuffer, 0, 1, &scissor);
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2889,7 +2998,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_setViewport(JNIEnv* en
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(currentFrame(context).commandBuffer, 0, 1, &viewport);
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2913,7 +3022,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_bindTextures(JNIEnv* e
         }
         bindTextureDescriptors(context, pipeline, textures.data(), static_cast<int>(count));
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2936,7 +3045,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_bindUniforms(JNIEnv* e
         }
         bindUniformDescriptor(context, pipeline, source, static_cast<int>(size));
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2952,7 +3061,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_draw(JNIEnv* env, jcla
                 static_cast<uint32_t>(instanceCount), static_cast<uint32_t>(firstVertex),
                 static_cast<uint32_t>(firstInstance));
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2968,7 +3077,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_drawIndexed(JNIEnv* en
                 static_cast<uint32_t>(instanceCount), static_cast<uint32_t>(firstIndex),
                 static_cast<int32_t>(baseVertex), static_cast<uint32_t>(firstInstance));
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -2984,7 +3093,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_endRenderPass(JNIEnv* 
         finishActiveRenderTarget(context);
         context->renderPassStarted = false;
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -3003,7 +3112,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_destroyShaderModule(JN
     }
     try {
         if (module->context != nullptr && module->context->device != VK_NULL_HANDLE) {
-            waitDeviceIdleBeforeDestroy(module->context, "shader module");
+            // Pipeline creation consumes the module. It is not retained by recorded GPU work.
             if (module->fragment != VK_NULL_HANDLE) {
                 vkDestroyShaderModule(module->context->device, module->fragment, nullptr);
             }
@@ -3013,8 +3122,201 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_destroyShaderModule(JN
         }
         delete module;
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_libfdx_backend_android_AndroidVulkanNative_retainPreparationDevice(JNIEnv*, jclass, jlong contextHandle) {
+    // Called by the owner on submission, or by a job already holding a device reference
+    // when handing a cache snapshot to asynchronous storage.
+    ptr<Context>(contextHandle)->deviceReferences.fetch_add(1, std::memory_order_relaxed);
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_io_github_libfdx_backend_android_AndroidVulkanNative_isDeviceLost(JNIEnv*, jclass, jlong contextHandle) {
+    return ptr<Context>(contextHandle)->deviceLost.load(std::memory_order_acquire) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_libfdx_backend_android_AndroidVulkanNative_releasePreparationDevice(JNIEnv*, jclass, jlong contextHandle) {
+    releasePreparationDevice(ptr<Context>(contextHandle));
+}
+
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_io_github_libfdx_backend_android_AndroidVulkanNative_pipelineCacheIdentity(JNIEnv* env, jclass, jlong contextHandle) {
+    Context* context = ptr<Context>(contextHandle);
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(context->physicalDevice, &properties);
+    uint8_t bytes[36]{};
+    const uint32_t fields[] = {properties.vendorID, properties.deviceID, properties.driverVersion,
+            properties.apiVersion, static_cast<uint32_t>(sizeof(void*))};
+    for (size_t field = 0; field < 5; ++field)
+        for (size_t b = 0; b < 4; ++b) bytes[field * 4 + b] = static_cast<uint8_t>(fields[field] >> (8 * b));
+    std::memcpy(bytes + 20, properties.pipelineCacheUUID, VK_UUID_SIZE);
+    jbyteArray result = env->NewByteArray(sizeof(bytes));
+    if (result != nullptr) env->SetByteArrayRegion(result, 0, sizeof(bytes), reinterpret_cast<const jbyte*>(bytes));
+    return result;
+}
+
+extern "C" JNIEXPORT jlongArray JNICALL
+Java_io_github_libfdx_backend_android_AndroidVulkanNative_pipelineCacheStatistics(JNIEnv* env, jclass, jlong contextHandle) {
+    Context* context = ptr<Context>(contextHandle);
+    jlong values[4];
+    {
+        std::lock_guard<std::mutex> lock(context->preparationCacheMetricsMutex);
+        values[0] = static_cast<jlong>(context->preparationPipelineCreations);
+        values[1] = static_cast<jlong>(context->preparationPipelineFeedbacks);
+        values[2] = static_cast<jlong>(context->preparationPipelineCacheHits);
+        values[3] = static_cast<jlong>(context->preparationPipelineMutations);
+    }
+    jlongArray result = env->NewLongArray(4);
+    if (result != nullptr) env->SetLongArrayRegion(result, 0, 4, values);
+    return result;
+}
+
+// Returns 1 for an available cache, 2 when rejected data was replaced, and 0 when caching
+// is unavailable. Cache allocation is optional; normal pipeline creation remains available.
+extern "C" JNIEXPORT jint JNICALL
+Java_io_github_libfdx_backend_android_AndroidVulkanNative_initializePipelineCache(JNIEnv* env, jclass,
+        jlong contextHandle, jbyteArray initialData) {
+    Context* context = ptr<Context>(contextHandle);
+    try {
+        requireDevice(context);
+        constexpr size_t maxBytes = 16 * 1024 * 1024;
+        jsize size = initialData != nullptr ? env->GetArrayLength(initialData) : 0;
+        std::vector<uint8_t> bytes;
+        bool rejected = size < 0 || static_cast<size_t>(size) > maxBytes;
+        if (!rejected && size > 0) {
+            bytes.resize(static_cast<size_t>(size));
+            env->GetByteArrayRegion(initialData, 0, size, reinterpret_cast<jbyte*>(bytes.data()));
+            if (env->ExceptionCheck()) return 0;
+            VkPhysicalDeviceProperties properties{};
+            vkGetPhysicalDeviceProperties(context->physicalDevice, &properties);
+            auto integer = [&bytes](size_t offset) {
+                return uint32_t(bytes[offset]) | (uint32_t(bytes[offset + 1]) << 8)
+                        | (uint32_t(bytes[offset + 2]) << 16) | (uint32_t(bytes[offset + 3]) << 24);
+            };
+            rejected = bytes.size() < 32 || integer(0) != 32
+                    || integer(4) != VK_PIPELINE_CACHE_HEADER_VERSION_ONE
+                    || integer(8) != properties.vendorID || integer(12) != properties.deviceID
+                    || std::memcmp(bytes.data() + 16, properties.pipelineCacheUUID, VK_UUID_SIZE) != 0;
+        }
+        if (rejected) bytes.clear();
+        VkPipelineCacheCreateInfo info{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+        info.initialDataSize = bytes.size();
+        info.pInitialData = bytes.empty() ? nullptr : bytes.data();
+        VkPipelineCache cache = VK_NULL_HANDLE;
+        VkResult status = vkCreatePipelineCache(context->device, &info, nullptr, &cache);
+        if (status != VK_SUCCESS && status != VK_ERROR_DEVICE_LOST && !bytes.empty()) {
+            if (cache != VK_NULL_HANDLE) vkDestroyPipelineCache(context->device, cache, nullptr);
+            cache = VK_NULL_HANDLE; rejected = true;
+            info.initialDataSize = 0; info.pInitialData = nullptr;
+            status = vkCreatePipelineCache(context->device, &info, nullptr, &cache);
+        }
+        if (status != VK_SUCCESS) {
+            if (cache != VK_NULL_HANDLE) vkDestroyPipelineCache(context->device, cache, nullptr);
+            optionalResult(context, status);
+            return 0;
+        }
+        VkPipelineCache previous = VK_NULL_HANDLE;
+        if (!context->preparationPipelineCache.compare_exchange_strong(previous, cache,
+                std::memory_order_release, std::memory_order_relaxed)) {
+            vkDestroyPipelineCache(context->device, cache, nullptr);
+        }
+        return rejected ? 2 : 1;
+    } catch (const DeviceLost& error) { throwFdx(env, error); return 0; }
+    catch (const std::exception&) { return 0; }
+}
+
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_io_github_libfdx_backend_android_AndroidVulkanNative_snapshotPipelineCache(JNIEnv* env, jclass, jlong contextHandle) {
+    Context* context = ptr<Context>(contextHandle);
+    VkPipelineCache cache = context->preparationPipelineCache.load(std::memory_order_acquire);
+    if (cache == VK_NULL_HANDLE) return nullptr;
+    try {
+        requireDevice(context);
+        constexpr size_t maxBytes = 16 * 1024 * 1024;
+        size_t size = 0;
+        if (optionalResult(context, vkGetPipelineCacheData(context->device, cache, &size, nullptr)) != VK_SUCCESS
+                || size < 32 || size > maxBytes) return nullptr;
+        std::vector<uint8_t> bytes(size);
+        // A concurrent compilation may grow the cache. Retry on a later snapshot, not in a loop.
+        if (optionalResult(context, vkGetPipelineCacheData(context->device, cache, &size, bytes.data())) != VK_SUCCESS) return nullptr;
+        jbyteArray result = env->NewByteArray(static_cast<jsize>(size));
+        if (result != nullptr) env->SetByteArrayRegion(result, 0, static_cast<jsize>(size),
+                reinterpret_cast<const jbyte*>(bytes.data()));
+        return result;
+    } catch (const DeviceLost& error) { throwFdx(env, error); return nullptr; }
+    catch (const std::exception&) { return nullptr; }
+}
+
+// Storage owns a device reference and a write transaction. Only private temporary caches are
+// merged; the cache used by parallel pipeline creation is never the merge destination.
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_io_github_libfdx_backend_android_AndroidVulkanNative_mergePipelineCaches(JNIEnv* env, jclass,
+        jlong contextHandle, jbyteArray current, jbyteArray incoming) {
+    Context* context = ptr<Context>(contextHandle);
+    struct Caches {
+        VkDevice device;
+        VkPipelineCache destination = VK_NULL_HANDLE, source = VK_NULL_HANDLE;
+        ~Caches() {
+            if (source != VK_NULL_HANDLE) vkDestroyPipelineCache(device, source, nullptr);
+            if (destination != VK_NULL_HANDLE) vkDestroyPipelineCache(device, destination, nullptr);
+        }
+    } caches{context->device};
+    try {
+        requireDevice(context);
+        constexpr size_t maxBytes = 16 * 1024 * 1024;
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(context->physicalDevice, &properties);
+        auto create = [&](jbyteArray input, VkPipelineCache* output) {
+            if (input == nullptr) return false;
+            jsize length = env->GetArrayLength(input);
+            if (length < 32 || static_cast<size_t>(length) > maxBytes) return false;
+            std::vector<uint8_t> bytes(static_cast<size_t>(length));
+            env->GetByteArrayRegion(input, 0, length, reinterpret_cast<jbyte*>(bytes.data()));
+            if (env->ExceptionCheck()) return false;
+            auto integer = [&bytes](size_t offset) {
+                return uint32_t(bytes[offset]) | (uint32_t(bytes[offset + 1]) << 8)
+                        | (uint32_t(bytes[offset + 2]) << 16) | (uint32_t(bytes[offset + 3]) << 24);
+            };
+            if (integer(0) != 32 || integer(4) != VK_PIPELINE_CACHE_HEADER_VERSION_ONE
+                    || integer(8) != properties.vendorID || integer(12) != properties.deviceID
+                    || std::memcmp(bytes.data() + 16, properties.pipelineCacheUUID, VK_UUID_SIZE) != 0) return false;
+            VkPipelineCacheCreateInfo info{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+            info.initialDataSize = bytes.size(); info.pInitialData = bytes.data();
+            return optionalResult(context, vkCreatePipelineCache(context->device, &info, nullptr, output)) == VK_SUCCESS;
+        };
+        if (!create(incoming, &caches.destination) || !create(current, &caches.source)) return nullptr;
+        if (optionalResult(context, vkMergePipelineCaches(context->device, caches.destination, 1, &caches.source)) != VK_SUCCESS) return nullptr;
+        size_t size = 0;
+        if (optionalResult(context, vkGetPipelineCacheData(context->device, caches.destination, &size, nullptr)) != VK_SUCCESS
+                || size < 32 || size > maxBytes) return nullptr;
+        std::vector<uint8_t> bytes(size);
+        if (optionalResult(context, vkGetPipelineCacheData(context->device, caches.destination, &size, bytes.data())) != VK_SUCCESS
+                || size < 32 || size > bytes.size()) return nullptr;
+        jbyteArray result = env->NewByteArray(static_cast<jsize>(size));
+        if (result != nullptr) env->SetByteArrayRegion(result, 0, static_cast<jsize>(size),
+                reinterpret_cast<const jbyte*>(bytes.data()));
+        return result;
+    } catch (const DeviceLost& error) { throwFdx(env, error); return nullptr; }
+    catch (const std::exception&) { return nullptr; }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_libfdx_backend_android_AndroidVulkanNative_discardPreparedPipeline(JNIEnv*, jclass, jlong pipelineHandle) {
+    // The unpublished pipeline has never been submitted to a command buffer.
+    Pipeline* pipeline = ptr<Pipeline>(pipelineHandle);
+    if (pipeline == nullptr) return;
+    VkDevice device = pipeline->context->device;
+    if (pipeline->pipeline != VK_NULL_HANDLE) vkDestroyPipeline(device, pipeline->pipeline, nullptr);
+    if (pipeline->layout != VK_NULL_HANDLE) vkDestroyPipelineLayout(device, pipeline->layout, nullptr);
+    if (pipeline->uniformDescriptorSetLayout != VK_NULL_HANDLE)
+        vkDestroyDescriptorSetLayout(device, pipeline->uniformDescriptorSetLayout, nullptr);
+    if (pipeline->textureDescriptorSetLayout != VK_NULL_HANDLE)
+        vkDestroyDescriptorSetLayout(device, pipeline->textureDescriptorSetLayout, nullptr);
+    delete pipeline;
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -3053,7 +3355,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_destroyRenderPipeline(
         }
         delete pipeline;
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -3083,7 +3385,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_destroyBuffer(JNIEnv* 
         }
         delete buffer;
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -3134,7 +3436,7 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_destroyTexture(JNIEnv*
         }
         delete texture;
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
 
@@ -3143,6 +3445,10 @@ Java_io_github_libfdx_backend_android_AndroidVulkanNative_destroy(JNIEnv* env, j
     try {
         destroyContext(ptr<Context>(contextHandle));
     } catch (const std::exception& error) {
-        throwFdx(env, error.what());
+        throwFdx(env, error);
     }
 }
+
+#ifdef LIBFDX_VULKAN_LOSS_TESTS
+#include "../../test/cpp/vulkan_loss_bridge.inc"
+#endif

@@ -98,12 +98,14 @@ final class TileMapTest {
 
         assertEquals(2, drawn);
         assertEquals(2, batch.drawCount);
-        assertSame(regions[0][0], batch.regions[0]);
+        assertSame(texture, batch.regions[0].texture());
+        assertEquals(.5f / 32, batch.regions[0].u());
         assertEquals(5.0f, batch.x[0]);
         assertEquals(7.0f, batch.y[0]);
         assertEquals(10.0f, batch.width[0]);
         assertEquals(20.0f, batch.height[0]);
-        assertSame(regions[0][1], batch.regions[1]);
+        assertSame(texture, batch.regions[1].texture());
+        assertEquals(16.5f / 32, batch.regions[1].u());
         assertEquals(25.0f, batch.x[1]);
         assertEquals(27.0f, batch.y[1]);
     }

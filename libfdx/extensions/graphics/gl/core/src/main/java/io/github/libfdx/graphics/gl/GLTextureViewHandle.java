@@ -15,6 +15,7 @@ final class GLTextureViewHandle implements TextureView {
     private final TextureFormat format;
     private final GLTextureHandle textureHandle;
     private final Object frameOwner;
+    private final int level;
 
     GLTextureViewHandle(ProviderId providerId, GLResourceDomain resourceDomain, TextureFormat format,
             Object frameOwner) {
@@ -23,14 +24,20 @@ final class GLTextureViewHandle implements TextureView {
         this.format = format;
         this.textureHandle = null;
         this.frameOwner = frameOwner;
+        level = 0;
     }
 
     GLTextureViewHandle(GLTextureHandle textureHandle) {
+        this(textureHandle, 0);
+    }
+
+    GLTextureViewHandle(GLTextureHandle textureHandle, int level) {
         this.providerId = textureHandle.providerId();
         this.resourceDomain = textureHandle.resourceDomain();
         this.format = textureHandle.format();
         this.textureHandle = textureHandle;
         this.frameOwner = null;
+        this.level = level;
     }
 
     boolean textureBacked() {
@@ -39,13 +46,16 @@ final class GLTextureViewHandle implements TextureView {
 
     @Override
     public int width() {
-        return textureHandle != null ? textureHandle.width() : 0;
+        return textureHandle != null ? textureHandle.mipWidth(level) : 0;
     }
 
     @Override
     public int height() {
-        return textureHandle != null ? textureHandle.height() : 0;
+        return textureHandle != null ? textureHandle.mipHeight(level) : 0;
     }
+
+    @Override public int mipLevel() { return level; }
+    @Override public int sampleCount() { return textureHandle != null ? textureHandle.sampleCount() : 1; }
 
     GLResourceDomain resourceDomain() {
         return resourceDomain;

@@ -1,5 +1,9 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.FramebufferCapture;
+import io.github.libfdx.testsupport.graphics.OutlineControls;
+import io.github.libfdx.testsupport.graphics.TestCameraControllers;
+
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
@@ -11,21 +15,19 @@ import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.camera.controller.OrbitCameraController3D;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.LoadOp;
-import io.github.libfdx.graphics.Mesh;
-import io.github.libfdx.graphics.g3d.DefaultModel;
+import io.github.libfdx.graphics.g3d.ModelBuilder;
+import io.github.libfdx.graphics.g3d.ModelVertexUsage;
+import io.github.libfdx.graphics.g3d.MaterialAttributes;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
 import io.github.libfdx.graphics.g3d.EdgeDetectionOutlineRenderer3D;
 import io.github.libfdx.graphics.g3d.Environment3D;
-import io.github.libfdx.graphics.g3d.MeshPart;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
 import io.github.libfdx.graphics.g3d.Material;
 import io.github.libfdx.graphics.g3d.PbrAttributes;
-import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
-import io.github.libfdx.math.Vector3;
-import io.github.libfdx.tests.TestFpsLogger;
+import io.github.libfdx.testsupport.TestFpsLogger;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -42,11 +44,13 @@ public final class Outline3DTest extends ApplicationAdapter {
     private Logger logger;
     private TestFpsLogger fpsLogger;
     private GraphicsContext graphics;
-    private EdgeDetectionOutlineRenderer3D outlineRenderer;
+    private final EdgeDetectionOutlineRenderer3D[] outlines = new EdgeDetectionOutlineRenderer3D[3];
+    private OutlineControls controls;
+    private final ArrayList<Model> models = new ArrayList<>();
+    private final ArrayList<DefaultModelInstance> scenery = new ArrayList<>();
     private ModelBatch batch;
     private Camera camera;
     private OrbitCameraController3D cameraInput;
-    private Model cubeModel;
     private DefaultModelInstance[] instances;
     private boolean created;
     private String capturePath;
@@ -82,19 +86,20 @@ public final class Outline3DTest extends ApplicationAdapter {
                         .direction(-0.35f, -0.75f, -0.42f)
                         .color(new Color(1.0f, 0.94f, 0.84f, 1.0f))
                         .intensity(1.6f));
-        outlineRenderer = new EdgeDetectionOutlineRenderer3D(graphics)
-                .outlineColor(0.0f, 0.86f, 1.0f, 1.0f)
-                .outlineWidth(2.0f);
+        controls = new OutlineControls(fdx, "RELIC COURTYARD / 3D OUTLINES",
+                "Cyan sentinel  /  amber cache  /  violet relic    -    Drag the scene to orbit");
+        outlines[0] = new EdgeDetectionOutlineRenderer3D(graphics).outlineColor(.18f,.85f,1,1);
+        outlines[1] = new EdgeDetectionOutlineRenderer3D(graphics).outlineColor(1,.69f,.16f,1);
+        outlines[2] = new EdgeDetectionOutlineRenderer3D(graphics).outlineColor(.77f,.40f,1,1);
         batch = new ModelBatch(graphics).environment(environment);
-        cubeModel = createCubeModel(graphics);
-        instances = createInstances(cubeModel);
+        createScene();
         camera = new Camera()
                 .projection(CameraProjection.PERSPECTIVE)
-                .fieldOfView(60.0f)
+                .fieldOfView(48.0f)
                 .viewport(framebufferWidth(), framebufferHeight())
-                .nearFar(0.1f, 30.0f);
+                .nearFar(0.1f, 80.0f);
         cameraInput = new OrbitCameraController3D(fdx.input(), camera)
-                .position(0.0f, 1.1f, 4.6f, 0.0f, 0.0f, -1.5f)
+                .position(8.0f, 7.0f, 13.5f, 0.0f, 1.0f, 0.0f)
                 .autoOrbit(TestCameraControllers.autoOrbitEnabled(), 0.75f, exitAfterFrames,
                         TestCameraControllers.autoOrbitStartDegrees(), TestCameraControllers.autoOrbitDegrees());
         capturePath = System.getProperty("libfdx.test.capture", "");
@@ -111,16 +116,22 @@ public final class Outline3DTest extends ApplicationAdapter {
     @Override
     public void render() {
         float deltaSeconds = application.deltaTime();
+        controls.update(deltaSeconds);
         camera.viewport(framebufferWidth(), framebufferHeight());
         cameraInput.update(deltaSeconds);
         batch.begin(LoadOp.clear(0.018f, 0.022f, 0.032f, 1.0f), camera);
+        for (int i = 0; i < scenery.size(); i++) batch.render(scenery.get(i));
         for (int i = 0; i < instances.length; i++) {
             batch.render(instances[i]);
         }
         batch.end();
-        outlineRenderer.begin(camera);
-        outlineRenderer.render(instances[1]);
-        outlineRenderer.end();
+        for (int i = 0; i < outlines.length; i++) {
+            outlines[i].outlineWidth(controls.width.get());
+            outlines[i].begin(camera);
+            outlines[i].render(instances[i]);
+            outlines[i].end();
+        }
+        controls.render();
 
         if (capturePath != null && capturePath.length() > 0 && !captured && renderedFrames >= captureFrame) {
             captureFrame(capturePath);
@@ -138,18 +149,13 @@ public final class Outline3DTest extends ApplicationAdapter {
      */
     @Override
     public void dispose() {
-        if (outlineRenderer != null) {
-            outlineRenderer.dispose();
-            outlineRenderer = null;
-        }
+        for (EdgeDetectionOutlineRenderer3D outline : outlines) if (outline != null) outline.dispose();
+        if (controls != null) controls.dispose();
         if (batch != null) {
             batch.dispose();
             batch = null;
         }
-        if (cubeModel != null) {
-            cubeModel.dispose();
-            cubeModel = null;
-        }
+        for (Model model : models) model.dispose();
         if (!created) {
             throw new FdxException("Outline3DTest did not create graphics resources");
         }
@@ -163,99 +169,55 @@ public final class Outline3DTest extends ApplicationAdapter {
         logger.info("Outline3DTest rendered " + renderedFrames + " frames");
     }
 
-    private DefaultModelInstance[] createInstances(Model model) {
-        DefaultModelInstance[] result = new DefaultModelInstance[3];
-        result[0] = new DefaultModelInstance(model);
-        result[0].transform().setToTranslation(-0.95f, -0.05f, -0.65f)
-                .rotateY(-0.42f);
-        result[1] = new DefaultModelInstance(model);
-        result[1].transform().setToTranslation(0.18f, 0.25f, -1.55f)
-                .rotateY(0.38f)
-                .rotateX(-0.18f);
-        result[2] = new DefaultModelInstance(model);
-        result[2].transform().setToTranslation(1.10f, -0.12f, -2.25f)
-                .rotateY(0.72f);
-        return result;
+    @Override
+    public void resize(int width, int height) {
+        if (controls != null) controls.resize(width, height);
     }
 
-    private static Model createCubeModel(GraphicsContext graphics) {
-        ArrayList<Float> positions = new ArrayList<Float>();
-        ArrayList<Float> normals = new ArrayList<Float>();
-        ArrayList<Float> texCoords = new ArrayList<Float>();
-        ArrayList<Float> colors = new ArrayList<Float>();
-        ArrayList<Float> pbr = new ArrayList<Float>();
-        ArrayList<Float> emissive = new ArrayList<Float>();
-        float h = 0.42f;
-        addFace(positions, normals, texCoords, colors, pbr, emissive,
-                -h, -h, h, h, -h, h, h, h, h, -h, h, h,
-                0.0f, 0.0f, 1.0f, 0.94f, 0.36f, 0.24f);
-        addFace(positions, normals, texCoords, colors, pbr, emissive,
-                h, -h, -h, -h, -h, -h, -h, h, -h, h, h, -h,
-                0.0f, 0.0f, -1.0f, 0.28f, 0.46f, 0.92f);
-        addFace(positions, normals, texCoords, colors, pbr, emissive,
-                -h, h, h, h, h, h, h, h, -h, -h, h, -h,
-                0.0f, 1.0f, 0.0f, 0.96f, 0.72f, 0.28f);
-        addFace(positions, normals, texCoords, colors, pbr, emissive,
-                -h, -h, -h, h, -h, -h, h, -h, h, -h, -h, h,
-                0.0f, -1.0f, 0.0f, 0.18f, 0.66f, 0.44f);
-        addFace(positions, normals, texCoords, colors, pbr, emissive,
-                h, -h, h, h, -h, -h, h, h, -h, h, h, h,
-                1.0f, 0.0f, 0.0f, 0.62f, 0.38f, 0.90f);
-        addFace(positions, normals, texCoords, colors, pbr, emissive,
-                -h, -h, -h, -h, -h, h, -h, h, h, -h, h, -h,
-                -1.0f, 0.0f, 0.0f, 0.24f, 0.72f, 0.84f);
-        float[] sourcePositions = toFloatArray(positions);
-        Mesh mesh = Mesh.positionColor3D(graphics, "outline-3d cube", sourcePositions,
-                toFloatArray(colors), toFloatArray(normals), toFloatArray(texCoords),
-                toFloatArray(pbr), toFloatArray(emissive), bounds(sourcePositions));
-        MeshPart meshPart = new MeshPart("outline-3d cube part", mesh, null, 0, mesh.vertexCount());
-        Material material = new Material("outline-3d material")
-                .set(PbrAttributes.roughnessFactor(0.66f))
-                .set(PbrAttributes.metallicFactor(0.02f));
-        return DefaultModel.singleNode("outline-3d cube", meshPart, material);
+    private ModelBuilder material(float r, float g, float b, float metal) {
+        return new ModelBuilder(graphics).material(new Material("courtyard material",
+                MaterialAttributes.baseColor(r,g,b,1), PbrAttributes.roughnessFactor(.48f),
+                PbrAttributes.metallicFactor(metal)));
     }
 
-    private static void addFace(ArrayList<Float> positions, ArrayList<Float> normals,
-            ArrayList<Float> texCoords, ArrayList<Float> colors, ArrayList<Float> pbr,
-            ArrayList<Float> emissive, float x0, float y0, float z0, float x1, float y1, float z1,
-            float x2, float y2, float z2, float x3, float y3, float z3, float nx, float ny, float nz,
-            float red, float green, float blue) {
-        addVertex(positions, normals, texCoords, colors, pbr, emissive,
-                x0, y0, z0, nx, ny, nz, 0.0f, 1.0f, red, green, blue);
-        addVertex(positions, normals, texCoords, colors, pbr, emissive,
-                x1, y1, z1, nx, ny, nz, 1.0f, 1.0f, red, green, blue);
-        addVertex(positions, normals, texCoords, colors, pbr, emissive,
-                x2, y2, z2, nx, ny, nz, 1.0f, 0.0f, red, green, blue);
-        addVertex(positions, normals, texCoords, colors, pbr, emissive,
-                x0, y0, z0, nx, ny, nz, 0.0f, 1.0f, red, green, blue);
-        addVertex(positions, normals, texCoords, colors, pbr, emissive,
-                x2, y2, z2, nx, ny, nz, 1.0f, 0.0f, red, green, blue);
-        addVertex(positions, normals, texCoords, colors, pbr, emissive,
-                x3, y3, z3, nx, ny, nz, 0.0f, 0.0f, red, green, blue);
+    private Model own(Model model) { models.add(model); return model; }
+
+    private DefaultModelInstance place(Model model, float x, float y, float z) {
+        DefaultModelInstance instance = new DefaultModelInstance(model);
+        instance.transform().setToTranslation(x,y,z);
+        return instance;
     }
 
-    private static void addVertex(ArrayList<Float> positions, ArrayList<Float> normals,
-            ArrayList<Float> texCoords, ArrayList<Float> colors, ArrayList<Float> pbr,
-            ArrayList<Float> emissive, float x, float y, float z, float nx, float ny, float nz,
-            float u, float v, float red, float green, float blue) {
-        positions.add(x);
-        positions.add(y);
-        positions.add(z);
-        normals.add(nx);
-        normals.add(ny);
-        normals.add(nz);
-        texCoords.add(u);
-        texCoords.add(v);
-        colors.add(red);
-        colors.add(green);
-        colors.add(blue);
-        colors.add(1.0f);
-        pbr.add(1.0f);
-        pbr.add(0.02f);
-        pbr.add(0.66f);
-        emissive.add(0.0f);
-        emissive.add(0.0f);
-        emissive.add(0.0f);
+    private void createScene() {
+        long usage = ModelVertexUsage.STANDARD_PBR;
+        Model ground = own(material(.13f,.21f,.24f,0).box("courtyard foundation",13,.3f,10,usage));
+        scenery.add(place(ground,0,-.3f,0));
+        Model tile = own(material(.27f,.35f,.37f,0).box("stone paver",1.45f,.12f,1.45f,usage));
+        for (int z=0;z<6;z++) for(int x=0;x<8;x++) scenery.add(place(tile,(x-3.5f)*1.5f,-.08f,(z-2.5f)*1.5f));
+        Model plinth = own(material(.32f,.40f,.45f,.15f).cylinder(.99f,.4f,48,usage));
+        Model rim = own(material(.56f,.63f,.67f,.6f).cylinder(1.06f,.10f,48,usage));
+        for(int i=0;i<3;i++) {
+            scenery.add(place(plinth,(i-1)*3.3f,.2f,0));
+            scenery.add(place(rim,(i-1)*3.3f,.45f,0));
+        }
+        Model sentinel = own(material(.32f,.66f,.72f,.35f).capsule(.62f,1.8f,40,usage));
+        Model cache = own(material(.71f,.38f,.14f,.2f).box("treasure cache",1.3f,1.1f,1.1f,usage));
+        Model relic = own(material(.52f,.31f,.78f,.65f).torus(.66f,.22f,48,usage));
+        instances = new DefaultModelInstance[] {place(sentinel,-3.3f,1.6f,0),place(cache,0,1.1f,0),place(relic,3.3f,1.55f,0)};
+        instances[1].transform().rotateY(.25f);
+        instances[2].transform().rotateX(1.1f);
+        Model visor = own(material(.035f,.10f,.16f,.45f).box("sentinel visor",.82f,.25f,.18f,usage));
+        scenery.add(place(visor,-3.3f,1.98f,.56f));
+        Model latch = own(material(.94f,.73f,.30f,.65f).box("cache latch",.23f,.37f,.13f,usage));
+        scenery.add(place(latch,.14f,1.13f,.59f));
+        Model column = own(material(.25f,.32f,.37f,0).box("ruined pillar",.65f,2.8f,.65f,usage));
+        Model cap = own(material(.42f,.49f,.50f,.1f).box("pillar cap",.94f,.22f,.94f,usage));
+        for(int i=0;i<5;i++) {
+            scenery.add(place(column,(i-2)*2.65f,1.25f,-3.7f));
+            scenery.add(place(cap,(i-2)*2.65f,2.76f,-3.7f));
+        }
+        Model boulder = own(material(.20f,.32f,.29f,0).sphere(.65f,8,usage));
+        for(int i=0;i<6;i++) scenery.add(place(boulder,-5.4f+i*2.15f,.25f,3.6f));
     }
 
     private int framebufferWidth() {
@@ -278,29 +240,4 @@ public final class Outline3DTest extends ApplicationAdapter {
         }
     }
 
-    private static BoundingBox bounds(float[] positions) {
-        float minX = positions[0];
-        float minY = positions[1];
-        float minZ = positions[2];
-        float maxX = minX;
-        float maxY = minY;
-        float maxZ = minZ;
-        for (int i = 3; i < positions.length; i += 3) {
-            minX = Math.min(minX, positions[i]);
-            minY = Math.min(minY, positions[i + 1]);
-            minZ = Math.min(minZ, positions[i + 2]);
-            maxX = Math.max(maxX, positions[i]);
-            maxY = Math.max(maxY, positions[i + 1]);
-            maxZ = Math.max(maxZ, positions[i + 2]);
-        }
-        return BoundingBox.of(new Vector3(minX, minY, minZ), new Vector3(maxX, maxY, maxZ));
-    }
-
-    private static float[] toFloatArray(ArrayList<Float> values) {
-        float[] result = new float[values.size()];
-        for (int i = 0; i < values.size(); i++) {
-            result[i] = values.get(i);
-        }
-        return result;
-    }
 }

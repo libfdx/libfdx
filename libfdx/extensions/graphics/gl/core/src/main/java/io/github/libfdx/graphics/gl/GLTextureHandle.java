@@ -20,11 +20,23 @@ final class GLTextureHandle implements Texture {
     private final int height;
     private final TextureFormat format;
     private final TextureUsage usage;
-    private final GLTextureViewHandle view;
+    private final GLTextureViewHandle[] views;
     private boolean disposed;
+    private final int samples;
 
     GLTextureHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain, int texture, int width, int height,
             TextureFormat format, TextureUsage usage) {
+        this(providerId, gl, resourceDomain, texture, width, height, format, usage, 1);
+    }
+
+    GLTextureHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain, int texture, int width, int height,
+            TextureFormat format, TextureUsage usage, int mipLevelCount) {
+        this(providerId, gl, resourceDomain, texture, width, height, format, usage, mipLevelCount, 1);
+    }
+
+    GLTextureHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain, int texture, int width, int height,
+            TextureFormat format, TextureUsage usage, int mipLevelCount, int samples) {
+        this.samples = samples;
         this.providerId = providerId;
         this.gl = gl;
         this.resourceDomain = resourceDomain;
@@ -33,12 +45,15 @@ final class GLTextureHandle implements Texture {
         this.height = height;
         this.format = format != null ? format : TextureFormat.RGBA8_UNORM;
         this.usage = usage != null ? usage : TextureUsage.SAMPLED;
-        view = new GLTextureViewHandle(this);
+        views = new GLTextureViewHandle[mipLevelCount];
+        for (int i = 0; i < views.length; i++) views[i] = new GLTextureViewHandle(this, i);
     }
 
     int texture() {
         return texture;
     }
+
+    @Override public int sampleCount() { return samples; }
 
     GLResourceDomain resourceDomain() {
         return resourceDomain;
@@ -91,7 +106,14 @@ final class GLTextureHandle implements Texture {
      */
     @Override
     public TextureView view() {
-        return view;
+        return views[0];
+    }
+
+    @Override public int mipLevelCount() { return views.length; }
+
+    @Override public TextureView view(int level) {
+        mipWidth(level); // Validate before indexing.
+        return views[level];
     }
 
     /**

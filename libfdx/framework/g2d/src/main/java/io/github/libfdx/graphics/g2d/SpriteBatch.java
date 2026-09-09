@@ -13,17 +13,22 @@ import io.github.libfdx.graphics.RenderPassCompatibility;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
+import io.github.libfdx.graphics.RenderTargetLayout;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceKind;
+import io.github.libfdx.graphics.shader.runtime.PreparedShaderPass;
 import io.github.libfdx.graphics.shader.runtime.ResolvedShaderPass;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparation;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationOrigin;
+import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
+import io.github.libfdx.graphics.shader.runtime.ShaderRequest;
+import io.github.libfdx.graphics.shader.runtime.ShaderSkippedDraws;
 import io.github.libfdx.graphics.shader.ShaderModule;
 import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
 import io.github.libfdx.graphics.shader.ShaderProfile;
-import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
-import io.github.libfdx.graphics.shader.runtime.ShaderRequest;
-import io.github.libfdx.graphics.shader.reflection.ShaderResourceKind;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.VertexLayout;
-
+import io.github.libfdx.maps.TileTransform;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
@@ -34,6 +39,16 @@ import java.nio.FloatBuffer;
  * @author xpenatan
  */
 public final class SpriteBatch implements Batch2D {
+    private final ShaderPreparation preparation;
+    private final SpriteShaderPlan shaderPlan;
+    private final PreparedShaderPass[] requestedPasses = new PreparedShaderPass[4];
+    private final PreparedShaderPass[] readyPasses = new PreparedShaderPass[4];
+    private final ShaderPreparationOrigin[] preparationOrigins = new ShaderPreparationOrigin[4];
+    private final ShaderSkippedDraws skippedDraws = new ShaderSkippedDraws();
+
+    /** Logical sprites omitted in the current application frame, broken down by outcome.
+     * Read after end(). Multiple begin/end pairs accumulate until preparation.update(). */
+    public ShaderSkippedDraws skippedDrawsLastFrame() { return skippedDraws; }
     private static final int FLOATS_PER_VERTEX = 8;
     private static final int BYTES_PER_VERTEX = FLOATS_PER_VERTEX * 4;
     private static final int VERTICES_PER_SPRITE = 6;
@@ -63,7 +78,7 @@ public final class SpriteBatch implements Batch2D {
             SpriteShaderAbi.COMPACT_INSTANCED.vertexLayouts()[1];
     private static final VertexLayout INSTANCED_SPRITE_VERTEX_LAYOUT =
             SpriteShaderAbi.PACKED_INSTANCED.vertexLayouts()[0];
-    private static final String SPRITE_SHADER_SOURCE = """
+    static final String SPRITE_SHADER_SOURCE = """
             struct VertexInput {
                 @location(0) position : vec2f,
                 @location(1) texCoord : vec2f,
@@ -89,7 +104,7 @@ public final class SpriteBatch implements Batch2D {
                 return textureSample(u_texture, u_sampler, input.texCoord) * input.color;
             }
             """;
-    private static final String WHITE_SPRITE_SHADER_SOURCE = """
+    static final String WHITE_SPRITE_SHADER_SOURCE = """
             struct VertexInput {
                 @location(0) position : vec2f,
                 @location(1) texCoord : vec2f,
@@ -112,7 +127,7 @@ public final class SpriteBatch implements Batch2D {
                 return textureSample(u_texture, u_sampler, input.texCoord);
             }
             """;
-    private static final String INSTANCED_SPRITE_SHADER_SOURCE = """
+    static final String INSTANCED_SPRITE_SHADER_SOURCE = """
             struct VertexInput {
                 @location(0) baseAndEdgeX : vec4f,
                 @location(1) edgeYAndUvBase : vec4f,
@@ -151,7 +166,7 @@ public final class SpriteBatch implements Batch2D {
                 return textureSample(u_texture, u_sampler, input.texCoord) * input.color;
             }
             """;
-    private static final String COMPACT_INSTANCED_SPRITE_SHADER_SOURCE = """
+    static final String COMPACT_INSTANCED_SPRITE_SHADER_SOURCE = """
             struct VertexInput {
                 @location(0) localPosition : vec2f,
                 @location(1) texCoord : vec2f,
@@ -326,16 +341,30 @@ public final class SpriteBatch implements Batch2D {
             throw new FdxException("SpriteBatch initial sprite count must be greater than zero");
         }
         graphics = graphicsSystem;
-        shaderProvider = config.shaderProvider();
+        preparation = config.preparation();
+        if (preparation != null && preparation.device().resourceDomain() != graphics.device().resourceDomain()) {
+            throw new FdxException("SpriteBatch preparation belongs to another graphics domain");
+        }
+        if (config.shaderPlan() != null && preparation == null) {
+            throw new FdxException("A sprite shader plan requires a preparation service");
+        }
+        if (config.shaderPlan() != null && config.shaderProvider() != null) {
+            throw new FdxException("Configure the custom provider on the shared sprite shader plan");
+        }
+        shaderPlan = config.shaderPlan() != null ? config.shaderPlan()
+                : preparation != null || config.shaderProvider() != null
+                        ? new SpriteShaderPlan(graphics, config.shaderProvider()) : null;
+        if (shaderPlan != null) shaderPlan.requireDomain(graphics.device());
+        shaderProvider = shaderPlan != null ? shaderPlan.shaderProvider : null;
         heapUploadBuffers = usesHeapUploadBuffers(graphicsSystem);
         if (shaderProvider != null) {
             if (!shaderProvider.supportsPassResolution()) {
                 throw new FdxException(
                         "SpriteBatch shader provider does not support common pass resolution");
             }
-            SpriteSelection selection = negotiateProvider(
+            SpriteShaderPlan.SpriteSelection selection = shaderPlan.negotiateProvider(
                     RenderPassCompatibility.layout(
-                            io.github.libfdx.graphics.RenderTargetLayout
+                            RenderTargetLayout
                                     .color(graphics.surfaceFormat())));
             shaderProfile = selection.profile;
             ordinaryAbi = selection.ordinary;
@@ -462,7 +491,7 @@ public final class SpriteBatch implements Batch2D {
         }
         if (shaderProvider != null) {
             refreshProviderPipelines(RenderPassCompatibility.layout(
-                    io.github.libfdx.graphics.RenderTargetLayout
+                    RenderTargetLayout
                             .color(graphics.surfaceFormat())));
         }
         int initialByteCount = initialMaxSprites * VERTICES_PER_SPRITE * BYTES_PER_VERTEX;
@@ -490,7 +519,9 @@ public final class SpriteBatch implements Batch2D {
     public void begin(LoadOp loadOp) {
         ensureNotDisposed();
         GraphicsFrame frame = graphics.currentFrame();
-        refreshProviderPipelines(frame.compatibility());
+        RenderPassCompatibility compatibility = frame.compatibility();
+        if (preparation != null) shaderPlan.targets().register("surface", compatibility.targetLayout());
+        refreshProviderPipelines(compatibility);
         pass = frame.commandEncoder().beginRenderPass(renderPassDescriptor
                 .colorAttachment(frame.colorAttachment())
                 .colorLoadOp(loadOp != null ? loadOp : LoadOp.load())
@@ -649,8 +680,23 @@ public final class SpriteBatch implements Batch2D {
                 originX, originY, rotationDegrees);
     }
 
+    @Override
+    public void draw(TextureRegion region, float x, float y, float width, float height,
+            float originX, float originY, float rotationDegrees, int transform) {
+        ensureDrawing();
+        if (region == null) { throw new FdxException("TextureRegion cannot be null"); }
+        TileTransform.check(transform);
+        draw(region.texture(), region.u(), region.v(), region.u2(), region.v2(), x, y, width, height,
+                originX, originY, rotationDegrees, transform);
+    }
+
     private void draw(Texture texture, float u, float v, float u2, float v2,
             float x, float y, float width, float height, float originX, float originY, float rotationDegrees) {
+        draw(texture, u, v, u2, v2, x, y, width, height, originX, originY, rotationDegrees, 0);
+    }
+
+    private void draw(Texture texture, float u, float v, float u2, float v2,
+            float x, float y, float width, float height, float originX, float originY, float rotationDegrees, int transform) {
         if (currentTexture != null && currentTexture != texture) {
             flush();
         }
@@ -669,6 +715,20 @@ public final class SpriteBatch implements Batch2D {
         float y3 = cachedY3 + worldOriginY;
         float x4 = cachedX4 + worldOriginX;
         float y4 = cachedY4 + worldOriginY;
+
+        if (transform != 0) {
+            // Move source UV corners to their transformed destinations. This also
+            // preserves the rectangle for diagonal transforms of non-square tiles.
+            int c1 = TileTransform.corner(0, transform);
+            int c2 = TileTransform.corner(1, transform);
+            int c3 = TileTransform.corner(2, transform);
+            int c4 = TileTransform.corner(3, transform);
+            float tx1 = corner(c1, x1, x2, x3, x4), ty1 = corner(c1, y1, y2, y3, y4);
+            float tx2 = corner(c2, x1, x2, x3, x4), ty2 = corner(c2, y1, y2, y3, y4);
+            float tx3 = corner(c3, x1, x2, x3, x4), ty3 = corner(c3, y1, y2, y3, y4);
+            float tx4 = corner(c4, x1, x2, x3, x4), ty4 = corner(c4, y1, y2, y3, y4);
+            x1 = tx1; y1 = ty1; x2 = tx2; y2 = ty2; x3 = tx3; y3 = ty3; x4 = tx4; y4 = ty4;
+        }
 
         if (instanced) {
             if (vertexCount > 0 || compactInstanceCount > 0) {
@@ -693,6 +753,10 @@ public final class SpriteBatch implements Batch2D {
         if (texture.width() <= 0 || texture.height() <= 0) {
             throw new FdxException("Texture size must be greater than zero");
         }
+    }
+
+    private static float corner(int corner, float a, float b, float c, float d) {
+        return switch (corner) { case 0 -> a; case 1 -> b; case 2 -> c; default -> d; };
     }
 
     /**
@@ -933,7 +997,7 @@ public final class SpriteBatch implements Batch2D {
     }
 
     private void prepareBatchForCurrentColor() {
-        boolean usesColor = whitePipeline == null || !isWhite();
+        boolean usesColor = (preparation != null ? whiteAbi == null : whitePipeline == null) || !isWhite();
         if (vertexCount > 0 && batchUsesColor != usesColor) {
             flush();
         }
@@ -1009,6 +1073,18 @@ public final class SpriteBatch implements Batch2D {
         if (vertexCount == 0) {
             return;
         }
+        if (preparation != null) {
+            int index = batchUsesColor ? 0 : 1;
+            if (batchUsesColor) pipeline = requirePrepared(0, ordinaryAbi);
+            else whitePipeline = requirePrepared(1, whiteAbi);
+            requestedPasses[index].recordDraws(preparationOrigins[index], spriteCount,
+                    (batchUsesColor ? pipeline : whitePipeline) == null);
+        }
+        if (preparation != null && (batchUsesColor ? pipeline : whitePipeline) == null) {
+            skippedDraws.record(requestedPasses[batchUsesColor ? 0 : 1].state(), spriteCount);
+            floatCount = vertexCount = indexCount = spriteCount = 0;
+            return;
+        }
         int byteCount = floatCount * 4;
         Buffer activeVertexBuffer = nextVertexBuffer(byteCount);
         ensureUploadBuffer(byteCount);
@@ -1029,6 +1105,7 @@ public final class SpriteBatch implements Batch2D {
         } else {
             pass.draw(vertexCount, 1, 0, 0);
         }
+        if (preparation != null) readyPasses[batchUsesColor ? 0 : 1].readyPass().recordDraw();
         floatCount = 0;
         vertexCount = 0;
         indexCount = 0;
@@ -1036,6 +1113,13 @@ public final class SpriteBatch implements Batch2D {
     }
 
     private void flushInstances() {
+        if (preparation != null) instancedPipeline = requirePrepared(2, packedAbi);
+        if (preparation != null) requestedPasses[2].recordDraws(preparationOrigins[2], instanceCount, instancedPipeline == null);
+        if (preparation != null && instancedPipeline == null) {
+            skippedDraws.record(requestedPasses[2].state(), instanceCount);
+            instanceFloatCount = instanceCount = 0;
+            return;
+        }
         int instanceByteCount = instanceFloatCount * 4;
         Buffer activeInstanceBuffer = nextInstanceBuffer(instanceCount);
         ensureInstanceUploadBuffer(instanceByteCount);
@@ -1057,11 +1141,20 @@ public final class SpriteBatch implements Batch2D {
         } else {
             pass.draw(VERTICES_PER_SPRITE, instanceCount, 0, 0);
         }
+        if (preparation != null && instanceCount > 0) readyPasses[2].readyPass().recordDraw();
         instanceFloatCount = 0;
         instanceCount = 0;
     }
 
     private void flushCompactInstances() {
+        if (preparation != null) compactInstancedPipeline = requirePrepared(3, compactAbi);
+        if (preparation != null) requestedPasses[3].recordDraws(preparationOrigins[3], compactInstanceCount, compactInstancedPipeline == null);
+        if (preparation != null && compactInstancedPipeline == null) {
+            skippedDraws.record(requestedPasses[3].state(), compactInstanceCount);
+            compactInstanceFloatCount = compactInstanceCount = 0;
+            compactBatchStateSet = false;
+            return;
+        }
         int instanceByteCount = compactInstanceFloatCount * 4;
         Buffer activeInstancedQuadBuffer = nextInstancedQuadBuffer();
         Buffer activeCompactInstanceBuffer = nextCompactInstanceBuffer(compactInstanceCount);
@@ -1086,6 +1179,7 @@ public final class SpriteBatch implements Batch2D {
         } else {
             pass.draw(instancedQuadVertexCount, compactInstanceCount, 0, 0);
         }
+        if (preparation != null && compactInstanceCount > 0) readyPasses[3].readyPass().recordDraw();
         compactInstanceFloatCount = 0;
         compactInstanceCount = 0;
         compactBatchStateSet = false;
@@ -1268,81 +1362,6 @@ public final class SpriteBatch implements Batch2D {
         return ShaderModuleDescriptor.wgsl(label, source);
     }
 
-    private SpriteSelection negotiateProvider(
-            RenderPassCompatibility compatibility) {
-        ShaderProfile[] profiles = {
-                ShaderProfile.PORTABLE_WEBGPU,
-                ShaderProfile.PORTABLE_WEBGL2,
-                ShaderProfile.NATIVE
-        };
-        boolean indexedDraw = graphics.device().capabilities()
-                .supports(GraphicsFeature.INDEXED_DRAW);
-        boolean instancedDraw = graphics.device().capabilities()
-                .supports(GraphicsFeature.INSTANCED_DRAW);
-        for (ShaderProfile profile : profiles) {
-            if (!graphics.device().capabilities().supports(profile)) {
-                continue;
-            }
-            if (instancedDraw && indexedDraw
-                    && supportsAbi(SpriteShaderAbi.PACKED_INSTANCED_INDEXED,
-                            profile, compatibility)
-                    && supportsAbi(SpriteShaderAbi.COMPACT_INSTANCED_INDEXED,
-                            profile, compatibility)) {
-                return new SpriteSelection(profile, null, null,
-                        SpriteShaderAbi.PACKED_INSTANCED_INDEXED,
-                        SpriteShaderAbi.COMPACT_INSTANCED_INDEXED);
-            }
-            if (instancedDraw
-                    && supportsAbi(SpriteShaderAbi.PACKED_INSTANCED,
-                            profile, compatibility)
-                    && supportsAbi(SpriteShaderAbi.COMPACT_INSTANCED,
-                            profile, compatibility)) {
-                return new SpriteSelection(profile, null, null,
-                        SpriteShaderAbi.PACKED_INSTANCED,
-                        SpriteShaderAbi.COMPACT_INSTANCED);
-            }
-            if (indexedDraw
-                    && supportsAbi(SpriteShaderAbi.ORDINARY_INDEXED,
-                            profile, compatibility)) {
-                SpriteShaderAbi white = supportsAbi(
-                        SpriteShaderAbi.WHITE_INDEXED, profile,
-                        compatibility)
-                        ? SpriteShaderAbi.WHITE_INDEXED : null;
-                return new SpriteSelection(profile,
-                        SpriteShaderAbi.ORDINARY_INDEXED, white,
-                        null, null);
-            }
-            if (supportsAbi(SpriteShaderAbi.ORDINARY, profile,
-                    compatibility)) {
-                SpriteShaderAbi white = supportsAbi(
-                        SpriteShaderAbi.WHITE, profile, compatibility)
-                        ? SpriteShaderAbi.WHITE : null;
-                return new SpriteSelection(profile,
-                        SpriteShaderAbi.ORDINARY, white, null, null);
-            }
-        }
-        throw new FdxException(
-                "SpriteBatch shader provider supports no compatible sprite geometry ABI");
-    }
-
-    private boolean supportsAbi(SpriteShaderAbi abi,
-            ShaderProfile profile,
-            RenderPassCompatibility compatibility) {
-        return shaderProvider.supports(request(abi, profile,
-                compatibility));
-    }
-
-    private ShaderRequest request(SpriteShaderAbi abi,
-            ShaderProfile profile,
-            RenderPassCompatibility compatibility) {
-        return ShaderRequest.builder(abi.passId())
-                .profile(profile)
-                .renderPass(compatibility)
-                .topology(PrimitiveTopology.TRIANGLE_LIST)
-                .vertexLayouts(abi.vertexLayouts())
-                .build();
-    }
-
     private void refreshProviderPipelines(
             RenderPassCompatibility compatibility) {
         if (shaderProvider == null) {
@@ -1353,6 +1372,10 @@ public final class SpriteBatch implements Batch2D {
                     "SpriteBatch graph provider requires exact render-pass compatibility");
         }
         long currentRevision = shaderProvider.revision();
+        if (preparation != null) {
+            refreshPreparedPipelines(compatibility, currentRevision);
+            return;
+        }
         if (shaderCompatibility != null
                 && shaderCompatibility.equals(compatibility)
                 && shaderProviderRevision == currentRevision) {
@@ -1401,7 +1424,7 @@ public final class SpriteBatch implements Batch2D {
 
     private ResolvedShaderPass resolveAbi(SpriteShaderAbi abi,
             RenderPassCompatibility compatibility) {
-        ShaderRequest request = request(abi, shaderProfile,
+        ShaderRequest request = SpriteShaderPlan.request(abi, shaderProfile,
                 compatibility);
         if (!shaderProvider.supports(request)) {
             throw new FdxException("SpriteBatch shader provider revision "
@@ -1409,6 +1432,10 @@ public final class SpriteBatch implements Batch2D {
                     + " no longer supports selected ABI " + abi);
         }
         ResolvedShaderPass resolved = shaderProvider.resolve(request);
+        return validateSpritePass(abi, resolved);
+    }
+
+    static ResolvedShaderPass validateSpritePass(SpriteShaderAbi abi, ResolvedShaderPass resolved) {
         if (!abi.passId().equals(resolved.passId())) {
             throw new FdxException(
                     "SpriteBatch shader provider returned the wrong pass for "
@@ -1426,6 +1453,68 @@ public final class SpriteBatch implements Batch2D {
                     + " must declare a sampled texture at 0:0 and sampler at 0:1");
         }
         return resolved;
+    }
+
+    private void refreshPreparedPipelines(RenderPassCompatibility compatibility, long revision) {
+        skippedDraws.beginFrame(preparation.frameIndex());
+        boolean targetChanged = shaderCompatibility == null
+                || !shaderCompatibility.targetLayout().equals(compatibility.targetLayout());
+        boolean changed = targetChanged || revision != shaderProviderRevision;
+        if (changed && hasPendingContent()) {
+            throw new FdxException("SpriteBatch shader configuration changed while draw data was pending");
+        }
+        if (targetChanged) releasePreparedPasses();
+        if (changed) {
+            RenderPassCompatibility layout = RenderPassCompatibility.layout(compatibility.targetLayout());
+            for (int i = 0; i < requestedPasses.length; i++) {
+                if (requestedPasses[i] != null && requestedPasses[i] != readyPasses[i]) requestedPasses[i].dispose();
+                requestedPasses[i] = null;
+                if (readyPasses[i] != null && !shaderProvider.canRenderPreparedRevision(
+                        readyPasses[i].request(), readyPasses[i].readyPass())) {
+                    readyPasses[i].dispose(); readyPasses[i] = null;
+                }
+            }
+            shaderCompatibility = layout;
+            shaderProviderRevision = revision;
+        }
+        pipeline = preparedPipeline(0);
+        whitePipeline = preparedPipeline(1);
+        instancedPipeline = preparedPipeline(2);
+        compactInstancedPipeline = preparedPipeline(3);
+    }
+
+    private RenderPipeline requirePrepared(int index, SpriteShaderAbi abi) {
+        if (requestedPasses[index] == null) requestPrepared(index, abi, shaderCompatibility);
+        return preparedPipeline(index);
+    }
+
+    private void requestPrepared(int index, SpriteShaderAbi abi, RenderPassCompatibility layout) {
+        if (abi == null) return;
+        if (requestedPasses[index] != null && requestedPasses[index] != readyPasses[index]) {
+            requestedPasses[index].dispose();
+        }
+        requestedPasses[index] = preparation.request(shaderProvider,
+                SpriteShaderPlan.request(abi, shaderProfile, layout));
+        preparationOrigins[index] = shaderPlan.origin(abi, requestedPasses[index].request(), layout.targetLayout());
+    }
+
+    private RenderPipeline preparedPipeline(int index) {
+        PreparedShaderPass next = requestedPasses[index];
+        if (next != null && next != readyPasses[index] && next.readyPass() != null) {
+            if (readyPasses[index] != null) readyPasses[index].dispose();
+            readyPasses[index] = next;
+        }
+        PreparedShaderPass ready = readyPasses[index];
+        ResolvedShaderPass pass = ready != null ? ready.readyPass() : null;
+        return pass != null ? pass.pipeline() : null;
+    }
+
+    private void releasePreparedPasses() {
+        for (int i = 0; i < requestedPasses.length; i++) {
+            if (requestedPasses[i] != null && requestedPasses[i] != readyPasses[i]) requestedPasses[i].dispose();
+            if (readyPasses[i] != null) readyPasses[i].dispose();
+            requestedPasses[i] = readyPasses[i] = null;
+        }
     }
 
     private void ensureProviderRevision() {
@@ -1465,24 +1554,6 @@ public final class SpriteBatch implements Batch2D {
 
     private boolean supportsWhitePipeline(GraphicsContext graphics) {
         return !"vulkan".equals(graphics.providerId().value());
-    }
-
-    private static final class SpriteSelection {
-        final ShaderProfile profile;
-        final SpriteShaderAbi ordinary;
-        final SpriteShaderAbi white;
-        final SpriteShaderAbi packed;
-        final SpriteShaderAbi compact;
-
-        SpriteSelection(ShaderProfile profile,
-                SpriteShaderAbi ordinary, SpriteShaderAbi white,
-                SpriteShaderAbi packed, SpriteShaderAbi compact) {
-            this.profile = profile;
-            this.ordinary = ordinary;
-            this.white = white;
-            this.packed = packed;
-            this.compact = compact;
-        }
     }
 
     private void ensureUploadBuffer(int byteCount) {
@@ -1574,6 +1645,7 @@ public final class SpriteBatch implements Batch2D {
      */
     @Override
     public void dispose() {
+        releasePreparedPasses();
         if (disposed) {
             return;
         }

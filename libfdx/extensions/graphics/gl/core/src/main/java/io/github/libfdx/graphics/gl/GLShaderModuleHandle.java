@@ -18,6 +18,7 @@ final class GLShaderModuleHandle implements ShaderModule {
     private final int program;
     private final ShaderReflection reflection;
     private final ShaderTranslatedInterface translatedInterface;
+    private final String vertexEntryPoint, fragmentEntryPoint;
     private int pipelineReferences;
     private boolean disposed;
 
@@ -32,12 +33,26 @@ final class GLShaderModuleHandle implements ShaderModule {
 
     GLShaderModuleHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain, int program,
             ShaderReflection reflection, ShaderTranslatedInterface translatedInterface) {
+        this(providerId,gl,resourceDomain,program,reflection,translatedInterface,"vertexMain","fragmentMain");
+    }
+
+    GLShaderModuleHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain, int program,
+            ShaderReflection reflection, ShaderTranslatedInterface translatedInterface,
+            String vertexEntryPoint, String fragmentEntryPoint) {
         this.providerId = providerId;
         this.gl = gl;
         this.resourceDomain = resourceDomain;
         this.program = program;
         this.reflection = reflection != null ? reflection : ShaderReflection.empty();
         this.translatedInterface = translatedInterface;
+        this.vertexEntryPoint = vertexEntryPoint; this.fragmentEntryPoint = fragmentEntryPoint;
+    }
+
+    void requireEntryPoints(String vertex, String fragment) {
+        if (!vertexEntryPoint.equals(vertex) || !fragmentEntryPoint.equals(fragment)) {
+            throw new io.github.libfdx.core.FdxException("GL pipeline entry points differ from its linked shader module; "
+                    + "create a module with ShaderModuleDescriptor.entryPoints for the requested pair");
+        }
     }
 
     int program() {

@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.GraphicsParityTest;
+
 import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
 import io.github.libfdx.Fdx;
 import io.github.libfdx.core.FdxException;
@@ -23,6 +25,7 @@ import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.TextureUsage;
+import io.github.libfdx.graphics.g2d.TextureBlitter;
 import io.github.libfdx.graphics.shadergraph.model.ShaderExpression;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraph;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphBuilder;
@@ -56,6 +59,10 @@ public final class ShaderGraphProgramTest extends GraphicsParityTest {
     private RenderPassDescriptor offscreenPass;
     private boolean multipleTargets;
     private boolean explicitDepth;
+    private TextureBlitter blitter;
+    private final RenderPassDescriptor presentation = new RenderPassDescriptor()
+            .label("shader graph outputs")
+            .colorLoadOp(LoadOp.clear(0.025f, 0.035f, 0.055f, 1));
 
     public ShaderGraphProgramTest(long exitAfterFrames) {
         super(exitAfterFrames);
@@ -131,6 +138,10 @@ public final class ShaderGraphProgramTest extends GraphicsParityTest {
                     color0.view(), LoadOp.clear(0, 0, 0, 1),
                     StoreOp.store()));
         }
+        blitter = new TextureBlitter(graphics.device());
+        logger.info("ShaderGraphProgramTest: expect a blue triangle"
+                + (multipleTargets ? " on the left and an orange triangle on the right" : " in the center")
+                + "; black corners are outside the graph-generated geometry");
         markCreated();
     }
 
@@ -147,16 +158,24 @@ public final class ShaderGraphProgramTest extends GraphicsParityTest {
         pass.draw(3, 1, 0, 0);
         pass.end();
 
-        RenderPass status = frame.commandEncoder().beginRenderPass(
-                RenderPassDescriptor.color(frame.colorAttachment(),
-                        LoadOp.clear(0.10f, 0.34f, 0.72f, 1),
-                        StoreOp.store()).label("graph program status"));
+        presentation.colorAttachment(frame.colorAttachment());
+        RenderPass status = frame.commandEncoder().beginRenderPass(presentation);
+        int width = framebufferWidth();
+        int height = framebufferHeight();
+        int panelWidth = multipleTargets ? width / 2 : width;
+        status.setViewport(0, 0, panelWidth, height);
+        blitter.draw(status, color0, graphics.device().capabilities().renderedTextureOrigin(), false);
+        if (multipleTargets) {
+            status.setViewport(panelWidth, 0, width - panelWidth, height);
+            blitter.draw(status, color1, graphics.device().capabilities().renderedTextureOrigin(), false);
+        }
         status.end();
         finishFrame();
     }
 
     @Override
     public void dispose() {
+        dispose(blitter);
         dispose(depth);
         dispose(color1);
         dispose(color0);
@@ -169,7 +188,8 @@ public final class ShaderGraphProgramTest extends GraphicsParityTest {
                 .label(label)
                 .size(TARGET_WIDTH, TARGET_HEIGHT)
                 .format(format)
-                .usage(TextureUsage.RENDER_ATTACHMENT));
+                .usage(format == TextureFormat.DEPTH32_FLOAT
+                        ? TextureUsage.RENDER_ATTACHMENT : TextureUsage.SAMPLED_RENDER_ATTACHMENT));
     }
 
     private static ShaderGraphProgram program(boolean multipleTargets,

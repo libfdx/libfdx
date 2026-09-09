@@ -68,6 +68,8 @@ Hosted tools and demos:
 
 ## Guides
 
+- [Unresolved issues](docs/UNRESOLVED_ISSUES.md): known failures and criteria for
+  revisiting them after dependency updates.
 - [Shaders](docs/SHADERS.md): WGSL authoring and provider translation.
 - [Shader graph sample](samples/graphics/shader-graph/): code-authored and
   serialized graphs, batch integration, provider targets, and optional UI Kit

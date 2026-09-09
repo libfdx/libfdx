@@ -34,12 +34,15 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
     private static final long REPORT_INTERVAL_NANOS = 1000000000L;
 
     private final long exitAfterNanos;
+    private final long warmupNanos;
+    private final BenchmarkFrameTiming timing;
     private final String resultPath;
     private final float[] spriteCenterX = new float[SPRITE_COUNT];
     private final float[] spriteCenterY = new float[SPRITE_COUNT];
     private Application application;
     private Display display;
     private AssetManager assets;
+    private GraphicsContext graphics;
     private Logger logger;
     private Batch2D batch;
     private TextureRegion sprite;
@@ -61,13 +64,20 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
     public SpriteBatchStressBenchmark(long exitAfterNanos, String resultPath) {
         this.exitAfterNanos = exitAfterNanos;
         this.resultPath = resultPath;
+        double warmupSeconds = Double.parseDouble(System.getProperty("libfdx.benchmark.warmupSeconds", "2"));
+        if (!Double.isFinite(warmupSeconds) || warmupSeconds < 0.0
+                || warmupSeconds * 1_000_000_000.0 >= Long.MAX_VALUE) {
+            throw new FdxException("Benchmark warmupSeconds must be finite, nonnegative, and fit in nanoseconds");
+        }
+        warmupNanos = (long)(warmupSeconds * 1_000_000_000.0);
+        timing = new BenchmarkFrameTiming(warmupNanos);
     }
 
     @Override
     public void create(Fdx fdx) {
         application = fdx.app();
         display = fdx.displays().main();
-        GraphicsContext graphics = fdx.graphics().main();
+        graphics = fdx.graphics().main();
         graphicsApi = graphicsApiName(graphics);
         graphicsProvider = graphics.providerId().value();
         assets = new DefaultAssetManager(fdx.files());
@@ -97,12 +107,12 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
 
     @Override
     public void render() {
+        long startNanos = System.nanoTime();
         assets.update();
         if (layoutWidth != framebufferWidth() || layoutHeight != framebufferHeight()) {
             configureViewport(framebufferWidth(), framebufferHeight());
         }
 
-        long startNanos = System.nanoTime();
         if (startedAtNanos == 0L) {
             startedAtNanos = startNanos;
         }
@@ -137,6 +147,7 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
         batch.end();
 
         long now = System.nanoTime();
+        timing.recordFrame(startNanos, now);
         lastRenderNanos = now;
         renderedFrames++;
         reportIfNeeded(now);
@@ -172,6 +183,15 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
                 + SPRITE_COUNT + " " + DRAW_SIZE + "x" + DRAW_SIZE
                 + " sprites, average fps=" + format(averageFrameFps)
                 + ", average sprite draws/s=" + format(averageSpriteDrawsPerSecond));
+        if (timing.intervals().count() == 0L) {
+            logger.warn(logPrefix() + " has no complete frame intervals after warm-up; increase duration");
+        } else {
+            logger.info(logPrefix() + " after warm-up: intervals=" + timing.intervals().count()
+                    + ", fps=" + format(timing.framesPerSecond())
+                    + ", p50/p95/p99 ms=" + format(timing.intervals().percentileNanos(0.5) / 1_000_000.0)
+                    + "/" + format(timing.intervals().percentileNanos(0.95) / 1_000_000.0)
+                    + "/" + format(timing.intervals().percentileNanos(0.99) / 1_000_000.0));
+        }
         writeResult(elapsedNanos, averageFrameFps, averageSpriteDrawsPerSecond);
     }
 
@@ -206,18 +226,38 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
             writeProperty(output, "benchmark", NAME);
             writeProperty(output, "label", graphicsApi);
             writeProperty(output, "graphicsProvider", graphicsProvider);
+            writeProperty(output, "renderer", graphics.frameMetrics().renderer());
+            writeProperty(output, "device", System.getProperty("libfdx.benchmark.device", "unspecified"));
+            writeProperty(output, "driver", System.getProperty("libfdx.benchmark.driver", "unspecified"));
+            writeProperty(output, "revision", System.getProperty("libfdx.benchmark.revision", "unspecified"));
             writeProperty(output, "visible", System.getProperty("libfdx.benchmark.visible", ""));
             writeProperty(output, "vSync", System.getProperty("libfdx.benchmark.vsync", ""));
             writeProperty(output, "foregroundFps", System.getProperty("libfdx.benchmark.foregroundFps", ""));
             writeProperty(output, "sprites", Integer.toString(SPRITE_COUNT));
             writeProperty(output, "spriteSize", DRAW_SIZE + "x" + DRAW_SIZE);
             writeProperty(output, "texture", SPRITE_ASSET);
+            writeProperty(output, "framebufferWidth", Integer.toString(layoutWidth));
+            writeProperty(output, "framebufferHeight", Integer.toString(layoutHeight));
+            writeProperty(output, "randomSeed", Long.toString(RANDOM_SEED));
+            writeProperty(output, "instanced", Boolean.toString(usesInstancedBatchPath()));
             writeProperty(output, "frames", Long.toString(renderedFrames));
             writeProperty(output, "completed", Boolean.toString(completedRunLimit || exitAfterNanos <= 0L));
             writeProperty(output, "elapsedSeconds", format(nanosToSeconds(elapsedNanos)));
             writeProperty(output, "targetSeconds", format(nanosToSeconds(exitAfterNanos)));
             writeProperty(output, "averageFrameFps", format(averageFrameFps));
             writeProperty(output, "averageSpriteDrawsPerSecond", format(averageSpriteDrawsPerSecond));
+            writeProperty(output, "warmupSeconds", format(nanosToSeconds(warmupNanos)));
+            writeProperty(output, "warmupFrames", Long.toString(timing.warmupFrames()));
+            writeProperty(output, "measuredIntervals", Long.toString(timing.intervals().count()));
+            writeProperty(output, "measuredSeconds", format(timing.intervals().totalNanos() / 1_000_000_000.0));
+            writeProperty(output, "measuredFrameFps", format(timing.framesPerSecond()));
+            writeProperty(output, "measuredSpriteDrawsPerSecond", format(timing.framesPerSecond() * SPRITE_COUNT));
+            writeProperty(output, "frameTimeDefinition", "render-start-to-render-start; includes presentation and pacing");
+            writeProperty(output, "cpuRenderDefinition", "render-start-to-batch-end; excludes presentation and reporting");
+            writeProperty(output, "histogramFormat", "upperBoundNanos:count pairs; 32 subdivisions per power of two");
+            writeProperty(output, "hitchThresholdMillis", format(FrameTimeHistogram.HITCH_NANOS / 1_000_000.0));
+            writeTimings(output, "frameTime", timing.intervals());
+            writeTimings(output, "cpuRender", timing.cpu());
             writeProperty(output, "javaVersion", System.getProperty("java.version", ""));
             writeProperty(output, "javaVm", System.getProperty("java.vm.name", "") + " "
                     + System.getProperty("java.vm.version", ""));
@@ -229,6 +269,16 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
         } catch (IOException error) {
             throw new FdxException("Could not write benchmark result: " + file, error);
         }
+    }
+
+    private void writeTimings(FileOutputStream output, String prefix, FrameTimeHistogram histogram) throws IOException {
+        writeProperty(output, prefix + "MeanMillis", format(histogram.meanNanos() / 1_000_000.0));
+        writeProperty(output, prefix + "P50Millis", format(histogram.percentileNanos(0.5) / 1_000_000.0));
+        writeProperty(output, prefix + "P95Millis", format(histogram.percentileNanos(0.95) / 1_000_000.0));
+        writeProperty(output, prefix + "P99Millis", format(histogram.percentileNanos(0.99) / 1_000_000.0));
+        writeProperty(output, prefix + "WorstMillis", format(histogram.worstNanos() / 1_000_000.0));
+        writeProperty(output, prefix + "Hitches", Long.toString(histogram.hitches()));
+        writeProperty(output, prefix + "HistogramNanos", histogram.encode());
     }
 
     private void configureViewport(int framebufferWidth, int framebufferHeight) {

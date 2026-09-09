@@ -38,18 +38,25 @@ final class BitmapFontAssetLoader implements AssetLoader<BitmapFont> {
      */
     @Override
     public FdxFuture<BitmapFont> load(final AssetLoadContext context, final AssetDescriptor<BitmapFont> descriptor) {
+        if (isFreeType(descriptor.path())) {
+            Object size = descriptor.options().get("size");
+            FreeTypeFontOptions options = FreeTypeFontOptions.defaults(size instanceof Number
+                    ? ((Number) size).floatValue() : 16.0f);
+            Object characters = descriptor.options().get("characters");
+            final FreeTypeFontOptions actual = characters instanceof String
+                    ? options.characters((String) characters) : options;
+            FdxFuture<BitmapFont> result = FdxFuture.pending();
+            context.readBytes(context.files().internal(descriptor.path())).onSuccess(bytes ->
+                    context.async(() -> BitmapFontFiles.rasterize(bytes, actual)).onSuccess(rasterized ->
+                            context.completeOnUpdate(() -> BitmapFontFiles.createFont(graphics, descriptor.path(), rasterized))
+                                    .onSuccess(result::complete).onFailure(result::completeExceptionally))
+                            .onFailure(result::completeExceptionally))
+                    .onFailure(result::completeExceptionally);
+            return result;
+        }
         return context.completeOnUpdate(new FdxTask<BitmapFont>() {
             @Override
             public BitmapFont run() {
-                Object size = descriptor.options().get("size");
-                if (isFreeType(descriptor.path()) && size instanceof Number) {
-                    FreeTypeFontOptions options = FreeTypeFontOptions.defaults(((Number) size).floatValue());
-                    Object characters = descriptor.options().get("characters");
-                    if (characters instanceof String) {
-                        options = options.characters((String) characters);
-                    }
-                    return BitmapFontFiles.loadFreeType(graphics, context.files(), descriptor.path(), options);
-                }
                 return BitmapFontFiles.load(graphics, context.files(), descriptor.path());
             }
         });

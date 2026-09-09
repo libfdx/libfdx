@@ -18,6 +18,7 @@ dependencies {
     api(project(":libfdx:framework:fdx:core"))
     api(project(":libfdx:framework:math"))
     api(project(":libfdx:framework:display"))
+    implementation(project(":libfdx:framework:json"))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
 }

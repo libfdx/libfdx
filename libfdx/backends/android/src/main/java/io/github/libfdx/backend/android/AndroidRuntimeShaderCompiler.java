@@ -16,6 +16,21 @@ import java.nio.charset.StandardCharsets;
  * @author xpenatan
  */
 final class AndroidRuntimeShaderCompiler implements RuntimeShaderCompiler {
+    private static final Object IDENTITY_LOCK = new Object();
+    private static boolean identityAttempted;
+    private static String identity;
+
+    /** Called only from preparation workers. Loading/math never acquire the file-hashing lock. */
+    @Override public String cacheIdentity() {
+        if (!available()) return null;
+        synchronized (IDENTITY_LOCK) {
+            if (!identityAttempted) {
+                identityAttempted = true;
+                identity = AndroidShaderCompilerIdentity.read(loadedLibraryPathNative());
+            }
+            return identity;
+        }
+    }
     /**
      * Returns whether the native compiler symbol is available.
      *
@@ -92,4 +107,6 @@ final class AndroidRuntimeShaderCompiler implements RuntimeShaderCompiler {
             String glslProfile, String glslEsProfile);
 
     private static native boolean isAvailableNative();
+
+    private static native String loadedLibraryPathNative();
 }

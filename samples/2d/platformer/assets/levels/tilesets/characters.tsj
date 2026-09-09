@@ -1,0 +1,11 @@
+{
+  "type": "tileset",
+  "name": "characters",
+  "tilewidth": 24,
+  "tileheight": 24,
+  "columns": 9,
+  "tilecount": 27,
+  "image": "../../kenney/pixel-platformer/Tilemap/tilemap-characters_packed.png",
+  "imagewidth": 216,
+  "imageheight": 72
+}

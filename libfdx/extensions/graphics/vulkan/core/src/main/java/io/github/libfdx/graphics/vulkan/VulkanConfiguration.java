@@ -1,6 +1,7 @@
 package io.github.libfdx.graphics.vulkan;
 
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.graphics.shader.runtime.ShaderArtifactCache;
 
 /**
  * Stores configuration values for a vulkan.
@@ -13,6 +14,26 @@ public final class VulkanConfiguration {
     private boolean vSync = true;
     private boolean preferMailboxPresentMode = true;
     private int framesInFlight = 2;
+    private int preparationWorkerLimit;
+    private ShaderArtifactCache shaderCache;
+
+    /** Optional borrowed persistence. Actual supported layers are reported by the provider. */
+    public ShaderArtifactCache shaderCache() { return shaderCache; }
+    public VulkanConfiguration shaderCache(ShaderArtifactCache value) { shaderCache = value; return this; }
+
+    /** Upper bound for provider workers where background preparation is available.
+     * Each platform reports its actual supported strategy through device capabilities. */
+    public int preparationWorkerLimit() {
+        // Only worker-capable providers query this default; TeaVM C cannot query processor counts.
+        return preparationWorkerLimit != 0 ? preparationWorkerLimit
+                : Math.max(1, Math.min(8, Runtime.getRuntime().availableProcessors()));
+    }
+
+    public VulkanConfiguration preparationWorkerLimit(int value) {
+        if (value < 1 || value > 64) throw new FdxException("Vulkan preparation workers must be between 1 and 64");
+        preparationWorkerLimit = value;
+        return this;
+    }
 
     /**
      * Returns the application name.

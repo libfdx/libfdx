@@ -118,6 +118,22 @@ public interface Batch2D extends Disposable {
     void draw(TextureRegion region, float x, float y, float width, float height,
             float originX, float originY, float rotationDegrees);
 
+    /** Draws with image-axis transforms from {@link io.github.libfdx.maps.TileTransform}. */
+    default void draw(TextureRegion region, float x, float y, float width, float height, int transform) {
+        draw(region, x, y, width, height, 0, 0, 0, transform);
+    }
+
+    /**
+     * Applies image-axis transforms inside the rectangle before its ordinary
+     * rotation. Implementations without transformed UV support reject nonzero
+     * transforms; existing untransformed implementations remain compatible.
+     */
+    default void draw(TextureRegion region, float x, float y, float width, float height,
+            float originX, float originY, float rotationDegrees, int transform) {
+        if (transform != 0) { throw new io.github.libfdx.core.FdxException("Batch does not support tile transforms"); }
+        draw(region, x, y, width, height, originX, originY, rotationDegrees);
+    }
+
     /**
      * Draws the current content.
      *

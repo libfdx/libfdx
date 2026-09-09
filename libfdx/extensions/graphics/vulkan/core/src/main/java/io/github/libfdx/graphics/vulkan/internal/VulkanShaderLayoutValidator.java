@@ -89,7 +89,9 @@ public final class VulkanShaderLayoutValidator {
                 || expected.group != target.group()
                 || expected.binding != target.binding()
                 || !"resource".equals(target.role())
-                || expected.kind != remap.kind()) {
+                || (expected.kind != remap.kind()
+                    // A samplerless OpTypeImage can consume the image portion of a combined descriptor.
+                    && !(sampled(binding.resourceKind()) && remap.kind() == ShaderBindingRemapKind.DIRECT))) {
             throw incompatible(binding, remap, "expected "
                     + expected.namespace + ' ' + expected.group + ':'
                     + expected.binding + " as " + expected.kind);

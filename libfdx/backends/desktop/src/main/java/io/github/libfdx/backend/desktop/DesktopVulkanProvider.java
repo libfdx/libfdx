@@ -1,50 +1,81 @@
 package io.github.libfdx.backend.desktop;
 
-import io.github.libfdx.graphics.DepthStencilState;
-import io.github.libfdx.graphics.CompareFunction;
-import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
 import io.github.libfdx.graphics.BufferUsage;
-import io.github.libfdx.graphics.CommandEncoder;
 import io.github.libfdx.graphics.ColorTargetState;
+import io.github.libfdx.graphics.CommandEncoder;
+import io.github.libfdx.graphics.CompareFunction;
+import io.github.libfdx.graphics.ComputePass;
+import io.github.libfdx.graphics.ComputePassDescriptor;
+import io.github.libfdx.graphics.ComputePipeline;
+import io.github.libfdx.graphics.ComputePipelineDescriptor;
+import io.github.libfdx.graphics.DepthStencilState;
 import io.github.libfdx.graphics.FrameBuffer;
 import io.github.libfdx.graphics.GraphicsAttachment;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentRequirements;
+import io.github.libfdx.graphics.GraphicsCapabilities;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.GraphicsDevice;
+import io.github.libfdx.graphics.GraphicsContextLostException;
 import io.github.libfdx.graphics.GraphicsEnvironment;
-import io.github.libfdx.graphics.GraphicsFrame;
-import io.github.libfdx.graphics.GraphicsCapabilities;
 import io.github.libfdx.graphics.GraphicsFeature;
+import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.GraphicsLimits;
+import io.github.libfdx.graphics.internal.ShaderRenderBindings;
+import io.github.libfdx.graphics.internal.TextureUploads;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.NativeWindow;
 import io.github.libfdx.graphics.PrimitiveTopology;
 import io.github.libfdx.graphics.RenderPass;
+import io.github.libfdx.graphics.RenderPassColorAttachment;
 import io.github.libfdx.graphics.RenderPassCompatibility;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
 import io.github.libfdx.graphics.RenderTargetLayout;
+import io.github.libfdx.graphics.Sampler;
+import io.github.libfdx.graphics.shader.reflection.ShaderParameterHandle;
+import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceKind;
+import io.github.libfdx.graphics.shader.reflection.ShaderResourceLayout;
+import io.github.libfdx.graphics.shader.runtime.ResolvedShaderPass;
+import io.github.libfdx.core.FdxFuture;
+import io.github.libfdx.graphics.shader.internal.ShaderCompilationTasks;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import io.github.libfdx.graphics.shader.runtime.ShaderParameterBlock;
+import io.github.libfdx.graphics.shader.runtime.ShaderPipelineRequest;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationCapabilities;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationOperation;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationPhase;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationTrace;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparedResult;
+import io.github.libfdx.graphics.shader.runtime.ShaderResourceSet;
+import io.github.libfdx.graphics.shader.runtime.ShaderResourceValueKind;
 import io.github.libfdx.graphics.shader.ShaderLanguage;
 import io.github.libfdx.graphics.shader.ShaderModule;
-import io.github.libfdx.graphics.shader.reflection.ShaderParameterHandle;
-import io.github.libfdx.graphics.shader.runtime.ShaderParameterBlock;
-import io.github.libfdx.graphics.shader.ShaderProfile;
-import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
 import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
 import io.github.libfdx.graphics.shader.ShaderModuleDescriptors;
+import io.github.libfdx.graphics.shader.ShaderProfile;
+import io.github.libfdx.graphics.shader.target.RuntimeShaderTargetCompiler;
+import io.github.libfdx.graphics.shader.target.RuntimeWgslTargetVerifier;
+import io.github.libfdx.graphics.shader.target.ShaderArtifactStage;
+import io.github.libfdx.graphics.shader.target.ShaderCompilerRegistry;
 import io.github.libfdx.graphics.shader.target.ShaderTarget;
+import io.github.libfdx.graphics.shader.target.ShaderTargetArtifact;
+import io.github.libfdx.graphics.shader.target.ShaderTargetSupport;
+import io.github.libfdx.graphics.shader.target.ShaderVerificationRequirement;
 import io.github.libfdx.graphics.StoreOp;
-import io.github.libfdx.graphics.Sampler;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.TextureFilter;
 import io.github.libfdx.graphics.TextureFormat;
+import io.github.libfdx.graphics.TextureMipmapFilter;
+import io.github.libfdx.graphics.TextureOrigin;
 import io.github.libfdx.graphics.TextureUsage;
 import io.github.libfdx.graphics.TextureView;
 import io.github.libfdx.graphics.TextureWrap;
@@ -52,12 +83,28 @@ import io.github.libfdx.graphics.VertexAttribute;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
 import io.github.libfdx.graphics.VertexStepMode;
-import io.github.libfdx.graphics.internal.ShaderRenderBindings;
+import io.github.libfdx.graphics.vulkan.internal.VulkanShaderLayoutValidator;
 import io.github.libfdx.graphics.vulkan.VulkanConfiguration;
 import io.github.libfdx.graphics.vulkan.VulkanProvider;
-import io.github.libfdx.graphics.vulkan.internal.VulkanShaderLayoutValidator;
-import org.lwjgl.PointerBuffer;
+import io.github.libfdx.math.ClipDepthRange;
+import io.github.libfdx.runtime.core.RuntimeCore;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.IntBuffer;
+import java.nio.LongBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 import org.lwjgl.glfw.GLFWVulkan;
+import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.KHRSurface;
 import org.lwjgl.vulkan.KHRSwapchain;
@@ -66,13 +113,16 @@ import org.lwjgl.vulkan.VkApplicationInfo;
 import org.lwjgl.vulkan.VkAttachmentDescription;
 import org.lwjgl.vulkan.VkAttachmentReference;
 import org.lwjgl.vulkan.VkBufferCopy;
-import org.lwjgl.vulkan.VkBufferImageCopy;
 import org.lwjgl.vulkan.VkBufferCreateInfo;
+import org.lwjgl.vulkan.VkBufferImageCopy;
+import org.lwjgl.vulkan.VkClearAttachment;
+import org.lwjgl.vulkan.VkClearRect;
 import org.lwjgl.vulkan.VkClearValue;
 import org.lwjgl.vulkan.VkCommandBuffer;
 import org.lwjgl.vulkan.VkCommandBufferAllocateInfo;
 import org.lwjgl.vulkan.VkCommandBufferBeginInfo;
 import org.lwjgl.vulkan.VkCommandPoolCreateInfo;
+import org.lwjgl.vulkan.VkComputePipelineCreateInfo;
 import org.lwjgl.vulkan.VkDescriptorBufferInfo;
 import org.lwjgl.vulkan.VkDescriptorImageInfo;
 import org.lwjgl.vulkan.VkDescriptorPoolCreateInfo;
@@ -85,21 +135,27 @@ import org.lwjgl.vulkan.VkDeviceCreateInfo;
 import org.lwjgl.vulkan.VkDeviceQueueCreateInfo;
 import org.lwjgl.vulkan.VkExtent2D;
 import org.lwjgl.vulkan.VkFenceCreateInfo;
+import org.lwjgl.vulkan.VkFormatProperties;
 import org.lwjgl.vulkan.VkFramebufferCreateInfo;
 import org.lwjgl.vulkan.VkGraphicsPipelineCreateInfo;
 import org.lwjgl.vulkan.VkImageCreateInfo;
+import org.lwjgl.vulkan.VkImageFormatProperties;
 import org.lwjgl.vulkan.VkImageMemoryBarrier;
+import org.lwjgl.vulkan.VkImageResolve;
 import org.lwjgl.vulkan.VkImageSubresourceRange;
 import org.lwjgl.vulkan.VkImageViewCreateInfo;
 import org.lwjgl.vulkan.VkInstance;
 import org.lwjgl.vulkan.VkInstanceCreateInfo;
 import org.lwjgl.vulkan.VkLayerProperties;
 import org.lwjgl.vulkan.VkMemoryAllocateInfo;
+import org.lwjgl.vulkan.VkMemoryBarrier;
 import org.lwjgl.vulkan.VkMemoryRequirements;
 import org.lwjgl.vulkan.VkPhysicalDevice;
 import org.lwjgl.vulkan.VkPhysicalDeviceFeatures;
 import org.lwjgl.vulkan.VkPhysicalDeviceMemoryProperties;
 import org.lwjgl.vulkan.VkPhysicalDeviceProperties;
+import org.lwjgl.vulkan.VkExtensionProperties;
+import org.lwjgl.vulkan.EXTPipelineCreationFeedback;
 import org.lwjgl.vulkan.VkPipelineColorBlendAttachmentState;
 import org.lwjgl.vulkan.VkPipelineColorBlendStateCreateInfo;
 import org.lwjgl.vulkan.VkPipelineDepthStencilStateCreateInfo;
@@ -131,19 +187,12 @@ import org.lwjgl.vulkan.VkVertexInputBindingDescription;
 import org.lwjgl.vulkan.VkViewport;
 import org.lwjgl.vulkan.VkWriteDescriptorSet;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.IntBuffer;
-import java.nio.LongBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-
 import static org.lwjgl.glfw.GLFWVulkan.glfwCreateWindowSurface;
 import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.memByteBuffer;
+import static org.lwjgl.system.MemoryUtil.memAlloc;
+import static org.lwjgl.system.MemoryUtil.memFree;
 import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.vulkan.KHRSurface.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
 import static org.lwjgl.vulkan.KHRSurface.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -169,18 +218,25 @@ import static org.lwjgl.vulkan.KHRSwapchain.vkQueuePresentKHR;
 import static org.lwjgl.vulkan.VK10.VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
 import static org.lwjgl.vulkan.VK10.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 import static org.lwjgl.vulkan.VK10.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+import static org.lwjgl.vulkan.VK10.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+import static org.lwjgl.vulkan.VK10.VK_ACCESS_SHADER_READ_BIT;
 import static org.lwjgl.vulkan.VK10.VK_ACCESS_TRANSFER_READ_BIT;
+import static org.lwjgl.vulkan.VK10.VK_ACCESS_TRANSFER_WRITE_BIT;
 import static org.lwjgl.vulkan.VK10.VK_API_VERSION_1_0;
 import static org.lwjgl.vulkan.VK10.VK_ATTACHMENT_LOAD_OP_CLEAR;
 import static org.lwjgl.vulkan.VK10.VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 import static org.lwjgl.vulkan.VK10.VK_ATTACHMENT_LOAD_OP_LOAD;
 import static org.lwjgl.vulkan.VK10.VK_ATTACHMENT_STORE_OP_DONT_CARE;
 import static org.lwjgl.vulkan.VK10.VK_ATTACHMENT_STORE_OP_STORE;
+import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_ONE;
+import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_SRC_ALPHA;
 import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_ZERO;
 import static org.lwjgl.vulkan.VK10.VK_BLEND_OP_ADD;
 import static org.lwjgl.vulkan.VK10.VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 import static org.lwjgl.vulkan.VK10.VK_COLOR_COMPONENT_A_BIT;
@@ -188,56 +244,70 @@ import static org.lwjgl.vulkan.VK10.VK_COLOR_COMPONENT_B_BIT;
 import static org.lwjgl.vulkan.VK10.VK_COLOR_COMPONENT_G_BIT;
 import static org.lwjgl.vulkan.VK10.VK_COLOR_COMPONENT_R_BIT;
 import static org.lwjgl.vulkan.VK10.VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+import static org.lwjgl.vulkan.VK10.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 import static org.lwjgl.vulkan.VK10.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 import static org.lwjgl.vulkan.VK10.VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-import static org.lwjgl.vulkan.VK10.VK_CULL_MODE_NONE;
-import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_LESS_OR_EQUAL;
-import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_NEVER;
-import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_LESS;
-import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_EQUAL;
-import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_GREATER;
-import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_NOT_EQUAL;
-import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_GREATER_OR_EQUAL;
 import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_ALWAYS;
-import static org.lwjgl.vulkan.VK10.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_EQUAL;
+import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_GREATER_OR_EQUAL;
+import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_GREATER;
+import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_LESS_OR_EQUAL;
+import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_LESS;
+import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_NEVER;
+import static org.lwjgl.vulkan.VK10.VK_COMPARE_OP_NOT_EQUAL;
+import static org.lwjgl.vulkan.VK10.VK_CULL_MODE_NONE;
 import static org.lwjgl.vulkan.VK10.VK_DEPENDENCY_BY_REGION_BIT;
+import static org.lwjgl.vulkan.VK10.VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+import static org.lwjgl.vulkan.VK10.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+import static org.lwjgl.vulkan.VK10.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 import static org.lwjgl.vulkan.VK10.VK_DYNAMIC_STATE_SCISSOR;
 import static org.lwjgl.vulkan.VK10.VK_DYNAMIC_STATE_VIEWPORT;
 import static org.lwjgl.vulkan.VK10.VK_FALSE;
 import static org.lwjgl.vulkan.VK10.VK_FENCE_CREATE_SIGNALED_BIT;
+import static org.lwjgl.vulkan.VK10.VK_FILTER_LINEAR;
+import static org.lwjgl.vulkan.VK10.VK_FILTER_NEAREST;
 import static org.lwjgl.vulkan.VK10.VK_FORMAT_B8G8R8A8_SRGB;
 import static org.lwjgl.vulkan.VK10.VK_FORMAT_B8G8R8A8_UNORM;
 import static org.lwjgl.vulkan.VK10.VK_FORMAT_D32_SFLOAT;
+import static org.lwjgl.vulkan.VK10.VK_FORMAT_R32_SFLOAT;
+import static org.lwjgl.vulkan.VK10.VK_FORMAT_R32G32_SFLOAT;
+import static org.lwjgl.vulkan.VK10.VK_FORMAT_R32G32B32_SFLOAT;
+import static org.lwjgl.vulkan.VK10.VK_FORMAT_R32G32B32A32_SFLOAT;
 import static org.lwjgl.vulkan.VK10.VK_FORMAT_R8G8B8A8_SRGB;
 import static org.lwjgl.vulkan.VK10.VK_FORMAT_R8G8B8A8_UNORM;
 import static org.lwjgl.vulkan.VK10.VK_FRONT_FACE_COUNTER_CLOCKWISE;
-import static org.lwjgl.vulkan.VK10.VK_FORMAT_R32G32B32A32_SFLOAT;
-import static org.lwjgl.vulkan.VK10.VK_FORMAT_R32G32B32_SFLOAT;
-import static org.lwjgl.vulkan.VK10.VK_FORMAT_R32G32_SFLOAT;
-import static org.lwjgl.vulkan.VK10.VK_FORMAT_R32_SFLOAT;
 import static org.lwjgl.vulkan.VK10.VK_IMAGE_ASPECT_COLOR_BIT;
 import static org.lwjgl.vulkan.VK10.VK_IMAGE_ASPECT_DEPTH_BIT;
 import static org.lwjgl.vulkan.VK10.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 import static org.lwjgl.vulkan.VK10.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+import static org.lwjgl.vulkan.VK10.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+import static org.lwjgl.vulkan.VK10.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 import static org.lwjgl.vulkan.VK10.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 import static org.lwjgl.vulkan.VK10.VK_IMAGE_LAYOUT_UNDEFINED;
 import static org.lwjgl.vulkan.VK10.VK_IMAGE_TILING_OPTIMAL;
 import static org.lwjgl.vulkan.VK10.VK_IMAGE_TYPE_2D;
 import static org.lwjgl.vulkan.VK10.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 import static org.lwjgl.vulkan.VK10.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+import static org.lwjgl.vulkan.VK10.VK_IMAGE_USAGE_SAMPLED_BIT;
+import static org.lwjgl.vulkan.VK10.VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 import static org.lwjgl.vulkan.VK10.VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 import static org.lwjgl.vulkan.VK10.VK_IMAGE_VIEW_TYPE_2D;
 import static org.lwjgl.vulkan.VK10.VK_INDEX_TYPE_UINT16;
 import static org.lwjgl.vulkan.VK10.VK_LOGIC_OP_COPY;
+import static org.lwjgl.vulkan.VK10.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 import static org.lwjgl.vulkan.VK10.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 import static org.lwjgl.vulkan.VK10.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+import static org.lwjgl.vulkan.VK10.VK_NOT_READY;
 import static org.lwjgl.vulkan.VK10.VK_NULL_HANDLE;
 import static org.lwjgl.vulkan.VK10.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
 import static org.lwjgl.vulkan.VK10.VK_PIPELINE_BIND_POINT_GRAPHICS;
 import static org.lwjgl.vulkan.VK10.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 import static org.lwjgl.vulkan.VK10.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 import static org.lwjgl.vulkan.VK10.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+import static org.lwjgl.vulkan.VK10.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 import static org.lwjgl.vulkan.VK10.VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+import static org.lwjgl.vulkan.VK10.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+import static org.lwjgl.vulkan.VK10.VK_PIPELINE_STAGE_TRANSFER_BIT;
 import static org.lwjgl.vulkan.VK10.VK_POLYGON_MODE_FILL;
 import static org.lwjgl.vulkan.VK10.VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
 import static org.lwjgl.vulkan.VK10.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -245,6 +315,11 @@ import static org.lwjgl.vulkan.VK10.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 import static org.lwjgl.vulkan.VK10.VK_QUEUE_FAMILY_IGNORED;
 import static org.lwjgl.vulkan.VK10.VK_QUEUE_GRAPHICS_BIT;
 import static org.lwjgl.vulkan.VK10.VK_SAMPLE_COUNT_1_BIT;
+import static org.lwjgl.vulkan.VK10.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+import static org.lwjgl.vulkan.VK10.VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+import static org.lwjgl.vulkan.VK10.VK_SAMPLER_ADDRESS_MODE_REPEAT;
+import static org.lwjgl.vulkan.VK10.VK_SAMPLER_MIPMAP_MODE_LINEAR;
+import static org.lwjgl.vulkan.VK10.VK_SAMPLER_MIPMAP_MODE_NEAREST;
 import static org.lwjgl.vulkan.VK10.VK_SHADER_STAGE_FRAGMENT_BIT;
 import static org.lwjgl.vulkan.VK10.VK_SHADER_STAGE_VERTEX_BIT;
 import static org.lwjgl.vulkan.VK10.VK_SHARING_MODE_CONCURRENT;
@@ -254,11 +329,16 @@ import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -274,53 +354,68 @@ import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STAT
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_SUBMIT_INFO;
+import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 import static org.lwjgl.vulkan.VK10.VK_SUBPASS_EXTERNAL;
-import static org.lwjgl.vulkan.VK10.VK_NOT_READY;
 import static org.lwjgl.vulkan.VK10.VK_SUCCESS;
-import static org.lwjgl.vulkan.VK10.VK_TRUE;
 import static org.lwjgl.vulkan.VK10.VK_TIMEOUT;
+import static org.lwjgl.vulkan.VK10.VK_TRUE;
 import static org.lwjgl.vulkan.VK10.VK_VERTEX_INPUT_RATE_INSTANCE;
 import static org.lwjgl.vulkan.VK10.VK_VERTEX_INPUT_RATE_VERTEX;
 import static org.lwjgl.vulkan.VK10.VK_WHOLE_SIZE;
-import static org.lwjgl.vulkan.VK10.vkAllocateMemory;
 import static org.lwjgl.vulkan.VK10.vkAllocateCommandBuffers;
+import static org.lwjgl.vulkan.VK10.vkAllocateDescriptorSets;
+import static org.lwjgl.vulkan.VK10.vkAllocateMemory;
 import static org.lwjgl.vulkan.VK10.vkBeginCommandBuffer;
+import static org.lwjgl.vulkan.VK10.vkBindBufferMemory;
+import static org.lwjgl.vulkan.VK10.vkBindImageMemory;
 import static org.lwjgl.vulkan.VK10.vkCmdBeginRenderPass;
+import static org.lwjgl.vulkan.VK10.vkCmdBindDescriptorSets;
 import static org.lwjgl.vulkan.VK10.vkCmdBindIndexBuffer;
 import static org.lwjgl.vulkan.VK10.vkCmdBindPipeline;
 import static org.lwjgl.vulkan.VK10.vkCmdBindVertexBuffers;
 import static org.lwjgl.vulkan.VK10.vkCmdCopyBuffer;
+import static org.lwjgl.vulkan.VK10.vkCmdCopyBufferToImage;
 import static org.lwjgl.vulkan.VK10.vkCmdCopyImageToBuffer;
 import static org.lwjgl.vulkan.VK10.vkCmdDraw;
 import static org.lwjgl.vulkan.VK10.vkCmdDrawIndexed;
 import static org.lwjgl.vulkan.VK10.vkCmdEndRenderPass;
+import static org.lwjgl.vulkan.VK10.vkCmdPipelineBarrier;
 import static org.lwjgl.vulkan.VK10.vkCmdSetScissor;
 import static org.lwjgl.vulkan.VK10.vkCmdSetViewport;
-import static org.lwjgl.vulkan.VK10.vkCreateCommandPool;
 import static org.lwjgl.vulkan.VK10.vkCreateBuffer;
+import static org.lwjgl.vulkan.VK10.vkCreateCommandPool;
+import static org.lwjgl.vulkan.VK10.vkCreateDescriptorPool;
+import static org.lwjgl.vulkan.VK10.vkCreateDescriptorSetLayout;
 import static org.lwjgl.vulkan.VK10.vkCreateDevice;
 import static org.lwjgl.vulkan.VK10.vkCreateFence;
 import static org.lwjgl.vulkan.VK10.vkCreateFramebuffer;
 import static org.lwjgl.vulkan.VK10.vkCreateGraphicsPipelines;
+import static org.lwjgl.vulkan.VK10.vkCreateImage;
 import static org.lwjgl.vulkan.VK10.vkCreateImageView;
 import static org.lwjgl.vulkan.VK10.vkCreateInstance;
 import static org.lwjgl.vulkan.VK10.vkCreatePipelineLayout;
 import static org.lwjgl.vulkan.VK10.vkCreateRenderPass;
+import static org.lwjgl.vulkan.VK10.vkCreateSampler;
 import static org.lwjgl.vulkan.VK10.vkCreateSemaphore;
 import static org.lwjgl.vulkan.VK10.vkCreateShaderModule;
-import static org.lwjgl.vulkan.VK10.vkDestroyCommandPool;
 import static org.lwjgl.vulkan.VK10.vkDestroyBuffer;
+import static org.lwjgl.vulkan.VK10.vkDestroyCommandPool;
+import static org.lwjgl.vulkan.VK10.vkDestroyDescriptorPool;
+import static org.lwjgl.vulkan.VK10.vkDestroyDescriptorSetLayout;
 import static org.lwjgl.vulkan.VK10.vkDestroyDevice;
 import static org.lwjgl.vulkan.VK10.vkDestroyFence;
 import static org.lwjgl.vulkan.VK10.vkDestroyFramebuffer;
+import static org.lwjgl.vulkan.VK10.vkDestroyImage;
 import static org.lwjgl.vulkan.VK10.vkDestroyImageView;
 import static org.lwjgl.vulkan.VK10.vkDestroyInstance;
 import static org.lwjgl.vulkan.VK10.vkDestroyPipeline;
 import static org.lwjgl.vulkan.VK10.vkDestroyPipelineLayout;
 import static org.lwjgl.vulkan.VK10.vkDestroyRenderPass;
+import static org.lwjgl.vulkan.VK10.vkDestroySampler;
 import static org.lwjgl.vulkan.VK10.vkDestroySemaphore;
 import static org.lwjgl.vulkan.VK10.vkDestroyShaderModule;
 import static org.lwjgl.vulkan.VK10.vkDeviceWaitIdle;
@@ -328,68 +423,22 @@ import static org.lwjgl.vulkan.VK10.vkEndCommandBuffer;
 import static org.lwjgl.vulkan.VK10.vkEnumerateInstanceLayerProperties;
 import static org.lwjgl.vulkan.VK10.vkEnumeratePhysicalDevices;
 import static org.lwjgl.vulkan.VK10.vkFreeCommandBuffers;
+import static org.lwjgl.vulkan.VK10.vkFreeDescriptorSets;
 import static org.lwjgl.vulkan.VK10.vkFreeMemory;
-import static org.lwjgl.vulkan.VK10.vkGetDeviceQueue;
 import static org.lwjgl.vulkan.VK10.vkGetBufferMemoryRequirements;
+import static org.lwjgl.vulkan.VK10.vkGetDeviceQueue;
+import static org.lwjgl.vulkan.VK10.vkGetImageMemoryRequirements;
 import static org.lwjgl.vulkan.VK10.vkGetPhysicalDeviceMemoryProperties;
 import static org.lwjgl.vulkan.VK10.vkGetPhysicalDeviceProperties;
 import static org.lwjgl.vulkan.VK10.vkGetPhysicalDeviceQueueFamilyProperties;
+import static org.lwjgl.vulkan.VK10.vkMapMemory;
 import static org.lwjgl.vulkan.VK10.vkQueueSubmit;
+import static org.lwjgl.vulkan.VK10.vkQueueWaitIdle;
 import static org.lwjgl.vulkan.VK10.vkResetCommandBuffer;
 import static org.lwjgl.vulkan.VK10.vkResetFences;
-import static org.lwjgl.vulkan.VK10.vkBindBufferMemory;
-import static org.lwjgl.vulkan.VK10.vkMapMemory;
 import static org.lwjgl.vulkan.VK10.vkUnmapMemory;
-import static org.lwjgl.vulkan.VK10.vkWaitForFences;
-import static org.lwjgl.vulkan.VK10.VK_ACCESS_SHADER_READ_BIT;
-import static org.lwjgl.vulkan.VK10.VK_ACCESS_TRANSFER_WRITE_BIT;
-import static org.lwjgl.vulkan.VK10.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_SRC_ALPHA;
-import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-import static org.lwjgl.vulkan.VK10.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-import static org.lwjgl.vulkan.VK10.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-import static org.lwjgl.vulkan.VK10.VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-import static org.lwjgl.vulkan.VK10.VK_FILTER_LINEAR;
-import static org.lwjgl.vulkan.VK10.VK_FILTER_NEAREST;
-import static org.lwjgl.vulkan.VK10.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-import static org.lwjgl.vulkan.VK10.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-import static org.lwjgl.vulkan.VK10.VK_IMAGE_USAGE_SAMPLED_BIT;
-import static org.lwjgl.vulkan.VK10.VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-import static org.lwjgl.vulkan.VK10.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-import static org.lwjgl.vulkan.VK10.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-import static org.lwjgl.vulkan.VK10.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-import static org.lwjgl.vulkan.VK10.VK_PIPELINE_STAGE_TRANSFER_BIT;
-import static org.lwjgl.vulkan.VK10.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-import static org.lwjgl.vulkan.VK10.VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-import static org.lwjgl.vulkan.VK10.VK_SAMPLER_ADDRESS_MODE_REPEAT;
-import static org.lwjgl.vulkan.VK10.VK_SAMPLER_MIPMAP_MODE_LINEAR;
-import static org.lwjgl.vulkan.VK10.VK_SAMPLER_MIPMAP_MODE_NEAREST;
-import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-import static org.lwjgl.vulkan.VK10.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-import static org.lwjgl.vulkan.VK10.vkAllocateDescriptorSets;
-import static org.lwjgl.vulkan.VK10.vkBindImageMemory;
-import static org.lwjgl.vulkan.VK10.vkCmdBindDescriptorSets;
-import static org.lwjgl.vulkan.VK10.vkCmdCopyBufferToImage;
-import static org.lwjgl.vulkan.VK10.vkCmdPipelineBarrier;
-import static org.lwjgl.vulkan.VK10.vkCreateDescriptorPool;
-import static org.lwjgl.vulkan.VK10.vkCreateDescriptorSetLayout;
-import static org.lwjgl.vulkan.VK10.vkCreateImage;
-import static org.lwjgl.vulkan.VK10.vkCreateSampler;
-import static org.lwjgl.vulkan.VK10.vkDestroyDescriptorPool;
-import static org.lwjgl.vulkan.VK10.vkDestroyDescriptorSetLayout;
-import static org.lwjgl.vulkan.VK10.vkDestroyImage;
-import static org.lwjgl.vulkan.VK10.vkDestroySampler;
-import static org.lwjgl.vulkan.VK10.vkFreeDescriptorSets;
-import static org.lwjgl.vulkan.VK10.vkGetImageMemoryRequirements;
-import static org.lwjgl.vulkan.VK10.vkQueueWaitIdle;
 import static org.lwjgl.vulkan.VK10.vkUpdateDescriptorSets;
+import static org.lwjgl.vulkan.VK10.vkWaitForFences;
 
 /**
  * Provides desktop vulkan services.
@@ -403,32 +452,63 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
     private static final int MAX_TEXTURE_DESCRIPTOR_SLOTS = 16;
     private static final int MAX_UNIFORM_DESCRIPTOR_SETS = 4096;
     private static final int MAX_UNIFORM_BYTE_COUNT = 64 * 1024;
-    static final GraphicsCapabilities CAPABILITIES = GraphicsCapabilities.builder()
+    static final GraphicsCapabilities CAPABILITIES = textureCapabilities(false, false, false, false);
+
+    private static GraphicsCapabilities textureCapabilities(boolean hdr, boolean completeState, boolean multipleTargets, boolean compute) {
+        GraphicsCapabilities.Builder builder = GraphicsCapabilities.builder()
             .profile(ShaderProfile.PORTABLE_WEBGL2)
             .profile(ShaderProfile.PORTABLE_WEBGPU)
             .profile(ShaderProfile.NATIVE)
             .feature(GraphicsFeature.INDEXED_DRAW)
             .feature(GraphicsFeature.INSTANCED_DRAW)
             .feature(GraphicsFeature.DEPTH_STENCIL_ATTACHMENTS)
+            .feature(GraphicsFeature.EXPLICIT_DEPTH_STENCIL_ATTACHMENTS)
             .feature(GraphicsFeature.ALPHA_BLEND_CONTROL)
+            .feature(GraphicsFeature.TEXTURE_MIP_LEVELS)
+            .feature(GraphicsFeature.TEXTURE_MIN_MAG_FILTERS)
             .colorFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
-                    TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB)
+                    TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB, TextureFormat.R32_FLOAT)
             .depthStencilFormats(TextureFormat.DEPTH32_FLOAT)
             // Vulkan clips depth to 0..w.
             .clipDepthRange(ClipDepthRange.ZERO_TO_ONE)
-            .sampleCounts(1)
+            .renderedTextureOrigin(TextureOrigin.TOP_LEFT)
+            .sampleCounts(multipleTargets ? new int[] {1, 4} : new int[] {1})
             .limits(GraphicsLimits.builder()
                     .maxBindGroups(2)
+                    .maxStorageBuffersPerStage(compute ? 4 : 0)
+                    .maxStorageTexturesPerStage(compute ? 4 : 0)
+                    .maxStorageBufferBindingSize(compute ? 128L * 1024 * 1024 : 0)
+                    .maxComputeWorkgroupsPerDimension(compute ? 65535 : 0)
+                    .maxComputeWorkgroupSize(compute ? 128 : 0, compute ? 128 : 0, compute ? 64 : 0)
+                    .maxComputeInvocationsPerWorkgroup(compute ? 128 : 0)
+                    .maxComputeWorkgroupStorageSize(compute ? 16384 : 0)
                     .maxBindingsPerGroup(32)
                     .maxUniformBuffersPerStage(1)
                     .maxSampledTexturesPerStage(MAX_TEXTURE_DESCRIPTOR_SLOTS)
                     .maxSamplersPerStage(MAX_TEXTURE_DESCRIPTOR_SLOTS)
-                    .maxColorAttachments(1)
+                    .maxColorAttachments(multipleTargets ? 4 : 1)
                     .maxVertexBuffers(4)
                     .maxVertexAttributes(16)
                     .maxUniformBufferBindingSize(MAX_UNIFORM_BYTE_COUNT)
-                    .build())
-            .build();
+                    .build());
+        if (hdr) builder.colorFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
+                TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB, TextureFormat.RGBA16_FLOAT, TextureFormat.R32_FLOAT)
+                .filterableColorFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
+                        TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB, TextureFormat.RGBA16_FLOAT)
+                .blendableColorFormats(TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
+                        TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB, TextureFormat.RGBA16_FLOAT);
+        if (completeState) builder.feature(GraphicsFeature.COMPLETE_RENDER_PIPELINE_STATE);
+        if (compute) builder.feature(GraphicsFeature.COMPUTE).feature(GraphicsFeature.STORAGE_BUFFERS)
+                .feature(GraphicsFeature.STORAGE_TEXTURES).feature(GraphicsFeature.ATOMICS);
+        if (multipleTargets) builder.feature(GraphicsFeature.MULTIPLE_COLOR_ATTACHMENTS)
+                .feature(GraphicsFeature.MULTISAMPLE).feature(GraphicsFeature.RESOLVE_ATTACHMENTS)
+                .resolveFormats(hdr
+                        ? new TextureFormat[] {TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
+                                TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB, TextureFormat.RGBA16_FLOAT, TextureFormat.R32_FLOAT}
+                        : new TextureFormat[] {TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
+                                TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB, TextureFormat.R32_FLOAT});
+        return builder.build();
+    }
     private static final int DEPTH_FORMAT = VK_FORMAT_D32_SFLOAT;
     private static final long FRAME_FENCE_TIMEOUT_NS = 33_000_000L;
     private static final long SWAPCHAIN_ACQUIRE_TIMEOUT_NS = 33_000_000L;
@@ -547,7 +627,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         return this;
     }
 
-    private static void waitForAllFences(VkDevice device, long[] fences, long timeoutNs, String operation) {
+    private static void waitForAllFences(VulkanResourceDomain domain, VkDevice device, long[] fences, long timeoutNs, String operation) {
         for (long fence : fences) {
             if (fence == VK_NULL_HANDLE) {
                 continue;
@@ -556,11 +636,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             if (waitResult == VK_TIMEOUT) {
                 throw new FdxException("Timed out while waiting for Vulkan " + operation);
             }
-            check(waitResult, "Could not wait for Vulkan " + operation);
+            domain.check(waitResult, "Could not wait for Vulkan " + operation);
         }
     }
 
-    private static boolean waitForFenceOrSkipFrame(VkDevice device, long fence, long timeoutNs, String operation) {
+    private static boolean waitForFenceOrSkipFrame(VulkanResourceDomain domain, VkDevice device, long fence, long timeoutNs, String operation) {
         if (fence == VK_NULL_HANDLE) {
             return true;
         }
@@ -568,18 +648,52 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         if (waitResult == VK_TIMEOUT) {
             return false;
         }
-        check(waitResult, "Could not wait for Vulkan " + operation);
+        domain.check(waitResult, "Could not wait for Vulkan " + operation);
         return true;
     }
 
     /**
      * Keeps one shared Vulkan instance/device alive until every related surface context is closed.
      */
-    private static final class VulkanResourceDomain {
+    static final class VulkanResourceDomain {
         private int contextReferences;
+        private int preparationReferences;
         private Runnable nativeRelease;
-        private VkDevice device;
-        private boolean closed;
+        private final ArrayList<DesktopVulkanPipelineCache> pipelineCaches = new ArrayList<>();
+        private volatile VkDevice device;
+        private volatile boolean closed;
+        private final AtomicBoolean lost = new AtomicBoolean();
+        private final Set<VulkanPreparationQueue> preparations = ConcurrentHashMap.newKeySet();
+        private volatile Throwable lossCleanupFailure;
+
+        boolean isLost() { return lost.get(); }
+
+        void requireUsable() {
+            if (isLost()) throw lossException();
+        }
+
+        private GraphicsContextLostException lossException() {
+            var failure = new GraphicsContextLostException(ID);
+            if (lossCleanupFailure != null) failure.addSuppressed(lossCleanupFailure);
+            return failure;
+        }
+
+        int observeResult(int result) {
+            if (result == VK10.VK_ERROR_DEVICE_LOST && lost.compareAndSet(false, true)) {
+                for (var queue : preparations) {
+                    try { queue.close(); }
+                    catch (RuntimeException | Error failure) {
+                        lossCleanupFailure = VulkanCleanup.merge(lossCleanupFailure, failure);
+                    }
+                }
+            }
+            return result;
+        }
+
+        void check(int result, String message) {
+            if (observeResult(result) == VK10.VK_ERROR_DEVICE_LOST) throw lossException();
+            DesktopVulkanProvider.check(result, message);
+        }
 
         void setNativeRelease(Runnable nativeRelease) {
             if (nativeRelease == null || this.nativeRelease != null || closed) {
@@ -588,7 +702,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             this.nativeRelease = nativeRelease;
         }
 
-        void retainContext() {
+        synchronized void retainContext() {
+            requireUsable();
             if (closed) {
                 throw new FdxException("Cannot retain a closed desktop Vulkan resource domain");
             }
@@ -613,21 +728,60 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return closed;
         }
 
+        synchronized void retainPreparation() {
+            requireUsable();
+            if (closed || contextReferences == 0) throw new FdxException("Cannot prepare against a closed Vulkan device domain");
+            preparationReferences++;
+        }
+
+        // A running preparation may hand a snapshot to storage even after its owner closes.
+        synchronized void retainCacheSave() {
+            requireUsable();
+            if (preparationReferences == 0) throw new FdxException("Vulkan cache save has no retained device");
+            preparationReferences++;
+        }
+
+        synchronized void registerPipelineCache(DesktopVulkanPipelineCache cache) {
+            if (closed) throw new FdxException("Cannot register a pipeline cache on a closed Vulkan domain");
+            pipelineCaches.add(cache);
+        }
+
+        void releasePreparation() {
+            Runnable release;
+            synchronized (this) {
+                if (preparationReferences <= 0) throw new FdxException("Vulkan preparation reference underflow");
+                preparationReferences--;
+                release = takeNativeRelease();
+            }
+            if (release != null) release.run();
+        }
+
         void releaseContext() {
-            if (contextReferences <= 0) {
-                throw new FdxException("Desktop Vulkan resource domain context reference underflow");
+            Runnable release;
+            synchronized (this) {
+                if (contextReferences <= 0) throw new FdxException("Desktop Vulkan resource domain context reference underflow");
+                contextReferences--;
+                if (contextReferences == 0) closed = true;
+                release = takeNativeRelease();
             }
-            contextReferences--;
-            if (contextReferences != 0) {
-                return;
-            }
-            closed = true;
+            if (release != null) release.run();
+        }
+
+        // Only lifecycle bookkeeping holds this monitor. Native work/release never does.
+        private Runnable takeNativeRelease() {
+            if (contextReferences != 0 || preparationReferences != 0) return null;
             Runnable release = nativeRelease;
             nativeRelease = null;
             device = null;
-            if (release != null) {
-                release.run();
-            }
+            if (release == null) return null;
+            var caches = new ArrayList<>(pipelineCaches);
+            pipelineCaches.clear();
+            return () -> {
+                VulkanCleanup cleanup = new VulkanCleanup();
+                for (var cache : caches) cleanup.run(cache::disposeNative);
+                cleanup.run(release);
+                cleanup.throwIfFailed();
+            };
         }
     }
 
@@ -688,6 +842,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
 
         final void retainForRecording() {
+            resourceDomain.requireUsable();
             if (retired || released || resourceDomain.isClosed()) {
                 throw new FdxException("Cannot record a retired desktop Vulkan resource");
             }
@@ -820,6 +975,16 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
      * @author xpenatan
      */
     private static final class VulkanContext implements GraphicsAttachment {
+        private void check(int result, String message) { resourceDomain.check(result, message); }
+        private final Map<RenderTargetLayout, Long> multipleRenderPasses = new HashMap<>();
+        private final ArrayList<VulkanMultipleTargets> multipleFramebuffers = new ArrayList<>();
+
+        private void destroyMultipleTargets() {
+            for (VulkanMultipleTargets targets : multipleFramebuffers) targets.retire();
+            multipleFramebuffers.clear();
+            for (long pass : multipleRenderPasses.values()) vkDestroyRenderPass(device, pass, null);
+            multipleRenderPasses.clear();
+        }
         private final VulkanConfiguration configuration;
         private final long windowHandle;
         private final boolean ownsDevice;
@@ -1113,8 +1278,27 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                             .pQueuePriorities(stack.floats(priority));
                 }
 
-                PointerBuffer extensionNames = stack.pointers(stack.UTF8(VK_KHR_SWAPCHAIN_EXTENSION_NAME));
+                IntBuffer extensionCount = stack.callocInt(1);
+                check(VK10.vkEnumerateDeviceExtensionProperties(physicalDevice, (ByteBuffer)null, extensionCount, null),
+                        "Could not query Vulkan device extensions");
+                boolean pipelineFeedback = false;
+                try (VkExtensionProperties.Buffer extensions = VkExtensionProperties.malloc(extensionCount.get(0))) {
+                    check(VK10.vkEnumerateDeviceExtensionProperties(physicalDevice, (ByteBuffer)null, extensionCount, extensions),
+                            "Could not query Vulkan device extensions");
+                    for (int i = 0; i < extensions.capacity(); i++) {
+                        pipelineFeedback |= extensions.get(i).extensionNameString().equals(
+                                EXTPipelineCreationFeedback.VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME);
+                    }
+                }
+                PointerBuffer extensionNames = pipelineFeedback
+                        ? stack.pointers(stack.UTF8(VK_KHR_SWAPCHAIN_EXTENSION_NAME),
+                                stack.UTF8(EXTPipelineCreationFeedback.VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME))
+                        : stack.pointers(stack.UTF8(VK_KHR_SWAPCHAIN_EXTENSION_NAME));
                 VkPhysicalDeviceFeatures features = VkPhysicalDeviceFeatures.calloc(stack);
+                VkPhysicalDeviceFeatures availableFeatures = VkPhysicalDeviceFeatures.calloc(stack);
+                VK10.vkGetPhysicalDeviceFeatures(physicalDevice, availableFeatures);
+                features.depthBiasClamp(availableFeatures.depthBiasClamp());
+                features.independentBlend(availableFeatures.independentBlend());
                 VkDeviceCreateInfo createInfo = VkDeviceCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO)
                         .pQueueCreateInfos(queueInfos)
@@ -1528,6 +1712,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
 
         private long createRenderPass(MemoryStack stack, int colorFormat, int loadOp, int storeOp, int depthLoadOp,
                 int initialLayout, int finalLayout) {
+            return createRenderPass(resourceDomain, device, stack, colorFormat, loadOp, storeOp, depthLoadOp, initialLayout, finalLayout);
+        }
+
+        private static long createRenderPass(VulkanResourceDomain domain, VkDevice device, MemoryStack stack, int colorFormat, int loadOp,
+                int storeOp, int depthLoadOp, int initialLayout, int finalLayout) {
             VkAttachmentDescription.Buffer attachments = VkAttachmentDescription.calloc(2, stack);
             attachments.get(0)
                     .format(colorFormat)
@@ -1604,7 +1793,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                     .pDependencies(dependencies);
 
             LongBuffer pRenderPass = stack.mallocLong(1);
-            check(vkCreateRenderPass(device, renderPassInfo, null, pRenderPass), "Could not create Vulkan render pass");
+            domain.check(vkCreateRenderPass(device, renderPassInfo, null, pRenderPass), "Could not create Vulkan render pass");
             return pRenderPass.get(0);
         }
 
@@ -1702,6 +1891,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             if (disposed || framebufferWidth <= 0 || framebufferHeight <= 0) {
                 return;
             }
+            resourceDomain.requireUsable();
             if (frameStarted) {
                 pendingResize = true;
                 pendingResizeWidth = framebufferWidth;
@@ -1715,6 +1905,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             if (framebufferWidth <= 0 || framebufferHeight <= 0 || device == null) {
                 return;
             }
+            resourceDomain.requireUsable();
             waitForPendingFences(READBACK_FENCE_TIMEOUT_NS, "swapchain recreation");
             cleanupSwapchain();
             createSwapchain(framebufferWidth, framebufferHeight);
@@ -1725,6 +1916,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
          */
         @Override
         public void processEvents() {
+            if (!disposed) resourceDomain.requireUsable();
         }
 
         /**
@@ -1734,6 +1926,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
          */
         @Override
         public boolean beginFrame() {
+            resourceDomain.requireUsable();
             if (disposed || swapchain == VK_NULL_HANDLE || width <= 0 || height <= 0) {
                 return false;
             }
@@ -1743,7 +1936,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
 
             try (MemoryStack stack = stackPush()) {
                 if (frameFencePending[currentFrameSlot]) {
-                    if (!waitForFenceOrSkipFrame(device, inFlightFences[currentFrameSlot], FRAME_FENCE_TIMEOUT_NS,
+                    if (!waitForFenceOrSkipFrame(resourceDomain, device, inFlightFences[currentFrameSlot], FRAME_FENCE_TIMEOUT_NS,
                             "frame fence")) {
                         return false;
                     }
@@ -1763,12 +1956,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                     return false;
                 }
                 if (acquireResult != VK_SUCCESS && acquireResult != VK_SUBOPTIMAL_KHR) {
-                    throw new FdxException("Could not acquire Vulkan swapchain image: " + acquireResult);
+                    check(acquireResult, "Could not acquire Vulkan swapchain image");
                 }
 
                 currentImageIndex = pImageIndex.get(0);
                 if (imagesInFlight[currentImageIndex] != VK_NULL_HANDLE) {
-                    if (!waitForFenceOrSkipFrame(device, imagesInFlight[currentImageIndex], READBACK_FENCE_TIMEOUT_NS,
+                    if (!waitForFenceOrSkipFrame(resourceDomain, device, imagesInFlight[currentImageIndex], READBACK_FENCE_TIMEOUT_NS,
                             "image fence")) {
                         throw new FdxException("Timed out waiting for Vulkan image fence");
                     }
@@ -1795,6 +1988,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
          */
         @Override
         public void endFrame() {
+            if (resourceDomain.isLost()) { frameStarted = false; resourceDomain.requireUsable(); }
             if (!frameStarted) {
                 return;
             }
@@ -1802,6 +1996,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
 
         ByteBuffer readPixelsRgba8() {
+            requireDeviceUsable("read pixels");
             if (!frameStarted) {
                 throw new FdxException("Cannot read pixels before beginFrame()");
             }
@@ -1920,6 +2115,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
 
         private void submitCurrentFrame(boolean waitForCompletion) {
+            requireDeviceUsable("submit a frame");
             commandEncoder.ensurePassesEnded();
             frameStarted = false;
 
@@ -1937,7 +2133,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                         "Could not submit Vulkan command buffer");
                 frameFencePending[currentFrameSlot] = true;
                 if (waitForCompletion) {
-                    if (!waitForFenceOrSkipFrame(device, inFlightFences[currentFrameSlot], READBACK_FENCE_TIMEOUT_NS,
+                    if (!waitForFenceOrSkipFrame(resourceDomain, device, inFlightFences[currentFrameSlot], READBACK_FENCE_TIMEOUT_NS,
                             "readback fence")) {
                         throw new FdxException("Timed out waiting for Vulkan readback frame fence");
                     }
@@ -1953,10 +2149,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 currentImageIndex = -1;
                 currentFrameSlot = (currentFrameSlot + 1) % configuration.framesInFlight();
 
+                if (presentResult != VK_SUCCESS && presentResult != VK_ERROR_OUT_OF_DATE_KHR
+                        && presentResult != VK_SUBOPTIMAL_KHR) {
+                    check(presentResult, "Could not present Vulkan swapchain image");
+                }
                 if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR || pendingResize) {
                     applyPendingOrCurrentResize();
-                } else if (presentResult != VK_SUCCESS) {
-                    throw new FdxException("Could not present Vulkan swapchain image: " + presentResult);
                 }
             }
         }
@@ -1995,6 +2193,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
          */
         @Override
         public GraphicsFrame currentFrame() {
+            resourceDomain.requireUsable();
             if (!frameStarted) {
                 throw new FdxException("No Vulkan frame is active");
             }
@@ -2024,6 +2223,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
 
         void requireDeviceUsable(String action) {
+            resourceDomain.requireUsable();
             if (disposed || device == null || resourceDomain.isClosed()) {
                 throw new FdxException("Cannot " + action + " with an unavailable desktop Vulkan context");
             }
@@ -2199,14 +2399,14 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 int result = vkAllocateMemory(device, allocationInfo, null, pMemory);
                 if (result != VK_SUCCESS) {
                     vkDestroyBuffer(device, nativeBuffer, null);
-                    throw new FdxException("Could not allocate Vulkan uniform buffer memory: " + result);
+                    check(result, "Could not allocate Vulkan uniform buffer memory");
                 }
                 long memory = pMemory.get(0);
                 result = vkBindBufferMemory(device, nativeBuffer, memory, 0L);
                 if (result != VK_SUCCESS) {
                     vkFreeMemory(device, memory, null);
                     vkDestroyBuffer(device, nativeBuffer, null);
-                    throw new FdxException("Could not bind Vulkan uniform buffer memory: " + result);
+                    check(result, "Could not bind Vulkan uniform buffer memory");
                 }
                 return new VulkanBufferAllocation(nativeBuffer, memory);
             }
@@ -2451,6 +2651,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
 
         boolean frameStarted() {
+            resourceDomain.requireUsable();
             return frameStarted;
         }
 
@@ -2509,6 +2710,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             disposed = true;
             frameStarted = false;
             VulkanCleanup cleanup = new VulkanCleanup();
+            cleanup.run(graphicsDevice::closePreparation);
             if (device != null) {
                 cleanup.run(() -> waitForPendingFences(DEVICE_DISPOSE_FENCE_TIMEOUT_NS, "context dispose"));
             }
@@ -2519,6 +2721,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 cleanup.run(this::releaseAllRecordedResources);
                 cleanup.run(this::destroySyncObjects);
                 cleanup.run(this::destroyTextureRenderPasses);
+                cleanup.run(this::destroyMultipleTargets);
                 if (commandPool != VK_NULL_HANDLE) {
                     long nativeCommandPool = commandPool;
                     commandPool = VK_NULL_HANDLE;
@@ -2535,6 +2738,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
 
         private void waitForPendingFences(long timeoutNs, String operation) {
+            if (resourceDomain.isLost()) return;
             if (inFlightFences == null || frameFencePending == null) {
                 return;
             }
@@ -2737,12 +2941,256 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
      *
      * @author xpenatan
      */
-    private static final class VulkanGraphicsDevice implements GraphicsDevice {
+    /** Jobs retain the actual device and descriptor layouts through native return/publication.
+     * Worker execution never reads a frame, surface attachment, context cache or owner registry. */
+    private static final class VulkanPreparationQueue implements AutoCloseable {
         private final VulkanContext context;
+        private final VulkanResourceDomain domain;
+        private final GraphicsCapabilities capabilities;
+        private final ShaderCompilerRegistry compilers;
+        private final ShaderCompilerRegistry refreshCompilers;
+        private final DesktopVulkanPipelineCache pipelineCache;
+        private final long textureSetLayout, uniformSetLayout;
+        private final ThreadPoolExecutor executor;
+        private final Set<Job> jobs = ConcurrentHashMap.newKeySet();
+        private volatile boolean closed;
+
+        VulkanPreparationQueue(VulkanContext context, GraphicsCapabilities capabilities, ShaderCompilerRegistry compilers,
+                ShaderCompilerRegistry refreshCompilers, int workers) {
+            this.context = context; domain = context.resourceDomain();
+            this.capabilities = capabilities; this.compilers = compilers;
+            this.refreshCompilers = refreshCompilers;
+            textureSetLayout = context.textureDescriptorSetLayout(); uniformSetLayout = context.uniformDescriptorSetLayout();
+            executor = new ThreadPoolExecutor(workers, workers, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(256), work -> {
+                Thread thread = new Thread(work); thread.setDaemon(true);
+                thread.setName("libfdx-vulkan-prepare-" + thread.threadId()); return thread;
+            }, new ThreadPoolExecutor.AbortPolicy());
+            pipelineCache = new DesktopVulkanPipelineCache(domain, context.physicalDevice,
+                    context.configuration.shaderCache(), executor::execute, domain::retainCacheSave, domain::releasePreparation);
+            domain.registerPipelineCache(pipelineCache);
+            domain.preparations.add(this);
+            if (domain.isLost()) close();
+        }
+
+        ShaderPreparationOperation submit(ShaderPipelineRequest request) {
+            domain.requireUsable();
+            if (closed) throw new FdxException("Vulkan preparation is closed");
+            domain.retainPreparation();
+            Job job = new Job(request, domain.device());
+            jobs.add(job);
+            try { executor.execute(job.trace.wrap(job)); }
+            catch (RuntimeException | Error failure) { jobs.remove(job); domain.releasePreparation(); throw failure; }
+            return job;
+        }
+
+        @Override public void close() {
+            if (closed) return;
+            closed = true;
+            VulkanCleanup cleanup = new VulkanCleanup();
+            for (Job job : jobs) cleanup.run(job::cancel);
+            executor.shutdown(); // Queued cancellation paths release their retained inputs. No join.
+            domain.preparations.remove(this);
+            cleanup.throwIfFailed();
+        }
+
+        private FdxFuture<ShaderModuleDescriptor> translateAsync(ShaderModuleDescriptor source, ShaderCompilerRegistry registry,
+                Consumer<Runnable> execute) {
+            FdxFuture<ShaderModuleDescriptor> reflected = FdxFuture.completed(source);
+            if (!source.reflection().complete()) {
+                reflected = ShaderModuleDescriptors.requireTargetAsync(source, ShaderTarget.WGPU_WGSL,
+                        registry, ShaderVerificationRequirement.REQUIRED, "Vulkan reflection", execute);
+            }
+            return ShaderCompilationTasks.then(reflected, execute, descriptor ->
+                    ShaderModuleDescriptors.requireTargetAsync(descriptor.entryPoints(source.vertexEntryPoint(), source.fragmentEntryPoint()),
+                            ShaderTarget.VULKAN_SPIRV, registry, ShaderVerificationRequirement.PROVIDER_PIPELINE,
+                            "Vulkan", execute));
+        }
+
+        private final class Job implements ShaderPreparationOperation, Runnable {
+            final ShaderPipelineRequest request;
+            final VkDevice device;
+            final AtomicReference<Prepared> output = new AtomicReference<>();
+            final AtomicBoolean completed = new AtomicBoolean();
+            volatile boolean done, cancelled;
+            private final ShaderPreparationTrace trace = new ShaderPreparationTrace();
+            Throwable failure;
+            boolean finished, disposed;
+            ShaderModuleDescriptor source;
+            boolean refreshedTranslation;
+            final Consumer<Runnable> execute = work -> { requireActive(); executor.execute(trace.wrap(work)); };
+            Job(ShaderPipelineRequest request, VkDevice device) { this.request = request; this.device = device; }
+
+            @Override public void run() {
+                try {
+                    requireActive(); trace.enter(ShaderPreparationPhase.SOURCE);
+                    source = request.sourceDescriptor();
+                    requireActive(); trace.enter(ShaderPreparationPhase.TRANSLATION);
+                    beginTranslation(compilers);
+                } catch (Throwable error) { fail(error); }
+            }
+
+            private void beginTranslation(ShaderCompilerRegistry registry) {
+                ShaderCompilationTasks.then(translateAsync(source, registry, execute), execute, translated -> {
+                    trace.enter(ShaderPreparationPhase.CACHE_LOOKUP);
+                    return ShaderCompilationTasks.then(pipelineCache.initializeAsync(), execute, initialized -> {
+                        prepareNative(translated);
+                        return FdxFuture.completed(null);
+                    });
+                }).onFailure(this::fail);
+            }
+
+            private void fail(Throwable error) {
+                if (!completed.compareAndSet(false, true)) return;
+                failure = error;
+                try { domain.releasePreparation(); }
+                catch (Throwable cleanup) { failure = VulkanCleanup.merge(failure, cleanup); }
+                trace.enter(ShaderPreparationPhase.PUBLICATION_WAIT); done = true;
+                jobs.remove(this);
+            }
+
+            private void prepareNative(ShaderModuleDescriptor translated) {
+                long vertex = 0, fragment = 0, renderPass = 0;
+                boolean transferred = false;
+                boolean retryTranslation = false;
+                try {
+                    requireActive();
+                    if (translated.targetArtifact() != null) {
+                        ShaderTargetSupport.forProvider(ID).require(translated.targetArtifact());
+                        VulkanShaderLayoutValidator.requireArtifact(translated.targetArtifact());
+                    }
+                    var descriptor = request.pipelineDescriptor(new VulkanPreparationModule(translated.reflection()));
+                    descriptor.validate(capabilities);
+                    requireActive(); trace.enter(ShaderPreparationPhase.COMPILATION);
+                    vertex = VulkanGraphicsDevice.createShaderModule(domain, device, translated.spirvVertexWords(), translated.label());
+                    fragment = VulkanGraphicsDevice.createShaderModule(domain, device, translated.spirvFragmentWords(), translated.label());
+                    RenderTargetLayout target = request.targetLayout();
+                    if (target.colorAttachmentCount() > 1 || target.sampleCount() > 1) {
+                        renderPass = VulkanMultipleTargets.createRenderPass(domain, device, target);
+                    } else try (MemoryStack stack = stackPush()) {
+                        // Single-target recording uses the provider's implicit depth attachment.
+                        renderPass = VulkanContext.createRenderPass(domain, device, stack, toNativeFormat(target.colorFormat(0)),
+                                VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_LOAD,
+                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                    }
+                    requireActive(); trace.enter(ShaderPreparationPhase.PIPELINE);
+                    VulkanPreparedPipeline pipeline = VulkanGraphicsDevice.createPreparedPipeline(domain, device, vertex, fragment,
+                            textureSetLayout, uniformSetLayout, renderPass, descriptor, pipelineCache);
+                    output.set(new Prepared(pipeline, descriptor)); transferred = true;
+                } catch (Throwable error) {
+                    if (!refreshedTranslation && compilers != refreshCompilers
+                            && error instanceof RuntimeException && !(error instanceof CancellationException)
+                            && !cancelled && !closed) {
+                        refreshedTranslation = true;
+                        retryTranslation = true;
+                    } else failure = error;
+                }
+                finally {
+                    VulkanCleanup cleanup = new VulkanCleanup();
+                    long preparedVertex = vertex, preparedFragment = fragment, preparedPass = renderPass;
+                    if (preparedVertex != 0) cleanup.run(() -> vkDestroyShaderModule(device, preparedVertex, null));
+                    if (preparedFragment != 0) cleanup.run(() -> vkDestroyShaderModule(device, preparedFragment, null));
+                    if (preparedPass != 0) cleanup.run(() -> vkDestroyRenderPass(device, preparedPass, null));
+                    if (!transferred && !retryTranslation) cleanup.run(domain::releasePreparation);
+                    try { cleanup.throwIfFailed(); } catch (Throwable error) { failure = VulkanCleanup.merge(failure, error); }
+                    if (!retryTranslation) {
+                        completed.set(true); trace.enter(ShaderPreparationPhase.PUBLICATION_WAIT); done = true;
+                        if (cancelled || closed || failure != null) discard();
+                        if (output.get() == null) jobs.remove(this);
+                    }
+                }
+                if (retryTranslation) {
+                    try {
+                        requireActive(); trace.enter(ShaderPreparationPhase.TRANSLATION);
+                        beginTranslation(refreshCompilers);
+                    } catch (Throwable error) { fail(error); }
+                }
+            }
+
+            void requireActive() { if (cancelled || closed || domain.isLost()) throw new CancellationException("Vulkan preparation cancelled"); }
+            void discard() {
+                Prepared prepared = output.getAndSet(null);
+                if (prepared != null) try { prepared.pipeline.release(device); } finally { domain.releasePreparation(); }
+            }
+            @Override public boolean isDone() { return done; }
+            @Override public ShaderPreparationPhase phase() { return trace.phase(); }
+            @Override public ShaderPreparationTrace trace() { return trace; }
+            @Override public ShaderPreparedResult finish() {
+                if (!done || finished) throw new FdxException("Vulkan preparation cannot be published now");
+                finished = true; requireActive();
+                context.requireDeviceUsable("publish a prepared pipeline");
+                if (failure instanceof Error error) throw error;
+                if (failure instanceof RuntimeException error) throw error;
+                if (failure != null) throw new FdxException("Vulkan preparation failed", failure);
+                Prepared prepared = output.getAndSet(null);
+                if (prepared == null) throw new CancellationException("Vulkan prepared result was retired");
+                try {
+                    RenderPipeline pipeline = VulkanGraphicsDevice.publishPreparedPipeline(context, prepared.pipeline, prepared.descriptor);
+                    try {
+                        return new ShaderPreparedResult(ResolvedShaderPass.of(request.passId(), pipeline,
+                                prepared.pipeline.resources().layout(), request.providerRevision()), pipeline);
+                    } catch (RuntimeException | Error error) { pipeline.dispose(); throw error; }
+                } finally { domain.releasePreparation(); jobs.remove(this); }
+            }
+            @Override public void cancel() { cancelled = true; if (done) { discard(); jobs.remove(this); } }
+            @Override public void dispose() {
+                if (disposed) return;
+                if (!done) throw new FdxException("Vulkan native preparation has not drained");
+                disposed = true; discard(); jobs.remove(this);
+            }
+            @Override public boolean isDisposed() { return disposed; }
+        }
+        private record Prepared(VulkanPreparedPipeline pipeline, RenderPipelineDescriptor descriptor) { }
+        private record VulkanPreparationModule(ShaderReflection reflection) implements ShaderModule {
+            @Override public ShaderLanguage language() { return ShaderLanguage.SPIRV; }
+            @Override public ProviderId providerId() { return ID; }
+            @Override public <T> T as() { throw new FdxException("Preparation metadata has no native module"); }
+            @Override public void dispose() { }
+            @Override public boolean isDisposed() { return false; }
+        }
+    }
+
+    private static final class VulkanGraphicsDevice implements GraphicsDevice {
+        private void check(int result, String message) { context.resourceDomain.check(result, message); }
+        private GraphicsCapabilities textureCapabilities;
+        private final VulkanContext context;
+        private final Object closedDomain = new Object();
+        private ShaderPreparationCapabilities preparationCapabilities;
+        private VulkanPreparationQueue preparation;
 
         VulkanGraphicsDevice(VulkanContext context) {
             this.context = context;
         }
+
+        @Override public Object resourceDomain() { return context.disposed || context.resourceDomain.isLost() ? closedDomain : context.resourceDomain(); }
+
+        @Override public ShaderPreparationCapabilities shaderPreparationCapabilities() {
+            if (preparationCapabilities == null) preparationCapabilities = new ShaderPreparationCapabilities(
+                    ShaderPreparationCapabilities.Execution.WORKERS, ShaderPreparationCapabilities.Execution.WORKERS,
+                    true, context.configuration.preparationWorkerLimit(),
+                    context.configuration.shaderCache() != null && context.configuration.shaderCache().enabled(),
+                    context.configuration.shaderCache() != null && context.configuration.shaderCache().supportsAtomicUpdate());
+            return preparationCapabilities;
+        }
+
+        @Override public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
+            context.requireDeviceUsable("prepare a render pipeline");
+            if (request == null) throw new FdxException("Shader pipeline request cannot be null");
+            if (preparation == null) {
+                var compiler = RuntimeCore.shaderCompiler();
+                var registry = ShaderCompilerRegistry.builder().compiler(new RuntimeShaderTargetCompiler(
+                                compiler, RuntimeShaderTargetCompiler.VERSION, context.configuration.shaderCache()))
+                        .verifier(new RuntimeWgslTargetVerifier(compiler)).build();
+                var cache = context.configuration.shaderCache();
+                var refreshRegistry = cache == null || !cache.enabled() ? registry : ShaderCompilerRegistry.builder()
+                        .compiler(new RuntimeShaderTargetCompiler(compiler, RuntimeShaderTargetCompiler.VERSION, cache.refreshing()))
+                        .verifier(new RuntimeWgslTargetVerifier(compiler)).build();
+                preparation = new VulkanPreparationQueue(context, capabilities(), registry, refreshRegistry,
+                        shaderPreparationCapabilities().workerLimit());
+            }
+            return preparation.submit(request);
+        }
+
+        void closePreparation() { if (preparation != null) preparation.close(); }
 
         /**
          * Creates a buffer.
@@ -2756,13 +3204,15 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 throw new FdxException("BufferDescriptor cannot be null");
             }
             context.requireDeviceUsable("create a buffer");
-            if (descriptor.usage() != BufferUsage.VERTEX && descriptor.usage() != BufferUsage.INDEX) {
-                throw new FdxException("Vulkan currently supports vertex and index buffers only");
-            }
-            int usage = descriptor.usage() == BufferUsage.INDEX
-                    ? VK_BUFFER_USAGE_INDEX_BUFFER_BIT
-                    : VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-            if (!descriptor.dynamic()) {
+            int usage = switch (descriptor.usage()) {
+                case VERTEX -> VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+                case INDEX -> VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+                case UNIFORM -> VK10.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+                case STORAGE -> VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+                case READBACK -> 0;
+            };
+            usage |= VK10.VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+            if (!descriptor.dynamic() && descriptor.usage() != BufferUsage.READBACK) {
                 VulkanBufferAllocation allocation = createNativeBuffer(descriptor.size(),
                         usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
                 return new VulkanBufferHandle(context, allocation, descriptor.size(), usage, descriptor.usage());
@@ -2770,6 +3220,30 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
 
             VulkanBufferAllocation allocation = createMappedBuffer(descriptor.size(), usage);
             return new VulkanBufferHandle(context, allocation, descriptor.size(), usage, descriptor.usage());
+        }
+
+        @Override
+        public ByteBuffer readBuffer(Buffer buffer, int offset, int size) {
+            context.requireDeviceUsable("read a buffer");
+            VulkanBufferHandle value = VulkanResources.requireBuffer(buffer, context.resourceDomain(), "Readback buffer");
+            if (value.usage() != BufferUsage.READBACK || offset < 0 || size < 0 || offset > value.size() - size) {
+                throw new FdxException("Invalid Vulkan readback buffer or range");
+            }
+            check(vkDeviceWaitIdle(context.deviceHandle()), "Could not wait for Vulkan readback");
+            ByteBuffer result = ByteBuffer.allocateDirect(size).order(ByteOrder.nativeOrder());
+            result.put(value.mappedMemory().duplicate().position(offset).limit(offset + size)).flip();
+            return result;
+        }
+
+        @Override
+        public ComputePipeline createComputePipeline(ComputePipelineDescriptor descriptor) {
+            context.requireDeviceUsable("create a compute pipeline");
+            descriptor.validate(capabilities());
+            if (!(descriptor.shaderModule() instanceof VulkanComputeModule module)
+                    || module.context != context || module.isDisposed()) {
+                throw new FdxException("Invalid Vulkan compute module or device");
+            }
+            return new VulkanComputePipeline(context, module, descriptor);
         }
 
         private VulkanBufferAllocation createMappedBuffer(int size, int usage) {
@@ -2798,14 +3272,14 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 int result = vkAllocateMemory(context.deviceHandle(), allocationInfo, null, pMemory);
                 if (result != VK_SUCCESS) {
                     vkDestroyBuffer(context.deviceHandle(), nativeBuffer, null);
-                    throw new FdxException("Could not allocate Vulkan buffer memory: " + result);
+                    check(result, "Could not allocate Vulkan buffer memory");
                 }
                 long memory = pMemory.get(0);
                 result = vkBindBufferMemory(context.deviceHandle(), nativeBuffer, memory, 0L);
                 if (result != VK_SUCCESS) {
                     vkFreeMemory(context.deviceHandle(), memory, null);
                     vkDestroyBuffer(context.deviceHandle(), nativeBuffer, null);
-                    throw new FdxException("Could not bind Vulkan buffer memory: " + result);
+                    check(result, "Could not bind Vulkan buffer memory");
                 }
 
                 PointerBuffer mappedPointer = stack.mallocPointer(1);
@@ -2813,7 +3287,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 if (result != VK_SUCCESS) {
                     vkDestroyBuffer(context.deviceHandle(), nativeBuffer, null);
                     vkFreeMemory(context.deviceHandle(), memory, null);
-                    throw new FdxException("Could not map Vulkan buffer memory: " + result);
+                    check(result, "Could not map Vulkan buffer memory");
                 }
                 ByteBuffer mappedMemory = memByteBuffer(mappedPointer.get(0), size)
                         .order(ByteOrder.nativeOrder());
@@ -2880,43 +3354,52 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             if (descriptor.format() != TextureFormat.RGBA8_UNORM
                     && descriptor.format() != TextureFormat.RGBA8_UNORM_SRGB
                     && descriptor.format() != TextureFormat.BGRA8_UNORM
-                    && descriptor.format() != TextureFormat.BGRA8_UNORM_SRGB) {
+                    && descriptor.format() != TextureFormat.BGRA8_UNORM_SRGB
+                    && descriptor.format() != TextureFormat.RGBA16_FLOAT
+                    && descriptor.format() != TextureFormat.R32_FLOAT
+                    && descriptor.format() != TextureFormat.DEPTH32_FLOAT) {
                 throw new FdxException("Vulkan textures require an RGBA8 or BGRA8 color format");
             }
-            if (!descriptor.usage().sampled() && !descriptor.usage().renderAttachment()) {
+            if (!descriptor.usage().sampled() && !descriptor.usage().renderAttachment() && !descriptor.usage().storage()) {
                 throw new FdxException("Vulkan texture usage must allow sampling or render attachment binding");
             }
 
+            if (descriptor.format().isDepthStencil() && descriptor.usage().sampled()) {
+                throw new FdxException("Vulkan depth textures currently support attachment usage only");
+            }
             VulkanTextureAllocation allocation = createTextureAllocation(descriptor.width(), descriptor.height(),
                     descriptor.format(), descriptor.usage(), descriptor.wrapS(), descriptor.wrapT(),
-                    descriptor.filter());
+                    descriptor.filter(), descriptor.magFilter(), descriptor.mipmapFilter(), descriptor.mipLevelCount(), descriptor.sampleCount());
             return new VulkanTextureHandle(context, allocation, descriptor.width(), descriptor.height(),
                     descriptor.format(), descriptor.usage(), descriptor.filter(), descriptor.wrapS(),
-                    descriptor.wrapT());
+                    descriptor.wrapT(), descriptor.magFilter(), descriptor.mipmapFilter(), descriptor.mipLevelCount(), descriptor.sampleCount());
         }
 
         private VulkanTextureAllocation createTextureAllocation(int width, int height, TextureFormat format,
-                TextureUsage usage, TextureWrap wrapS, TextureWrap wrapT, TextureFilter filter) {
+                TextureUsage usage, TextureWrap wrapS, TextureWrap wrapT, TextureFilter filter,
+                TextureFilter magFilter, TextureMipmapFilter mipFilter, int mipLevels, int samples) {
             long image = VK_NULL_HANDLE;
             long memory = VK_NULL_HANDLE;
             long imageView = VK_NULL_HANDLE;
             long sampler = VK_NULL_HANDLE;
             long descriptorSet = VK_NULL_HANDLE;
+            long[] levelViews = new long[mipLevels];
             try (MemoryStack stack = stackPush()) {
-                int imageUsage = 0;
+                int imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | (format.isColor() ? VK10.VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0);
                 if (usage.sampled()) {
                     imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
                 }
                 if (usage.renderAttachment()) {
-                    imageUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+                    imageUsage |= format.isDepthStencil() ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
                 }
+                if (usage.storage()) imageUsage |= VK10.VK_IMAGE_USAGE_STORAGE_BIT;
                 VkImageCreateInfo imageInfo = VkImageCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO)
                         .imageType(VK_IMAGE_TYPE_2D)
                         .format(toNativeFormat(format))
-                        .mipLevels(1)
+                        .mipLevels(mipLevels)
                         .arrayLayers(1)
-                        .samples(VK_SAMPLE_COUNT_1_BIT)
+                        .samples(samples)
                         .tiling(VK_IMAGE_TILING_OPTIMAL)
                         .usage(imageUsage)
                         .sharingMode(VK_SHARING_MODE_EXCLUSIVE)
@@ -2946,18 +3429,24 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 check(vkBindImageMemory(context.deviceHandle(), image, memory, 0L),
                         "Could not bind Vulkan texture memory");
 
-                imageView = createTextureImageView(image, format);
+                imageView = createTextureImageView(image, format, 0, mipLevels);
+                for (int level = 0; level < mipLevels; level++) {
+                    levelViews[level] = mipLevels == 1 ? imageView : createTextureImageView(image, format, level, 1);
+                }
                 if (usage.sampled()) {
-                    sampler = createTextureSampler(wrapS, wrapT, filter);
+                    sampler = createTextureSampler(wrapS, wrapT, filter, magFilter, mipFilter, mipLevels);
                     descriptorSet = allocateTextureDescriptorSet();
                 }
                 VulkanTextureAllocation allocation = new VulkanTextureAllocation(context.resourceDomain(), image,
-                        memory, imageView, sampler, context.textureDescriptorPool(), descriptorSet);
+                        memory, imageView, sampler, context.textureDescriptorPool(), descriptorSet, levelViews);
                 if (usage.sampled()) {
                     updateTextureDescriptorSet(allocation);
                 }
                 return allocation;
             } catch (RuntimeException error) {
+                for (long levelView : levelViews) {
+                    if (levelView != VK_NULL_HANDLE && levelView != imageView) vkDestroyImageView(context.deviceHandle(), levelView, null);
+                }
                 if (sampler != VK_NULL_HANDLE) {
                     vkDestroySampler(context.deviceHandle(), sampler, null);
                 }
@@ -2982,23 +3471,27 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
          */
         @Override
         public void writeTexture(Texture texture, ByteBuffer data) {
-            if (texture == null) {
-                throw new FdxException("Texture cannot be null");
-            }
-            if (data == null) {
-                throw new FdxException("Texture data cannot be null");
-            }
+            TextureUploads.validateSingle(texture, data);
+            writeMipChain(texture, data, null);
+        }
+
+        @Override
+        public void writeTextureMipLevels(Texture texture, ByteBuffer... levels) {
+            TextureUploads.validate(texture, levels);
+            writeMipChain(texture, null, levels);
+        }
+
+        private void writeMipChain(Texture texture, ByteBuffer single, ByteBuffer[] levels) {
             context.requireDeviceUsable("write a texture");
             VulkanTextureHandle vulkanTexture = VulkanResources.requireTexture(texture, context.resourceDomain(),
                     "Texture");
-            int byteCount = vulkanTexture.width() * vulkanTexture.height() * 4;
-            if (data.remaining() != byteCount) {
-                throw new FdxException("Vulkan texture upload expects " + byteCount + " RGBA bytes");
-            }
+            int byteCount = 0;
+            for (int level = 0; level < texture.mipLevelCount(); level++) byteCount = Math.addExact(byteCount, TextureUploads.byteCount(texture, level));
             if (vulkanTexture.allocation().hasRecordingReferences()) {
                 VulkanTextureAllocation replacement = createTextureAllocation(vulkanTexture.width(),
                         vulkanTexture.height(), vulkanTexture.format(), vulkanTexture.usage(),
-                        vulkanTexture.wrapS(), vulkanTexture.wrapT(), vulkanTexture.filter());
+                        vulkanTexture.wrapS(), vulkanTexture.wrapT(), vulkanTexture.filter(),
+                        vulkanTexture.magFilter, vulkanTexture.mipFilter, vulkanTexture.mipLevelCount(), vulkanTexture.sampleCount());
                 vulkanTexture.nativeAllocation(replacement);
             }
 
@@ -3010,16 +3503,25 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                     check(vkMapMemory(context.deviceHandle(), staging.memory(), 0L, byteCount, 0,
                             mappedPointer), "Could not map Vulkan texture staging memory");
                     ByteBuffer mapped = memByteBuffer(mappedPointer.get(0), byteCount);
-                    mapped.put(data.duplicate());
+                    for (int level = 0; level < texture.mipLevelCount(); level++) {
+                        ByteBuffer source = (levels == null ? single : levels[level]).duplicate();
+                        source.limit(source.position() + TextureUploads.byteCount(texture, level));
+                        mapped.put(source);
+                    }
                     vkUnmapMemory(context.deviceHandle(), staging.memory());
                 }
 
                 VkCommandBuffer commandBuffer = beginSingleTimeCommands();
-                transitionImageLayout(commandBuffer, vulkanTexture, vulkanTexture.layout(),
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-                copyBufferToImage(commandBuffer, staging.buffer(), vulkanTexture);
-                transitionImageLayout(commandBuffer, vulkanTexture, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                long offset = 0;
+                for (int level = 0; level < texture.mipLevelCount(); level++) {
+                    transitionImageLayout(commandBuffer, vulkanTexture, level, vulkanTexture.layout(level),
+                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                    copyBufferToImage(commandBuffer, staging.buffer(), vulkanTexture, level, offset);
+                    transitionImageLayout(commandBuffer, vulkanTexture, level, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                            vulkanTexture.usage().sampled() ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                    : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                    offset += TextureUploads.byteCount(texture, level);
+                }
                 endSingleTimeCommands(commandBuffer);
             } finally {
                 staging.dispose(context.deviceHandle());
@@ -3051,14 +3553,14 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 int result = vkAllocateMemory(context.deviceHandle(), allocationInfo, null, pMemory);
                 if (result != VK_SUCCESS) {
                     vkDestroyBuffer(context.deviceHandle(), nativeBuffer, null);
-                    throw new FdxException("Could not allocate Vulkan buffer memory: " + result);
+                    check(result, "Could not allocate Vulkan buffer memory");
                 }
                 long memory = pMemory.get(0);
                 result = vkBindBufferMemory(context.deviceHandle(), nativeBuffer, memory, 0L);
                 if (result != VK_SUCCESS) {
                     vkFreeMemory(context.deviceHandle(), memory, null);
                     vkDestroyBuffer(context.deviceHandle(), nativeBuffer, null);
-                    throw new FdxException("Could not bind Vulkan buffer memory: " + result);
+                    check(result, "Could not bind Vulkan buffer memory");
                 }
                 return new VulkanBufferAllocation(nativeBuffer, memory);
             }
@@ -3095,7 +3597,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             endSingleTimeCommands(commandBuffer);
         }
 
-        private long createTextureImageView(long image, TextureFormat format) {
+        private long createTextureImageView(long image, TextureFormat format, int baseMip, int mipCount) {
             try (MemoryStack stack = stackPush()) {
                 VkImageViewCreateInfo viewInfo = VkImageViewCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO)
@@ -3108,9 +3610,9 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                         .b(VK10.VK_COMPONENT_SWIZZLE_IDENTITY)
                         .a(VK10.VK_COMPONENT_SWIZZLE_IDENTITY);
                 viewInfo.subresourceRange()
-                        .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
-                        .baseMipLevel(0)
-                        .levelCount(1)
+                        .aspectMask(format.isDepthStencil() ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT)
+                        .baseMipLevel(baseMip)
+                        .levelCount(mipCount)
                         .baseArrayLayer(0)
                         .layerCount(1);
                 LongBuffer pImageView = stack.mallocLong(1);
@@ -3120,12 +3622,13 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
-        private long createTextureSampler(TextureWrap wrapS, TextureWrap wrapT, TextureFilter filter) {
+        private long createTextureSampler(TextureWrap wrapS, TextureWrap wrapT, TextureFilter filter,
+                TextureFilter magFilter, TextureMipmapFilter mipFilter, int mipCount) {
             try (MemoryStack stack = stackPush()) {
                 int nativeFilter = toNativeFilter(filter);
                 VkSamplerCreateInfo samplerInfo = VkSamplerCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO)
-                        .magFilter(nativeFilter)
+                        .magFilter(toNativeFilter(magFilter))
                         .minFilter(nativeFilter)
                         .addressModeU(toNativeAddressMode(wrapS))
                         .addressModeV(toNativeAddressMode(wrapT))
@@ -3135,12 +3638,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                         .borderColor(VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK)
                         .unnormalizedCoordinates(false)
                         .compareEnable(false)
-                        .mipmapMode(filter == TextureFilter.NEAREST
+                        .mipmapMode(mipFilter != TextureMipmapFilter.LINEAR
                                 ? VK_SAMPLER_MIPMAP_MODE_NEAREST
                                 : VK_SAMPLER_MIPMAP_MODE_LINEAR)
                         .mipLodBias(0.0f)
                         .minLod(0.0f)
-                        .maxLod(0.0f);
+                        .maxLod(mipFilter == TextureMipmapFilter.NONE ? 0.0f : mipCount - 1.0f);
                 LongBuffer pSampler = stack.mallocLong(1);
                 check(vkCreateSampler(context.deviceHandle(), samplerInfo, null, pSampler),
                         "Could not create Vulkan texture sampler");
@@ -3229,7 +3732,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 try {
                     check(vkQueueSubmit(context.graphicsQueue(), submitInfo, fence),
                         "Could not submit Vulkan texture upload command buffer");
-                    waitForAllFences(context.deviceHandle(), new long[]{fence}, ONE_TIME_COMMAND_TIMEOUT_NS,
+                    waitForAllFences(context.resourceDomain(), context.deviceHandle(), new long[]{fence}, ONE_TIME_COMMAND_TIMEOUT_NS,
                             "texture upload command");
                 } finally {
                     vkDestroyFence(context.deviceHandle(), fence, null);
@@ -3240,7 +3743,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
 
         private void transitionImageLayout(VkCommandBuffer commandBuffer, VulkanTextureHandle texture,
-                int oldLayout, int newLayout) {
+                int mipLevel, int oldLayout, int newLayout) {
             try (MemoryStack stack = stackPush()) {
                 VkImageMemoryBarrier.Buffer barrier = VkImageMemoryBarrier.calloc(1, stack)
                         .sType(VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER)
@@ -3251,7 +3754,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                         .image(texture.image());
                 barrier.subresourceRange()
                         .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
-                        .baseMipLevel(0)
+                        .baseMipLevel(mipLevel)
                         .levelCount(1)
                         .baseArrayLayer(0)
                         .layerCount(1);
@@ -3270,6 +3773,18 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                             .dstAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT);
                     sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
                     destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+                } else if (oldLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                        && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+                    barrier.srcAccessMask(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+                            .dstAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT);
+                    sourceStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                    destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+                } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+                        && newLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+                    barrier.srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
+                            .dstAccessMask(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+                    sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+                    destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
                 } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
                         && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
                     barrier.srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT)
@@ -3283,23 +3798,23 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
 
                 vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0,
                         null, null, barrier);
-                texture.layout(newLayout);
+                texture.layout(mipLevel, newLayout);
             }
         }
 
-        private void copyBufferToImage(VkCommandBuffer commandBuffer, long buffer, VulkanTextureHandle texture) {
+        private void copyBufferToImage(VkCommandBuffer commandBuffer, long buffer, VulkanTextureHandle texture, int level, long offset) {
             try (MemoryStack stack = stackPush()) {
                 VkBufferImageCopy.Buffer region = VkBufferImageCopy.calloc(1, stack)
-                        .bufferOffset(0L)
+                        .bufferOffset(offset)
                         .bufferRowLength(0)
                         .bufferImageHeight(0);
                 region.imageSubresource()
                         .aspectMask(VK_IMAGE_ASPECT_COLOR_BIT)
-                        .mipLevel(0)
+                        .mipLevel(level)
                         .baseArrayLayer(0)
                         .layerCount(1);
                 region.imageOffset().set(0, 0, 0);
-                region.imageExtent().set(texture.width(), texture.height(), 1);
+                region.imageExtent().set(texture.mipWidth(level), texture.mipHeight(level), 1);
                 vkCmdCopyBufferToImage(commandBuffer, buffer, texture.image(),
                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, region);
             }
@@ -3331,7 +3846,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 throw new FdxException("ShaderModuleDescriptor cannot be null");
             }
             context.requireDeviceUsable("create a shader module");
+            if (descriptor.hasSource(ShaderLanguage.WGSL) && !descriptor.reflection().complete()) {
+                descriptor = ShaderModuleDescriptors.requireTarget(descriptor, ShaderTarget.WGPU_WGSL, "Vulkan reflection")
+                        .entryPoints(descriptor.vertexEntryPoint(), descriptor.fragmentEntryPoint());
+            }
             descriptor = ShaderModuleDescriptors.requireTarget(descriptor, ShaderTarget.VULKAN_SPIRV, "Vulkan");
+            if (ShaderModuleDescriptors.computeOnly(descriptor.reflection())) return new VulkanComputeModule(context, descriptor);
             if (descriptor.targetArtifact() != null) {
                 shaderTargetSupport().require(descriptor.targetArtifact());
                 VulkanShaderLayoutValidator.requireArtifact(
@@ -3346,17 +3866,23 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
 
         private long createShaderModule(int[] words, String label) {
+            return createShaderModule(context.resourceDomain(), context.deviceHandle(), words, label);
+        }
+
+        private static long createShaderModule(VulkanResourceDomain domain, VkDevice device, int[] words, String label) {
+            // SPIR-V size is not bounded by LWJGL's small thread-local stack. Vulkan copies
+            // the bytecode during this call, so release the temporary native allocation here.
+            ByteBuffer code = memAlloc(Math.multiplyExact(words.length, Integer.BYTES)).order(ByteOrder.LITTLE_ENDIAN);
             try (MemoryStack stack = stackPush()) {
-                ByteBuffer code = stack.malloc(words.length * 4).order(ByteOrder.LITTLE_ENDIAN);
                 code.asIntBuffer().put(words);
                 VkShaderModuleCreateInfo createInfo = VkShaderModuleCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO)
                         .pCode(code);
                 LongBuffer pShaderModule = stack.mallocLong(1);
-                check(vkCreateShaderModule(context.deviceHandle(), createInfo, null, pShaderModule),
+                domain.check(vkCreateShaderModule(device, createInfo, null, pShaderModule),
                         "Could not create Vulkan shader module " + label);
                 return pShaderModule.get(0);
-            }
+            } finally { memFree(code); }
         }
 
         /**
@@ -3367,16 +3893,33 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
          */
         @Override
         public RenderPipeline createRenderPipeline(RenderPipelineDescriptor descriptor) {
-            if (descriptor == null) {
-                throw new FdxException("RenderPipelineDescriptor cannot be null");
-            }
+            if (descriptor == null) throw new FdxException("RenderPipelineDescriptor cannot be null");
             context.requireDeviceUsable("create a render pipeline");
             VulkanShaderModuleHandle shaderModule = VulkanResources.requireShaderModule(descriptor.shaderModule(),
                     context.resourceDomain(), "Render pipeline shader module");
             descriptor.validate(capabilities());
-            if (descriptor.renderTargetLayout().colorAttachmentCount() != 1) {
-                throw new FdxException("Desktop Vulkan currently requires exactly one color attachment");
-            }
+            long renderPass = descriptor.renderTargetLayout().colorAttachmentCount() > 1 || descriptor.renderTargetLayout().sampleCount() > 1
+                    ? VulkanMultipleTargets.renderPass(context, descriptor.renderTargetLayout())
+                    : context.pipelineRenderPass(descriptor.colorFormat());
+            VulkanPreparedPipeline prepared = createPreparedPipeline(context.resourceDomain(), context.deviceHandle(), shaderModule.vertexModule(),
+                    shaderModule.fragmentModule(), context.textureDescriptorSetLayout(), context.uniformDescriptorSetLayout(), renderPass, descriptor, null);
+            return publishPreparedPipeline(context, prepared, descriptor);
+        }
+
+        private static RenderPipeline publishPreparedPipeline(VulkanContext context, VulkanPreparedPipeline prepared,
+                RenderPipelineDescriptor descriptor) {
+            VulkanRenderPipelineAllocation allocation = new VulkanRenderPipelineAllocation(
+                    context.resourceDomain(), prepared.pipeline(), prepared.layout());
+            try {
+                return new VulkanRenderPipelineHandle(context, allocation, descriptor.primitiveTopology(), descriptor.sampledTextureCount(),
+                        prepared.resources(), prepared.uniformSetIndex(), descriptor.renderTargetLayout());
+            } catch (RuntimeException | Error failure) { allocation.retire(); throw failure; }
+        }
+
+        /** Isolated native work. Every argument is retained or belongs to the calling job. */
+        private static VulkanPreparedPipeline createPreparedPipeline(VulkanResourceDomain domain, VkDevice device, long vertexModule, long fragmentModule,
+                long textureSetLayout, long uniformSetLayout, long renderPass, RenderPipelineDescriptor descriptor,
+                DesktopVulkanPipelineCache pipelineCache) {
             ShaderRenderBindings resourceBindings = ShaderRenderBindings.from(descriptor);
             VulkanShaderLayoutValidator.requireRenderLayout(resourceBindings);
             toNativeFormat(descriptor.colorFormat());
@@ -3390,12 +3933,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 shaderStages.get(0)
                         .sType(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO)
                         .stage(VK_SHADER_STAGE_VERTEX_BIT)
-                        .module(shaderModule.vertexModule())
+                        .module(vertexModule)
                         .pName(stack.UTF8(descriptor.vertexEntryPoint()));
                 shaderStages.get(1)
                         .sType(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO)
                         .stage(VK_SHADER_STAGE_FRAGMENT_BIT)
-                        .module(shaderModule.fragmentModule())
+                        .module(fragmentModule)
                         .pName(stack.UTF8(descriptor.fragmentEntryPoint()));
 
                 VkPipelineVertexInputStateCreateInfo vertexInput = createVertexInputState(descriptor.vertexLayouts(),
@@ -3420,8 +3963,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 VkPipelineMultisampleStateCreateInfo multisampling = VkPipelineMultisampleStateCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO)
                         .sampleShadingEnable(false)
-                        .rasterizationSamples(VK_SAMPLE_COUNT_1_BIT);
-                VkPipelineColorBlendAttachmentState.Buffer colorBlendAttachment = VkPipelineColorBlendAttachmentState.calloc(1, stack)
+                        .rasterizationSamples(descriptor.multisampleState().count());
+                VkPipelineColorBlendAttachmentState.Buffer colorBlendAttachment = VkPipelineColorBlendAttachmentState.calloc(descriptor.colorTargets().length, stack)
                         .colorWriteMask(VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
                                 | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT)
                         .blendEnable(blendEnabled(descriptor.colorTargets()[0]))
@@ -3441,24 +3984,29 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                         .sType(VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO)
                         .pDynamicStates(stack.ints(VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR));
                 VkPipelineDepthStencilStateCreateInfo depthStencilState = createDepthStencilState(descriptor, stack);
+                for (int i = 0; i < colorBlendAttachment.capacity(); i++) {
+                    DesktopVulkanPipelineState.apply(descriptor, rasterizer, multisampling,
+                            colorBlendAttachment.get(i), i, stack);
+                }
 
                 VkPipelineLayoutCreateInfo pipelineLayoutInfo = VkPipelineLayoutCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO);
                 boolean uniformBufferEnabled = resourceBindings.hasUniformBuffer();
                 int uniformDescriptorSetIndex = resourceBindings.uniformSetIndex();
                 if (descriptor.sampledTextureCount() > 0 && uniformBufferEnabled) {
-                    pipelineLayoutInfo.pSetLayouts(stack.longs(context.textureDescriptorSetLayout(),
-                            context.uniformDescriptorSetLayout()));
+                    pipelineLayoutInfo.pSetLayouts(stack.longs(textureSetLayout,
+                            uniformSetLayout));
                 } else if (descriptor.sampledTextureCount() > 0) {
-                    pipelineLayoutInfo.pSetLayouts(stack.longs(context.textureDescriptorSetLayout()));
+                    pipelineLayoutInfo.pSetLayouts(stack.longs(textureSetLayout));
                 } else if (uniformBufferEnabled) {
-                    pipelineLayoutInfo.pSetLayouts(stack.longs(context.uniformDescriptorSetLayout()));
+                    pipelineLayoutInfo.pSetLayouts(stack.longs(uniformSetLayout));
                 }
                 LongBuffer pPipelineLayout = stack.mallocLong(1);
-                check(vkCreatePipelineLayout(context.deviceHandle(), pipelineLayoutInfo, null, pPipelineLayout),
+                domain.check(vkCreatePipelineLayout(device, pipelineLayoutInfo, null, pPipelineLayout),
                         "Could not create Vulkan pipeline layout");
                 long pipelineLayout = pPipelineLayout.get(0);
-
+                long nativePipeline = VK_NULL_HANDLE;
+                try {
                 VkGraphicsPipelineCreateInfo.Buffer pipelineInfo = VkGraphicsPipelineCreateInfo.calloc(1, stack)
                         .sType(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO)
                         .pStages(shaderStages)
@@ -3471,23 +4019,26 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                         .pDynamicState(dynamicState)
                         .pDepthStencilState(depthStencilState)
                         .layout(pipelineLayout)
-                        .renderPass(context.pipelineRenderPass(descriptor.colorFormat()))
+                        .renderPass(renderPass)
                         .subpass(0)
                         .basePipelineHandle(VK_NULL_HANDLE)
                         .basePipelineIndex(-1);
 
-                LongBuffer pPipeline = stack.mallocLong(1);
-                int result = vkCreateGraphicsPipelines(context.deviceHandle(), VK_NULL_HANDLE, pipelineInfo, null, pPipeline);
+                LongBuffer pPipeline = stack.callocLong(1);
+                int result;
+                try {
+                    result = pipelineCache == null ? vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, pipelineInfo, null, pPipeline)
+                            : pipelineCache.create(pipelineInfo, pPipeline);
+                } finally { nativePipeline = pPipeline.get(0); }
                 if (result != VK_SUCCESS) {
-                    vkDestroyPipelineLayout(context.deviceHandle(), pipelineLayout, null);
-                    throw new FdxException("Could not create Vulkan graphics pipeline: " + result);
+                    domain.check(result, "Could not create Vulkan graphics pipeline");
                 }
-                VulkanRenderPipelineAllocation allocation = new VulkanRenderPipelineAllocation(
-                        context.resourceDomain(), pPipeline.get(0), pipelineLayout);
-                return new VulkanRenderPipelineHandle(context, allocation, descriptor.primitiveTopology(),
-                        descriptor.sampledTextureCount(),
-                        resourceBindings, uniformDescriptorSetIndex,
-                        descriptor.renderTargetLayout());
+                return new VulkanPreparedPipeline(nativePipeline, pipelineLayout, resourceBindings, uniformDescriptorSetIndex);
+                } catch (RuntimeException | Error error) {
+                    if (nativePipeline != VK_NULL_HANDLE) vkDestroyPipeline(device, nativePipeline, null);
+                    vkDestroyPipelineLayout(device, pipelineLayout, null);
+                    throw error;
+                }
             }
         }
 
@@ -3515,7 +4066,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
-        private VkPipelineDepthStencilStateCreateInfo createDepthStencilState(RenderPipelineDescriptor descriptor,
+        private static VkPipelineDepthStencilStateCreateInfo createDepthStencilState(RenderPipelineDescriptor descriptor,
                 MemoryStack stack) {
             return VkPipelineDepthStencilStateCreateInfo.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO)
@@ -3528,7 +4079,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                     .maxDepthBounds(1.0f);
         }
 
-        private VkPipelineVertexInputStateCreateInfo createVertexInputState(VertexLayout[] layouts, MemoryStack stack) {
+        private static VkPipelineVertexInputStateCreateInfo createVertexInputState(VertexLayout[] layouts, MemoryStack stack) {
             VkPipelineVertexInputStateCreateInfo vertexInput = VkPipelineVertexInputStateCreateInfo.calloc(stack)
                     .sType(VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO);
             if (layouts == null || layouts.length == 0) {
@@ -3569,7 +4120,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                     .pVertexAttributeDescriptions(attributeDescriptions);
         }
 
-        private int toNative(VertexFormat format) {
+        private static int toNative(VertexFormat format) {
             switch (format) {
                 case FLOAT32:
                     return VK_FORMAT_R32_SFLOAT;
@@ -3585,7 +4136,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
-        private int toNative(PrimitiveTopology topology) {
+        private static int toNative(PrimitiveTopology topology) {
             if (topology == PrimitiveTopology.LINE_LIST) {
                 return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
             }
@@ -3607,7 +4158,26 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
 
         @Override
         public GraphicsCapabilities capabilities() {
-            return CAPABILITIES;
+            if (textureCapabilities == null) {
+                if (context.physicalDeviceHandle() == null) return CAPABILITIES;
+                try (MemoryStack stack = stackPush()) {
+                    var properties = VkFormatProperties.malloc(stack);
+                    VK10.vkGetPhysicalDeviceFormatProperties(context.physicalDeviceHandle(), VK10.VK_FORMAT_R16G16B16A16_SFLOAT, properties);
+                    int required = VK10.VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK10.VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT
+                            | VK10.VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK10.VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
+                    VkPhysicalDeviceFeatures features = VkPhysicalDeviceFeatures.calloc(stack);
+                    VK10.vkGetPhysicalDeviceFeatures(context.physicalDeviceHandle(), features);
+                    IntBuffer count = stack.ints(0);
+                    vkGetPhysicalDeviceQueueFamilyProperties(context.physicalDeviceHandle(), count, null);
+                    VkQueueFamilyProperties.Buffer families = VkQueueFamilyProperties.malloc(count.get(0), stack);
+                    vkGetPhysicalDeviceQueueFamilyProperties(context.physicalDeviceHandle(), count, families);
+                    textureCapabilities = textureCapabilities(
+                            (properties.optimalTilingFeatures() & required) == required, features.depthBiasClamp(),
+                            features.independentBlend() && VulkanMultipleTargets.supported(context),
+                            (families.get(context.graphicsQueueFamily).queueFlags() & VK10.VK_QUEUE_COMPUTE_BIT) != 0);
+                }
+            }
+            return textureCapabilities;
         }
 
         /**
@@ -3629,7 +4199,547 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
      *
      * @author xpenatan
      */
+    /** Cached attachment snapshots; framebuffer and images survive all recording frame slots. */
+    private static final class VulkanMultipleTargets extends VulkanRecordedResource {
+        private final VulkanContext context;
+        private final RenderPassCompatibility compatibility;
+        private final VulkanTextureViewHandle[] colors, resolves;
+        private final VulkanTextureAllocation[] colorAllocations, resolveAllocations;
+        private final VulkanTextureViewHandle depth;
+        private final VulkanTextureAllocation depthAllocation;
+        private final boolean implicitDepth;
+        private long framebuffer;
+
+        static boolean supported(VulkanContext context) {
+            try (MemoryStack stack = stackPush()) {
+                var result = VkImageFormatProperties.malloc(stack);
+                for (TextureFormat format : new TextureFormat[] {TextureFormat.RGBA8_UNORM, TextureFormat.RGBA8_UNORM_SRGB,
+                        TextureFormat.BGRA8_UNORM, TextureFormat.BGRA8_UNORM_SRGB, TextureFormat.RGBA16_FLOAT,
+                        TextureFormat.R32_FLOAT, TextureFormat.DEPTH32_FLOAT}) {
+                    int usage = format.isDepthStencil() ? VK10.VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+                            : VK10.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK10.VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK10.VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+                    if (VK10.vkGetPhysicalDeviceImageFormatProperties(context.physicalDeviceHandle(), toNativeFormat(format),
+                            VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, usage, 0, result) != VK_SUCCESS
+                            || (result.sampleCounts() & VK10.VK_SAMPLE_COUNT_4_BIT) == 0) return false;
+                }
+                return true;
+            }
+        }
+
+        static long renderPass(VulkanContext context, RenderTargetLayout layout) {
+            Long cached = context.multipleRenderPasses.get(layout);
+            if (cached != null) return cached;
+            long created = createRenderPass(context.resourceDomain(), context.deviceHandle(), layout);
+            context.multipleRenderPasses.put(layout, created);
+            return created;
+        }
+
+        static long createRenderPass(VulkanResourceDomain domain, VkDevice device, RenderTargetLayout layout) {
+            try (MemoryStack stack = stackPush()) {
+                int count = layout.colorAttachmentCount();
+                VkAttachmentDescription.Buffer attachments = VkAttachmentDescription.calloc(count + (layout.hasDepthStencil() ? 1 : 0), stack);
+                VkAttachmentReference.Buffer colors = VkAttachmentReference.calloc(count, stack);
+                for (int i = 0; i < attachments.capacity(); i++) {
+                    boolean isDepth = i == count;
+                    int imageLayout = isDepth ? VK10.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                    attachments.get(i).format(toNativeFormat(isDepth ? layout.depthStencilFormat() : layout.colorFormat(i)))
+                            .samples(layout.sampleCount()).loadOp(VK_ATTACHMENT_LOAD_OP_LOAD).storeOp(VK_ATTACHMENT_STORE_OP_STORE)
+                            .stencilLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE).stencilStoreOp(VK_ATTACHMENT_STORE_OP_DONT_CARE)
+                            .initialLayout(imageLayout).finalLayout(imageLayout);
+                    if (!isDepth) colors.get(i).attachment(i).layout(imageLayout);
+                }
+                VkSubpassDescription.Buffer subpass = VkSubpassDescription.calloc(1, stack)
+                        .pipelineBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS).colorAttachmentCount(count).pColorAttachments(colors);
+                if (layout.hasDepthStencil()) subpass.pDepthStencilAttachment(VkAttachmentReference.calloc(stack)
+                        .attachment(count).layout(VK10.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL));
+                VkSubpassDependency.Buffer dependencies = VkSubpassDependency.calloc(2, stack);
+                dependencies.get(0).srcSubpass(VK_SUBPASS_EXTERNAL).dstSubpass(0)
+                        .srcStageMask(VK10.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT).dstStageMask(VK10.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)
+                        .srcAccessMask(VK10.VK_ACCESS_MEMORY_WRITE_BIT).dstAccessMask(VK10.VK_ACCESS_MEMORY_READ_BIT | VK10.VK_ACCESS_MEMORY_WRITE_BIT);
+                dependencies.get(1).srcSubpass(0).dstSubpass(VK_SUBPASS_EXTERNAL)
+                        .srcStageMask(VK10.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT).dstStageMask(VK10.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)
+                        .srcAccessMask(VK10.VK_ACCESS_MEMORY_WRITE_BIT).dstAccessMask(VK10.VK_ACCESS_MEMORY_READ_BIT | VK10.VK_ACCESS_MEMORY_WRITE_BIT);
+                VkRenderPassCreateInfo info = VkRenderPassCreateInfo.calloc(stack).sType(VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO)
+                        .pAttachments(attachments).pSubpasses(subpass).pDependencies(dependencies);
+                LongBuffer output = stack.mallocLong(1);
+                domain.check(vkCreateRenderPass(device, info, null, output), "Could not create Vulkan multiple-target render pass");
+                return output.get(0);
+            }
+        }
+
+        static VulkanMultipleTargets acquire(VulkanContext context, RenderPassDescriptor descriptor, RenderPassCompatibility compatibility) {
+            var colors = descriptor.colorAttachments();
+            for (int i = context.multipleFramebuffers.size() - 1; i >= 0; i--) {
+                VulkanMultipleTargets candidate = context.multipleFramebuffers.get(i);
+                if (candidate.stale()) { context.multipleFramebuffers.remove(i); candidate.retire(); }
+                else if (candidate.matches(descriptor, colors, compatibility)) return candidate;
+            }
+            VulkanMultipleTargets created = new VulkanMultipleTargets(context, descriptor, colors, compatibility);
+            context.multipleFramebuffers.add(created);
+            return created;
+        }
+
+        private VulkanMultipleTargets(VulkanContext context, RenderPassDescriptor descriptor,
+                RenderPassColorAttachment[] attachments, RenderPassCompatibility compatibility) {
+            super(context.resourceDomain());
+            this.context = context;
+            this.compatibility = compatibility;
+            colors = new VulkanTextureViewHandle[attachments.length];
+            resolves = new VulkanTextureViewHandle[attachments.length];
+            colorAllocations = new VulkanTextureAllocation[attachments.length];
+            resolveAllocations = new VulkanTextureAllocation[attachments.length];
+            for (int i = 0; i < colors.length; i++) {
+                colors[i] = require(attachments[i].view());
+                colorAllocations[i] = colors[i].texture.allocation();
+                for (int j = 0; j < i; j++) {
+                    if (colorAllocations[j] == colorAllocations[i] && colors[j].mipLevel == colors[i].mipLevel) {
+                        throw new FdxException("Vulkan color attachments must not alias");
+                    }
+                }
+                if (attachments[i].resolveView() != null) {
+                    resolves[i] = require(attachments[i].resolveView());
+                    resolveAllocations[i] = resolves[i].texture.allocation();
+                }
+            }
+            implicitDepth = compatibility.targetLayout().hasDepthStencil() && descriptor.depthStencilAttachment() == null;
+            depth = implicitDepth ? (VulkanTextureViewHandle) context.graphicsDevice.createTexture(new TextureDescriptor()
+                    .size(compatibility.width(), compatibility.height()).format(compatibility.targetLayout().depthStencilFormat())
+                    .usage(TextureUsage.RENDER_ATTACHMENT).sampleCount(compatibility.targetLayout().sampleCount())).view()
+                    : descriptor.depthStencilAttachment() == null ? null : require(descriptor.depthStencilAttachment().view());
+            depthAllocation = depth == null ? null : depth.texture.allocation();
+            try (MemoryStack stack = stackPush()) {
+                LongBuffer views = stack.mallocLong(colors.length + (depth != null ? 1 : 0));
+                for (int i = 0; i < colors.length; i++) views.put(i, colorAllocations[i].levelViews[colors[i].mipLevel]);
+                if (depth != null) views.put(colors.length, depthAllocation.levelViews[depth.mipLevel]);
+                VkFramebufferCreateInfo info = VkFramebufferCreateInfo.calloc(stack).sType(VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO)
+                        .renderPass(renderPass(context, compatibility.targetLayout())).pAttachments(views)
+                        .width(compatibility.width()).height(compatibility.height()).layers(1);
+                LongBuffer output = stack.mallocLong(1);
+                context.check(vkCreateFramebuffer(context.deviceHandle(), info, null, output), "Could not create Vulkan multiple-target framebuffer");
+                framebuffer = output.get(0);
+            } catch (RuntimeException | Error failure) {
+                if (implicitDepth) depth.texture.dispose();
+                throw failure;
+            }
+        }
+
+        private VulkanTextureViewHandle require(TextureView view) {
+            VulkanTextureViewHandle result = VulkanResources.requireTextureView(view, context, "Render attachment");
+            if (!result.textureBacked() || !result.texture.usage().renderAttachment()) throw new FdxException("Vulkan multiple targets require attachment textures");
+            return result;
+        }
+
+        private boolean stale() {
+            if (depthAllocation != null && depthAllocation.isRetired()) return true;
+            for (int i = 0; i < colors.length; i++) {
+                if (colorAllocations[i].isRetired() || resolveAllocations[i] != null && resolveAllocations[i].isRetired()) return true;
+            }
+            return false;
+        }
+
+        private boolean matches(RenderPassDescriptor descriptor, RenderPassColorAttachment[] attachments,
+                RenderPassCompatibility compatibility) {
+            if (!this.compatibility.targetLayout().equals(compatibility.targetLayout())
+                    || this.compatibility.width() != compatibility.width() || this.compatibility.height() != compatibility.height()) return false;
+            if (descriptor.depthStencilAttachment() != null
+                    ? depth == null || implicitDepth || depth != descriptor.depthStencilAttachment().view()
+                    : depth != null && !implicitDepth) return false;
+            for (int i = 0; i < colors.length; i++) {
+                if (colors[i] != attachments[i].view() || resolves[i] != attachments[i].resolveView()) return false;
+            }
+            return true;
+        }
+
+        private void transition(VulkanTextureAllocation allocation, VulkanTextureViewHandle view, int layout) {
+            int old = allocation.layout(view.mipLevel);
+            if (old == layout) return;
+            try (MemoryStack stack = stackPush()) {
+                VkImageMemoryBarrier.Buffer barrier = VkImageMemoryBarrier.calloc(1, stack).sType(VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER)
+                        .oldLayout(old).newLayout(layout).srcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED).dstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+                        .image(allocation.image()).srcAccessMask(old == VK_IMAGE_LAYOUT_UNDEFINED ? 0 : VK10.VK_ACCESS_MEMORY_READ_BIT | VK10.VK_ACCESS_MEMORY_WRITE_BIT)
+                        .dstAccessMask(VK10.VK_ACCESS_MEMORY_READ_BIT | VK10.VK_ACCESS_MEMORY_WRITE_BIT);
+                barrier.subresourceRange().aspectMask(view.format().isDepthStencil() ? VK10.VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT)
+                        .baseMipLevel(view.mipLevel).levelCount(1).baseArrayLayer(0).layerCount(1);
+                vkCmdPipelineBarrier(context.commandBuffer(), VK10.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                        VK10.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, null, null, barrier);
+                allocation.layout(view.mipLevel, layout);
+            }
+        }
+
+        void begin(RenderPassDescriptor descriptor) {
+            context.markRecordedResource(this);
+            for (int i = 0; i < colors.length; i++) {
+                require(colors[i]);
+                context.markRecordedResource(colorAllocations[i]);
+                if (resolves[i] != null) { require(resolves[i]); context.markRecordedResource(resolveAllocations[i]); }
+                transition(colorAllocations[i], colors[i], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            }
+            if (depth != null) {
+                require(depth);
+                context.markRecordedResource(depthAllocation);
+                transition(depthAllocation, depth, VK10.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+            }
+            try (MemoryStack stack = stackPush()) {
+                VkRenderPassBeginInfo info = VkRenderPassBeginInfo.calloc(stack).sType(VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO)
+                        .renderPass(renderPass(context, compatibility.targetLayout())).framebuffer(framebuffer);
+                info.renderArea().offset().set(0, 0);
+                info.renderArea().extent().set(compatibility.width(), compatibility.height());
+                vkCmdBeginRenderPass(context.commandBuffer(), info, VK10.VK_SUBPASS_CONTENTS_INLINE);
+                var rectangle = VkClearRect.calloc(1, stack).baseArrayLayer(0).layerCount(1);
+                rectangle.rect().offset().set(0, 0);
+                rectangle.rect().extent().set(compatibility.width(), compatibility.height());
+                var clear = VkClearAttachment.calloc(1, stack);
+                var attachments = descriptor.colorAttachments();
+                for (int i = 0; i < colors.length; i++) {
+                    LoadOp load = attachments[i].loadOp();
+                    if (!load.isClear()) continue;
+                    clear.aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).colorAttachment(i);
+                    clear.clearValue().color().float32(0, load.red()).float32(1, load.green()).float32(2, load.blue()).float32(3, load.alpha());
+                    VK10.vkCmdClearAttachments(context.commandBuffer(), clear, rectangle);
+                }
+                if (depth != null && (descriptor.depthStencilAttachment() != null
+                        ? descriptor.depthStencilAttachment().depthLoadOp().isClear() : descriptor.depthClearEnabled())) {
+                    clear.aspectMask(VK10.VK_IMAGE_ASPECT_DEPTH_BIT).colorAttachment(0);
+                    clear.clearValue().depthStencil().depth(descriptor.depthClearValue()).stencil(0);
+                    VK10.vkCmdClearAttachments(context.commandBuffer(), clear, rectangle);
+                }
+                VkViewport.Buffer viewport = VkViewport.calloc(1, stack).x(0).y(compatibility.height())
+                        .width(compatibility.width()).height(-compatibility.height()).minDepth(0).maxDepth(1);
+                VkRect2D.Buffer scissor = VkRect2D.calloc(1, stack);
+                scissor.offset().set(0, 0);
+                scissor.extent().set(compatibility.width(), compatibility.height());
+                vkCmdSetViewport(context.commandBuffer(), 0, viewport);
+                vkCmdSetScissor(context.commandBuffer(), 0, scissor);
+            }
+        }
+
+        void end() {
+            for (int i = 0; i < colors.length; i++) {
+                if (resolves[i] != null) {
+                    transition(colorAllocations[i], colors[i], VK10.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+                    transition(resolveAllocations[i], resolves[i], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                    try (MemoryStack stack = stackPush()) {
+                        var region = VkImageResolve.calloc(1, stack);
+                        region.srcSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).mipLevel(colors[i].mipLevel).baseArrayLayer(0).layerCount(1);
+                        region.dstSubresource().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).mipLevel(resolves[i].mipLevel).baseArrayLayer(0).layerCount(1);
+                        region.extent().set(compatibility.width(), compatibility.height(), 1);
+                        VK10.vkCmdResolveImage(context.commandBuffer(), colorAllocations[i].image(), VK10.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                resolveAllocations[i].image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, region);
+                    }
+                    transition(resolveAllocations[i], resolves[i], resolves[i].finalLayout());
+                }
+                transition(colorAllocations[i], colors[i], colors[i].finalLayout());
+            }
+        }
+
+        @Override protected void releaseNative(VkDevice device) {
+            if (framebuffer != VK_NULL_HANDLE) vkDestroyFramebuffer(device, framebuffer, null);
+            framebuffer = VK_NULL_HANDLE;
+            if (implicitDepth) depth.texture.dispose();
+        }
+    }
+
+    private static final class VulkanComputeModule implements ShaderModule {
+        final VulkanContext context;
+        final ShaderTargetArtifact artifact;
+        final ShaderReflection reflection;
+        private boolean disposed;
+        VulkanComputeModule(VulkanContext context, ShaderModuleDescriptor descriptor) {
+            this.context = context;
+            artifact = descriptor.targetArtifact();
+            reflection = descriptor.reflection();
+            if (artifact == null) throw new FdxException("Vulkan compute requires translated stage artifacts");
+        }
+        @Override public ShaderReflection reflection() { return reflection; }
+        @Override public ShaderLanguage language() { return ShaderLanguage.SPIRV; }
+        @Override public ProviderId providerId() { return ID; }
+        @Override @SuppressWarnings("unchecked") public <T> T as() { return (T) this; }
+        @Override public boolean isDisposed() { return disposed; }
+        @Override public void dispose() { disposed = true; }
+    }
+
+    private static final class VulkanComputePipeline extends VulkanRecordedResource implements ComputePipeline {
+        final VulkanContext context;
+        final ShaderResourceLayout layout;
+        final int[] groups, bindings, types;
+        final long[] setLayouts;
+        final ArrayList<VulkanComputeBindings> snapshots = new ArrayList<>();
+        long pipeline, pipelineLayout;
+        VulkanComputePipeline(VulkanContext context, VulkanComputeModule module, ComputePipelineDescriptor descriptor) {
+            super(context.resourceDomain());
+            this.context = context;
+            layout = descriptor.resourceLayout();
+            groups = new int[layout.bindingCount()];
+            bindings = new int[groups.length];
+            types = new int[groups.length];
+            int groupCount = 0;
+            for (int i = 0; i < groups.length; i++) {
+                var binding = layout.binding(i);
+                var remap = module.artifact.translatedInterface().findBinding(ShaderArtifactStage.COMPUTE,
+                        descriptor.entryPoint(), binding.group(), binding.binding());
+                if (remap == null || remap.targetCount() != 1) throw new FdxException("Invalid Vulkan compute resource remap");
+                groups[i] = remap.target(0).group();
+                bindings[i] = remap.target(0).binding();
+                groupCount = Math.max(groupCount, groups[i] + 1);
+                types[i] = switch (binding.resourceKind()) {
+                    case STORAGE_BUFFER -> VK10.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                    case UNIFORM_BUFFER -> VK10.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                    case STORAGE_TEXTURE -> VK10.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                    default -> throw new FdxException("Unsupported Vulkan compute resource: " + binding.resourceKind());
+                };
+            }
+            setLayouts = new long[groupCount];
+            long shader = 0;
+            try (MemoryStack stack = stackPush()) {
+                LongBuffer result = stack.mallocLong(1);
+                for (int group = 0; group < groupCount; group++) {
+                    int count = 0;
+                    for (int value : groups) if (value == group) count++;
+                    var entries = VkDescriptorSetLayoutBinding.calloc(count, stack);
+                    int index = 0;
+                    for (int i = 0; i < groups.length; i++) if (groups[i] == group) {
+                        entries.get(index++).binding(bindings[i]).descriptorType(types[i]).descriptorCount(1)
+                                .stageFlags(VK10.VK_SHADER_STAGE_COMPUTE_BIT);
+                    }
+                    var info = VkDescriptorSetLayoutCreateInfo.calloc(stack)
+                            .sType(VK10.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO).pBindings(entries);
+                    context.check(vkCreateDescriptorSetLayout(context.deviceHandle(), info, null, result), "Create compute descriptor layout");
+                    setLayouts[group] = result.get(0);
+                }
+                var layoutInfo = VkPipelineLayoutCreateInfo.calloc(stack).sType(VK10.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO)
+                        .pSetLayouts(stack.longs(setLayouts));
+                context.check(vkCreatePipelineLayout(context.deviceHandle(), layoutInfo, null, result), "Create compute pipeline layout");
+                pipelineLayout = result.get(0);
+                String entry = null;
+                for (var remap : module.artifact.translatedInterface().entryPoints()) {
+                    if (remap.sourceName().equals(descriptor.entryPoint())) entry = remap.targetName();
+                }
+                var stage = entry == null ? null : module.artifact.find(ShaderArtifactStage.COMPUTE, entry);
+                if (stage == null) throw new FdxException("Missing Vulkan compute entry point " + descriptor.entryPoint());
+                byte[] payload = stage.payload();
+                int[] words = new int[payload.length / 4];
+                ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer().get(words);
+                shader = context.graphicsDevice.createShaderModule(words, descriptor.label());
+                var info = VkComputePipelineCreateInfo.calloc(1, stack);
+                info.get(0).sType(VK10.VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO).layout(pipelineLayout);
+                info.get(0).stage().sType(VK10.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO)
+                        .stage(VK10.VK_SHADER_STAGE_COMPUTE_BIT).module(shader).pName(stack.UTF8(entry));
+                context.check(VK10.vkCreateComputePipelines(context.deviceHandle(), VK_NULL_HANDLE, info, null, result), "Create compute pipeline");
+                pipeline = result.get(0);
+            } catch (RuntimeException | Error failure) {
+                retire();
+                throw failure;
+            } finally {
+                if (shader != 0) vkDestroyShaderModule(context.deviceHandle(), shader, null);
+            }
+        }
+        VulkanComputeBindings bindings(ShaderResourceSet[] sets) {
+            for (int i = snapshots.size() - 1; i >= 0; i--) {
+                VulkanComputeBindings snapshot = snapshots.get(i);
+                if (snapshot.stale()) { snapshots.remove(i); snapshot.retire(); }
+                else if (snapshot.matches(sets)) return snapshot;
+            }
+            VulkanComputeBindings snapshot = new VulkanComputeBindings(this, sets);
+            snapshots.add(snapshot);
+            return snapshot;
+        }
+        @Override protected void onRetired() {
+            for (var snapshot : snapshots) snapshot.retire();
+            snapshots.clear();
+        }
+        @Override protected void releaseNative(VkDevice device) {
+            if (pipeline != 0) vkDestroyPipeline(device, pipeline, null);
+            if (pipelineLayout != 0) vkDestroyPipelineLayout(device, pipelineLayout, null);
+            for (long value : setLayouts) if (value != 0) vkDestroyDescriptorSetLayout(device, value, null);
+        }
+        @Override public ProviderId providerId() { return ID; }
+        @Override @SuppressWarnings("unchecked") public <T> T as() { return (T) this; }
+        @Override public boolean isDisposed() { return isRetired(); }
+        @Override public void dispose() { retire(); }
+    }
+
+    /** Immutable descriptor snapshots are reused until a bound allocation changes. */
+    private static final class VulkanComputeBindings extends VulkanRecordedResource {
+        final VulkanComputePipeline pipeline;
+        final VulkanRecordedResource[] resources;
+        final long[] offsets, sizes, sets;
+        final VulkanTextureHandle[] textures;
+        long pool;
+        VulkanComputeBindings(VulkanComputePipeline pipeline, ShaderResourceSet[] values) {
+            super(pipeline.resourceDomain());
+            this.pipeline = pipeline;
+            int count = pipeline.layout.bindingCount();
+            resources = new VulkanRecordedResource[count];
+            offsets = new long[count]; sizes = new long[count]; textures = new VulkanTextureHandle[count];
+            sets = new long[pipeline.setLayouts.length];
+            try (MemoryStack stack = stackPush()) {
+                var poolSizes = VkDescriptorPoolSize.calloc(3, stack);
+                poolSizes.get(0).type(VK10.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER).descriptorCount(Math.max(count, 1));
+                poolSizes.get(1).type(VK10.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER).descriptorCount(Math.max(count, 1));
+                poolSizes.get(2).type(VK10.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE).descriptorCount(Math.max(count, 1));
+                var info = VkDescriptorPoolCreateInfo.calloc(stack).sType(VK10.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO)
+                        .maxSets(Math.max(sets.length, 1)).pPoolSizes(poolSizes);
+                LongBuffer result = stack.mallocLong(1);
+                pipeline.context.check(vkCreateDescriptorPool(pipeline.context.deviceHandle(), info, null, result), "Create compute descriptor pool");
+                pool = result.get(0);
+                if (sets.length > 0) {
+                    var allocation = VkDescriptorSetAllocateInfo.calloc(stack).sType(VK10.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO)
+                            .descriptorPool(pool).pSetLayouts(stack.longs(pipeline.setLayouts));
+                    LongBuffer handles = stack.mallocLong(sets.length);
+                    pipeline.context.check(vkAllocateDescriptorSets(pipeline.context.deviceHandle(), allocation, handles), "Allocate compute descriptor sets");
+                    handles.get(sets);
+                }
+                var writes = VkWriteDescriptorSet.calloc(count, stack);
+                for (int i = 0; i < count; i++) {
+                    var binding = pipeline.layout.binding(i);
+                    var value = values[binding.group()].find(binding.binding());
+                    var write = writes.get(i).sType(VK10.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET)
+                            .dstSet(sets[pipeline.groups[i]]).dstBinding(pipeline.bindings[i])
+                            .descriptorType(pipeline.types[i]).descriptorCount(1);
+                    if (value.kind() == ShaderResourceValueKind.BUFFER) {
+                        var buffer = VulkanResources.requireBuffer(value.buffer(), pipeline.resourceDomain(), "Compute buffer");
+                        resources[i] = buffer.resource(); offsets[i] = value.offset(); sizes[i] = value.size();
+                        var bufferInfo = VkDescriptorBufferInfo.calloc(1, stack).buffer(buffer.buffer()).offset(offsets[i]).range(sizes[i]);
+                        write.pBufferInfo(bufferInfo);
+                    } else if (value.kind() == ShaderResourceValueKind.TEXTURE) {
+                        var texture = VulkanResources.requireTexture(value.texture(), pipeline.resourceDomain(), "Compute image");
+                        textures[i] = texture; resources[i] = texture.allocation();
+                        write.pImageInfo(VkDescriptorImageInfo.calloc(1, stack).imageView(texture.allocation().levelViews[0])
+                                .imageLayout(VK10.VK_IMAGE_LAYOUT_GENERAL));
+                    } else throw new FdxException("Vulkan compute requires explicit buffer or texture resources");
+                }
+                vkUpdateDescriptorSets(pipeline.context.deviceHandle(), writes, null);
+            } catch (RuntimeException | Error failure) { retire(); throw failure; }
+        }
+        boolean stale() {
+            for (var resource : resources) if (resource != null && resource.isRetired()) return true;
+            return false;
+        }
+        boolean matches(ShaderResourceSet[] values) {
+            for (int i = 0; i < resources.length; i++) {
+                var binding = pipeline.layout.binding(i);
+                var value = values[binding.group()].find(binding.binding());
+                if (value.kind() == ShaderResourceValueKind.BUFFER) {
+                    var buffer = VulkanResources.requireBuffer(value.buffer(), pipeline.resourceDomain(), "Compute buffer");
+                    if (resources[i] != buffer.resource() || offsets[i] != value.offset() || sizes[i] != value.size()) return false;
+                } else if (value.kind() == ShaderResourceValueKind.TEXTURE) {
+                    var texture = VulkanResources.requireTexture(value.texture(), pipeline.resourceDomain(), "Compute image");
+                    if (resources[i] != texture.allocation()) return false;
+                } else return false;
+            }
+            return true;
+        }
+        void transitionImages(int target) {
+            try (MemoryStack stack = stackPush()) {
+                for (int i = 0; i < textures.length; i++) if (textures[i] != null) {
+                    var allocation = (VulkanTextureAllocation) resources[i];
+                    int layout = target == VK10.VK_IMAGE_LAYOUT_GENERAL || !textures[i].usage().sampled()
+                            ? VK10.VK_IMAGE_LAYOUT_GENERAL : VK10.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    var barrier = VkImageMemoryBarrier.calloc(1, stack).sType(VK10.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER)
+                            .oldLayout(allocation.layout(0)).newLayout(layout).image(allocation.image())
+                            .srcQueueFamilyIndex(VK10.VK_QUEUE_FAMILY_IGNORED).dstQueueFamilyIndex(VK10.VK_QUEUE_FAMILY_IGNORED)
+                            .srcAccessMask(VK10.VK_ACCESS_MEMORY_WRITE_BIT | VK10.VK_ACCESS_MEMORY_READ_BIT)
+                            .dstAccessMask(VK10.VK_ACCESS_MEMORY_WRITE_BIT | VK10.VK_ACCESS_MEMORY_READ_BIT);
+                    barrier.subresourceRange().aspectMask(VK_IMAGE_ASPECT_COLOR_BIT).levelCount(1).layerCount(1);
+                    vkCmdPipelineBarrier(pipeline.context.commandBuffer(), VK10.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                            VK10.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, null, null, barrier);
+                    allocation.layout(0, layout);
+                }
+            }
+        }
+        @Override protected void releaseNative(VkDevice device) {
+            if (pool != 0) vkDestroyDescriptorPool(device, pool, null);
+        }
+    }
+
+    private static void computeMemoryBarrier(VulkanContext context) {
+        try (MemoryStack stack = stackPush()) {
+            var barrier = VkMemoryBarrier.calloc(1, stack).sType(VK10.VK_STRUCTURE_TYPE_MEMORY_BARRIER)
+                    .srcAccessMask(VK10.VK_ACCESS_MEMORY_WRITE_BIT).dstAccessMask(VK10.VK_ACCESS_MEMORY_READ_BIT | VK10.VK_ACCESS_MEMORY_WRITE_BIT);
+            vkCmdPipelineBarrier(context.commandBuffer(), VK10.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                    VK10.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK10.VK_PIPELINE_STAGE_HOST_BIT, 0, barrier, null, null);
+        }
+    }
+
+    private static final class VulkanComputePass implements ComputePass {
+        final VulkanContext context;
+        final ShaderResourceSet[] sets = new ShaderResourceSet[2];
+        VulkanComputePipeline pipeline;
+        boolean ended = true;
+        VulkanComputePass(VulkanContext context) { this.context = context; }
+        void begin() { ended = false; pipeline = null; Arrays.fill(sets, null); }
+        void requireOpen() {
+            context.requireDeviceUsable("record compute commands");
+            if (ended) throw new FdxException("Vulkan compute pass has ended");
+        }
+        @Override public void setPipeline(ComputePipeline value) {
+            requireOpen();
+            if (!(value instanceof VulkanComputePipeline candidate) || candidate.context != context || candidate.isDisposed()) {
+                throw new FdxException("Invalid Vulkan compute pipeline or device");
+            }
+            pipeline = candidate; Arrays.fill(sets, null);
+        }
+        @Override public void setResourceSet(ShaderResourceSet value) {
+            requireOpen();
+            if (pipeline == null || value == null || value.group() >= sets.length
+                    || !pipeline.layout.physicalHash().equals(value.layout().physicalHash())) throw new FdxException("Mismatched Vulkan compute resources");
+            sets[value.group()] = value;
+        }
+        @Override public void dispatch(int x, int y, int z) {
+            requireOpen(); validateDispatch(x, y, z, context.graphicsDevice.capabilities().limits());
+            if (pipeline == null || pipeline.isDisposed()) throw new FdxException("No live Vulkan compute pipeline");
+            for (int i = 0; i < pipeline.layout.bindingCount(); i++) {
+                if (sets[pipeline.layout.binding(i).group()] == null) throw new FdxException("Missing Vulkan compute resource group");
+            }
+            var snapshot = pipeline.bindings(sets);
+            context.markRecordedResource(pipeline); context.markRecordedResource(snapshot);
+            for (var resource : snapshot.resources) context.markRecordedResource(resource);
+            snapshot.transitionImages(VK10.VK_IMAGE_LAYOUT_GENERAL);
+            vkCmdBindPipeline(context.commandBuffer(), VK10.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.pipeline);
+            try (MemoryStack stack = stackPush()) {
+                if (snapshot.sets.length > 0) vkCmdBindDescriptorSets(context.commandBuffer(), VK10.VK_PIPELINE_BIND_POINT_COMPUTE,
+                        pipeline.pipelineLayout, 0, stack.longs(snapshot.sets), null);
+            }
+            VK10.vkCmdDispatch(context.commandBuffer(), x, y, z);
+            computeMemoryBarrier(context);
+            snapshot.transitionImages(VK10.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
+        @Override public void end() { ended = true; pipeline = null; Arrays.fill(sets, null); }
+        @Override public ProviderId providerId() { return ID; }
+        @Override @SuppressWarnings("unchecked") public <T> T as() { return (T) this; }
+    }
+
     private static final class VulkanCommandEncoder implements CommandEncoder {
+        private final ArrayList<VulkanComputePass> computePasses = new ArrayList<>();
+        private int computePassCount;
+
+        @Override public ComputePass beginComputePass(ComputePassDescriptor descriptor) {
+            context.requireDeviceUsable("begin a compute pass");
+            if (descriptor == null) throw new FdxException("Compute descriptor cannot be null");
+            ensurePreviousPassEnded();
+            if (computePassCount == computePasses.size()) computePasses.add(new VulkanComputePass(context));
+            var pass = computePasses.get(computePassCount++);
+            pass.begin();
+            return pass;
+        }
+
+        @Override public void copyBufferToBuffer(Buffer source, int sourceOffset, Buffer destination, int destinationOffset, int size) {
+            context.requireDeviceUsable("copy buffers"); ensurePreviousPassEnded();
+            var from = VulkanResources.requireBuffer(source, context.resourceDomain(), "Copy source");
+            var to = VulkanResources.requireBuffer(destination, context.resourceDomain(), "Copy destination");
+            if (size < 0 || sourceOffset < 0 || destinationOffset < 0 || sourceOffset > from.size() - size || destinationOffset > to.size() - size
+                    || (from == to && sourceOffset < destinationOffset + size && destinationOffset < sourceOffset + size)) {
+                throw new FdxException("Invalid Vulkan buffer copy range");
+            }
+            if (size == 0) return;
+            context.markRecordedResource(from.resource()); context.markRecordedResource(to.resource());
+            computeMemoryBarrier(context);
+            try (MemoryStack stack = stackPush()) {
+                var region = VkBufferCopy.calloc(1, stack).srcOffset(sourceOffset).dstOffset(destinationOffset).size(size);
+                vkCmdCopyBuffer(context.commandBuffer(), from.buffer(), to.buffer(), region);
+            }
+            computeMemoryBarrier(context);
+        }
         private final VulkanContext context;
         private VulkanRenderPass[] renderPasses = new VulkanRenderPass[4];
         private int renderPassCount;
@@ -3655,13 +4765,30 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             ensurePreviousPassEnded();
             RenderPassCompatibility compatibility = descriptor.validate(
                     context.graphicsDevice.capabilities());
+            if (compatibility.targetLayout().colorAttachmentCount() > 1 || compatibility.targetLayout().sampleCount() > 1) {
+                VulkanMultipleTargets targets = VulkanMultipleTargets.acquire(context, descriptor, compatibility);
+                targets.begin(descriptor);
+                VulkanRenderPass pass = nextRenderPass();
+                pass.begin(null, null, compatibility.height(), compatibility);
+                pass.multipleTargets = targets;
+                renderPassCount++;
+                return pass;
+            }
             VulkanTextureViewHandle attachment = VulkanResources.requireTextureView(descriptor.colorAttachment(),
                     context, "Color attachment");
             LoadOp loadOp = descriptor.colorLoadOp();
             StoreOp storeOp = descriptor.colorStoreOp();
+            VulkanTextureViewHandle depth = null;
+            var explicitDepth = descriptor.depthStencilAttachment();
+            if (explicitDepth != null) {
+                depth = VulkanResources.requireTextureView(explicitDepth.view(), context, "Depth attachment");
+                if (!attachment.textureBacked() || !depth.textureBacked() || !depth.texture.usage().renderAttachment()) {
+                    throw new FdxException("Vulkan explicit depth requires offscreen attachment textures");
+                }
+            }
             return beginRenderPass(attachment, loadOp.isClear(), loadOp.red(), loadOp.green(), loadOp.blue(),
-                    loadOp.alpha(), storeOp.isStore(), descriptor.depthClearEnabled(),
-                    descriptor.depthClearValue(), compatibility);
+                    loadOp.alpha(), storeOp.isStore(), explicitDepth != null ? explicitDepth.depthLoadOp().isClear() : descriptor.depthClearEnabled(),
+                    descriptor.depthClearValue(), compatibility, depth);
         }
 
         RenderPass beginClearPass(float red, float green, float blue, float alpha) {
@@ -3671,22 +4798,23 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             ensurePreviousPassEnded();
             return beginRenderPass(context.colorAttachment, true, red, green, blue, alpha, true, false, 1.0f,
                     RenderPassCompatibility.of(RenderTargetLayout.color(
-                            context.colorAttachment.format()), context.width(), context.height()));
+                            context.colorAttachment.format()), context.width(), context.height()), null);
         }
 
         private RenderPass beginRenderPass(VulkanTextureViewHandle attachment, boolean clear,
                 float red, float green, float blue, float alpha, boolean store, boolean depthClear,
-                float depthClearValue, RenderPassCompatibility compatibility) {
+                float depthClearValue, RenderPassCompatibility compatibility, VulkanTextureViewHandle explicitDepth) {
             boolean textureBacked = attachment.textureBacked();
             VulkanTextureAllocation renderTargetAllocation = textureBacked ? attachment.texture.allocation() : null;
             if (renderTargetAllocation != null) {
                 context.markRecordedResource(renderTargetAllocation);
             }
             int finalLayout = attachment.finalLayout();
+            if (explicitDepth != null) context.markRecordedResource(explicitDepth.texture.allocation());
             long renderPass = textureBacked
                     ? context.selectTextureRenderPass(attachment.format(), clear, store, depthClear, finalLayout)
                     : context.selectRenderPass(clear, store, depthClear);
-            long framebuffer = textureBacked ? attachment.framebuffer(context, renderPass) : context.framebuffer();
+            long framebuffer = textureBacked ? attachment.framebuffer(context, renderPass, explicitDepth) : context.framebuffer();
             int passWidth = attachment.width();
             int passHeight = attachment.height();
             try (MemoryStack stack = stackPush()) {
@@ -3733,9 +4861,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         void beginFrame() {
             ensurePassesEnded();
             renderPassCount = 0;
+            computePassCount = 0;
         }
 
         void ensurePassesEnded() {
+            for (int i = 0; i < computePassCount; i++) if (!computePasses.get(i).ended) throw new FdxException("Vulkan compute pass must be ended");
             for (int i = 0; i < renderPassCount; i++) {
                 if (!renderPasses[i].isEnded()) {
                     throw new FdxException("Vulkan render pass must be ended before ending the frame");
@@ -3744,6 +4874,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
 
         private void ensurePreviousPassEnded() {
+            if (computePassCount > 0 && !computePasses.get(computePassCount - 1).ended) throw new FdxException("Previous Vulkan compute pass must be ended");
             if (renderPassCount > 0 && !renderPasses[renderPassCount - 1].isEnded()) {
                 throw new FdxException("Previous Vulkan render pass must be ended before beginning another pass");
             }
@@ -3790,6 +4921,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
      * @author xpenatan
      */
     private static final class VulkanRenderPass implements RenderPass {
+        private VulkanMultipleTargets multipleTargets;
         private final VulkanContext context;
         private VulkanTextureViewHandle colorAttachment;
         private VulkanTextureAllocation renderTargetAllocation;
@@ -3817,6 +4949,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 throw new FdxException("Cannot reuse an active Vulkan render pass");
             }
             this.colorAttachment = colorAttachment;
+            multipleTargets = null;
             this.renderTargetAllocation = renderTargetAllocation;
             this.renderTargetHeight = renderTargetHeight;
             this.compatibility = compatibility;
@@ -3937,6 +5070,15 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
             VulkanTextureHandle vulkanTexture = VulkanResources.requireTexture(texture, context.resourceDomain(),
                     "Texture");
+            if (colorAttachment != null && colorAttachment.texture == texture) throw new FdxException("Cannot sample the active render target");
+            if (multipleTargets != null) {
+                for (int i = 0; i < multipleTargets.colors.length; i++) {
+                    if (multipleTargets.colors[i].texture == texture
+                            || (multipleTargets.resolves[i] != null && multipleTargets.resolves[i].texture == texture)) {
+                        throw new FdxException("Cannot sample an active color or resolve attachment");
+                    }
+                }
+            }
             textures[slot] = vulkanTexture;
         }
 
@@ -4169,8 +5311,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 return;
             }
             ended = true;
-            vkCmdEndRenderPass(context.commandBuffer());
-            if (colorAttachment != null) {
+            if (!context.resourceDomain.isLost()) {
+                vkCmdEndRenderPass(context.commandBuffer());
+                if (multipleTargets != null) multipleTargets.end();
+            }
+            multipleTargets = null;
+            if (colorAttachment != null && !context.resourceDomain.isLost()) {
                 colorAttachment.markRenderPassEnded(renderTargetAllocation);
             }
             pipeline = null;
@@ -4183,6 +5329,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         }
 
         private void ensureOpen() {
+            context.requireDeviceUsable("use a render pass");
             if (ended) {
                 throw new FdxException("Render pass has already ended");
             }
@@ -4191,6 +5338,13 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
             if (colorAttachment != null && colorAttachment.texture.isDisposed()) {
                 throw new FdxException("Render target texture has been disposed");
+            }
+            if (multipleTargets != null) {
+                for (int i = 0; i < multipleTargets.colors.length; i++) {
+                    multipleTargets.require(multipleTargets.colors[i]);
+                    if (multipleTargets.resolves[i] != null) multipleTargets.require(multipleTargets.resolves[i]);
+                }
+                if (multipleTargets.depth != null) multipleTargets.require(multipleTargets.depth);
             }
         }
 
@@ -4635,12 +5789,13 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         private final long sampler;
         private final long descriptorPool;
         private final long descriptorSet;
-        private VulkanTextureViewResources viewResources;
+        private final ArrayList<VulkanTextureViewResources> viewResources = new ArrayList<>();
+        private final long[] levelViews;
+        private final int[] layouts;
         private ArrayList<VulkanTextureDescriptorSetResource> descriptorSets;
-        private int layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         VulkanTextureAllocation(VulkanResourceDomain resourceDomain, long image, long memory, long imageView,
-                long sampler, long descriptorPool, long descriptorSet) {
+                long sampler, long descriptorPool, long descriptorSet, long[] levelViews) {
             super(resourceDomain);
             this.image = image;
             this.memory = memory;
@@ -4648,6 +5803,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             this.sampler = sampler;
             this.descriptorPool = descriptorPool;
             this.descriptorSet = descriptorSet;
+            this.levelViews = levelViews;
+            this.layouts = new int[levelViews.length];
         }
 
         long image() {
@@ -4666,19 +5823,16 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return descriptorSet;
         }
 
-        int layout() {
-            return layout;
+        int layout(int level) {
+            return layouts[level];
         }
 
-        void layout(int layout) {
-            this.layout = layout;
+        void layout(int level, int layout) {
+            this.layouts[level] = layout;
         }
 
         void viewResources(VulkanTextureViewResources viewResources) {
-            if (this.viewResources != null) {
-                throw new FdxException("Desktop Vulkan texture view resources were already detached");
-            }
-            this.viewResources = viewResources;
+            if (viewResources != null) this.viewResources.add(viewResources);
         }
 
         void addDescriptorSet(VulkanTextureDescriptorSetResource descriptorSet) {
@@ -4721,9 +5875,9 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                     firstFailure = VulkanCleanup.merge(firstFailure, failure);
                 }
             }
-            if (viewResources != null) {
+            for (VulkanTextureViewResources resources : viewResources) {
                 try {
-                    viewResources.dispose(device);
+                    resources.dispose(device);
                 } catch (RuntimeException | Error failure) {
                     firstFailure = VulkanCleanup.merge(firstFailure, failure);
                 }
@@ -4734,6 +5888,9 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 } catch (RuntimeException | Error failure) {
                     firstFailure = VulkanCleanup.merge(firstFailure, failure);
                 }
+            }
+            for (long levelView : levelViews) {
+                if (levelView != VK_NULL_HANDLE && levelView != imageView) vkDestroyImageView(device, levelView, null);
             }
             if (imageView != VK_NULL_HANDLE) {
                 try {
@@ -4769,6 +5926,10 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         private final VulkanContext context;
         private VulkanTextureAllocation allocation;
         private final VulkanTextureViewHandle view;
+        private final VulkanTextureViewHandle[] views;
+        private final TextureFilter magFilter;
+        private final TextureMipmapFilter mipFilter;
+        private final int samples;
         private final int width;
         private final int height;
         private final TextureFormat format;
@@ -4780,7 +5941,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
 
         VulkanTextureHandle(VulkanContext context, VulkanTextureAllocation allocation, int width, int height,
                 TextureFormat format, TextureUsage usage, TextureFilter filter, TextureWrap wrapS,
-                TextureWrap wrapT) {
+                TextureWrap wrapT, TextureFilter magFilter, TextureMipmapFilter mipFilter, int mipCount, int samples) {
             this.context = context;
             this.allocation = allocation;
             this.width = width;
@@ -4790,7 +5951,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             this.filter = filter;
             this.wrapS = wrapS;
             this.wrapT = wrapT;
-            view = new VulkanTextureViewHandle(this);
+            this.magFilter = magFilter;
+            this.mipFilter = mipFilter;
+            this.samples = samples;
+            views = new VulkanTextureViewHandle[mipCount];
+            for (int level = 0; level < mipCount; level++) views[level] = new VulkanTextureViewHandle(this, level);
+            view = views[0];
         }
 
         long image() {
@@ -4809,12 +5975,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return allocation.descriptorSet();
         }
 
-        int layout() {
-            return allocation.layout();
+        int layout(int level) {
+            return allocation.layout(level);
         }
 
-        void layout(int layout) {
-            allocation.layout(layout);
+        void layout(int level, int layout) {
+            allocation.layout(level, layout);
         }
 
         VulkanTextureAllocation allocation() {
@@ -4826,7 +5992,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 throw new FdxException("Replacement Vulkan texture allocation is incompatible");
             }
             VulkanTextureAllocation previous = this.allocation;
-            previous.viewResources(view.detachResources());
+            for (VulkanTextureViewHandle mipView : views) previous.viewResources(mipView.detachResources());
             this.allocation = allocation;
             previous.retire();
         }
@@ -4892,6 +6058,14 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         public TextureView view() {
             return view;
         }
+        @Override public int sampleCount() { return samples; }
+
+        @Override public int mipLevelCount() { return views.length; }
+
+        @Override public TextureView view(int mipLevel) {
+            if (mipLevel < 0 || mipLevel >= views.length) throw new FdxException("Texture mip level outside range");
+            return views[mipLevel];
+        }
 
         /**
          * Returns the identifier of the provider backing this object.
@@ -4924,7 +6098,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 return;
             }
             disposed = true;
-            allocation.viewResources(view.detachResources());
+            for (VulkanTextureViewHandle mipView : views) allocation.viewResources(mipView.detachResources());
             allocation.retire();
         }
 
@@ -5124,25 +6298,30 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
      * @author xpenatan
      */
     private static final class VulkanTextureViewHandle implements TextureView {
+        @Override public int sampleCount() { return texture != null ? texture.sampleCount() : 1; }
         private final VulkanContext context;
         private final VulkanTextureHandle texture;
+        private final int mipLevel;
         private long[] framebufferRenderPasses = new long[4];
         private long[] framebuffers = new long[4];
+        private VulkanTextureAllocation[] framebufferDepths = new VulkanTextureAllocation[4];
         private int framebufferCount;
         private VulkanDepthAttachment depthAttachment;
 
         VulkanTextureViewHandle(VulkanContext context) {
             this.context = context;
             this.texture = null;
+            this.mipLevel = 0;
         }
 
-        VulkanTextureViewHandle(VulkanTextureHandle texture) {
+        VulkanTextureViewHandle(VulkanTextureHandle texture, int mipLevel) {
             this.context = null;
             this.texture = texture;
+            this.mipLevel = mipLevel;
         }
 
         long nativeView() {
-            return texture != null ? texture.imageView() : context.currentImageView();
+            return texture != null ? texture.allocation().levelViews[mipLevel] : context.currentImageView();
         }
 
         boolean textureBacked() {
@@ -5151,12 +6330,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
 
         @Override
         public int width() {
-            return texture != null ? texture.width() : context.width();
+            return texture != null ? texture.mipWidth(mipLevel) : context.width();
         }
 
         @Override
         public int height() {
-            return texture != null ? texture.height() : context.height();
+            return texture != null ? texture.mipHeight(mipLevel) : context.height();
         }
 
         int finalLayout() {
@@ -5166,37 +6345,40 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         }
 
-        long framebuffer(VulkanContext context, long renderPass) {
+        long framebuffer(VulkanContext context, long renderPass, VulkanTextureViewHandle explicitDepth) {
             if (texture == null || !texture.usage().renderAttachment()) {
                 throw new FdxException("Texture view is not a Vulkan render attachment");
             }
             for (int i = 0; i < framebufferCount; i++) {
-                if (framebufferRenderPasses[i] == renderPass) {
+                if (framebufferRenderPasses[i] == renderPass
+                        && framebufferDepths[i] == (explicitDepth == null ? null : explicitDepth.texture.allocation())) {
                     return framebuffers[i];
                 }
             }
-            if (depthAttachment == null) {
-                depthAttachment = context.createDepthAttachment(texture.width(), texture.height());
+            if (depthAttachment == null && explicitDepth == null) {
+                depthAttachment = context.createDepthAttachment(width(), height());
             }
             try (MemoryStack stack = stackPush()) {
-                LongBuffer attachments = stack.longs(texture.imageView(), depthAttachment.imageView());
+                LongBuffer attachments = stack.longs(nativeView(), explicitDepth == null ? depthAttachment.imageView() : explicitDepth.nativeView());
                 VkFramebufferCreateInfo framebufferInfo = VkFramebufferCreateInfo.calloc(stack)
                         .sType(VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO)
                         .renderPass(renderPass)
                         .pAttachments(attachments)
-                        .width(texture.width())
-                        .height(texture.height())
+                        .width(width())
+                        .height(height())
                         .layers(1);
                 LongBuffer pFramebuffer = stack.mallocLong(1);
-                check(vkCreateFramebuffer(context.deviceHandle(), framebufferInfo, null, pFramebuffer),
+                context.check(vkCreateFramebuffer(context.deviceHandle(), framebufferInfo, null, pFramebuffer),
                         "Could not create Vulkan texture framebuffer");
                 long created = pFramebuffer.get(0);
                 if (framebufferCount == framebuffers.length) {
                     framebufferRenderPasses = Arrays.copyOf(framebufferRenderPasses, framebuffers.length * 2);
                     framebuffers = Arrays.copyOf(framebuffers, framebuffers.length * 2);
+                    framebufferDepths = Arrays.copyOf(framebufferDepths, framebuffers.length);
                 }
                 framebufferRenderPasses[framebufferCount] = renderPass;
                 framebuffers[framebufferCount] = created;
+                framebufferDepths[framebufferCount] = explicitDepth == null ? null : explicitDepth.texture.allocation();
                 framebufferCount++;
                 return created;
             }
@@ -5204,13 +6386,13 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
 
         void markRenderPassStarted(VulkanTextureAllocation allocation) {
             if (allocation != null) {
-                allocation.layout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                allocation.layout(mipLevel, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             }
         }
 
         void markRenderPassEnded(VulkanTextureAllocation allocation) {
             if (allocation != null) {
-                allocation.layout(finalLayout());
+                allocation.layout(mipLevel, finalLayout());
             }
         }
 
@@ -5221,6 +6403,7 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             long[] nativeFramebuffers = Arrays.copyOf(framebuffers, framebufferCount);
             Arrays.fill(framebufferRenderPasses, 0, framebufferCount, VK_NULL_HANDLE);
             Arrays.fill(framebuffers, 0, framebufferCount, VK_NULL_HANDLE);
+            Arrays.fill(framebufferDepths, 0, framebufferCount, null);
             framebufferCount = 0;
             VulkanDepthAttachment detachedDepthAttachment = depthAttachment;
             depthAttachment = null;
@@ -5377,6 +6560,13 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         @Override
         public boolean isDisposed() {
             return disposed;
+        }
+    }
+
+    private record VulkanPreparedPipeline(long pipeline, long layout, ShaderRenderBindings resources, int uniformSetIndex) {
+        void release(VkDevice device) {
+            try { vkDestroyPipeline(device, pipeline, null); }
+            finally { vkDestroyPipelineLayout(device, layout, null); }
         }
     }
 
@@ -5561,6 +6751,12 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
 
     private static int toNativeFormat(TextureFormat format) {
         switch (format) {
+            case RGBA16_FLOAT:
+                return VK10.VK_FORMAT_R16G16B16A16_SFLOAT;
+            case R32_FLOAT:
+                return VK10.VK_FORMAT_R32_SFLOAT;
+            case DEPTH32_FLOAT:
+                return VK_FORMAT_D32_SFLOAT;
             case RGBA8_UNORM:
                 return VK_FORMAT_R8G8B8A8_UNORM;
             case RGBA8_UNORM_SRGB:

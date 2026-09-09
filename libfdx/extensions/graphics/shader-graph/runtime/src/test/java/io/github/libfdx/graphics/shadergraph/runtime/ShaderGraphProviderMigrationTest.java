@@ -1,7 +1,5 @@
 package io.github.libfdx.graphics.shadergraph.runtime;
 
-import io.github.libfdx.math.ClipDepthRange;
-import io.github.libfdx.graphics.shader.reflection.ShaderBinding;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.Buffer;
@@ -15,41 +13,42 @@ import io.github.libfdx.graphics.RenderPassCompatibility;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
 import io.github.libfdx.graphics.RenderTargetLayout;
+import io.github.libfdx.graphics.shader.reflection.ShaderBinding;
 import io.github.libfdx.graphics.shader.reflection.ShaderBuiltinUsage;
 import io.github.libfdx.graphics.shader.reflection.ShaderEntryPoint;
 import io.github.libfdx.graphics.shader.reflection.ShaderInterpolation;
 import io.github.libfdx.graphics.shader.reflection.ShaderInterpolationSampling;
+import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
+import io.github.libfdx.graphics.shader.reflection.ShaderScalarType;
+import io.github.libfdx.graphics.shader.reflection.ShaderStageVariable;
+import io.github.libfdx.graphics.shader.reflection.ShaderValueType;
+import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
+import io.github.libfdx.graphics.shader.runtime.ShaderRequest;
 import io.github.libfdx.graphics.shader.ShaderLanguage;
 import io.github.libfdx.graphics.shader.ShaderModule;
 import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
-import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
 import io.github.libfdx.graphics.shader.ShaderProfile;
-import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
-import io.github.libfdx.graphics.shader.runtime.ShaderRequest;
-import io.github.libfdx.graphics.shader.reflection.ShaderScalarType;
 import io.github.libfdx.graphics.shader.ShaderStage;
-import io.github.libfdx.graphics.shader.reflection.ShaderStageVariable;
-import io.github.libfdx.graphics.shader.reflection.ShaderValueType;
-import io.github.libfdx.graphics.Texture;
-import io.github.libfdx.graphics.TextureDescriptor;
-import io.github.libfdx.graphics.TextureFormat;
-import io.github.libfdx.graphics.shadergraph.model.ShaderGraphBuilder;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCacheContext;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompileOptions;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompiler;
 import io.github.libfdx.graphics.shadergraph.document.ShaderGraphDocument;
 import io.github.libfdx.graphics.shadergraph.model.ShaderExpression;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraph;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraphBuilder;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphKind;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphLiteral;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphStageSemantic;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphType;
 import io.github.libfdx.graphics.shadergraph.technique.ShaderGraphProgram;
-import org.junit.jupiter.api.Test;
-
+import io.github.libfdx.graphics.Texture;
+import io.github.libfdx.graphics.TextureDescriptor;
+import io.github.libfdx.graphics.TextureFormat;
+import io.github.libfdx.math.ClipDepthRange;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -280,8 +279,8 @@ final class ShaderGraphProviderMigrationTest {
                         "reload", 0.75f)), context);
         provider.replace(replacement);
         assertEquals(revision + 1, provider.revision());
-        assertEquals(modules + 1, graphics.device.sources.size());
-        assertEquals(1, graphics.device.disposedModules);
+        assertEquals(modules, graphics.device.sources.size(), "Replacing definitions must not compile native modules");
+        assertEquals(0, graphics.device.disposedModules);
         provider.dispose();
     }
 
@@ -354,7 +353,7 @@ final class ShaderGraphProviderMigrationTest {
                                 .outputs(color)
                                 .build()
                 },
-                new io.github.libfdx.graphics.shader.reflection.ShaderBinding[0],
+                new ShaderBinding[0],
                 new String[0]);
     }
 

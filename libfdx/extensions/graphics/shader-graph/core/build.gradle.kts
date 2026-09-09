@@ -3,6 +3,9 @@ plugins {
     id("java-library")
 }
 
+// Portable graph data/compiler contracts; checked with framework production dependencies.
+extra["libfdx.portable"] = true
+
 java {
     sourceCompatibility = JavaVersion.toVersion(25)
     targetCompatibility = JavaVersion.toVersion(25)

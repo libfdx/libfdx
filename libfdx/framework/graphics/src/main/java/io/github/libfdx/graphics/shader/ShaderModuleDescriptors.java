@@ -19,6 +19,8 @@ import io.github.libfdx.graphics.shader.target.ShaderTargetEnvironment;
 import io.github.libfdx.graphics.shader.target.ShaderTargetId;
 import io.github.libfdx.graphics.shader.target.ShaderVerificationRequirement;
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.core.FdxFuture;
+import io.github.libfdx.graphics.shader.internal.ShaderCompilationTasks;
 import io.github.libfdx.runtime.core.RuntimeCore;
 import io.github.libfdx.runtime.core.RuntimeCoreException;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompiler;
@@ -27,6 +29,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -128,21 +131,44 @@ public final class ShaderModuleDescriptors {
         }
         requireWgsl(descriptor, target, providerName, format);
 
-        ShaderTargetCompileRequest request = ShaderTargetCompileRequest.builder(
+        ShaderTargetCompileRequest request = compileRequest(descriptor, target, format, environment, verification);
+        ShaderTargetCompileResult result = registry.compile(request);
+        result.throwIfFailed(descriptor.label());
+        return descriptor(result.artifact(), descriptor.label(), descriptor.wgslSource());
+    }
+
+    /**
+     * Provider preparation counterpart: CPU work uses the audited borrowed executor; asynchronous
+     * compiler/cache reads release its workers while pending. Callbacks never publish native resources.
+     */
+    public static FdxFuture<ShaderModuleDescriptor> requireTargetAsync(ShaderModuleDescriptor descriptor,
+            ShaderTarget target, ShaderCompilerRegistry registry, ShaderVerificationRequirement verification,
+            String providerName, Consumer<Runnable> execute) {
+        return ShaderCompilationTasks.then(ShaderCompilationTasks.submit(execute, () -> {
+            requireDescriptor(descriptor);
+            requireWgsl(descriptor, target.id(), providerName, target.format());
+            return compileRequest(descriptor, target.id(), target.format(), target.environment(), verification);
+        }), execute, request -> ShaderCompilationTasks.then(registry.compileAsync(request, execute), execute, result -> {
+            result.throwIfFailed(descriptor.label());
+            return FdxFuture.completed(descriptor(result.artifact(), descriptor.label(), descriptor.wgslSource()));
+        }));
+    }
+
+    private static ShaderTargetCompileRequest compileRequest(ShaderModuleDescriptor descriptor,
+            ShaderTargetId target, ShaderArtifactFormat format, ShaderTargetEnvironment environment,
+            ShaderVerificationRequirement verification) {
+        return ShaderTargetCompileRequest.builder(
                         descriptor.label(), descriptor.wgslSource(), target, format, environment)
                 .shaderInterface(descriptor.reflection())
                 .profile(descriptor.reflection().profile())
                 .entryPoints(entryPoints(descriptor, format))
                 .verification(verification)
                 .build();
-        ShaderTargetCompileResult result = registry.compile(request);
-        result.throwIfFailed(descriptor.label());
-        return descriptor(result.artifact(), descriptor.label(), descriptor.wgslSource());
     }
 
     private static ShaderEntryPointSelection[] entryPoints(
             ShaderModuleDescriptor descriptor, ShaderArtifactFormat format) {
-        if (!ShaderArtifactFormats.WGSL_TEXT.equals(format)) {
+        if (!ShaderArtifactFormats.WGSL_TEXT.equals(format) && !computeOnly(descriptor.reflection())) {
             return new ShaderEntryPointSelection[] {
                     ShaderEntryPointSelection.of(ShaderArtifactStage.VERTEX,
                             descriptor.vertexEntryPoint()),
@@ -166,6 +192,15 @@ public final class ShaderModuleDescriptors {
                     }, entryPoint.name());
         }
         return selections;
+    }
+
+    /** Whether complete reflection describes a module containing only compute entry points. */
+    public static boolean computeOnly(ShaderReflection reflection) {
+        if (!reflection.complete() || reflection.entryPointCount() == 0) return false;
+        for (int i = 0; i < reflection.entryPointCount(); i++) {
+            if (reflection.entryPoint(i).stage() != ShaderStage.COMPUTE) return false;
+        }
+        return true;
     }
 
     /**
@@ -193,7 +228,11 @@ public final class ShaderModuleDescriptors {
         String fragmentEntry = fragmentRemap != null
                 ? fragmentRemap.targetName() : ShaderModuleDescriptor.DEFAULT_FRAGMENT_ENTRY_POINT;
 
-        if (ShaderArtifactFormats.WGSL_TEXT.equals(artifact.format())) {
+        if (computeOnly(artifact.translatedInterface().canonical())
+                && !ShaderArtifactFormats.WGSL_TEXT.equals(artifact.format())) {
+            // Compute stages remain individually addressable in the target artifact.
+            descriptor = ShaderModuleDescriptor.wgsl(label, canonicalWgsl);
+        } else if (ShaderArtifactFormats.WGSL_TEXT.equals(artifact.format())) {
             ShaderStageArtifact module = requireStage(artifact, ShaderArtifactStage.MODULE, "");
             descriptor = ShaderModuleDescriptor.wgsl(label, module.text());
         } else if (ShaderArtifactFormats.GLSL_TEXT.equals(artifact.format())

@@ -32,7 +32,8 @@ public interface AssetHandle<T> {
     boolean isLoaded();
 
     /**
-     * Returns the asset.
+     * Returns the borrowed asset while loaded, otherwise null. Do not dispose
+     * it directly; its lifetime ends when the manager releases its final owner.
      *
      * @return the asset
      */
@@ -40,7 +41,9 @@ public interface AssetHandle<T> {
 
     /**
      * Returns the future. If its manager unloads this handle or is disposed
-     * before loading completes, the future completes with failure.
+     * before loading completes, the future completes with failure. A successful
+     * future retains its original result even after unloading; it does not keep
+     * the resource alive. Use the handle's current status to check validity.
      *
      * @return the future
      */

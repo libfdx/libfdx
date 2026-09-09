@@ -12,6 +12,7 @@ import io.github.libfdx.graphics.GraphicsProviderSupport;
 import io.github.libfdx.graphics.NativeWindow;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.gl.GLGraphicsAttachment;
+import io.github.libfdx.graphics.shader.runtime.ShaderArtifactCache;
 
 /**
  * Provides android gles services.
@@ -20,6 +21,25 @@ import io.github.libfdx.graphics.gl.GLGraphicsAttachment;
  */
 public final class AndroidGlesProvider implements GraphicsAttachmentProvider, GraphicsProviderSupport {
     public static final ProviderId ID = ProviderId.of("gles");
+    private int preparationWorkerLimit = Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors()));
+    private ShaderArtifactCache shaderCache;
+
+    /** Optional borrowed compiler-artifact and supported native program-binary cache.
+     * Binary import/export may block and runs only through explicit updateLoading calls;
+     * native binary work begun there must finish through loading updates. Runtime preparation
+     * never imports/exports binaries. Keep storage available until preparation drains. */
+    public ShaderArtifactCache shaderCache() { return shaderCache; }
+    public AndroidGlesProvider shaderCache(ShaderArtifactCache value) { shaderCache = value; return this; }
+
+    /** CPU translation worker limit for newly created attachments. The default is at most two
+     * workers. Native compilation stays on the owning GLES context and uses driver completion
+     * polling only when supported. This does not control the driver's internal worker count. */
+    public int preparationWorkerLimit() { return preparationWorkerLimit; }
+    public AndroidGlesProvider preparationWorkerLimit(int workers) {
+        if (workers < 1 || workers > 64) throw new FdxException("GLES preparation workers must be between 1 and 64");
+        preparationWorkerLimit = workers;
+        return this;
+    }
 
     /**
      * Returns the identifier of the provider backing this object.
@@ -77,9 +97,14 @@ public final class AndroidGlesProvider implements GraphicsAttachmentProvider, Gr
             throw new FdxException("Android GLES requires an Android Surface");
         }
         AndroidGlesSurface surface = new AndroidGlesSurface((Surface) nativeWindow.objectHandle());
-        surface.makeCurrent();
-        return new GLGraphicsAttachment(ID, new AndroidGlesApi(), surface,
-                environment.display().framebufferWidth(), environment.display().framebufferHeight(),
-                TextureFormat.RGBA8_UNORM);
+        try {
+            surface.makeCurrent();
+            return new GLGraphicsAttachment(ID, new AndroidGlesApi(preparationWorkerLimit), surface,
+                    environment.display().framebufferWidth(), environment.display().framebufferHeight(),
+                    TextureFormat.RGBA8_UNORM, null, shaderCache);
+        } catch (RuntimeException | Error failure) {
+            surface.dispose();
+            throw failure;
+        }
     }
 }

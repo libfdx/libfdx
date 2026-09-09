@@ -1,0 +1,14 @@
+{
+  "revision": "81e8b567643b5166e6ff40024e4ff71ad4b18676",
+  "source": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/81e8b567643b5166e6ff40024e4ff71ad4b18676/Models/NormalTangentMirrorTest/",
+  "license": "CC-BY-4.0",
+  "copyright": "2018 Analytical Graphics, Inc.; Ed Mackey",
+  "sha256": {
+    "NormalTangentMirrorTest.gltf": "2da070d2036a51cf645c40a2ded94c1c72cc38de94039a321257610bfdd2e163",
+    "NormalTangentMirrorTest.bin": "4cc94ba24a39bdf34f5db6c1b38a8423ff4bd33a5b2d6f52db7959c6021273b7",
+    "NormalTangentMirrorTest_OcclusionRoughnessMetallic.png": "4edb5c336d3d7b2c131d6aee925b967c2ae15ca8c011823bb17551c75d060ee8",
+    "NormalTangentMirrorTest_Normal.png": "95b14c4a91309fc5834e30030dfb8898297b96754a05733d37e6c04f2e45a6fb",
+    "NormalTangentMirrorTest_BaseColor.png": "879c6296d80189e4d1a871d8cbf788e087d2f6b1a822647b449348dc1734934f",
+    "UPSTREAM.txt": "03031b823926ec032f9cb9d5c27735d12e86fe0a6d0a0ca9ffd3a2c306397339"
+  }
+}

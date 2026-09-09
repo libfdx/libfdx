@@ -10,6 +10,7 @@ import io.github.libfdx.display.Display;
 import io.github.libfdx.files.FileSystem;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.input.Input;
+import io.github.libfdx.input.InputRouter;
 import io.github.libfdx.input.Key;
 import io.github.libfdx.input.KeyEvent;
 import io.github.libfdx.input.MouseButton;
@@ -111,6 +112,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     private UiTheme theme = UiTheme.dark();
     private UiRenderer renderer;
     private Input input;
+    private InputRouter inputRouter;
     private UiContent content;
     private UiNode rootNode;
     private UiNode hoveredNode;
@@ -214,6 +216,34 @@ public final class UiRoot implements Disposable, UiStateListener {
         this.width = display != null ? display.width() : 0;
         this.height = display != null ? display.height() : 0;
         this.renderer = graphics != null ? new UiG2DRenderer(graphics) : null;
+    }
+
+    /**
+     * Allows substitute fonts when a requested font cannot be loaded. Defaults to
+     * false: missing/invalid files, unavailable rasterizers and unsupported font
+     * families throw an {@link io.github.libfdx.core.FdxException} with the font
+     * source and original cause during text measurement or rendering.
+     *
+     * <p>When enabled, failures are logged once per source/scale and the configured
+     * {@link UiFont#fallback(UiFont)} chain is tried before the built-in diagnostic
+     * bitmap text. Fonts passed through {@link UiFont#bitmap} remain borrowed.
+     * Changing this flag invalidates text layouts; disabling it also rejects
+     * previously cached failures. Call on the root's application thread.</p>
+     *
+     * @param allow whether font substitution is allowed
+     * @return this root
+     */
+    public UiRoot allowFontFallback(boolean allow) {
+        if (textEngine.allowFontFallback() != allow) {
+            textEngine.allowFontFallback(allow);
+            requestCompose();
+        }
+        return this;
+    }
+
+    /** Returns whether font substitution is allowed; false by default. */
+    public boolean allowFontFallback() {
+        return textEngine.allowFontFallback();
     }
 
     /**
@@ -390,7 +420,8 @@ public final class UiRoot implements Disposable, UiStateListener {
     /**
      * Sets whether the root automatically applies {@link Display#contentScale()} and returns this UI root.
      *
-     * <p>Disable this only when an application already converts its UI units to display-scaled units.</p>
+     * <p>Enabled by default. When disabled, rendering uses only {@link #uiScale(float)}.
+     * Pointer conversion still accounts for framebuffer density in either mode.</p>
      *
      * @param autoUiScale true to apply display content scaling
      * @return this UI root for chaining
@@ -529,16 +560,32 @@ public final class UiRoot implements Disposable, UiStateListener {
      * @return this UI root for chaining
      */
     public UiRoot input(Input input) {
-        if (this.input == input) {
+        return input(input, null);
+    }
+
+    /**
+     * Routes UI through a borrowed ordered router. Register that router with input
+     * once and attach UI before adding gameplay processors. The root removes only
+     * its own handler on detach/dispose. Null router keeps direct registration.
+     * Configure outside input dispatch; modal gamepad contexts need explicit gating.
+     */
+    public UiRoot input(Input input, InputRouter router) {
+        if (input == null && router != null) {
+            throw new IllegalArgumentException("Routed UI requires its input service");
+        }
+        if (this.input == input && this.inputRouter == router) {
             return this;
         }
         if (this.input != null) {
             hidePlatformTextInput(this.input);
-            this.input.removeProcessor(inputHandler);
+            if (inputRouter != null) inputRouter.remove(inputHandler);
+            else this.input.removeProcessor(inputHandler);
         }
         this.input = input;
+        this.inputRouter = router;
         if (this.input != null) {
-            this.input.addProcessor(inputHandler);
+            if (inputRouter != null) inputRouter.add(inputHandler);
+            else this.input.addProcessor(inputHandler);
             requestPlatformTextInput(focusedNode);
         }
         return this;
@@ -668,8 +715,10 @@ public final class UiRoot implements Disposable, UiStateListener {
         tooltipAnchors.clear();
         if (input != null) {
             hidePlatformTextInput(input);
-            input.removeProcessor(inputHandler);
+            if (inputRouter != null) inputRouter.remove(inputHandler);
+            else input.removeProcessor(inputHandler);
             input = null;
+            inputRouter = null;
         }
         if (renderer != null) {
             renderer.dispose();
@@ -882,15 +931,17 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     float effectiveUiScale() {
-        float scale = logicalUiScale();
+        float scale = uiScale > 0.0f ? uiScale : 1.0f;
         if (autoUiScale && display != null) {
-            scale *= framebufferScale();
+            float contentScale = display.contentScale();
+            scale *= contentScale > 0.0f && Float.isFinite(contentScale) ? contentScale : framebufferScale();
         }
         return Math.max(0.25f, Math.min(4.0f, scale));
     }
 
     private float logicalUiScale() {
-        return Math.max(0.25f, Math.min(4.0f, uiScale > 0.0f ? uiScale : 1.0f));
+        // Input uses display coordinates, while rendering uses framebuffer pixels.
+        return effectiveUiScale() / (display != null ? framebufferScale() : 1.0f);
     }
 
     private float framebufferScale() {
@@ -3342,6 +3393,64 @@ public final class UiRoot implements Disposable, UiStateListener {
 
     private boolean isShiftDown() {
         return input != null && (input.isKeyPressed(Key.SHIFT_LEFT) || input.isKeyPressed(Key.SHIFT_RIGHT));
+    }
+
+    /**
+     * Reveals a node through its ancestor scroll containers using its laid-out bounds.
+     * Call on the application thread after composition (for example, after {@link #update(float)}),
+     * not from a content builder. Both axes and nested scroll containers are supported.
+     * Fully visible nodes leave scrolling unchanged. An oversized node is moved only until
+     * it covers the viewport on that axis. Offsets remain clamped to the available content.
+     * Hidden, detached, foreign, or null nodes are ignored. This does not change focus.
+     *
+     * @param node the node to reveal
+     * @return whether any scroll offset changed
+     */
+    public boolean ensureVisible(UiNode node) {
+        ensureComposed();
+        syncDisplayMetrics();
+        UiNode ancestor = node;
+        while (ancestor != null && ancestor != rootNode) {
+            if (!ancestor.visible()) {
+                return false;
+            }
+            ancestor = ancestor.parent();
+        }
+        if (node == null || ancestor != rootNode) {
+            return false;
+        }
+        boolean changed = false;
+        for (ancestor = node.parent(); ancestor != null; ancestor = ancestor.parent()) {
+            if (ancestor.type() != UiNodeType.SCROLL || ancestor.scrollState() == null) {
+                continue;
+            }
+            UiRect viewport = ancestor.bounds().inset(effectivePadding(ancestor));
+            UiRect bounds = node.bounds();
+            UiScrollState state = ancestor.scrollState();
+            float x = state.x();
+            float y = state.y();
+            state.scrollTo(x + revealDelta(bounds.x(), bounds.right(), viewport.x(), viewport.right()),
+                    y + revealDelta(bounds.y(), bounds.bottom(), viewport.y(), viewport.bottom()));
+            if (state.x() != x || state.y() != y) {
+                changed = true;
+                layout();
+            }
+        }
+        return changed;
+    }
+
+    private static float revealDelta(float start, float end, float visibleStart, float visibleEnd) {
+        if (visibleEnd <= visibleStart || (start <= visibleStart && end >= visibleEnd)) {
+            return 0.0f;
+        }
+        boolean fits = end - start <= visibleEnd - visibleStart;
+        if (start < visibleStart) {
+            return fits ? start - visibleStart : end - visibleEnd;
+        }
+        if (end > visibleEnd) {
+            return fits ? end - visibleEnd : start - visibleStart;
+        }
+        return 0.0f;
     }
 
     private void ensureTextCursorVisible(UiNode node) {

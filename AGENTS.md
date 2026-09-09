@@ -29,6 +29,8 @@ Do not manually duplicate inventories that can be read from source or Gradle.
   proportionate validation within that scope. Ask before materially expanding
   scope or performing destructive, expensive, or external actions.
 - Stop immediately when the user says stop.
+- Do not create Python (`.py`) files, including asset generators or temporary
+  helper scripts, unless the user explicitly requests them.
 - Inspect the current worktree before editing. Existing changes belong to the
   user unless the active request says otherwise.
 - Before a material investigation or change, state what is being checked, why
@@ -57,6 +59,11 @@ Use the architecture and common API documents for the complete durable rules.
 
 ## Change And Validation
 
+In the `tests` module, reserve `io.github.libfdx.tests` and its subpackages for
+executable tests only. Place helper classes, fixtures, utilities, and test
+infrastructure in a separate package within the same module, outside that
+namespace. Do not place helper class files alongside executable tests.
+
 1. Identify the smallest affected modules, public contracts, platforms, and
    consumers.
 2. Change the canonical source first, then update only directly affected tests,
@@ -72,6 +79,19 @@ successful build alone is not visual proof. Never describe an unavailable
 platform/provider as validated.
 
 ## Documentation Policy
+
+Use the ignored `/.plan/` folder for temporary Markdown (`.md`) plans written
+before implementation. Keep plans focused on scope, intended changes, and
+validation, and update them as implementation decisions change. This folder
+must contain only Markdown planning files; do not store PNGs, screenshots,
+logs, scripts, generated output, or other artifacts in it. Apart from these
+Markdown plans, store all temporary files and validation artifacts under the
+repository's root `build/` directory or the affected module's `build/` directory
+so they are covered by the existing Git ignore rule. Do not force-add them.
+
+Public documentation must not mention, link to, or depend on plan files. Once
+implemented, document durable behavior at its canonical owner using the source
+and verified behavior, without referring readers to the plan.
 
 Update documentation when a change invalidates:
 

@@ -14,6 +14,8 @@ public final class PlatformerGame {
     private static final int MAX_HAZARDS = 8;
     private static final int MAX_ENEMIES = 8;
     private static final int MAX_GOALS = 2;
+    // Less than 0.001 source pixel: tolerate roundoff on the non-moving axis only.
+    private static final float CONTACT_EPSILON = 0.000001f;
 
     private final PlatformerInput input;
     private final Sprite[] sprites = new Sprite[MAX_SPRITES];
@@ -44,6 +46,22 @@ public final class PlatformerGame {
     private boolean gameOver;
     private boolean completed;
     private boolean restarting;
+    private float levelLeft = PlatformerConstants.LEVEL_LEFT, levelRight = PlatformerConstants.LEVEL_RIGHT;
+    private float spawnX = PlatformerConstants.PLAYER_START_X, spawnY = PlatformerConstants.PLAYER_START_Y;
+    private float cameraMaximum = PlatformerConstants.CAMERA_MAX_X;
+    private int events;
+    public static final int JUMP = 1, COIN = 2, HURT = 4, COMPLETE = 8, RESTART = 16;
+
+    /** Returns and clears simulation events since the last call; no callbacks or event objects. */
+    public int consumeEvents() { int result = events; events = 0; return result; }
+    public boolean playerFacingRight() { return playerFacingRight; }
+    /** Configures authored horizontal bounds before play; units match simulation positions. */
+    void levelBounds(float left, float right) {
+        if (!Float.isFinite(left) || !Float.isFinite(right) || right-left < PlatformerConstants.VIEW_WIDTH) {
+            throw new IllegalArgumentException("Level bounds must contain the view");
+        }
+        levelLeft = left; levelRight = right; cameraMaximum = right - PlatformerConstants.VIEW_RIGHT;
+    }
 
     /**
      * Creates an empty platformer simulation.
@@ -254,6 +272,7 @@ public final class PlatformerGame {
     public Sprite goalAt(int index) {
         return checkedSprite(goals, goalCount, index, "Goal");
     }
+    public int goalCount() { return goalCount; }
 
     Sprite addSprite(float x, float y, float halfWidth, float halfHeight, int regionId, int layer,
             float parallax) {
@@ -303,6 +322,7 @@ public final class PlatformerGame {
 
     void player(Sprite sprite) {
         player = sprite;
+        spawnX = sprite.x; spawnY = sprite.y;
     }
 
     private void updateInput() {
@@ -312,8 +332,8 @@ public final class PlatformerGame {
         boolean nextRestartDown = input != null && input.restartDown();
         leftDown = nextLeftDown;
         rightDown = nextRightDown;
-        jumpPressed = nextJumpDown && !jumpDown;
-        restartPressed = nextRestartDown && !restartDown;
+        jumpPressed = input != null && input.consumeJumpPress() || nextJumpDown && !jumpDown;
+        restartPressed = input != null && input.consumeRestartPress() || nextRestartDown && !restartDown;
         jumpDown = nextJumpDown;
         restartDown = nextRestartDown;
     }
@@ -326,13 +346,19 @@ public final class PlatformerGame {
         if ((!gameOver && !completed) || !restartPressed) {
             return;
         }
+        restart();
+    }
+
+    /** Restarts at the authored spawn and restores collectibles/enemies; input bindings remain owned by the caller. */
+    public void restart() {
+        if (player == null) { return; }
         cameraX = 0.0f;
         coinsCollected = 0;
         gameOver = false;
         completed = false;
         restarting = true;
-        player.x = PlatformerConstants.PLAYER_START_X;
-        player.y = PlatformerConstants.PLAYER_START_Y;
+        player.x = spawnX;
+        player.y = spawnY;
         playerVelocityX = 0.0f;
         playerVelocityY = 0.0f;
         playerOnGround = true;
@@ -343,6 +369,7 @@ public final class PlatformerGame {
         for (int i = 0; i < enemyCount; i++) {
             enemies[i].reset();
         }
+        events |= RESTART;
     }
 
     private void updatePlayer(float delta) {
@@ -369,6 +396,7 @@ public final class PlatformerGame {
         if (jumpPressed && playerOnGround) {
             playerVelocityY = PlatformerConstants.JUMP_VELOCITY;
             playerOnGround = false;
+            events |= JUMP;
         }
         if (delta <= 0.0f) {
             updatePlayerRegion();
@@ -381,14 +409,14 @@ public final class PlatformerGame {
 
         player.x += playerVelocityX * delta;
         resolveHorizontal();
-        player.x = clamp(player.x, PlatformerConstants.LEVEL_LEFT + player.halfWidth,
-                PlatformerConstants.LEVEL_RIGHT - player.halfWidth);
+        player.x = clamp(player.x, levelLeft + player.halfWidth, levelRight - player.halfWidth);
 
         player.y += playerVelocityY * delta;
         playerOnGround = false;
         resolveVertical();
         if (player.y < PlatformerConstants.FALL_Y) {
             gameOver = true;
+            events |= HURT;
             playerVelocityY = 0.0f;
         }
         updatePlayerRegion();
@@ -398,12 +426,15 @@ public final class PlatformerGame {
         if (playerVelocityX == 0.0f) {
             return;
         }
+        boolean movingRight = playerVelocityX > 0.0f;
         for (int i = 0; i < solidCount; i++) {
             Sprite solid = solids[i];
-            if (!overlaps(player, solid)) {
+            if (!overlaps(player, solid)
+                    || player.y - player.halfHeight >= solid.y + solid.halfHeight - CONTACT_EPSILON
+                    || player.y + player.halfHeight <= solid.y - solid.halfHeight + CONTACT_EPSILON) {
                 continue;
             }
-            if (playerVelocityX > 0.0f) {
+            if (movingRight) {
                 player.x = solid.x - solid.halfWidth - player.halfWidth;
             } else {
                 player.x = solid.x + solid.halfWidth + player.halfWidth;
@@ -413,12 +444,15 @@ public final class PlatformerGame {
     }
 
     private void resolveVertical() {
+        boolean falling = playerVelocityY <= 0.0f;
         for (int i = 0; i < solidCount; i++) {
             Sprite solid = solids[i];
-            if (!overlaps(player, solid)) {
+            if (!overlaps(player, solid)
+                    || player.x - player.halfWidth >= solid.x + solid.halfWidth - CONTACT_EPSILON
+                    || player.x + player.halfWidth <= solid.x - solid.halfWidth + CONTACT_EPSILON) {
                 continue;
             }
-            if (playerVelocityY <= 0.0f) {
+            if (falling) {
                 player.y = solid.y + solid.halfHeight + player.halfHeight;
                 playerOnGround = true;
             } else {
@@ -454,23 +488,27 @@ public final class PlatformerGame {
             if (!collectible.collected && overlaps(player, collectible)) {
                 collectible.collected = true;
                 coinsCollected += collectible.value;
+                events |= COIN;
             }
         }
         for (int i = 0; i < hazardCount; i++) {
             if (overlaps(player, hazards[i])) {
                 gameOver = true;
+                events |= HURT;
                 return;
             }
         }
         for (int i = 0; i < enemyCount; i++) {
             if (overlaps(player, enemies[i].sprite)) {
                 gameOver = true;
+                events |= HURT;
                 return;
             }
         }
         for (int i = 0; i < goalCount; i++) {
             if (overlaps(player, goals[i])) {
                 completed = true;
+                events |= COMPLETE;
                 return;
             }
         }
@@ -481,7 +519,7 @@ public final class PlatformerGame {
             return;
         }
         float target = clamp(player.x - 0.25f, PlatformerConstants.CAMERA_MIN_X,
-                PlatformerConstants.CAMERA_MAX_X);
+                cameraMaximum);
         float alpha = Math.min(1.0f, delta * PlatformerConstants.CAMERA_FOLLOW_SPEED);
         cameraX += (target - cameraX) * alpha;
     }

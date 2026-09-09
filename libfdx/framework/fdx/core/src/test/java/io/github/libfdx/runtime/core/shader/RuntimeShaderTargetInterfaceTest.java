@@ -8,6 +8,7 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 final class RuntimeShaderTargetInterfaceTest {
@@ -39,6 +40,8 @@ final class RuntimeShaderTargetInterfaceTest {
         assertEquals(RuntimeShaderBindingRemapKind.COMBINED_SAMPLER,
                 targetInterface.bindings()[1].kind());
         assertEquals(3, targetInterface.bindings()[2].targets().length);
+        assertArrayEquals(writer.bytes(), targetInterface.bytes());
+        assertArrayEquals(writer.bytes(), RuntimeShaderTargetInterface.fromBytes(targetInterface.bytes()).bytes());
     }
 
     @Test

@@ -174,8 +174,8 @@ final class DesktopCVulkan {
         fdxDesktopVulkanDestroyShaderModule(shaderModule);
     }
 
-    static void destroyRenderPipeline(long pipeline) {
-        fdxDesktopVulkanDestroyRenderPipeline(pipeline);
+    static void destroyRenderPipeline(long pipeline, boolean published) {
+        fdxDesktopVulkanDestroyRenderPipeline(pipeline, bool(published));
     }
 
     static void destroyBuffer(long buffer) {
@@ -307,7 +307,7 @@ final class DesktopCVulkan {
     private static native void fdxDesktopVulkanDestroyShaderModule(long shaderModule);
 
     @Import(name = "fdx_desktop_vulkan_destroy_render_pipeline")
-    private static native void fdxDesktopVulkanDestroyRenderPipeline(long pipeline);
+    private static native void fdxDesktopVulkanDestroyRenderPipeline(long pipeline, int published);
 
     @Import(name = "fdx_desktop_vulkan_destroy_buffer")
     private static native void fdxDesktopVulkanDestroyBuffer(long buffer);

@@ -18,6 +18,14 @@ import java.nio.charset.StandardCharsets;
  * @author xpenatan
  */
 final class DesktopCGLApi implements GLApi {
+    @Override public boolean supportsDepthTextures() { return true; }
+    @Override public void texImageDepth32F(int width, int height) {
+        DesktopCOpenGL.glTexImage2D(DesktopCOpenGL.TEXTURE_2D, 0, 0x8CAC, width, height, 0, 0x1902, 0x1406, Address.fromLong(0L));
+    }
+    @Override public void framebufferDepthTexture2D(int texture) {
+        DesktopCOpenGL.glFramebufferTexture2D(DesktopCOpenGL.FRAMEBUFFER, 0x8D00, DesktopCOpenGL.TEXTURE_2D, texture, 0);
+    }
+
     /**
      * Returns the create program.
      *
@@ -350,6 +358,16 @@ final class DesktopCGLApi implements GLApi {
      */
     @Override
     public void texImage2D(int width, int height, ByteBuffer data) {
+        texImage2D(io.github.libfdx.graphics.TextureFormat.RGBA8_UNORM, width, height, data);
+    }
+
+    @Override
+    public void framebufferSrgb(boolean enabled) {
+        if (enabled) DesktopCOpenGL.glEnable(0x8DB9); else DesktopCOpenGL.glDisable(0x8DB9);
+    }
+
+    @Override
+    public void texImage2D(io.github.libfdx.graphics.TextureFormat format, int width, int height, ByteBuffer data) {
         DesktopCOpenGL.glTexParameteri(DesktopCOpenGL.TEXTURE_2D, DesktopCOpenGL.TEXTURE_MIN_FILTER,
                 DesktopCOpenGL.LINEAR);
         DesktopCOpenGL.glTexParameteri(DesktopCOpenGL.TEXTURE_2D, DesktopCOpenGL.TEXTURE_MAG_FILTER,
@@ -358,7 +376,7 @@ final class DesktopCGLApi implements GLApi {
                 DesktopCOpenGL.CLAMP_TO_EDGE);
         DesktopCOpenGL.glTexParameteri(DesktopCOpenGL.TEXTURE_2D, DesktopCOpenGL.TEXTURE_WRAP_T,
                 DesktopCOpenGL.CLAMP_TO_EDGE);
-        DesktopCOpenGL.glTexImage2D(DesktopCOpenGL.TEXTURE_2D, 0, DesktopCOpenGL.RGBA8, width, height, 0,
+        DesktopCOpenGL.glTexImage2D(DesktopCOpenGL.TEXTURE_2D, 0, format.isSrgb() ? 0x8C43 : DesktopCOpenGL.RGBA8, width, height, 0,
                 DesktopCOpenGL.RGBA, DesktopCOpenGL.UNSIGNED_BYTE, Address.fromLong(0L));
         if (data != null) {
             texSubImage2D(width, height, data);

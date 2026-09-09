@@ -12,6 +12,7 @@ import io.github.libfdx.graphics.NativeWindow;
 import io.github.libfdx.graphics.NativeWindowPlatform;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.gl.GLGraphicsAttachment;
+import io.github.libfdx.graphics.shader.runtime.ShaderArtifactCache;
 import org.teavm.jso.JSBody;
 import org.teavm.jso.dom.html.HTMLCanvasElement;
 import org.teavm.jso.webgl.WebGLRenderingContext;
@@ -23,6 +24,15 @@ import org.teavm.jso.webgl.WebGLRenderingContext;
  */
 public final class WebGLProvider implements GraphicsAttachmentProvider, GraphicsProviderSupport {
     public static final ProviderId ID = ProviderId.of("webgl");
+    private ShaderArtifactCache shaderCache;
+
+    /** Borrowed WGSL/reflection and GLSL artifact cache for explicit loading preparation.
+     * Configure before attachment; the application keeps its store alive until preparation drains
+     * and owns storage disposal. Null disables caching. Browser compilation/linking still runs. */
+    public ShaderArtifactCache shaderCache() { return shaderCache; }
+
+    /** Sets the optional borrowed artifact cache for newly created attachments. */
+    public WebGLProvider shaderCache(ShaderArtifactCache value) { shaderCache = value; return this; }
 
     /**
      * Returns the identifier of the provider backing this object.
@@ -87,7 +97,7 @@ public final class WebGLProvider implements GraphicsAttachmentProvider, Graphics
         }
         return new GLGraphicsAttachment(ID, new WebGLApi(context), new WebGLSurface(),
                 environment.display().framebufferWidth(), environment.display().framebufferHeight(),
-                TextureFormat.RGBA8_UNORM);
+                TextureFormat.RGBA8_UNORM, null, shaderCache);
     }
 
     @JSBody(script =

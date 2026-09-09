@@ -1,6 +1,7 @@
 package io.github.libfdx.backend.android;
 
 import android.app.Activity;
+import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.view.Choreographer;
@@ -114,6 +115,17 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
     private long lastFrameTimeNanos;
     private float deltaTime;
     private long frameId;
+    private GraphicsAttachmentProvider[] startupProviders;
+    private int nextStartupAttempt;
+    private int activeStartupAttempt;
+    private boolean firstFrameCompleted;
+    private AndroidGraphicsStartupRecovery startupRecovery;
+    private GraphicsFailureCollector startupFailures = new GraphicsFailureCollector();
+
+    /** Clears the saved selection and pending marker before creating a new backend session/launch. */
+    public static void clearGraphicsStartupRecovery(Context context, String key) {
+        AndroidGraphicsStartupPreferences.clear(context, key);
+    }
 
     /**
      * Returns the identifier of the provider backing this object.
@@ -226,10 +238,15 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
             createSessionIfNeeded();
             return;
         }
-        if (graphics != null) {
-            graphics.resize(display.framebufferWidth(), display.framebufferHeight());
+        try {
+            if (graphics != null) {
+                graphics.resize(display.framebufferWidth(), display.framebufferHeight());
+            }
+            listener.resize(display.width(), display.height());
+        } catch (RuntimeException failure) {
+            if (firstFrameCompleted) throw failure;
+            retryStartup(failure);
         }
-        listener.resize(display.width(), display.height());
     }
 
     /**
@@ -266,9 +283,14 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         RuntimeCore.registerProvider(new AndroidRuntimeCoreProvider());
         MathAcceleration.register(new AndroidNativeMathAccelerator());
 
-        listener.create(fdx);
-        listenerCreated = true;
-        listener.resize(display.width(), display.height());
+        try {
+            listenerCreated = true; // Partial create must also receive dispose before retrying.
+            listener.create(fdx);
+            listener.resize(display.width(), display.height());
+        } catch(RuntimeException failure) {
+            retryStartup(failure);
+            return;
+        }
         lifecycle = ApplicationLifecycle.RUNNING;
         lastFrameTimeNanos = System.nanoTime();
         postFrameCallbackIfNeeded();
@@ -294,26 +316,48 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
             throw new FdxException("No Android graphics provider configured");
         }
 
-        GraphicsFailureCollector failures = new GraphicsFailureCollector();
-        GraphicsAttachment graphicsAttachment = tryCreateGraphics(graphicsProvider, graphicsEnvironment, failures);
-        if (graphicsAttachment != null) {
-            return graphicsAttachment;
-        }
-
-        if (config.graphicsFallbackEnabled()) {
-            GraphicsAttachmentProvider[] fallbackGraphics = config.fallbackGraphics();
-            for (GraphicsAttachmentProvider fallbackProvider : fallbackGraphics) {
-                if (fallbackProvider == null || fallbackProvider.providerId().equals(graphicsProvider.providerId())) {
-                    continue;
-                }
-                graphicsAttachment = tryCreateGraphics(fallbackProvider, graphicsEnvironment, failures);
-                if (graphicsAttachment != null) {
-                    return graphicsAttachment;
-                }
+        if(startupProviders == null) {
+            GraphicsAttachmentProvider[] fallbacks = config.graphicsFallbackEnabled()
+                    ? config.fallbackGraphics() : new GraphicsAttachmentProvider[0];
+            startupProviders = new GraphicsAttachmentProvider[fallbacks.length + 1];
+            startupProviders[0] = graphicsProvider;
+            System.arraycopy(fallbacks, 0, startupProviders, 1, fallbacks.length);
+            if(config.graphicsStartupRecoveryKey() != null) {
+                startupRecovery = AndroidGraphicsStartupPreferences.create(activity,
+                        config.graphicsStartupRecoveryKey(), startupProviders.length);
+                nextStartupAttempt = startupRecovery.firstAttempt();
+                logger.info("Graphics startup recovery starts at attempt " + nextStartupAttempt);
             }
         }
+        while(nextStartupAttempt < startupProviders.length) {
+            int attempt = nextStartupAttempt++;
+            GraphicsAttachmentProvider provider = startupProviders[attempt];
+            if(attempt > 0 && provider == graphicsProvider) continue;
+            if(startupRecovery != null) startupRecovery.begin(attempt, System.currentTimeMillis());
+            logger.info("Graphics startup attempt " + attempt + ": " + provider.providerId());
+            GraphicsAttachment attachment = tryCreateGraphics(provider, graphicsEnvironment, startupFailures);
+            if(attachment != null) {
+                activeStartupAttempt = attempt;
+                return attachment;
+            }
+            if(startupRecovery != null) startupRecovery.cancel();
+        }
+        throw new FdxException("Android graphics startup exhausted its configured attempts. " + startupFailures.message()
+                + (startupRecovery != null ? " Reset graphics startup recovery to retry skipped attempts." : ""));
+    }
 
-        throw new FdxException("Android graphics startup failed. " + failures.message());
+    private void retryStartup(RuntimeException failure) {
+        startupFailures.add(startupProviders[activeStartupAttempt], "attempt " + activeStartupAttempt + ": " + failure);
+        logger.warn("Graphics startup attempt " + activeStartupAttempt + " failed before its first frame: " + failure);
+        int next = nextStartupAttempt;
+        try {
+            shutdown();
+        } catch(RuntimeException cleanupFailure) {
+            failure.addSuppressed(cleanupFailure);
+            throw failure; // A failed cleanup cannot safely hand the window to another provider.
+        }
+        nextStartupAttempt = next;
+        createSessionIfNeeded();
     }
 
     private GraphicsAttachment tryCreateGraphics(GraphicsAttachmentProvider provider,
@@ -381,26 +425,35 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
             return;
         }
 
-        if (graphics != null) {
-            graphics.processEvents();
-        }
-
-        long now = System.nanoTime();
-        deltaTime = (now - lastFrameTimeNanos) / 1000000000.0f;
-        lastFrameTimeNanos = now;
-        frameId++;
-
-        if (graphics == null || graphics.beginFrame()) {
-            try {
-                listener.render();
-                if (graphics != null) {
-                    listener.onFrameEnd();
+        try {
+            if (graphics != null) {
+                graphics.processEvents();
+            }
+            long now = System.nanoTime();
+            deltaTime = (now - lastFrameTimeNanos) / 1000000000.0f;
+            lastFrameTimeNanos = now;
+            frameId++;
+            if (graphics == null || graphics.beginFrame()) {
+                try {
+                    listener.render();
+                    if (graphics != null) {
+                        listener.onFrameEnd();
+                    }
+                } finally {
+                    if (graphics != null) {
+                        graphics.endFrame();
+                    }
                 }
-            } finally {
-                if (graphics != null) {
-                    graphics.endFrame();
+                if(!firstFrameCompleted) {
+                    if(startupRecovery != null) startupRecovery.firstFrame();
+                    firstFrameCompleted = true;
+                    logger.info("Graphics first frame completed for startup attempt " + activeStartupAttempt);
                 }
             }
+        } catch(RuntimeException failure) {
+            if(firstFrameCompleted) throw failure;
+            retryStartup(failure);
+            return;
         }
         postFrameCallbackIfNeeded();
     }
@@ -413,6 +466,7 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
             return;
         }
         paused = true;
+        if(startupRecovery != null) startupRecovery.cancel();
         removeFrameCallbackIfNeeded();
         if (listenerCreated) {
             listener.pause();
@@ -429,6 +483,9 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         }
         paused = false;
         if (listenerCreated) {
+            if(!firstFrameCompleted && startupRecovery != null) {
+                startupRecovery.begin(activeStartupAttempt, System.currentTimeMillis());
+            }
             listener.resume();
             lifecycle = ApplicationLifecycle.RUNNING;
             lastFrameTimeNanos = System.nanoTime();
@@ -647,17 +704,34 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
     }
 
     private void shutdown() {
+        RuntimeException failure = null;
+        try {
+            if(startupRecovery != null) startupRecovery.cancel();
+        } catch(RuntimeException error) {
+            failure = error;
+        }
+        firstFrameCompleted = false;
+        nextStartupAttempt = startupRecovery != null ? startupRecovery.firstAttempt() : 0;
         if (listenerCreated) {
             lifecycle = ApplicationLifecycle.DISPOSED;
             try {
                 listener.dispose();
+            } catch(RuntimeException error) {
+                if(failure == null) failure = error;
+                else failure.addSuppressed(error);
             } finally {
                 listenerCreated = false;
             }
         }
         if (graphics != null) {
-            graphics.dispose();
-            graphics = null;
+            try {
+                graphics.dispose();
+            } catch(RuntimeException error) {
+                if(failure == null) failure = error;
+                else failure.addSuppressed(error);
+            } finally {
+                graphics = null;
+            }
         }
         if (textInputController != null) {
             textInputController.hideTextInput();
@@ -667,6 +741,7 @@ public final class AndroidApplicationBackend implements ApplicationBackend, Appl
         input = null;
         RuntimeCore.registerProvider(null);
         MathAcceleration.register(null);
+        if(failure != null) throw failure;
     }
 
     /**

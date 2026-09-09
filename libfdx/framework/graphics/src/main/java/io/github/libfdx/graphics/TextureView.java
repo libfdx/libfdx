@@ -8,6 +8,8 @@ import io.github.libfdx.core.ProviderHandle;
  * @author xpenatan
  */
 public interface TextureView extends ProviderHandle {
+    /** The single attachment level selected by this view; external frame views use zero. */
+    default int mipLevel() { return 0; }
     /**
      * Returns the view width when known, or zero for an externally owned view
      * whose dimensions must be supplied through render-pass compatibility.

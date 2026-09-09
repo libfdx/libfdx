@@ -267,6 +267,9 @@ public final class RenderPassDescriptor {
      * @return the depth clear value
      */
     public float depthClearValue() {
+        if (depthStencilAttachment != null && depthStencilAttachment.depthLoadOp().isClear()) {
+            return depthStencilAttachment.depthLoadOp().red();
+        }
         return Float.isNaN(depthClearValue)
                 ? ClipDepthRange.getDefault().depthClearValue()
                 : depthClearValue;

@@ -12,6 +12,17 @@ import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 public final class DesktopApplicationConfig extends ApplicationConfig {
     private DisplayConfig displayConfig = new DisplayConfig();
     private GraphicsAttachmentProvider graphics;
+    private io.github.libfdx.audio.AudioProvider audio;
+
+    /** Returns explicit optional audio setup, or null to disable audio. */
+    public io.github.libfdx.audio.AudioProvider audio() { return audio; }
+
+    /** Configures backend-owned audio. Device setup failure aborts startup. */
+    public DesktopApplicationConfig audio(io.github.libfdx.audio.AudioProvider audio) {
+        this.audio = audio;
+        audioProvider(audio != null ? audio.providerId() : null);
+        return this;
+    }
 
     /**
      * Returns the display config.

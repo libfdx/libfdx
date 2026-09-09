@@ -3,6 +3,9 @@
 .*.swp
 .DS_STORE
 
+# JVM heap dumps
+*.hprof
+
 #Ignore Eclipse files
 .classpath
 .project
@@ -73,3 +76,6 @@ CURRENT_CHAT_CONTEXT
 # Local agent recovery state
 .agents/*
 .codex/*
+
+# Local plans
+/.plan/

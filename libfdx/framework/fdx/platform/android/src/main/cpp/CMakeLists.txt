@@ -31,6 +31,7 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LIBFDX_ANDROID_PAGE_SIZE
 set(LIBFDX_RUNTIME_FDX_ANDROID_SOURCES
     libfdx_android_freetype_jni.cpp
     libfdx_android_math_jni.cpp
+    libfdx_android_gles_jni.cpp
     "${LIBFDX_RUNTIME_FDX_NATIVE_DIR}/libfdx_freetype.cpp"
     "${LIBFDX_RUNTIME_FDX_NATIVE_DIR}/libfdx_math.cpp")
 
@@ -54,7 +55,7 @@ if(LIBFDX_ENABLE_SHADER_COMPILER)
 endif()
 
 target_link_options(fdx PRIVATE ${LIBFDX_ANDROID_PAGE_SIZE_LINK_OPTIONS})
-target_link_libraries(fdx PRIVATE fdx_natives::freetype)
+target_link_libraries(fdx PRIVATE fdx_natives::freetype dl EGL GLESv2)
 
 if(LIBFDX_ENABLE_SHADER_COMPILER)
     target_link_libraries(fdx PRIVATE

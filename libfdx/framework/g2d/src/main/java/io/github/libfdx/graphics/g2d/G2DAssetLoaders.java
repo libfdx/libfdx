@@ -28,8 +28,11 @@ public final class G2DAssetLoaders {
             throw new FdxException("GraphicsContext cannot be null");
         }
         ImageAssetLoader.register(assets);
+        io.github.libfdx.assets.loaders.AtlasDataLoader.register(assets);
+        assets.registerLoader(SpriteAtlas.class, new SpriteAtlasLoader());
         assets.registerLoader(io.github.libfdx.graphics.Texture.class, new TextureAssetLoader(graphics));
         assets.registerLoader(TextureRegion.class, new TextureRegionAssetLoader());
+        assets.registerLoader(TileMapAsset.class, new TileMapAssetLoader());
         assets.registerLoader(BitmapFont.class, new BitmapFontAssetLoader(graphics));
     }
 }

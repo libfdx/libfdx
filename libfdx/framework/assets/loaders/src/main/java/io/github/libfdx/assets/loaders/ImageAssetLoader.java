@@ -11,6 +11,8 @@ import org.teavm.interop.Address;
 import org.teavm.interop.Import;
 import org.teavm.interop.c.Include;
 import org.teavm.jso.JSBody;
+import org.teavm.jso.JSFunctor;
+import org.teavm.jso.JSObject;
 import org.teavm.jso.typedarrays.Int8Array;
 
 import java.io.ByteArrayInputStream;
@@ -54,8 +56,12 @@ public final class ImageAssetLoader implements AssetLoader<ImageData> {
      */
     @Override
     public FdxFuture<ImageData> load(final AssetLoadContext context, final AssetDescriptor<ImageData> descriptor) {
-        return FdxFuture.supply(() -> decode(descriptor.path(),
-                context.files().internal(descriptor.path()).readBytes().get()));
+        FdxFuture<ImageData> result = FdxFuture.pending();
+        context.readBytes(context.files().internal(descriptor.path()))
+                .onSuccess(bytes -> context.asyncFuture(() -> decodeAsync(descriptor.path(), bytes))
+                        .onSuccess(result::complete).onFailure(result::completeExceptionally))
+                .onFailure(result::completeExceptionally);
+        return result;
     }
 
     /**
@@ -76,6 +82,8 @@ public final class ImageAssetLoader implements AssetLoader<ImageData> {
      * @return the decode
      */
     public static ImageData decode(String path, byte[] bytes) {
+        ImageData png = PngRgbaDecoder.decode(bytes);
+        if (png != null) return png;
         ImageData browserImage = decodeWithBrowser(path);
         if (browserImage != null) {
             return browserImage;
@@ -94,6 +102,70 @@ public final class ImageAssetLoader implements AssetLoader<ImageData> {
         }
         throw new FdxException("Could not decode image as PNG or JPG");
     }
+
+    /**
+     * Prepares image pixels, including deferred browser images. May complete inline
+     * on the caller (CPU decoding) or later on the browser event loop. Managed loads
+     * dispatch this through the preparation executor and deliver through update.
+     * Raw RGB/RGBA8 non-interlaced PNG preserves RGB at alpha zero; other browser
+     * layouts use canvas conversion, which can lose that hidden RGB and precision.
+     * The input bytes must remain unchanged until completion. No global cache is added.
+     */
+    public static FdxFuture<ImageData> decodeAsync(String path,byte[] bytes) {
+        try {
+            ImageData png=PngRgbaDecoder.decode(bytes);
+            if(png!=null) return FdxFuture.completed(png);
+            if(!isBrowserRuntime()) return FdxFuture.completed(decode(path,bytes));
+            // TeaVM C needs a direct target guard to prune browser interop during dependency analysis.
+            if(PlatformDetector.isLowLevel()) return FdxFuture.completed(decode(path,bytes));
+            ImageData cached=decodeWithBrowser(path);
+            if(cached!=null) return FdxFuture.completed(cached);
+            if(bytes==null || bytes.length==0 || bytes.length>64*1024*1024) throw new FdxException("Encoded image size is invalid");
+            FdxFuture<ImageData> result=FdxFuture.pending();
+            Int8Array encoded=Int8Array.create(bytes.length);
+            encoded.set(bytes);
+            decodeBrowserBytes(encoded,(width,height,pixels) -> {
+                ImageData image;
+                try {
+                    byte[] rgba=pixels.copyToJavaArray();
+                    ByteBuffer buffer=ByteBuffer.allocateDirect(rgba.length); buffer.put(rgba).flip();
+                    image=new ImageData(width,height,buffer);
+                } catch(RuntimeException | Error error) { result.completeExceptionally(error); return; }
+                result.complete(image);
+            },error -> result.completeExceptionally(new FdxException("Browser image decode failed: "+error)));
+            return result;
+        } catch(RuntimeException | Error error) { return FdxFuture.failed(error); }
+    }
+
+    private static boolean isBrowserRuntime() {
+        try { return PlatformDetector.isJavaScript() || PlatformDetector.isWebAssemblyGC(); }
+        catch(LinkageError ignored) { return false; }
+    }
+
+    @JSFunctor private interface Decoded extends JSObject { void accept(int width,int height,Int8Array pixels); }
+    @JSFunctor private interface DecodeFailure extends JSObject { void accept(String message); }
+    @JSBody(params={"bytes","success","failure"},script=
+            "var blob=new Blob([bytes]);\n"+
+            "var promise;\n"+
+            "if(typeof createImageBitmap==='function') promise=createImageBitmap(blob);\n"+
+            "else promise=new Promise(function(resolve,reject) {\n"+
+            "  var image=new Image(),url=URL.createObjectURL(blob);\n"+
+            "  image.onload=function(){URL.revokeObjectURL(url);resolve(image);};\n"+
+            "  image.onerror=function(){URL.revokeObjectURL(url);reject(new Error('Invalid image'));};image.src=url;\n"+
+            "});\n"+
+            "promise.then(function(image) {\n"+
+            "  var width,height,rgba;\n"+
+            "  try {\n"+
+            "    width=image.width||image.naturalWidth;height=image.height||image.naturalHeight;\n"+
+            "    if(width<1||height<1||width*height>16777216) throw new Error('Image exceeds 16M pixels');\n"+
+            "    var canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;\n"+
+            "    var context=canvas.getContext('2d');if(!context) throw new Error('Canvas decode unavailable');\n"+
+            "    context.drawImage(image,0,0);rgba=context.getImageData(0,0,width,height).data;\n"+
+            "  } catch(error) { failure(String(error)); return;\n"+
+            "  } finally { if(typeof image.close==='function') image.close(); }\n"+
+            "  success(width,height,new Int8Array(rgba.buffer,rgba.byteOffset,rgba.byteLength));\n"+
+            "},function(error){failure(String(error));});")
+    private static native void decodeBrowserBytes(Int8Array bytes,Decoded success,DecodeFailure failure);
 
     private static ImageData decodeWithBrowser(String path) {
         try {

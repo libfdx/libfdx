@@ -1,8 +1,12 @@
 package io.github.libfdx.graphics.g2d;
 
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.graphics.particles.ParticleCurve;
+import io.github.libfdx.graphics.particles.ParticleVolume;
 
 /**
+ * Not thread-safe. Owns only CPU storage; textures and renderers are borrowed.
+ * Configuration of motion/curves affects live particles; spawn ranges affect future particles.
  * Updates and renders a fixed-capacity 2D particle emitter.
  *
  * @author xpenatan
@@ -27,6 +31,13 @@ public final class ParticleEmitter2D {
     private final float[] endGreen;
     private final float[] endBlue;
     private final float[] endAlpha;
+    private float spawnWidth, spawnHeight;
+    private float drag;
+    private float turbulenceStrength, turbulenceFrequency = 1, simulationTime;
+    private float aspectRatio = 1;
+    private ParticleCurve sizeCurve = ParticleCurve.LINEAR;
+    private ParticleCurve colorCurve = ParticleCurve.LINEAR;
+    private ParticleCurve opacityCurve;
     private int activeCount;
     private int rngState = 0x1234ABCD;
     private float emitX;
@@ -370,8 +381,8 @@ public final class ParticleEmitter2D {
             }
             float halfSize = size * 0.5f;
             batch.color(red(i), green(i), blue(i), alpha(i));
-            batch.draw(region, x[i] - halfSize, y[i] - halfSize, size, size,
-                    halfSize, halfSize, rotationDegrees[i]);
+            batch.draw(region, x[i] - halfSize * aspectRatio, y[i] - halfSize, size * aspectRatio, size,
+                    halfSize * aspectRatio, halfSize, rotationDegrees[i]);
             drawn++;
         }
         batch.color(1.0f, 1.0f, 1.0f, 1.0f);
@@ -448,7 +459,7 @@ public final class ParticleEmitter2D {
      */
     public float size(int index) {
         checkIndex(index);
-        return lerp(startSize[index], endSize[index], progress(index));
+        return lerp(startSize[index], endSize[index], sizeCurve.sample(progress(index)));
     }
 
     /**
@@ -459,7 +470,7 @@ public final class ParticleEmitter2D {
      */
     public float red(int index) {
         checkIndex(index);
-        return lerp(startRed[index], endRed[index], progress(index));
+        return lerp(startRed[index], endRed[index], colorCurve.sample(progress(index)));
     }
 
     /**
@@ -470,7 +481,7 @@ public final class ParticleEmitter2D {
      */
     public float green(int index) {
         checkIndex(index);
-        return lerp(startGreen[index], endGreen[index], progress(index));
+        return lerp(startGreen[index], endGreen[index], colorCurve.sample(progress(index)));
     }
 
     /**
@@ -481,7 +492,7 @@ public final class ParticleEmitter2D {
      */
     public float blue(int index) {
         checkIndex(index);
-        return lerp(startBlue[index], endBlue[index], progress(index));
+        return lerp(startBlue[index], endBlue[index], colorCurve.sample(progress(index)));
     }
 
     /**
@@ -492,7 +503,7 @@ public final class ParticleEmitter2D {
      */
     public float alpha(int index) {
         checkIndex(index);
-        return lerp(startAlpha[index], endAlpha[index], progress(index));
+        return lerp(startAlpha[index], endAlpha[index], colorCurve.sample(progress(index))) * (opacityCurve == null ? 1 : opacityCurve.sample(progress(index)));
     }
 
     /**
@@ -506,12 +517,82 @@ public final class ParticleEmitter2D {
         return rotationDegrees[index];
     }
 
+    /** Sets the centered rectangular spawn area for future particles. Full extents must be nonnegative. */
+    public ParticleEmitter2D spawnArea(float width, float height) {
+        validateRange(width, width, false, "spawn width");
+        validateRange(height, height, false, "spawn height");
+
+        spawnWidth = width;
+        spawnHeight = height;
+
+        return this;
+    }
+
+    /** Sets exponential velocity damping per second, applied to all live particles. Zero disables drag. */
+    public ParticleEmitter2D drag(float value) {
+        validateRange(value, value, false, "particle drag");
+        drag = value;
+        return this;
+    }
+
+    /** Sets rendered width / height for all live particles; size remains the height. */
+    public ParticleEmitter2D aspectRatio(float value) {
+        validateRange(value, value, true, "particle aspect ratio");
+        aspectRatio = value;
+        return this;
+    }
+
+    /**
+     * Borrows immutable curves for all live particles. Size/color curves control interpolation
+     * between spawn-sampled endpoints. Opacity multiplies interpolated alpha; null disables it.
+     * Custom curves allow pulses, delayed growth, and fade-in without per-frame allocation.
+     */
+    public ParticleEmitter2D curves(ParticleCurve size, ParticleCurve color, ParticleCurve opacity) {
+        if (size == null || color == null) throw new FdxException("Size and color curves cannot be null");
+        sizeCurve = size;
+        colorCurve = color;
+        opacityCurve = opacity;
+        return this;
+    }
+
+    /** Sets smooth world-space turbulent acceleration; strength >= 0 and frequency > 0. */
+    public ParticleEmitter2D turbulence(float strength, float frequency) {
+        validateRange(strength, strength, false, "turbulence strength");
+        validateRange(frequency, frequency, true, "turbulence frequency");
+        turbulenceStrength = strength; turbulenceFrequency = frequency; return this;
+    }
+
+    /**
+     * Deposits live particles into a borrowed density volume without drawing sprites or allocating.
+     * The 2D plane is placed at the supplied world Z; each particle has spherical thickness.
+     * Clear the volume once before depositing all emitters. Size is the kernel diameter.
+     */
+    public void deposit(ParticleVolume volume, ParticleVolume.Medium medium, float worldZ) {
+        if (volume == null || medium == null) throw new FdxException("Volume and medium are required");
+        validateFinite(worldZ, "volume z");
+        for (int i = 0; i < activeCount; i++) {
+            float radius = size(i) * 0.5f;
+            float opacity = alpha(i);
+            if (radius > 0 && opacity > 0) volume.add(x[i], y[i], worldZ, radius,
+                    opacity * 2, 1 - progress(i), medium);
+        }
+    }
+
     private void updateActive(float deltaSeconds) {
+        simulationTime += deltaSeconds;
+        float damping = (float)Math.exp(-drag * deltaSeconds);
         int i = 0;
         while (i < activeCount) {
+            float phase = simulationTime * 1.3f;
+            float fx = x[i] * turbulenceFrequency;
+            float fy = y[i] * turbulenceFrequency;
+            velocityX[i] += turbulenceStrength * (float)Math.sin(fy * 2.1f - phase) * deltaSeconds;
+            velocityY[i] += turbulenceStrength * 0.35f * (float)Math.sin(fx * 1.7f + phase) * deltaSeconds;
             velocityX[i] += gravityX * deltaSeconds;
             velocityY[i] += gravityY * deltaSeconds;
+            velocityX[i] *= damping;
             x[i] += velocityX[i] * deltaSeconds;
+            velocityY[i] *= damping;
             y[i] += velocityY[i] * deltaSeconds;
             rotationDegrees[i] += angularVelocityDegrees[i] * deltaSeconds;
             age[i] += deltaSeconds;
@@ -524,8 +605,8 @@ public final class ParticleEmitter2D {
     }
 
     private void spawn(int index) {
-        x[index] = emitX;
-        y[index] = emitY;
+        x[index] = emitX + random(-spawnWidth * 0.5f, spawnWidth * 0.5f);
+        y[index] = emitY + random(-spawnHeight * 0.5f, spawnHeight * 0.5f);
         age[index] = 0.0f;
         lifetime[index] = random(minLifetime, maxLifetimeValue);
         float angle = (float)Math.toRadians(directionDegrees + (nextFloat() * 2.0f - 1.0f)

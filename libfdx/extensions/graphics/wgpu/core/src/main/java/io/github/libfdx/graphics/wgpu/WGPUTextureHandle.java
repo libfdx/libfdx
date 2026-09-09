@@ -20,7 +20,7 @@ import io.github.libfdx.graphics.TextureWrap;
 final class WGPUTextureHandle implements Texture {
     private final WGPUResourceDomain resourceDomain;
     private WGPUTextureAllocation allocation;
-    private final WGPUTextureViewHandle view;
+    private final WGPUTextureViewHandle[] views;
     private final String label;
     private final int width;
     private final int height;
@@ -29,6 +29,8 @@ final class WGPUTextureHandle implements Texture {
     private final TextureFormat format;
     private final TextureUsage usage;
     private final TextureFilter filter;
+    private final TextureFilter magFilter;
+    private final io.github.libfdx.graphics.TextureMipmapFilter mipmapFilter;
     private final TextureWrap wrapS;
     private final TextureWrap wrapT;
     private boolean disposed;
@@ -36,6 +38,13 @@ final class WGPUTextureHandle implements Texture {
     WGPUTextureHandle(WGPUResourceDomain resourceDomain, WGPUTextureAllocation allocation, String label, int width,
             int height, int mipLevelCount, int sampleCount, TextureFormat format, TextureUsage usage, TextureFilter filter,
             TextureWrap wrapS, TextureWrap wrapT) {
+        this(resourceDomain, allocation, label, width, height, mipLevelCount, sampleCount, format, usage, filter,
+                filter, io.github.libfdx.graphics.TextureMipmapFilter.NONE, wrapS, wrapT);
+    }
+
+    WGPUTextureHandle(WGPUResourceDomain resourceDomain, WGPUTextureAllocation allocation, String label, int width,
+            int height, int mipLevelCount, int sampleCount, TextureFormat format, TextureUsage usage, TextureFilter filter,
+            TextureFilter magFilter, io.github.libfdx.graphics.TextureMipmapFilter mipmapFilter, TextureWrap wrapS, TextureWrap wrapT) {
         if (resourceDomain == null || allocation == null || allocation.resourceDomain() != resourceDomain) {
             throw new FdxException("WGPU texture allocation is incompatible with its resource domain");
         }
@@ -49,9 +58,12 @@ final class WGPUTextureHandle implements Texture {
         this.format = format != null ? format : TextureFormat.RGBA8_UNORM;
         this.usage = usage != null ? usage : TextureUsage.SAMPLED;
         this.filter = filter != null ? filter : TextureFilter.LINEAR;
+        this.magFilter = magFilter;
+        this.mipmapFilter = mipmapFilter;
         this.wrapS = wrapS != null ? wrapS : TextureWrap.CLAMP_TO_EDGE;
         this.wrapT = wrapT != null ? wrapT : TextureWrap.CLAMP_TO_EDGE;
-        view = new WGPUTextureViewHandle(this);
+        views = new WGPUTextureViewHandle[mipLevelCount];
+        for (int i = 0; i < views.length; i++) views[i] = new WGPUTextureViewHandle(this, i);
     }
 
     WGPUTexture nativeTexture() {
@@ -61,6 +73,8 @@ final class WGPUTextureHandle implements Texture {
     WGPUTextureView nativeView() {
         return allocation.nativeView();
     }
+
+    WGPUTextureView nativeAttachmentView(int level) { return allocation.nativeAttachmentView(level); }
 
     WGPUTextureView nativeStorageView() {
         return allocation.nativeStorageView();
@@ -91,13 +105,16 @@ final class WGPUTextureHandle implements Texture {
         return label;
     }
 
-    int mipLevelCount() {
+    @Override public int mipLevelCount() {
         return mipLevelCount;
     }
 
     TextureFilter filter() {
         return filter;
     }
+
+    TextureFilter magFilter() { return magFilter; }
+    io.github.libfdx.graphics.TextureMipmapFilter mipmapFilter() { return mipmapFilter; }
 
     TextureWrap wrapS() {
         return wrapS;
@@ -159,7 +176,12 @@ final class WGPUTextureHandle implements Texture {
      */
     @Override
     public TextureView view() {
-        return view;
+        return views[0];
+    }
+
+    @Override public TextureView view(int level) {
+        mipWidth(level);
+        return views[level];
     }
 
     /**

@@ -1,13 +1,13 @@
 package io.github.libfdx.core;
 
-import org.junit.jupiter.api.Test;
-
+import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -22,6 +22,45 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * @author xpenatan
  */
 final class FdxFutureTest {
+    @Test
+    void dispatchedSuccessDefersEarlyLateAndNestedListenersWithoutDelayingResult() {
+        var queue = new ArrayDeque<Runnable>();
+        FdxFuture<String> future = FdxFuture.pending(queue::addLast);
+        List<String> events = new ArrayList<>();
+        future.onSuccess(value -> {
+            events.add("early:" + value);
+            future.onSuccess(nested -> events.add("nested:" + nested));
+        });
+        future.onFailure(error -> events.add("wrong"));
+        future.complete("ready");
+        future.onSuccess(value -> events.add("late:" + value));
+        future.complete("ignored");
+        assertTrue(events.isEmpty());
+        assertEquals("ready", future.get());
+        assertEquals(2, queue.size());
+        while (!queue.isEmpty()) queue.removeFirst().run();
+        assertEquals(List.of("early:ready", "late:ready", "nested:ready"), events);
+    }
+
+    @Test
+    void dispatchedFailureKeepsResultAndLeavesListenerErrorsToTheDispatcher() {
+        var queue = new ArrayDeque<Runnable>();
+        FdxFuture<String> future = FdxFuture.pending(queue::addLast);
+        var resultError = new IllegalArgumentException("shader failed");
+        var listenerError = new IllegalStateException("listener failed");
+        List<Throwable> errors = new ArrayList<>();
+        future.onFailure(error -> { throw listenerError; });
+        future.onFailure(errors::add);
+        future.onSuccess(value -> { throw new AssertionError("wrong path"); });
+        future.completeExceptionally(resultError);
+        future.onFailure(errors::add);
+        assertTrue(errors.isEmpty());
+        assertSame(resultError, assertThrows(IllegalArgumentException.class, future::get));
+        assertSame(listenerError, assertThrows(IllegalStateException.class, queue.removeFirst()::run));
+        while (!queue.isEmpty()) queue.removeFirst().run();
+        assertEquals(List.of(resultError, resultError), errors);
+    }
+
     @Test
     void successDispatchPreservesOrderAndContinuesAfterCallbackFailures() {
         FdxFuture<String> future = FdxFuture.pending();

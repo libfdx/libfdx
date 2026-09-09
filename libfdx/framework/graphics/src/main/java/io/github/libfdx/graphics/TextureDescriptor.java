@@ -15,6 +15,9 @@ public final class TextureDescriptor {
     private TextureUsage usage = TextureUsage.SAMPLED;
     private int sampleCount = 1;
     private TextureFilter filter = TextureFilter.LINEAR;
+    private TextureFilter magFilter = TextureFilter.LINEAR;
+    private TextureMipmapFilter mipmapFilter = TextureMipmapFilter.NONE;
+    private int mipLevelCount = 1;
     private TextureWrap wrapS = TextureWrap.CLAMP_TO_EDGE;
     private TextureWrap wrapT = TextureWrap.CLAMP_TO_EDGE;
 
@@ -176,14 +179,39 @@ public final class TextureDescriptor {
         return filter;
     }
 
+    /** Returns the minification filter; filter() is its legacy alias. */
+    public TextureFilter minFilter() { return filter; }
+    public TextureFilter magFilter() { return magFilter; }
+    public TextureMipmapFilter mipmapFilter() { return mipmapFilter; }
+    public int mipLevelCount() { return mipLevelCount; }
+
+    /** Requests exactly this many allocated levels, including level zero. No levels are generated. */
+    public TextureDescriptor mipLevelCount(int count) {
+        if (count < 1) throw new FdxException("Texture mip count must be positive");
+        mipLevelCount = count;
+        return this;
+    }
+
+    /** Selects this texture's default sampler. Mip filtering requires explicitly allocated/uploaded levels. */
+    public TextureDescriptor filters(TextureFilter min, TextureFilter mag, TextureMipmapFilter mipmap) {
+        if (min == null || mag == null || mipmap == null) throw new FdxException("Texture filters cannot be null");
+        filter = min;
+        magFilter = mag;
+        mipmapFilter = mipmap;
+        return this;
+    }
+
     /**
-     * Sets the sampled texture filter and returns this texture descriptor.
+     * Sets both minification and magnification filters and disables mip sampling. The allocated
+     * mip count is unchanged. Use filters(min, mag, mipmap) for independent choices.
      *
      * @param filter the sampled texture filter
      * @return this texture descriptor for chaining
      */
     public TextureDescriptor filter(TextureFilter filter) {
         this.filter = filter != null ? filter : TextureFilter.LINEAR;
+        magFilter = this.filter;
+        mipmapFilter = TextureMipmapFilter.NONE;
         return this;
     }
 
@@ -241,6 +269,16 @@ public final class TextureDescriptor {
         if (width <= 0 || height <= 0) {
             throw new FdxException("Texture size must be set before creation");
         }
+        if (mipLevelCount > 32 - Integer.numberOfLeadingZeros(Math.max(width, height))) {
+            throw new FdxException("Texture mip count exceeds its size");
+        }
+        if (mipLevelCount > 1 || mipmapFilter != TextureMipmapFilter.NONE) {
+            capabilities.require(GraphicsFeature.TEXTURE_MIP_LEVELS);
+            if (format.isDepthStencil() || sampleCount != 1) {
+                throw new FdxException("Mip chains require single-sample color textures");
+            }
+        }
+        if (filter != magFilter) capabilities.require(GraphicsFeature.TEXTURE_MIN_MAG_FILTERS);
         if (format.isDepthStencil()) {
             if (!capabilities.supportsDepthStencilFormat(format)) {
                 throw new FdxException("Graphics device does not support depth/stencil format "
@@ -252,6 +290,11 @@ public final class TextureDescriptor {
         if (!capabilities.supportsSampleCount(format, sampleCount)) {
             throw new FdxException("Graphics device does not support sample count "
                     + sampleCount + " for texture format " + format);
+        }
+        if (format.isColor() && usage.sampled() && sampleCount == 1
+                && (filter == TextureFilter.LINEAR || magFilter == TextureFilter.LINEAR || mipmapFilter == TextureMipmapFilter.LINEAR)
+                && !capabilities.supportsColorFiltering(format)) {
+            throw new FdxException("Graphics device does not support linear filtering for " + format);
         }
         if (sampleCount > 1 && !usage.renderAttachment()) {
             throw new FdxException("Multisampled textures must allow render attachment use");

@@ -3,17 +3,13 @@ package io.github.libfdx.graphics.g3d;
 import io.github.libfdx.collections.KeyComparison;
 import io.github.libfdx.collections.ObjectIterator;
 import io.github.libfdx.collections.ObjectMap;
-import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
-import io.github.libfdx.graphics.shader.runtime.ShaderResourceBinding;
-import io.github.libfdx.graphics.camera.Camera;
-import io.github.libfdx.math.Color;
-import io.github.libfdx.math.Matrix4;
-import io.github.libfdx.math.Vector3;
-
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.Buffer;
 import io.github.libfdx.graphics.BufferDescriptor;
+import io.github.libfdx.graphics.camera.Camera;
+import io.github.libfdx.graphics.camera.CameraProjection;
+import io.github.libfdx.graphics.ColorTransfer;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.Mesh;
 import io.github.libfdx.graphics.PrimitiveTopology;
@@ -21,19 +17,25 @@ import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassCompatibility;
 import io.github.libfdx.graphics.RenderPipeline;
 import io.github.libfdx.graphics.RenderPipelineDescriptor;
+import io.github.libfdx.graphics.RenderTargetLayout;
 import io.github.libfdx.graphics.shader.runtime.ResolvedShaderPass;
+import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
+import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
+import io.github.libfdx.graphics.shader.runtime.ShaderRequest;
+import io.github.libfdx.graphics.shader.runtime.ShaderResourceBinding;
 import io.github.libfdx.graphics.shader.ShaderModule;
 import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
 import io.github.libfdx.graphics.shader.ShaderProfile;
-import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
-import io.github.libfdx.graphics.shader.runtime.ShaderRequest;
+import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphProvider;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
+import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.VertexAttribute;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
-import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphProvider;
-
+import io.github.libfdx.math.Color;
+import io.github.libfdx.math.Matrix4;
+import io.github.libfdx.math.Vector3;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
@@ -47,7 +49,7 @@ import java.util.Arrays;
  *
  * @author xpenatan
  */
-public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
+public final class PbrShaderProvider implements PreparedShaderProvider3D, Disposable {
     private static final int PRIMITIVE_TOPOLOGY_COUNT = PrimitiveTopology.values().length;
     private static final float[] IDENTITY_MATRIX_VALUES = Matrix4.IDENTITY.values();
     private static final int MAX_POINT_LIGHTS = PbrShaderParameters.MAX_POINT_LIGHTS;
@@ -55,7 +57,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
     private static final int SHADOW_TEXTURE_SLOT_OFFSET = 5;
     private static final int MAX_SHADER_BONES = PbrShaderParameters.MAX_BONES;
     private static final int MAX_SPOT_LIGHTS = PbrShaderParameters.MAX_SPOT_LIGHTS;
-    private static final String POSITION_COLOR_SHADER_SOURCE = """
+    static final String POSITION_COLOR_SHADER_SOURCE = """
             struct VertexInput {
                 @location(0) position : vec3f,
                 @location(1) color : vec4f,
@@ -85,6 +87,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 @location(4) pbr : vec3f,
                 @location(5) emissive : vec3f,
                 //__PBR_SKINNED_INPUTS__
+                //__PBR_TEXTURED_INPUTS__
             };
             struct VertexOutput {
                 @builtin(position) position : vec4f,
@@ -94,6 +97,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 @location(3) color : vec4f,
                 @location(4) pbr : vec3f,
                 @location(5) emissive : vec3f,
+                @location(6) uv1 : vec2f,
+                @location(7) tangent : vec4f,
             };
             struct PbrUniforms {
                 model : mat4x4<f32>,
@@ -138,6 +143,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 shadowCameraParams : vec4f,
                 shadowFilterParams : vec4f,
                 shadowFilterScales : vec4f,
+                textureTransforms : array<vec4f, 10>,
+                normalOcclusion : vec4f,
+                iblParams : vec4f,
+                iblRotation : vec4f,
                 //__PBR_SKINNED_UNIFORMS__
             };
             @group(0) @binding(0) var baseColorTexture : texture_2d<f32>;
@@ -158,6 +167,12 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             @group(0) @binding(15) var shadowSampler2 : sampler;
             @group(0) @binding(16) var shadowTexture3 : texture_2d<f32>;
             @group(0) @binding(17) var shadowSampler3 : sampler;
+            @group(0) @binding(18) var iblDiffuseTexture : texture_2d<f32>;
+            @group(0) @binding(19) var iblDiffuseSampler : sampler;
+            @group(0) @binding(20) var iblSpecularTexture : texture_2d<f32>;
+            @group(0) @binding(21) var iblSpecularSampler : sampler;
+            @group(0) @binding(22) var iblBrdfTexture : texture_2d<f32>;
+            @group(0) @binding(23) var iblBrdfSampler : sampler;
             @group(1) @binding(0) var<uniform> uniforms : PbrUniforms;
             const PI : f32 = 3.14159265359;
             @vertex
@@ -165,11 +180,17 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 var output : VertexOutput;
                 var localPosition = vec4f(input.position, 1.0);
                 var localNormal = vec4f(input.normal, 0.0);
+                var localTangent = vec4f(0.0);
+                var uv1 = vec2f(0.0);
+                //__PBR_TEXTURED_ASSIGN__
                 //__PBR_SKINNING_TRANSFORM__
                 //__PBR_VERTEX_GRAPH_EVALUATION__
                 let worldPosition = uniforms.model * localPosition;
                 output.worldPosition = worldPosition.xyz;
-                output.normal = (uniforms.model * localNormal).xyz;
+                output.normal = transformNormal(uniforms.model, localNormal.xyz);
+                output.tangent = vec4f((uniforms.model * vec4f(localTangent.xyz, 0.0)).xyz,
+                        localTangent.w * transformSign(uniforms.model));
+                output.uv1 = uv1;
                 output.uv = input.uv;
                 output.color = input.color;
                 output.pbr = input.pbr;
@@ -177,11 +198,40 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 output.position = uniforms.viewProjection * worldPosition;
                 return output;
             }
+            fn transformSign(m : mat4x4<f32>) -> f32 {
+                if (dot(m[0].xyz, cross(m[1].xyz, m[2].xyz)) < 0.0) { return -1.0; }
+                return 1.0;
+            }
+            fn transformNormal(m : mat4x4<f32>, n : vec3f) -> vec3f {
+                let cofactor = mat3x3<f32>(cross(m[1].xyz, m[2].xyz),
+                        cross(m[2].xyz, m[0].xyz), cross(m[0].xyz, m[1].xyz));
+                let result = cofactor * n * transformSign(m);
+                if (dot(result, result) < 1e-20) { return n; }
+                return normalize(result);
+            }
+            fn textureUv(input : VertexOutput, slot : i32) -> vec2f {
+                let row0 = uniforms.textureTransforms[slot * 2];
+                let row1 = uniforms.textureTransforms[slot * 2 + 1];
+                var uv = input.uv;
+                if (row0.w > 0.5) { uv = input.uv1; }
+                return vec2f(dot(row0.xyz, vec3f(uv, 1.0)), dot(row1.xyz, vec3f(uv, 1.0)))
+                        + uniforms.materialParams.zw;
+            }
             fn srgbToLinear(value : vec3f) -> vec3f {
-                return pow(max(value, vec3f(0.0)), vec3f(2.2));
+                return vec3f(srgbChannelToLinear(value.r), srgbChannelToLinear(value.g), srgbChannelToLinear(value.b));
+            }
+            fn srgbChannelToLinear(value : f32) -> f32 {
+                let c = max(value, 0.0);
+                if (c <= 0.04045) { return c / 12.92; }
+                return pow((c + 0.055) / 1.055, 2.4);
             }
             fn linearToSrgb(value : vec3f) -> vec3f {
-                return pow(max(value, vec3f(0.0)), vec3f(1.0 / 2.2));
+                return vec3f(linearChannelToSrgb(value.r), linearChannelToSrgb(value.g), linearChannelToSrgb(value.b));
+            }
+            fn linearChannelToSrgb(value : f32) -> f32 {
+                let c = max(value, 0.0);
+                if (c <= 0.0031308) { return c * 12.92; }
+                return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
             }
             fn neutralToneMapping(colorIn : vec3f) -> vec3f {
                 const startCompression = 0.76;
@@ -272,22 +322,48 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 let specular = (prefiltered * envBrdf + sunSpec) * uniforms.skyParams.z;
                 return (kd * diffuse + specular) * ao;
             }
-            fn mappedNormal(nIn : vec3f, worldPosition : vec3f, uv : vec2f) -> vec3f {
+            fn iblUv(direction : vec3f) -> vec2f {
+                let c = uniforms.iblRotation.x;
+                let s = uniforms.iblRotation.y;
+                let ray = normalize(vec3f(c * direction.x - s * direction.z, direction.y,
+                        s * direction.x + c * direction.z));
+                return vec2f(atan2(ray.z, ray.x) / (2.0 * PI) + 0.5, acos(clamp(ray.y, -1.0, 1.0)) / PI);
+            }
+            fn imageBasedLighting(n : vec3f, v : vec3f, albedo : vec3f,
+                    metallic : f32, roughness : f32, ao : f32) -> vec3f {
+                if (uniforms.iblParams.x < 0.5) { return vec3f(0.0); }
+                let ndv = clamp(dot(n, v), 0.0, 1.0);
+                let f0 = mix(vec3f(0.04), albedo, vec3f(metallic));
+                let kd = (vec3f(1.0) - fresnelSchlick(ndv, f0)) * (1.0 - metallic);
+                let diffuse = textureSampleLevel(iblDiffuseTexture, iblDiffuseSampler, iblUv(n), 0.0).rgb;
+                let specular = textureSampleLevel(iblSpecularTexture, iblSpecularSampler,
+                        iblUv(reflect(-v, n)), roughness * uniforms.iblParams.z).rgb;
+                let brdf = textureSampleLevel(iblBrdfTexture, iblBrdfSampler, vec2f(ndv, roughness), 0.0).rg;
+                return (kd * albedo * diffuse + specular * (f0 * brdf.x + vec3f(brdf.y)))
+                        * (ao * uniforms.iblParams.y);
+            }
+            fn mappedNormal(nIn : vec3f, worldPosition : vec3f, uv : vec2f, supplied : vec4f) -> vec3f {
                 let n = normalize(nIn);
                 if (uniforms.textureFlags.z < 0.5) {
                     return n;
                 }
-                let sampleNormal = textureSample(normalTexture, normalSampler, uv).xyz * 2.0 - vec3f(1.0);
+                let sampleNormal = (textureSample(normalTexture, normalSampler, uv).xyz * 2.0 - vec3f(1.0))
+                        * vec3f(uniforms.normalOcclusion.xx, 1.0);
                 let q1 = dpdx(worldPosition);
                 let q2 = dpdy(worldPosition);
                 let st1 = dpdx(uv);
                 let st2 = dpdy(uv);
-                let tangent = q1 * st2.y - q2 * st1.y;
+                let determinant = st1.x * st2.y - st2.x * st1.y;
+                var handedness = 1.0;
+                if (determinant < 0.0) { handedness = -1.0; }
+                var tangent = (q1 * st2.y - q2 * st1.y) * handedness;
+                if (abs(supplied.w) > 0.5) { tangent = supplied.xyz; handedness = supplied.w; }
+                tangent -= n * dot(n, tangent);
                 if (dot(tangent, tangent) < 0.000001) {
                     return n;
                 }
                 let t = normalize(tangent);
-                let b = normalize(cross(n, t));
+                let b = normalize(cross(n, t)) * handedness;
                 return normalize(mat3x3<f32>(t, b, n) * sampleNormal);
             }
             fn unpackShadowDepth(encodedDepth : vec4f) -> f32 {
@@ -530,18 +606,13 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                             (uvDx.x * depthDy - depthDx * uvDy.x)
                                     / gradientDeterminant);
                 }
-                // Constant bias is not enough on receivers that are nearly
-                // parallel to the light direction. In a coarse cascade, a
-                // small depth quantization error otherwise stretches into
-                // long self-shadow teeth across walls and other steep faces.
-                // Keep the configured cascade bias as the floor, then apply
-                // the same resolution-aware slope bias used by the Box3D
-                // solid renderer.
-                let biasResolutionScale = max(
-                        uniforms.shadowFilterParams.x * 2048.0, 1.0);
-                let receiverBias = max(shadowBias(cascadeIndex),
-                        mix(0.0040, 0.0008, normalDotLight)
-                                * biasResolutionScale);
+                // Cascades already convert world-space/texel bias to their
+                // own depth range. A fixed normalized floor expands into
+                // metres in a city and erases cars/building contact shadows.
+                // Receiver-plane PCF above handles the depth gradient; scale
+                // only the configured bias for grazing normals.
+                let receiverBias = max(shadowBias(cascadeIndex)
+                        * mix(2.0, 1.0, normalDotLight), 0.0000002);
                 let filterScale = shadowFilterScale(cascadeIndex);
                 let radiusX = max(uniforms.shadowFilterParams.x, 0.000001)
                         * uniforms.shadowFilterParams.z * filterScale;
@@ -549,39 +620,22 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                         * uniforms.shadowFilterParams.z * filterScale;
                 // Approximate the 1-4-6-4-1 Gaussian footprint with nine
                 // weighted taps instead of twenty-five texture fetches.
-                let x0 = -1.2 * radiusX;
-                let x1 = 0.0;
-                let x2 = 1.2 * radiusX;
-                let y0 = -1.2 * radiusY;
-                let y1 = 0.0;
-                let y2 = 1.2 * radiusY;
-                var visibility = shadowVisibility(cascadeIndex, uv, currentDepth,
-                        depthGradient, receiverBias,
-                        vec2f(x0, y0)) * 25.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
-                        depthGradient, receiverBias,
-                        vec2f(x1, y0)) * 30.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
-                        depthGradient, receiverBias,
-                        vec2f(x2, y0)) * 25.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
-                        depthGradient, receiverBias,
-                        vec2f(x0, y1)) * 30.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
-                        depthGradient, receiverBias,
-                        vec2f(x1, y1)) * 36.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
-                        depthGradient, receiverBias,
-                        vec2f(x2, y1)) * 30.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
-                        depthGradient, receiverBias,
-                        vec2f(x0, y2)) * 25.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
-                        depthGradient, receiverBias,
-                        vec2f(x1, y2)) * 30.0;
-                visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
-                        depthGradient, receiverBias,
-                        vec2f(x2, y2)) * 25.0;
+                // Keep the filter as loops: expanding these calls duplicates
+                // the bilinear comparisons and cascade branches nine times,
+                // making optimized runtime HLSL compilation very expensive.
+                var visibility = 0.0;
+                for (var y = 0; y < 3; y++) {
+                    for (var x = 0; x < 3; x++) {
+                        var weightX = 5.0;
+                        var weightY = 5.0;
+                        if (x == 1) { weightX = 6.0; }
+                        if (y == 1) { weightY = 6.0; }
+                        let offset = vec2f(f32(x - 1) * 1.2 * radiusX,
+                                f32(y - 1) * 1.2 * radiusY);
+                        visibility += shadowVisibility(cascadeIndex, uv, currentDepth,
+                                depthGradient, receiverBias, offset) * (weightX * weightY);
+                    }
+                }
                 return normalizedShadowVisibility(visibility);
             }
             fn directionalShadow(worldPosition : vec3f, normal : vec3f,
@@ -616,30 +670,38 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
             //__PBR_SURFACE_GRAPH_DECLARATIONS__
             @fragment
-            fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
-                let uv = input.uv + uniforms.materialParams.zw;
+            fn fragmentMain(input : VertexOutput, @builtin(front_facing) frontFacing : bool) -> @location(0) vec4f {
+                let uv = textureUv(input, 0);
                 var base = input.color;
                 if (uniforms.textureFlags.x > 0.5) {
                     let texel = textureSample(baseColorTexture, baseColorSampler, uv);
-                    base = vec4f(base.rgb * srgbToLinear(texel.rgb), base.a * texel.a);
+                    var sampledColor = texel.rgb;
+                    if (uniforms.textureFlags.x < 1.5) { sampledColor = srgbToLinear(sampledColor); }
+                    base = vec4f(base.rgb * sampledColor, base.a * texel.a);
                 }
                 //__PBR_ALPHA_TEST__
                 var ao = clamp(input.pbr.x, 0.0, 1.0);
                 var metallic = clamp(input.pbr.y, 0.0, 1.0);
                 var roughness = clamp(input.pbr.z, 0.04, 1.0);
                 if (uniforms.textureFlags.y > 0.5) {
-                    let mr = textureSample(metallicRoughnessTexture, metallicRoughnessSampler, uv);
+                    let mr = textureSample(metallicRoughnessTexture, metallicRoughnessSampler, textureUv(input, 1));
                     roughness = clamp(roughness * mr.g, 0.04, 1.0);
                     metallic = clamp(metallic * mr.b, 0.0, 1.0);
                 }
                 if (uniforms.textureFlags.w > 0.5) {
-                    ao *= textureSample(occlusionTexture, occlusionSampler, uv).r;
+                    ao *= mix(1.0, textureSample(occlusionTexture, occlusionSampler, textureUv(input, 3)).r,
+                            uniforms.normalOcclusion.y);
                 }
                 var emissive = input.emissive;
                 if (uniforms.emissiveFlags.x > 0.5) {
-                    emissive *= srgbToLinear(textureSample(emissiveTexture, emissiveSampler, uv).rgb);
+                    var sampledEmissive = textureSample(emissiveTexture, emissiveSampler, textureUv(input, 4)).rgb;
+                    if (uniforms.emissiveFlags.x < 1.5) { sampledEmissive = srgbToLinear(sampledEmissive); }
+                    emissive *= sampledEmissive;
                 }
-                var n = mappedNormal(input.normal, input.worldPosition, uv);
+                var n = mappedNormal(input.normal, input.worldPosition, textureUv(input, 2), input.tangent);
+                var facing = frontFacing;
+                if (uniforms.normalOcclusion.w < 0.0) { facing = !facing; }
+                if (uniforms.normalOcclusion.z > 0.5 && !facing) { n = -n; }
                 let worldPositionDx = dpdx(input.worldPosition);
                 let worldPositionDy = dpdy(input.worldPosition);
                 //__PBR_SURFACE_GRAPH_EVALUATION__
@@ -648,7 +710,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                         0.0, 1.0);
                 var color = albedo + emissive;
                 if (lightingInfluence > 0.0) {
-                let v = normalize(uniforms.cameraPosition.xyz - input.worldPosition);
+                var v = normalize(uniforms.cameraPosition.xyz - input.worldPosition);
+                if (uniforms.cameraDirection.w > 0.5) { v = -normalize(uniforms.cameraDirection.xyz); }
                 let l = normalize(-uniforms.lightDirection.xyz);
                 let radiance = uniforms.lightColorIntensity.rgb * uniforms.lightColorIntensity.a;
                 let shadowInfluence = clamp(uniforms.materialParams.y, 0.0, 1.0);
@@ -704,6 +767,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     }
                 }
                 color += skyEnvironmentContribution(n, v, albedo, metallic, roughness, ao);
+                color += imageBasedLighting(n, v, albedo, metallic, roughness, ao);
                 color += uniforms.ambientColor.rgb * albedo * ao;
                 color += emissive;
                 //__PBR_LIGHTING_GRAPH_EVALUATION__
@@ -714,11 +778,14 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 let fogRange = max(uniforms.fogParams.y - uniforms.fogParams.x, 0.0001);
                 let fogAmount = clamp((viewDistance - uniforms.fogParams.x) / fogRange,
                         0.0, uniforms.fogParams.z);
-                color = mix(color, srgbToLinear(uniforms.fogColor.rgb), fogAmount);
                 color *= max(uniforms.postProcessing.y, 0.0001);
                 if (uniforms.postProcessing.x > 0.5) {
                     color = neutralToneMapping(color);
                 }
+                // Fog is a display color: full fog must match a background cleared
+                // to that color, independently of scene exposure and tone mapping.
+                color = mix(color, srgbToLinear(uniforms.fogColor.rgb), fogAmount);
+                if (uniforms.postProcessing.z > 0.5) { return vec4f(color, base.a); }
                 return vec4f(linearToSrgb(color), base.a);
             }
             """;
@@ -734,6 +801,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
 
     static String pbrRendererTemplate(boolean skinned,
             String graphMaterialFields, boolean alphaTest) {
+        return pbrRendererTemplate(skinned, graphMaterialFields, alphaTest, false);
+    }
+
+    static String pbrRendererTemplate(boolean skinned,
+            String graphMaterialFields, boolean alphaTest, boolean textured) {
         String materialFields = graphMaterialFields != null
                 ? graphMaterialFields : "";
         String template = PBR_RENDERER_TEMPLATE.replace(
@@ -743,6 +815,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                         + "        discard;\n"
                         + "    }"
                         : "");
+        template = template.replace("//__PBR_TEXTURED_INPUTS__", textured
+                ? "@location(8) uv1 : vec2f,\n    @location(9) tangent : vec4f," : "")
+                .replace("//__PBR_TEXTURED_ASSIGN__", textured
+                        ? "uv1 = input.uv1; localTangent = input.tangent;" : "");
         if (!skinned) {
             return template.replace(
                     "//__PBR_SKINNED_UNIFORMS__",
@@ -758,36 +834,24 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                         + "    boneMatrices : array<mat4x4<f32>, 64>,"
                         + (materialFields.isEmpty() ? ""
                                 : "\n" + materialFields));
-        return source.replace(
-                "//__PBR_SKINNING_TRANSFORM__",
-                "if (uniforms.skinningParams.x > 0.0) {\n"
-                        + "        let joint0 = clamp(i32(input.joints.x), 0, 63);\n"
-                        + "        let joint1 = clamp(i32(input.joints.y), 0, 63);\n"
-                        + "        let joint2 = clamp(i32(input.joints.z), 0, 63);\n"
-                        + "        let joint3 = clamp(i32(input.joints.w), 0, 63);\n"
-                        + "        localPosition = (uniforms.boneMatrices[joint0] * vec4f(input.position, 1.0))\n"
-                        + "                * input.weights.x\n"
-                        + "                + (uniforms.boneMatrices[joint1] * vec4f(input.position, 1.0))\n"
-                        + "                * input.weights.y\n"
-                        + "                + (uniforms.boneMatrices[joint2] * vec4f(input.position, 1.0))\n"
-                        + "                * input.weights.z\n"
-                        + "                + (uniforms.boneMatrices[joint3] * vec4f(input.position, 1.0))\n"
-                        + "                * input.weights.w;\n"
-                        + "        localNormal = (uniforms.boneMatrices[joint0] * vec4f(input.normal, 0.0))\n"
-                        + "                * input.weights.x\n"
-                        + "                + (uniforms.boneMatrices[joint1] * vec4f(input.normal, 0.0))\n"
-                        + "                * input.weights.y\n"
-                        + "                + (uniforms.boneMatrices[joint2] * vec4f(input.normal, 0.0))\n"
-                        + "                * input.weights.z\n"
-                        + "                + (uniforms.boneMatrices[joint3] * vec4f(input.normal, 0.0))\n"
-                        + "                * input.weights.w;\n"
-                        + "    }");
+        return SkinningShader3D.FUNCTION + source.replace("//__PBR_SKINNING_TRANSFORM__", """
+                if (uniforms.skinningParams.x > 0.0) {
+                    let skinMatrix = skinTransform(input.joints, input.weights);
+                    localPosition = skinMatrix * localPosition;
+                    localNormal = vec4f(transformNormal(skinMatrix, localNormal.xyz), 0.0);
+                    localTangent = vec4f((skinMatrix * vec4f(localTangent.xyz, 0.0)).xyz,
+                            localTangent.w * transformSign(skinMatrix));
+                }
+                """);
     }
 
     private final PositionColorShader shader;
     private final GpuPbrShader gpuShader;
     private final ShaderGraphProvider ownedGraphProvider;
+    private final ModelShaderPlan preparationPlan;
     private boolean disposed;
+
+    @Override public ModelShaderPlan preparationPlan() { return preparationPlan; }
 
     /**
      * Creates a PBR shader provider.
@@ -805,7 +869,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
      * @param config the configuration
      */
     public PbrShaderProvider(GraphicsContext graphics, PbrShaderConfig config) {
-        this(graphics, config, standardGraphProvider(graphics));
+        this(graphics, config, config != null && config.shaderPlan() != null ? null : standardGraphProvider(graphics));
     }
 
     static PbrShaderProvider common(GraphicsContext graphics,
@@ -836,19 +900,25 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         }
         PbrShaderConfig safeConfig = config != null
                 ? config : new PbrShaderConfig();
+        preparationPlan = safeConfig.shaderPlan();
+        if (safeConfig.shaderPlan() != null) {
+            safeConfig.shaderPlan().requireDomain(graphics.device());
+            commonProvider = safeConfig.shaderPlan().commonProvider();
+            positionColorFallback = safeConfig.shaderPlan().supportsPositionColor();
+        }
         String providerId = graphics.providerId().value();
         PositionColorShader createdShader = null;
         GpuPbrShader createdGpuShader = null;
         try {
             createdShader = positionColorFallback
-                    ? new PositionColorShader(graphics) : null;
+                    ? new PositionColorShader(graphics, safeConfig.imageBasedLightingEnabled(), safeConfig.shaderPlan() != null) : null;
             if (usesGpuPbrShader(providerId)) {
                 if (commonProvider == null) {
                     throw new FdxException(
                             "GPU PBR rendering requires the standard graph provider");
                 }
                 createdGpuShader = new GpuPbrShader(graphics,
-                        providerId, safeConfig.maxBones(),
+                        providerId, safeConfig,
                         commonProvider);
             }
         } catch (RuntimeException failure) {
@@ -878,6 +948,35 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         }
         return new ShaderGraphProvider(graphics,
                 StandardPbrTechnique.create(graphics).technique());
+    }
+
+    static String variantKey(boolean skinned,
+            MaterialAlphaMode alphaMode, boolean textured) {
+        MaterialAlphaMode mode = alphaMode != null
+                ? alphaMode : MaterialAlphaMode.OPAQUE;
+        String alpha = switch (mode) {
+            case OPAQUE -> "";
+            case MASK -> "mask";
+            case BLEND -> "blend";
+        };
+        if (!skinned) {
+            if (!textured) return alpha;
+            return switch (mode) { case OPAQUE -> "textured"; case MASK -> "textured-mask"; case BLEND -> "textured-blend"; };
+        }
+        if (textured) return switch (mode) { case OPAQUE -> "textured-skinned"; case MASK -> "textured-skinned-mask"; case BLEND -> "textured-skinned-blend"; };
+        return switch (mode) { case OPAQUE -> "skinned"; case MASK -> "skinned-mask"; case BLEND -> "skinned-blend"; };
+    }
+
+    static boolean isPositionColorLayout(VertexLayout layout) {
+        if (layout.attributeCount() < 2) {
+            return false;
+        }
+        VertexAttribute position = layout.attribute(0);
+        VertexAttribute color = layout.attribute(1);
+        return position.location() == 0
+                && position.format() == VertexFormat.FLOAT32X3
+                && color.location() == 1
+                && color.format() == VertexFormat.FLOAT32X4;
     }
 
     static boolean usesGpuPbrShader(String providerId) {
@@ -973,8 +1072,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         private static final float MIN_VISIBLE_CLIP_W = 0.000001f;
         private final GraphicsContext graphics;
         private final ShaderModule shaderModule;
-        private final ObjectMap<VertexLayout, RenderPipeline[]> pipelines =
-                new ObjectMap<VertexLayout, RenderPipeline[]>(KeyComparison.IDENTITY);
+        private final boolean preparedRendering;
+        private final ObjectMap<RenderTargetLayout, ObjectMap<VertexLayout, RenderPipeline[]>> pipelines =
+                new ObjectMap<>();
         private ScratchBuffer[] scratchBuffers = new ScratchBuffer[4];
         private WorldVertex[] worldVertexPool = new WorldVertex[64];
         private ColorVertex[] colorVertexPool = new ColorVertex[64];
@@ -993,11 +1093,15 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         private int projectedVertexCursor;
         private int scratchCursor;
         private RenderContext3D context;
+        private boolean linearOutput;
+        private final boolean imageBasedLightingEnabled;
         private boolean disposed;
 
-        PositionColorShader(GraphicsContext graphics) {
+        PositionColorShader(GraphicsContext graphics, boolean imageBasedLightingEnabled, boolean preparedRendering) {
             this.graphics = graphics;
-            shaderModule = graphics.device().createShaderModule(ShaderModuleDescriptor.wgsl(
+            this.imageBasedLightingEnabled = imageBasedLightingEnabled;
+            this.preparedRendering = preparedRendering;
+            shaderModule = preparedRendering ? null : graphics.device().createShaderModule(ShaderModuleDescriptor.wgsl(
                     "model batch position color", POSITION_COLOR_SHADER_SOURCE));
         }
 
@@ -1027,7 +1131,12 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             if (disposed) {
                 throw new FdxException("ModelBatch shader has been disposed");
             }
+            if (imageBasedLightingEnabled && context.environment().imageBasedLighting() != null) {
+                throw new FdxException("Image-based lighting is unavailable on the CPU projection path");
+            }
             this.context = context;
+            var format = context.renderPassCompatibility().targetLayout().colorFormat(0);
+            linearOutput = format.isSrgb() || format == TextureFormat.RGBA16_FLOAT;
             scratchCursor = 0;
         }
 
@@ -1040,6 +1149,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         public void render(Renderable3D renderable) {
             if (context == null) {
                 throw new FdxException("Shader3D.begin() must be called before render");
+            }
+            if (preparedRendering && context.preparedShaderPass() == null) {
+                throw new FdxException("A prepared PBR shader requires a ready pass selected by its async ModelBatch");
             }
             MeshPart meshPart = renderable.meshPart();
             Mesh mesh = meshPart.mesh();
@@ -1062,15 +1174,18 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                 vertexCount = projectedMesh.vertexCount;
                 firstVertex = 0;
             }
-            pass.setPipeline(pipeline(vertexLayout, meshPart.primitiveTopology()));
+            pass.setPipeline(preparedRendering ? context.preparedShaderPass().pipeline()
+                    : pipeline(vertexLayout, meshPart.primitiveTopology()));
             pass.setVertexBuffer(vertexBuffer);
             int indexCount = meshPart.indexCount() > 0 ? meshPart.indexCount() : mesh.indexCount();
             if (indexCount > 0 && vertexBuffer == mesh.vertexBuffer()) {
                 pass.setIndexBuffer(mesh.indexBuffer());
                 pass.drawIndexed(indexCount, 1, meshPart.firstIndex(), 0, 0);
+                if (preparedRendering) context.preparedShaderPass().recordDraw();
             }
             else {
                 pass.draw(vertexCount, 1, firstVertex, 0);
+                if (preparedRendering && vertexCount > 0) context.preparedShaderPass().recordDraw();
             }
         }
 
@@ -1084,36 +1199,31 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
 
         private RenderPipeline pipeline(VertexLayout vertexLayout, PrimitiveTopology topology) {
             PrimitiveTopology actualTopology = topology != null ? topology : PrimitiveTopology.TRIANGLE_LIST;
-            RenderPipeline[] variants = pipelines.get(vertexLayout);
+            var target = context.renderPassCompatibility().targetLayout();
+            ObjectMap<VertexLayout, RenderPipeline[]> layouts = pipelines.get(target);
+            if (layouts == null) {
+                layouts = new ObjectMap<>(KeyComparison.IDENTITY);
+                pipelines.put(target, layouts);
+            }
+            RenderPipeline[] variants = layouts.get(vertexLayout);
             if (variants == null) {
                 variants = new RenderPipeline[PRIMITIVE_TOPOLOGY_COUNT];
-                pipelines.put(vertexLayout, variants);
+                layouts.put(vertexLayout, variants);
             }
             int slot = actualTopology.ordinal();
             RenderPipeline pipeline = variants[slot];
             if (pipeline == null) {
                 pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
-                        .shader(shaderModule, graphics.surfaceFormat())
+                        .shader(shaderModule, target.colorFormat(0))
+                        .renderTargetLayout(target)
                         .label("model batch position color")
                         .primitiveTopology(actualTopology)
-                        .depthTestEnabled(true)
-                        .depthWriteEnabled(true)
+                        .depthTestEnabled(target.hasDepthStencil())
+                        .depthWriteEnabled(target.hasDepthStencil())
                         .vertexLayout(vertexLayout));
                 variants[slot] = pipeline;
             }
             return pipeline;
-        }
-
-        private boolean isPositionColorLayout(VertexLayout layout) {
-            if (layout.attributeCount() < 2) {
-                return false;
-            }
-            VertexAttribute position = layout.attribute(0);
-            VertexAttribute color = layout.attribute(1);
-            return position.location() == 0
-                    && position.format() == VertexFormat.FLOAT32X3
-                    && color.location() == 1
-                    && color.format() == VertexFormat.FLOAT32X4;
         }
 
         /**
@@ -1131,7 +1241,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     scratchBuffers[i] = null;
                 }
             }
-            ObjectIterator<RenderPipeline[]> iterator = pipelines.values().iterator();
+            var targets = pipelines.values().iterator();
+            while (targets.hasNext()) {
+            ObjectIterator<RenderPipeline[]> iterator = targets.next().values().iterator();
             while (iterator.hasNext()) {
                 RenderPipeline[] variants = iterator.next();
                 for (int i = 0; i < variants.length; i++) {
@@ -1140,8 +1252,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     }
                 }
             }
+            }
             pipelines.clear();
-            shaderModule.dispose();
+            if (shaderModule != null) shaderModule.dispose();
         }
 
         /**
@@ -1259,6 +1372,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             float viewX = cameraPosition.x() - centerX;
             float viewY = cameraPosition.y() - centerY;
             float viewZ = cameraPosition.z() - centerZ;
+            if (context.camera().projection() == CameraProjection.ORTHOGRAPHIC) {
+                viewX = -context.camera().direction().x();
+                viewY = -context.camera().direction().y();
+                viewZ = -context.camera().direction().z();
+            }
             return normal.x * viewX + normal.y * viewY + normal.z * viewZ > 0.0f;
         }
 
@@ -1412,6 +1530,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             float viewX = context.camera().position().x() - worldVertex.x;
             float viewY = context.camera().position().y() - worldVertex.y;
             float viewZ = context.camera().position().z() - worldVertex.z;
+            if (context.camera().projection() == CameraProjection.ORTHOGRAPHIC) {
+                viewX = -context.camera().direction().x();
+                viewY = -context.camera().direction().y();
+                viewZ = -context.camera().direction().z();
+            }
             WorldVertex view = normalize(viewX, viewY, viewZ);
             int pointLightCount = 0;
             int spotLightCount = 0;
@@ -1707,7 +1830,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         }
 
         private float linearToSrgb(float value) {
-            return clamp((float)Math.pow(Math.max(value, 0.0f), 1.0f / 2.2f), 0.0f, 1.0f);
+            if (linearOutput) return Math.max(value, 0);
+            return clamp(ColorTransfer.linearToSrgb(value), 0, 1);
         }
 
         private WorldVertex normalize(float x, float y, float z) {
@@ -2019,6 +2143,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         private final String providerId;
         private final int maxBones;
         private final ShaderProvider commonProvider;
+        private final boolean preparedRendering;
         private PbrShaderParameters staticParameters;
         private PbrShaderParameters skinnedParameters;
         private long staticLayoutIdentity = -1;
@@ -2036,8 +2161,11 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         private RenderContext3D context;
         private boolean disposed;
 
+        private final boolean shadowsEnabled;
+        private final boolean imageBasedLightingEnabled;
+
         GpuPbrShader(GraphicsContext graphics, String providerId,
-                int maxBones,
+                PbrShaderConfig config,
                 ShaderProvider commonProvider) {
             this.graphics = graphics;
             this.providerId = providerId != null ? providerId : "";
@@ -2047,6 +2175,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                         "GPU PBR shader requires a graph-compatible ShaderProvider");
             }
             this.commonProvider = commonProvider;
+            preparedRendering = config.shaderPlan() != null;
+            int maxBones = config.maxBones();
+            shadowsEnabled = config.shadowsEnabled();
+            imageBasedLightingEnabled = config.imageBasedLightingEnabled();
             if (maxBones <= 0 || maxBones > MAX_SHADER_BONES) {
                 throw new FdxException("PBR GPU skinning supports 1.." + MAX_SHADER_BONES + " bones");
             }
@@ -2067,7 +2199,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             return renderable != null
                     && renderable.meshPart() != null
                     && (renderable.meshPart().mesh().vertexLayout() == Mesh.PBR_LAYOUT
-                    || renderable.meshPart().mesh().vertexLayout() == Mesh.PBR_SKINNED_LAYOUT);
+                    || renderable.meshPart().mesh().hasPbrSkinning()
+                    || renderable.meshPart().mesh().hasPbrTextureCoordinates());
         }
 
         /**
@@ -2102,12 +2235,15 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             if (context == null) {
                 throw new FdxException("Shader3D.begin() must be called before render");
             }
+            if (preparedRendering && context.preparedShaderPass() == null) {
+                throw new FdxException("A prepared PBR shader requires a ready pass selected by its async ModelBatch");
+            }
             MeshPart meshPart = renderable.meshPart();
             Mesh mesh = meshPart.mesh();
             boolean skinned =
-                    mesh.vertexLayout() == Mesh.PBR_SKINNED_LAYOUT;
+                    mesh.hasPbrSkinning();
             RenderPass pass = context.pass();
-            ResolvedShaderPass resolved = resolveCommon(
+            ResolvedShaderPass resolved = preparedRendering ? context.preparedShaderPass() : resolveCommon(
                     mesh.vertexLayout(),
                     meshPart.primitiveTopology(), skinned,
                     renderable.material().alphaMode());
@@ -2122,8 +2258,9 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             uniforms.setUniform3f(uniforms.CAMERA_POSITION,
                     cameraPosition.x(), cameraPosition.y(), cameraPosition.z());
             Vector3 cameraDirection = context.camera().direction();
-            uniforms.setUniform3f(uniforms.CAMERA_DIRECTION,
-                    cameraDirection.x(), cameraDirection.y(), cameraDirection.z());
+            uniforms.setUniform4f(uniforms.CAMERA_DIRECTION,
+                    cameraDirection.x(), cameraDirection.y(), cameraDirection.z(),
+                    context.camera().projection() == CameraProjection.ORTHOGRAPHIC ? 1 : 0);
             applyEnvironment(pass);
             applySkinning(pass, renderable);
             applyMaterial(pass, renderable.material());
@@ -2147,10 +2284,12 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             if (indexCount > 0) {
                 pass.setIndexBuffer(mesh.indexBuffer());
                 pass.drawIndexed(indexCount, 1, meshPart.firstIndex(), 0, 0);
+                resolved.recordDraw();
                 return;
             }
             int vertexCount = meshPart.vertexCount() > 0 ? meshPart.vertexCount() : mesh.vertexCount();
             pass.draw(vertexCount, 1, meshPart.firstVertex(), 0);
+            if (vertexCount > 0) resolved.recordDraw();
         }
 
         private ResolvedShaderPass resolveCommon(
@@ -2170,7 +2309,8 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                                              : ShaderProfile.NATIVE;
             PrimitiveTopology actualTopology = topology != null
                     ? topology : PrimitiveTopology.TRIANGLE_LIST;
-            String variantKey = variantKey(skinned, alphaMode);
+            String variantKey = variantKey(skinned, alphaMode,
+                    vertexLayout == Mesh.PBR_TEXTURED_LAYOUT || vertexLayout == Mesh.PBR_TEXTURED_SKINNED_LAYOUT);
             RenderPassCompatibility compatibility =
                     context.renderPassCompatibility();
             for (ResolvedPassEntry entry : resolvedPassCache) {
@@ -2211,21 +2351,6 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     actualTopology, vertexLayout, variantKey,
                     commonRevision, resolved, ++resolvedPassClock);
             return resolved;
-        }
-
-        private static String variantKey(boolean skinned,
-                MaterialAlphaMode alphaMode) {
-            MaterialAlphaMode mode = alphaMode != null
-                    ? alphaMode : MaterialAlphaMode.OPAQUE;
-            String alpha = switch (mode) {
-                case OPAQUE -> "";
-                case MASK -> "mask";
-                case BLEND -> "blend";
-            };
-            if (!skinned) {
-                return alpha;
-            }
-            return alpha.isEmpty() ? "skinned" : "skinned-" + alpha;
         }
 
         private int emptyOrOldestResolvedPass() {
@@ -2294,7 +2419,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
             uniforms.setUniform4f(uniforms.POST_PROCESSING,
                     environment.neutralToneMappingEnabled() ? 1.0f : 0.0f,
-                    environment.exposure(), 0.0f, 0.0f);
+                    environment.exposure(),
+                    context.renderPassCompatibility().targetLayout().colorFormat(0).isSrgb()
+                            || context.renderPassCompatibility().targetLayout().colorFormat(0)
+                            == TextureFormat.RGBA16_FLOAT ? 1f : 0f, 0.0f);
             if (fillDirectional == null) {
                 uniforms.setUniform3f(uniforms.FILL_LIGHT_DIRECTION, 0.4f, -0.5f, 0.7f);
                 uniforms.setUniform3f(uniforms.FILL_LIGHT_COLOR_INTENSITY,
@@ -2313,6 +2441,10 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             }
             applyFog(pass, environment);
             applySkyEnvironment(pass, environment);
+            ImageBasedLighting3D ibl = imageBasedLightingEnabled ? environment.imageBasedLighting() : null;
+            uniforms.setUniform4f(uniforms.IBL_PARAMS, ibl != null ? 1 : 0,
+                    environment.imageBasedLightingIntensity(), ibl != null ? ibl.specularTexture().mipLevelCount() - 1 : 0, 0);
+            uniforms.setUniform4f(uniforms.IBL_ROTATION, environment.iblRotationCos(), environment.iblRotationSin(), 0, 0);
             applyPointLights(pass, environment);
             applySpotLights(pass, environment);
             applyDirectionalShadow(pass, environment);
@@ -2333,7 +2465,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         }
 
         private void applySkinning(RenderPass pass, Renderable3D renderable) {
-            if (renderable.meshPart().mesh().vertexLayout() != Mesh.PBR_SKINNED_LAYOUT) {
+            if (!renderable.meshPart().mesh().hasPbrSkinning()) {
                 return;
             }
             SkinningPalette palette = renderable.skinningPalette();
@@ -2656,14 +2788,21 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     ? materialOcclusion : whiteTexture;
             Texture emissive = materialEmissive != null
                     ? materialEmissive : blackTexture;
+            if (metallicRoughness.format().isSrgb() || normal.format().isSrgb() || occlusion.format().isSrgb()) {
+                throw new FdxException("PBR non-color textures must use linear UNORM storage");
+            }
             uniforms.bindTexture(pass, 0, baseColor);
             uniforms.bindTexture(pass, 1, metallicRoughness);
             uniforms.bindTexture(pass, 2, normal);
             uniforms.bindTexture(pass, 3, occlusion);
             uniforms.bindTexture(pass, 4, emissive);
             applyShadowTextures(pass, context.environment());
+            ImageBasedLighting3D ibl = imageBasedLightingEnabled ? context.environment().imageBasedLighting() : null;
+            uniforms.bindTexture(pass, 9, ibl != null ? ibl.diffuseTexture() : blackTexture);
+            uniforms.bindTexture(pass, 10, ibl != null ? ibl.specularTexture() : blackTexture);
+            uniforms.bindTexture(pass, 11, ibl != null ? ibl.brdfTexture() : blackTexture);
             uniforms.setUniform1i(uniforms.HAS_BASE_COLOR_TEXTURE,
-                    materialBaseColor != null ? 1 : 0);
+                    materialBaseColor != null ? (materialBaseColor.format().isSrgb() ? 2 : 1) : 0);
             uniforms.setUniform1i(uniforms.HAS_METALLIC_ROUGHNESS_TEXTURE,
                     materialMetallicRoughness != null ? 1 : 0);
             uniforms.setUniform1i(uniforms.HAS_NORMAL_TEXTURE,
@@ -2671,7 +2810,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             uniforms.setUniform1i(uniforms.HAS_OCCLUSION_TEXTURE,
                     materialOcclusion != null ? 1 : 0);
             uniforms.setUniform1i(uniforms.HAS_EMISSIVE_TEXTURE,
-                    materialEmissive != null ? 1 : 0);
+                    materialEmissive != null ? (materialEmissive.format().isSrgb() ? 2 : 1) : 0);
             uniforms.setUniform1f(uniforms.ALPHA_CUTOFF,
                     material.alphaMode() == MaterialAlphaMode.MASK
                             ? MaterialAttributes.alphaCutoff(material)
@@ -2684,6 +2823,26 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
                     MaterialAttributes.textureOffsetU(material));
             uniforms.setUniform1f(uniforms.TEXTURE_OFFSET_V,
                     MaterialAttributes.textureOffsetV(material));
+            applyCoordinates(material, 0, MaterialAttributes.BASE_COLOR_TEXTURE);
+            applyCoordinates(material, 1, PbrAttributes.METALLIC_ROUGHNESS_TEXTURE);
+            applyCoordinates(material, 2, MaterialAttributes.NORMAL_TEXTURE);
+            applyCoordinates(material, 3, PbrAttributes.OCCLUSION_TEXTURE);
+            applyCoordinates(material, 4, MaterialAttributes.EMISSIVE_TEXTURE);
+            uniforms.setUniform4f(uniforms.NORMAL_OCCLUSION,
+                    PbrAttributes.normalScale(material), PbrAttributes.occlusionStrength(material),
+                    material.doubleSided() ? 1 : 0, modelDeterminantSign());
+        }
+
+        private float modelDeterminantSign() {
+            float determinant = modelMatrix[0]*(modelMatrix[5]*modelMatrix[10]-modelMatrix[6]*modelMatrix[9])
+                    + modelMatrix[1]*(modelMatrix[6]*modelMatrix[8]-modelMatrix[4]*modelMatrix[10])
+                    + modelMatrix[2]*(modelMatrix[4]*modelMatrix[9]-modelMatrix[5]*modelMatrix[8]);
+            return determinant < 0 ? -1 : 1;
+        }
+
+        private void applyCoordinates(Material material, int slot, MaterialAttributeType<TextureMaterialAttribute> type) {
+            TextureMaterialAttribute attribute = material.find(type);
+            uniforms.textureCoordinates(slot, attribute == null ? TextureCoordinates.UV0 : attribute.coordinates());
         }
 
         private void applyShadowTextures(RenderPass pass, Environment3D environment) {
@@ -2704,6 +2863,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         }
 
         private CascadedShadowMap3D activeCascadedShadowMap(Environment3D environment) {
+            if (!shadowsEnabled) return null;
             CascadedShadowMap3D cascaded = environment.cascadedShadowMap();
             if (cascaded != null && !cascaded.isDisposed()) {
                 return cascaded;
@@ -2712,6 +2872,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         }
 
         private DirectionalShadowMap3D activeDirectionalShadowMap(Environment3D environment) {
+            if (!shadowsEnabled) return null;
             DirectionalShadowMap3D shadowMap = environment.directionalShadowMap();
             return shadowMap != null && !shadowMap.isDisposed() ? shadowMap : null;
         }
@@ -2753,7 +2914,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
         }
 
         private static final class ResolvedPassEntry {
-            final io.github.libfdx.graphics.shader.runtime.ShaderPassId passId;
+            final ShaderPassId passId;
             final ShaderProfile profile;
             final RenderPassCompatibility compatibility;
             final PrimitiveTopology topology;
@@ -2764,7 +2925,7 @@ public final class PbrShaderProvider implements ShaderProvider3D, Disposable {
             long lastUse;
 
             ResolvedPassEntry(
-                    io.github.libfdx.graphics.shader.runtime.ShaderPassId passId,
+                    ShaderPassId passId,
                     ShaderProfile profile,
                     RenderPassCompatibility compatibility,
                     PrimitiveTopology topology,

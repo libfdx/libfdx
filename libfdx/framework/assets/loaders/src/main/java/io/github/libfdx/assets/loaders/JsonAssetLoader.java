@@ -42,7 +42,11 @@ public final class JsonAssetLoader implements AssetLoader<JsonValue> {
      */
     @Override
     public FdxFuture<JsonValue> load(final AssetLoadContext context, final AssetDescriptor<JsonValue> descriptor) {
-        return FdxFuture.supply(() -> new JsonReader().parse(
-                context.files().internal(descriptor.path()).readBytes().get()));
+        FdxFuture<JsonValue> result = FdxFuture.pending();
+        context.readBytes(context.files().internal(descriptor.path()))
+                .onSuccess(bytes -> context.async(() -> new JsonReader().parse(bytes))
+                        .onSuccess(result::complete).onFailure(result::completeExceptionally))
+                .onFailure(result::completeExceptionally);
+        return result;
     }
 }

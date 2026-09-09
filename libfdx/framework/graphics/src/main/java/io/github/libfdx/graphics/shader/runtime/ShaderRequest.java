@@ -1,11 +1,13 @@
 package io.github.libfdx.graphics.shader.runtime;
 
-import io.github.libfdx.graphics.PrimitiveTopology;
-import io.github.libfdx.graphics.RenderPassCompatibility;
-import io.github.libfdx.graphics.VertexLayout;
-import io.github.libfdx.graphics.shader.ShaderProfile;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.internal.ShaderStableId;
+import io.github.libfdx.graphics.PrimitiveTopology;
+import io.github.libfdx.graphics.RenderPassCompatibility;
+import io.github.libfdx.graphics.shader.ShaderProfile;
+import io.github.libfdx.graphics.VertexLayout;
+import java.util.Arrays;
+import java.util.Objects;
 
 /**
  * Immutable provider-neutral request for one shader technique pass.
@@ -17,6 +19,7 @@ public final class ShaderRequest {
     private final PrimitiveTopology topology;
     private final VertexLayout[] vertexLayouts;
     private final String variantKey;
+    private final int hash;
 
     private ShaderRequest(Builder builder) {
         passId = builder.passId != null ? builder.passId : ShaderPassId.FORWARD;
@@ -32,6 +35,12 @@ public final class ShaderRequest {
         }
         variantKey = builder.variantKey != null && !builder.variantKey.trim().isEmpty()
                 ? ShaderStableId.normalize(builder.variantKey, "Shader variant key") : "";
+        int structuralHash = passId.hashCode();
+        structuralHash = 31 * structuralHash + profile.hashCode();
+        structuralHash = 31 * structuralHash + Objects.hashCode(renderPass);
+        structuralHash = 31 * structuralHash + topology.hashCode();
+        structuralHash = 31 * structuralHash + variantKey.hashCode();
+        hash = 31 * structuralHash + Arrays.hashCode(vertexLayouts);
     }
 
     public static Builder builder(ShaderPassId passId) {
@@ -60,6 +69,15 @@ public final class ShaderRequest {
 
     public String variantKey() {
         return variantKey;
+    }
+
+    @Override public int hashCode() { return hash; }
+
+    @Override public boolean equals(Object object) {
+        return object instanceof ShaderRequest other && passId.equals(other.passId)
+                && profile == other.profile && Objects.equals(renderPass, other.renderPass)
+                && topology == other.topology && variantKey.equals(other.variantKey)
+                && Arrays.equals(vertexLayouts, other.vertexLayouts);
     }
 
     /**

@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.web;
 
+import io.github.libfdx.testsupport.web.WebTestLauncherSupport;
+
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.gl.web.WebGLProvider;
 import io.github.libfdx.graphics.wgpu.WebWGPUProvider;

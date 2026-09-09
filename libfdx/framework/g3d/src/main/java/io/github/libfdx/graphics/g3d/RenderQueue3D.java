@@ -37,9 +37,11 @@ public interface RenderQueue3D {
     Renderable3D get(int index);
 
     /**
-     * Runs the sort step.
+     * Orders queued draws for the supplied camera. The default queue groups
+     * opaque and masked draws by state before sorting blended draws back to
+     * front using transformed local-bounds centers.
      *
-     * @param camera the camera
+     * @param camera the non-null camera used for view-depth ordering
      */
     void sort(Camera camera);
 

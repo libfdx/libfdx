@@ -1,0 +1,47 @@
+{
+  "type": "tileset",
+  "name": "sparse",
+  "columns": 3,
+  "tilewidth": 20,
+  "tileheight": 20,
+  "tilecount": 3,
+  "tileoffset": {
+    "x": 2,
+    "y": -1
+  },
+  "tiles": [
+    {
+      "id": 100000000,
+      "image": "../images/collection-a.png",
+      "imagewidth": 12,
+      "imageheight": 20,
+      "x": 2,
+      "y": 4,
+      "width": 8,
+      "height": 8,
+      "type": "cropped"
+    },
+    {
+      "id": 0,
+      "image": "../images/collection-a.png",
+      "imagewidth": 12,
+      "imageheight": 20,
+      "animation": [
+        {
+          "tileid": 0,
+          "duration": 100
+        },
+        {
+          "tileid": 7,
+          "duration": 200
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "image": "../images/collection-b.png",
+      "imagewidth": 20,
+      "imageheight": 12
+    }
+  ]
+}

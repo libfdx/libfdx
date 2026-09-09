@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.GraphicsParityTest;
+
 import io.github.libfdx.Fdx;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.Buffer;

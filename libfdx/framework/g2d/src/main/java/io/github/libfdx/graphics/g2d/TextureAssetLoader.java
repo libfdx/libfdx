@@ -41,18 +41,30 @@ final class TextureAssetLoader implements AssetLoader<Texture> {
      */
     @Override
     public FdxFuture<Texture> load(AssetLoadContext context, AssetDescriptor<Texture> descriptor) {
-        final FdxFuture<Texture> future = FdxFuture.pending();
-        context.dependency(AssetDescriptor.of(descriptor.path(), ImageData.class))
-                .onSuccess(image -> context.completeOnUpdate(new FdxTask<Texture>() {
-                    @Override
-                    public Texture run() {
-                        Texture texture = graphics.device().createTexture(TextureDescriptor
-                                .rgba8(descriptor.path(), image.width(), image.height()));
-                        graphics.device().writeTexture(texture, image.rgba());
-                        return texture;
+        TextureLoadOptions options = TextureLoadOptions.from(descriptor);
+        FdxFuture<ImageData> dependency = context.dependency(AssetDescriptor.of(descriptor.path(), ImageData.class));
+        return context.completeOnUpdate(new FdxTask<Texture>() {
+            @Override
+            public Texture run() {
+                // The manager admits this finalizer only once dependencies are ready.
+                ImageData image = dependency.get();
+                Texture texture = graphics.device().createTexture(TextureDescriptor
+                        .rgba8(descriptor.path(), image.width(), image.height())
+                        .format(options.format()).filter(options.filter()).wrap(options.wrap()));
+                try {
+                    graphics.device().writeTexture(texture, image.rgba());
+                    return texture;
+                } catch (RuntimeException | Error error) {
+                    try {
+                        texture.dispose();
+                    } catch (RuntimeException | Error cleanupError) {
+                        if (cleanupError != error) {
+                            error.addSuppressed(cleanupError);
+                        }
                     }
-                }).onSuccess(future::complete).onFailure(future::completeExceptionally))
-                .onFailure(future::completeExceptionally);
-        return future;
+                    throw error;
+                }
+            }
+        });
     }
 }

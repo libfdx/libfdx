@@ -40,7 +40,12 @@ public final class NativeRuntimeShaderResultEnvelope {
         } catch (IllegalArgumentException error) {
             return failure("Native shader compiler returned invalid base64");
         }
-        if (bytes.length < VERSION_1_HEADER_SIZE) {
+        return decode(bytes);
+    }
+
+    /** Decodes owned binary transport/cache bytes with the same validation as native transport. */
+    public static RuntimeShaderCompileResult decode(byte[] bytes) {
+        if (bytes == null || bytes.length < VERSION_1_HEADER_SIZE) {
             return failure("Native shader compiler returned a truncated result");
         }
 
@@ -112,6 +117,23 @@ public final class NativeRuntimeShaderResultEnvelope {
             return RuntimeShaderCompileResult.spirv(output, reflection, targetInterface);
         }
         return failure("Native shader compiler returned no output");
+    }
+
+    /** Encodes a successful reflected result as FDXR v2; failures are never cache artifacts. */
+    public static byte[] encode(RuntimeShaderCompileResult result) {
+        if (result == null || !result.success() || !result.hasReflection()
+                || result.outputKind() == RuntimeShaderCompileOutputKind.NONE) {
+            throw new IllegalArgumentException("Only successful reflected shader results can be encoded");
+        }
+        byte[] output = result.output(), reflection = result.reflection().bytes();
+        byte[] target = result.hasTargetInterface() ? result.targetInterface().bytes() : new byte[0];
+        int size = Math.toIntExact((long) VERSION_2_HEADER_SIZE + output.length + reflection.length + target.length);
+        ByteBuffer buffer = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN);
+        buffer.put(new byte[] { 'F', 'D', 'X', 'R' }).putInt(2).putInt(0)
+                .putInt(result.outputKind() == RuntimeShaderCompileOutputKind.TEXT ? 1 : 2)
+                .putInt(output.length).putInt(0).putInt(reflection.length).putInt(target.length)
+                .put(output).put(reflection).put(target);
+        return buffer.array();
     }
 
     private static RuntimeShaderCompileOutputKind outputKind(int value) {

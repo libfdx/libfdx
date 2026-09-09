@@ -194,6 +194,18 @@ public final class DefaultFileSystem implements FileSystem {
         }
     }
 
+    FdxFuture<FileDataSource> openRead(DefaultFileHandle handle, int maximum) {
+        try {
+            FileDataSource.validateLimit(maximum);
+            InputStream input = openForRead(handle);
+            if (input == null) { throw new FdxException("File not found: " + handle.path()); }
+            File file = handle.location == FileLocation.CLASSPATH ? null : resolveFile(handle);
+            boolean seekable = file != null && file.isFile() && input instanceof FileInputStream;
+            return FdxFuture.completed(new StreamFileDataSource(input,
+                    seekable ? () -> openForRead(handle) : null, seekable ? file.length() : -1, maximum));
+        } catch (Throwable error) { return FdxFuture.failed(error); }
+    }
+
     FdxFuture<Void> writeBytes(final DefaultFileHandle handle, final byte[] bytes, final boolean append) {
         try {
             File file = resolveFile(handle);
@@ -481,6 +493,10 @@ public final class DefaultFileSystem implements FileSystem {
         @Override
         public FdxFuture<byte[]> readBytes() {
             return files.readBytes(this);
+        }
+
+        @Override public FdxFuture<FileDataSource> openRead(int maxReadBytes) {
+            return files.openRead(this, maxReadBytes);
         }
 
         /**

@@ -1,6 +1,7 @@
 package io.github.libfdx.graphics.g2d;
 
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparation;
 import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
 
 /**
@@ -14,6 +15,17 @@ public final class SpriteBatchConfig {
 
     private int initialMaxSprites = DEFAULT_MAX_SPRITES;
     private ShaderProvider shaderProvider;
+    private ShaderPreparation preparation;
+    private SpriteShaderPlan shaderPlan;
+
+    /** Borrows the application-thread service. With this set, construction and drawing never
+     * compile shaders. The application calls its update before passes and outlives this batch. */
+    public SpriteBatchConfig preparation(ShaderPreparation value) { preparation = value; return this; }
+    public ShaderPreparation preparation() { return preparation; }
+
+    /** Uses the exact source/ABI provider used during preloading. Borrowed, immutable metadata. */
+    public SpriteBatchConfig shaderPlan(SpriteShaderPlan value) { shaderPlan = value; return this; }
+    public SpriteShaderPlan shaderPlan() { return shaderPlan; }
 
     /**
      * Sets initial reusable CPU and GPU batch capacity.

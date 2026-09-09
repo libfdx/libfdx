@@ -12,6 +12,7 @@ import io.github.libfdx.graphics.GraphicsFrame;
 import io.github.libfdx.graphics.NativeWindow;
 import io.github.libfdx.graphics.TextureFormat;
 import org.teavm.jso.JSBody;
+import org.teavm.jso.browser.Window;
 
 /**
  * Represents a WGPU web graphics attachment.
@@ -79,6 +80,9 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
         }
         if (context != null) {
             context.processEvents();
+            if (context.isReady() && context.preparation() == null) {
+                context.initializePreparation(new WGPUWebPreparation(), 0);
+            }
         }
     }
 
@@ -104,6 +108,7 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
         WGPUNativeSurface.SurfaceHandle surface = WGPUNativeSurface.create(instance, nativeWindow);
         publishDebugStatus("surface-created", null);
         context = new WGPUContext(configuration, instance, surface.surface(), surface.owner());
+        context.deferDeviceLossRetirement(work -> Window.setTimeout(work::run, 0));
         context.initializeAsync();
         context.resize(width, height);
     }

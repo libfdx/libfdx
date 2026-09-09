@@ -50,7 +50,7 @@ void fdx_desktop_vulkan_draw_indexed(int64_t contextHandle, int32_t indexCount,
 void fdx_desktop_vulkan_end_render_pass(int64_t contextHandle);
 int32_t fdx_desktop_vulkan_surface_format(int64_t contextHandle);
 void fdx_desktop_vulkan_destroy_shader_module(int64_t shaderModuleHandle);
-void fdx_desktop_vulkan_destroy_render_pipeline(int64_t pipelineHandle);
+void fdx_desktop_vulkan_destroy_render_pipeline(int64_t pipelineHandle, int32_t published);
 void fdx_desktop_vulkan_destroy_buffer(int64_t bufferHandle);
 void fdx_desktop_vulkan_destroy_texture(int64_t textureHandle);
 void fdx_desktop_vulkan_destroy(int64_t contextHandle);

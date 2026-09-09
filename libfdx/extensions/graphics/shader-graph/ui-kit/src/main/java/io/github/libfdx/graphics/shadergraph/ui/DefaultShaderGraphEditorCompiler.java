@@ -100,9 +100,10 @@ public final class DefaultShaderGraphEditorCompiler
                                 + message(failure));
             }
         }
+        // A factory lambda here collides with Compilation in TeaVM's short C filenames on Windows.
         return new ShaderGraphEditorCompilation(request.generation(),
                 request.semanticRevision(), document.semanticHash(), wgsl,
-                diagnostics.toArray(ShaderGraphDiagnostic[]::new), artifacts);
+                diagnostics.toArray(new ShaderGraphDiagnostic[diagnostics.size()]), artifacts);
     }
 
     private Compilation compileCanonical(ShaderGraphEditorDocument document,

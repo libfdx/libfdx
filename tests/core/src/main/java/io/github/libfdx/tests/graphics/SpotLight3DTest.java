@@ -1,6 +1,15 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.graphics.FramebufferCapture;
+import io.github.libfdx.testsupport.graphics.TestCameraControllers;
+import io.github.libfdx.testsupport.graphics.SpotLightGallery;
 import io.github.libfdx.Fdx;
+import io.github.libfdx.assets.AssetDescriptor;
+import io.github.libfdx.assets.AssetManager;
+import io.github.libfdx.assets.DefaultAssetManager;
+import io.github.libfdx.graphics.g3d.DirectionalShadowMap3D;
+import io.github.libfdx.graphics.g3d.G3DAssetLoaders;
+import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
 import io.github.libfdx.core.FdxException;
@@ -11,33 +20,20 @@ import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.camera.controller.OrbitCameraController3D;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.LoadOp;
-import io.github.libfdx.graphics.Mesh;
-import io.github.libfdx.graphics.g3d.DefaultModel;
-import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
 import io.github.libfdx.graphics.g3d.Environment3D;
-import io.github.libfdx.graphics.g3d.MeshPart;
-import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
-import io.github.libfdx.graphics.g3d.Material;
-import io.github.libfdx.graphics.g3d.PbrAttributes;
-import io.github.libfdx.graphics.g3d.SpotLight;
-import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
-import io.github.libfdx.math.Vector3;
-import io.github.libfdx.tests.TestFpsLogger;
-
+import io.github.libfdx.testsupport.TestFpsLogger;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.Locale;
 
 /**
- * Runs the 3D spotlight shader test scenario.
+ * Renders a sculpture gallery that exposes spotlight cone falloff on curved and flat surfaces.
  *
  * @author xpenatan
  */
 public final class SpotLight3DTest extends ApplicationAdapter {
-    private static final int INSTANCE_COUNT = 5;
     private static final Color CLEAR_COLOR = new Color(0.018f, 0.022f, 0.032f, 1.0f);
 
     private final long exitAfterFrames;
@@ -49,8 +45,10 @@ public final class SpotLight3DTest extends ApplicationAdapter {
     private ModelBatch batch;
     private Camera camera;
     private OrbitCameraController3D cameraInput;
-    private Model cubeModel;
-    private DefaultModelInstance[] instances;
+    private SpotLightGallery gallery;
+    private AssetManager assets;
+    private DirectionalLight mainLight;
+    private DirectionalShadowMap3D shadows;
     private boolean created;
     private String capturePath;
     private int captureEvery;
@@ -80,43 +78,36 @@ public final class SpotLight3DTest extends ApplicationAdapter {
         logger = fdx.logger();
         fpsLogger = TestFpsLogger.create(logger, "SpotLight3DTest");
 
+        assets = new DefaultAssetManager(fdx.files());
+        G3DAssetLoaders.register(assets, graphics);
+        String dragonPath = "data/g3d/gltf/StanfordDragon/stanfordDragon.gltf";
+        assets.load(AssetDescriptor.of(dragonPath, Model.class));
+        assets.finishLoading();
+        mainLight = new DirectionalLight().direction(-.6f, -1, -.35f)
+                .color(new Color(.72f, .82f, 1, 1)).intensity(1.6f);
+        // The existing renderer shadows this directional key; spotlights add local pools.
+        shadows = new DirectionalShadowMap3D(graphics, 2048, 2048)
+                .bounds(0, 1, 0, 10, .1f, 35).autoBias(true).strength(1);
         Environment3D environment = new Environment3D()
-                .ambientColor(new Color(0.012f, 0.014f, 0.018f, 1.0f))
-                .add(new DirectionalLight()
-                        .direction(-0.3f, -0.85f, -0.35f)
-                        .color(new Color(0.72f, 0.76f, 0.84f, 1.0f))
-                        .intensity(0.16f))
-                .add(new SpotLight()
-                        .position(-0.8f, 1.95f, 1.35f)
-                        .direction(-0.2f, -0.6f, -1.0f)
-                        .color(new Color(1.0f, 0.46f, 0.2f, 1.0f))
-                        .intensity(16.0f)
-                        .range(5.3f)
-                        .cone(9.0f, 25.0f))
-                .add(new SpotLight()
-                        .position(1.65f, 1.45f, 0.2f)
-                        .direction(-0.18f, -0.38f, -1.0f)
-                        .color(new Color(0.22f, 0.62f, 1.0f, 1.0f))
-                        .intensity(11.5f)
-                        .range(4.2f)
-                        .cone(8.0f, 22.0f));
+                .ambientColor(new Color(.055f, .065f, .08f, 1))
+                .fog(CLEAR_COLOR, 30, 55).neutralToneMapping(1)
+                .add(mainLight).directionalShadowMap(shadows);
+        gallery = new SpotLightGallery(graphics, environment, assets.get(dragonPath, Model.class));
         batch = new ModelBatch(graphics).environment(environment);
-        cubeModel = createCubeModel(graphics);
-        instances = createInstances(cubeModel);
         camera = new Camera()
                 .projection(CameraProjection.PERSPECTIVE)
-                .fieldOfView(61.0f)
+                .fieldOfView(46.0f)
                 .viewport(framebufferWidth(), framebufferHeight())
-                .nearFar(0.1f, 35.0f);
+                .nearFar(0.1f, 60.0f);
         cameraInput = new OrbitCameraController3D(fdx.input(), camera)
-                .position(0.0f, 1.15f, 4.8f, 0.0f, 0.0f, -1.6f)
+                .position(7.0f, 6.8f, 14.5f, 0.0f, 1.0f, 0.0f)
                 .autoOrbit(TestCameraControllers.autoOrbitEnabled(), 0.75f, exitAfterFrames,
                         TestCameraControllers.autoOrbitStartDegrees(), TestCameraControllers.autoOrbitDegrees());
         capturePath = System.getProperty("libfdx.test.capture", "");
         captureEvery = Integer.parseInt(System.getProperty("libfdx.test.captureEvery", "0"));
 
         created = true;
-        logger.info("SpotLight3DTest created generated PBR scene with spotlights for provider "
+        logger.info("SpotLight3DTest created courtyard with spotlights and directional shadows for provider "
                 + graphics.providerId());
     }
 
@@ -128,10 +119,9 @@ public final class SpotLight3DTest extends ApplicationAdapter {
         float deltaSeconds = application.deltaTime();
         camera.viewport(framebufferWidth(), framebufferHeight());
         cameraInput.update(deltaSeconds);
+        shadows.render(mainLight, gallery.shadowCasters());
         batch.begin(LoadOp.clear(CLEAR_COLOR.red(), CLEAR_COLOR.green(), CLEAR_COLOR.blue(), 1.0f), camera);
-        for (int i = 0; i < instances.length; i++) {
-            batch.render(instances[i]);
-        }
+        gallery.render(batch);
         batch.end();
         if (capturePath != null && capturePath.length() > 0) {
             if (captureEvery > 0 && capturePath.indexOf('%') >= 0) {
@@ -162,9 +152,17 @@ public final class SpotLight3DTest extends ApplicationAdapter {
             batch.dispose();
             batch = null;
         }
-        if (cubeModel != null) {
-            cubeModel.dispose();
-            cubeModel = null;
+        if (shadows != null) {
+            shadows.dispose();
+            shadows = null;
+        }
+        if (gallery != null) {
+            gallery.dispose();
+            gallery = null;
+        }
+        if (assets != null) {
+            assets.dispose();
+            assets = null;
         }
         if (!created) {
             throw new FdxException("SpotLight3DTest did not create graphics resources");
@@ -174,100 +172,6 @@ public final class SpotLight3DTest extends ApplicationAdapter {
                     + exitAfterFrames + " required frames");
         }
         logger.info("SpotLight3DTest rendered " + renderedFrames + " frames");
-    }
-
-    private DefaultModelInstance[] createInstances(Model model) {
-        DefaultModelInstance[] result = new DefaultModelInstance[INSTANCE_COUNT];
-        float[] x = { -1.55f, -0.65f, 0.15f, 0.95f, 1.65f };
-        float[] y = { -0.18f, 0.08f, -0.1f, 0.12f, -0.04f };
-        float[] z = { -0.2f, -0.95f, -1.65f, -2.35f, -3.0f };
-        float[] yaw = { -0.38f, 0.24f, -0.18f, 0.36f, -0.45f };
-        for (int i = 0; i < result.length; i++) {
-            result[i] = new DefaultModelInstance(model);
-            result[i].transform().setToTranslation(x[i], y[i], z[i])
-                    .rotateY(yaw[i]);
-        }
-        return result;
-    }
-
-    private static Model createCubeModel(GraphicsContext graphics) {
-        ArrayList<Float> positions = new ArrayList<Float>();
-        ArrayList<Float> normals = new ArrayList<Float>();
-        ArrayList<Float> texCoords = new ArrayList<Float>();
-        ArrayList<Float> colors = new ArrayList<Float>();
-        ArrayList<Float> pbr = new ArrayList<Float>();
-        ArrayList<Float> emissive = new ArrayList<Float>();
-        float h = 0.42f;
-        addFace(positions, normals, texCoords, colors, pbr, emissive,
-                -h, -h, h, h, -h, h, h, h, h, -h, h, h,
-                0.0f, 0.0f, 1.0f, 0.72f, 0.70f, 0.66f);
-        addFace(positions, normals, texCoords, colors, pbr, emissive,
-                h, -h, -h, -h, -h, -h, -h, h, -h, h, h, -h,
-                0.0f, 0.0f, -1.0f, 0.50f, 0.54f, 0.62f);
-        addFace(positions, normals, texCoords, colors, pbr, emissive,
-                -h, h, h, h, h, h, h, h, -h, -h, h, -h,
-                0.0f, 1.0f, 0.0f, 0.84f, 0.78f, 0.66f);
-        addFace(positions, normals, texCoords, colors, pbr, emissive,
-                -h, -h, -h, h, -h, -h, h, -h, h, -h, -h, h,
-                0.0f, -1.0f, 0.0f, 0.42f, 0.44f, 0.50f);
-        addFace(positions, normals, texCoords, colors, pbr, emissive,
-                h, -h, h, h, -h, -h, h, h, -h, h, h, h,
-                1.0f, 0.0f, 0.0f, 0.60f, 0.58f, 0.68f);
-        addFace(positions, normals, texCoords, colors, pbr, emissive,
-                -h, -h, -h, -h, -h, h, -h, h, h, -h, h, -h,
-                -1.0f, 0.0f, 0.0f, 0.62f, 0.66f, 0.66f);
-        float[] sourcePositions = toFloatArray(positions);
-        Mesh mesh = Mesh.positionColor3D(graphics, "spot-light-3d cube", sourcePositions,
-                toFloatArray(colors), toFloatArray(normals), toFloatArray(texCoords),
-                toFloatArray(pbr), toFloatArray(emissive), bounds(sourcePositions));
-        MeshPart meshPart = new MeshPart("spot-light-3d cube part", mesh, null, 0, mesh.vertexCount());
-        Material material = new Material("spot-light-3d material")
-                .set(PbrAttributes.roughnessFactor(0.72f))
-                .set(PbrAttributes.metallicFactor(0.0f));
-        return DefaultModel.singleNode("spot-light-3d cube", meshPart, material);
-    }
-
-    private static void addFace(ArrayList<Float> positions, ArrayList<Float> normals,
-            ArrayList<Float> texCoords, ArrayList<Float> colors, ArrayList<Float> pbr,
-            ArrayList<Float> emissive, float x0, float y0, float z0, float x1, float y1, float z1,
-            float x2, float y2, float z2, float x3, float y3, float z3, float nx, float ny, float nz,
-            float red, float green, float blue) {
-        addVertex(positions, normals, texCoords, colors, pbr, emissive,
-                x0, y0, z0, nx, ny, nz, 0.0f, 1.0f, red, green, blue);
-        addVertex(positions, normals, texCoords, colors, pbr, emissive,
-                x1, y1, z1, nx, ny, nz, 1.0f, 1.0f, red, green, blue);
-        addVertex(positions, normals, texCoords, colors, pbr, emissive,
-                x2, y2, z2, nx, ny, nz, 1.0f, 0.0f, red, green, blue);
-        addVertex(positions, normals, texCoords, colors, pbr, emissive,
-                x0, y0, z0, nx, ny, nz, 0.0f, 1.0f, red, green, blue);
-        addVertex(positions, normals, texCoords, colors, pbr, emissive,
-                x2, y2, z2, nx, ny, nz, 1.0f, 0.0f, red, green, blue);
-        addVertex(positions, normals, texCoords, colors, pbr, emissive,
-                x3, y3, z3, nx, ny, nz, 0.0f, 0.0f, red, green, blue);
-    }
-
-    private static void addVertex(ArrayList<Float> positions, ArrayList<Float> normals,
-            ArrayList<Float> texCoords, ArrayList<Float> colors, ArrayList<Float> pbr,
-            ArrayList<Float> emissive, float x, float y, float z, float nx, float ny, float nz,
-            float u, float v, float red, float green, float blue) {
-        positions.add(x);
-        positions.add(y);
-        positions.add(z);
-        normals.add(nx);
-        normals.add(ny);
-        normals.add(nz);
-        texCoords.add(u);
-        texCoords.add(v);
-        colors.add(red);
-        colors.add(green);
-        colors.add(blue);
-        colors.add(1.0f);
-        pbr.add(1.0f);
-        pbr.add(0.0f);
-        pbr.add(0.72f);
-        emissive.add(0.0f);
-        emissive.add(0.0f);
-        emissive.add(0.0f);
     }
 
     private int framebufferWidth() {
@@ -288,31 +192,5 @@ public final class SpotLight3DTest extends ApplicationAdapter {
         } catch (Exception e) {
             throw new FdxException("Could not capture SpotLight3DTest framebuffer", e);
         }
-    }
-
-    private static BoundingBox bounds(float[] positions) {
-        float minX = positions[0];
-        float minY = positions[1];
-        float minZ = positions[2];
-        float maxX = minX;
-        float maxY = minY;
-        float maxZ = minZ;
-        for (int i = 3; i < positions.length; i += 3) {
-            minX = Math.min(minX, positions[i]);
-            minY = Math.min(minY, positions[i + 1]);
-            minZ = Math.min(minZ, positions[i + 2]);
-            maxX = Math.max(maxX, positions[i]);
-            maxY = Math.max(maxY, positions[i + 1]);
-            maxZ = Math.max(maxZ, positions[i + 2]);
-        }
-        return BoundingBox.of(new Vector3(minX, minY, minZ), new Vector3(maxX, maxY, maxZ));
-    }
-
-    private static float[] toFloatArray(ArrayList<Float> values) {
-        float[] result = new float[values.size()];
-        for (int i = 0; i < values.size(); i++) {
-            result[i] = values.get(i);
-        }
-        return result;
     }
 }
