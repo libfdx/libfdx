@@ -25,6 +25,7 @@ import io.github.libfdx.testsupport.TestChooserApplication;
 import io.github.libfdx.testsupport.TestSelector;
 import io.github.libfdx.testsupport.graphics.FramebufferCapture;
 import io.github.libfdx.tests.graphics.ModelBatchTest;
+import io.github.libfdx.tests.graphics.GltfLoadingTest;
 import io.github.libfdx.tests.web.WebGPUShaderPreparationTest;
 import io.github.libfdx.tests.web.WebGPUDeviceLossTest;
 import io.github.libfdx.tests.web.WebGLContextLossTest;
@@ -82,6 +83,11 @@ public final class WebTestLauncherSupport {
                 .graphics(graphicsProvider);
 
         ApplicationListener selectedTest = test(testName, frames, modelAsset, webgpu);
+        if ("GltfLoadingTest".equalsIgnoreCase(testName)) {
+            // Exclude exact files from startup downloads, retaining their server/manifest entries.
+            config.deferAssets("streaming/", "atlas/", "deferred-image/",
+                    GltfLoadingTest.MODEL_PATH, GltfLoadingTest.BUFFER_PATH, GltfLoadingTest.IMAGE_PATH);
+        }
         String cacheName = option(args, "shaderCacheDatabase", query("shaderCacheDatabase"), "");
         WebShaderCacheStore cacheStore = null;
         ShaderArtifactCache shaderCache = null;
@@ -184,6 +190,9 @@ public final class WebTestLauncherSupport {
     }
 
     private static ApplicationListener test(String testName, long frames, String modelAsset, boolean webgpu) {
+        if ("GltfLoadingTest".equalsIgnoreCase(testName)) {
+            return new GltfLoadingTest(frames, new WebGltfDownloadProbe());
+        }
         if ("WebGLContextLossTest".equalsIgnoreCase(testName)) {
             if (webgpu) throw new FdxException("WebGLContextLossTest requires WebGL");
             return new WebGLContextLossTest();

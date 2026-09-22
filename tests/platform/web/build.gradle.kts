@@ -86,11 +86,11 @@ libfdx {
         htmlWidth.set(0)
         htmlHeight.set(0)
 
-        target("webgl") {
+        target("tests_webgl") {
             buildDescription.set("Builds the WebGL JavaScript test web application.")
             runDescription.set("Builds and serves the WebGL JavaScript test web application.")
         }
-        target("webgpu") {
+        target("tests_webgpu") {
             defaultPath.set("/?graphics=webgpu")
             buildDescription.set("Builds the WebGPU JavaScript test web application.")
             runDescription.set("Builds and serves the WebGPU JavaScript test web application.")
@@ -103,11 +103,11 @@ libfdx {
         htmlWidth.set(0)
         htmlHeight.set(0)
 
-        target("webgl") {
+        target("tests_webgl") {
             buildDescription.set("Builds the WebGL Wasm test web application.")
             runDescription.set("Builds and serves the WebGL Wasm test web application.")
         }
-        target("webgpu") {
+        target("tests_webgpu") {
             defaultPath.set("/?graphics=webgpu")
             buildDescription.set("Builds the WebGPU Wasm test web application.")
             runDescription.set("Builds and serves the WebGPU Wasm test web application.")
