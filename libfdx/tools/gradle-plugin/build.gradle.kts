@@ -1,5 +1,7 @@
 import org.gradle.api.publish.tasks.GenerateModuleMetadata
+import org.gradle.api.tasks.javadoc.Javadoc
 import org.gradle.api.tasks.testing.Test
+import org.gradle.external.javadoc.StandardJavadocDocletOptions
 import org.gradle.jvm.tasks.Jar
 
 plugins {
@@ -54,6 +56,10 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+}
+
+tasks.withType<Javadoc>().configureEach {
+    (options as StandardJavadocDocletOptions).addBooleanOption("-no-fonts", true)
 }
 
 tasks.withType<GenerateModuleMetadata>().configureEach {

@@ -417,7 +417,7 @@ jobs:
           max_attempts: 6
           timeout_minutes: 50
           retry_on: error
-          command: ./gradlew publishSnapshot
+          command: ./gradlew publishSnapshot --parallel --max-workers=4
 
       - name: Create Git tag
         uses: actions/github-script@v9

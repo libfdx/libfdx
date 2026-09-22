@@ -1,4 +1,7 @@
 import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
+import org.gradle.api.tasks.bundling.Jar
+import org.gradle.api.tasks.javadoc.Javadoc
+import org.gradle.external.javadoc.StandardJavadocDocletOptions
 
 plugins {
     id("base")
@@ -173,6 +176,15 @@ tasks.matching { task ->
 
 allprojects {
     version = libfdxVersion
+
+    tasks.withType<Javadoc>().configureEach {
+        (options as StandardJavadocDocletOptions).addBooleanOption("-no-fonts", true)
+    }
+
+    tasks.withType<Jar>().matching { it.name == "sourcesJar" }.configureEach {
+        // Compiled native libraries belong in runtime artifacts, not source archives.
+        exclude("**/*.dll", "**/*.so", "**/*.dylib", "**/*.lib", "**/*.a", "**/*.wasm")
+    }
 
     repositories {
         google()
