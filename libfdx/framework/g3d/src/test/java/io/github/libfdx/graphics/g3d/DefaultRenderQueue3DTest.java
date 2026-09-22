@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 final class DefaultRenderQueue3DTest {
-    private final Mesh mesh = new Mesh(new DefaultRenderQueue3DAllocationTest.FakeGraphicsContext(),
+    private final Mesh mesh = new Mesh(new DefaultRenderQueue3DReuseTest.FakeGraphicsContext(),
             "ordering-mesh", Mesh.POSITION_COLOR_LAYOUT,
             new float[] {
                     0, 0, 0, 1, 1, 1, 1,

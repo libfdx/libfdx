@@ -4,7 +4,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
 
-import org.openjdk.jmh.profile.GCProfiler;
 import org.openjdk.jmh.results.RunResult;
 import org.openjdk.jmh.results.format.ResultFormatType;
 import org.openjdk.jmh.runner.Runner;
@@ -60,7 +59,6 @@ public final class CollectionsBenchmarkRunner {
 
         Options options = new OptionsBuilder()
                 .include(benchmarkFilter(collections))
-                .addProfiler(GCProfiler.class)
                 .resultFormat(ResultFormatType.JSON)
                 .result(jsonReport.toString())
                 .shouldFailOnError(true)

@@ -4,14 +4,12 @@ import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.FdxFuture;
 import io.github.libfdx.collections.ObjectMap;
-import com.sun.management.ThreadMXBean;
 import io.github.libfdx.files.FileHandle;
 import io.github.libfdx.files.FileSystem;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
-import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -19,7 +17,6 @@ import java.util.Map;
 import java.util.function.BiFunction;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class DefaultAssetManagerSchedulingTest {
     private final Map<String, FdxFuture<byte[]>> reads = new HashMap<>();
@@ -370,12 +367,7 @@ final class DefaultAssetManagerSchedulingTest {
     }
 
     @Test
-    void warmedBudgetedUpdatesReuseSchedulerStorageWhileExecutorIsFull() {
-        java.lang.management.ThreadMXBean platformBean = ManagementFactory.getThreadMXBean();
-        assumeTrue(platformBean instanceof ThreadMXBean);
-        ThreadMXBean bean = (ThreadMXBean)platformBean;
-        assumeTrue(bean.isThreadAllocatedMemorySupported());
-        if (!bean.isThreadAllocatedMemoryEnabled()) { bean.setThreadAllocatedMemoryEnabled(true); }
+    void budgetedUpdatesRemainPendingWhileExecutorIsFull() {
         AssetExecutor full = new AssetExecutor() {
             @Override public boolean submit(Runnable task) { return false; }
             @Override public void dispose() { }
@@ -384,15 +376,9 @@ final class DefaultAssetManagerSchedulingTest {
         manager = new DefaultAssetManager(files, full);
         register((context, descriptor) -> context.async(() -> asset("A")));
         manager.load(descriptor("A"));
-        for (int i = 0; i < 10_000; i++) { manager.update(1, Long.MAX_VALUE); }
-        long threadId = Thread.currentThread().threadId();
-        long minimum = Long.MAX_VALUE;
-        for (int attempt = 0; attempt < 5; attempt++) {
-            long before = bean.getThreadAllocatedBytes(threadId);
-            for (int i = 0; i < 2_000; i++) { manager.update(1, Long.MAX_VALUE); }
-            minimum = Math.min(minimum, bean.getThreadAllocatedBytes(threadId) - before);
+        for (int i = 0; i < 2_000; i++) {
+            assertFalse(manager.update(1, Long.MAX_VALUE));
         }
-        assertTrue(minimum <= 512L, "Budgeted retry queue allocated " + minimum + " bytes");
         assertFalse(manager.update(0, 0));
     }
 

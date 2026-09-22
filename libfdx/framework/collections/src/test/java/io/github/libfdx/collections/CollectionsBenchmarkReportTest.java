@@ -25,9 +25,9 @@ class CollectionsBenchmarkReportTest {
 
         assertTrue(markdown.contains("| Collection | Add / put | Lookup | Remove | "
                 + "Remove by retained node | Loop all |"));
-        assertTrue(markdown.contains("| libFDX CustomBag | 4.000 ns/op / ~0 B/op | "
-                + "3.000 ns/op / ~0 B/op | 2.000 ns/op / ~0 B/op | - | "
-                + "1.000 ns/op / ~0 B/op |"));
+        assertTrue(markdown.contains("| libFDX CustomBag | 4.000 ns/op | "
+                + "3.000 ns/op | 2.000 ns/op | - | "
+                + "1.000 ns/op |"));
     }
 
     @Test
@@ -65,12 +65,12 @@ class CollectionsBenchmarkReportTest {
 
         String markdown = comparison(results);
 
-        assertTrue(markdown.contains("| libFDX IntMap | 5.000 ns/op / ~0 B/op | "
-                + "4.000 ns/op / ~0 B/op |"));
-        assertTrue(markdown.contains("| libFDX IntMap | 5.000 ns/op / ~0 B/op | "
-                + "4.000 ns/op / ~0 B/op | - | - | - |"));
+        assertTrue(markdown.contains("| libFDX IntMap | 5.000 ns/op | "
+                + "4.000 ns/op |"));
+        assertTrue(markdown.contains("| libFDX IntMap | 5.000 ns/op | "
+                + "4.000 ns/op | - | - | - |"));
         assertTrue(markdown.contains("| libFDX OrderedIntNodeMap | - | - | - | "
-                + "2.000 ns/op / ~0 B/op | - |"));
+                + "2.000 ns/op | - |"));
         assertFalse(markdown.contains("| libFDX IntMap | 1.000 ns/op"));
         assertFalse(markdown.contains("0.500 ns/op"));
         assertEquals(1, occurrences(markdown, "| libFDX IntMap |"));
@@ -79,7 +79,7 @@ class CollectionsBenchmarkReportTest {
     private static CollectionsBenchmarkReport.BenchmarkResult result(String collection,
             String operation, String options, double score) {
         return new CollectionsBenchmarkReport.BenchmarkResult(collection, operation, options,
-                score, score - 0.1d, score + 0.1d, "ns/op", 0d, 0d);
+                score, score - 0.1d, score + 0.1d, "ns/op");
     }
 
     private static String comparison(

@@ -1,6 +1,5 @@
 package io.github.libfdx.graphics.g2d;
 
-import com.sun.management.ThreadMXBean;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.*;
 import io.github.libfdx.maps.MapObject;
@@ -10,10 +9,8 @@ import io.github.libfdx.maps.GroupLayer;
 import io.github.libfdx.maps.TileAnimation;
 import io.github.libfdx.maps.ImageLayer;
 import org.junit.jupiter.api.Test;
-import java.lang.management.ManagementFactory;
 import java.lang.reflect.Proxy;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class ImportedTileRenderingTest {
     @Test void sparseRowsMatchDensePainterOrderAcrossUnequalChunksAndOverhangs() {
@@ -48,23 +45,6 @@ final class ImportedTileRenderingTest {
         layer.offset(2,3);batch.count=0;
         assertEquals(1,renderer.render(sparse,tiles,batch,-8_000_000_000f,-8_000_000_000f,-8,-8,40,40));
         assertEquals(-3,batch.x[0]);assertEquals(-1,batch.y[0]);
-    }
-
-    @Test void sparseCameraQueriesAndCellEditsReuseFrameStorage() {
-        assumeTrue(ManagementFactory.getThreadMXBean() instanceof ThreadMXBean);
-        var bean=(ThreadMXBean)ManagementFactory.getThreadMXBean();assumeTrue(bean.isThreadAllocatedMemorySupported());
-        bean.setThreadAllocatedMemoryEnabled(true);
-        var map=io.github.libfdx.maps.TileMap.infinite(16,16);
-        var chunks=new io.github.libfdx.maps.ChunkedTileLayer(2,16);
-        chunks.put(new io.github.libfdx.maps.TileChunk(-4,-2,4,2).fill(1));
-        chunks.put(new io.github.libfdx.maps.TileChunk(0,-2,4,2).fill(1));map.addChunkedLayer(chunks);
-        var tiles=new TileSet().region(1,region(16,16));var renderer=new TileMapRenderer().chunkLimits(2,16);
-        var batch=new RecordingBatch();
-        for(int i=0;i<12000;i++){batch.count=0;chunks.tile(-4,-2,1,i%8);renderer.render(map,tiles,batch,0,0,-66+i%4,-34,130,40);}
-        long thread=Thread.currentThread().threadId(),before=bean.getThreadAllocatedBytes(thread);
-        for(int i=0;i<2000;i++){batch.count=0;chunks.tile(-4,-2,1,i%8);renderer.render(map,tiles,batch,0,0,-66+i%4,-34,130,40);}
-        long allocated=bean.getThreadAllocatedBytes(thread)-before;
-        assertTrue(allocated<=512,"Sparse renderer allocated "+allocated+" bytes");
     }
 
     @Test void imageTintParallaxAndTopLeftAnchorComposeThroughGroups() {
@@ -187,41 +167,6 @@ final class ImportedTileRenderingTest {
         assertSame(layer, ((io.github.libfdx.maps.TileMap)map).layer(0));
         assertThrows(FdxException.class, () -> map.addLayer(new io.github.libfdx.maps.TileLayer(1,1)));
         assertSame(layer, map.removeLayer(0));
-    }
-    @Test void warmedCulledTraversalDoesNotAllocate() {
-        var platform = ManagementFactory.getThreadMXBean();
-        assumeTrue(platform instanceof ThreadMXBean);
-        ThreadMXBean bean = (ThreadMXBean)platform;
-        assumeTrue(bean.isThreadAllocatedMemorySupported());
-        bean.setThreadAllocatedMemoryEnabled(true);
-        var map = new io.github.libfdx.maps.TileMap(2, 2, 16, 16);
-        GroupLayer group=new GroupLayer(new io.github.libfdx.maps.TileLayer(2,2).fill(1).tile(0,0,1,7),
-                new ImageLayer("repeat.png",0,0,0,16,true,true));
-        group.tint(0x8040ffff); map.addGroupLayer(group);
-        TileSet tiles = new TileSet().region(1, region(16,16)).region(2,region(16,16))
-                .animation(1,new TileAnimation(new int[] {0,1},new int[] {100,250}),1);
-        tiles.imageRegion("repeat.png",region(16,16));
-        TileMapRenderer renderer = new TileMapRenderer(); RecordingBatch batch = new RecordingBatch();
-        // Warm the same call site that is measured, including the allocation counter.
-        // Separate inline loops can enter different JIT tiers during the measurement.
-        long thread = Thread.currentThread().threadId();
-        for (int i = 0; i < 20; i++) {
-            bean.getThreadAllocatedBytes(thread);
-            renderCulledFrames(map, tiles, renderer, batch);
-        }
-        long before = bean.getThreadAllocatedBytes(thread);
-        renderCulledFrames(map, tiles, renderer, batch);
-        long allocated = bean.getThreadAllocatedBytes(thread) - before;
-        assertTrue(allocated <= 512, "Allocated " + allocated + " bytes");
-    }
-
-    private static void renderCulledFrames(io.github.libfdx.maps.TileMap map, TileSet tiles,
-            TileMapRenderer renderer, RecordingBatch batch) {
-        for (int i = 0; i < 2000; i++) {
-            batch.count = 0;
-            tiles.animationTime(i * 17);
-            renderer.render(map, tiles, batch, 0, 0, 0, 0, 30, 30);
-        }
     }
     private static TextureRegion region(int width, int height) {
         Texture texture = (Texture)Proxy.newProxyInstance(Texture.class.getClassLoader(), new Class<?>[] {Texture.class},

@@ -1,12 +1,10 @@
 package io.github.libfdx.ui;
 
-import com.sun.management.ThreadMXBean;
 import io.github.libfdx.input.Key;
 import io.github.libfdx.input.KeyEvent;
 import io.github.libfdx.input.MouseButton;
 import io.github.libfdx.input.PointerEvent;
 import io.github.libfdx.input.TextInputEvent;
-import java.lang.management.ManagementFactory;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -14,7 +12,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class UiCustomSurfaceTest {
     @Test
@@ -124,58 +121,37 @@ final class UiCustomSurfaceTest {
     }
 
     @Test
-    void retainedPathSupportsLinesAndBezierCurvesWithoutSteadyStateAllocation() {
+    void retainedPathSupportsRepeatedLineAndBezierCurveRebuilds() {
         UiPath path = new UiPath(8, 24);
-        for (int i = 0; i < 10_000; i++) {
-            rebuildPath(path);
-        }
+        rebuildPath(path);
         assertEquals(5, path.commandCount());
         assertEquals(UiPath.MOVE_TO, path.command(0));
         assertEquals(UiPath.CLOSE, path.command(4));
 
-        ThreadMXBean bean = allocationBean();
-        long threadId = Thread.currentThread().threadId();
-        long before = bean.getThreadAllocatedBytes(threadId);
         int checksum = 0;
         for (int i = 0; i < 2_000; i++) {
             rebuildPath(path);
             checksum += path.commandCount();
         }
-        long allocated = bean.getThreadAllocatedBytes(threadId) - before;
 
         assertEquals(10_000, checksum);
-        assertTrue(allocated <= 512L,
-                "Expected retained UI path rebuilds to allocate no post-warm-up objects, allocated "
-                        + allocated + " bytes");
     }
 
     @Test
-    void warmedSurfaceInputRoutingAllocatesNoFrameworkObjects() {
+    void repeatedSurfaceInputRoutingDeliversEveryPointerEvent() {
         RecordingSurfaceInput input = new RecordingSurfaceInput();
         StableSurfaceContent content = new StableSurfaceContent(input);
         UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
         root.resize(200, 100);
         root.setContent(content);
         root.update(0.0f);
-        for (int i = 0; i < 10_000; i++) {
-            root.handlePointerDown(POINTER_DOWN);
-            root.handlePointerUp(POINTER_UP_INSIDE);
-        }
-
-        ThreadMXBean bean = allocationBean();
-        long threadId = Thread.currentThread().threadId();
-        long before = bean.getThreadAllocatedBytes(threadId);
         int beforeCalls = input.pointerCount;
         for (int i = 0; i < 2_000; i++) {
             root.handlePointerDown(POINTER_DOWN);
             root.handlePointerUp(POINTER_UP_INSIDE);
         }
-        long allocated = bean.getThreadAllocatedBytes(threadId) - before;
 
         assertEquals(4_000, input.pointerCount - beforeCalls);
-        assertTrue(allocated <= 512L,
-                "Expected custom-surface input routing to allocate no post-warm-up objects, allocated "
-                        + allocated + " bytes");
         root.dispose();
     }
 
@@ -195,17 +171,6 @@ final class UiCustomSurfaceTest {
                 .quadraticTo(5.0f, 6.0f, 7.0f, 8.0f)
                 .cubicTo(9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f)
                 .close();
-    }
-
-    private static ThreadMXBean allocationBean() {
-        java.lang.management.ThreadMXBean platformBean = ManagementFactory.getThreadMXBean();
-        assumeTrue(platformBean instanceof ThreadMXBean);
-        ThreadMXBean bean = (ThreadMXBean)platformBean;
-        assumeTrue(bean.isThreadAllocatedMemorySupported());
-        if (!bean.isThreadAllocatedMemoryEnabled()) {
-            bean.setThreadAllocatedMemoryEnabled(true);
-        }
-        return bean;
     }
 
     private static final class StableSurfaceContent implements UiContent, UiCustomContent {

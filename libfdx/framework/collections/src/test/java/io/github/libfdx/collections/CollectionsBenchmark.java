@@ -27,7 +27,7 @@ import org.openjdk.jmh.annotations.Warmup;
  * <p>Each invocation performs {@value #ELEMENT_COUNT} logical collection
  * operations and is normalized by JMH to nanoseconds per logical operation.
  * Mutation setup happens outside the timed region and reuses reserved storage.
- * Full runs also enable JMH's GC profiler through the Gradle task.</p>
+ * Full runs write timing reports through the Gradle task.</p>
  *
  * <p>Array benchmarks cover ordered and unordered storage. Hash collections
  * cover 0.50 and 0.75 load factors, while {@link ObjectMap} additionally covers

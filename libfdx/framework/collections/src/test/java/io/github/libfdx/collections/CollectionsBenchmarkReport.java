@@ -15,8 +15,6 @@ import org.openjdk.jmh.results.RunResult;
 
 /** Generates a readable Markdown report directly from JMH run results. */
 public final class CollectionsBenchmarkReport {
-    private static final double EFFECTIVELY_ZERO_ALLOCATION = 0.01d;
-
     private CollectionsBenchmarkReport() {
     }
 
@@ -65,9 +63,7 @@ public final class CollectionsBenchmarkReport {
                     primary.getScore(),
                     confidence[0],
                     confidence[1],
-                    primary.getScoreUnit(),
-                    secondaryScore(runResult, "gc.alloc.rate.norm"),
-                    secondaryScore(runResult, "gc.count")));
+                    primary.getScoreUnit()));
         }
         return results;
     }
@@ -86,11 +82,6 @@ public final class CollectionsBenchmarkReport {
             text.append(name).append('=').append(params.getParam(name));
         }
         return text.toString();
-    }
-
-    private static double secondaryScore(RunResult result, String name) {
-        Result<?> metric = result.getSecondaryResults().get(name);
-        return metric != null ? metric.getScore() : Double.NaN;
     }
 
     private static Array<ComparisonGroup> buildComparisons(Array<BenchmarkResult> results) {
@@ -142,7 +133,7 @@ public final class CollectionsBenchmarkReport {
 
         appendAllCollectionsComparison(text, results);
         appendRunConfiguration(text, metadata, results);
-        appendConclusions(text, results, comparisons);
+        appendConclusions(text, comparisons);
         appendComparisonTable(text, comparisons);
         appendDetailedResults(text, results);
         return text.toString();
@@ -156,7 +147,7 @@ public final class CollectionsBenchmarkReport {
         }
 
         text.append("## All collections performance comparison\n\n");
-        text.append("Each result is `average time / allocated bytes per operation`. A `-` means ")
+        text.append("Each result is the average time per operation. A `-` means ")
                 .append("the collection does not expose a matching benchmark operation.\n\n");
         text.append("| Collection | Add / put | Lookup | Remove | Remove by retained node | "
                 + "Loop all |\n");
@@ -180,7 +171,7 @@ public final class CollectionsBenchmarkReport {
                 .append("`Loop all` selects the fastest measured complete traversal and does not ")
                 .append("require the same visit order or element representation. Java HashMap ")
                 .append("uses Integer keys because Java has no primitive-int HashMap. Exact ")
-                .append("operations, configurations, confidence intervals, and allocations are ")
+                .append("operations, configurations, and confidence intervals are ")
                 .append("listed below.\n\n");
     }
 
@@ -311,8 +302,7 @@ public final class CollectionsBenchmarkReport {
             return;
         }
         text.append(' ').append(formatScore(result.score)).append(' ')
-                .append(result.unit).append(" / ")
-                .append(formatComparisonAllocation(result.allocation)).append(" |");
+                .append(result.unit).append(" |");
     }
 
     private static String optionValue(String options, String name) {
@@ -399,20 +389,8 @@ public final class CollectionsBenchmarkReport {
         text.append('\n');
     }
 
-    private static void appendConclusions(StringBuilder text, Array<BenchmarkResult> results,
-            Array<ComparisonGroup> comparisons) {
-        int effectivelyAllocationFree = 0;
-        int zeroGc = 0;
+    private static void appendConclusions(StringBuilder text, Array<ComparisonGroup> comparisons) {
         int clearComparisons = 0;
-        for (int i = 0; i < results.size(); i++) {
-            BenchmarkResult result = results.get(i);
-            if (!Double.isNaN(result.allocation) && result.allocation < EFFECTIVELY_ZERO_ALLOCATION) {
-                effectivelyAllocationFree++;
-            }
-            if (!Double.isNaN(result.gcCount) && result.gcCount == 0d) {
-                zeroGc++;
-            }
-        }
         for (int i = 0; i < comparisons.size(); i++) {
             if (comparisons.get(i).clearWinner) {
                 clearComparisons++;
@@ -420,12 +398,6 @@ public final class CollectionsBenchmarkReport {
         }
 
         text.append("## Conclusions\n\n");
-        text.append("- ").append(effectivelyAllocationFree).append('/').append(results.size())
-                .append(" configurations measured below ")
-                .append(formatAllocation(EFFECTIVELY_ZERO_ALLOCATION))
-                .append(" of normalized allocation.\n");
-        text.append("- ").append(zeroGc).append('/').append(results.size())
-                .append(" configurations reported zero garbage collections during measurement.\n");
         if (comparisons.isEmpty()) {
             text.append("- This selection has no configuration variants, so option comparisons ")
                     .append("do not apply.\n");
@@ -478,15 +450,14 @@ public final class CollectionsBenchmarkReport {
                 collection = result.collection;
                 text.append("### ").append(markdownEscape(collection)).append("\n\n");
                 text.append("| Operation | Configuration | Average time | ")
-                        .append("99.9% confidence interval | Allocated bytes/op |\n");
-                text.append("|---|---|---:|---:|---:|\n");
+                        .append("99.9% confidence interval |\n");
+                text.append("|---|---|---:|---:|\n");
             }
             text.append('|').append(code(result.operation));
             text.append('|').append(codeOrDash(result.options));
             text.append('|').append(formatScore(result.score)).append(' ').append(result.unit);
             text.append('|').append(formatScore(result.confidenceLow)).append(" - ")
                     .append(formatScore(result.confidenceHigh)).append(' ').append(result.unit);
-            text.append('|').append(formatAllocation(result.allocation));
             text.append("|\n");
         }
         text.append('\n');
@@ -542,27 +513,6 @@ public final class CollectionsBenchmarkReport {
         return format("%.3f", value);
     }
 
-    private static String formatAllocation(double value) {
-        if (Double.isNaN(value)) {
-            return "n/a";
-        }
-        double absolute = Math.abs(value);
-        if (absolute == 0d) {
-            return "0 B/op";
-        }
-        if (absolute < 0.001d) {
-            return format("%.2e B/op", value);
-        }
-        return format("%.5f B/op", value);
-    }
-
-    private static String formatComparisonAllocation(double value) {
-        if (!Double.isNaN(value) && Math.abs(value) < 0.001d) {
-            return "~0 B/op";
-        }
-        return formatAllocation(value);
-    }
-
     private static String formatPercent(double value) {
         return Double.isNaN(value) ? "n/a" : format("%.1f%%", value);
     }
@@ -579,12 +529,9 @@ public final class CollectionsBenchmarkReport {
         private final double confidenceLow;
         private final double confidenceHigh;
         private final String unit;
-        private final double allocation;
-        private final double gcCount;
 
         BenchmarkResult(String collection, String operation, String options, double score,
-                double confidenceLow, double confidenceHigh, String unit, double allocation,
-                double gcCount) {
+                double confidenceLow, double confidenceHigh, String unit) {
             this.collection = collection;
             this.operation = operation;
             this.options = options;
@@ -592,8 +539,6 @@ public final class CollectionsBenchmarkReport {
             this.confidenceLow = confidenceLow;
             this.confidenceHigh = confidenceHigh;
             this.unit = unit;
-            this.allocation = allocation;
-            this.gcCount = gcCount;
         }
     }
 

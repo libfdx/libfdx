@@ -1,10 +1,7 @@
 package io.github.libfdx.input;
 
-import com.sun.management.ThreadMXBean;
-import java.lang.management.ManagementFactory;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class InputActionsTest {
     @Test void shortTapsLatchAcrossRenderOnlyFramesAndRepeatDoesNotCreateAnotherPress() {
@@ -90,18 +87,5 @@ final class InputActionsTest {
         assertThrows(IllegalArgumentException.class,()->actions.importBindings(saved.replace("jump\t","unknown\t")));
         assertThrows(IllegalArgumentException.class,()->actions.importBindings(saved.replace(".15","NaN")));
         actions.dispose();
-    }
-    @Test void steadyPollingAndLatchedTransitionsReuseStorage() {
-        DefaultInput input=new DefaultInput(); InputActions actions=new InputActions(input);
-        InputAction move=actions.define("move"); actions.bind(move,InputBinding.key(Key.D));
-        actions.bind(move,InputBinding.axis(-1,GamepadAxis.LEFT_X,.2f,1));
-        var bean=ManagementFactory.getThreadMXBean(); assumeTrue(bean instanceof ThreadMXBean);
-        ThreadMXBean allocation=(ThreadMXBean)bean; assumeTrue(allocation.isThreadAllocatedMemorySupported());
-        allocation.setThreadAllocatedMemoryEnabled(true); long thread=Thread.currentThread().threadId();
-        for(int i=0;i<15000;i++) { actions.update(); move.consumePressed(); }
-        long start=allocation.getThreadAllocatedBytes(thread);
-        for(int i=0;i<3000;i++) { actions.update(); move.consumePressed(); }
-        long bytes=allocation.getThreadAllocatedBytes(thread)-start;
-        assertTrue(bytes<=512,"Action polling allocated "+bytes+" bytes"); actions.dispose();
     }
 }

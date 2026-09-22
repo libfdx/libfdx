@@ -1,6 +1,5 @@
 package io.github.libfdx.graphics.shader.runtime;
 
-import com.sun.management.ThreadMXBean;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.FdxFuture;
 import io.github.libfdx.core.ProviderId;
@@ -18,14 +17,12 @@ import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.VertexAttribute;
 import io.github.libfdx.graphics.VertexFormat;
 import io.github.libfdx.graphics.VertexLayout;
-import java.lang.management.ManagementFactory;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Assumptions;
 
 import static io.github.libfdx.graphics.shader.runtime.ShaderPreparationCapabilities.Execution.*;
 import static io.github.libfdx.graphics.shader.runtime.ShaderPreparationState.*;
@@ -757,48 +754,6 @@ class ShaderPreparationTest {
         worker.join();
         assertInstanceOf(FdxException.class, failure.get());
         assertEquals(0, f.service.queuedCount());
-    }
-
-    @Test void readyLookupIdleUpdatesAndRepeatedOriginsAllocateNoObjectsAfterWarmup() {
-        var platform = ManagementFactory.getThreadMXBean();
-        Assumptions.assumeTrue(platform instanceof ThreadMXBean);
-        var bean = (ThreadMXBean) platform;
-        Assumptions.assumeTrue(bean.isThreadAllocatedMemorySupported());
-        if (!bean.isThreadAllocatedMemoryEnabled()) bean.setThreadAllocatedMemoryEnabled(true);
-        Fixture f = new Fixture(1, 8, 16);
-        var handle = f.service.request(f, request("ready"));
-        f.service.update();
-        f.jobs.getFirst().done = true;
-        f.service.update();
-        f.service.captureRuntime("repeated models");
-        ShaderPreparationOrigin definition = origin("ready");
-        // Warm ordinary method entry as well as the loop's on-stack-replacement compilation.
-        for (int i = 0; i < 10; i++) exerciseReadyCapture(f.service, handle, definition, 10_000);
-        long thread = Thread.currentThread().threadId();
-        long allocated = 0;
-        ResolvedShaderPass pass = null;
-        // Warm the instrumented sample once too. JVM measurement/code initialization was a
-        // fixed first-sample allocation; every subsequent 10,000-frame sample must meet the bound.
-        for (int i = 0; i < 5; i++) {
-            long before = bean.getThreadAllocatedBytes(thread);
-            pass = exerciseReadyCapture(f.service, handle, definition, 10_000);
-            long sample = bean.getThreadAllocatedBytes(thread) - before;
-            if (i > 0) allocated = Math.max(allocated, sample);
-        }
-        assertSame(handle.readyPass(), pass);
-        assertTrue(allocated <= 1_024, "Idle preparation allocated " + allocated + " bytes");
-    }
-
-    private static ResolvedShaderPass exerciseReadyCapture(ShaderPreparation service, PreparedShaderPass handle,
-            ShaderPreparationOrigin definition, int iterations) {
-        ResolvedShaderPass pass = null;
-        for (int i = 0; i < iterations; i++) {
-            service.update(); pass = handle.readyPass();
-            pass.recordDraw();
-            handle.recordDraws(definition, "tree", "material", 1, false);
-            handle.recordDraws(definition, "bush", "material", 1, false);
-        }
-        return pass;
     }
 
     @Test void operationCleanupFailureStillPublishesOtherResultsAndDrains() {

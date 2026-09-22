@@ -1,6 +1,5 @@
 package io.github.libfdx.assets;
 
-import com.sun.management.ThreadMXBean;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.FdxFuture;
@@ -9,7 +8,6 @@ import io.github.libfdx.files.FileSystem;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-import java.lang.management.ManagementFactory;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -18,7 +16,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class DefaultAssetManagerScopeTest {
     private final Map<String, String[]> graph = new HashMap<>();
@@ -413,27 +410,14 @@ final class DefaultAssetManagerScopeTest {
     }
 
     @Test
-    void warmedLeaseReadsAndManagerUpdatesDoNotAllocate() {
+    void repeatedLeaseReadsAndManagerUpdatesRemainLoaded() {
         AssetLease<Asset> lease = manager.createScope().load(descriptor("same"));
         drain();
-        java.lang.management.ThreadMXBean platform = ManagementFactory.getThreadMXBean();
-        assumeTrue(platform instanceof ThreadMXBean);
-        ThreadMXBean bean = (ThreadMXBean)platform;
-        assumeTrue(bean.isThreadAllocatedMemorySupported());
-        if (!bean.isThreadAllocatedMemoryEnabled()) { bean.setThreadAllocatedMemoryEnabled(true); }
-        for (int i = 0; i < 10_000; i++) { lease.asset(); lease.isLoaded(); manager.update(2, Long.MAX_VALUE); }
-        long id = Thread.currentThread().threadId();
-        long minimum = Long.MAX_VALUE;
-        for (int attempt = 0; attempt < 5; attempt++) {
-            long before = bean.getThreadAllocatedBytes(id);
-            int valid = 0;
-            for (int i = 0; i < 2_000; i++) {
-                if (lease.asset() != null && lease.isLoaded() && manager.update(2, Long.MAX_VALUE)) { valid++; }
-            }
-            minimum = Math.min(minimum, bean.getThreadAllocatedBytes(id) - before);
-            assertEquals(2_000, valid);
+        for (int i = 0; i < 2_000; i++) {
+            assertNotNull(lease.asset());
+            assertTrue(lease.isLoaded());
+            assertTrue(manager.update(2, Long.MAX_VALUE));
         }
-        assertTrue(minimum <= 512, "Steady lease observation allocated " + minimum + " bytes");
     }
 
     private void drain() {

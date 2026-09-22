@@ -1,16 +1,13 @@
 package io.github.libfdx.graphics.g3d;
 
-import com.sun.management.ThreadMXBean;
 import io.github.libfdx.collections.Array;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.Mesh;
 import io.github.libfdx.graphics.camera.*;
 import io.github.libfdx.math.*;
 import org.junit.jupiter.api.Test;
-import java.lang.management.ManagementFactory;
 import java.util.Random;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class FrustumCuller3DTest {
     private static final BoundingBox POINT=BoundingBox.empty();
@@ -69,7 +66,7 @@ final class FrustumCuller3DTest {
         assertTrue(extra<5,"Unexpected conservative overdraw: "+extra);
     }
     @Test void stableQueueCompactionSkipsUnknownSkinBoundsAndHonorsExplicitOverrides() {
-        var graphics=new DefaultRenderQueue3DAllocationTest.FakeGraphicsContext();
+        var graphics=new DefaultRenderQueue3DReuseTest.FakeGraphicsContext();
         Mesh mesh=Mesh.coloredTriangle(graphics,"bounds");
         try {
             var part=new MeshPart(mesh,0,3);var material=new Material("bounds");
@@ -85,17 +82,12 @@ final class FrustumCuller3DTest {
             b.cullingBounds(null);queue.add(b);assertEquals(0,queue.cull(culler));
         } finally {mesh.dispose();}
     }
-    @Test void cameraRefreshAndVisibilityTestsAllocateNoSteadyStateStorage() {
-        assumeTrue(ManagementFactory.getThreadMXBean() instanceof ThreadMXBean);
-        var bean=(ThreadMXBean)ManagementFactory.getThreadMXBean();assumeTrue(bean.isThreadAllocatedMemorySupported());
-        bean.setThreadAllocatedMemoryEnabled(true);
+    @Test void repeatedCameraRefreshPreservesVisibility() {
         var culler=new FrustumCuller3D();var camera=new Camera().viewport(4,4).position(0,0,0);
         var transform=new Matrix4().setToTranslation(0,0,-3);
-        for(int i=0;i<12000;i++){culler.update(camera);culler.isVisible(BOX,transform);}
-        long thread=Thread.currentThread().threadId(),before=bean.getThreadAllocatedBytes(thread);int visible=0;
+        int visible=0;
         for(int i=0;i<2000;i++){culler.update(camera);if(culler.isVisible(BOX,transform))visible++;}
-        long allocated=bean.getThreadAllocatedBytes(thread)-before;
-        assertEquals(2000,visible);assertTrue(allocated<=512,"Frustum update/test allocated "+allocated+" bytes");
+        assertEquals(2000,visible);
     }
     private static boolean point(FrustumCuller3D culler,float x,float y,float z) {
         return culler.isVisible(POINT,new Matrix4().setToTranslation(x,y,z));

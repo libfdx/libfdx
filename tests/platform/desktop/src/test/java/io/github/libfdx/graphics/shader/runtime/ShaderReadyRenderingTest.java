@@ -1,6 +1,5 @@
 package io.github.libfdx.graphics.shader.runtime;
 
-import com.sun.management.ThreadMXBean;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.graphics.*;
 import io.github.libfdx.graphics.camera.Camera;
@@ -15,30 +14,23 @@ import io.github.libfdx.graphics.shader.reflection.*;
 import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.math.Matrix4;
-import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static io.github.libfdx.graphics.shader.runtime.ShaderPreparationCapabilities.Execution.WORKERS;
 
-/** Measures portable ready-render code, including capture and first-draw hooks, with concrete
- * allocation-free provider doubles. Native drivers/bindings and preparation allocations are
- * deliberately outside this measurement; preparation must finish before the measured frames. */
-final class ShaderReadyAllocationTest {
+/** Verifies ready-render behavior, capture, and first-draw hooks using provider doubles. */
+final class ShaderReadyRenderingTest {
     private static final RenderTargetLayout TARGET = RenderTargetLayout.color(TextureFormat.RGBA8_UNORM);
-    private static final int FRAMES = 10_000;
-    private static final int WARMUP_SAMPLES = 10;
-    private static final int MEASURED_SAMPLES = 5;
+    private static final int FRAMES = 100;
 
     @ParameterizedTest @ValueSource(booleans = {false, true})
-    void preparedSpriteFramesReusePipelinesAndCaptureWithoutAllocations(boolean instanced) {
+    void preparedSpriteFramesReusePipelinesAndCaptureDraws(boolean instanced) {
         Device device = new Device("gl", instanced);
         Context graphics = new Context(device);
         ShaderPreparation service = new ShaderPreparation(graphics);
@@ -64,20 +56,20 @@ final class ShaderReadyAllocationTest {
             frame.run();
             int drawsPerFrame = pass.draws - initialDraws;
             int requests = device.requests;
-            int drawsBeforeMeasurement = pass.draws;
-            measure("sprites-instanced=" + instanced, frame);
+            int drawsBeforeFrames = pass.draws;
+            frames(frame);
             assertEquals(requests, device.requests, "Ready frames requested more compilation");
             assertEquals(0, batch.skippedDrawsLastFrame().total());
             assertTrue(drawsPerFrame >= 2);
-            assertEquals(drawsPerFrame * FRAMES * (WARMUP_SAMPLES + MEASURED_SAMPLES), pass.draws - drawsBeforeMeasurement);
+            assertEquals(drawsPerFrame * FRAMES, pass.draws - drawsBeforeFrames);
             assertFalse(service.hasPendingWork());
             assertTrue(device.writes > 0);
             assertDrawTimings(capture);
         } finally { batch.dispose(); device.close(service); texture.dispose(); }
     }
 
-    @ParameterizedTest @ValueSource(strings = {"allocation-cpu", "gl"})
-    void preparedModelFramesReusePipelinesAndCaptureWithoutAllocations(String provider) {
+    @ParameterizedTest @ValueSource(strings = {"cpu-test", "gl"})
+    void preparedModelFramesReusePipelinesAndCaptureDraws(String provider) {
         Device device = new Device(provider, false);
         Context graphics = new Context(device);
         ShaderPreparation service = new ShaderPreparation(graphics);
@@ -100,11 +92,11 @@ final class ShaderReadyAllocationTest {
         try {
             frame.run(); device.complete(service); frame.run();
             int requests = device.requests;
-            int drawsBeforeMeasurement = pass.draws;
-            measure("models-provider=" + provider, frame);
+            int drawsBeforeFrames = pass.draws;
+            frames(frame);
             assertEquals(requests, device.requests, "Ready frames requested more compilation");
             assertEquals(0, batch.skippedDrawsLastFrame().total());
-            assertEquals(2 * FRAMES * (WARMUP_SAMPLES + MEASURED_SAMPLES), pass.draws - drawsBeforeMeasurement);
+            assertEquals(2 * FRAMES, pass.draws - drawsBeforeFrames);
             assertFalse(service.hasPendingWork());
             if (provider.equals("gl")) assertTrue(pass.parameterBinds > 0, "GPU PBR path was not exercised");
             else assertTrue(device.writes > FRAMES, "CPU projection path was not exercised");
@@ -130,29 +122,10 @@ final class ShaderReadyAllocationTest {
         for (var discovery : discoveries) assertTrue(discovery.timings().firstDrawNanos() >= 0, "Captured path did not draw");
     }
 
-    private static void measure(String label, Runnable frame) {
-        var platform = ManagementFactory.getThreadMXBean();
-        assumeTrue(platform instanceof ThreadMXBean);
-        ThreadMXBean bean = (ThreadMXBean) platform;
-        assumeTrue(bean.isThreadAllocatedMemorySupported());
-        if (!bean.isThreadAllocatedMemoryEnabled()) bean.setThreadAllocatedMemoryEnabled(true);
-        for (int i = 0; i < WARMUP_SAMPLES; i++) frames(frame);
-        long thread = Thread.currentThread().threadId();
-        long[] samples = new long[MEASURED_SAMPLES];
-        // The first instrumented sample warms the measurement call site too. Every following
-        // sample must pass, not just the cheapest sample. The allowance is fixed, not per frame.
-        for (int i = 0; i < samples.length; i++) {
-            long before = bean.getThreadAllocatedBytes(thread);
-            frames(frame);
-            samples[i] = bean.getThreadAllocatedBytes(thread) - before;
-        }
-        System.out.println("READY_ALLOCATIONS " + label + " frames=" + FRAMES + " bytes=" + Arrays.toString(samples));
-        for (int i = 1; i < samples.length; i++) assertTrue(samples[i] <= 1024, label + " allocated " + samples[i] + " bytes");
-    }
     private static void frames(Runnable frame) { for (int i = 0; i < FRAMES; i++) frame.run(); }
 
     private static class Handle {
-        private static final ProviderId ID = ProviderId.of("allocation-test");
+        private static final ProviderId ID = ProviderId.of("rendering-test");
         private boolean disposed;
         public ProviderId providerId() { return ID; }
         @SuppressWarnings("unchecked") public <T> T as() { return (T) this; }

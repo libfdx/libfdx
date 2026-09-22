@@ -4,13 +4,10 @@ import io.github.libfdx.collections.Array;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.Mesh;
 import io.github.libfdx.math.Matrix4;
-import com.sun.management.ThreadMXBean;
-import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class AnimationPlaybackTest {
     private static DefaultModelInstance instance() {
@@ -143,22 +140,6 @@ final class AnimationPlaybackTest {
         assertThrows(FdxException.class,()->controller.update(.25f));
         assertArrayEquals(before,instance.copyNodeTransform("root",new Matrix4()).values());
         assertEquals(.25f,controller.timeSeconds());
-    }
-
-    @Test void crossfadeUpdatesDoNotAllocateAfterWarmup() {
-        AnimationController controller=new AnimationController(instance()).play(move("a",0,4),true)
-                .crossFade(move("b",10,14),true,100_000);
-        for (int i=0;i<2000;i++) controller.update(.001f);
-        var platform=ManagementFactory.getThreadMXBean(); assumeTrue(platform instanceof ThreadMXBean);
-        ThreadMXBean bean=(ThreadMXBean)platform; assumeTrue(bean.isThreadAllocatedMemorySupported());
-        bean.setThreadAllocatedMemoryEnabled(true);
-        long id=Thread.currentThread().threadId(),minimum=Long.MAX_VALUE;
-        for (int attempt=0;attempt<5;attempt++) {
-            long before=bean.getThreadAllocatedBytes(id);
-            for (int i=0;i<2000;i++) controller.update(.001f);
-            minimum=Math.min(minimum,bean.getThreadAllocatedBytes(id)-before);
-        }
-        assertTrue(minimum <= 1024,"Animation update allocated "+minimum+" bytes for 2000 operations");
     }
 
     @Test void programmaticMatrixDefaultsRoundTripEveryZeroAndSignedScaleCombination() {

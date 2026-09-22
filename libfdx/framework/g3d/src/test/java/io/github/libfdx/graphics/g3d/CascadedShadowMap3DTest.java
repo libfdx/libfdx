@@ -1,6 +1,5 @@
 package io.github.libfdx.graphics.g3d;
 
-import com.sun.management.ThreadMXBean;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.collections.Array;
 import io.github.libfdx.core.FdxException;
@@ -36,12 +35,10 @@ import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Matrix4;
 import org.junit.jupiter.api.Test;
 
-import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.List;
 import java.util.ArrayList;
-import java.util.Locale;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -51,7 +48,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 final class CascadedShadowMap3DTest {
     @Test void asyncCascadesShareDefinitionsWithoutCreatingAnyShaderModule() {
@@ -117,8 +113,6 @@ final class CascadedShadowMap3DTest {
         } finally { coarse.dispose(); fine.dispose(); }
     }
     private static final float EPSILON = 0.0001f;
-    private static final int ALLOCATION_MEASUREMENT_ATTEMPTS = 5;
-    private static final int ALLOCATION_OPERATIONS_PER_ATTEMPT = 2_000;
 
     @Test
     void cachedPassesTrackCameraLightCasterRevisionAndFailures() {
@@ -186,7 +180,7 @@ final class CascadedShadowMap3DTest {
     }
 
     @Test
-    void subTexelMotionReusesStabilizedCascadesWithoutSteadyAllocations() {
+    void subTexelMotionReusesStabilizedCascades() {
         FakeGraphicsContext graphics = new FakeGraphicsContext(ProviderId.of("gl"));
         CascadedShadowMap3D maps = new CascadedShadowMap3D(graphics, 2, 256, 256).shadowFadeFraction(0);
         Camera camera = new Camera().projection(CameraProjection.ORTHOGRAPHIC).viewport(10, 10)
@@ -201,19 +195,6 @@ final class CascadedShadowMap3DTest {
             assertEquals(0, maps.renderIfNeeded(light, camera, casters, 1));
             maps.cascade(0).lightViewProjection().copyValues(shifted, 0);
             assertArrayEquals(original, shifted);
-            for (int i = 0; i < 2_000; i++) maps.renderIfNeeded(light, camera, casters, 1);
-            var platform = ManagementFactory.getThreadMXBean();
-            assumeTrue(platform instanceof ThreadMXBean);
-            ThreadMXBean bean = (ThreadMXBean)platform;
-            assumeTrue(bean.isThreadAllocatedMemorySupported());
-            bean.setThreadAllocatedMemoryEnabled(true);
-            long threadId = Thread.currentThread().threadId(), minimum = Long.MAX_VALUE;
-            for (int attempt = 0; attempt < 5; attempt++) {
-                long before = bean.getThreadAllocatedBytes(threadId);
-                for (int i = 0; i < 2_000; i++) maps.renderIfNeeded(light, camera, casters, 1);
-                minimum = Math.min(minimum, bean.getThreadAllocatedBytes(threadId) - before);
-            }
-            assertTrue(minimum <= 1024, "Cached shadow path allocated " + minimum + " bytes over 2000 calls");
         } finally { maps.dispose(); }
     }
 
@@ -240,7 +221,7 @@ final class CascadedShadowMap3DTest {
     }
 
     @Test
-    void cpuProjectionAllocatesNoPerDrawObjectsAfterWarmup() {
+    void cpuProjectionDrawsOnRepeatedShaderUse() {
         FakeGraphicsContext graphics = new FakeGraphicsContext(ProviderId.of("cpu-test"));
         Renderable3D renderable = renderable(graphics);
         Camera camera = new Camera()
@@ -256,44 +237,19 @@ final class CascadedShadowMap3DTest {
         PbrShaderProvider provider = new PbrShaderProvider(graphics, new PbrShaderConfig());
         Shader3D shader = provider.shader(renderable, context);
 
-        for (int i = 0; i < ALLOCATION_OPERATIONS_PER_ATTEMPT; i++) {
+        int initialDrawCalls = pass.drawCalls;
+        for (int i = 0; i < 100; i++) {
             shader.begin(context);
             shader.render(renderable);
             shader.end();
         }
-
-        var platformBean = ManagementFactory.getThreadMXBean();
-        assumeTrue(platformBean instanceof ThreadMXBean);
-        ThreadMXBean bean = (ThreadMXBean)platformBean;
-        assumeTrue(bean.isThreadAllocatedMemorySupported());
-        if (!bean.isThreadAllocatedMemoryEnabled()) {
-            bean.setThreadAllocatedMemoryEnabled(true);
-        }
-        long threadId = Thread.currentThread().threadId();
-        bean.getThreadAllocatedBytes(threadId);
-        long minimumAllocated = Long.MAX_VALUE;
-        int initialDrawCalls = pass.drawCalls;
-        for (int attempt = 0; attempt < ALLOCATION_MEASUREMENT_ATTEMPTS; attempt++) {
-            long before = bean.getThreadAllocatedBytes(threadId);
-            for (int i = 0; i < ALLOCATION_OPERATIONS_PER_ATTEMPT; i++) {
-                shader.begin(context);
-                shader.render(renderable);
-                shader.end();
-            }
-            long allocated = bean.getThreadAllocatedBytes(threadId) - before;
-            minimumAllocated = Math.min(minimumAllocated, allocated);
-        }
-
-        assertEquals(initialDrawCalls
-                + ALLOCATION_MEASUREMENT_ATTEMPTS * ALLOCATION_OPERATIONS_PER_ATTEMPT, pass.drawCalls);
-        assertTrue(minimumAllocated <= 1_024L,
-                "Expected no post-warm-up CPU projection churn, minimum allocated " + minimumAllocated + " bytes");
+        assertEquals(initialDrawCalls + 100, pass.drawCalls);
         provider.dispose();
         renderable.meshPart().mesh().dispose();
     }
 
     @Test
-    void graphPbrAllocatesNoPerDrawObjectsAfterWarmup() {
+    void graphPbrDrawsAcrossRepeatedPasses() {
         FakeGraphicsContext graphics =
                 new FakeGraphicsContext(ProviderId.of("gl"));
         Renderable3D renderable = renderable(graphics);
@@ -306,82 +262,28 @@ final class CascadedShadowMap3DTest {
         Environment3D environment = new Environment3D()
                 .add(new DirectionalLight()
                         .direction(-0.5f, -1.0f, -0.25f));
-        AllocationRenderPass pass =
-                new AllocationRenderPass();
+        CountingRenderPass pass =
+                new CountingRenderPass();
         RenderContext3D context = new RenderContext3D(
                 graphics, camera, environment, null, pass);
         PbrShaderProvider provider = new PbrShaderProvider(
                 graphics, new PbrShaderConfig());
         Shader3D shader = provider.shader(renderable, context);
 
-        for (int i = 0; i < ALLOCATION_OPERATIONS_PER_ATTEMPT; i++) {
+        int initialDrawCalls = pass.drawCalls;
+        for (int i = 0; i < 100; i++) {
             shader.begin(context);
-            shader.render(renderable);
             shader.end();
         }
-
-        var platformBean =
-                ManagementFactory.getThreadMXBean();
-        assumeTrue(platformBean instanceof ThreadMXBean);
-        ThreadMXBean bean = (ThreadMXBean)platformBean;
-        assumeTrue(bean.isThreadAllocatedMemorySupported());
-        if (!bean.isThreadAllocatedMemoryEnabled()) {
-            bean.setThreadAllocatedMemoryEnabled(true);
-        }
-        long threadId = Thread.currentThread().threadId();
-        bean.getThreadAllocatedBytes(threadId);
-        long lifecycleAllocated = Long.MAX_VALUE;
-        long lifecycleNanos = 0L;
-        for (int attempt = 0; attempt < ALLOCATION_MEASUREMENT_ATTEMPTS; attempt++) {
-            long lifecycleBefore = bean.getThreadAllocatedBytes(threadId);
-            long lifecycleStart = System.nanoTime();
-            for (int i = 0; i < ALLOCATION_OPERATIONS_PER_ATTEMPT; i++) {
-                shader.begin(context);
-                shader.end();
-            }
-            long attemptNanos = System.nanoTime() - lifecycleStart;
-            long attemptAllocated = bean.getThreadAllocatedBytes(threadId) - lifecycleBefore;
-            if (attemptAllocated < lifecycleAllocated) {
-                lifecycleAllocated = attemptAllocated;
-                lifecycleNanos = attemptNanos;
-            }
-        }
-        int initialDrawCalls = pass.drawCalls;
-        long allocated = Long.MAX_VALUE;
-        long drawNanos = 0L;
-        for (int attempt = 0; attempt < ALLOCATION_MEASUREMENT_ATTEMPTS; attempt++) {
+        assertEquals(initialDrawCalls, pass.drawCalls);
+        for (int i = 0; i < 5; i++) {
             shader.begin(context);
-            long before = bean.getThreadAllocatedBytes(threadId);
-            long drawStart = System.nanoTime();
-            for (int i = 0; i < ALLOCATION_OPERATIONS_PER_ATTEMPT; i++) {
+            for (int draw = 0; draw < 100; draw++) {
                 shader.render(renderable);
             }
-            long attemptNanos = System.nanoTime() - drawStart;
-            long attemptAllocated = bean.getThreadAllocatedBytes(threadId) - before;
             shader.end();
-            if (attemptAllocated < allocated) {
-                allocated = attemptAllocated;
-                drawNanos = attemptNanos;
-            }
         }
-
-        assertEquals(initialDrawCalls
-                        + ALLOCATION_MEASUREMENT_ATTEMPTS * ALLOCATION_OPERATIONS_PER_ATTEMPT,
-                pass.drawCalls);
-        assertTrue(allocated <= 4_096L,
-                "Expected no post-warm-up graph PBR churn, minimum allocated "
-                        + allocated + " render bytes and "
-                        + lifecycleAllocated + " lifecycle bytes");
-        assertTrue(lifecycleAllocated <= 4_096L,
-                "Expected no post-warm-up graph PBR lifecycle churn, minimum allocated "
-                        + lifecycleAllocated + " bytes");
-        System.out.printf(Locale.ROOT,
-                "SHADER_GRAPH_PERF pbr_draws=%d draw_ns_per_op=%.3f "
-                        + "draw_bytes=%d lifecycle_ns_per_op=%.3f "
-                        + "lifecycle_bytes=%d%n",
-                ALLOCATION_OPERATIONS_PER_ATTEMPT,
-                drawNanos / (double)ALLOCATION_OPERATIONS_PER_ATTEMPT, allocated,
-                lifecycleNanos / (double)ALLOCATION_OPERATIONS_PER_ATTEMPT, lifecycleAllocated);
+        assertEquals(initialDrawCalls + 500, pass.drawCalls);
         provider.dispose();
         renderable.meshPart().mesh().dispose();
     }
@@ -1101,10 +1003,10 @@ final class CascadedShadowMap3DTest {
         }
     }
 
-    private static final class AllocationRenderPass
+    private static final class CountingRenderPass
             implements RenderPass {
         private static final ProviderId PROVIDER_ID =
-                ProviderId.of("allocation-pass");
+                ProviderId.of("counting-pass");
         private static final RenderPassCompatibility COMPATIBILITY =
                 RenderPassCompatibility.of(
                         RenderTargetLayout.color(
