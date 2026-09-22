@@ -31,7 +31,7 @@ public final class GltfMaterialsTest extends GraphicsParityTest {
     private final ModelBatch[] batches = new ModelBatch[2];
     private final Camera camera = new Camera().projection(CameraProjection.PERSPECTIVE).fieldOfView(44)
             .nearFar(.1f, 80);
-    private final Environment3D environment = new Environment3D().ambientColor(new Color(.07f,.09f,.13f,1))
+    private final Environment environment = new Environment().ambientColor(new Color(.07f,.09f,.13f,1))
             .add(new DirectionalLight().direction(-.6f,-.4f,-1).intensity(2));
     private final RenderPassDescriptor screen = new RenderPassDescriptor().label("glTF material comparison")
             .colorLoadOp(LoadOp.clear(12f/255,18f/255,28f/255,1)).colorStoreOp(StoreOp.store());

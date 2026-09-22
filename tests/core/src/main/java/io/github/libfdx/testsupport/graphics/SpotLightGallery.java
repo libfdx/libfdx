@@ -3,7 +3,7 @@ package io.github.libfdx.testsupport.graphics;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.Material;
 import io.github.libfdx.graphics.g3d.MaterialAttributes;
 import io.github.libfdx.graphics.g3d.Model;
@@ -32,7 +32,7 @@ public final class SpotLightGallery implements Disposable {
     private DefaultModelInstance[] shadowCasters;
     private boolean disposed;
 
-    public SpotLightGallery(GraphicsContext graphics, Environment3D environment, Model dragon) {
+    public SpotLightGallery(GraphicsContext graphics, Environment environment, Model dragon) {
         try {
             build(new ModelBuilder(graphics), environment, dragon);
             shadowCasters = instances.toArray(new DefaultModelInstance[0]);
@@ -42,7 +42,7 @@ public final class SpotLightGallery implements Disposable {
         }
     }
 
-    private void build(ModelBuilder builder, Environment3D environment, Model dragon) {
+    private void build(ModelBuilder builder, Environment environment, Model dragon) {
         Material paving = surface("slate paving", .38f, .43f, .46f, .88f, 0);
         Material limestone = surface("honed limestone", .64f, .61f, .53f, .8f, 0);
         Material metal = surface("graphite steel", .24f, .29f, .31f, .48f, .35f);
@@ -135,7 +135,7 @@ public final class SpotLightGallery implements Disposable {
         }
     }
 
-    private void lamps(ModelBuilder builder, Environment3D environment, Material metal,
+    private void lamps(ModelBuilder builder, Environment environment, Material metal,
                        Model box, Model rod) {
         Model head = own(builder.material(metal).cylinder(.27f, HEAD_HEIGHT, 40, LIT));
         Model collar = own(builder.material(metal).cylinder(.30f, .08f, 40, LIT));

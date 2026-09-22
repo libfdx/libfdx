@@ -23,7 +23,7 @@ import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.g3d.BillboardRenderer3D;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
 import io.github.libfdx.graphics.g3d.ModelBuilder;
@@ -98,7 +98,7 @@ public final class Billboard3DTest extends ApplicationAdapter {
                 .sunColor(1.0f, 0.78f, 0.42f, 0.62f)
                 .sunPosition(0.68f, 0.70f)
                 .sunSize(0.10f);
-        batch = new ModelBatch(graphics).environment(new Environment3D()
+        batch = new ModelBatch(graphics).environment(new Environment()
                 .ambientColor(new Color(0.18f, 0.19f, 0.22f, 1.0f))
                 .add(new DirectionalLight()
                         .direction(-0.52f, -0.74f, -0.42f)

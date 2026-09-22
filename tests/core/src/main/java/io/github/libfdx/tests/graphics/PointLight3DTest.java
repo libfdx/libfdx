@@ -18,7 +18,7 @@ import io.github.libfdx.graphics.Mesh;
 import io.github.libfdx.graphics.g3d.DefaultModel;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.MeshPart;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
@@ -83,7 +83,7 @@ public final class PointLight3DTest extends ApplicationAdapter {
         logger = fdx.logger();
         fpsLogger = TestFpsLogger.create(logger, "PointLight3DTest");
 
-        Environment3D environment = new Environment3D()
+        Environment environment = new Environment()
                 .ambientColor(new Color(0.025f, 0.026f, 0.03f, 1.0f))
                 .add(new DirectionalLight()
                         .direction(-0.2f, -0.9f, -0.35f)

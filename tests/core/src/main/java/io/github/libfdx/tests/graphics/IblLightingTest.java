@@ -24,7 +24,7 @@ public final class IblLightingTest extends GraphicsParityTest {
     private static final String PROBE = "ibl/studio.fdxibl";
     private final Camera camera = new Camera().projection(CameraProjection.PERSPECTIVE)
             .fieldOfView(48).nearFar(.1f, 100);
-    private final Environment3D environment = new Environment3D().ambientColor(Color.BLACK)
+    private final Environment environment = new Environment().ambientColor(Color.BLACK)
             .neutralToneMapping(1);
     private final Model[] models = new Model[12];
     private final DefaultModelInstance[] instances = new DefaultModelInstance[12];

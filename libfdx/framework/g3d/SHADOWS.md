@@ -4,7 +4,7 @@
 batch. `CascadedShadowMap3D` owns one to four such maps, fits them to a camera and
 directional light, snaps their light-space centers to texels, and extends depth
 coverage for submitted casters. Dispose these resources on the graphics thread
-before their context. `Environment3D` borrows them for PBR sampling.
+before their context. `Environment` borrows them for PBR sampling.
 
 `ShadowBudget3D` validates the cascade count, square resolution and logical byte
 budget before allocation. Its low/balanced/high setup presets trade coverage and

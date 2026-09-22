@@ -29,7 +29,7 @@ import io.github.libfdx.graphics.g3d.DefaultModel;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
 import io.github.libfdx.graphics.g3d.DirectionalShadowMap3D;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.G3DAssetLoaders;
 import io.github.libfdx.graphics.g3d.MeshPart;
 import io.github.libfdx.graphics.g3d.Material;
@@ -99,7 +99,7 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
     private TestFpsLogger fpsLogger;
     private AssetManager assets;
     private GraphicsContext graphics;
-    private Environment3D environment;
+    private Environment environment;
     private ModelBatch batch;
     private SkyboxRenderer3D skybox;
     private SkyEnvironment3D skyEnvironment;
@@ -192,7 +192,7 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
                 .sunColor(1.0f, 0.80f, 0.42f, 0.70f)
                 .sunDirection(0.43f, 0.87f, 0.25f)
                 .sunSize(0.16f);
-        environment = new Environment3D()
+        environment = new Environment()
                 .ambientColor(new Color(0.035f, 0.040f, 0.050f, 1.0f))
                 .skyEnvironment(skyEnvironment)
                 .fog(0.50f, 0.62f, 0.80f, 0.42f, 52.0f, 150.0f)

@@ -63,7 +63,7 @@ public final class ShadowShaderPreparationTest extends GraphicsParityTest {
             shadow = cascades.cascade(0);
         }
         group.usePlan(ShaderPassId.SHADOW, shadow.shaderPlan());
-        Environment3D environment = new Environment3D().ambientColor(new Color(.2f, .23f, .28f, 1)).add(light);
+        Environment environment = new Environment().ambientColor(new Color(.2f, .23f, .28f, 1)).add(light);
         if (cascades != null) environment.cascadedShadowMap(cascades); else environment.directionalShadowMap(shadow);
         world = new ModelBatch(graphics, new ModelBatchConfig().shaderPlan(worldPlan).shaderGroup(group))
                 .environment(environment);

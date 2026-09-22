@@ -26,6 +26,6 @@ public interface RenderGraph3D extends Disposable {
      * @param environment the environment
      * @param instances the instances
      */
-    void render(Camera camera, Environment3D environment,
+    void render(Camera camera, Environment environment,
             ObjectIterable<? extends ModelInstance> instances);
 }

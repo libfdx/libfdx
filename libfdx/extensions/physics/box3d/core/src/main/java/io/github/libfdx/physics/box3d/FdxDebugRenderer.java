@@ -30,7 +30,7 @@ import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.graphics.g3d.CascadedShadowMap3D;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
 import io.github.libfdx.graphics.g3d.ModelBuilder;
@@ -69,7 +69,7 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
             .depthClear(1.0f);
     private final InstancedSolidRenderer instancedSolidRenderer;
     private final InstancedWireRenderer instancedWireRenderer;
-    private final Environment3D environment;
+    private final Environment environment;
     private final DirectionalLight directionalLight;
     private final CascadedShadowMap3D shadowMap;
     private final boolean ownsModelBatch;
@@ -149,7 +149,7 @@ public class FdxDebugRenderer extends B3DebugDrawEm {
                         .minTexelBias(shadowBias * SHADOW_MAP_SIZE)
                         .strength(0.82f)
                 : null;
-        this.environment = new Environment3D()
+        this.environment = new Environment()
                 .ambientColor(new Color(0.18f, 0.19f, 0.21f, 1.0f))
                 .add(directionalLight);
         if(shadowMap != null) {

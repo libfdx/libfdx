@@ -1654,7 +1654,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
         }
 
         private ColorVertex applyFog(ColorVertex color, WorldVertex worldVertex, RenderContext3D context) {
-            Environment3D environment = context.environment();
+            Environment environment = context.environment();
             if (!environment.fogEnabled()) {
                 return color;
             }
@@ -1700,7 +1700,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
                     0.0f);
         }
 
-        private ColorVertex skyEnvironmentContribution(Environment3D environment, WorldVertex normal,
+        private ColorVertex skyEnvironmentContribution(Environment environment, WorldVertex normal,
                 WorldVertex view, float red, float green, float blue, float metallic, float roughness, float ao) {
             SkyEnvironment3D sky = environment.skyEnvironment();
             if (sky == null) {
@@ -1771,7 +1771,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
             return obtainColorVertex(red, green, blue, 0.0f);
         }
 
-        private float fogFactor(Environment3D environment, WorldVertex worldVertex, Vector3 cameraPosition) {
+        private float fogFactor(Environment environment, WorldVertex worldVertex, Vector3 cameraPosition) {
             float dx = cameraPosition.x() - worldVertex.x;
             float dy = cameraPosition.y() - worldVertex.y;
             float dz = cameraPosition.z() - worldVertex.z;
@@ -2399,7 +2399,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
         }
 
         private void applyEnvironment(RenderPass pass) {
-            Environment3D environment = context.environment();
+            Environment environment = context.environment();
             Color ambient = environment.ambientColor();
             uniforms.setUniform3f(uniforms.AMBIENT_COLOR,
                     ambient.red(), ambient.green(), ambient.blue());
@@ -2488,7 +2488,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
             }
         }
 
-        private void applyFog(RenderPass pass, Environment3D environment) {
+        private void applyFog(RenderPass pass, Environment environment) {
             if (!environment.fogEnabled()) {
                 uniforms.setUniform4f(uniforms.FOG_COLOR,
                         0.0f, 0.0f, 0.0f, 0.0f);
@@ -2504,7 +2504,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
                     Math.max(0.0f, Math.min(1.0f, fog.alpha())), 0.0f);
         }
 
-        private void applySkyEnvironment(RenderPass pass, Environment3D environment) {
+        private void applySkyEnvironment(RenderPass pass, Environment environment) {
             SkyEnvironment3D sky = environment.skyEnvironment();
             if (sky == null) {
                 uniforms.setUniform4f(uniforms.SKY_ZENITH_COLOR,
@@ -2540,7 +2540,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
                     sky.horizonBlend());
         }
 
-        private void applyPointLights(RenderPass pass, Environment3D environment) {
+        private void applyPointLights(RenderPass pass, Environment environment) {
             int count = 0;
             for (int i = 0; i < environment.lights().size() && count < MAX_POINT_LIGHTS; i++) {
                 Light light = environment.lights().get(i);
@@ -2565,7 +2565,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
             }
         }
 
-        private void applySpotLights(RenderPass pass, Environment3D environment) {
+        private void applySpotLights(RenderPass pass, Environment environment) {
             int count = 0;
             for (int i = 0; i < environment.lights().size() && count < MAX_SPOT_LIGHTS; i++) {
                 Light light = environment.lights().get(i);
@@ -2612,7 +2612,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
             }
         }
 
-        private void applyDirectionalShadow(RenderPass pass, Environment3D environment) {
+        private void applyDirectionalShadow(RenderPass pass, Environment environment) {
             CascadedShadowMap3D cascaded = activeCascadedShadowMap(environment);
             if (cascaded != null) {
                 applyCascadedDirectionalShadow(pass, cascaded);
@@ -2845,7 +2845,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
             uniforms.textureCoordinates(slot, attribute == null ? TextureCoordinates.UV0 : attribute.coordinates());
         }
 
-        private void applyShadowTextures(RenderPass pass, Environment3D environment) {
+        private void applyShadowTextures(RenderPass pass, Environment environment) {
             CascadedShadowMap3D cascaded = activeCascadedShadowMap(environment);
             DirectionalShadowMap3D singleShadowMap = cascaded == null ? activeDirectionalShadowMap(environment) : null;
             int cascadeCount = cascaded != null ? Math.min(cascaded.cascadeCount(), MAX_SHADOW_CASCADES) : 0;
@@ -2862,7 +2862,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
             }
         }
 
-        private CascadedShadowMap3D activeCascadedShadowMap(Environment3D environment) {
+        private CascadedShadowMap3D activeCascadedShadowMap(Environment environment) {
             if (!shadowsEnabled) return null;
             CascadedShadowMap3D cascaded = environment.cascadedShadowMap();
             if (cascaded != null && !cascaded.isDisposed()) {
@@ -2871,7 +2871,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
             return null;
         }
 
-        private DirectionalShadowMap3D activeDirectionalShadowMap(Environment3D environment) {
+        private DirectionalShadowMap3D activeDirectionalShadowMap(Environment environment) {
             if (!shadowsEnabled) return null;
             DirectionalShadowMap3D shadowMap = environment.directionalShadowMap();
             return shadowMap != null && !shadowMap.isDisposed() ? shadowMap : null;

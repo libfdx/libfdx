@@ -24,7 +24,7 @@ import io.github.libfdx.graphics.g3d.DefaultModel;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
 import io.github.libfdx.graphics.g3d.EdgeDetectionOutlineRenderer3D;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.Material;
 import io.github.libfdx.graphics.g3d.MeshPart;
 import io.github.libfdx.graphics.g3d.Model;
@@ -115,7 +115,7 @@ public final class SkinnedModelBatchTest extends ApplicationAdapter {
                     .outlineColor(0.0f, 0.86f, 1.0f, 1.0f)
                     .outlineWidth(2.0f);
         }
-        batch.environment(new Environment3D()
+        batch.environment(new Environment()
                 .ambientColor(new Color(0.42f, 0.42f, 0.45f, 1.0f))
                 .add(new DirectionalLight().direction(-0.35f, -0.75f, -1.0f).intensity(1.35f)));
         model = createModel();

@@ -50,7 +50,7 @@ public final class ModelBatch implements Batch3D {
     private FrustumCuller3D culler;
     private boolean frustumCulling;
     private int lastFlushCulledCount,lastFlushVisibleCount;
-    private final Environment3D defaultEnvironment = new Environment3D();
+    private final Environment defaultEnvironment = new Environment();
     // The depth clear value is applied per pass in begin(), not here: it has
     // to match the active clip depth range, and a field initializer would latch
     // whatever was set when this batch happened to be constructed.
@@ -67,7 +67,7 @@ public final class ModelBatch implements Batch3D {
     private ShaderProvider3D ownedShaderProvider;
     private Disposable[] retiredOwnedProviders = new Disposable[2];
     private int retiredOwnedProviderCount;
-    private Environment3D environment = defaultEnvironment;
+    private Environment environment = defaultEnvironment;
     private ShaderProvider3D shaderProvider;
     private ShaderProvider commonShaderProvider;
     private long commonShaderRevision = -1;
@@ -318,7 +318,7 @@ public final class ModelBatch implements Batch3D {
      * @return this model batch for chaining
      */
     @Override
-    public ModelBatch environment(Environment3D environment) {
+    public ModelBatch environment(Environment environment) {
         this.environment = environment != null ? environment : defaultEnvironment;
         return this;
     }

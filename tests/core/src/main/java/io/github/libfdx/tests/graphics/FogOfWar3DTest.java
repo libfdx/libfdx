@@ -75,7 +75,7 @@ public final class FogOfWar3DTest extends GraphicsParityTest {
         for(int i=0;i<shadowAlpha.length;i++)shadowAlpha[i]=new Material("foreground shadow "+i,
                 MaterialAttributes.baseColor(1,1,1,i/255f)).alphaMode(MaterialAlphaMode.BLEND);
         batch = new ModelBatch(graphics)
-                .frustumCulling(true).environment(new Environment3D()
+                .frustumCulling(true).environment(new Environment()
                 .ambientColor(new Color(.14f,.18f,.22f,1)).add(sun).directionalShadowMap(shadows)
                 .neutralToneMapping(1));
         ModelBuilder builder = new ModelBuilder(graphics);

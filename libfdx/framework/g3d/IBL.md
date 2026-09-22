@@ -1,7 +1,7 @@
 # Prepared image-based lighting
 
 `ImageBasedLighting3D` owns a diffuse map, a specular mip chain and a BRDF lookup
-in the creating graphics context's resource domain. `Environment3D` borrows it.
+in the creating graphics context's resource domain. `Environment` borrows it.
 `G3DAssetLoaders.register` installs the `.fdxibl` loader by resource type:
 
 ```java

@@ -6,7 +6,7 @@ import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.Material;
 import io.github.libfdx.graphics.g3d.MaterialAlphaMode;
 import io.github.libfdx.graphics.g3d.MaterialAttributes;
@@ -46,7 +46,7 @@ public final class Transparency3DTest extends GraphicsParityTest {
     @Override
     public void create(Fdx fdx) {
         initialize(fdx, "Transparency3DTest");
-        batch = new ModelBatch(graphics).environment(new Environment3D()
+        batch = new ModelBatch(graphics).environment(new Environment()
                 .ambientColor(new Color(0.32f, 0.37f, 0.43f, 1.0f))
                 .add(new DirectionalLight().direction(-0.5f, -1.0f, -0.3f)
                         .color(new Color(1.0f, 0.92f, 0.80f, 1.0f)).intensity(2.0f)));

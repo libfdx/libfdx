@@ -14,7 +14,7 @@ import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.Material;
 import io.github.libfdx.graphics.g3d.MaterialAttributes;
 import io.github.libfdx.graphics.g3d.Model;
@@ -130,7 +130,7 @@ public final class FarWorldCameraTest extends ApplicationAdapter {
         graphics = fdx.graphics().main();
         input = fdx.input();
 
-        Environment3D environment = new Environment3D()
+        Environment environment = new Environment()
                 .ambientColor(new Color(0.32f, 0.32f, 0.34f, 1.0f))
                 .add(new DirectionalLight()
                         .direction(-1.0f, -0.8f, -0.2f)

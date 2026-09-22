@@ -19,7 +19,7 @@ import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.G3DAssetLoaders;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
@@ -90,7 +90,7 @@ public final class Skybox3DTest extends ApplicationAdapter {
                 .sunColor(1.0f, 0.86f, 0.52f, 0.9f)
                 .sunPosition(0.36f, 0.72f)
                 .sunSize(0.12f);
-        batch = new ModelBatch(graphics).environment(new Environment3D()
+        batch = new ModelBatch(graphics).environment(new Environment()
                 .ambientColor(new Color(0.21f, 0.22f, 0.25f, 1.0f))
                 .add(new DirectionalLight()
                         .direction(-0.42f, -0.68f, -0.6f)

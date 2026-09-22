@@ -72,7 +72,7 @@ final class ImageBasedLightingTest {
         ImageBasedLighting3D light = ImageBasedLighting3D.create(device.context(), data());
         assertEquals(4, light.specularTexture().mipLevelCount());
         assertEquals(3, device.uploads);
-        Environment3D environment = new Environment3D().imageBasedLighting(light).imageBasedLightingTransform(2, .5f);
+        Environment environment = new Environment().imageBasedLighting(light).imageBasedLightingTransform(2, .5f);
         assertSame(light, environment.imageBasedLighting());
         environment.imageBasedLighting(null);
         assertFalse(light.isDisposed());

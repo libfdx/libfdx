@@ -23,7 +23,7 @@ import io.github.libfdx.graphics.g2d.StandardSpriteTechnique;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.GraphMaterial;
 import io.github.libfdx.graphics.g3d.MaterialAttributes;
 import io.github.libfdx.graphics.g3d.Model;
@@ -89,7 +89,7 @@ public final class ShaderGraphSampleApplication extends ApplicationAdapter {
     private Input input;
     private Logger logger;
     private Camera camera;
-    private Environment3D environment;
+    private Environment environment;
     private ModelBatch modelBatch;
     private SpriteBatch spriteBatch;
     private ShaderProvider modelShaderProvider;
@@ -144,7 +144,7 @@ public final class ShaderGraphSampleApplication extends ApplicationAdapter {
         modelShaderProvider = modelGraphProvider;
         spriteShaderProvider = spriteGraphProvider;
 
-        environment = new Environment3D()
+        environment = new Environment()
                 .ambientColor(new Color(0.065f, 0.075f, 0.105f, 1.0f))
                 .neutralToneMapping(1.18f)
                 .add(new DirectionalLight()

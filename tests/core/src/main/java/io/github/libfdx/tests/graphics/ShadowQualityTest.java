@@ -27,7 +27,7 @@ public final class ShadowQualityTest extends GraphicsParityTest {
     private final Model[] models = new Model[4];
     private final DefaultModelInstance[] instances = new DefaultModelInstance[17];
     private final CascadedShadowMap3D[] shadows = new CascadedShadowMap3D[2];
-    private final Environment3D[] environments = new Environment3D[2];
+    private final Environment[] environments = new Environment[2];
     private final ModelBatch[] batches = new ModelBatch[2];
     private final OffscreenTarget[] targets = new OffscreenTarget[2];
     private final ShadowQualityLayout layout = new ShadowQualityLayout();
@@ -56,7 +56,7 @@ public final class ShadowQualityTest extends GraphicsParityTest {
         initialize(fdx, getClass().getSimpleName());
         createScene();
         for (int i = 0; i < 2; i++) {
-            environments[i] = new Environment3D().ambientColor(new Color(.16f, .18f, .22f, 1))
+            environments[i] = new Environment().ambientColor(new Color(.16f, .18f, .22f, 1))
                     .add(light).neutralToneMapping(1);
             batches[i] = new ModelBatch(graphics).environment(environments[i]).frustumCulling(true);
             targets[i] = new OffscreenTarget(graphics.device(), true).clearColor(.36f, .47f, .59f, 1);

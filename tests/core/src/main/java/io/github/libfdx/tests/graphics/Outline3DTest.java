@@ -21,7 +21,7 @@ import io.github.libfdx.graphics.g3d.MaterialAttributes;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
 import io.github.libfdx.graphics.g3d.EdgeDetectionOutlineRenderer3D;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
 import io.github.libfdx.graphics.g3d.Material;
@@ -80,7 +80,7 @@ public final class Outline3DTest extends ApplicationAdapter {
         logger = fdx.logger();
         fpsLogger = TestFpsLogger.create(logger, "Outline3DTest");
 
-        Environment3D environment = new Environment3D()
+        Environment environment = new Environment()
                 .ambientColor(new Color(0.10f, 0.11f, 0.14f, 1.0f))
                 .add(new DirectionalLight()
                         .direction(-0.35f, -0.75f, -0.42f)

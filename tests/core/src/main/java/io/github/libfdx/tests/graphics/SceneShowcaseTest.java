@@ -33,7 +33,7 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
     private final Camera camera=new Camera().projection(CameraProjection.PERSPECTIVE).fieldOfView(44).nearFar(.15f,40);
     private final DirectionalLight sun=new DirectionalLight().direction(-.55f,-1,-.45f)
             .color(new Color(1,.82f,.61f,1)).intensity(1.8f);
-    private final Environment3D environment=new Environment3D().ambientColor(new Color(.015f,.02f,.025f,1)).add(sun)
+    private final Environment environment=new Environment().ambientColor(new Color(.015f,.02f,.025f,1)).add(sun)
             .add(new DirectionalLight().direction(.6f,-.25f,.45f).color(new Color(.16f,.45f,.65f,1)).intensity(.7f));
     private final RenderPassDescriptor screen=new RenderPassDescriptor().label("Kinetic gallery and controls")
             .colorLoadOp(LoadOp.clear(.025f,.035f,.05f,1)).colorStoreOp(StoreOp.store());

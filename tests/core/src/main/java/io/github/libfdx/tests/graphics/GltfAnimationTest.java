@@ -27,7 +27,7 @@ public final class GltfAnimationTest extends GraphicsParityTest {
     private final float[] actualValues = new float[16], expectedValues = new float[16];
     private final Camera camera = new Camera().projection(CameraProjection.PERSPECTIVE).fieldOfView(44)
             .nearFar(.1f, 60).position(4, 2, 13).lookAt(0, 0, 0);
-    private final Environment3D environment = new Environment3D().ambientColor(new Color(.22f,.27f,.36f,1))
+    private final Environment environment = new Environment().ambientColor(new Color(.22f,.27f,.36f,1))
             .add(new DirectionalLight().direction(-.5f,-.7f,-1).intensity(3));
     private final DefaultModelInstance[] rails = new DefaultModelInstance[3];
     private Model railModel;

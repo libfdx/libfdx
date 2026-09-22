@@ -21,7 +21,7 @@ import io.github.libfdx.graphics.camera.controller.OrbitCameraController3D;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.ModelBatch;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.testsupport.TestFpsLogger;
@@ -88,7 +88,7 @@ public final class SpotLight3DTest extends ApplicationAdapter {
         // The existing renderer shadows this directional key; spotlights add local pools.
         shadows = new DirectionalShadowMap3D(graphics, 2048, 2048)
                 .bounds(0, 1, 0, 10, .1f, 35).autoBias(true).strength(1);
-        Environment3D environment = new Environment3D()
+        Environment environment = new Environment()
                 .ambientColor(new Color(.055f, .065f, .08f, 1))
                 .fog(CLEAR_COLOR, 30, 55).neutralToneMapping(1)
                 .add(mainLight).directionalShadowMap(shadows);

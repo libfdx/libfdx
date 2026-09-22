@@ -16,7 +16,7 @@ import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.camera.controller.OrbitCameraController3D;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.Material;
 import io.github.libfdx.graphics.g3d.MaterialAttributes;
 import io.github.libfdx.graphics.g3d.Model;
@@ -85,7 +85,7 @@ public final class ShadingModels3DTest extends ApplicationAdapter {
         logger = fdx.logger();
         fpsLogger = TestFpsLogger.create(logger, "ShadingModels3DTest");
 
-        Environment3D environment = new Environment3D()
+        Environment environment = new Environment()
                 .ambientColor(new Color(0.025f, 0.030f, 0.040f, 1.0f))
                 .add(new DirectionalLight()
                         .direction(-0.42f, -0.82f, -0.38f)

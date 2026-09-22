@@ -24,6 +24,6 @@ public interface RenderPath3D extends Disposable {
      * @param environment the environment
      * @param instances the instances
      */
-    void render(Batch3D batch, Camera camera, Environment3D environment,
+    void render(Batch3D batch, Camera camera, Environment environment,
             ObjectIterable<? extends ModelInstance> instances);
 }

@@ -19,7 +19,7 @@ import io.github.libfdx.math.Color;
 public final class Fog3DTest extends GraphicsParityTest {
     private static final float[][] ROUTE = FogSceneLayout.ROUTE;
     private static final Color MIST = new Color(122 / 255f, 153 / 255f, 173 / 255f, 1);
-    private Environment3D environment;
+    private Environment environment;
     private float appliedStrength = -1;
     private final FogMovement movement = new FogMovement();
     private final Model[] models = new Model[6];
@@ -44,7 +44,7 @@ public final class Fog3DTest extends GraphicsParityTest {
                 .color(new Color(1,.91f,.76f,1)).intensity(3.1f);
         shadows = new DirectionalShadowMap3D(graphics,2048,2048)
                 .bounds(0,0,0,34,.1f,110).autoBias(true).strength(.82f).shadowFadeFraction(0);
-        environment = new Environment3D().ambientColor(new Color(.14f,.18f,.22f,1))
+        environment = new Environment().ambientColor(new Color(.14f,.18f,.22f,1))
                 .add(sun).directionalShadowMap(shadows).neutralToneMapping(1);
         batch = new ModelBatch(graphics).frustumCulling(true).environment(environment);
         ModelBuilder builder = new ModelBuilder(graphics);

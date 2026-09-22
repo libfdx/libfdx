@@ -48,7 +48,7 @@ public final class ForwardRenderGraph3D implements RenderGraph3D {
     public Texture color(){ensureOpen();return scene.color();}
     public TextureOrigin origin(){return scene.origin();}
     public long estimatedBytes(){return scene.estimatedBytes();}
-    @Override public void render(Camera camera,Environment3D environment,ObjectIterable<? extends ModelInstance> instances){
+    @Override public void render(Camera camera,Environment environment,ObjectIterable<? extends ModelInstance> instances){
         ensureOpen();path.render(batch,camera,environment,instances);
     }
     private void ensureOpen(){if(disposed)throw new FdxException("ForwardRenderGraph3D disposed");}

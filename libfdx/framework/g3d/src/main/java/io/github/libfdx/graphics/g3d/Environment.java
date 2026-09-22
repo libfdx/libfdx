@@ -6,11 +6,11 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.math.Color;
 
 /**
- * Represents an environment3 d.
+ * Defines scene lighting, fog, tone mapping, and borrowed environment resources.
  *
  * @author xpenatan
  */
-public final class Environment3D {
+public final class Environment {
     private Color ambientColor = new Color(0.03f, 0.03f, 0.03f, 1.0f);
     private Color fogColor = Color.CLEAR;
     private float fogStartDistance;
@@ -28,23 +28,23 @@ public final class Environment3D {
     private final ArrayView<Light> readOnlyLights = lights.view();
 
     /**
-     * Sets the ambient color and returns this environment3 d.
+     * Sets the ambient color and returns this environment.
      *
      * @param ambientColor the ambient color
-     * @return this environment3 d for chaining
+     * @return this environment for chaining
      */
-    public Environment3D ambientColor(Color ambientColor) {
+    public Environment ambientColor(Color ambientColor) {
         this.ambientColor = ambientColor != null ? ambientColor : Color.BLACK;
         return this;
     }
 
     /**
-     * Sets the add and returns this environment3 d.
+     * Sets the add and returns this environment.
      *
      * @param light the light
-     * @return this environment3 d for chaining
+     * @return this environment for chaining
      */
-    public Environment3D add(Light light) {
+    public Environment add(Light light) {
         if (light != null) {
             lights.add(light);
         }
@@ -54,9 +54,9 @@ public final class Environment3D {
     /**
      * Returns the clear lights.
      *
-     * @return this environment3 d for chaining
+     * @return this environment for chaining
      */
-    public Environment3D clearLights() {
+    public Environment clearLights() {
         lights.clear();
         return this;
     }
@@ -72,7 +72,7 @@ public final class Environment3D {
      * @param endDistance the distance at which fog reaches full strength
      * @return this environment for chaining
      */
-    public Environment3D fog(Color fogColor, float startDistance, float endDistance) {
+    public Environment fog(Color fogColor, float startDistance, float endDistance) {
         if (startDistance < 0.0f) {
             throw new FdxException("Fog start distance cannot be negative");
         }
@@ -97,7 +97,7 @@ public final class Environment3D {
      * @param endDistance the distance at which fog reaches full strength
      * @return this environment for chaining
      */
-    public Environment3D fog(float red, float green, float blue, float alpha,
+    public Environment fog(float red, float green, float blue, float alpha,
             float startDistance, float endDistance) {
         return fog(new Color(red, green, blue, alpha), startDistance, endDistance);
     }
@@ -107,7 +107,7 @@ public final class Environment3D {
      *
      * @return this environment for chaining
      */
-    public Environment3D clearFog() {
+    public Environment clearFog() {
         fogColor = Color.CLEAR;
         fogStartDistance = 0.0f;
         fogEndDistance = 1.0f;
@@ -121,7 +121,7 @@ public final class Environment3D {
      * @param exposure the positive scene exposure multiplier
      * @return this environment for chaining
      */
-    public Environment3D neutralToneMapping(float exposure) {
+    public Environment neutralToneMapping(float exposure) {
         if (exposure <= 0.0f) {
             throw new FdxException("Tone mapping exposure must be greater than zero");
         }
@@ -135,7 +135,7 @@ public final class Environment3D {
      *
      * @return this environment for chaining
      */
-    public Environment3D clearToneMapping() {
+    public Environment clearToneMapping() {
         neutralToneMappingEnabled = false;
         exposure = 1.0f;
         return this;
@@ -149,14 +149,14 @@ public final class Environment3D {
      * @param skyEnvironment the sky environment, or null to disable sky environment lighting
      * @return this environment for chaining
      */
-    public Environment3D skyEnvironment(SkyEnvironment3D skyEnvironment) {
+    public Environment skyEnvironment(SkyEnvironment3D skyEnvironment) {
         this.skyEnvironment = skyEnvironment;
         return this;
     }
 
     /** Borrows an uploaded distant probe, or null to disable. Adds to existing ambient/procedural lighting.
      * The resource must remain alive in the drawing context's resource domain until recorded draws finish. */
-    public Environment3D imageBasedLighting(ImageBasedLighting3D lighting) {
+    public Environment imageBasedLighting(ImageBasedLighting3D lighting) {
         if (lighting != null && lighting.isDisposed()) throw new FdxException("Image-based lighting resource is disposed");
         imageBasedLighting = lighting;
         return this;
@@ -164,7 +164,7 @@ public final class Environment3D {
 
     /** Sets the nonnegative linear radiance multiplier and world-space rotation about +Y, in radians.
      * Rotation uses the right-hand rule. Call during application update, outside batch recording. */
-    public Environment3D imageBasedLightingTransform(float intensity, float rotationRadians) {
+    public Environment imageBasedLightingTransform(float intensity, float rotationRadians) {
         if (!Float.isFinite(intensity) || intensity < 0 || !Float.isFinite(rotationRadians)) {
             throw new FdxException("IBL intensity and rotation must be finite; intensity cannot be negative");
         }
@@ -184,7 +184,7 @@ public final class Environment3D {
      *
      * @return this environment for chaining
      */
-    public Environment3D clearSkyEnvironment() {
+    public Environment clearSkyEnvironment() {
         skyEnvironment = null;
         return this;
     }
@@ -196,7 +196,7 @@ public final class Environment3D {
      * @param shadowMap the directional shadow map, or null to disable shadows
      * @return this environment for chaining
      */
-    public Environment3D directionalShadowMap(DirectionalShadowMap3D shadowMap) {
+    public Environment directionalShadowMap(DirectionalShadowMap3D shadowMap) {
         directionalShadowMap = shadowMap;
         return this;
     }
@@ -208,7 +208,7 @@ public final class Environment3D {
      * @param shadowMap the cascaded shadow map, or null to disable cascaded shadows
      * @return this environment for chaining
      */
-    public Environment3D cascadedShadowMap(CascadedShadowMap3D shadowMap) {
+    public Environment cascadedShadowMap(CascadedShadowMap3D shadowMap) {
         cascadedShadowMap = shadowMap;
         return this;
     }
@@ -218,7 +218,7 @@ public final class Environment3D {
      *
      * @return this environment for chaining
      */
-    public Environment3D clearDirectionalShadowMap() {
+    public Environment clearDirectionalShadowMap() {
         directionalShadowMap = null;
         return this;
     }
@@ -228,7 +228,7 @@ public final class Environment3D {
      *
      * @return this environment for chaining
      */
-    public Environment3D clearCascadedShadowMap() {
+    public Environment clearCascadedShadowMap() {
         cascadedShadowMap = null;
         return this;
     }

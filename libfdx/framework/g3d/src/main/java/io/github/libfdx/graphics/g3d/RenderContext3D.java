@@ -16,7 +16,7 @@ import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
 public final class RenderContext3D {
     private final GraphicsContext graphics;
     private Camera camera;
-    private Environment3D environment;
+    private Environment environment;
     private RenderTarget3D target;
     private RenderPass pass;
     private ShaderPassId shaderPassId;
@@ -37,7 +37,7 @@ public final class RenderContext3D {
      * @param target the target value
      * @param pass the pass
      */
-    public RenderContext3D(GraphicsContext graphics, Camera camera, Environment3D environment,
+    public RenderContext3D(GraphicsContext graphics, Camera camera, Environment environment,
             RenderTarget3D target, RenderPass pass) {
         this(graphics, camera, environment, target, pass,
                 ShaderPassId.FORWARD);
@@ -54,7 +54,7 @@ public final class RenderContext3D {
      * @param shaderPassId requested shader technique pass
      */
     public RenderContext3D(GraphicsContext graphics, Camera camera,
-            Environment3D environment, RenderTarget3D target,
+            Environment environment, RenderTarget3D target,
             RenderPass pass, ShaderPassId shaderPassId) {
         this.graphics = graphics;
         this.camera = camera;
@@ -65,11 +65,11 @@ public final class RenderContext3D {
                 ? shaderPassId : ShaderPassId.FORWARD;
     }
 
-    void reset(Camera camera, Environment3D environment, RenderTarget3D target, RenderPass pass) {
+    void reset(Camera camera, Environment environment, RenderTarget3D target, RenderPass pass) {
         reset(camera, environment, target, pass, ShaderPassId.FORWARD);
     }
 
-    void reset(Camera camera, Environment3D environment,
+    void reset(Camera camera, Environment environment,
             RenderTarget3D target, RenderPass pass,
             ShaderPassId shaderPassId) {
         this.camera = camera;
@@ -109,7 +109,7 @@ public final class RenderContext3D {
      *
      * @return the environment
      */
-    public Environment3D environment() {
+    public Environment environment() {
         return environment;
     }
 

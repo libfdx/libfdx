@@ -50,7 +50,7 @@ public interface Batch3D extends Disposable {
      * @param environment the environment
      * @return this batch3 d for chaining
      */
-    Batch3D environment(Environment3D environment);
+    Batch3D environment(Environment environment);
 
     /**
      * Sets the borrowed shader provider and returns this batch3 d.

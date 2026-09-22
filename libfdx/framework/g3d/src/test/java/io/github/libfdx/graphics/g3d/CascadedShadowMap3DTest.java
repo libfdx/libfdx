@@ -208,7 +208,7 @@ final class CascadedShadowMap3DTest {
         config.enableShadows(true).enableImageBasedLighting(true);
         FakeRenderPass pass = new FakeRenderPass();
         RenderContext3D context = new RenderContext3D(graphics, new Camera(),
-                new Environment3D().cascadedShadowMap(maps), null, pass);
+                new Environment().cascadedShadowMap(maps), null, pass);
         try {
             Shader3D shader = provider.shader(renderable, context);
             shader.begin(context); shader.render(renderable); shader.end();
@@ -230,7 +230,7 @@ final class CascadedShadowMap3DTest {
                 .nearFar(0.1f, 48.0f)
                 .position(0.0f, 0.0f, 3.0f)
                 .direction(0.0f, 0.0f, -1.0f);
-        Environment3D environment = new Environment3D()
+        Environment environment = new Environment()
                 .add(new DirectionalLight().direction(-0.5f, -1.0f, -0.25f));
         FakeRenderPass pass = new FakeRenderPass();
         RenderContext3D context = new RenderContext3D(graphics, camera, environment, null, pass);
@@ -259,7 +259,7 @@ final class CascadedShadowMap3DTest {
                 .nearFar(0.1f, 48.0f)
                 .position(0.0f, 0.0f, 3.0f)
                 .direction(0.0f, 0.0f, -1.0f);
-        Environment3D environment = new Environment3D()
+        Environment environment = new Environment()
                 .add(new DirectionalLight()
                         .direction(-0.5f, -1.0f, -0.25f));
         CountingRenderPass pass =
@@ -321,7 +321,7 @@ final class CascadedShadowMap3DTest {
     void environmentStoresCascadedShadowMapReference() {
         FakeGraphicsContext graphics = new FakeGraphicsContext(ProviderId.of("gl"));
         CascadedShadowMap3D cascades = new CascadedShadowMap3D(graphics, 1, 8, 8);
-        Environment3D environment = new Environment3D().cascadedShadowMap(cascades);
+        Environment environment = new Environment().cascadedShadowMap(cascades);
 
         assertSame(cascades, environment.cascadedShadowMap());
 
@@ -353,7 +353,7 @@ final class CascadedShadowMap3DTest {
                 .position(9.0f, 4.0f, 2.0f)
                 .direction(-1.0f, -0.2f, -0.4f);
         cascades.update(shadowCamera);
-        Environment3D environment = new Environment3D()
+        Environment environment = new Environment()
                 .directionalShadowMap(singleShadow)
                 .cascadedShadowMap(cascades);
         Renderable3D renderable = renderable(graphics);
@@ -417,7 +417,7 @@ final class CascadedShadowMap3DTest {
                 .nearFar(1.0f, 24.0f)
                 .position(0.0f, 0.0f, 6.0f)
                 .direction(0.0f, 0.0f, -1.0f);
-        Environment3D environment = new Environment3D().directionalShadowMap(singleShadow);
+        Environment environment = new Environment().directionalShadowMap(singleShadow);
         Renderable3D renderable = renderable(graphics);
         FakeRenderPass pass = new FakeRenderPass();
         RenderContext3D context = new RenderContext3D(graphics, camera, environment, null, pass);

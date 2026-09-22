@@ -38,7 +38,7 @@ import io.github.libfdx.graphics.g3d.DefaultModel;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
 import io.github.libfdx.graphics.g3d.DirectionalShadowMap3D;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.G3DAssetLoaders;
 import io.github.libfdx.graphics.g3d.MeshPart;
 import io.github.libfdx.graphics.g3d.Model;
@@ -177,7 +177,7 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter {
     private DirectionalShadowMap3D shadowMap;
     private SkyboxRenderer3D skybox;
     private SkyEnvironment3D skyEnvironment;
-    private Environment3D environment;
+    private Environment environment;
     private ModelBatch batch;
     private SpriteBatch spriteBatch;
     private UiRoot uiRoot;
@@ -277,7 +277,7 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter {
                 .sunColor(1.0f, 0.78f, 0.42f, 0.62f)
                 .sunDirection(0.42f, 0.82f, 0.36f)
                 .sunSize(0.12f);
-        environment = new Environment3D()
+        environment = new Environment()
                 .ambientColor(new Color(0.05f, 0.055f, 0.065f, 1.0f))
                 .skyEnvironment(skyEnvironment)
                 .directionalShadowMap(shadowMap)

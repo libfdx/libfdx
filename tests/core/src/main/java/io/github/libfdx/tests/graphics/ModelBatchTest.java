@@ -16,7 +16,7 @@ import io.github.libfdx.graphics.camera.CameraProjection;
 import io.github.libfdx.graphics.camera.controller.OrbitCameraController3D;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.G3DAssetLoaders;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
@@ -124,7 +124,7 @@ public final class ModelBatchTest extends ApplicationAdapter {
         assets = new DefaultAssetManager(fdx.files());
         G3DAssetLoaders.register(assets, graphics);
 
-        Environment3D environment = new Environment3D()
+        Environment environment = new Environment()
                 .ambientColor(new Color(0.24f, 0.24f, 0.27f, 1.0f))
                 .add(new DirectionalLight()
                         .direction(-0.35f, -0.65f, -1.0f)

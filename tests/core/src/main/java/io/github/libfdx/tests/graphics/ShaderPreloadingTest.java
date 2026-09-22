@@ -17,7 +17,7 @@ import io.github.libfdx.graphics.g2d.SpriteBatchConfig;
 import io.github.libfdx.graphics.g2d.SpriteShaderPlan;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
-import io.github.libfdx.graphics.g3d.Environment3D;
+import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.Material;
 import io.github.libfdx.graphics.g3d.MaterialAlphaMode;
 import io.github.libfdx.graphics.g3d.MaterialAttributes;
@@ -89,7 +89,7 @@ public final class ShaderPreloadingTest extends GraphicsParityTest {
         modelPlan = new ModelShaderPlan(graphics);
         hud = new ShowcaseHud(graphics, new SpriteBatchConfig().preparation(shaders).shaderPlan(spritePlan));
         models = new ModelBatch(graphics, new ModelBatchConfig().preparation(shaders).shaderPlan(modelPlan))
-                .environment(new Environment3D().ambientColor(new Color(.25f, .25f, .3f, 1))
+                .environment(new Environment().ambientColor(new Color(.25f, .25f, .3f, 1))
                         .add(new DirectionalLight().direction(-.3f, -.8f, -1).intensity(1.4f)));
         assets = new DefaultAssetManager(fdx.files());
         G2DAssetLoaders.register(assets, graphics);

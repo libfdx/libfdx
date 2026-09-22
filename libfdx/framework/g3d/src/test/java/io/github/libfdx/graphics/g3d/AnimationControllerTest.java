@@ -370,10 +370,10 @@ final class AnimationControllerTest {
 
         PbrShaderProvider provider = new PbrShaderProvider(graphics, new PbrShaderConfig().maxBones(1));
         Shader3D shader = provider.shader(renderable, new RenderContext3D(graphics,
-                new Camera().viewport(64.0f, 64.0f).update(), new Environment3D(), null, new FakeRenderPass()));
+                new Camera().viewport(64.0f, 64.0f).update(), new Environment(), null, new FakeRenderPass()));
         FakeRenderPass pass = new FakeRenderPass();
         RenderContext3D context = new RenderContext3D(graphics, new Camera().viewport(64.0f, 64.0f).update(),
-                new Environment3D(), null, pass);
+                new Environment(), null, pass);
 
         shader.begin(context);
         shader.render(renderable);

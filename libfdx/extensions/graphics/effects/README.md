@@ -95,7 +95,7 @@ scene.dispose();
 ```
 
 A [forward 3D graph](../../../framework/g3d/README.md) can supply the scene instead.
-Use `Environment3D.clearToneMapping()` when `PostProcessor` owns exposure/tone
+Use `Environment.clearToneMapping()` when `PostProcessor` owns exposure/tone
 mapping, and choose an sRGB or float graph target so the PBR renderer outputs linear
 RGB. Render UI after presentation so scene exposure does not affect it.
 

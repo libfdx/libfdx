@@ -76,7 +76,7 @@ public final class AnimationIntegrationTest extends GraphicsParityTest {
             casters[method][0]=new DefaultModelInstance(ground);
             shadows[method]=new CascadedShadowMap3D(graphics,2,512,512).maxDistance(30)
                     .bias(.006f).minTexelBias(.5f).strength(.85f).shadowFadeFraction(0);
-            Environment3D environment=new Environment3D().ambientColor(new Color(.13f,.15f,.19f,1))
+            Environment environment=new Environment().ambientColor(new Color(.13f,.15f,.19f,1))
                     .add(sun).cascadedShadowMap(shadows[method]).neutralToneMapping(1);
             batches[method]=new ModelBatch(graphics).environment(environment).frustumCulling(true);
             targets[method]=new OffscreenTarget(graphics.device(),true).clearColor(12f/255,18f/255,28f/255,1);

@@ -55,7 +55,7 @@ public final class FrustumCullingTest extends GraphicsParityTest {
         createScene();
         shadows = new DirectionalShadowMap3D(graphics, 2048, 2048)
                 .bounds(0, 0, 0, 52, .1f, 160).autoBias(true).strength(.8f);
-        Environment3D environment = new Environment3D().ambientColor(new Color(.15f, .19f, .24f, 1))
+        Environment environment = new Environment().ambientColor(new Color(.15f, .19f, .24f, 1))
                 .add(sunlight)
                 .add(new DirectionalLight().direction(.6f, -.3f, .7f)
                         .color(new Color(.55f, .72f, 1, 1)).intensity(.55f))
