@@ -47,6 +47,7 @@ public final class SpotLight3DTest extends ApplicationAdapter {
     private OrbitCameraController3D cameraInput;
     private SpotLightGallery gallery;
     private AssetManager assets;
+    private Runnable assetSetup;
     private DirectionalLight mainLight;
     private DirectionalShadowMap3D shadows;
     private boolean created;
@@ -82,7 +83,10 @@ public final class SpotLight3DTest extends ApplicationAdapter {
         G3DAssetLoaders.register(assets, graphics);
         String dragonPath = "data/g3d/gltf/StanfordDragon/stanfordDragon.gltf";
         assets.load(AssetDescriptor.of(dragonPath, Model.class));
-        assets.finishLoading();
+        assetSetup = () -> createLoadedAssets(fdx, dragonPath);
+    }
+
+    private void createLoadedAssets(Fdx fdx, String dragonPath) {
         mainLight = new DirectionalLight().direction(-.6f, -1, -.35f)
                 .color(new Color(.72f, .82f, 1, 1)).intensity(1.6f);
         // The existing renderer shadows this directional key; spotlights add local pools.
@@ -116,6 +120,16 @@ public final class SpotLight3DTest extends ApplicationAdapter {
      */
     @Override
     public void render() {
+        boolean assetsFinished = assets.update(4, 1_000_000L);
+        if (assetSetup != null) {
+            if (!assetsFinished) {
+                graphics.clear(0.02f, 0.025f, 0.04f, 1.0f);
+                return;
+            }
+            Runnable setup = assetSetup;
+            assetSetup = null;
+            setup.run();
+        }
         float deltaSeconds = application.deltaTime();
         camera.viewport(framebufferWidth(), framebufferHeight());
         cameraInput.update(deltaSeconds);
@@ -148,6 +162,8 @@ public final class SpotLight3DTest extends ApplicationAdapter {
      */
     @Override
     public void dispose() {
+        boolean cancelledLoading = assetSetup != null;
+        assetSetup = null;
         if (batch != null) {
             batch.dispose();
             batch = null;
@@ -163,6 +179,9 @@ public final class SpotLight3DTest extends ApplicationAdapter {
         if (assets != null) {
             assets.dispose();
             assets = null;
+        }
+        if (cancelledLoading && exitAfterFrames == 0L) {
+            return;
         }
         if (!created) {
             throw new FdxException("SpotLight3DTest did not create graphics resources");

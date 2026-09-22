@@ -31,7 +31,7 @@ final class DefaultAssetManagerTest {
         assertTrue(manager.update());
         assertEquals(AssetStatus.FAILED, handle.status());
         assertSame(failure, assertThrows(RuntimeException.class, handle.future()::get));
-        manager.finishLoading();
+        assertTrue(manager.update());
         assertSame(failure, assertThrows(RuntimeException.class,
                 () -> manager.get("pending.asset", TestAsset.class)).getCause());
         manager.dispose();

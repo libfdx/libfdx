@@ -119,7 +119,7 @@ final class DefaultAssetManagerSchedulingTest {
         assertEquals(6L, manager.lastUpdateMaxTaskNanos());
         assertThrows(FdxException.class, () -> manager.update(-1, 5L));
         assertThrows(FdxException.class, () -> manager.update(1, -1L));
-        manager.finishLoading();
+        drainOneStepAtATime();
     }
 
     @Test
@@ -338,7 +338,7 @@ final class DefaultAssetManagerSchedulingTest {
     void rejectsRecursiveUpdatesAndLateDependencyDiscovery() {
         register((context, descriptor) -> context.completeOnUpdate(() -> {
             assertThrows(FdxException.class, () -> manager.update());
-            assertThrows(FdxException.class, () -> manager.finishLoading());
+            assertThrows(FdxException.class, () -> manager.update(1, 1_000_000L));
             context.dependency(descriptor("B"));
             return asset("A");
         }));
@@ -360,10 +360,10 @@ final class DefaultAssetManagerSchedulingTest {
         assertSame(handle, manager.load(first));
         assertThrows(FdxException.class, () -> manager.load(conflicting));
         assertThrows(FdxException.class, () -> graphLoader(Map.of()));
-        manager.finishLoading();
+        drainOneStepAtATime();
         manager.unload("A");
         assertNotSame(handle, manager.load(conflicting));
-        manager.finishLoading();
+        drainOneStepAtATime();
     }
 
     @Test
@@ -395,7 +395,7 @@ final class DefaultAssetManagerSchedulingTest {
     void disposalContinuesThroughThrowingResourcesAndCancellationCallbacks() {
         graphLoader(Map.of("A", new String[] {"B", "C"}));
         manager.load(descriptor("A"));
-        manager.finishLoading();
+        drainOneStepAtATime();
         built.get("A").throwOnDispose = true;
         built.get("C").throwOnDispose = true;
         assertThrows(FdxException.class, manager::dispose);

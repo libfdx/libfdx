@@ -185,6 +185,7 @@ public final class UiKitTest extends ApplicationAdapter {
     private Display display;
     private GraphicsContext graphics;
     private AssetManager assets;
+    private Runnable assetSetup;
     private Logger logger;
     private UiRoot root;
     private DefaultInput input;
@@ -379,7 +380,10 @@ public final class UiKitTest extends ApplicationAdapter {
         G2DAssetLoaders.register(assets, graphics);
         assets.load(AssetDescriptor.of(LOGO_ASSET, Texture.class));
         assets.load(AssetDescriptor.of(PATCH_ASSET, Texture.class));
-        assets.finishLoading();
+        assetSetup = () -> createLoadedAssets(fdx);
+    }
+
+    private void createLoadedAssets(Fdx fdx) {
 
         Texture logo = assets.get(LOGO_ASSET, Texture.class);
         Texture patch = assets.get(PATCH_ASSET, Texture.class);
@@ -553,8 +557,15 @@ public final class UiKitTest extends ApplicationAdapter {
      */
     @Override
     public void render() {
-        if (assets != null) {
-            assets.update();
+        boolean assetsFinished = assets.update(4, 1_000_000L);
+        if (assetSetup != null) {
+            if (!assetsFinished) {
+                graphics.clear(0.02f, 0.025f, 0.04f, 1.0f);
+                return;
+            }
+            Runnable setup = assetSetup;
+            assetSetup = null;
+            setup.run();
         }
         graphics.clear(0.045f, 0.052f, 0.066f, 1.0f);
         float deltaSeconds = 0.0f;
@@ -621,6 +632,8 @@ public final class UiKitTest extends ApplicationAdapter {
      */
     @Override
     public void dispose() {
+        boolean cancelledLoading = assetSetup != null;
+        assetSetup = null;
         if (root != null) {
             root.dispose();
             root = null;
@@ -631,6 +644,9 @@ public final class UiKitTest extends ApplicationAdapter {
         }
         if (renderFailure != null) {
             throw new FdxException("UiKitTest failed during render", renderFailure);
+        }
+        if (cancelledLoading && exitAfterFrames == 0L) {
+            return;
         }
         if (!created) {
             throw new FdxException("UiKitTest did not create UI resources");

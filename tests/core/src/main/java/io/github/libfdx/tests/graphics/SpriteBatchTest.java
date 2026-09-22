@@ -39,6 +39,7 @@ public final class SpriteBatchTest extends ApplicationAdapter {
     private Display display;
     private GraphicsContext graphics;
     private AssetManager assets;
+    private Runnable assetSetup;
     private Logger logger;
     private TestFpsLogger fpsLogger;
     private Batch2D batch;
@@ -72,7 +73,10 @@ public final class SpriteBatchTest extends ApplicationAdapter {
         G2DAssetLoaders.register(assets, graphics);
         batch = new SpriteBatch(graphics);
         assets.load(TextureLoadOptions.PIXEL_ART.descriptor(COAST_ASSET, Texture.class));
-        assets.finishLoading();
+        assetSetup = this::createLoadedAssets;
+    }
+
+    private void createLoadedAssets() {
         Texture coast = assets.get(COAST_ASSET, Texture.class);
         // This authored sheet contains twelve complete 32x32 sprites in one row.
         if (coast.width() != 12 * TILE_SIZE || coast.height() != TILE_SIZE) {
@@ -91,6 +95,16 @@ public final class SpriteBatchTest extends ApplicationAdapter {
      */
     @Override
     public void render() {
+        boolean assetsFinished = assets.update(4, 1_000_000L);
+        if (assetSetup != null) {
+            if (!assetsFinished) {
+                graphics.clear(0.02f, 0.025f, 0.04f, 1.0f);
+                return;
+            }
+            Runnable setup = assetSetup;
+            assetSetup = null;
+            setup.run();
+        }
         float deltaSeconds = application.deltaTime();
         elapsed += Math.max(0, Math.min(deltaSeconds, 0.1f));
         int width = framebufferWidth();
@@ -119,6 +133,8 @@ public final class SpriteBatchTest extends ApplicationAdapter {
      */
     @Override
     public void dispose() {
+        boolean cancelledLoading = assetSetup != null;
+        assetSetup = null;
         if (batch != null) {
             batch.dispose();
             batch = null;
@@ -127,6 +143,9 @@ public final class SpriteBatchTest extends ApplicationAdapter {
         if (assets != null) {
             assets.dispose();
             assets = null;
+        }
+        if (cancelledLoading && exitAfterFrames == 0L) {
+            return;
         }
         if (!created) {
             throw new FdxException("SpriteBatchTest did not create graphics resources");

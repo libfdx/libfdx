@@ -4,7 +4,10 @@ import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxFuture;
 
 /**
- * Defines the contract for asset manager implementations.
+ * Application-owned asset loading driven by updates on the application thread.
+ * Requests may remain pending across frames, including while downloading input.
+ * Continue rendering and call {@link #update(int, long)} each frame; inspect the
+ * returned handles or futures before using an asset. Preloading is optional.
  *
  * @author xpenatan
  */
@@ -69,7 +72,7 @@ public interface AssetManager extends Disposable {
      * A step cannot be interrupted. Zero in either limit performs no queued work;
      * negative limits are invalid. Pending dependencies do not block ready work.
      * Finalization, worker-result delivery, dependency readiness, and lease
-     * notifications share the same budget. Recursive update/finishLoading calls
+     * notifications share the same budget. Recursive update calls
      * are invalid.
      *
      * @param maxTasks the maximum number of attempted queue steps
@@ -77,12 +80,6 @@ public interface AssetManager extends Disposable {
      * @return true when no queued/loading work remains, including failed loads
      */
     boolean update(int maxTasks, long maxNanos);
-
-    /**
-     * Finishes pending load work before returning. Completion does not imply
-     * that every asset loaded successfully; inspect its handle or future.
-     */
-    void finishLoading();
 
     /**
      * Returns the loaded asset at the given path.

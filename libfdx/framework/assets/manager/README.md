@@ -44,9 +44,13 @@ or GPU upload may exceed the time limit. The manager exposes the most recent
 update's task count, elapsed time, and longest step for measurement. Large uploads
 and glTF geometry construction still run as individual finalization steps.
 
-`update()` drains available work. `finishLoading()` also waits for pending input;
-use frame updates when acquisition needs the browser/application event loop.
-Calling either update or finishLoading recursively from a callback is invalid.
+`update()` drains available work without waiting for pending input. Use budgeted
+updates each frame and keep rendering while downloads or preparation remain
+pending. Browser preloading is an optimization, not a requirement for managed
+loading. The manager has no blocking completion method; migrate former
+`finishLoading()` calls to a loading state that checks handles/futures after
+each update. Completion includes failures, which must be handled before entering
+the ready state. Calling update recursively from a callback is invalid.
 
 A loader can read its input with `context.readBytes(file)`, prepare CPU data with
 `context.async(task)`, then discover dependencies from the preparation callback.
@@ -57,7 +61,12 @@ Dependency failures prevent finalization; cycles fail with the involved paths.
 GPU access belongs in finalization, and staging data successfully delivered to
 the loader remains its responsibility through later failure or cancellation.
 
-The image → texture → texture-region loaders use this pipeline. The glTF loader
+The image → texture → texture-region loaders use this pipeline. Managed bitmap
+fonts acquire their `.fnt` definition asynchronously, retain page images as
+dependencies, and create owned GPU pages after every image is ready. TTF/OTF
+fonts similarly acquire bytes before rasterization and GPU upload. Standalone
+`BitmapFontFiles` helpers still require already available file reads.
+The glTF loader
 also acquires external buffer and image dependencies asynchronously; embedded
 images are decoded after their buffers arrive. `G3DAssetLoaders.register` installs
 its required binary and image loaders. A caller registering `modelLoader` alone

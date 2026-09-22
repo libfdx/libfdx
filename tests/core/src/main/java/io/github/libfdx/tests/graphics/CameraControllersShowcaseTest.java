@@ -173,6 +173,7 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter {
     private Logger logger;
     private TestFpsLogger fpsLogger;
     private AssetManager assets;
+    private Runnable assetSetup;
     private DirectionalLight sun;
     private DirectionalShadowMap3D shadowMap;
     private SkyboxRenderer3D skybox;
@@ -286,6 +287,13 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter {
         batch = new ModelBatch(graphics).environment(environment);
         spriteBatch = new SpriteBatch(graphics, 256);
         createCinematic2DTextures();
+        assets.load(AssetDescriptor.of(DUCK_ASSET, Model.class));
+        assets.load(AssetDescriptor.of(DRAGON_ASSET, Model.class));
+        assets.load(AssetDescriptor.of(HELMET_ASSET, Model.class));
+        assetSetup = () -> createLoadedAssets(fdx);
+    }
+
+    private void createLoadedAssets(Fdx fdx) {
         createSceneModel();
         createCamerasAndControllers(fdx);
         createCinematicInput();
@@ -313,6 +321,16 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter {
      */
     @Override
     public void render() {
+        boolean assetsFinished = assets.update(4, 1_000_000L);
+        if (assetSetup != null) {
+            if (!assetsFinished) {
+                graphics.clear(0.02f, 0.025f, 0.04f, 1.0f);
+                return;
+            }
+            Runnable setup = assetSetup;
+            assetSetup = null;
+            setup.run();
+        }
         float deltaSeconds = application.deltaTime();
         int width = framebufferWidth();
         int height = framebufferHeight();
@@ -346,6 +364,8 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter {
      */
     @Override
     public void dispose() {
+        boolean cancelledLoading = assetSetup != null;
+        assetSetup = null;
         if (cinematicInput != null && input != null) {
             input.removeProcessor(cinematicInput);
             cinematicInput = null;
@@ -394,6 +414,9 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter {
         duckModel = null;
         dragonModel = null;
         helmetModel = null;
+        if (cancelledLoading && exitAfterFrames == 0L) {
+            return;
+        }
         if (!created) {
             throw new FdxException("CameraControllersShowcaseTest did not create graphics resources");
         }
@@ -412,10 +435,6 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter {
     }
 
     private void createSceneModel() {
-        assets.load(AssetDescriptor.of(DUCK_ASSET, Model.class));
-        assets.load(AssetDescriptor.of(DRAGON_ASSET, Model.class));
-        assets.load(AssetDescriptor.of(HELMET_ASSET, Model.class));
-        assets.finishLoading();
         duckModel = assets.get(DUCK_ASSET, Model.class);
         dragonModel = assets.get(DRAGON_ASSET, Model.class);
         helmetModel = assets.get(HELMET_ASSET, Model.class);

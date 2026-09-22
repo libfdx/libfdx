@@ -60,6 +60,7 @@ public final class ModelBatchTest extends ApplicationAdapter {
     private Logger logger;
     private TestFpsLogger fpsLogger;
     private AssetManager assets;
+    private Runnable assetSetup;
     private GraphicsContext graphics;
     private ModelBatch batch;
     private ShaderPreparation preparation;
@@ -154,7 +155,10 @@ public final class ModelBatchTest extends ApplicationAdapter {
             batch = new ModelBatch(graphics).environment(environment);
         }
         assets.load(AssetDescriptor.of(gltfAsset, Model.class));
-        assets.finishLoading();
+        assetSetup = () -> createLoadedAssets(fdx);
+    }
+
+    private void createLoadedAssets(Fdx fdx) {
         model = assets.get(gltfAsset, Model.class);
         instance = new DefaultModelInstance(model);
         camera = new Camera()
@@ -179,6 +183,16 @@ public final class ModelBatchTest extends ApplicationAdapter {
      */
     @Override
     public void render() {
+        boolean assetsFinished = assets.update(4, 1_000_000L);
+        if (assetSetup != null) {
+            if (!assetsFinished) {
+                graphics.clear(0.02f, 0.025f, 0.04f, 1.0f);
+                return;
+            }
+            Runnable setup = assetSetup;
+            assetSetup = null;
+            setup.run();
+        }
         if (preparation != null) {
             if (preload == null && (preloadManifest != null || Boolean.getBoolean("libfdx.test.shaderPreload")
                     || Boolean.getBoolean("libfdx.test.shaderLoadingOnly"))) {
@@ -205,7 +219,6 @@ public final class ModelBatchTest extends ApplicationAdapter {
             }
         }
         float deltaSeconds = application.deltaTime();
-        assets.update();
         camera.viewport(framebufferWidth(), framebufferHeight());
         cameraInput.update(deltaSeconds);
         float seconds = renderedFrames / 60.0f;
@@ -274,6 +287,8 @@ public final class ModelBatchTest extends ApplicationAdapter {
      */
     @Override
     public void dispose() {
+        boolean cancelledLoading = assetSetup != null;
+        assetSetup = null;
         if (batch != null) {
             batch.dispose();
             batch = null;
@@ -292,6 +307,9 @@ public final class ModelBatchTest extends ApplicationAdapter {
         if (model != null) {
             model.dispose();
             model = null;
+        }
+        if (cancelledLoading && exitAfterFrames == 0L) {
+            return;
         }
         if (!created) {
             throw new FdxException("ModelBatchTest did not create graphics resources");

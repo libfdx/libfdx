@@ -63,6 +63,15 @@ public final class BitmapFontFiles {
         ensure(graphics, files, path);
         String text = files.internal(path).readString(StandardCharsets.UTF_8).get();
         BitmapFontDefinition definition = BitmapFontDefinition.parse(text);
+        return createBitmap(graphics, path, definition, i -> {
+            String pagePath = resolveSibling(path, definition.pageFiles.get(i));
+            return ImageAssetLoader.decode(pagePath, files.internal(pagePath).readBytes().get());
+        });
+    }
+
+    /** Creates owned GPU pages from borrowed, already acquired image data. */
+    static BitmapFont createBitmap(GraphicsContext graphics, String path, BitmapFontDefinition definition,
+            java.util.function.IntFunction<ImageData> images) {
         if (definition.pageFiles.size() == 0 || definition.glyphs.size() == 0) {
             throw new FdxException("Bitmap font has no pages or glyphs: " + path);
         }
@@ -70,8 +79,7 @@ public final class BitmapFontFiles {
         try {
             for (int i = 0; i < definition.pageFiles.size(); i++) {
                 String pagePath = resolveSibling(path, definition.pageFiles.get(Integer.valueOf(i)));
-                ImageData image = ImageAssetLoader.decode(pagePath, files.internal(pagePath).readBytes().get());
-                pages.add(createTexture(graphics, pagePath, image));
+                pages.add(createTexture(graphics, pagePath, images.apply(i)));
             }
             IntMap<BitmapFontGlyph> glyphs = new IntMap<BitmapFontGlyph>();
             ObjectIterator<BitmapFontDefinition.Glyph> glyphIterator = definition.glyphs.values().iterator();
@@ -231,7 +239,7 @@ public final class BitmapFontFiles {
         return dot >= 0 ? path.substring(dot + 1).toLowerCase() : "";
     }
 
-    private static String resolveSibling(String path, String sibling) {
+    static String resolveSibling(String path, String sibling) {
         if (sibling == null || sibling.length() == 0) {
             return path;
         }
@@ -250,7 +258,7 @@ public final class BitmapFontFiles {
      *
      * @author xpenatan
      */
-    private static final class BitmapFontDefinition {
+    static final class BitmapFontDefinition {
         final IntMap<String> pageFiles = new IntMap<String>();
         final IntMap<Glyph> glyphs = new IntMap<Glyph>();
         final LongMap<Integer> kernings = new LongMap<Integer>();

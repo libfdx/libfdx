@@ -348,8 +348,8 @@ final class DefaultAssetManagerScopeTest {
             AssetScope secondDomain = second.createScope();
             AssetLease<Asset> first = firstDomain.load(descriptor("texture"));
             AssetLease<Asset> other = secondDomain.load(descriptor("texture"));
-            manager.finishLoading();
-            second.finishLoading();
+            drain();
+            assertTrue(second.update());
             assertNotSame(first.asset(), other.asset());
             Asset otherResource = other.asset();
             firstDomain.dispose();

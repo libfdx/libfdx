@@ -15,7 +15,9 @@ final class AuthoredPlatformerLevelTest {
                     path -> AuthoredPlatformerLevelTest.class.getResourceAsStream("/"+path)));
             try {
                 TiledMapLoader.register(assets);
-                var lease = assets.acquire(AssetDescriptor.of("levels/"+name+".tmj", TileMap.class)); assets.finishLoading();
+                var lease = assets.acquire(AssetDescriptor.of("levels/"+name+".tmj", TileMap.class));
+                for (int frame = 0; frame < 100 && !lease.future().isDone(); frame++) assets.update(1, Long.MAX_VALUE);
+                assertTrue(lease.future().isDone());
                 TileMap map = lease.future().get(); TestPlatformerInput input = new TestPlatformerInput();
                 PlatformerGame game = PlatformerLevel.create(input, map);
                 assertEquals(9, game.solidCount()); assertEquals(12, game.collectibleCount());

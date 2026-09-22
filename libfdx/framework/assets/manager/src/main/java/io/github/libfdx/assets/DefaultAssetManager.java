@@ -201,27 +201,6 @@ public final class DefaultAssetManager implements AssetManager {
         return lastUpdateMaxTaskNanos;
     }
 
-    /**
-     * {@inheritDoc}
-     * <p>Requires acquisition to progress independently of this call. Event-loop
-     * platforms should pump update across frames instead of waiting here.</p>
-     */
-    @Override
-    public void finishLoading() {
-        checkActive();
-        if (updating) {
-            throw new FdxException("finishLoading cannot be called inside update");
-        }
-        while (!update()) {
-            try {
-                Thread.sleep(1L);
-            } catch (InterruptedException error) {
-                Thread.currentThread().interrupt();
-                throw new FdxException("Interrupted while waiting for assets to load", error);
-            }
-        }
-    }
-
     /** {@inheritDoc} */
     @Override
     public <T> T get(String path, Class<T> type) {

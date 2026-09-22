@@ -42,6 +42,7 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
     private Application application;
     private Display display;
     private AssetManager assets;
+    private Runnable assetSetup;
     private GraphicsContext graphics;
     private Logger logger;
     private Batch2D batch;
@@ -86,7 +87,10 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
         batch = new SpriteBatch(graphics, SPRITE_COUNT);
 
         assets.load(AssetDescriptor.of(SPRITE_ASSET, Texture.class));
-        assets.finishLoading();
+        assetSetup = this::createLoadedAssets;
+    }
+
+    private void createLoadedAssets() {
         Texture texture = assets.get(SPRITE_ASSET, Texture.class);
         sprite = new TextureRegion(texture);
         configureViewport(framebufferWidth(), framebufferHeight());
@@ -107,8 +111,17 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
 
     @Override
     public void render() {
+        boolean assetsFinished = assets.update(4, 1_000_000L);
+        if (assetSetup != null) {
+            if (!assetsFinished) {
+                graphics.clear(0.02f, 0.025f, 0.04f, 1.0f);
+                return;
+            }
+            Runnable setup = assetSetup;
+            assetSetup = null;
+            setup.run();
+        }
         long startNanos = System.nanoTime();
-        assets.update();
         if (layoutWidth != framebufferWidth() || layoutHeight != framebufferHeight()) {
             configureViewport(framebufferWidth(), framebufferHeight());
         }
@@ -160,6 +173,7 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
 
     @Override
     public void dispose() {
+        assetSetup = null;
         if (batch != null) {
             batch.dispose();
             batch = null;

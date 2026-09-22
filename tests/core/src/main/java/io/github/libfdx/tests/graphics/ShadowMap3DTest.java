@@ -98,6 +98,7 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
     private Logger logger;
     private TestFpsLogger fpsLogger;
     private AssetManager assets;
+    private Runnable assetSetup;
     private GraphicsContext graphics;
     private Environment environment;
     private ModelBatch batch;
@@ -201,7 +202,10 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
         batch = new ModelBatch(graphics).environment(environment);
         assets.load(AssetDescriptor.of(DUCK_ASSET, Model.class));
         assets.load(AssetDescriptor.of(DRAGON_ASSET, Model.class));
-        assets.finishLoading();
+        assetSetup = () -> createLoadedAssets(fdx);
+    }
+
+    private void createLoadedAssets(Fdx fdx) {
         duckModel = assets.get(DUCK_ASSET, Model.class);
         dragonModel = assets.get(DRAGON_ASSET, Model.class);
         tuneSceneMaterials(duckModel, dragonModel);
@@ -265,6 +269,16 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
      */
     @Override
     public void render() {
+        boolean assetsFinished = assets.update(4, 1_000_000L);
+        if (assetSetup != null) {
+            if (!assetsFinished) {
+                graphics.clear(0.02f, 0.025f, 0.04f, 1.0f);
+                return;
+            }
+            Runnable setup = assetSetup;
+            assetSetup = null;
+            setup.run();
+        }
 
         float deltaSeconds = application.deltaTime();
         int width = framebufferWidth();
@@ -339,6 +353,8 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
      */
     @Override
     public void dispose() {
+        boolean cancelledLoading = assetSetup != null;
+        assetSetup = null;
         if (root != null) {
             root.dispose();
             root = null;
@@ -396,6 +412,9 @@ public final class ShadowMap3DTest extends ApplicationAdapter {
         if (assets != null) {
             assets.dispose();
             assets = null;
+        }
+        if (cancelledLoading && exitAfterFrames == 0L) {
+            return;
         }
         if (!created) {
             throw new FdxException("ShadowMap3DTest did not create graphics resources");

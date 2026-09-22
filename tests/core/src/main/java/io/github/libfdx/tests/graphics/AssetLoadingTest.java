@@ -20,6 +20,7 @@ import io.github.libfdx.core.FdxFuture;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.g2d.G2DAssetLoaders;
+import io.github.libfdx.graphics.g2d.BitmapFont;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 
 import java.nio.ByteBuffer;
@@ -27,6 +28,8 @@ import java.nio.ByteBuffer;
 /** Delayed shared acquisition, budgeted finalization, and independent level scope release. */
 public final class AssetLoadingTest extends GraphicsParityTest {
     private static final String IMAGE = "fdx_logo_dark.png";
+    private static final String FONT = "deferred-image/runtime-font.fnt";
+    private static final String FONT_PAGE = "deferred-image/gray.png";
     private static final int COUNT = 24;
     private static final int TASK_BUDGET = 3;
     private static final long TIME_BUDGET = 1_000_000L;
@@ -38,6 +41,8 @@ public final class AssetLoadingTest extends GraphicsParityTest {
     private AssetScope previousLevel;
     private AssetScope currentLevel;
     private DelayedImage image;
+    private DelayedImage fontDefinition;
+    private DelayedImage fontPage;
     private AssetLoadingScene scene;
     private Input input;
     private boolean advance;
@@ -86,7 +91,10 @@ public final class AssetLoadingTest extends GraphicsParityTest {
         input.addProcessor(controls);
         scene = new AssetLoadingScene(graphics, fdx.files());
         image = new DelayedImage(fdx.files().internal(IMAGE));
-        assets = new DefaultAssetManager(new DelayedFiles(fdx.files(), image), executor);
+        fontDefinition = new DelayedImage(fdx.files().internal(FONT));
+        fontPage = new DelayedImage(fdx.files().internal(FONT_PAGE));
+        assets = new DefaultAssetManager(new DelayedFiles(new DelayedFiles(
+                new DelayedFiles(fdx.files(), image), fontDefinition), fontPage), executor);
         previousLevel = assets.createScope();
         currentLevel = assets.createScope();
         G2DAssetLoaders.register(assets, graphics);
@@ -94,6 +102,7 @@ public final class AssetLoadingTest extends GraphicsParityTest {
             @Override public Class<Card> type() { return Card.class; }
             @Override public FdxFuture<Card> load(AssetLoadContext context, AssetDescriptor<Card> descriptor) {
                 FdxFuture<TextureRegion> logo = context.dependency(AssetDescriptor.of(IMAGE, TextureRegion.class));
+                FdxFuture<BitmapFont> font = context.dependency(AssetDescriptor.of(FONT, BitmapFont.class));
                 FdxFuture<Card> result = FdxFuture.pending();
                 context.async(() -> {
                     if (Thread.currentThread() != applicationThread) { preparedOnWorker = true; }
@@ -104,6 +113,7 @@ public final class AssetLoadingTest extends GraphicsParityTest {
                     return pixels;
                 }).onSuccess(pixels -> context.completeOnUpdate(() -> {
                     requireApplicationThread();
+                    if (!font.get().hasGlyph('A')) { throw new FdxException("Deferred bitmap font has no glyph A"); }
                     Texture tile = graphics.device().createTexture(TextureDescriptor.rgba8(descriptor.path(), 1, 1));
                     try {
                         graphics.device().writeTexture(tile, pixels);
@@ -137,6 +147,8 @@ public final class AssetLoadingTest extends GraphicsParityTest {
         elapsedTime += delta;
         updateClock += delta;
         image.pump(requiresCompletion() ? frames >= 12 : elapsedTime >= 1.5f);
+        fontDefinition.pump(requiresCompletion() ? frames >= 18 : elapsedTime >= 1.8f);
+        fontPage.pump(requiresCompletion() ? frames >= 24 : elapsedTime >= 2.1f);
         int before = finalized;
         // Only the interactive demonstration is paced; automated runs exercise every frame.
         if (requiresCompletion() || updateClock >= .08f) {
@@ -149,7 +161,9 @@ public final class AssetLoadingTest extends GraphicsParityTest {
             maxUpdateNanos = Math.max(maxUpdateNanos, assets.lastUpdateNanos());
             if (assets.lastUpdateMaxTaskNanos() > TIME_BUDGET) { overruns++; }
         }
-        if (frames < 12 && loaded != 0) { throw new FdxException("Parent published before delayed I/O"); }
+        if (requiresCompletion() && frames < 24 && loaded != 0) {
+            throw new FdxException("Parent published before delayed font dependency I/O");
+        }
         if (reported && !scopesReleased && (requiresCompletion() ? frames - firstLevelReleasedFrame >= 24 : advance)) {
             releaseFinalLevel();
             advance = false;
@@ -182,6 +196,7 @@ public final class AssetLoadingTest extends GraphicsParityTest {
             }
             firstLevelReleasedFrame = frames;
             logger.info("AssetLoadingTest complete: cards=" + loaded + ", imageReads=" + image.reads
+                    + ", fontReads=" + fontDefinition.reads + ", fontPageReads=" + fontPage.reads
                     + ", frames=" + loadingFrames + ", finalizationFrames=" + finalizationFrames
                     + ", maxSteps=" + maxSteps + ", maxStepNs=" + maxStepNanos + ", maxUpdateNs=" + maxUpdateNanos
                     + ", stepOverruns=" + overruns + ", meanRenderNs=" + (loadingFrameNanos / loadingFrames)
@@ -194,7 +209,8 @@ public final class AssetLoadingTest extends GraphicsParityTest {
     }
 
     private void verifyLoading() {
-        if (loaded != COUNT || image.reads != 1 || finalizationFrames <= 1 || executor != null && !preparedOnWorker) {
+        if (loaded != COUNT || image.reads != 1 || fontDefinition.reads != 1 || fontPage.reads != 1
+                || finalizationFrames <= 1 || executor != null && !preparedOnWorker) {
             throw new FdxException("Incomplete loading, duplicate I/O, or finalization was not spread across frames");
         }
         Texture shared = ((Card)cards[0].asset()).logo.texture();
@@ -207,6 +223,7 @@ public final class AssetLoadingTest extends GraphicsParityTest {
 
     private void releaseFinalLevel() {
         Texture shared = ((Card)cards[0].asset()).logo.texture();
+        BitmapFont sharedFont = assets.get(FONT, BitmapFont.class);
         for (int i = 0; i < cards.length; i++) { releasedCards[i] = (Card)cards[i].asset(); }
         currentLevel.dispose();
         for (int i = 0; i < cards.length; i++) {
@@ -216,6 +233,10 @@ public final class AssetLoadingTest extends GraphicsParityTest {
         }
         if (!shared.isDisposed() || assets.find(IMAGE, Texture.class) != null || finalized != COUNT) {
             throw new FdxException("Final level release leaked or duplicated a dependency");
+        }
+        if (!sharedFont.isDisposed() || assets.find(FONT, BitmapFont.class) != null
+                || assets.find(FONT_PAGE, io.github.libfdx.assets.loaders.ImageData.class) != null) {
+            throw new FdxException("Final level release leaked a deferred font dependency");
         }
         scopesReleased = true;
         logger.info("AssetLoadingTest scopes released: parents=" + COUNT + ", sharedTextureDisposed=true");

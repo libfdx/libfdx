@@ -36,6 +36,7 @@ public final class TextureTest extends ApplicationAdapter {
     private Display display;
     private GraphicsContext graphics;
     private AssetManager assets;
+    private Runnable assetSetup;
     private Logger logger;
     private TestFpsLogger fpsLogger;
     private Batch2D batch;
@@ -72,7 +73,10 @@ public final class TextureTest extends ApplicationAdapter {
         capturePath = System.getProperty("libfdx.test.capture", "").trim();
 
         assets.load(AssetDescriptor.of(LOGO_ASSET, Texture.class));
-        assets.finishLoading();
+        assetSetup = this::createLoadedAssets;
+    }
+
+    private void createLoadedAssets() {
         logo = assets.get(LOGO_ASSET, Texture.class);
 
         created = true;
@@ -85,8 +89,17 @@ public final class TextureTest extends ApplicationAdapter {
      */
     @Override
     public void render() {
+        boolean assetsFinished = assets.update(4, 1_000_000L);
+        if (assetSetup != null) {
+            if (!assetsFinished) {
+                graphics.clear(0.02f, 0.025f, 0.04f, 1.0f);
+                return;
+            }
+            Runnable setup = assetSetup;
+            assetSetup = null;
+            setup.run();
+        }
         float deltaSeconds = application.deltaTime();
-        assets.update();
         float height = textureHeight();
         float width = textureWidth(height);
         float x = -width * 0.5f;
@@ -113,6 +126,8 @@ public final class TextureTest extends ApplicationAdapter {
      */
     @Override
     public void dispose() {
+        boolean cancelledLoading = assetSetup != null;
+        assetSetup = null;
         if (batch != null) {
             batch.dispose();
             batch = null;
@@ -120,6 +135,9 @@ public final class TextureTest extends ApplicationAdapter {
         if (assets != null) {
             assets.dispose();
             assets = null;
+        }
+        if (cancelledLoading && exitAfterFrames == 0L) {
+            return;
         }
         if (!created) {
             throw new FdxException("TextureTest did not create graphics resources");

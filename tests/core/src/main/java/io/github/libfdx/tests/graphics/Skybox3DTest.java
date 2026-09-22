@@ -44,6 +44,7 @@ public final class Skybox3DTest extends ApplicationAdapter {
     private Logger logger;
     private TestFpsLogger fpsLogger;
     private AssetManager assets;
+    private Runnable assetSetup;
     private GraphicsContext graphics;
     private SkyboxRenderer3D skybox;
     private ModelBatch batch;
@@ -97,7 +98,10 @@ public final class Skybox3DTest extends ApplicationAdapter {
                         .color(new Color(1.0f, 0.88f, 0.72f, 1.0f))
                         .intensity(1.6f)));
         assets.load(AssetDescriptor.of(MODEL_ASSET, Model.class));
-        assets.finishLoading();
+        assetSetup = () -> createLoadedAssets(fdx);
+    }
+
+    private void createLoadedAssets(Fdx fdx) {
         model = assets.get(MODEL_ASSET, Model.class);
         instance = new DefaultModelInstance(model);
         camera = new Camera()
@@ -123,8 +127,17 @@ public final class Skybox3DTest extends ApplicationAdapter {
      */
     @Override
     public void render() {
+        boolean assetsFinished = assets.update(4, 1_000_000L);
+        if (assetSetup != null) {
+            if (!assetsFinished) {
+                graphics.clear(0.02f, 0.025f, 0.04f, 1.0f);
+                return;
+            }
+            Runnable setup = assetSetup;
+            assetSetup = null;
+            setup.run();
+        }
         float deltaSeconds = application.deltaTime();
-        assets.update();
         camera.viewport(framebufferWidth(), framebufferHeight());
         float seconds = renderedFrames / 60.0f;
         cameraInput.update(deltaSeconds);
@@ -163,6 +176,8 @@ public final class Skybox3DTest extends ApplicationAdapter {
      */
     @Override
     public void dispose() {
+        boolean cancelledLoading = assetSetup != null;
+        assetSetup = null;
         if (batch != null) {
             batch.dispose();
             batch = null;
@@ -178,6 +193,9 @@ public final class Skybox3DTest extends ApplicationAdapter {
         if (model != null) {
             model.dispose();
             model = null;
+        }
+        if (cancelledLoading && exitAfterFrames == 0L) {
+            return;
         }
         if (!created) {
             throw new FdxException("Skybox3DTest did not create graphics resources");

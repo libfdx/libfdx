@@ -184,7 +184,7 @@ final class GltfModelLoaderTest {
             assertEquals(2, graphics.device.texturesDisposed);
             graphics.device.failTextureWrite = true;
             AssetHandle<Model> failed = manager.load(AssetDescriptor.of("models/A.gltf", Model.class));
-            manager.finishLoading();
+            assertTrue(manager.update());
             assertTrue(failed.future().isFailed());
             assertEquals(3, graphics.device.texturesCreated);
             assertEquals(3, graphics.device.texturesDisposed);
