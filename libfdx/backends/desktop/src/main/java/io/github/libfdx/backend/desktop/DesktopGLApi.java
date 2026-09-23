@@ -794,6 +794,12 @@ final class DesktopGLApi implements GLApi {
         GL15.glBufferSubData(GL15.GL_ARRAY_BUFFER, 0, data);
     }
 
+    @Override public boolean supportsBufferRangeInitialization() { return true; }
+
+    @Override public void bufferSubData(int offset, ByteBuffer data) {
+        recordUpload(data.remaining()); GL15.glBufferSubData(GL15.GL_ARRAY_BUFFER, offset, data);
+    }
+
     /**
      * Runs the bind uniform buffer step.
      *

@@ -55,6 +55,26 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class GLResourceOwnershipTest {
+    @Test void initialBufferRangesPreserveOffsetsAndRejectInvalidOrForeignResources() {
+        FakeGL gl = new FakeGL();
+        GLGraphicsAttachment attachment = attachment(gl, new FakeSurface());
+        GraphicsDevice device = attachment.device();
+        Buffer buffer = device.createBuffer(BufferDescriptor.staticVertex("initial", 16));
+        ByteBuffer data = ByteBuffer.allocateDirect(12).position(4);
+        device.initializeBufferRange(buffer, 8, data);
+        assertEquals(8, gl.bufferOffset);
+        assertEquals(8, gl.bufferRemaining);
+        assertEquals(4, data.position()); assertEquals(12, data.limit());
+        int writes = gl.calls("bufferSubData");
+        assertThrows(FdxException.class, () -> device.initializeBufferRange(buffer, 12, data));
+        assertEquals(writes, gl.calls("bufferSubData"));
+        GLGraphicsAttachment other = attachment(new FakeGL(), new FakeSurface());
+        assertThrows(FdxException.class, () -> other.device().initializeBufferRange(buffer, 0, data));
+        other.dispose();
+        buffer.dispose();
+        assertThrows(FdxException.class, () -> device.initializeBufferRange(buffer, 0, data));
+        attachment.dispose();
+    }
     private static final ProviderId PROVIDER_ID = ProviderId.of("gl-test");
     private static final ShaderReflection UNIFORM_REFLECTION = uniformReflection();
 
@@ -874,6 +894,7 @@ final class GLResourceOwnershipTest {
         private int failingCall;
         private TextureFormat uploadFormat;
         private int uploadRemaining;
+        private int bufferOffset, bufferRemaining;
         private boolean lost;
         private FakeSurface expectedSurface;
         private int lossQueries, preparationCloses;
@@ -902,6 +923,9 @@ final class GLResourceOwnershipTest {
 
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) {
+            if (method.getName().equals("bufferSubData") && args.length == 2) {
+                bufferOffset = (Integer) args[0]; bufferRemaining = ((ByteBuffer) args[1]).remaining();
+            }
             if (method.getName().equals("closeShaderPreparation")) { preparationCloses++; return null; }
             if (method.getName().equals("applyPipelineState")) appliedPrimitive = (PrimitiveState)args[0];
             if (method.getName().equals("isContextLost")) {

@@ -25,35 +25,13 @@ final class GltfAccessors {
         Accessor accessor=accessor(index);
         if(accessor.components!=components)throw error("accessor "+index+" component count mismatch");
         if(accessor.componentType==5125)throw error("unsigned-int accessor cannot supply floating attributes");
-        if(accessor.floats==null) {
-            float[] out=new float[accessor.count*components];
-            for(int i=0;i<accessor.count;i++)for(int c=0;c<components;c++) {
-                out[i*components+c]=accessor.base==null?0:component(accessor.base.bytes,accessor.base.offset+i*accessor.stride+accessor.componentOffset(c),accessor);
-            }
-            for(int i=0;i<accessor.sparseCount;i++)for(int c=0;c<components;c++) {
-                out[accessor.sparseIndices[i]*components+c]=component(accessor.sparseValues.bytes,
-                        accessor.sparseValues.offset+i*accessor.elementBytes+accessor.componentOffset(c),accessor);
-            }
-            accessor.floats=out;
-        }
+        while (!decodeStep(accessor, false, 1024)) { }
         return accessor.floats;
     }
     int count(int index) { return accessor(index).count; }
     float[] skinWeights(int index) {
         Accessor accessor = accessor(index);
-        if (accessor.skinWeights == null) {
-            float[] weights = attribute(index, "WEIGHTS_0").clone();
-            for (int i = 0; i < weights.length; i += 4) {
-                double total = 0;
-                for (int j = 0; j < 4; j++) {
-                    if (!Float.isFinite(weights[i+j]) || weights[i+j] < 0) throw error("skin weights must be finite and nonnegative");
-                    total += weights[i+j];
-                }
-                if (total <= 0) throw error("skinned vertices require a positive weight sum");
-                for (int j = 0; j < 4; j++) weights[i+j] = (float)(weights[i+j] / total);
-            }
-            accessor.skinWeights = weights;
-        }
+        while (!prepareStep(index, "WEIGHTS_0", 1024)) { }
         return accessor.skinWeights;
     }
     float[] inverseBindMatrices(int index, int jointCount) {
@@ -80,7 +58,30 @@ final class GltfAccessors {
     }
 
     float[] attribute(int index, String semantic) {
+        while (!prepareStep(index, semantic, 1024)) { }
+        return accessor(index).floats;
+    }
+
+    /** Prepares one semantic in bounded element batches, including sparse overrides and validation. */
+    boolean prepareStep(int index, String semantic, int maxElements) {
+        if (maxElements <= 0) throw error("accessor preparation budget must be positive");
         Accessor accessor = accessor(index);
+        if ("INDICES".equals(semantic) || "JOINTS_0".equals(semantic)) {
+            int components = "INDICES".equals(semantic) ? 1 : 4;
+            if (!(components == 1 ? "SCALAR" : "VEC4").equals(accessor.type) || accessor.normalized
+                    || accessor.componentType != 5121 && accessor.componentType != 5123
+                    && !(components == 1 && accessor.componentType == 5125))
+                throw error(semantic + " requires unnormalized unsigned integer components");
+            return decodeStep(accessor, true, maxElements);
+        }
+        if ("COLOR_0".equals(semantic)) {
+            if (!"VEC3".equals(accessor.type) && !"VEC4".equals(accessor.type))
+                throw error("COLOR_0 must be VEC3 or VEC4");
+            if (accessor.componentType != 5126 && (!accessor.normalized
+                    || accessor.componentType != 5121 && accessor.componentType != 5123))
+                throw error("COLOR_0 requires float or normalized unsigned byte/short values");
+            return decodeStep(accessor, false, maxElements);
+        }
         boolean uv = semantic.startsWith("TEXCOORD_");
         boolean weights = "WEIGHTS_0".equals(semantic);
         String type = uv ? "VEC2" : weights || "TANGENT".equals(semantic) ? "VEC4" : "VEC3";
@@ -88,15 +89,34 @@ final class GltfAccessors {
                 && (!(uv || weights) || !accessor.normalized
                 || accessor.componentType != 5121 && accessor.componentType != 5123))
             throw error(semantic + " requires " + type + " FLOAT" + (uv || weights ? " or normalized unsigned byte/short" : ""));
-        float[] data = floats(index, accessor.components);
+        if (!decodeStep(accessor, false, maxElements)) return false;
+        float[] data = accessor.floats;
         if ("NORMAL".equals(semantic) || "TANGENT".equals(semantic)) {
-            for (int i = 0; i < data.length; i += accessor.components) {
+            int end = accessor.unitCursor + Math.min(maxElements, accessor.count - accessor.unitCursor);
+            for (; accessor.unitCursor < end; accessor.unitCursor++) {
+                int i = accessor.unitCursor * accessor.components;
                 double length = (double)data[i]*data[i] + (double)data[i+1]*data[i+1] + (double)data[i+2]*data[i+2];
                 if (Math.abs(length - 1) > .001 || accessor.components == 4 && Math.abs(data[i+3]) != 1)
                     throw error(semantic + " must be unit length; tangent W must be +1 or -1");
             }
+            return accessor.unitCursor == accessor.count;
         }
-        return data;
+        if (weights) {
+            if (accessor.skinWeights == null) accessor.skinWeights = new float[data.length];
+            int end = accessor.weightCursor + Math.min(maxElements, accessor.count - accessor.weightCursor);
+            for (; accessor.weightCursor < end; accessor.weightCursor++) {
+                int i = accessor.weightCursor * 4;
+                double total = 0;
+                for (int j = 0; j < 4; j++) {
+                    if (data[i+j] < 0) throw error("skin weights must be finite and nonnegative");
+                    total += data[i+j];
+                }
+                if (total <= 0) throw error("skinned vertices require a positive weight sum");
+                for (int j = 0; j < 4; j++) accessor.skinWeights[i+j] = (float)(data[i+j] / total);
+            }
+            return accessor.weightCursor == accessor.count;
+        }
+        return true;
     }
 
     int[] joints(int index) {
@@ -117,19 +137,47 @@ final class GltfAccessors {
         if(accessor.components!=components||accessor.normalized
                 ||accessor.componentType!=5121&&accessor.componentType!=5123&&accessor.componentType!=5125)
             throw error("accessor "+index+" requires unnormalized unsigned integer components");
-        if(accessor.integers==null) {
-            int[] out=new int[accessor.count*components];
-            for(int i=0;i<accessor.count;i++)for(int c=0;c<components;c++) {
-                out[i*components+c]=accessor.base==null?0:unsigned(accessor.base.bytes,
-                        accessor.base.offset+i*accessor.stride+accessor.componentOffset(c),accessor.componentType);
-            }
-            for(int i=0;i<accessor.sparseCount;i++)for(int c=0;c<components;c++) {
-                out[accessor.sparseIndices[i]*components+c]=unsigned(accessor.sparseValues.bytes,
-                        accessor.sparseValues.offset+i*accessor.elementBytes+accessor.componentOffset(c),accessor.componentType);
-            }
-            accessor.integers=out;
-        }
+        while (!decodeStep(accessor, true, 1024)) { }
         return accessor.integers;
+    }
+
+    private boolean decodeStep(Accessor accessor, boolean integer, int maxElements) {
+        if (accessor.sparseCursor < accessor.sparseCount) {
+            int end = accessor.sparseCursor + Math.min(maxElements, accessor.sparseCount - accessor.sparseCursor);
+            for (; accessor.sparseCursor < end; accessor.sparseCursor++) {
+                int i = accessor.sparseCursor;
+                int next = unsigned(accessor.sparseSource.bytes,
+                        accessor.sparseSource.offset + i * componentBytes(accessor.sparseType), accessor.sparseType);
+                if (next <= (i == 0 ? -1 : accessor.sparseIndices[i-1]) || next >= accessor.count)
+                    throw error("sparse indices must be strictly increasing and within accessor count");
+                accessor.sparseIndices[i] = next;
+            }
+            return false;
+        }
+        if (integer && accessor.integers == null) accessor.integers = new int[accessor.count * accessor.components];
+        if (!integer && accessor.floats == null) accessor.floats = new float[accessor.count * accessor.components];
+        int cursor = integer ? accessor.integerCursor : accessor.floatCursor;
+        int end = cursor + Math.min(maxElements, accessor.count - cursor);
+        for (int i = cursor; i < end; i++) for (int c = 0; c < accessor.components; c++) {
+            int out = i * accessor.components + c;
+            int offset = accessor.base == null ? 0 : accessor.base.offset + i * accessor.stride + accessor.componentOffset(c);
+            if (integer) accessor.integers[out] = accessor.base == null ? 0 : unsigned(accessor.base.bytes, offset, accessor.componentType);
+            else accessor.floats[out] = accessor.base == null ? 0 : component(accessor.base.bytes, offset, accessor);
+        }
+        if (integer) accessor.integerCursor = end; else accessor.floatCursor = end;
+        if (end < accessor.count) return false;
+        // Apply overrides on a later step so a call never decodes two full batches.
+        if (cursor < end && accessor.sparseCount > 0) return false;
+        int sparse = integer ? accessor.integerSparseCursor : accessor.floatSparseCursor;
+        end = sparse + Math.min(maxElements, accessor.sparseCount - sparse);
+        for (int i = sparse; i < end; i++) for (int c = 0; c < accessor.components; c++) {
+            int out = accessor.sparseIndices[i] * accessor.components + c;
+            int offset = accessor.sparseValues.offset + i * accessor.elementBytes + accessor.componentOffset(c);
+            if (integer) accessor.integers[out] = unsigned(accessor.sparseValues.bytes, offset, accessor.componentType);
+            else accessor.floats[out] = component(accessor.sparseValues.bytes, offset, accessor);
+        }
+        if (integer) accessor.integerSparseCursor = end; else accessor.floatSparseCursor = end;
+        return end == accessor.sparseCount;
     }
     byte[] viewBytes(int index) {
         View view=view(index);byte[] out=new byte[view.length];System.arraycopy(view.bytes,view.offset,out,0,out.length);return out;
@@ -173,12 +221,8 @@ final class GltfAccessors {
                 View source=slice(view(indexView),integer(indices,"byteOffset",0),(long)accessor.sparseCount*indexBytes,indexBytes);
                 accessor.sparseValues=slice(view(valueView),integer(values,"byteOffset",0),
                         (long)(accessor.sparseCount-1)*accessor.elementBytes+finalElementBytes,accessor.rows==0?accessor.componentBytes:4);
-                accessor.sparseIndices=new int[accessor.sparseCount];int previous=-1;
-                for(int i=0;i<accessor.sparseCount;i++) {
-                    int next=unsigned(source.bytes,source.offset+i*indexBytes,indexType);
-                    if(next<=previous||next>=accessor.count)throw error("sparse indices must be strictly increasing and within accessor count");
-                    accessor.sparseIndices[i]=previous=next;
-                }
+                accessor.sparseIndices=new int[accessor.sparseCount];
+                accessor.sparseSource=source;accessor.sparseType=indexType;
             }
             accessors[index]=accessor;return accessor;
         } catch(RuntimeException failure){throw new FdxException("glTF accessor "+index+": "+failure.getMessage(),failure);}
@@ -234,6 +278,8 @@ final class GltfAccessors {
     private static final class Accessor {
         String type;int components,componentType,componentBytes,rows,columnBytes,elementBytes,count,stride,sparseCount;
         boolean normalized;View base,sparseValues;int[] sparseIndices,integers;float[] floats,skinWeights;
+        View sparseSource;
+        int sparseType,sparseCursor,floatCursor,integerCursor,floatSparseCursor,integerSparseCursor,unitCursor,weightCursor;
         int componentOffset(int component){return rows==0?component*componentBytes:component/rows*columnBytes+component%rows*componentBytes;}
     }
 }

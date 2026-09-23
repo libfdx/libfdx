@@ -418,6 +418,12 @@ final class WebGLApi implements GLApi {
         gl.bufferSubData(ARRAY_BUFFER, 0, activeBytes(data));
     }
 
+    @Override public boolean supportsBufferRangeInitialization() { return true; }
+
+    @Override public void bufferSubData(int offset, ByteBuffer data) {
+        gl.bufferSubData(ARRAY_BUFFER, offset, activeBytes(data));
+    }
+
     /**
      * Runs the bind uniform buffer step.
      *

@@ -76,6 +76,20 @@ public interface GraphicsDevice extends ProviderHandle {
      */
     void writeBuffer(Buffer buffer, ByteBuffer data);
 
+    /** Whether unpublished vertex/index buffers can be initialized in separate byte ranges. */
+    default boolean supportsBufferRangeInitialization() { return false; }
+
+    /** Initializes part of a new, unpublished vertex/index buffer on the graphics thread.
+     * The buffer must not have been referenced by drawing or command recording. Other bytes
+     * are preserved; publish it only after every required range has been initialized.
+     * Offset and nonempty data length must be multiples of four and fit inside the buffer.
+     * Data is borrowed for this call; its position and limit are preserved. Failure may leave
+     * partial data, so the caller must dispose an abandoned buffer. Individual native calls
+     * are not time-bounded. Check {@link #supportsBufferRangeInitialization()} first. */
+    default void initializeBufferRange(Buffer buffer, int offset, ByteBuffer data) {
+        throw new FdxException("Buffer range initialization is not supported by this graphics device");
+    }
+
     /**
      * Reads a completed GPU buffer range into new direct storage. Callers must
      * submit any command encoder that writes the range before invoking this

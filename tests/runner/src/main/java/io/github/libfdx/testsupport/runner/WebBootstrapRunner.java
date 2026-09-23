@@ -8,6 +8,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HexFormat;
+import java.security.MessageDigest;
 import java.util.concurrent.Executors;
 
 /** Real generated-page startup checks, including downloads that remain pending after Java main returns. */
@@ -38,7 +41,8 @@ public final class WebBootstrapRunner {
                     try {
                         for (String graphics : List.of("webgl", "webgpu")) {
                             for (String scenario : List.of("delayed-script", "delayed-wasm", "dispose", "missing-script",
-                                    "invalid-script", "missing-wasm", "invalid-wasm", "missing-app", "invalid-app")) {
+                                    "invalid-script", "missing-wasm", "invalid-wasm", "missing-app", "invalid-app",
+                                    "runtime-error", "runtime-rejection")) {
                                 run(browser, root, target.equals("Wasm"), graphics, scenario,
                                         "http://127.0.0.1:" + server.getAddress().getPort() + "/nested/game/");
                             }
@@ -50,6 +54,9 @@ public final class WebBootstrapRunner {
     }
 
     private static void run(Browser browser, Path root, boolean wasm, String graphics, String scenario, String url) throws Exception {
+        String html = Files.readString(root.resolve("index.html"));
+        if (html.contains("libfdx-bootstrap-data") || html.contains("runtimeBase") || html.contains("application/json")
+                || html.contains("scripts/")) throw new AssertionError("Framework metadata leaked into index.html");
         String label = (wasm ? "wasm" : "js") + "-" + graphics + " " + scenario;
         System.out.println("BOOTSTRAP_START " + label);
         try (BrowserContext context = browser.newContext(); Page page = context.newPage()) {
@@ -108,6 +115,7 @@ public final class WebBootstrapRunner {
                     require(page, "() => window.libfdxBootstrapProbe.disposed===1 && window.libfdxBootstrapProbe.preload===0 && window.libfdxBootstrapProbe.created===0", "Late listener creation after disposal");
                 } else {
                     page.waitForFunction("() => window.libfdxBootstrapProbe.created===1");
+                    checkCompiledMetadata(page, root);
                     require(page, "() => window.libfdxBootstrapProbe.preload===1", "Preload listener count");
                     page.evaluate("window.libfdxBootstrapProbe.dispose()");
                 }
@@ -115,9 +123,23 @@ public final class WebBootstrapRunner {
                 if (requests.stream().filter(request -> request.endsWith("/scripts/fdx.wasm")).count() != 1)
                     throw new AssertionError("Native Wasm must be fetched exactly once");
                 if (!errors.isEmpty()) throw new AssertionError(errors.toString());
+            } else if (scenario.startsWith("runtime-")) {
+                page.waitForFunction("() => window.libfdxBootstrapProbe?.created===1");
+                if (scenario.equals("runtime-error")) {
+                    page.evaluate("() => { setTimeout(() => { throw new Error('runtime error probe'); }, 0); }");
+                } else {
+                    page.evaluate("() => { Promise.reject(new Error('runtime rejection probe')); }");
+                }
+                page.waitForFunction("() => document.getElementById('libfdx-error')?.textContent.includes('probe')");
+                require(page, "() => document.querySelectorAll('#libfdx-error').length===1", "Duplicate error overlay");
+                page.evaluate("window.libfdxBootstrapProbe.dispose()");
             } else {
-                page.waitForFunction("() => !!document.getElementById('libfdx-error')?.textContent");
-                if (!scenario.endsWith("-app")) {
+                if (scenario.endsWith("-app")) {
+                    // The backend cannot display an overlay when the application never executes.
+                    page.waitForCondition(() -> !errors.isEmpty());
+                    require(page, "() => !document.getElementById('libfdx-error')", "Page owns runtime error handling");
+                } else {
+                    page.waitForFunction("() => !!document.getElementById('libfdx-error')?.textContent");
                     String detail = page.locator("#libfdx-error").textContent();
                     if (!detail.contains("Web runtime startup failed:") || !detail.contains("fdx."))
                         throw new AssertionError("Startup failure lost its actionable cause: " + detail);
@@ -129,6 +151,9 @@ public final class WebBootstrapRunner {
                     page.screenshot(new Page.ScreenshotOptions().setPath(captures.resolve(label.replace(' ', '-') + ".png")));
                 }
             }
+            require(page, "() => typeof window.libfdxStartupError==='undefined'", "HTML startup error global remains");
+            require(page, "() => window.libfdxPublishedAssets===undefined && window.libfdxShaderCompilerIdentity===undefined"
+                    + " && window.libfdxRuntimeBaseUrl===undefined", "Legacy page configuration remains");
             if (requests.stream().anyMatch(request -> request.contains("fdx-loader.js"))) throw new AssertionError("Legacy loader requested");
             if (!scenario.endsWith("-app")) {
                 int application = indexOf(requests, wasm ? "/app.wasm" : "/app.js");
@@ -137,6 +162,29 @@ public final class WebBootstrapRunner {
             }
             System.out.println("BOOTSTRAP_PASS " + label);
         }
+    }
+
+    private static void checkCompiledMetadata(Page page, Path root) throws Exception {
+        var expected = new java.util.TreeMap<String, Long>();
+        Path assetsRoot = root.resolve("assets");
+        try (var files = Files.walk(assetsRoot)) {
+            for (Path file : files.filter(Files::isRegularFile).toList()) {
+                expected.put(assetsRoot.relativize(file).toString().replace('\\', '/'), Files.size(file));
+            }
+        }
+        Map<?, ?> actual = (Map<?, ?>) page.evaluate("window.libfdxBootstrapProbe.assets");
+        if (!expected.keySet().equals(actual.keySet())) throw new AssertionError("Compiled and packaged asset paths differ");
+        for (var entry : expected.entrySet()) {
+            if (((Number) actual.get(entry.getKey())).longValue() != entry.getValue())
+                throw new AssertionError("Compiled asset size differs: " + entry.getKey());
+        }
+        StringBuilder identity = new StringBuilder("fdx-web-fdxr2-v1");
+        for (String file : List.of("fdx.js", "fdx.wasm")) {
+            identity.append(':').append(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(Files.readAllBytes(root.resolve("scripts").resolve(file)))));
+        }
+        if (!identity.toString().equals(page.evaluate("window.libfdxBootstrapProbe.compilerIdentity")))
+            throw new AssertionError("Compiled compiler fingerprint differs from packaged binaries");
     }
 
     private static int indexOf(List<String> requests, String suffix) {

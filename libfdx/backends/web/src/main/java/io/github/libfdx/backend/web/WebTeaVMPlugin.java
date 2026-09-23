@@ -28,7 +28,19 @@ public final class WebTeaVMPlugin implements TeaVMPlugin {
      */
     @Override
     public void install(TeaVMHost host) {
-        host.add((cls, context) -> bindPreparationDefaults(cls));
+        host.add((cls, context) -> {
+            bindPreparationDefaults(cls);
+            if (cls.getName().equals("io.github.libfdx.backend.web.WebRuntimeShaderCompiler")) {
+                var method = cls.getMethod(new MethodDescriptor("compiledIdentity", ValueType.object("java.lang.String")));
+                var program = new Program(); program.createVariable();
+                var result = program.createVariable(); var block = program.createBasicBlock();
+                var value = new StringConstantInstruction();
+                value.setConstant(TeaVMAssetProperties.compilerIdentity(host.getProperties()));
+                value.setReceiver(result); block.add(value);
+                var exit = new ExitInstruction(); exit.setValueToReturn(result); block.add(exit);
+                method.setProgram(program);
+            }
+        });
         MetadataRegistration registration = host.getService(MetadataRegistration.class);
         if (registration != null) {
             registration.register(new MethodReference(WebGeneratedAssets.class, "assets", ResourceArray.class),

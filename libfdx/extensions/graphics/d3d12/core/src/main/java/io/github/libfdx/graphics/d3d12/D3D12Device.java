@@ -182,6 +182,15 @@ final class D3D12Device implements GraphicsDevice {
         D3D12Native.writeBuffer(context.nativeHandle(), target.nativeHandle(), source, size);
     }
 
+    @Override public boolean supportsBufferRangeInitialization() { return true; }
+
+    @Override public void initializeBufferRange(Buffer buffer, int offset, ByteBuffer data) {
+        D3D12Buffer target = context.requireBuffer(buffer, "Buffer");
+        io.github.libfdx.graphics.BufferInitialization.validate(target, offset, data);
+        D3D12Native.initializeBufferRange(context.nativeHandle(), target.nativeHandle(), offset,
+                target.uploadSource(data, data.remaining()), data.remaining());
+    }
+
     @Override public ByteBuffer readBuffer(Buffer buffer, int offset, int size) {
         var target = context.requireBuffer(buffer, "Readback buffer");
         if (target.usage() != BufferUsage.READBACK || offset < 0 || size < 0 || offset > target.size() - size) throw new FdxException("Invalid D3D12 readback buffer or range");

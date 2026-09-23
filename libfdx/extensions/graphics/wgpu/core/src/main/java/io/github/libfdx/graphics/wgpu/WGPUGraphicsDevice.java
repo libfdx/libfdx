@@ -277,6 +277,18 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         context.nativeQueue().writeBuffer(wgpuBuffer.nativeBuffer(), 0, uploadData, uploadByteCount);
     }
 
+    @Override public boolean supportsBufferRangeInitialization() { return true; }
+
+    @Override public void initializeBufferRange(Buffer buffer, int offset, ByteBuffer data) {
+        context.requireDeviceUsable("initialize a buffer");
+        WGPUBufferHandle target = WGPUResources.requireBuffer(buffer, context.resourceDomain(), "Buffer");
+        io.github.libfdx.graphics.BufferInitialization.validate(target, offset, data);
+        if (target.allocation().hasRecordingReferences())
+            throw new FdxException("Cannot initialize a buffer referenced by recorded commands");
+        context.nativeQueue().writeBuffer(target.nativeBuffer(), offset,
+                bufferUploadData(data, data.remaining(), data.remaining()), data.remaining());
+    }
+
     @Override
     public ByteBuffer readBuffer(Buffer buffer, int offset, int size) {
         context.requireDeviceUsable("read a buffer");

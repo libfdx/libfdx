@@ -254,6 +254,17 @@ final class GLGraphicsDevice implements GraphicsDevice {
         }
     }
 
+    @Override public boolean supportsBufferRangeInitialization() { return gl.supportsBufferRangeInitialization(); }
+
+    @Override public void initializeBufferRange(Buffer buffer, int offset, ByteBuffer data) {
+        GLBufferHandle target = GLResources.requireBuffer(buffer, resourceDomain, "Buffer");
+        io.github.libfdx.graphics.BufferInitialization.validate(target, offset, data);
+        attachment.makeCurrent();
+        gl.bindArrayBuffer(target.buffer());
+        try { gl.bufferSubData(offset, data); }
+        finally { gl.bindArrayBuffer(0); }
+    }
+
     /**
      * Creates a texture.
      *

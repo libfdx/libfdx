@@ -7,6 +7,44 @@ import java.nio.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class GltfAccessorsTest {
+    @Test void cooperativeDecodingDefersLateInvalidComponentsAndNormalValidation() {
+        byte[] bytes = new byte[36];
+        ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+        buffer.putFloat(0, 1).putFloat(16, 1).putFloat(32, 2);
+        JsonValue accessor = JsonValue.object().put("bufferView", 0).put("count", 3)
+                .put("componentType", 5126).put("type", "VEC3");
+        var reader = new GltfAccessors(root(bytes.length, accessor, view(0, bytes.length)), new byte[][]{bytes});
+        assertFalse(reader.prepareStep(0, "NORMAL", 1));
+        assertFalse(reader.prepareStep(0, "NORMAL", 1));
+        assertFalse(reader.prepareStep(0, "NORMAL", 1));
+        assertFalse(reader.prepareStep(0, "NORMAL", 1));
+        assertThrows(FdxException.class, () -> reader.prepareStep(0, "NORMAL", 1));
+        buffer.putFloat(32, Float.NaN);
+        var invalid = new GltfAccessors(root(bytes.length, accessor, view(0, bytes.length)), new byte[][]{bytes});
+        assertFalse(invalid.prepareStep(0, "POSITION", 1));
+        assertFalse(invalid.prepareStep(0, "POSITION", 1));
+        assertThrows(FdxException.class, () -> invalid.prepareStep(0, "POSITION", 1));
+        assertThrows(FdxException.class, () -> invalid.prepareStep(0, "POSITION", 0));
+    }
+
+    @Test void cooperativeSparseAndWeightPreparationPreservesResults() {
+        byte[] bytes = new byte[36];
+        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+                .putFloat(4, 2).putFloat(8, 2).putFloat(20, 1).putFloat(24, 3);
+        bytes[0] = 0; bytes[1] = 1;
+        var accessor = JsonValue.object().put("count",2).put("componentType",5126).put("type","VEC4")
+                .put("sparse", JsonValue.object().put("count",2)
+                        .put("indices", JsonValue.object().put("bufferView",0).put("componentType",5121))
+                        .put("values", JsonValue.object().put("bufferView",1)));
+        var reader = new GltfAccessors(root(bytes.length, accessor, view(0,2),view(4,32)),new byte[][]{bytes});
+        int steps = 0;
+        while (!reader.prepareStep(0,"WEIGHTS_0",1)) assertTrue(++steps < 12);
+        assertTrue(steps >= 6);
+        assertArrayEquals(new float[]{.5f,.5f,0,0,.25f,.75f,0,0}, reader.skinWeights(0));
+        assertArrayEquals(new float[]{2,2,0,0,1,3,0,0}, reader.floats(0,4));
+        assertTrue(reader.prepareStep(0,"WEIGHTS_0",1));
+    }
+
     @Test void finalMatrixColumnMayOmitTrailingPaddingInDenseAndSparseViews() {
         byte[] bytes = {1,2,3,0, 4,5,6,0, 7,8,9,0, 9,8,7,0, 6,5,4,0, 3,2,1,0, 0,1};
         var accessor = JsonValue.object().put("bufferView",0).put("count",2).put("componentType",5121).put("type","MAT3");

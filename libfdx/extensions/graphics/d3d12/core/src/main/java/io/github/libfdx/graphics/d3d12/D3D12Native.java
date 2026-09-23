@@ -129,6 +129,10 @@ final class D3D12Native {
         context(context).writeBuffer(buffer, source, size);
     }
 
+    static void initializeBufferRange(long context, long buffer, int offset, MemorySegment source, int size) {
+        context(context).initializeBufferRange(buffer, offset, source, size);
+    }
+
     static void destroyBuffer(long context, long buffer) {
         context(context).destroyBuffer(buffer);
     }

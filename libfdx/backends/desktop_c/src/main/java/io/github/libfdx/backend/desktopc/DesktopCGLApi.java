@@ -267,6 +267,12 @@ final class DesktopCGLApi implements GLApi {
         DesktopCOpenGL.glBufferSubData(DesktopCOpenGL.ARRAY_BUFFER, 0, data.remaining(), data);
     }
 
+    @Override public boolean supportsBufferRangeInitialization() { return true; }
+
+    @Override public void bufferSubData(int offset, ByteBuffer data) {
+        DesktopCOpenGL.glBufferSubData(DesktopCOpenGL.ARRAY_BUFFER, offset, data.remaining(), data);
+    }
+
     /**
      * Runs the bind uniform buffer step.
      *

@@ -21,9 +21,12 @@ public final class G3DAssetLoaders {
     }
 
     /**
-     * Registers standard model, image, buffer and lighting loaders. Default image and glTF mipmap
+     * Registers standard model, image, buffer and lighting loaders. Initial mesh uploads use
+     * bounded byte ranges on supporting providers, with whole-buffer writes as a compatibility
+     * fallback. A model is published only after every upload completes. Default image and glTF mipmap
      * preparation uses manager-owned platform strategies (a shared worker on web).
-     * Mesh interleaving runs as bounded CPU preparation; graphics finalization yields between
+     * Geometry accessor decoding, validation and mesh interleaving run as bounded CPU preparation;
+     * graphics finalization yields between
      * textures, nodes and primitives under the asset manager's update budget. A single graphics
      * upload cannot be interrupted and may exceed that cooperative budget.
      *

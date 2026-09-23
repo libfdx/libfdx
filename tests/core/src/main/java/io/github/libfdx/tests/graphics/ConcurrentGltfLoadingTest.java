@@ -148,6 +148,8 @@ public final class ConcurrentGltfLoadingTest extends GraphicsParityTest {
         finishFrame();
     }
 
+    @Override protected boolean readyForCapture() { return reported; }
+
     private void drawStatus() {
         int width = framebufferWidth(), height = framebufferHeight();
         float scale = Math.min(width / 960f, height / 640f);

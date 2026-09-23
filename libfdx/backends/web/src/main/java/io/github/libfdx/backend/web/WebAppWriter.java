@@ -54,7 +54,7 @@ public final class WebAppWriter {
         List<WebAsset> assets = new ArrayList<>(WebAssets.copy(app.getAssets(), root.resolve("assets")));
         copySharedAssets(root.resolve("assets"), app.getRuntimeClasspath(), assets);
         copyRuntimeScripts(root, app.getRuntimeClasspath());
-        Files.writeString(root.resolve("index.html"), indexHtml(app, assets, shaderCompilerIdentity(root.resolve("scripts"))), StandardCharsets.UTF_8);
+        Files.writeString(root.resolve("index.html"), indexHtml(app), StandardCharsets.UTF_8);
         Files.writeString(webInf.resolve("web.xml"), "<web-app></web-app>\n", StandardCharsets.UTF_8);
         return assets;
     }
@@ -62,6 +62,27 @@ public final class WebAppWriter {
     private static void copySharedAssets(Path assetsRoot, List<Path> runtimeClasspath,
             List<WebAsset> assets) throws IOException {
         Path outputRoot = assetsRoot.toAbsolutePath().normalize();
+        for (SharedAsset asset : discoverSharedAssets(runtimeClasspath, assets)) {
+            Path output = sharedAssetOutput(outputRoot, asset.resourcePath(), asset.origin());
+            Files.createDirectories(output.getParent());
+            try (InputStream input = asset.open()) {
+                Files.copy(input, output, StandardCopyOption.REPLACE_EXISTING);
+            }
+            assets.add(new WebAsset(asset.resourcePath(), Files.size(output), output));
+        }
+    }
+
+    /** Compilation and packaging share discovery, collision checks and application overrides. */
+    static List<WebAsset> collectSharedAssets(List<Path> runtimeClasspath, List<WebAsset> assets) throws IOException {
+        List<WebAsset> result = new ArrayList<>(assets);
+        for (SharedAsset asset : discoverSharedAssets(runtimeClasspath, assets)) {
+            result.add(new WebAsset(asset.resourcePath(), asset.size(), null));
+        }
+        return result;
+    }
+
+    private static List<SharedAsset> discoverSharedAssets(List<Path> runtimeClasspath,
+            List<WebAsset> assets) throws IOException {
         LinkedHashMap<String, SharedAsset> discovered = new LinkedHashMap<>();
         for (Path entry : runtimeClasspath) {
             Path normalized = entry.toAbsolutePath().normalize();
@@ -76,19 +97,10 @@ public final class WebAppWriter {
         for (WebAsset asset : assets) {
             applicationAssets.add(asset.getPath().toLowerCase(Locale.ROOT));
         }
-        for (SharedAsset asset : discovered.values().stream()
+        return discovered.values().stream()
+                .filter(asset -> !applicationAssets.contains(asset.resourcePath().toLowerCase(Locale.ROOT)))
                 .sorted(Comparator.comparing(SharedAsset::resourcePath))
-                .toList()) {
-            if (applicationAssets.contains(asset.resourcePath().toLowerCase(Locale.ROOT))) {
-                continue;
-            }
-            Path output = sharedAssetOutput(outputRoot, asset.resourcePath(), asset.origin());
-            Files.createDirectories(output.getParent());
-            try (InputStream input = asset.open()) {
-                Files.copy(input, output, StandardCopyOption.REPLACE_EXISTING);
-            }
-            assets.add(new WebAsset(asset.resourcePath(), Files.size(output), output));
-        }
+                .toList();
     }
 
     private static void discoverSharedAssetsFromDirectory(Path classpathRoot,
@@ -202,7 +214,7 @@ public final class WebAppWriter {
         }
     }
 
-    private static String indexHtml(WebApp app, List<WebAsset> assets, String compilerIdentity) {
+    private static String indexHtml(WebApp app) {
         String escapedTitle = html(app.getTitle());
         String escapedCanvas = html(app.getCanvasId());
         boolean fillWindow = app.getWidth() <= 0 || app.getHeight() <= 0;
@@ -222,28 +234,15 @@ public final class WebAppWriter {
                     <style>
                         html, body { margin: 0; width: 100%%; height: 100%%; overflow: hidden; background: #ffffff; }
                         canvas { display: block; %s }
-                        #libfdx-error {
-                            position: fixed;
-                            inset: 0;
-                            z-index: 2147483647;
-                            box-sizing: border-box;
-                            overflow: auto;
-                            padding: 16px;
-                            background: rgba(20, 20, 20, 0.94);
-                            color: #ff6b6b;
-                            font: 13px/1.45 Consolas, Monaco, monospace;
-                            white-space: pre-wrap;
-                        }
                     </style>
                 </head>
                 <body>
                     <canvas id="%s" width="%d" height="%d"%s></canvas>
-                    <script id="libfdx-bootstrap-data" type="application/json">%s</script>
                     %s
                 </body>
                 </html>
                 """.formatted(escapedTitle, canvasSizeCss, escapedCanvas, canvasWidth, canvasHeight, fillWindowAttribute,
-                        bootstrapData(assets, compilerIdentity), applicationScripts(app))
+                        applicationScripts(app))
                 .trim() + "\n";
     }
 
@@ -252,55 +251,27 @@ public final class WebAppWriter {
         String entry = "[\"" + inlineJs(app.getEntryPointName()) + "\"]";
         String args = "[" + app.getMainClassArgs().replace("</", "<\\/") + "]";
         String start = app.isWasm()
-                ? "return TeaVM.wasmGC.load(\"" + inlineJs(target) + "\").then(function(app) { return app.exports"
+                ? "TeaVM.wasmGC.load(\"" + inlineJs(target) + "\").then(function(app) { return app.exports"
                         + entry + "(" + args + "); });"
-                : "return window" + entry + "(" + args + ");";
+                : "window" + entry + "(" + args + ");";
         return """
-                <script>
-                function libfdxStartupError(error) {
-                    var message = error && error.stack || String(error);
-                    console.error(message);
-                    var output = document.getElementById('libfdx-error');
-                    if (output) return;
-                    output = document.createElement('pre');
-                    output.id = 'libfdx-error';
-                    document.body.appendChild(output);
-                    output.textContent = 'libfdx startup/runtime failed\\n' + message;
-                }
-                window.addEventListener('error', function(event) { libfdxStartupError(event.error || event.message); });
-                window.addEventListener('unhandledrejection', function(event) { libfdxStartupError(event.reason); });
-                window.addEventListener('load', function() {
-                    Promise.resolve().then(function() { %s }).catch(libfdxStartupError);
-                });
-                </script>
-                <script defer src="%s" onerror="libfdxStartupError('Application script failed to load')"></script>
-                """.formatted(start, html(target + (app.isWasm() ? "-runtime.js" : ""))).trim();
-    }
-
-    private static String bootstrapData(List<WebAsset> assets, String compilerIdentity) {
-        StringBuilder data = new StringBuilder("{\"runtimeBase\":\"scripts/\",\"shaderCompilerIdentity\":\"")
-                .append(inlineJs(compilerIdentity)).append("\",\"assets\":[");
-        for (int index = 0; index < assets.size(); index++) {
-            if (index > 0) data.append(',');
-            WebAsset asset = assets.get(index);
-            data.append("{\"path\":\"").append(inlineJs(asset.getPath())).append("\",\"size\":")
-                    .append(asset.getSize()).append('}');
-        }
-        return data.append("]}").toString();
+                <script src="%s"></script>
+                    <script>%s</script>
+                """.formatted(html(target + (app.isWasm() ? "-runtime.js" : "")), start).trim();
     }
 
     private static String inlineJs(String value) {
         return js(value).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026");
     }
 
-    private static String shaderCompilerIdentity(Path scriptsRoot) throws IOException {
-        if (!Files.isRegularFile(scriptsRoot.resolve("fdx.js"))
-                || !Files.isRegularFile(scriptsRoot.resolve("fdx.wasm"))) return "";
+    static String shaderCompilerIdentity(Path webappRoot, List<Path> runtimeClasspath) throws IOException {
+        Map<String, RuntimeScript> scripts = discoverRuntimeScripts(webappRoot, runtimeClasspath);
+        if (!scripts.containsKey("fdx.js") || !scripts.containsKey("fdx.wasm")) return "";
         try {
             StringBuilder identity = new StringBuilder("fdx-web-fdxr2-v1");
             for (String name : List.of("fdx.js", "fdx.wasm")) {
                 MessageDigest digest = MessageDigest.getInstance("SHA-256");
-                try (InputStream input = Files.newInputStream(scriptsRoot.resolve(name))) {
+                try (InputStream input = scripts.get(name).open()) {
                     byte[] buffer = new byte[65536];
                     int count;
                     while ((count = input.read(buffer)) >= 0) if (count > 0) digest.update(buffer, 0, count);
@@ -314,16 +285,7 @@ public final class WebAppWriter {
     private static void copyRuntimeScripts(Path root, List<Path> runtimeClasspath) throws IOException {
         Path webappRoot = root.toAbsolutePath().normalize();
         Path scriptsRoot = root.resolve("scripts").toAbsolutePath().normalize();
-        LinkedHashMap<String, RuntimeScript> discovered = new LinkedHashMap<>();
-        LinkedHashMap<String, String> portablePaths = new LinkedHashMap<>();
-        for (Path entry : runtimeClasspath) {
-            Path normalized = entry.toAbsolutePath().normalize();
-            if (Files.isDirectory(normalized)) {
-                discoverRuntimeScriptsFromDirectory(normalized, webappRoot, discovered, portablePaths);
-            } else if (Files.isRegularFile(normalized) && isJar(normalized)) {
-                discoverRuntimeScriptsFromJar(normalized, discovered, portablePaths);
-            }
-        }
+        Map<String, RuntimeScript> discovered = discoverRuntimeScripts(webappRoot, runtimeClasspath);
 
         ArrayList<RuntimeScriptCopy> copies = new ArrayList<>(discovered.size());
         for (RuntimeScript script : discovered.values().stream()
@@ -342,16 +304,32 @@ public final class WebAppWriter {
         }
     }
 
+    private static Map<String, RuntimeScript> discoverRuntimeScripts(Path webappRoot,
+            List<Path> runtimeClasspath) throws IOException {
+        LinkedHashMap<String, RuntimeScript> discovered = new LinkedHashMap<>();
+        LinkedHashMap<String, String> portablePaths = new LinkedHashMap<>();
+        for (Path entry : runtimeClasspath) {
+            Path normalized = entry.toAbsolutePath().normalize();
+            if (Files.isDirectory(normalized)) {
+                discoverRuntimeScriptsFromDirectory(normalized, webappRoot, discovered, portablePaths);
+            } else if (Files.isRegularFile(normalized) && isJar(normalized)) {
+                discoverRuntimeScriptsFromJar(normalized, discovered, portablePaths);
+            }
+        }
+
+        return discovered;
+    }
+
     private static void discoverRuntimeScriptsFromDirectory(Path directory, Path webappRoot,
             Map<String, RuntimeScript> discovered, Map<String, String> portablePaths)
             throws IOException {
-        if (directory.startsWith(webappRoot)) {
+        if (webappRoot != null && directory.startsWith(webappRoot)) {
             return;
         }
         try (var paths = Files.walk(directory)) {
             for (Path source : paths
                     .filter(Files::isRegularFile)
-                    .filter(path -> !path.toAbsolutePath().normalize().startsWith(webappRoot))
+                    .filter(path -> webappRoot == null || !path.toAbsolutePath().normalize().startsWith(webappRoot))
                     .filter(path -> isRuntimeScript(directory.relativize(path).toString()))
                     .sorted(Comparator.comparing(path -> directory.relativize(path).toString()))
                     .toList()) {

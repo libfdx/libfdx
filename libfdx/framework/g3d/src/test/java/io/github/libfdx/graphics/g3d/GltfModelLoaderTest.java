@@ -137,17 +137,32 @@ final class GltfModelLoaderTest {
         FileSystem files=(FileSystem)Proxy.newProxyInstance(FileSystem.class.getClassLoader(),new Class<?>[]{FileSystem.class},
                 (proxy,method,args)->file((String)args[0],reads,counts));
         DefaultAssetManager manager=new DefaultAssetManager(files);
-        G3DAssetLoaders.register(manager,new FakeGraphicsContext());
+        FakeGraphicsContext graphics = new FakeGraphicsContext();
+        graphics.device.rangeInitialization = true;
+        G3DAssetLoaders.register(manager, graphics);
         try {
             AssetHandle<Model> handle=manager.load(AssetDescriptor.of("large.gltf",Model.class));
             int frames=0;
             while(!handle.future().isDone() && frames++<1000) {
+                int before = graphics.device.rangeCalls;
                 manager.update(1,Long.MAX_VALUE);assertTrue(manager.lastUpdateTaskCount()<=1);
+                assertTrue(graphics.device.rangeCalls - before <= 1);
             }
             Mesh mesh=handle.future().get().nodes().get(0).parts().get(0).meshPart().mesh();
             assertEquals(triangles*3,mesh.vertexCount());assertTrue(frames>triangles/256);
             float[] positions=mesh.sourcePositions();
             for(int i=9;i<positions.length;i++)assertEquals(positions[i%9],positions[i]);
+            assertTrue(graphics.device.rangeCalls > 1);
+            assertEquals(graphics.device.buffers.get(0).size(), graphics.device.buffers.get(0).initialized);
+            manager.unload("large.gltf");
+            var cancelled = manager.load(AssetDescriptor.of("large.gltf", Model.class));
+            int initialCalls = graphics.device.rangeCalls;
+            for (int i = 0; i < 1000 && graphics.device.rangeCalls == initialCalls; i++) manager.update(1,Long.MAX_VALUE);
+            assertTrue(graphics.device.rangeCalls > initialCalls);
+            assertFalse(cancelled.isLoaded());
+            manager.unload("large.gltf");
+            assertTrue(cancelled.future().isFailed());
+            for (FakeBuffer allocated : graphics.device.buffers) assertTrue(allocated.disposed);
         } finally {manager.dispose();}
     }
 
@@ -319,7 +334,7 @@ final class GltfModelLoaderTest {
             assertEquals(0, graphics.device.buffers.size());
             assertEquals(0, graphics.device.texturesCreated);
             reads.get("models/shared.png").complete(new byte[0]);
-            for (int i = 0; i < 100 && !manager.update(1, Long.MAX_VALUE); i++) {
+            for (int i = 0; i < 300 && !manager.update(1, Long.MAX_VALUE); i++) {
                 assertEquals(1, manager.lastUpdateTaskCount());
             }
             assertDoesNotThrow(() -> a.future().get());
@@ -714,6 +729,19 @@ final class GltfModelLoaderTest {
         private int texturesDisposed;
         private boolean failBufferWrite;
         private boolean failTextureWrite;
+        private boolean rangeInitialization;
+        private int rangeCalls;
+
+        @Override public boolean supportsBufferRangeInitialization() { return rangeInitialization; }
+        @Override public void initializeBufferRange(Buffer buffer, int offset, ByteBuffer data) {
+            assertSame(applicationThread, Thread.currentThread());
+            io.github.libfdx.graphics.BufferInitialization.validate(buffer, offset, data);
+            FakeBuffer target = (FakeBuffer) buffer;
+            assertEquals(target.initialized, offset);
+            assertTrue(data.remaining() <= 256 * 1024);
+            if (failBufferWrite) throw new FdxException("range upload failed");
+            target.initialized += data.remaining(); rangeCalls++;
+        }
 
         @Override
         public Buffer createBuffer(BufferDescriptor descriptor) {
@@ -783,6 +811,7 @@ final class GltfModelLoaderTest {
         private final int size;
         private final BufferUsage usage;
         private boolean disposed;
+        private int initialized;
 
         FakeBuffer(int size, BufferUsage usage) {
             this.size = size;

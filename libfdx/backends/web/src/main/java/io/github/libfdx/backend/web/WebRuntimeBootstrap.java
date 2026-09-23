@@ -27,7 +27,8 @@ final class WebRuntimeBootstrap {
 
     private void begin() {
         try {
-            String base = installMetadata();
+            installErrorReporting(WebRuntimeBootstrap::reportFailure);
+            String base = runtimeBaseUrl();
             var document = HTMLDocument.current();
             var script = (HTMLScriptElement) document.createElement("script");
             script.setSrc(base + "fdx.js");
@@ -64,27 +65,29 @@ final class WebRuntimeBootstrap {
         reportFailure(detail);
     }
 
+    @JSBody(params = "report", script = """
+            window.addEventListener('error', function(event) { report(String(event.error && event.error.stack || event.message)); });
+            window.addEventListener('unhandledrejection', function(event) { report(String(event.reason && event.reason.stack || event.reason)); });
+            """)
+    private static native void installErrorReporting(Failure report);
+
+    // Owned by the application, including custom hosts. Errors before Java starts use the browser console.
     // TeaVM's browser Error stack may omit the Java exception message. Preserve the actionable cause.
     @JSBody(params = "message", script = """
-            if(typeof globalThis.libfdxStartupError==='function')globalThis.libfdxStartupError(message);
+            console.error(message);
+            if(document.getElementById('libfdx-error'))return;
+            var output=document.createElement('pre');
+            output.id='libfdx-error';
+            output.style.cssText='position:fixed;inset:0;z-index:2147483647;box-sizing:border-box;'
+                +'overflow:auto;margin:0;padding:16px;background:rgba(20,20,20,0.94);color:#ff6b6b;'
+                +'font:13px/1.45 Consolas,Monaco,monospace;white-space:pre-wrap;';
+            output.textContent='libfdx startup/runtime failed\\n'+message;
+            document.body.appendChild(output);
             """)
     private static native void reportFailure(String message);
 
-    /** Reads packaging data, with defaults for custom hosts using compiler-generated assets. */
-    @JSBody(script = """
-            var root=globalThis;
-            var element=document.getElementById('libfdx-bootstrap-data');
-            if(element) {
-                var data=JSON.parse(element.textContent);
-                root.libfdxPublishedAssets=data.assets;
-                root.libfdxShaderCompilerIdentity=data.shaderCompilerIdentity;
-                root.libfdxRuntimeBaseUrl=new URL(data.runtimeBase || 'scripts/',document.baseURI).href;
-            } else if(!root.libfdxRuntimeBaseUrl) {
-                root.libfdxRuntimeBaseUrl=new URL('scripts/',document.baseURI).href;
-            }
-            return root.libfdxRuntimeBaseUrl;
-            """)
-    static native String installMetadata();
+    @JSBody(script = "return new URL('scripts/',document.baseURI).href;")
+    private static native String runtimeBaseUrl();
 
     @JSFunctor private interface Success extends JSObject { void run(JSObject module); }
     @JSFunctor private interface Failure extends JSObject { void run(String message); }

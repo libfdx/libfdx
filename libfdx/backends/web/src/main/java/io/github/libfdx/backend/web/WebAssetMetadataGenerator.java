@@ -9,6 +9,10 @@ import org.teavm.platform.metadata.builders.ResourceArrayBuilder;
 import org.teavm.platform.metadata.builders.ResourceBuilder;
 
 import java.util.Properties;
+import java.util.ArrayList;
+import java.util.List;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 
 /**
  * Represents a web asset metadata generator.
@@ -28,17 +32,30 @@ public final class WebAssetMetadataGenerator implements MetadataGenerator {
      */
     @Override
     public ResourceBuilder generateMetadata(MetadataGeneratorContext context, MethodReference method) {
-        Properties properties = context.getProperties();
+        return generateMetadata(context.getProperties());
+    }
+
+    ResourceArrayBuilder<WebAssetBuilder> generateMetadata(Properties properties) {
         int count = parseCount(properties.getProperty(COUNT_PROPERTY));
-        ResourceArrayBuilder<WebAssetBuilder> result = new ResourceArrayBuilder<>();
+        List<WebAsset> assets = new ArrayList<>();
         for (int index = 0; index < count; index++) {
             String path = properties.getProperty(ASSET_PROPERTY_PREFIX + index + ".path", "");
-            if (path.isEmpty()) {
-                continue;
-            }
+            if (!path.isEmpty()) assets.add(new WebAsset(path,
+                    parseSize(properties.getProperty(ASSET_PROPERTY_PREFIX + index + ".size")), null));
+        }
+        for (WebAsset defaultAsset : WebAssets.collect(List.of())) {
+            if (assets.stream().noneMatch(asset -> asset.getPath().equals(defaultAsset.getPath()))) assets.add(defaultAsset);
+        }
+        try {
+            assets = WebAppWriter.collectSharedAssets(TeaVMAssetProperties.runtimeClasspath(properties), assets);
+        } catch (IOException error) {
+            throw new UncheckedIOException("Could not collect shared web assets", error);
+        }
+        ResourceArrayBuilder<WebAssetBuilder> result = new ResourceArrayBuilder<>();
+        for (WebAsset entry : assets) {
             WebAssetBuilder asset = new WebAssetBuilder();
-            asset.path = path;
-            asset.size = parseSize(properties.getProperty(ASSET_PROPERTY_PREFIX + index + ".size"));
+            asset.path = entry.getPath();
+            asset.size = parseSize(Long.toString(entry.getSize()));
             result.values.add(asset);
         }
         return result;

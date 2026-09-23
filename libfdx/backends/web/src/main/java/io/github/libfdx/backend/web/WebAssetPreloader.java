@@ -49,41 +49,18 @@ public final class WebAssetPreloader {
         if (installed) {
             return;
         }
-        WebRuntimeBootstrap.installMetadata();
         beginInstall();
-        // Packaging discovers shared classpath resources after TeaVM compilation.
-        // Prefer that complete inventory; custom hosts may still use compile metadata.
-        int publishedCount = publishedAssetCount();
-        if (publishedCount >= 0) {
-            for (int index = 0; index < publishedCount; index++) {
-                String path = publishedAssetPath(index);
-                addAsset(path, publishedAssetSize(index), !isDeferred(path, deferred));
-            }
-        } else {
-            ResourceArray<WebGeneratedAsset> assets = WebGeneratedAssets.assets();
-            if (assets != null) {
-                for (int index = 0; index < assets.size(); index++) {
-                    WebGeneratedAsset asset = assets.get(index);
-                    addAsset(asset.getPath(), asset.getSize(), !isDeferred(asset.getPath(), deferred));
-                }
+        ResourceArray<WebGeneratedAsset> assets = WebGeneratedAssets.assets();
+        if (assets != null) {
+            for (int index = 0; index < assets.size(); index++) {
+                WebGeneratedAsset asset = assets.get(index);
+                addAsset(asset.getPath(), asset.getSize(), !isDeferred(asset.getPath(), deferred));
             }
         }
         addAsset(WebAssets.DEFAULT_PRELOAD_LOGO_PATH, WebAssets.DEFAULT_PRELOAD_LOGO_SIZE, true);
         finishInstall();
         installed = true;
     }
-
-    @JSBody(script = "var root = typeof window !== 'undefined' ? window : globalThis;"
-            + "return Array.isArray(root.libfdxPublishedAssets) ? root.libfdxPublishedAssets.length : -1;")
-    private static native int publishedAssetCount();
-
-    @JSBody(params = "index", script = "var root = typeof window !== 'undefined' ? window : globalThis;"
-            + "return root.libfdxPublishedAssets[index].path;")
-    private static native String publishedAssetPath(int index);
-
-    @JSBody(params = "index", script = "var root = typeof window !== 'undefined' ? window : globalThis;"
-            + "return root.libfdxPublishedAssets[index].size;")
-    private static native double publishedAssetSize(int index);
 
     static boolean isDeferred(String path, String[] selections) {
         for (String selection : selections) {

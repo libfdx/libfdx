@@ -304,6 +304,12 @@ public interface GLApi {
      */
     void bufferSubData(ByteBuffer data);
 
+    default boolean supportsBufferRangeInitialization() { return false; }
+
+    default void bufferSubData(int offset, ByteBuffer data) {
+        throw new UnsupportedOperationException("Buffer range initialization is not supported");
+    }
+
     /**
      * Runs the bind uniform buffer step.
      *

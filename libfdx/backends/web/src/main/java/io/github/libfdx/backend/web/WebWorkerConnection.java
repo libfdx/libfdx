@@ -90,7 +90,7 @@ final class WebWorkerConnection {
     @JSBody(script = "return typeof Worker === 'function';")
     private static native boolean available();
     @JSBody(params = {"source", "role"}, script = """
-            var base = globalThis.libfdxRuntimeBaseUrl || new URL('scripts/', document.baseURI).href;
+            var base = new URL('scripts/', document.baseURI).href;
             var prefix = 'self.libfdxRuntimeBaseUrl=' + JSON.stringify(base) + ';\\n';
             var start = '\\nmain([' + JSON.stringify('libfdx-' + role) + ']);\\n';
             return URL.createObjectURL(new Blob([prefix, source, start], {type:'text/javascript'}));

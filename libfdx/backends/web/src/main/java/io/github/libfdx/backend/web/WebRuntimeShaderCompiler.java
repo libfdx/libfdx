@@ -27,14 +27,14 @@ final class WebRuntimeShaderCompiler implements RuntimeShaderCompiler {
     }
 
     void dispose() { disposed = true; worker.dispose(); }
-    /** Fingerprinted from the packaged compiler JS/Wasm by WebAppWriter, without runtime I/O. */
+    /** Fingerprinted from the compiler JS/Wasm during TeaVM compilation, without runtime I/O. */
     @Override public String cacheIdentity() {
-        String identity = publishedIdentity();
+        String identity = compiledIdentity();
         return identity == null || identity.isEmpty() ? null : identity;
     }
 
-    @JSBody(script = "return globalThis.libfdxShaderCompilerIdentity || null;")
-    private static native String publishedIdentity();
+    // Replaced by WebTeaVMPlugin. Builds without compiler inputs disable persistent shader caching.
+    private static String compiledIdentity() { return null; }
 
     /**
      * Compiles the request.

@@ -131,10 +131,17 @@ Generated `index.html` starts the TeaVM application directly: the JavaScript tar
 loads the application script, and the Wasm target uses TeaVM's companion runtime
 to load the application Wasm and call its entry point. The Java web backend then
 loads `scripts/fdx.js` and initializes `scripts/fdx.wasm` asynchronously before
-creating preload or game listeners. No `fdx-loader.js` is generated. The page's
-inline JSON contains the packaged asset inventory and native compiler cache identity;
-keep that data when customizing the page. Paths resolve relative to the page, so
-the complete generated directory can be served from a subdirectory.
+creating preload or game listeners. The asset inventory (including shared
+classpath assets) and native compiler cache identity are embedded during TeaVM
+compilation. Rebuild the application when those inputs change. The backend
+resolves runtime and asset paths relative to the page, so the complete generated
+directory can be served from a subdirectory. Custom HTML needs only its canvas
+and TeaVM application launch; no bootstrap JSON or `fdx-loader.js` is needed.
+
+The Java web backend owns the startup/runtime error overlay and its styling.
+Failures that prevent the application script or Wasm from executing are reported
+by the browser console; the generated HTML contains only the page structure
+and application launch.
 
 The local web runner serves files with bounded buffers and supports GET, HEAD,
 and single HTTP byte ranges. This allows deferred assets and streamed audio to

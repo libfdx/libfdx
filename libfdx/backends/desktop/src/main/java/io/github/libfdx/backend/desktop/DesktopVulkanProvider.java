@@ -3566,7 +3566,24 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
+        @Override public boolean supportsBufferRangeInitialization() { return true; }
+
+        @Override public void initializeBufferRange(Buffer buffer, int offset, ByteBuffer data) {
+            context.requireDeviceUsable("initialize a buffer");
+            VulkanBufferHandle target = VulkanResources.requireBuffer(buffer, context.resourceDomain(), "Buffer");
+            io.github.libfdx.graphics.BufferInitialization.validate(target, offset, data);
+            if (target.resource().hasRecordingReferences())
+                throw new FdxException("Cannot initialize a buffer referenced by recorded commands");
+            ByteBuffer mapped = target.mappedMemory();
+            if (mapped != null) mapped.duplicate().position(offset).put(data.duplicate());
+            else writeStaticBuffer(target, data.duplicate(), offset);
+        }
+
         private void writeStaticBuffer(VulkanBufferHandle destination, ByteBuffer source) {
+            writeStaticBuffer(destination, source, 0);
+        }
+
+        private void writeStaticBuffer(VulkanBufferHandle destination, ByteBuffer source, int offset) {
             int byteCount = source.remaining();
             VulkanBufferAllocation staging = createNativeBuffer(byteCount, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -3579,18 +3596,22 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                     mapped.put(source);
                     vkUnmapMemory(context.deviceHandle(), staging.memory());
                 }
-                copyBuffer(staging.buffer(), destination.buffer(), byteCount);
+                copyBuffer(staging.buffer(), destination.buffer(), offset, byteCount);
             } finally {
                 staging.dispose(context.deviceHandle());
             }
         }
 
         private void copyBuffer(long sourceBuffer, long destinationBuffer, long byteCount) {
+            copyBuffer(sourceBuffer, destinationBuffer, 0, byteCount);
+        }
+
+        private void copyBuffer(long sourceBuffer, long destinationBuffer, int offset, long byteCount) {
             VkCommandBuffer commandBuffer = beginSingleTimeCommands();
             try (MemoryStack stack = stackPush()) {
                 VkBufferCopy.Buffer copyRegion = VkBufferCopy.calloc(1, stack)
                         .srcOffset(0L)
-                        .dstOffset(0L)
+                        .dstOffset(offset)
                         .size(byteCount);
                 vkCmdCopyBuffer(commandBuffer, sourceBuffer, destinationBuffer, copyRegion);
             }

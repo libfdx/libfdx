@@ -13,6 +13,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.Properties;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import org.junit.jupiter.api.Test;
@@ -35,20 +37,25 @@ final class WebAppWriterTest {
             assertTrue(html.contains("[\"launch\"]([\"one\",\"two\"]);"));
             assertTrue(html.contains("src=\"" + target + (wasm ? "-runtime.js" : "") + "\""));
             assertEquals(wasm, html.contains("TeaVM.wasmGC.load(\"game.wasm\")"));
-            assertTrue(html.contains("libfdxStartupError"));
+            assertFalse(html.contains("libfdxStartupError"));
+            assertFalse(html.contains("libfdx-error"));
+            assertFalse(html.contains("addEventListener"));
+            assertFalse(html.contains("onerror="));
+            assertTrue(html.indexOf("src=\"") < html.indexOf("[\"launch\"]"));
             assertDirectStartup(webapp);
         }
     }
 
     @Test
-    void embeddedMetadataAndEntryPointCannotCloseTheirScriptElements() throws Exception {
+    void assetsStayOutOfHtmlAndEntryPointCannotCloseItsScriptElement() throws Exception {
         Path assets = temporaryDirectory.resolve("assets");
         write(assets.resolve("a&b.txt"), new byte[]{1});
         Path webapp = temporaryDirectory.resolve("safe-html");
         WebAppWriter.write(WebApp.builder().webappDirectory(webapp).asset(assets)
                 .entryPointName("</script><script>bad()</script>").build());
         String html = Files.readString(webapp.resolve("index.html"));
-        assertTrue(html.contains("a\\u0026b.txt"));
+        assertFalse(html.contains("a\\u0026b.txt"));
+        assertFalse(html.contains("a&b.txt"));
         assertTrue(html.contains("\\u003c/script\\u003e"));
         assertFalse(html.contains("<script>bad()"));
     }
@@ -58,29 +65,30 @@ final class WebAppWriterTest {
         Path runtime = Files.createDirectories(temporaryDirectory.resolve("compiler"));
         Path webapp = temporaryDirectory.resolve("compiler-webapp");
         writeWebApp(webapp, runtime);
-        String missing = compilerIdentity(webapp);
+        String missing = compilerIdentity(webapp, runtime);
         assertEquals("", missing);
         write(runtime.resolve("fdx.js"), new byte[]{1, 2});
         write(runtime.resolve("fdx.wasm"), new byte[]{3, 4});
         writeWebApp(webapp, runtime);
-        String original = compilerIdentity(webapp);
+        String original = compilerIdentity(webapp, runtime);
         assertTrue(original.matches("fdx-web-fdxr2-v1:[0-9a-f]{64}:[0-9a-f]{64}"));
         writeWebApp(webapp, runtime);
-        assertEquals(original, compilerIdentity(webapp));
+        assertEquals(original, compilerIdentity(webapp, runtime));
         write(runtime.resolve("fdx.js"), new byte[]{1, 5});
         writeWebApp(webapp, runtime);
-        String scriptChanged = compilerIdentity(webapp);
+        String scriptChanged = compilerIdentity(webapp, runtime);
         assertNotEquals(original, scriptChanged);
         write(runtime.resolve("fdx.wasm"), new byte[]{3, 6});
         writeWebApp(webapp, runtime);
-        assertNotEquals(scriptChanged, compilerIdentity(webapp));
+        assertNotEquals(scriptChanged, compilerIdentity(webapp, runtime));
+        Path jar = createJar("compiler.jar", Map.of("fdx.js", new byte[]{1, 5}, "fdx.wasm", new byte[]{3, 6}));
+        assertEquals(compilerIdentity(webapp, runtime), compilerIdentity(webapp, jar));
     }
 
-    private static String compilerIdentity(Path webapp) throws IOException {
-        String html = Files.readString(webapp.resolve("index.html"));
-        String marker = "\"shaderCompilerIdentity\":\"";
-        int start = html.indexOf(marker) + marker.length();
-        return html.substring(start, html.indexOf('"', start));
+    private static String compilerIdentity(Path webapp, Path runtime) {
+        Properties properties = new Properties();
+        TeaVMAssetProperties.putRuntimeClasspath(properties, List.of(runtime), webapp);
+        return TeaVMAssetProperties.compilerIdentity(properties);
     }
 
     @Test
@@ -100,8 +108,7 @@ final class WebAppWriterTest {
 
         assertArrayEquals(font,
                 Files.readAllBytes(webapp.resolve("assets/libfdx-assets/ui/font/default.ttf")));
-        assertTrue(Files.readString(webapp.resolve("index.html"))
-                .contains("{\"path\":\"libfdx-assets/ui/font/default.ttf\",\"size\":5}"));
+        assertCompiledAsset(runtime, "libfdx-assets/ui/font/default.ttf", 5);
     }
 
     @Test
@@ -115,8 +122,22 @@ final class WebAppWriterTest {
 
         assertArrayEquals(license,
                 Files.readAllBytes(webapp.resolve("assets/libfdx-assets/ui/font/OFL.txt")));
-        assertTrue(Files.readString(webapp.resolve("index.html"))
-                .contains("{\"path\":\"libfdx-assets/ui/font/OFL.txt\",\"size\":" + license.length + "}"));
+        assertCompiledAsset(jar, "libfdx-assets/ui/font/OFL.txt", license.length);
+    }
+
+    private void assertCompiledAsset(Path runtime, String path, int size) {
+        Properties properties = new Properties();
+        TeaVMAssetProperties.putRuntimeClasspath(properties, List.of(runtime), temporaryDirectory.resolve("webapp"));
+        var assets = new WebAssetMetadataGenerator().generateMetadata(properties);
+        var shared = assets.values.stream().filter(asset -> asset.path.equals(path)).toList();
+        assertEquals(1, shared.size());
+        assertEquals(size, shared.getFirst().size);
+        // Application overrides must match what packaging will actually publish.
+        TeaVMAssetProperties.putInto(properties, List.of(new WebAsset(path, size + 1, null)));
+        assets = new WebAssetMetadataGenerator().generateMetadata(properties);
+        shared = assets.values.stream().filter(asset -> asset.path.equals(path)).toList();
+        assertEquals(1, shared.size());
+        assertEquals(size + 1, shared.getFirst().size);
     }
 
     @Test
@@ -212,7 +233,12 @@ final class WebAppWriterTest {
         assertFalse(html.contains("fdx-loader.js"));
         assertFalse(html.contains("bundled worker fixture"));
         assertFalse(html.contains("FdxModule"));
-        assertTrue(html.contains("type=\"application/json\""));
+        assertFalse(html.contains("application/json"));
+        assertFalse(html.contains("libfdx-bootstrap-data"));
+        assertFalse(html.contains("runtimeBase"));
+        assertFalse(html.contains("scripts/"));
+        assertFalse(html.contains("shaderCompilerIdentity"));
+        assertEquals(2, html.split("<script", -1).length - 1);
         if (Files.exists(webapp.resolve("scripts"))) {
             try (var files = Files.walk(webapp.resolve("scripts"))) {
                 assertEquals(0, files.filter(Files::isRegularFile).count());

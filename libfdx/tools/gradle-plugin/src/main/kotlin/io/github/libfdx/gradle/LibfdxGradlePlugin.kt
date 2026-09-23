@@ -678,6 +678,8 @@ class LibfdxGradlePlugin : Plugin<Project> {
             }
         }
         registerWebTargets(project, extension.js, "libfdx_web_js", prepare)
+        configureWebRuntimeMetadata(project, extension.js, TeaVMPlugin.JS_TASK_NAME, prepare)
+        runtimeFdxWebResources?.let { resources -> project.tasks.named(TeaVMPlugin.JS_TASK_NAME).configure { dependsOn(resources) } }
     }
 
     private fun registerWasmTasks(
@@ -729,6 +731,31 @@ class LibfdxGradlePlugin : Plugin<Project> {
             }
         }
         registerWebTargets(project, extension.wasm, "libfdx_web_wasm", prepare)
+        configureWebRuntimeMetadata(project, extension.wasm, TeaVMPlugin.WASM_GC_TASK_NAME, prepare)
+        runtimeFdxWebResources?.let { resources -> project.tasks.named(TeaVMPlugin.WASM_GC_TASK_NAME).configure { dependsOn(resources) } }
+    }
+
+    private fun configureWebRuntimeMetadata(
+        project: Project,
+        web: LibfdxWebExtension,
+        compileTask: String,
+        prepare: TaskProvider<LibfdxWebAppTask>
+    ) {
+        // Use packaging's exact classpath without making compilation depend on packaging.
+        val runtimeInputs = project.provider { prepare.get().runtimeClasspath }
+        web.teavmConfig.properties.putAll(project.provider {
+            val paths = runtimeInputs.get().files.toList()
+            buildMap {
+                put("libfdx.web.outputDirectory", web.webappDir().get().asFile.absolutePath)
+                put("libfdx.web.runtimeClasspath.count", paths.size.toString())
+                paths.forEachIndexed { index, path -> put("libfdx.web.runtimeClasspath.$index", path.absolutePath) }
+            }
+        })
+        project.tasks.named(compileTask).configure {
+            dependsOn(runtimeInputs)
+            inputs.files(runtimeInputs).withPropertyName("libfdxWebRuntimeMetadata")
+                .withNormalizer(org.gradle.api.tasks.ClasspathNormalizer::class.java)
+        }
     }
 
     private fun registerWebTargets(

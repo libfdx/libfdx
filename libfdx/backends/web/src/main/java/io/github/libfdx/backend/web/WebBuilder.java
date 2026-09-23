@@ -488,6 +488,7 @@ public final class WebBuilder {
         Properties teaVMProperties = new Properties();
         teaVMProperties.putAll(properties);
         TeaVMAssetProperties.putInto(teaVMProperties, assetEntries);
+        TeaVMAssetProperties.putRuntimeClasspath(teaVMProperties, actualRuntimeClasspath, output);
         Set<Path> generatedFiles = TeaVMBuildRunner.build(new TeaVMBuildRunner.Request(
                 target.teaVMTargetType(),
                 actualClasspath,

@@ -54,7 +54,7 @@ public abstract class GraphicsParityTest extends ApplicationAdapter {
     }
 
     protected final void finishFrame() {
-        if (capturePath.length() > 0 && !captured && renderedFrames >= captureFrame) {
+        if (capturePath.length() > 0 && !captured && renderedFrames >= captureFrame && readyForCapture()) {
             captureFrame();
             captured = true;
         }
@@ -135,6 +135,9 @@ public abstract class GraphicsParityTest extends ApplicationAdapter {
             throw new FdxException("Could not capture " + testName + " framebuffer", e);
         }
     }
+
+    /** Async scenes can defer an explicitly requested capture until their content is ready. */
+    protected boolean readyForCapture() { return true; }
 
     private static String stringProperty(String name, String defaultValue) {
         String value = System.getProperty(name);

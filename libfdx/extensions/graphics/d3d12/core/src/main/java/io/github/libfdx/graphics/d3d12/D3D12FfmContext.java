@@ -1276,6 +1276,18 @@ final class D3D12FfmContext implements AutoCloseable {
         } else MemorySegment.copy(data, 0, allocation.mapped, 0, size);
     }
 
+    void initializeBufferRange(long handle, int offset, MemorySegment source, int size) {
+        requireOpen();
+        Buffer buffer = resource(handle, Buffer.class, "buffer");
+        BufferAllocation allocation = buffer.allocations.get(buffer.current);
+        if (buffer.usage > 1 || offset < 0 || size <= 0 || offset > buffer.size - size
+                || (offset & 3) != 0 || (size & 3) != 0)
+            throw new FdxException("Invalid Direct3D 12 initial buffer range");
+        if (allocation.recording || allocation.lastFence != 0)
+            throw new FdxException("Cannot initialize a buffer referenced by GPU commands");
+        MemorySegment.copy(dataSegment(source, size, "Buffer source"), 0, allocation.mapped, offset, size);
+    }
+
     void destroyBuffer(long handle) {
         retire(removeResource(handle, Buffer.class, "buffer"));
     }

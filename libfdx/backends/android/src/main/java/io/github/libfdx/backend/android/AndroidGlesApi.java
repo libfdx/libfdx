@@ -381,6 +381,12 @@ final class AndroidGlesApi implements GLApi {
         GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, 0, data.remaining(), data);
     }
 
+    @Override public boolean supportsBufferRangeInitialization() { return true; }
+
+    @Override public void bufferSubData(int offset, ByteBuffer data) {
+        GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, offset, data.remaining(), data);
+    }
+
     /**
      * Runs the bind uniform buffer step.
      *

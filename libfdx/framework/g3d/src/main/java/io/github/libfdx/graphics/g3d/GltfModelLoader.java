@@ -218,11 +218,15 @@ final class GltfModelLoader implements AssetLoader<Model> {
     private final class StructurePreparation {
         final GltfDocument document;
         int stage;
+        GeometryValidation validation;
         StructurePreparation(GltfDocument document) { this.document = document; }
         boolean step() {
             switch (stage++) {
                 case 0 -> document.accessors = new GltfAccessors(document.root, document.buffers);
-                case 1 -> validateGeometry(document);
+                case 1 -> {
+                    if (validation == null) validation = new GeometryValidation(document);
+                    if (!validation.step()) stage--;
+                }
                 case 2 -> document.nodeIds = nodeIds(document);
                 case 3 -> { document.preparedSkins = skins(document); document.skins = document.preparedSkins.toArray(new Skin[0]); }
                 case 4 -> validateSkinInfluences(document);
@@ -450,53 +454,71 @@ final class GltfModelLoader implements AssetLoader<Model> {
                 ? TextureCoordinates.UV0 : material.slots[slot].coordinates);
     }
 
-    private void validateGeometry(GltfDocument document) {
-        ArrayView<JsonValue> materials = array(document.root, "materials");
-        ArrayView<JsonValue> meshes = array(document.root, "meshes");
-        for (int m = 0; m < meshes.size(); m++) {
-          ArrayView<JsonValue> primitives = array(meshes.get(m), "primitives");
-          for (int p = 0; p < primitives.size(); p++) {
-            JsonValue primitive = primitives.get(p);
-            if (integer(primitive, "mode", MODE_TRIANGLES) != MODE_TRIANGLES)
-                throw new FdxException("Only glTF triangle primitives are supported");
-            if (!array(primitive, "targets").isEmpty()) throw new FdxException("glTF morph targets are unsupported");
-            JsonValue attributes = object(primitive.get("attributes"), "primitive attributes");
-            if (attributes.get("JOINTS_1") != null || attributes.get("WEIGHTS_1") != null)
-                throw new FdxException("glTF skinning supports one four-weight joint set");
-            int position = integer(attributes, "POSITION", -1);
-            document.accessors.attribute(position, "POSITION");
-            int count = document.accessors.count(position);
-            for (String semantic : new String[] {"NORMAL", "TANGENT", "TEXCOORD_0", "TEXCOORD_1", "WEIGHTS_0", "JOINTS_0", "COLOR_0"}) {
-                if (attributes.get(semantic) == null) continue;
-                int index = integer(attributes, semantic, -1);
-                if ("JOINTS_0".equals(semantic)) document.accessors.joints(index);
-                else if ("COLOR_0".equals(semantic)) document.accessors.colors(index);
-                else if ("WEIGHTS_0".equals(semantic)) document.accessors.skinWeights(index);
-                else document.accessors.attribute(index, semantic);
-                if (document.accessors.count(index) != count) throw new FdxException("glTF " + semantic + " count differs from POSITION");
+    private static final String[] GEOMETRY_SEMANTICS = {
+            "POSITION", "NORMAL", "TANGENT", "TEXCOORD_0", "TEXCOORD_1", "WEIGHTS_0", "JOINTS_0", "COLOR_0", "INDICES"};
+
+    /** Decode, validate and range-check at most one accessor batch per executor step. */
+    private final class GeometryValidation {
+        final GltfDocument document;
+        final ArrayView<JsonValue> meshes;
+        int mesh, primitive, semantic, indexCursor;
+        GeometryValidation(GltfDocument document) { this.document = document; meshes = array(document.root, "meshes"); }
+        boolean step() {
+            if (mesh == meshes.size()) return true;
+            ArrayView<JsonValue> primitives = array(meshes.get(mesh), "primitives");
+            if (primitive == primitives.size()) { mesh++; primitive = 0; return false; }
+            JsonValue value = primitives.get(primitive);
+            JsonValue attributes = object(value.get("attributes"), "primitive attributes");
+            int count = document.accessors.count(integer(attributes, "POSITION", -1));
+            if (semantic < GEOMETRY_SEMANTICS.length) {
+                String name = GEOMETRY_SEMANTICS[semantic];
+                int index = "INDICES".equals(name) ? integer(value, "indices", -1) : integer(attributes, name, -1);
+                if (index < 0 && ("INDICES".equals(name) ? value.get("indices") : attributes.get(name)) != null)
+                    throw new FdxException("glTF accessor index outside range: " + index);
+                if (index >= 0) {
+                    if (!document.accessors.prepareStep(index, name, 1024)) return false;
+                    if (!"INDICES".equals(name) && document.accessors.count(index) != count)
+                        throw new FdxException("glTF " + name + " count differs from POSITION");
+                }
+                semantic++;
+                return false;
             }
-            if (attributes.get("TANGENT") != null && attributes.get("NORMAL") == null)
-                throw new FdxException("glTF supplied tangents require normals");
-            if ((attributes.get("JOINTS_0") == null) != (attributes.get("WEIGHTS_0") == null))
-                throw new FdxException("glTF skinning requires both JOINTS_0 and WEIGHTS_0");
-            if (primitive.get("indices") != null) {
-                int[] indices = readIndexAccessor(document, integer(primitive, "indices", -1));
+            if (value.get("indices") != null) {
+                int[] indices = readIndexAccessor(document, integer(value, "indices", -1));
                 if (indices.length % 3 != 0) throw new FdxException("glTF triangle index count must be a multiple of three");
-                for (int index : indices) validateGltfIndex(index, count);
+                int end = indexCursor + Math.min(3072, indices.length - indexCursor);
+                for (; indexCursor < end; indexCursor++) validateGltfIndex(indices[indexCursor], count);
+                if (indexCursor < indices.length) return false;
             } else if (count % 3 != 0) throw new FdxException("glTF unindexed triangles require a multiple of three vertices");
-            int materialIndex = integer(primitive, "material", -1);
-            if (materialIndex < -1 || primitive.get("material") != null && materialIndex < 0 || materialIndex >= materials.size())
-                throw new FdxException("glTF material index outside range");
-            if (materialIndex < 0) continue;
-            JsonValue material = materials.get(materialIndex), pbr = material.get("pbrMetallicRoughness");
-            JsonValue[] slots = {pbr == null ? null : pbr.get("baseColorTexture"),
-                    pbr == null ? null : pbr.get("metallicRoughnessTexture"), material.get("normalTexture"),
-                    material.get("occlusionTexture"), material.get("emissiveTexture")};
-            for (JsonValue slot : slots) if (slot != null
-                    && attributes.get("TEXCOORD_" + GltfTextures.coordinates(slot).set()) == null)
-                throw new FdxException("glTF material references a missing texture coordinate set");
-          }
+            validatePrimitive(document, value);
+            primitive++; semantic = 0; indexCursor = 0;
+            return false;
         }
+    }
+
+    private void validatePrimitive(GltfDocument document, JsonValue primitive) {
+        ArrayView<JsonValue> materials = array(document.root, "materials");
+        if (integer(primitive, "mode", MODE_TRIANGLES) != MODE_TRIANGLES)
+            throw new FdxException("Only glTF triangle primitives are supported");
+        if (!array(primitive, "targets").isEmpty()) throw new FdxException("glTF morph targets are unsupported");
+        JsonValue attributes = object(primitive.get("attributes"), "primitive attributes");
+        if (attributes.get("JOINTS_1") != null || attributes.get("WEIGHTS_1") != null)
+            throw new FdxException("glTF skinning supports one four-weight joint set");
+        if (attributes.get("TANGENT") != null && attributes.get("NORMAL") == null)
+            throw new FdxException("glTF supplied tangents require normals");
+        if ((attributes.get("JOINTS_0") == null) != (attributes.get("WEIGHTS_0") == null))
+            throw new FdxException("glTF skinning requires both JOINTS_0 and WEIGHTS_0");
+        int materialIndex = integer(primitive, "material", -1);
+        if (materialIndex < -1 || primitive.get("material") != null && materialIndex < 0 || materialIndex >= materials.size())
+            throw new FdxException("glTF material index outside range");
+        if (materialIndex < 0) return;
+        JsonValue material = materials.get(materialIndex), pbr = material.get("pbrMetallicRoughness");
+        JsonValue[] slots = {pbr == null ? null : pbr.get("baseColorTexture"),
+                pbr == null ? null : pbr.get("metallicRoughnessTexture"), material.get("normalTexture"),
+                material.get("occlusionTexture"), material.get("emissiveTexture")};
+        for (JsonValue slot : slots) if (slot != null
+                && attributes.get("TEXCOORD_" + GltfTextures.coordinates(slot).set()) == null)
+            throw new FdxException("glTF material references a missing texture coordinate set");
     }
 
     /** Holds partial graphics ownership across budgeted update steps, including cancellation. */
@@ -519,6 +541,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
                 if (!handedOff) {
                     handedOff = true;
                     for (Texture resource : document.gpuTextures) disposeAfterFailure(resource, error);
+                    if (assembly != null) disposeAfterFailure(assembly.upload, error);
                     if (assembly != null) for (int i = 0; i < assembly.meshResources.size(); i++)
                         disposeAfterFailure(assembly.meshResources.get(i), error);
                 }
@@ -562,6 +585,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
         final boolean implicitNodes;
         int root;
         boolean done;
+        Mesh.PositionColor3DUpload upload;
         ModelAssembly(String path, GltfDocument document) {
             this.path = path; this.document = document;
             implicitNodes = array(document.root, "nodes").isEmpty() && array(document.root, "scenes").isEmpty();
@@ -578,9 +602,19 @@ final class GltfModelLoader implements AssetLoader<Model> {
             }
             AssemblyNode current = stack.peek();
             if (current.primitive < current.primitives.size()) {
-                int index = current.primitive++;
+                int index = current.primitive;
+                if (upload == null) {
+                    upload = document.geometry[current.mesh][index].preparedMesh.beginUpload(graphics,
+                            path + " mesh " + current.mesh + "." + index);
+                    return;
+                }
+                if (!upload.step(256 * 1024)) return;
+                Mesh mesh = upload.take();
+                meshResources.add(mesh);
+                upload.dispose(); upload = null;
                 current.node.addPart(modelNodePart(path, document, current.mesh, index,
-                        current.primitives.get(index), current.skin, materials, meshResources));
+                        current.primitives.get(index), current.skin, materials, mesh));
+                current.primitive++;
             } else if (current.child < current.children.size()) {
                 AssemblyNode child = node(integerValue(current.children.get(current.child++), -1));
                 if (child != null) { current.node.addChild(child.node); stack.add(child); }
@@ -763,11 +797,17 @@ final class GltfModelLoader implements AssetLoader<Model> {
     private ModelNodePart modelNodePart(String path, GltfDocument document, int meshIndex, int primitiveIndex,
             JsonValue primitive, Skin skin, Array<Material> materials, Array<Mesh> meshResources) {
         GeometryBuilder geometry = document.geometry[meshIndex][primitiveIndex];
+        Mesh mesh = geometry.preparedMesh.upload(graphics, path + " mesh " + meshIndex + "." + primitiveIndex);
+        meshResources.add(mesh);
+        return modelNodePart(path, document, meshIndex, primitiveIndex, primitive, skin, materials, mesh);
+    }
+
+    private ModelNodePart modelNodePart(String path, GltfDocument document, int meshIndex, int primitiveIndex,
+            JsonValue primitive, Skin skin, Array<Material> materials, Mesh mesh) {
+        GeometryBuilder geometry = document.geometry[meshIndex][primitiveIndex];
         Material pbrMaterial = material(path + " material " + meshIndex + "." + primitiveIndex,
                 material(document, integer(primitive, "material", -1))).doubleSided(geometry.doubleSided);
         materials.add(pbrMaterial);
-        Mesh mesh = geometry.preparedMesh.upload(graphics, path + " mesh " + meshIndex + "." + primitiveIndex);
-        meshResources.add(mesh);
         MeshPart meshPart = new MeshPart(path + " part " + meshIndex + "." + primitiveIndex, mesh, null, 0,
                 mesh.vertexCount());
         return geometry.hasSkinning()

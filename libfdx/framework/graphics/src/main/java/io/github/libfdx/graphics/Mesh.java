@@ -167,7 +167,7 @@ public final class Mesh implements Disposable {
         this(graphics, id, vertexLayout, vertices, vertexCount, indices, indexCount, bounds,
                 sourcePositions, sourceColors, sourceBakedColors, sourceNormals, sourceTexCoords, sourcePbr,
                 sourceBakedPbr, sourceEmissive, sourceBakedEmissive, sourceJoints, sourceWeights, retainSourceData,
-                sourceTexCoords1, sourceTangents, null);
+                sourceTexCoords1, sourceTangents, null, false);
     }
 
     private Mesh(GraphicsContext graphics, String id, VertexLayout vertexLayout, float[] vertices, int vertexCount,
@@ -175,7 +175,7 @@ public final class Mesh implements Disposable {
             float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords, float[] sourcePbr,
             float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive, int[] sourceJoints,
             float[] sourceWeights, boolean retainSourceData, float[] sourceTexCoords1, float[] sourceTangents,
-            ByteBuffer preparedVertices) {
+            PositionColor3DPreparation preparation, boolean deferUpload) {
         if (graphics == null) {
             throw new FdxException("GraphicsContext cannot be null");
         }
@@ -195,7 +195,9 @@ public final class Mesh implements Disposable {
             throw new FdxException("Mesh indices cannot be empty when index count is greater than zero");
         }
         int vertexByteCount = vertexCount * vertexLayout.arrayStride();
-        validateFloatVertexData(vertices, vertexByteCount);
+        if (preparation == null) validateFloatVertexData(vertices, vertexByteCount);
+        else if (preparation.uploadBytes.capacity() != vertexByteCount)
+            throw new FdxException("Prepared vertex bytes do not match the mesh layout");
         this.id = id != null ? id : "";
         this.vertexLayout = vertexLayout;
         this.vertexCount = vertexCount;
@@ -204,24 +206,25 @@ public final class Mesh implements Disposable {
         // Geometry queries (for example editor picking) are independent of
         // optional CPU shading attributes. Keep one mesh-owned position copy
         // even when rendering uses only the uploaded GPU attributes.
-        this.sourcePositions = sourcePositions != null ? sourcePositions.clone() : null;
-        this.sourceColors = retainSourceData && sourceColors != null ? sourceColors.clone() : null;
-        this.sourceBakedColors = retainSourceData && sourceBakedColors != null ? sourceBakedColors.clone() : null;
-        this.sourceNormals = retainSourceData && sourceNormals != null ? sourceNormals.clone() : null;
-        this.sourceTexCoords = retainSourceData && sourceTexCoords != null ? sourceTexCoords.clone() : null;
-        this.sourceTexCoords1 = retainSourceData && sourceTexCoords1 != null ? sourceTexCoords1.clone() : null;
-        this.sourceTangents = retainSourceData && sourceTangents != null ? sourceTangents.clone() : null;
-        this.sourcePbr = retainSourceData && sourcePbr != null ? sourcePbr.clone() : null;
-        this.sourceBakedPbr = retainSourceData && sourceBakedPbr != null ? sourceBakedPbr.clone() : null;
-        this.sourceEmissive = retainSourceData && sourceEmissive != null ? sourceEmissive.clone() : null;
-        this.sourceBakedEmissive = retainSourceData && sourceBakedEmissive != null ? sourceBakedEmissive.clone()
+        this.sourcePositions = sourcePositions != null ? copySource(preparation, 0, sourcePositions) : null;
+        this.sourceColors = retainSourceData && sourceColors != null ? copySource(preparation, 1, sourceColors) : null;
+        this.sourceBakedColors = retainSourceData && sourceBakedColors != null ? copySource(preparation, 2, sourceBakedColors) : null;
+        this.sourceNormals = retainSourceData && sourceNormals != null ? copySource(preparation, 3, sourceNormals) : null;
+        this.sourceTexCoords = retainSourceData && sourceTexCoords != null ? copySource(preparation, 4, sourceTexCoords) : null;
+        this.sourceTexCoords1 = retainSourceData && sourceTexCoords1 != null ? copySource(preparation, 5, sourceTexCoords1) : null;
+        this.sourceTangents = retainSourceData && sourceTangents != null ? copySource(preparation, 6, sourceTangents) : null;
+        this.sourcePbr = retainSourceData && sourcePbr != null ? copySource(preparation, 7, sourcePbr) : null;
+        this.sourceBakedPbr = retainSourceData && sourceBakedPbr != null ? copySource(preparation, 8, sourceBakedPbr) : null;
+        this.sourceEmissive = retainSourceData && sourceEmissive != null ? copySource(preparation, 9, sourceEmissive) : null;
+        this.sourceBakedEmissive = retainSourceData && sourceBakedEmissive != null ? copySource(preparation, 10, sourceBakedEmissive)
                 : null;
-        this.sourceJoints = retainSourceData && sourceJoints != null ? sourceJoints.clone() : null;
-        this.sourceWeights = retainSourceData && sourceWeights != null ? sourceWeights.clone() : null;
+        this.sourceJoints = retainSourceData && sourceJoints != null ? (preparation != null && !preparation.uploaded ? preparation.jointCopy : sourceJoints.clone()) : null;
+        this.sourceWeights = retainSourceData && sourceWeights != null ? copySource(preparation, 11, sourceWeights) : null;
         try {
             vertexBuffer = graphics.device().createBuffer(BufferDescriptor.staticVertex(this.id + " vertices",
                     vertexByteCount));
-            graphics.device().writeBuffer(vertexBuffer, preparedVertices != null ? preparedVertices : floats(vertices, vertexByteCount));
+            if (!deferUpload) graphics.device().writeBuffer(vertexBuffer,
+                    preparation != null ? preparation.uploadBytes.duplicate() : floats(vertices, vertexByteCount));
             if (indexCount > 0) {
                 int indexByteCount = indexCount * 2;
                 indexBuffer = graphics.device().createBuffer(BufferDescriptor.staticIndex(this.id + " indices",
@@ -235,6 +238,9 @@ public final class Mesh implements Disposable {
         }
     }
 
+    private static float[] copySource(PositionColor3DPreparation preparation, int index, float[] source) {
+        return preparation != null && !preparation.uploaded ? preparation.copies[index] : source.clone();
+    }
     private static void releaseFailedBuffer(Buffer buffer, Throwable error) {
         if (buffer != null) {
             try {
@@ -520,9 +526,13 @@ public final class Mesh implements Disposable {
         private final boolean retainSourceData;
         private boolean pbrLayout, hasSkinning, textured;
         private int vertexCount, floatsPerVertex, cursor;
-        private final float[] vertices;
-        private final ByteBuffer uploadBytes;
-        private final java.nio.FloatBuffer uploadFloats;
+        private float[] vertices;
+        private ByteBuffer uploadBytes;
+        private java.nio.FloatBuffer uploadFloats;
+        private final float[][] sources, copies;
+        private int[] jointCopy;
+        private int allocatedCopies;
+        private boolean uploaded;
 
         private PositionColor3DPreparation(float[] sourcePositions, float[] sourceColors, float[] sourceBakedColors,
             float[] sourceNormals, float[] sourceTexCoords, float[] sourcePbr, float[] sourceBakedPbr,
@@ -599,16 +609,35 @@ public final class Mesh implements Disposable {
                     : pbrLayout ? PBR_FLOATS_PER_VERTEX : POSITION_COLOR_FLOATS_PER_VERTEX;
             if (textured) floatsPerVertex += 6;
 
-            vertices = new float[Math.multiplyExact(vertexCount, floatsPerVertex)];
-            uploadBytes = ByteBuffer.allocateDirect(Math.multiplyExact(vertices.length, Float.BYTES)).order(ByteOrder.nativeOrder());
-            uploadFloats = uploadBytes.asFloatBuffer();
+            Math.multiplyExact(Math.multiplyExact(vertexCount, floatsPerVertex), Float.BYTES);
+            sources = new float[][] {sourcePositions, sourceColors, sourceBakedColors, sourceNormals,
+                    sourceTexCoords, sourceTexCoords1, sourceTangents, sourcePbr, sourceBakedPbr,
+                    sourceEmissive, sourceBakedEmissive, sourceWeights};
+            copies = new float[sources.length][];
         }
 
-        /** Packs at most maxVertices vertices; returns true when upload can begin. Positive budgets only. */
+        /** Allocates one staging array or packs at most maxVertices vertices; returns true when
+         * upload can begin. Positive budgets only. A single allocation cannot be interrupted. */
         public boolean step(int maxVertices) {
             if (maxVertices <= 0) throw new FdxException("Mesh preparation vertex budget must be positive");
-            int end = cursor + Math.min(maxVertices, vertexCount - cursor);
-            int start = cursor * floatsPerVertex, out = start;
+            // Separate large allocations: a cooperative caller can yield before each one.
+            if (vertices == null) { vertices = new float[Math.min(vertexCount, 1024) * floatsPerVertex]; return false; }
+            if (uploadBytes == null) {
+                uploadBytes = ByteBuffer.allocateDirect(vertexCount * floatsPerVertex * Float.BYTES).order(ByteOrder.nativeOrder());
+                uploadFloats = uploadBytes.asFloatBuffer();
+                return false;
+            }
+            while (allocatedCopies < sources.length) {
+                int i = allocatedCopies++;
+                if ((i == 0 || retainSourceData) && sources[i] != null) {
+                    copies[i] = new float[sources[i].length]; return false;
+                }
+            }
+            if (retainSourceData && sourceJoints != null && jointCopy == null) {
+                jointCopy = new int[sourceJoints.length]; return false;
+            }
+            int end = cursor + Math.min(Math.min(maxVertices, 1024), vertexCount - cursor);
+            int out = 0;
             for (int i = cursor; i < end; i++) {
                 int positionOffset = i * 3;
                 int colorOffset = i * 4;
@@ -656,23 +685,95 @@ public final class Mesh implements Disposable {
                 }
             }
 
-            uploadFloats.put(vertices, start, out - start);
+            uploadFloats.put(vertices, 0, out);
+            for (int i = 0; i < sources.length; i++) if (copies[i] != null) {
+                int components = sources[i].length / vertexCount;
+                System.arraycopy(sources[i], cursor * components, copies[i], cursor * components, (end - cursor) * components);
+            }
+            if (jointCopy != null) System.arraycopy(sourceJoints, cursor * 4, jointCopy, cursor * 4, (end - cursor) * 4);
             cursor = end;
             return cursor == vertexCount;
         }
 
         /** Creates an owned mesh on the graphics thread once prepared. Source data is copied as in
-         * positionColor3D. Upload failure releases partial buffers. Individual driver calls cannot
+         * positionColor3D. The first upload transfers CPU-prepared source copies; subsequent uploads
+         * clone them on the caller thread. Upload failure releases partial buffers. Individual driver calls cannot
          * be preempted. Reuse is allowed while the borrowed inputs remain unchanged. */
         public Mesh upload(GraphicsContext graphics, String id) {
+            PositionColor3DUpload upload = beginUpload(graphics, id);
+            try {
+                while (!upload.step(Integer.MAX_VALUE)) { }
+                return upload.take();
+            } finally { upload.dispose(); }
+        }
+
+        /** Creates an owned, unpublished upload on the graphics thread. Step it there, then take
+         * the completed mesh. Dispose the upload on cancellation/failure or when no longer needed.
+         * Providers without range initialization use one complete write on the first step. */
+        public PositionColor3DUpload beginUpload(GraphicsContext graphics, String id) {
             if (cursor != vertexCount) throw new FdxException("Mesh preparation is not complete");
-            return new Mesh(graphics, id, textured ? (hasSkinning ? PBR_TEXTURED_SKINNED_LAYOUT : PBR_TEXTURED_LAYOUT)
+            Mesh mesh = new Mesh(graphics, id, textured ? (hasSkinning ? PBR_TEXTURED_SKINNED_LAYOUT : PBR_TEXTURED_LAYOUT)
                     : hasSkinning ? PBR_SKINNED_LAYOUT : pbrLayout ? PBR_LAYOUT
                     : POSITION_COLOR_LAYOUT, vertices, vertexCount,
                     null, 0, bounds, sourcePositions, sourceColors, sourceBakedColors, sourceNormals, sourceTexCoords,
                     sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, sourceJoints, sourceWeights,
-                    retainSourceData, sourceTexCoords1, sourceTangents, uploadBytes.duplicate());
+                    retainSourceData, sourceTexCoords1, sourceTangents, this, true);
+            uploaded = true;
+            return new PositionColor3DUpload(graphics.device(), mesh, uploadBytes.duplicate());
         }
+    }
+
+    /** Graphics-thread initial upload. Owns the partial mesh until {@link #take()} succeeds. */
+    public static final class PositionColor3DUpload implements Disposable {
+        private final GraphicsDevice device;
+        private final ByteBuffer bytes;
+        private Mesh mesh;
+        private int offset;
+        private boolean disposed;
+
+        private PositionColor3DUpload(GraphicsDevice device, Mesh mesh, ByteBuffer bytes) {
+            this.device = device; this.mesh = mesh; this.bytes = bytes;
+        }
+
+        /** Writes at most maxBytes (rounded down to a multiple of four) when the provider supports
+         * ranges. Requires at least four bytes. An individual allocation/upload can exceed a time budget. */
+        public boolean step(int maxBytes) {
+            if (disposed || mesh == null) throw new FdxException("Mesh upload is no longer owned");
+            if (maxBytes < 4) throw new FdxException("Mesh upload byte budget must be at least four");
+            if (offset == bytes.capacity()) return true;
+            try {
+                if (device.supportsBufferRangeInitialization()) {
+                    int count = Math.min(maxBytes & ~3, bytes.capacity() - offset);
+                    bytes.position(offset).limit(offset + count);
+                    device.initializeBufferRange(mesh.vertexBuffer, offset, bytes);
+                    offset += count;
+                } else {
+                    bytes.clear();
+                    device.writeBuffer(mesh.vertexBuffer, bytes);
+                    offset = bytes.capacity();
+                }
+                return offset == bytes.capacity();
+            } catch (RuntimeException | Error failure) {
+                releaseFailedBuffer(mesh.vertexBuffer, failure);
+                mesh = null; disposed = true;
+                throw failure;
+            }
+        }
+
+        /** Transfers the complete mesh to the caller exactly once. */
+        public Mesh take() {
+            if (disposed || mesh == null || offset != bytes.capacity()) throw new FdxException("Mesh upload is not complete or owned");
+            Mesh result = mesh; mesh = null;
+            return result;
+        }
+
+        @Override public void dispose() {
+            if (disposed) return;
+            disposed = true;
+            if (mesh != null) { Mesh owned = mesh; mesh = null; owned.dispose(); }
+        }
+
+        @Override public boolean isDisposed() { return disposed; }
     }
     /**
      * Returns the ID.
