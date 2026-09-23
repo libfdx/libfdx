@@ -78,11 +78,12 @@ final class GLPreparationOperation implements ShaderPreparationOperation {
     private void prepareSource(Consumer<Runnable> executor) {
         Consumer<Runnable> execute = trace.executor(executor);
         ShaderCompilerRegistry registry = refreshed ? refreshCompilers : compilers;
-        FdxFuture<ShaderModuleDescriptor> translatedSource = ShaderCompilationTasks.then(ShaderCompilationTasks.submit(execute, () -> {
+        FdxFuture<ShaderModuleDescriptor> generatedSource = ShaderCompilationTasks.then(ShaderCompilationTasks.submit(execute, () -> {
             requireInterest();
             trace.enter(ShaderPreparationPhase.SOURCE);
-            return request.sourceDescriptor();
-        }), execute, generated -> {
+            return request.sourceDescriptorAsync(execute);
+        }), execute, pending -> pending);
+        FdxFuture<ShaderModuleDescriptor> translatedSource = ShaderCompilationTasks.then(generatedSource, execute, generated -> {
             requireInterest();
             trace.enter(ShaderPreparationPhase.TRANSLATION);
             FdxFuture<ShaderModuleDescriptor> reflected = generated.reflection().complete()
@@ -112,11 +113,14 @@ final class GLPreparationOperation implements ShaderPreparationOperation {
     @Override public void advanceLoading() {
         if (attachment.detectContextLoss()) close(true);
         if (done) return;
+        long budget = gl.shaderLoadingBudgetNanos();
+        long started = budget > 0 ? System.nanoTime() : 0;
         for (int step = 0; step < 32 && !cancelled; step++) {
             Runnable work;
             synchronized (loadingWork) { work = loadingWork.pollFirst(); }
             if (work == null) break;
             work.run();
+            if (budget > 0 && System.nanoTime() - started >= budget) break;
         }
         // At most submit then finish. Pending source/cache work never causes an owner wait.
         if (!advance(true) && sourceDone && !driverPolling()) advance(true);

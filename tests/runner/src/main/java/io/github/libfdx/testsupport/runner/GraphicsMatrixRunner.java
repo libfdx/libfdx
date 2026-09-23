@@ -25,7 +25,13 @@ public final class GraphicsMatrixRunner {
 
     public static int run(List<String> javaCommand, String mainClass, List<String> variants,
             String platform, Runnable cleanup) throws IOException, InterruptedException {
-        List<String> tests = selection("libfdx.test.autoTests", Arrays.stream(TestSelector.testNames()).sorted().toList());
+        List<String> availableTests = new ArrayList<>(Arrays.stream(TestSelector.testNames()).sorted().toList());
+        if (platform.equals("web")) {
+            availableTests.add("WebAssetPreparationTest");
+            availableTests.add("WebShaderWorkerTest");
+            availableTests.add("WebPbrSourceTest");
+        }
+        List<String> tests = selection("libfdx.test.autoTests", availableTests);
         List<String> graphics = selection("libfdx.test.autoGraphics", variants);
         long timeout = Long.parseLong(System.getProperty("libfdx.test.autoTimeoutSeconds", "180"));
         if (timeout <= 0) throw new IllegalArgumentException("autoTimeoutSeconds must be positive");

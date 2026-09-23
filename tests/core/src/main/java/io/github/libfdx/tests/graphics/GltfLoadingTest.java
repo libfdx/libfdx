@@ -3,6 +3,7 @@ package io.github.libfdx.tests.graphics;
 import io.github.libfdx.Fdx;
 import io.github.libfdx.assets.AssetDescriptor;
 import io.github.libfdx.assets.AssetLease;
+import io.github.libfdx.assets.AssetExecutor;
 import io.github.libfdx.assets.DefaultAssetManager;
 import io.github.libfdx.assets.loaders.ImageData;
 import io.github.libfdx.core.FdxException;
@@ -19,6 +20,14 @@ import io.github.libfdx.graphics.g3d.Environment;
 import io.github.libfdx.graphics.g3d.G3DAssetLoaders;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
+import io.github.libfdx.graphics.g3d.ModelBatchConfig;
+import io.github.libfdx.graphics.g3d.ModelShaderPlan;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparation;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationCapabilities;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationScope;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationReport;
+import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
+import io.github.libfdx.core.FdxFuture;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.testsupport.graphics.GltfLoadingObserver;
 import io.github.libfdx.testsupport.graphics.GraphicsParityTest;
@@ -31,33 +40,56 @@ public final class GltfLoadingTest extends GraphicsParityTest {
     public static final String BUFFER_PATH = "data/g3d/gltf/Ducky/ducky.bin";
     public static final String IMAGE_PATH = "data/g3d/gltf/Ducky/textures/palette.png";
     private final GltfLoadingObserver observer;
+    private final AssetExecutor executor;
     private final RenderPassDescriptor overlay = new RenderPassDescriptor()
             .colorLoadOp(LoadOp.load()).colorStoreOp(StoreOp.store());
     private DefaultAssetManager assets;
     private AssetLease<Model> model;
     private DefaultModelInstance instance;
     private ModelBatch batch;
+    private ShaderPreparation shaders;
+    private ModelShaderPlan shaderPlan;
+    private ShaderPreparationScope shaderScope;
+    private FdxFuture<ShaderPreparationReport> shaderReady;
+    private boolean loadingOnlyShaders;
     private Camera camera;
     private ShowcaseHud hud;
     private ShowcaseFont font;
     private float seconds;
     private long loadingFrames, readyFrames;
+    private long maxLoadingUpdateNanos, maxModelRenderNanos;
+    private long previousFrameNanos, maxFrameGapNanos, maxShaderUpdateNanos;
 
     public GltfLoadingTest(long exitAfterFrames) { this(exitAfterFrames, GltfLoadingObserver.NONE); }
 
     public GltfLoadingTest(long exitAfterFrames, GltfLoadingObserver observer) {
+        this(exitAfterFrames, observer, null);
+    }
+
+    /** Takes ownership of the optional preparation executor. */
+    public GltfLoadingTest(long exitAfterFrames, GltfLoadingObserver observer, AssetExecutor executor) {
         super(exitAfterFrames);
         this.observer = observer;
+        this.executor = executor;
     }
 
     @Override public void create(Fdx fdx) {
         initialize(fdx, "GltfLoadingTest");
-        assets = new DefaultAssetManager(fdx.files());
-        G3DAssetLoaders.register(assets, graphics);
+        assets = new DefaultAssetManager(fdx.files(), executor);
         G2DAssetLoaders.register(assets, graphics);
+        G3DAssetLoaders.register(assets, graphics);
         font = new ShowcaseFont(assets.createScope(), false);
         hud = new ShowcaseHud(graphics);
-        batch = new ModelBatch(graphics).environment(new Environment()
+        ModelBatchConfig batchConfig = new ModelBatchConfig();
+        var capabilities = graphics.device().shaderPreparationCapabilities();
+        if (capabilities.cpuExecution() != ShaderPreparationCapabilities.Execution.UNAVAILABLE
+                && capabilities.nativeExecution() != ShaderPreparationCapabilities.Execution.UNAVAILABLE) {
+            shaders = new ShaderPreparation(graphics);
+            shaderPlan = new ModelShaderPlan(graphics);
+            loadingOnlyShaders = !capabilities.runtimeNonblocking();
+            batchConfig.preparation(shaders).shaderPlan(shaderPlan);
+        }
+        batch = new ModelBatch(graphics, batchConfig).environment(new Environment()
                 .ambientColor(new Color(.32f, .34f, .4f, 1))
                 .add(new DirectionalLight().direction(-.4f, -.7f, -1).intensity(1.8f)));
         camera = new Camera().projection(CameraProjection.PERSPECTIVE).fieldOfView(45)
@@ -69,28 +101,48 @@ public final class GltfLoadingTest extends GraphicsParityTest {
     }
 
     @Override public void render() {
+        long now = System.nanoTime();
+        if (previousFrameNanos != 0) maxFrameGapNanos = Math.max(maxFrameGapNanos, now - previousFrameNanos);
+        previousFrameNanos = now;
         seconds += Math.max(0, Math.min(.1f, application.deltaTime()));
         assets.update(4, 1_000_000L);
+        if (instance == null) maxLoadingUpdateNanos = Math.max(maxLoadingUpdateNanos, assets.lastUpdateNanos());
         if (model.future().isFailed()) model.future().get();
         observer.frame(model.isLoaded());
+        if (shaders != null) {
+            long shaderStart = System.nanoTime();
+            if (loadingOnlyShaders && shaderScope != null) shaders.updateLoading();
+            else shaders.update();
+            maxShaderUpdateNanos = Math.max(maxShaderUpdateNanos, System.nanoTime() - shaderStart);
+            if (shaders.failedCount() > 0 || shaders.unsupportedCount() > 0)
+                throw new FdxException("glTF shader preparation failed");
+        }
         if (model.isLoaded() && instance == null) {
             if (assets.find(BUFFER_PATH, byte[].class) == null || assets.find(IMAGE_PATH, ImageData.class) == null) {
                 throw new FdxException("Model became ready without its external dependencies");
             }
             instance = new DefaultModelInstance(model.asset());
+            if (shaders != null) {
+                shaderScope = shaders.createScope("glTF model");
+                shaderPlan.include(shaderScope, instance, ShaderPassId.FORWARD, shaderPlan.surfaceTarget(graphics.currentFrame()));
+                shaderReady = shaders.prepareAsync(shaderScope.seal());
+            }
             logger.info("GltfLoadingTest ready: requested only " + MODEL_PATH
                     + ", external buffer and image ready, loadingFrames=" + loadingFrames);
         }
-        if (instance == null) {
+        if (instance == null || shaderReady != null && !shaderReady.isDone()) {
             loadingFrames++;
             graphics.clear(.025f, .04f, .07f, 1);
         } else {
-            readyFrames++;
+            if (shaderReady != null && !shaderReady.get().allReady()) throw new FdxException("glTF shaders were not prepared");
+            long renderStart = System.nanoTime();
             camera.viewport(framebufferWidth(), framebufferHeight()).update();
             instance.transform().setToRotationY(seconds * .25f);
             batch.begin(LoadOp.clear(.025f, .04f, .07f, 1), camera);
             batch.render(instance);
             batch.end();
+            maxModelRenderNanos = Math.max(maxModelRenderNanos, System.nanoTime() - renderStart);
+            if (batch.skippedDrawsLastFrame().total() == 0) readyFrames++;
         }
         drawStatus();
         finishFrame();
@@ -105,7 +157,8 @@ public final class GltfLoadingTest extends GraphicsParityTest {
         hud.begin(pass, width, height, scale, (width - 960 * scale) / 2, (height - 640 * scale) / 2);
         hud.text("GLTF / LOAD BY PATH", 28, 24, 2, .88f, .95f, 1);
         hud.text("ROOT DOCUMENT  >  BINARY + IMAGE  >  MODEL", 28, 66, 1.3f, .6f, .76f, .9f);
-        hud.text(instance == null ? "DOWNLOADING / PREPARING DEPENDENCIES" : "READY / MODEL AND DEPENDENCIES LOADED",
+        hud.text(instance == null ? "DOWNLOADING / PREPARING DEPENDENCIES"
+                        : readyFrames == 0 ? "PREPARING MODEL SHADERS" : "READY / MODEL AND DEPENDENCIES LOADED",
                 28, 565, 1.4f, .3f, .9f, .7f);
         hud.rect(28 + seconds * 110 % 880, 610, 24, 5, .95f, .76f, .38f, 1);
         hud.end();
@@ -113,13 +166,22 @@ public final class GltfLoadingTest extends GraphicsParityTest {
     }
 
     @Override public void dispose() {
+        logger.info("GltfLoadingTest timing: maxLoadingUpdateMs=" + maxLoadingUpdateNanos / 1_000_000.0
+                + ", maxModelRenderMs=" + maxModelRenderNanos / 1_000_000.0
+                + ", maxShaderUpdateMs=" + maxShaderUpdateNanos / 1_000_000.0
+                + ", maxFrameGapMs=" + maxFrameGapNanos / 1_000_000.0);
         try {
             if (requiresCompletion() && (instance == null || readyFrames == 0)) {
                 throw new FdxException("Deferred glTF never reached rendering");
             }
         } finally {
             try { dispose(batch); dispose(hud); dispose(font); dispose(assets); }
-            finally { observer.dispose(); }
+            finally {
+                if (shaderScope != null) shaderScope.dispose();
+                if (shaders != null) { shaders.disposeAsync(); shaders.update(); }
+                if (shaderPlan != null) shaderPlan.dispose();
+                try { dispose(executor); } finally { observer.dispose(); }
+            }
         }
         verifyDisposed();
     }

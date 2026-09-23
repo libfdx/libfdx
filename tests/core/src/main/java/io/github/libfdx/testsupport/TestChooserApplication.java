@@ -53,6 +53,7 @@ public final class TestChooserApplication extends ApplicationAdapter {
     private final TestLaunchHandler launchHandler;
     private final boolean embeddedFallback;
     private final boolean compactLayout;
+    private final java.util.function.BiFunction<String, Long, ApplicationListener> testFactory;
     private final TestChooserList testList = new TestChooserList();
     private final UiState<String> search = Ui.state("");
     private final InputAdapter returnInputProcessor = new InputAdapter() {
@@ -156,6 +157,14 @@ public final class TestChooserApplication extends ApplicationAdapter {
      */
     public TestChooserApplication(String[] graphicsOptions, String initialGraphics, TestLaunchHandler launchHandler,
             boolean embeddedFallback, boolean compactLayout) {
+        this(graphicsOptions, initialGraphics, launchHandler, embeddedFallback, compactLayout, TestSelector::create);
+    }
+
+    /** Supplies platform-owned test construction for embedded launches. */
+    public TestChooserApplication(String[] graphicsOptions, String initialGraphics, TestLaunchHandler launchHandler,
+            boolean embeddedFallback, boolean compactLayout,
+            java.util.function.BiFunction<String, Long, ApplicationListener> testFactory) {
+        this.testFactory = testFactory;
         this.graphicsOptions = normalizedGraphicsOptions(graphicsOptions);
         this.launchHandler = launchHandler;
         this.embeddedFallback = embeddedFallback;
@@ -349,7 +358,7 @@ public final class TestChooserApplication extends ApplicationAdapter {
         }
         currentTestName = descriptor.name();
         try {
-            currentTest = descriptor.create(0L);
+            currentTest = testFactory.apply(descriptor.name(), 0L);
             currentTest.create(fdx);
             currentTest.resize(display.width(), display.height());
             status = "Running " + descriptor.displayName();
@@ -375,7 +384,7 @@ public final class TestChooserApplication extends ApplicationAdapter {
                 pendingReturnStatus = "Auto complete: " + (totalTests - failedTests - skippedTests)
                         + " ran without errors, " + skippedTests + " skipped, " + failedTests + " failed";
             }
-        }, false);
+        }, false, testFactory);
         try {
             currentTest.create(fdx);
             currentTest.resize(display.width(), display.height());

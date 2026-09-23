@@ -19,8 +19,39 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 final class WebAppWriterTest {
+    private static final String WORKER_RESOURCE = "io/github/libfdx/backend/web/internal/worker.js";
+    private static final byte[] WORKER_PAYLOAD = "/* bundled worker fixture */".getBytes(StandardCharsets.UTF_8);
     @TempDir
     Path temporaryDirectory;
+
+    @Test
+    void indexStartsConfiguredApplicationForBothTargets() throws Exception {
+        for (boolean wasm : new boolean[]{false, true}) {
+            Path webapp = temporaryDirectory.resolve(wasm ? "wasm" : "js");
+            String target = wasm ? "game.wasm" : "game.js";
+            WebAppWriter.write(WebApp.builder().webappDirectory(webapp).wasm(wasm)
+                    .targetFileName(target).entryPointName("launch").mainClassArgs("\"one\",\"two\"").build());
+            String html = Files.readString(webapp.resolve("index.html"));
+            assertTrue(html.contains("[\"launch\"]([\"one\",\"two\"]);"));
+            assertTrue(html.contains("src=\"" + target + (wasm ? "-runtime.js" : "") + "\""));
+            assertEquals(wasm, html.contains("TeaVM.wasmGC.load(\"game.wasm\")"));
+            assertTrue(html.contains("libfdxStartupError"));
+            assertDirectStartup(webapp);
+        }
+    }
+
+    @Test
+    void embeddedMetadataAndEntryPointCannotCloseTheirScriptElements() throws Exception {
+        Path assets = temporaryDirectory.resolve("assets");
+        write(assets.resolve("a&b.txt"), new byte[]{1});
+        Path webapp = temporaryDirectory.resolve("safe-html");
+        WebAppWriter.write(WebApp.builder().webappDirectory(webapp).asset(assets)
+                .entryPointName("</script><script>bad()</script>").build());
+        String html = Files.readString(webapp.resolve("index.html"));
+        assertTrue(html.contains("a\\u0026b.txt"));
+        assertTrue(html.contains("\\u003c/script\\u003e"));
+        assertFalse(html.contains("<script>bad()"));
+    }
 
     @Test
     void compilerCacheIdentityTracksBothPublishedBinariesAndDisablesMissingCompiler() throws Exception {
@@ -46,10 +77,10 @@ final class WebAppWriterTest {
     }
 
     private static String compilerIdentity(Path webapp) throws IOException {
-        String loader = Files.readString(webapp.resolve("scripts/fdx-loader.js"));
-        String marker = "root.libfdxShaderCompilerIdentity = \"";
-        int start = loader.indexOf(marker) + marker.length();
-        return loader.substring(start, loader.indexOf('"', start));
+        String html = Files.readString(webapp.resolve("index.html"));
+        String marker = "\"shaderCompilerIdentity\":\"";
+        int start = html.indexOf(marker) + marker.length();
+        return html.substring(start, html.indexOf('"', start));
     }
 
     @Test
@@ -69,8 +100,8 @@ final class WebAppWriterTest {
 
         assertArrayEquals(font,
                 Files.readAllBytes(webapp.resolve("assets/libfdx-assets/ui/font/default.ttf")));
-        assertTrue(Files.readString(webapp.resolve("scripts/fdx-loader.js"))
-                .contains("{path:\"libfdx-assets/ui/font/default.ttf\",size:5}"));
+        assertTrue(Files.readString(webapp.resolve("index.html"))
+                .contains("{\"path\":\"libfdx-assets/ui/font/default.ttf\",\"size\":5}"));
     }
 
     @Test
@@ -84,43 +115,8 @@ final class WebAppWriterTest {
 
         assertArrayEquals(license,
                 Files.readAllBytes(webapp.resolve("assets/libfdx-assets/ui/font/OFL.txt")));
-        assertTrue(Files.readString(webapp.resolve("scripts/fdx-loader.js"))
-                .contains("{path:\"libfdx-assets/ui/font/OFL.txt\",size:" + license.length + "}"));
-    }
-
-    @Test
-    void preparesNativeCompilerAndApplicationInParallelBeforeUiKitStartup() throws Exception {
-        Path runtime = Files.createDirectories(temporaryDirectory.resolve("runtime"));
-        byte[] runtimeScript = "runtime-core-script".getBytes(StandardCharsets.UTF_8);
-        byte[] runtimeWasm = new byte[] { 0, 97, 115, 109, 1, 0, 0, 0 };
-        write(runtime.resolve("fdx.js"), runtimeScript);
-        write(runtime.resolve("fdx.wasm"), runtimeWasm);
-        Path webapp = temporaryDirectory.resolve("webapp");
-
-        writeWebApp(webapp, runtime);
-
-        String html = Files.readString(webapp.resolve("index.html"));
-        String loader = Files.readString(webapp.resolve("scripts/fdx-loader.js"));
-        int start = loader.indexOf("function start() {");
-        int exports = loader.indexOf("root.libfdxPreloadRuntimeCore", start);
-        String startup = loader.substring(start, exports);
-        assertTrue(html.contains("<canvas id=\"libfdx-canvas\""));
-        assertFalse(html.contains("libfdx-preload"));
-        assertTrue(loader.contains("preloadLogoPath: \"fdx_logo_dark.png\""));
-        assertTrue(loader.contains("runtimeCoreScriptSize: " + runtimeScript.length));
-        assertTrue(loader.contains("runtimeCoreWasmSize: " + runtimeWasm.length));
-        assertTrue(startup.contains("preloadBootstrapLogo()"));
-        assertTrue(startup.contains("loadRuntimeCore()"));
-        assertTrue(startup.contains("prepareTeaVmApp()"));
-        assertTrue(startup.contains(
-                "Promise.all([preloadBootstrapLogo(), loadRuntimeCore(), prepareTeaVmApp()])"));
-        assertTrue(startup.contains("return prepared[2]();"));
-        assertTrue(loader.contains("Promise.all([scriptPromise, loadRuntimeWasm()]).then(ensureModule)"));
-        assertTrue(loader.contains("root.libfdxPreloadRuntimeCore = loadRuntimeCore"));
-        assertTrue(loader.contains("WebAssembly.instantiate(bytes, imports)"));
-        assertFalse(loader.contains("new WebAssembly.Instance"));
-        assertTrue(loader.contains("return entry(config.mainClassArgs);"));
-        assertFalse(loader.contains("entry.apply(root, config.mainClassArgs)"));
+        assertTrue(Files.readString(webapp.resolve("index.html"))
+                .contains("{\"path\":\"libfdx-assets/ui/font/OFL.txt\",\"size\":" + license.length + "}"));
     }
 
     @Test
@@ -150,7 +146,7 @@ final class WebAppWriterTest {
         assertFalse(Files.exists(webapp.resolve("scripts/WEB-INF/private.wasm")));
         assertFalse(Files.exists(webapp.resolve("scripts/app.js")));
         assertFalse(Files.exists(webapp.resolve("scripts/stale.js")));
-        assertNotEquals("dependency-loader", Files.readString(webapp.resolve("scripts/fdx-loader.js")));
+        assertFalse(Files.exists(webapp.resolve("scripts/fdx-loader.js")));
     }
 
     @Test
@@ -178,20 +174,53 @@ final class WebAppWriterTest {
     }
 
     @Test
-    void discoversJavaScriptOnlyRuntimeJarThroughArtifactMarker() throws Exception {
+    void keepsWorkerCompilerInputOutOfThePageAndDeployment() throws Exception {
         LinkedHashMap<String, byte[]> entries = new LinkedHashMap<>();
-        entries.put("META-INF/libfdx-web.properties", new byte[0]);
-        entries.put("plugin/javascript-only.js", "runtime".getBytes(StandardCharsets.UTF_8));
+        entries.put(WORKER_RESOURCE, WORKER_PAYLOAD);
+        entries.put("embedded/admin-tool.js", "internal".getBytes(StandardCharsets.UTF_8));
         Path jar = createJar("javascript-only.jar", entries);
         Path webapp = temporaryDirectory.resolve("webapp");
 
-        writeWebApp(webapp, jar);
+        WebAppWriter.write(WebApp.builder().webappDirectory(webapp).runtimeClasspath(jar).build());
 
-        assertTrue(Files.isRegularFile(webapp.resolve("scripts/plugin/javascript-only.js")));
+        assertDirectStartup(webapp);
+        assertFalse(Files.exists(webapp.resolve("scripts/embedded/admin-tool.js")));
     }
 
     @Test
-    void doesNotPublishJavaScriptFromAnUnmarkedNonRuntimeJar() throws Exception {
+    void excludesDirectoryWorkerAndRemovesStaleDeploymentScripts() throws Exception {
+        Path runtime = temporaryDirectory.resolve("runtime");
+        Path webapp = temporaryDirectory.resolve("webapp");
+        write(runtime.resolve(WORKER_RESOURCE), WORKER_PAYLOAD);
+        write(webapp.resolve("scripts/fdx-loader.js"), WORKER_PAYLOAD);
+        write(webapp.resolve("scripts/libfdx-asset-worker.js"), WORKER_PAYLOAD);
+        write(webapp.resolve("scripts/libfdx-pbr-worker.js"), WORKER_PAYLOAD);
+        write(webapp.resolve("scripts/libfdx-shader-worker.js"), WORKER_PAYLOAD);
+        WebAppWriter.write(WebApp.builder().webappDirectory(webapp).runtimeClasspath(runtime).build());
+        assertDirectStartup(webapp);
+    }
+
+    @Test
+    void startupPackagingDoesNotRequireWorkerCompilerInputs() throws Exception {
+        Path webapp = temporaryDirectory.resolve("webapp");
+        WebAppWriter.write(WebApp.builder().webappDirectory(webapp).build());
+        assertDirectStartup(webapp);
+    }
+    private static void assertDirectStartup(Path webapp) throws IOException {
+        String html = Files.readString(webapp.resolve("index.html"));
+        assertFalse(Files.exists(webapp.resolve("scripts/fdx-loader.js")));
+        assertFalse(html.contains("fdx-loader.js"));
+        assertFalse(html.contains("bundled worker fixture"));
+        assertFalse(html.contains("FdxModule"));
+        assertTrue(html.contains("type=\"application/json\""));
+        if (Files.exists(webapp.resolve("scripts"))) {
+            try (var files = Files.walk(webapp.resolve("scripts"))) {
+                assertEquals(0, files.filter(Files::isRegularFile).count());
+            }
+        }
+    }
+    @Test
+    void doesNotPublishJavaScriptFromAnUnrelatedJar() throws Exception {
         Path jar = createJar("unrelated.jar",
                 Map.of("embedded/admin-tool.js", "internal".getBytes(StandardCharsets.UTF_8)));
         Path webapp = temporaryDirectory.resolve("webapp");
@@ -249,7 +278,7 @@ final class WebAppWriterTest {
     @Test
     void rejectsRuntimeScriptPathsThatDifferOnlyByCase() throws Exception {
         LinkedHashMap<String, byte[]> entries = new LinkedHashMap<>();
-        entries.put("META-INF/libfdx-web.properties", new byte[0]);
+        entries.put("runtime.wasm", new byte[] { 0, 97, 115, 109 });
         entries.put("Vendor/Runtime.js", new byte[] { 1 });
         entries.put("vendor/runtime.js", new byte[] { 1 });
         Path jar = createJar("case-collision.jar", entries);
@@ -290,7 +319,7 @@ final class WebAppWriterTest {
 
         IOException error = assertThrows(IOException.class, () -> writeWebApp(webapp, jar));
 
-        assertTrue(error.getMessage().contains("conflicts with generated loader"));
+        assertTrue(error.getMessage().contains("conflicts with legacy loader"));
         assertTrue(error.getMessage().contains("fdx-loader.js/worker.wasm"));
         assertTrue(Files.exists(sentinel));
     }
@@ -298,7 +327,7 @@ final class WebAppWriterTest {
     @Test
     void rejectsArchivePathsThatCouldEscapeTheScriptsDirectory() throws Exception {
         Path jar = createJar("invalid.jar", Map.of(
-                "META-INF/libfdx-web.properties", new byte[0],
+                "runtime.wasm", new byte[] { 0, 97, 115, 109 },
                 "../escape.js", new byte[] { 1 }));
         Path webapp = temporaryDirectory.resolve("webapp");
 
@@ -311,7 +340,7 @@ final class WebAppWriterTest {
     @Test
     void rejectsNonPortableArchivePathsBeforeReplacingExistingOutput() throws Exception {
         Path jar = createJar("invalid-portable-path.jar", Map.of(
-                "META-INF/libfdx-web.properties", new byte[0],
+                "runtime.wasm", new byte[] { 0, 97, 115, 109 },
                 "bad?.js", new byte[] { 1 }));
         Path webapp = temporaryDirectory.resolve("webapp");
         Path sentinel = webapp.resolve("scripts/sentinel.txt");
@@ -323,7 +352,7 @@ final class WebAppWriterTest {
         assertTrue(Files.exists(sentinel));
     }
 
-    private static void writeWebApp(Path webapp, Path... runtimeClasspath) throws IOException {
+    private void writeWebApp(Path webapp, Path... runtimeClasspath) throws IOException {
         WebApp.Builder builder = WebApp.builder().webappDirectory(webapp);
         for (Path entry : runtimeClasspath) {
             builder.runtimeClasspath(entry);

@@ -20,6 +20,10 @@ import io.github.libfdx.tests.graphics.AssetLoadingTest;
 import io.github.libfdx.tests.graphics.AudioPlaybackTest;
 import io.github.libfdx.tests.graphics.FileStreamingTest;
 import io.github.libfdx.tests.graphics.ModelBatchTest;
+import io.github.libfdx.tests.graphics.GltfLoadingTest;
+import io.github.libfdx.tests.graphics.ConcurrentGltfLoadingTest;
+import io.github.libfdx.testsupport.graphics.ConcurrentGltfObserver;
+import io.github.libfdx.testsupport.graphics.GltfLoadingObserver;
 import io.github.libfdx.tests.graphics.ShaderPreloadingTest;
 import io.github.libfdx.tests.graphics.MusicStreamingTest;
 import io.github.libfdx.tests.graphics.SceneShowcaseTest;
@@ -173,8 +177,19 @@ public final class DesktopTestLauncher {
             try {
                 String manifest = manifestPath.isEmpty() ? null : Files.readString(Path.of(manifestPath));
                 return new ModelBatchTest(exitAfterFrames(), System.getProperty("libfdx.test.modelAsset", ModelBatchTest.DEFAULT_GLTF_ASSET),
-                        exportPath.isEmpty() ? null : new DesktopShaderPreloadDestination(Path.of(exportPath)), manifest);
+                        exportPath.isEmpty() ? null : new DesktopShaderPreloadDestination(Path.of(exportPath)), manifest,
+                        new DesktopAssetExecutor(2, 8));
             } catch (IOException failure) { throw new UncheckedIOException(failure); }
+        }
+        if ("GltfLoadingTest".equals(testName)) {
+            return new GltfLoadingTest(exitAfterFrames(), GltfLoadingObserver.NONE, new DesktopAssetExecutor(2, 8));
+        }
+        if ("ConcurrentGltfLoadingTest".equals(testName)) {
+            return new ConcurrentGltfLoadingTest(exitAfterFrames(), ConcurrentGltfObserver.NONE, new DesktopAssetExecutor(2, 8));
+        }
+        if ("ModelBatchTest".equals(testName)) {
+            return new ModelBatchTest(exitAfterFrames(), System.getProperty("libfdx.test.modelAsset", ModelBatchTest.DEFAULT_GLTF_ASSET),
+                    null, null, new DesktopAssetExecutor(2, 8));
         }
         if (testName.equals("SceneShowcaseTest")) {
             return new SceneShowcaseTest(exitAfterFrames(), new DesktopAssetExecutor(2, 8));

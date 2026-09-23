@@ -8,6 +8,8 @@ import io.github.libfdx.runtime.core.shader.RuntimeShaderCompileTarget;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderCompiler;
 import io.github.libfdx.runtime.core.shader.internal.NativeRuntimeShaderResultEnvelope;
 import org.teavm.jso.JSBody;
+import io.github.libfdx.core.FdxFuture;
+import java.util.function.Consumer;
 
 /**
  * Web shader compiler backed by the loaded fdx Emscripten module.
@@ -15,6 +17,16 @@ import org.teavm.jso.JSBody;
  * @author xpenatan
  */
 final class WebRuntimeShaderCompiler implements RuntimeShaderCompiler {
+    private final WebShaderWorker worker = new WebShaderWorker(this);
+    private boolean disposed;
+
+    /** Worker results complete on the browser event loop; unavailable-worker fallback uses execute. */
+    @Override public FdxFuture<RuntimeShaderCompileResult> compileAsync(RuntimeShaderCompileRequest request,
+            Consumer<Runnable> execute) {
+        return worker.compile(request, execute);
+    }
+
+    void dispose() { disposed = true; worker.dispose(); }
     /** Fingerprinted from the packaged compiler JS/Wasm by WebAppWriter, without runtime I/O. */
     @Override public String cacheIdentity() {
         String identity = publishedIdentity();
@@ -32,6 +44,7 @@ final class WebRuntimeShaderCompiler implements RuntimeShaderCompiler {
      */
     @Override
     public RuntimeShaderCompileResult compile(RuntimeShaderCompileRequest request) {
+        if (disposed) throw new io.github.libfdx.core.FdxException("Shader compiler is disposed");
         if (!available()) {
             return failure("Web runtime shader compiler is not available. Regenerate fdx web native with "
                     + "libfdx.runtimeFdx.shaderCompiler=true or the default compiler-enabled web build.");
@@ -60,7 +73,7 @@ final class WebRuntimeShaderCompiler implements RuntimeShaderCompiler {
         });
     }
 
-    private static int nativeTarget(RuntimeShaderCompileTarget target) {
+    static int nativeTarget(RuntimeShaderCompileTarget target) {
         switch (target) {
             case WEBGPU_WGSL:
                 return 0;
@@ -83,7 +96,7 @@ final class WebRuntimeShaderCompiler implements RuntimeShaderCompiler {
         }
     }
 
-    private static int nativeStage(RuntimeShaderCompileStage stage) {
+    static int nativeStage(RuntimeShaderCompileStage stage) {
         if (stage == RuntimeShaderCompileStage.VERTEX) {
             return 1;
         }

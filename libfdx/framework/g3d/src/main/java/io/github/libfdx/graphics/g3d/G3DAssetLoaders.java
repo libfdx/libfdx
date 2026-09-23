@@ -2,7 +2,11 @@ package io.github.libfdx.graphics.g3d;
 
 import io.github.libfdx.assets.AssetManager;
 import io.github.libfdx.assets.AssetLoader;
+import io.github.libfdx.assets.AssetLoadContext;
 import io.github.libfdx.assets.loaders.ImageAssetLoader;
+import io.github.libfdx.assets.loaders.ImageDecoder;
+import io.github.libfdx.assets.loaders.ImageData;
+import io.github.libfdx.graphics.TextureMipmapPreparer;
 import io.github.libfdx.assets.loaders.BinaryAssetLoader;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsContext;
@@ -17,21 +21,41 @@ public final class G3DAssetLoaders {
     }
 
     /**
-     * Runs the register step.
+     * Registers standard model, image, buffer and lighting loaders. Default image and glTF mipmap
+     * preparation uses manager-owned platform strategies (a shared worker on web).
+     * Mesh interleaving runs as bounded CPU preparation; graphics finalization yields between
+     * textures, nodes and primitives under the asset manager's update budget. A single graphics
+     * upload cannot be interrupted and may exceed that cooperative budget.
      *
      * @param assets the assets
      * @param graphics the graphics context
      */
     public static void register(AssetManager assets, GraphicsContext graphics) {
+        if (assets == null || graphics == null) throw new FdxException("AssetManager and GraphicsContext are required");
+        ImageAssetLoader.register(assets);
+        BinaryAssetLoader.register(assets);
+        assets.registerLoader(Model.class, new GltfModelLoader(graphics));
+        assets.registerLoader(ImageBasedLighting3D.class, new ImageBasedLightingAssetLoader(graphics));
+    }
+
+    /** Web compilation binds this hook to the same manager-owned worker as image decoding. */
+    static TextureMipmapPreparer defaultMipmaps(AssetLoadContext context) {
+        return null;
+    }
+
+    /** Overrides platform defaults with borrowed CPU strategies; null mipmaps uses the loading executor.
+     * The application must keep strategies alive until its asset manager is disposed. */
+    public static void register(AssetManager assets, GraphicsContext graphics, ImageDecoder decoder,
+            TextureMipmapPreparer mipmaps) {
         if (assets == null) {
             throw new FdxException("AssetManager cannot be null");
         }
         if (graphics == null) {
             throw new FdxException("GraphicsContext cannot be null");
         }
-        ImageAssetLoader.register(assets);
+        assets.registerLoader(ImageData.class, new ImageAssetLoader(decoder));
         BinaryAssetLoader.register(assets);
-        assets.registerLoader(Model.class, modelLoader(graphics));
+        assets.registerLoader(Model.class, new GltfModelLoader(graphics, decoder, mipmaps));
         assets.registerLoader(ImageBasedLighting3D.class, new ImageBasedLightingAssetLoader(graphics));
     }
 

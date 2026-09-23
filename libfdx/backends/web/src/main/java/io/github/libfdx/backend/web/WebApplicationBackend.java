@@ -68,6 +68,8 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
     };
     private final PlatformRunnable jsFrameRunner = frameRunner::run;
     private WebApplicationConfig config;
+    private WebRuntimeCoreProvider runtimeCoreProvider;
+    private io.github.libfdx.core.FdxFuture<Void> runtimeReady;
     private ApplicationListener listener;
     private Fdx fdx;
     private io.github.libfdx.audio.Audio audio;
@@ -111,7 +113,10 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
     }
 
     /**
-     * Runs the start step.
+     * Starts asynchronous browser initialization and returns before assets are ready. The Java backend
+     * loads the page's shared native runtime and bootstrap logo before creating either preload or main
+     * listeners. Initialization failures dispose this backend and surface through the browser error
+     * handler. Disposing while initialization is pending prevents subsequent listener creation.
      *
      * @param config the configuration
      * @param listener the listener
@@ -160,7 +165,6 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             if (actualConfig.audio() != null) audio = actualConfig.audio().create();
             fdx = new DefaultFdx(this, new DefaultDisplays(display), new DefaultGraphics(graphics), input,
                     new WebFileSystem(), new DefaultStorage(new WebStorageBackend()), null, audio, logger);
-            RuntimeCore.registerProvider(new WebRuntimeCoreProvider());
             applicationPreloadListener = actualConfig.applicationPreloadListener();
             preloadApplicationListener = applicationPreloadListener == null
                     ? (actualConfig.preloadApplicationListener() != null
@@ -168,12 +172,13 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                             : new WebDefaultPreloadApplicationListener())
                     : null;
             WebAssetPreloader.install(actualConfig.deferredAssets());
+            runtimeReady = WebRuntimeBootstrap.start();
 
             running = true;
             lifecycle = ApplicationLifecycle.CREATED;
             lastFrameMillis = System.currentTimeMillis();
 
-            if (isGraphicsReady()) {
+            if (isRuntimeReady() && isGraphicsReady()) {
                 createPreloadListener();
             }
             Window.requestAnimationFrame(this);
@@ -433,7 +438,7 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                 if (graphics != null) {
                     graphics.processEvents();
                 }
-                if (isGraphicsReady()) {
+                if (isRuntimeReady() && isGraphicsReady()) {
                     // Publish the ready device's camera convention before either listener is created.
                     fdx.graphics().main();
                     createPreloadListener();
@@ -487,6 +492,16 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
     private boolean isGraphicsReady() {
         return graphics == null || !(graphics instanceof GraphicsAttachmentReadiness)
                 || ((GraphicsAttachmentReadiness) graphics).isReady();
+    }
+
+    private boolean isRuntimeReady() {
+        if (runtimeReady == null || !runtimeReady.isDone()) return false;
+        runtimeReady.get(); // Propagate initialization failure through normal backend cleanup.
+        if (runtimeCoreProvider == null) {
+            runtimeCoreProvider = new WebRuntimeCoreProvider();
+            RuntimeCore.registerProvider(runtimeCoreProvider);
+        }
+        return true;
     }
 
     private void step() {
@@ -736,6 +751,11 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             }
         } finally {
             listenerCreated = false;
+            if (runtimeCoreProvider != null) {
+                try { runtimeCoreProvider.dispose(); }
+                catch (RuntimeException | Error failure) { logger.error("Runtime core shutdown failed", failure); }
+                runtimeCoreProvider = null;
+            }
             if (audio != null) {
                 try { audio.dispose(); }
                 catch (RuntimeException | Error failure) { logger.error("Audio shutdown failed", failure); }

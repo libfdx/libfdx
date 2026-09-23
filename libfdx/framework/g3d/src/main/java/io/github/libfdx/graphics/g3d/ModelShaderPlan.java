@@ -31,6 +31,7 @@ import io.github.libfdx.graphics.VertexLayout;
 import java.util.function.Function;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /** Application-owned model shader definitions shared by collection and rendering. Native
  * resources belong to preparation entries. Pass the same plan to the loading scope and batches;
@@ -43,14 +44,29 @@ public final class ModelShaderPlan implements Disposable {
     private final ShaderProvider unavailable;
     private final PositionColorProvider positionColor;
     private final Disposable owned;
+    private final StandardPbrSourcePreparer.Owned ownedSources;
     private final ShaderProfile profile;
     private final boolean builtins;
     private final ShaderPreloadTargets targets = new ShaderPreloadTargets();
     private boolean disposed;
 
+    /** Uses the platform's default source strategy (a plan-owned worker on web). */
     public ModelShaderPlan(GraphicsContext graphics) { this(graphics, null); }
 
+    /** Custom providers are borrowed; built-in PBR uses the platform's default source strategy. */
     public ModelShaderPlan(GraphicsContext graphics, ShaderProvider commonProvider) {
+        this(graphics, commonProvider, null, ModelShaderPlan::defaultSources);
+    }
+
+    /** Borrows an optional preparer for the built-in standard PBR recipe. Custom providers keep
+     * their own source strategy. Dispose the preparer after this plan and its preparation scopes.
+     * This explicit overload overrides platform defaults; null uses the loading executor. */
+    public ModelShaderPlan(GraphicsContext graphics, ShaderProvider commonProvider, StandardPbrSourcePreparer preparer) {
+        this(graphics, commonProvider, preparer, null);
+    }
+
+    ModelShaderPlan(GraphicsContext graphics, ShaderProvider commonProvider,
+            StandardPbrSourcePreparer preparer, Supplier<StandardPbrSourcePreparer.Owned> sourceFactory) {
         this.graphics = Objects.requireNonNull(graphics, "graphics");
         unavailable = new ShaderProvider() {
             @Override public GraphicsDevice preparationDevice() { return graphics.device(); }
@@ -59,15 +75,29 @@ public final class ModelShaderPlan implements Disposable {
         profile = profile(graphics.device());
         builtins = commonProvider == null;
         if (commonProvider == null && PbrShaderProvider.usesGpuPbrShader(graphics.providerId().value())) {
-            ShaderGraphProvider provider = new ShaderGraphProvider(graphics, StandardPbrTechnique.preparationTechnique(graphics));
+            ownedSources = sourceFactory != null ? sourceFactory.get() : null;
+            ShaderGraphProvider provider;
+            try {
+                provider = new ShaderGraphProvider(graphics, StandardPbrTechnique.preparationTechnique(graphics,
+                        ownedSources != null ? ownedSources : preparer));
+            } catch (RuntimeException | Error failure) {
+                if (ownedSources != null) {
+                    try { ownedSources.dispose(); } catch (RuntimeException | Error cleanup) { failure.addSuppressed(cleanup); }
+                }
+                throw failure;
+            }
             common = provider;
             owned = provider;
         } else {
+            ownedSources = null;
             common = commonProvider;
             owned = null;
         }
         positionColor = commonProvider == null ? new PositionColorProvider(graphics.device()) : null;
     }
+
+    /** Web compilation binds this hook directly to a new plan-owned source worker. */
+    private static StandardPbrSourcePreparer.Owned defaultSources() { return null; }
 
     /** Logical target roles must be registered before capture. Normal frame begin updates surface. */
     public ShaderPreloadTargets targets() { return targets; }
@@ -173,7 +203,12 @@ public final class ModelShaderPlan implements Disposable {
         for (int i = 0; i < collection.size(); i++) include(scope, collection.get(i), pass, target);
     }
 
-    @Override public void dispose() { if (!disposed) { disposed = true; if (owned != null) owned.dispose(); } }
+    @Override public void dispose() {
+        if (disposed) return;
+        disposed = true;
+        try { if (owned != null) owned.dispose(); }
+        finally { if (ownedSources != null) ownedSources.dispose(); }
+    }
     @Override public boolean isDisposed() { return disposed; }
 
     private static final class PositionColorProvider implements ShaderProvider {

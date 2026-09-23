@@ -1,6 +1,9 @@
 package io.github.libfdx.graphics.g3d;
 
 import io.github.libfdx.assets.loaders.ImageData;
+import io.github.libfdx.assets.AssetLoadContext;
+import io.github.libfdx.core.FdxFuture;
+import io.github.libfdx.graphics.TextureMipmapPreparer;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsDevice;
 import io.github.libfdx.graphics.Texture;
@@ -24,6 +27,8 @@ final class GltfTextures {
     private final boolean[] used;
     private final ByteBuffer[][] levels;
     private ImageData[] images;
+    private int preparing;
+    private TextureMipmaps.Rgba8Preparation mipmaps;
 
     GltfTextures(JsonValue root) {
         JsonValue textureArray = root.get("textures"), samplerArray = root.get("samplers");
@@ -75,38 +80,75 @@ final class GltfTextures {
 
     /** Runs on the asset executor; GPU resources are not touched. */
     void prepare(ImageData[] images) {
+        while (!prepareStep(images, 4096)) { }
+    }
+
+    boolean prepareStep(ImageData[] images, int pixels) {
         this.images = images;
-        for (int i = 0; i < used.length; i++) {
-            if (!used[i]) continue;
+        while (preparing < used.length && !used[preparing]) preparing++;
+        if (preparing < used.length) {
+            int i = preparing;
             ImageData image = images[sources[i / ROLE_COUNT]];
             if (image == null) throw new FdxException("glTF texture image is not ready");
             int role = i % ROLE_COUNT;
-            levels[i] = samplers[i / ROLE_COUNT].mip == TextureMipmapFilter.NONE
-                    ? new ByteBuffer[] { image.rgba() }
-                    : TextureMipmaps.rgba8(image.rgba(), image.width(), image.height(),
-                            role != DATA, role == COLOR_ALPHA);
+            if (samplers[i / ROLE_COUNT].mip == TextureMipmapFilter.NONE) {
+                levels[i] = new ByteBuffer[] { image.rgba() }; preparing++;
+            } else {
+                if (mipmaps == null) mipmaps = TextureMipmaps.prepareRgba8(image.rgba(), image.width(), image.height(),
+                        role != DATA, role == COLOR_ALPHA);
+                if (mipmaps.step(pixels)) { levels[i] = mipmaps.result(); mipmaps = null; preparing++; }
+            }
         }
+        return preparing == used.length;
     }
 
     Texture[] allocateHandles() { return new Texture[used.length]; }
 
+    FdxFuture<Void> prepareAsync(AssetLoadContext context, ImageData[] images, TextureMipmapPreparer strategy) {
+        this.images = images;
+        FdxFuture<Void> result = FdxFuture.pending();
+        prepareNext(context, strategy, result);
+        return result;
+    }
+
+    private void prepareNext(AssetLoadContext context, TextureMipmapPreparer strategy, FdxFuture<Void> result) {
+        try {
+            while (preparing < used.length && !used[preparing]) preparing++;
+            if (preparing == used.length) { result.complete(null); return; }
+            int i = preparing;
+            ImageData image = images[sources[i / ROLE_COUNT]];
+            context.asyncFuture(() -> samplers[i / ROLE_COUNT].mip == TextureMipmapFilter.NONE
+                    ? FdxFuture.completed(new ByteBuffer[] { image.rgba() })
+                    : strategy.prepare(image.rgba(), image.width(), image.height(), i % ROLE_COUNT != DATA,
+                            i % ROLE_COUNT == COLOR_ALPHA)).onSuccess(chain -> {
+                        levels[i] = chain; preparing++;
+                        prepareNext(context, strategy, result);
+                    }).onFailure(result::completeExceptionally);
+        } catch (RuntimeException | Error failure) { result.completeExceptionally(failure); }
+    }
+
     /** Caller owns every non-null result immediately, including when a later upload fails. */
     void upload(GraphicsDevice device, String path, Texture[] result) {
         for (int i = 0; i < used.length; i++) {
-            if (!used[i]) continue;
-            ImageData image = images[sources[i / ROLE_COUNT]];
-            Sampler sampler = samplers[i / ROLE_COUNT];
-            TextureFormat format = i % ROLE_COUNT != DATA
-                    && device.capabilities().supportsColorFormat(TextureFormat.RGBA8_UNORM_SRGB)
-                    ? TextureFormat.RGBA8_UNORM_SRGB : TextureFormat.RGBA8_UNORM;
-            TextureDescriptor descriptor = TextureDescriptor.rgba8(path + " texture " + i / ROLE_COUNT
-                    + " role " + i % ROLE_COUNT, image.width(), image.height()).format(format)
-                    .mipLevelCount(levels[i].length).filters(sampler.min, sampler.mag, sampler.mip)
-                    .wrap(sampler.wrapS, sampler.wrapT);
-            result[i] = device.createTexture(descriptor);
-            device.writeTextureMipLevels(result[i], levels[i]);
-            levels[i] = null; // Release prepared chains after upload; the image remains a managed dependency.
+            upload(device, path, result, i);
         }
+    }
+
+    /** Uploads at most one texture so the asset queue can yield between resources. */
+    void upload(GraphicsDevice device, String path, Texture[] result, int i) {
+        if (!used[i]) return;
+        ImageData image = images[sources[i / ROLE_COUNT]];
+        Sampler sampler = samplers[i / ROLE_COUNT];
+        TextureFormat format = i % ROLE_COUNT != DATA
+                && device.capabilities().supportsColorFormat(TextureFormat.RGBA8_UNORM_SRGB)
+                ? TextureFormat.RGBA8_UNORM_SRGB : TextureFormat.RGBA8_UNORM;
+        TextureDescriptor descriptor = TextureDescriptor.rgba8(path + " texture " + i / ROLE_COUNT
+                + " role " + i % ROLE_COUNT, image.width(), image.height()).format(format)
+                .mipLevelCount(levels[i].length).filters(sampler.min, sampler.mag, sampler.mip)
+                .wrap(sampler.wrapS, sampler.wrapT);
+        result[i] = device.createTexture(descriptor);
+        device.writeTextureMipLevels(result[i], levels[i]);
+        levels[i] = null; // Release prepared chains after upload; the image remains a managed dependency.
     }
 
     ImageData image(JsonValue info) { return info == null ? null : images[sources[index(info)]]; }

@@ -22,31 +22,71 @@ public final class TextureMipmaps {
      * material slots whose alpha is ignored. This does not preserve alpha-test coverage or normalize
      * normal vectors; those need content-specific preparation. */
     public static ByteBuffer[] rgba8(ByteBuffer source, int width, int height, boolean srgb, boolean alphaWeighted) {
-        int count = levelCount(width, height);
-        long bytes = (long)width*height*4;
-        if (bytes > Integer.MAX_VALUE || source == null || source.remaining() < bytes) {
-            throw new FdxException("RGBA8 source range is too small or exceeds buffer size limit");
+        Rgba8Preparation preparation = prepareRgba8(source, width, height, srgb, alphaWeighted);
+        while (!preparation.step(4096)) { }
+        return preparation.result();
+    }
+
+    /** Creates CPU-only work that can yield between pixel batches. Borrows source until complete. */
+    public static Rgba8Preparation prepareRgba8(ByteBuffer source, int width, int height,
+            boolean srgb, boolean alphaWeighted) {
+        return new Rgba8Preparation(source, width, height, srgb, alphaWeighted);
+    }
+
+    /** One caller at a time, on a worker or application thread. No graphics resources are touched. */
+    public static final class Rgba8Preparation {
+        private final ByteBuffer source;
+        private final ByteBuffer[] levels;
+        private final boolean srgb, alphaWeighted;
+        private int width, height, level, pixel;
+
+        private Rgba8Preparation(ByteBuffer source, int width, int height, boolean srgb, boolean alphaWeighted) {
+            int count = levelCount(width, height);
+            long bytes = (long)width*height*4;
+            if (bytes > Integer.MAX_VALUE || source == null || source.remaining() < bytes) {
+                throw new FdxException("RGBA8 source range is too small or exceeds buffer size limit");
+            }
+            this.width = width; this.height = height; this.srgb = srgb; this.alphaWeighted = alphaWeighted;
+            this.source = source.slice();
+            levels = new ByteBuffer[count];
+            levels[0] = ByteBuffer.allocateDirect((int)bytes);
         }
-        ByteBuffer[] levels = new ByteBuffer[count];
-        ByteBuffer input = source.duplicate();
-        input.limit(input.position()+(int)bytes);
-        levels[0] = ByteBuffer.allocateDirect((int)bytes);
-        levels[0].put(input).flip();
-        for (int level = 1; level < count; level++) {
+
+        /** Processes at most maxPixels output pixels, including the base-level copy. */
+        public boolean step(int maxPixels) {
+            if (maxPixels < 1) throw new FdxException("Mip pixel budget must be positive");
+            if (level == levels.length) return true;
+            if (level == 0) {
+                int end = (int)Math.min((long)width * height, (long)pixel + maxPixels);
+                source.limit(end*4).position(pixel*4);
+                levels[0].put(source);
+                pixel = end;
+                if (pixel == width*height) { levels[0].flip(); pixel = 0; level++; }
+                return level == levels.length;
+            }
             int nextWidth = Math.max(1, width/2), nextHeight = Math.max(1, height/2);
-            ByteBuffer out = ByteBuffer.allocateDirect(nextWidth*nextHeight*4);
-            downsample(levels[level-1], width, height, out, nextWidth, nextHeight, srgb, alphaWeighted);
-            out.flip();
-            levels[level] = out;
-            width = nextWidth;
-            height = nextHeight;
+            if (levels[level] == null) levels[level] = ByteBuffer.allocateDirect(nextWidth*nextHeight*4);
+            // Filtering is substantially dearer than a bulk base-level copy.
+            int end = (int)Math.min((long)nextWidth*nextHeight, (long)pixel + Math.min(maxPixels, 4096));
+            downsample(levels[level-1], width, height, levels[level], nextWidth, nextHeight, srgb, alphaWeighted, pixel, end);
+            pixel = end;
+            if (pixel == nextWidth*nextHeight) {
+                levels[level].flip(); level++; pixel = 0; width = nextWidth; height = nextHeight;
+            }
+            return level == levels.length;
         }
-        return levels;
+
+        /** Transfers the completed buffers to the caller; repeated access returns the same array. */
+        public ByteBuffer[] result() {
+            if (level != levels.length) throw new FdxException("Mip preparation is still pending");
+            return levels;
+        }
     }
 
     private static void downsample(ByteBuffer source, int width, int height, ByteBuffer out,
-            int nextWidth, int nextHeight, boolean srgb, boolean alphaWeighted) {
-        for (int y = 0; y < nextHeight; y++) for (int x = 0; x < nextWidth; x++) {
+            int nextWidth, int nextHeight, boolean srgb, boolean alphaWeighted, int start, int end) {
+        for (int pixel = start; pixel < end; pixel++) {
+            int x = pixel % nextWidth, y = pixel / nextWidth;
             double x0 = (double)x*width/nextWidth, x1 = (double)(x+1)*width/nextWidth;
             double y0 = (double)y*height/nextHeight, y1 = (double)(y+1)*height/nextHeight;
             double red = 0, green = 0, blue = 0, alpha = 0, weight = 0, colorWeight = 0;

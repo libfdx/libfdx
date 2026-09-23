@@ -153,6 +153,7 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
         }
         ShaderPreparationOperation operation = graphics.device().prepareRenderPipeline(packet);
         return new ShaderPreparationOperation() {
+            @Override public void advanceLoading() { operation.advanceLoading(); }
             @Override public boolean isDone() { return operation.isDone(); }
             @Override public ShaderPreparationPhase phase() { return operation.phase(); }
             @Override public ShaderPreparationTrace trace() { return operation.trace(); }

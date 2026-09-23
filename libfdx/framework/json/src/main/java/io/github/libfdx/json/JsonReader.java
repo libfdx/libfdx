@@ -14,6 +14,10 @@ public final class JsonReader {
     private int index;
     private int line;
     private int column;
+    private final java.util.ArrayDeque<Frame> stack = new java.util.ArrayDeque<>();
+    private JsonValue parsed;
+    private StringBuilder string;
+    private boolean memberName, complete;
 
     /**
      * Runs the parse step.
@@ -32,16 +36,92 @@ public final class JsonReader {
      * @return the parse
      */
     public JsonValue parse(String text) {
+        begin(text);
+        while (!step(8192)) { }
+        return result();
+    }
+
+    /** Starts a resumable parse. One caller owns this reader until completion. */
+    public JsonReader begin(String text) {
         this.text = text != null ? text : "";
         index = 0;
         line = 1;
         column = 1;
-        JsonValue value = readValue();
-        skipWhitespace();
-        if (!end()) {
-            throw error("Unexpected content after JSON value");
+        stack.clear(); parsed = null; string = null; complete = false;
+        return this;
+    }
+
+    /** Advances by a character budget, yielding even inside long strings. Scalar numbers and
+     * escapes are indivisible; allocation and number conversion can exceed this work budget. */
+    public boolean step(int maxCharacters) {
+        if (maxCharacters < 1) throw error("JSON character budget must be positive");
+        if (text == null) throw error("JSON parse has not started");
+        int start = index;
+        while (!complete && index - start < maxCharacters) {
+            if (string != null) {
+                if (end()) throw error("Unterminated JSON string");
+                char c = next();
+                if (c == '"') {
+                    String value = string.toString(); string = null;
+                    if (memberName) { stack.peek().name = value; stack.peek().state = 1; }
+                    else accept(JsonValue.value(value));
+                } else if (c < 0x20) throw error("Unescaped control character in JSON string");
+                else if (c == '\\') string.append(readEscape());
+                else string.append(c);
+                continue;
+            }
+            if (!end() && (peek() == ' ' || peek() == '\n' || peek() == '\r' || peek() == '\t')) { next(); continue; }
+            Frame frame = stack.peek();
+            if (frame == null && parsed != null) {
+                if (!end()) throw error("Unexpected content after JSON value");
+                complete = true; continue;
+            }
+            if (end()) throw error("Unexpected end of JSON");
+            if (frame != null) {
+                char close = frame.object ? '}' : ']';
+                if (frame.state == 3) {
+                    if (consumeIf(close)) { stack.pop(); continue; }
+                    expect(','); frame.state = frame.object ? 4 : 2; continue;
+                }
+                if (frame.object && (frame.state == 0 || frame.state == 4)) {
+                    if (frame.state == 0 && consumeIf('}')) { stack.pop(); continue; }
+                    expect('"'); memberName = true; string = new StringBuilder(); continue;
+                }
+                if (frame.object && frame.state == 1) { expect(':'); frame.state = 2; continue; }
+                if (!frame.object && frame.state == 0 && consumeIf(']')) { stack.pop(); continue; }
+            }
+            char c = peek();
+            if (c == '{' || c == '[') {
+                next(); JsonValue value = c == '{' ? JsonValue.object() : JsonValue.array();
+                accept(value); stack.push(new Frame(value, c == '{'));
+            } else if (c == '"') {
+                next(); memberName = false; string = new StringBuilder();
+            } else accept(readValue());
         }
-        return value;
+        return complete;
+    }
+
+    /** Returns the completed tree; incomplete parses must not be published. */
+    public JsonValue result() {
+        if (!complete) throw error("JSON parse is still pending");
+        return parsed;
+    }
+
+    private void accept(JsonValue value) {
+        Frame frame = stack.peek();
+        if (frame == null) parsed = value;
+        else {
+            if (frame.object) frame.value.put(frame.name, value); else frame.value.add(value);
+            frame.state = 3;
+        }
+    }
+
+    private static final class Frame {
+        final JsonValue value;
+        final boolean object;
+        int state;
+        String name;
+        Frame(JsonValue value, boolean object) { this.value = value; this.object = object; }
     }
 
     private JsonValue readValue() {
@@ -50,15 +130,6 @@ public final class JsonReader {
             throw error("Unexpected end of JSON");
         }
         char c = peek();
-        if (c == '{') {
-            return readObject();
-        }
-        if (c == '[') {
-            return readArray();
-        }
-        if (c == '"') {
-            return JsonValue.value(readString());
-        }
         if (c == 't') {
             expect("true");
             return JsonValue.value(true);
@@ -75,68 +146,6 @@ public final class JsonReader {
             return readNumber();
         }
         throw error("Unexpected JSON value");
-    }
-
-    private JsonValue readObject() {
-        expect('{');
-        JsonValue object = JsonValue.object();
-        skipWhitespace();
-        if (consumeIf('}')) {
-            return object;
-        }
-        while (true) {
-            skipWhitespace();
-            if (end() || peek() != '"') {
-                throw error("Expected JSON object member name");
-            }
-            String name = readString();
-            skipWhitespace();
-            expect(':');
-            object.put(name, readValue());
-            skipWhitespace();
-            if (consumeIf('}')) {
-                return object;
-            }
-            expect(',');
-        }
-    }
-
-    private JsonValue readArray() {
-        expect('[');
-        JsonValue array = JsonValue.array();
-        skipWhitespace();
-        if (consumeIf(']')) {
-            return array;
-        }
-        while (true) {
-            array.add(readValue());
-            skipWhitespace();
-            if (consumeIf(']')) {
-                return array;
-            }
-            expect(',');
-        }
-    }
-
-    private String readString() {
-        expect('"');
-        StringBuilder builder = new StringBuilder();
-        while (!end()) {
-            char c = next();
-            if (c == '"') {
-                return builder.toString();
-            }
-            if (c < 0x20) {
-                throw error("Unescaped control character in JSON string");
-            }
-            if (c == '\\') {
-                builder.append(readEscape());
-            }
-            else {
-                builder.append(c);
-            }
-        }
-        throw error("Unterminated JSON string");
     }
 
     private String readEscape() {

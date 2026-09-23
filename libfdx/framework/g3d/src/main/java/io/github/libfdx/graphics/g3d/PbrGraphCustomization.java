@@ -57,8 +57,8 @@ final class PbrGraphCustomization {
     private final String skinnedSource;
     private final String staticOpaqueSource;
     private final String skinnedOpaqueSource;
-    private final ShaderReflection staticReflection;
-    private final ShaderReflection skinnedReflection;
+    private ShaderReflection staticReflection;
+    private ShaderReflection skinnedReflection;
     private final ShaderModuleDescriptor[] texturedShaders = new ShaderModuleDescriptor[4];
 
     PbrGraphCustomization(ShaderGraphMaterialDefinition definition) {
@@ -140,6 +140,19 @@ final class PbrGraphCustomization {
         return definition;
     }
 
+    /** Rebuilds CPU binding metadata/defaults without graph compilation or template composition. */
+    PbrGraphCustomization(ShaderGraphMaterialDefinition definition, StandardPbrSources prepared) {
+        this.definition = definition; profile = prepared.profile();
+        vertexGraph = lightingGraph = null;
+        vertexCompilation = lightingCompilation = null;
+        defaultMaterial = new ShaderGraphMaterialInstance(definition);
+        defaultGraphMaterial = new GraphMaterial("libfdx.standard.pbr.default", defaultMaterial);
+        staticOpaqueSource = prepared.variant(0); skinnedOpaqueSource = prepared.variant(1);
+        staticSource = prepared.variant(2); skinnedSource = prepared.variant(3);
+        for (int i = 0; i < 4; i++) texturedShaders[i] = ShaderModuleDescriptor
+                .wgsl("model batch textured PBR " + i, prepared.variant(4 + i));
+    }
+
     ShaderGraphMaterialInstance newMaterialInstance() {
         return new ShaderGraphMaterialInstance(definition);
     }
@@ -156,8 +169,10 @@ final class PbrGraphCustomization {
         return shader(skinned, true);
     }
 
-    ShaderModuleDescriptor shader(boolean skinned,
+    synchronized ShaderModuleDescriptor shader(boolean skinned,
             boolean alphaTest) {
+        if (skinned && skinnedReflection == null) skinnedReflection = reflection(PbrShaderParameters.skinnedReflection());
+        if (!skinned && staticReflection == null) staticReflection = reflection(PbrShaderParameters.staticReflection());
         String source = alphaTest
                 ? skinned ? skinnedSource : staticSource
                 : skinned ? skinnedOpaqueSource : staticOpaqueSource;
@@ -169,8 +184,11 @@ final class PbrGraphCustomization {
                         : staticReflection);
     }
 
-    ShaderModuleDescriptor shader(boolean skinned, boolean alphaTest, boolean textured) {
-        return textured ? texturedShaders[(skinned ? 1 : 0) | (alphaTest ? 2 : 0)] : shader(skinned, alphaTest);
+    synchronized ShaderModuleDescriptor shader(boolean skinned, boolean alphaTest, boolean textured) {
+        if (!textured) return shader(skinned, alphaTest);
+        ShaderModuleDescriptor shader = texturedShaders[(skinned ? 1 : 0) | (alphaTest ? 2 : 0)];
+        if (!shader.reflection().complete()) shader.reflection(reflection(PbrShaderParameters.texturedReflection(skinned)));
+        return shader;
     }
 
     String staticSource() {

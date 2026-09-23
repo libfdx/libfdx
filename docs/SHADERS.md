@@ -78,6 +78,12 @@ compilation, which can block. `hasPendingWork()` becoming false does not imply t
 every requirement succeeded. Failures remain attached to their entries; `retry(handle)`
 explicitly creates a new attempt while old handles retain their outcome.
 
+Use `update(maxNanos)` or `updateLoading(maxNanos)` to add an elapsed-time budget
+to the existing operation-count limits. The budget is cooperative: the service
+checks between operations and callbacks, but cannot interrupt an individual driver
+call or listener. Zero does no work; negative budgets are rejected. The no-argument
+methods retain their existing count limits without an elapsed-time limit.
+
 Providers participate through `preparationDevice()` and `beginPreparation(request)`.
 Device capabilities describe the actual CPU/native execution and cache support;
 their default is unavailable. The service never calls synchronous `resolve()` as a
@@ -139,9 +145,10 @@ capabilities. Confirmed native device-loss cleanup failures are tracked in
 safe cleanup after loss.
 
 Browser WebGPU uses `createRenderPipelineAsync` for GPU pipeline completion on
-both TeaVM JavaScript and Wasm GC application targets. Java
-source generation, WGSL validation/reflection, shader modules and descriptor setup
-run only during `updateLoading()`. Capabilities report CPU `OWNER_THREAD`, native
+both TeaVM JavaScript and Wasm GC application targets. Java source generation,
+shader modules and descriptor setup run only during `updateLoading()`; Tint
+validation/reflection uses the backend's compiler worker described below.
+Capabilities report CPU `OWNER_THREAD`, native
 `NATIVE_ASYNC`, zero Java workers and `runtimeNonblocking=false`. A loading update
 can therefore block while its CPU work runs; GPU async completion does not make
 arbitrary Java generators transferable to a Web Worker. Ordinary `update()` only
@@ -176,14 +183,70 @@ The surface's native-window wrapper is released with the surface. When the Andro
 backend recreates the session, rebuild its preparation scopes and graphics resources
 from the new `create(Fdx)` callback rather than publishing results from the old session.
 
-WebGL uses the same program polling during explicit loading, but its current source
-compiler runs on the browser thread. Its capabilities therefore report owner-thread
+WebGL uses the same program polling during explicit loading. Java source generation
+runs on the browser thread; Tint translation uses the backend's compiler worker.
+Its capabilities therefore still report owner-thread
 CPU work and `runtimeNonblocking=false`. Without completion polling, GL adapters
 still use available source workers, but advance blocking native compilation only
 during `updateLoading()`. If source work finishes after loading updates stop, that
 native stage stays pending until loading updates resume. Regular updates can publish
 finished results without starting further blocking work. Runtime
 misses on loading-only adapters remain unsupported; preload their required variants.
+
+The web backend lazily owns one Tint worker for `RuntimeShaderCompiler.compileAsync`.
+Both TeaVM application targets send immutable WGSL/options and receive the same
+validated result envelope used by synchronous compilation. Cache misses use this
+path; cache validation and subsequent GPU submission retain their existing rules.
+The worker loads a separate instance of the packaged `fdx.js`/`fdx.wasm`, increasing
+memory use. It accepts at most 32 requests and four million UTF-16 input characters;
+exceeding either bound fails the future. The TeaVM compiler embeds compiled Java
+worker code as a string in the application. Asset, PBR and shader workers create
+independent Blob URLs from that string; no separate worker scripts need deployment.
+The backend releases each URL after startup, or on failure/disposal before startup.
+The generated HTML starts the TeaVM application directly. Its Java web backend
+loads `fdx.js` and initializes `fdx.wasm` asynchronously, and supplies the absolute
+native runtime base to workers. Deployments using Content Security Policy must allow `blob:` in
+`worker-src` (or its applicable fallback directive). Blocked Blob workers select
+the same loading-executor fallback as unavailable workers.
+
+Worker results complete on the browser event loop. Preparation continuations queue
+for explicit loading updates, so pausing or cancelling one scope cannot hold the
+worker slot needed by another scope. Backend shutdown terminates the worker, fails
+outstanding requests and discards late replies. Missing worker support, startup
+failure (including a 15-second startup timeout), or a worker crash selects the
+caller's loading executor as fallback; that fallback can block a loading frame.
+Shader diagnostics are ordinary results and do not trigger a retry on the main
+thread. Synchronous shader APIs and arbitrary Java source generators remain
+synchronous; the worker does not change `runtimeNonblocking` capabilities.
+
+Standard `ModelShaderPlan` PBR source generation uses a web worker by default.
+The web backend binds its implementation directly during web compilation; ordinary
+plan construction needs no worker setup:
+
+```java
+var plan = new ModelShaderPlan(graphics);
+```
+
+Use that plan for both requirement collection and `ModelBatch`, keep advancing
+`updateLoading()`, and dispose the plan after its batches and preparation scopes.
+Each plan owns its source worker and terminates it on disposal. Desktop and Android
+keep their loading-executor path. Custom common providers keep their own strategy.
+The explicit three-argument constructor overrides the defaults and borrows its supplied
+`StandardPbrSourcePreparer`; null selects the loading executor. Applications may use
+that overload to share a `WebPbrSourcePreparation`, disposing it after all borrowers.
+The explicit versioned recipe compiles the framework's standard surface, vertex,
+and lighting graphs and composes its eight PBR variants off the main thread. It
+returns WGSL and compiled surface metadata; mutable material defaults and lazily
+created reflection stay local. The service caches immutable results per profile,
+accepts at most 32 waiting callers, and never waits on one caller's loading queue
+before servicing another. Worker failure falls back on each caller's loading
+executor. Its generated script is packaged by the web backend; G3D remains an
+optional application dependency. It does not offload custom providers,
+custom graphs, arbitrary Java generators, synchronous shader APIs, or GPU operations.
+The provider capability remains loading-only because these other paths can block.
+Browser WebGL/WebGPU loading advances also yield between queued CPU continuations
+after a soft two-millisecond budget. A single callback or native GPU call can exceed
+that budget; it is not a frame-time guarantee.
 
 `disposeAsync()` starts cancellation. Continue `update()` until its future completes
 before destroying the device; cancellation cannot terminate an active native compiler
@@ -301,8 +364,8 @@ corresponding libFDX Tint calls. Source generation still runs to establish conte
 identity, and the browser still compiles/links GLSL. Native program binaries are
 not persisted, so `pipelineCache` remains false.
 
-WebGL cache callbacks enqueue shader continuations. Source generation, translation
-and new native shader submissions run during explicit `updateLoading()` advances; ordinary updates can
+WebGL cache callbacks enqueue shader continuations. Source generation, worker
+translation submission and new native shader submissions run during explicit `updateLoading()` advances; ordinary updates can
 poll a previously submitted program but cannot start a new compilation. A rejected
 cached translation permits one loading-only rebuild. Cancelling a pending storage
 read discards its continuation without using a closed or lost graphics context.

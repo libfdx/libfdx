@@ -31,6 +31,101 @@ final class DefaultAssetManagerSchedulingTest {
         manager.dispose();
     }
 
+    @Test void preparationResourcesAreSharedOnlyWithinOneManagerAndOutliveIndividualLoads() {
+        List<Preparation> made = new ArrayList<>();
+        List<Preparation> borrowed = new ArrayList<>();
+        AssetLoader<Asset> loader = new AssetLoader<>() {
+            @Override public Class<Asset> type() { return Asset.class; }
+            @Override public FdxFuture<Asset> load(AssetLoadContext context, AssetDescriptor<Asset> descriptor) {
+                borrowed.add(context.preparationResource(Preparation.class, () -> {
+                    Preparation resource = new Preparation(); made.add(resource); return resource;
+                }));
+                return FdxFuture.pending();
+            }
+        };
+        DefaultAssetManager other = new DefaultAssetManager(files);
+        try {
+            manager.registerLoader(Asset.class, loader); other.registerLoader(Asset.class, loader);
+            manager.load(descriptor("A")); manager.load(descriptor("B"));
+            AssetHandle<Asset> separate = other.load(descriptor("A"));
+            assertEquals(2, made.size()); assertSame(borrowed.get(0), borrowed.get(1));
+            assertNotSame(borrowed.get(0), borrowed.get(2));
+            manager.unload("A"); assertEquals(0, made.getFirst().disposals);
+            manager.dispose(); manager.dispose();
+            assertEquals(1, made.getFirst().disposals); assertEquals(0, made.getLast().disposals);
+            assertFalse(separate.future().isDone());
+        } finally { other.dispose(); }
+        assertEquals(1, made.getLast().disposals);
+    }
+
+    @Test void preparationShutdownFollowsAssetCancellationAndContinuesAfterErrors() {
+        Preparation resource = new Preparation(); resource.fail = true;
+        Asset other = asset("other preparation");
+        register((context, descriptor) -> {
+            context.preparationResource(Preparation.class, () -> resource);
+            context.preparationResource(Asset.class, () -> other);
+            return FdxFuture.pending();
+        });
+        AssetHandle<Asset> pending = manager.load(descriptor("pending"));
+        pending.future().onFailure(error -> assertEquals(0, resource.disposals));
+        assertThrows(FdxException.class, manager::dispose);
+        assertTrue(pending.future().isFailed()); assertEquals(1, resource.disposals); assertEquals(1, other.disposed);
+        manager.dispose(); assertEquals(1, resource.disposals);
+    }
+
+    @Test void preparationFactoryCannotPublishAfterReentrantShutdownOrRecurse() {
+        Preparation resource = new Preparation();
+        register((context, descriptor) -> {
+            assertThrows(FdxException.class, () -> context.preparationResource(Preparation.class,
+                    () -> context.preparationResource(Preparation.class, Preparation::new)));
+            context.preparationResource(Preparation.class, () -> { manager.dispose(); return resource; });
+            return FdxFuture.pending();
+        });
+        assertTrue(manager.load(descriptor("shutdown")).future().isFailed());
+        assertEquals(1, resource.disposals);
+    }
+
+    @Test void preparationLookupRejectsWorkerThreadAndCancelledContext() throws Exception {
+        AssetLoadContext[] saved = new AssetLoadContext[1];
+        register((context, descriptor) -> { saved[0] = context; return FdxFuture.pending(); });
+        manager.load(descriptor("pending"));
+        Throwable[] failure = new Throwable[1];
+        Thread worker = new Thread(() -> {
+            try { saved[0].preparationResource(Preparation.class, Preparation::new); }
+            catch (Throwable error) { failure[0] = error; }
+        });
+        worker.start(); worker.join(); assertInstanceOf(FdxException.class, failure[0]);
+        manager.unload("pending");
+        assertThrows(FdxException.class, () -> saved[0].preparationResource(Preparation.class, Preparation::new));
+    }
+
+    private static final class Preparation implements Disposable {
+        int disposals; boolean fail;
+        @Override public void dispose() { disposals++; if (fail) throw new FdxException("Injected preparation cleanup failure"); }
+        @Override public boolean isDisposed() { return disposals > 0; }
+    }
+
+    @Test void cooperativeStepsYieldWithinUpdateBudgetAndCancellationStopsFurtherSteps() {
+        int[] steps={0};
+        register((context, descriptor) -> {
+            FdxFuture<Asset> result=FdxFuture.pending();
+            context.asyncSteps(() -> ++steps[0]>=8).onSuccess(ignored ->
+                    context.completeOnUpdate(() -> asset(descriptor.path())).onSuccess(result::complete)
+                            .onFailure(result::completeExceptionally)).onFailure(result::completeExceptionally);
+            return result;
+        });
+        AssetLease<Asset> cancelled=manager.acquire(descriptor("cancelled"));
+        manager.update(1,Long.MAX_VALUE);
+        assertEquals(1,steps[0]);assertFalse(cancelled.isLoaded());
+        cancelled.dispose();
+        for(int frame=0;frame<20;frame++)manager.update(1,Long.MAX_VALUE);
+        assertEquals(1,steps[0]);assertTrue(cancelled.future().isFailed());
+        AssetLease<Asset> loaded=manager.acquire(descriptor("loaded"));
+        int frames=0;
+        while(!loaded.isLoaded() && frames++<100)manager.update(1,Long.MAX_VALUE);
+        assertTrue(loaded.isLoaded());assertTrue(frames>=7);assertEquals(8,steps[0]);
+    }
+
     @Test
     void asynchronousFuturePreparationQueuesCompletionAndCleansLateOwnedResults() throws Exception {
         FdxFuture<Asset> provider = FdxFuture.pending();

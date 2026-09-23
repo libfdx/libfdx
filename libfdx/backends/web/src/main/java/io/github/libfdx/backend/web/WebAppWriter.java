@@ -30,8 +30,7 @@ import java.util.zip.ZipFile;
  * @author xpenatan
  */
 public final class WebAppWriter {
-    private static final String GENERATED_LOADER_PATH = "fdx-loader.js";
-    private static final String WEB_RUNTIME_MARKER_PATH = "META-INF/libfdx-web.properties";
+    private static final String LEGACY_LOADER_PATH = "fdx-loader.js";
     private static final String TEAVM_INTERNAL_RESOURCE_PREFIX = "org/teavm/";
     private static final String SHARED_ASSET_PREFIX = "libfdx-assets/";
 
@@ -55,8 +54,7 @@ public final class WebAppWriter {
         List<WebAsset> assets = new ArrayList<>(WebAssets.copy(app.getAssets(), root.resolve("assets")));
         copySharedAssets(root.resolve("assets"), app.getRuntimeClasspath(), assets);
         copyRuntimeScripts(root, app.getRuntimeClasspath());
-        writeFdxLoader(root, app, assets);
-        Files.writeString(root.resolve("index.html"), indexHtml(app, assets.size()), StandardCharsets.UTF_8);
+        Files.writeString(root.resolve("index.html"), indexHtml(app, assets, shaderCompilerIdentity(root.resolve("scripts"))), StandardCharsets.UTF_8);
         Files.writeString(webInf.resolve("web.xml"), "<web-app></web-app>\n", StandardCharsets.UTF_8);
         return assets;
     }
@@ -204,9 +202,9 @@ public final class WebAppWriter {
         }
     }
 
-    private static String indexHtml(WebApp app, int assetCount) {
+    private static String indexHtml(WebApp app, List<WebAsset> assets, String compilerIdentity) {
         String escapedTitle = html(app.getTitle());
-        String escapedCanvas = js(app.getCanvasId());
+        String escapedCanvas = html(app.getCanvasId());
         boolean fillWindow = app.getWidth() <= 0 || app.getHeight() <= 0;
         int canvasWidth = fillWindow ? 1 : app.getWidth();
         int canvasHeight = fillWindow ? 1 : app.getHeight();
@@ -240,25 +238,59 @@ public final class WebAppWriter {
                 </head>
                 <body>
                     <canvas id="%s" width="%d" height="%d"%s></canvas>
-                    <script type="text/javascript" src="scripts/fdx-loader.js"></script>
+                    <script id="libfdx-bootstrap-data" type="application/json">%s</script>
+                    %s
                 </body>
                 </html>
-                """.formatted(escapedTitle, canvasSizeCss, escapedCanvas, canvasWidth, canvasHeight, fillWindowAttribute)
+                """.formatted(escapedTitle, canvasSizeCss, escapedCanvas, canvasWidth, canvasHeight, fillWindowAttribute,
+                        bootstrapData(assets, compilerIdentity), applicationScripts(app))
                 .trim() + "\n";
     }
 
-    private static void writeFdxLoader(Path root, WebApp app, List<WebAsset> assets) throws IOException {
-        Path scriptsRoot = root.resolve("scripts").toAbsolutePath().normalize();
-        Files.createDirectories(scriptsRoot);
-        long runtimeCoreScriptSize = publishedFileSize(scriptsRoot.resolve("fdx.js"));
-        long runtimeCoreWasmSize = publishedFileSize(scriptsRoot.resolve("fdx.wasm"));
-        Files.writeString(scriptsRoot.resolve("fdx-loader.js"),
-                fdxLoaderJs(app, assets, runtimeCoreScriptSize, runtimeCoreWasmSize,
-                        shaderCompilerIdentity(scriptsRoot)), StandardCharsets.UTF_8);
+    private static String applicationScripts(WebApp app) {
+        String target = app.getTargetFileName();
+        String entry = "[\"" + inlineJs(app.getEntryPointName()) + "\"]";
+        String args = "[" + app.getMainClassArgs().replace("</", "<\\/") + "]";
+        String start = app.isWasm()
+                ? "return TeaVM.wasmGC.load(\"" + inlineJs(target) + "\").then(function(app) { return app.exports"
+                        + entry + "(" + args + "); });"
+                : "return window" + entry + "(" + args + ");";
+        return """
+                <script>
+                function libfdxStartupError(error) {
+                    var message = error && error.stack || String(error);
+                    console.error(message);
+                    var output = document.getElementById('libfdx-error');
+                    if (output) return;
+                    output = document.createElement('pre');
+                    output.id = 'libfdx-error';
+                    document.body.appendChild(output);
+                    output.textContent = 'libfdx startup/runtime failed\\n' + message;
+                }
+                window.addEventListener('error', function(event) { libfdxStartupError(event.error || event.message); });
+                window.addEventListener('unhandledrejection', function(event) { libfdxStartupError(event.reason); });
+                window.addEventListener('load', function() {
+                    Promise.resolve().then(function() { %s }).catch(libfdxStartupError);
+                });
+                </script>
+                <script defer src="%s" onerror="libfdxStartupError('Application script failed to load')"></script>
+                """.formatted(start, html(target + (app.isWasm() ? "-runtime.js" : ""))).trim();
     }
 
-    private static long publishedFileSize(Path path) throws IOException {
-        return Files.isRegularFile(path) ? Files.size(path) : 0L;
+    private static String bootstrapData(List<WebAsset> assets, String compilerIdentity) {
+        StringBuilder data = new StringBuilder("{\"runtimeBase\":\"scripts/\",\"shaderCompilerIdentity\":\"")
+                .append(inlineJs(compilerIdentity)).append("\",\"assets\":[");
+        for (int index = 0; index < assets.size(); index++) {
+            if (index > 0) data.append(',');
+            WebAsset asset = assets.get(index);
+            data.append("{\"path\":\"").append(inlineJs(asset.getPath())).append("\",\"size\":")
+                    .append(asset.getSize()).append('}');
+        }
+        return data.append("]}").toString();
+    }
+
+    private static String inlineJs(String value) {
+        return js(value).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026");
     }
 
     private static String shaderCompilerIdentity(Path scriptsRoot) throws IOException {
@@ -277,609 +309,6 @@ public final class WebAppWriter {
             }
             return identity.toString();
         } catch (NoSuchAlgorithmException error) { throw new IOException("SHA-256 unavailable", error); }
-    }
-
-    private static String fdxLoaderJs(WebApp app, List<WebAsset> assets, long runtimeCoreScriptSize,
-            long runtimeCoreWasmSize, String shaderCompilerIdentity) {
-        String source = """
-                (function(root) {
-                    "use strict";
-
-                    var config = {
-                        wasm: __WASM__,
-                        targetFileName: "__TARGET_FILE_NAME__",
-                        entryPointName: "__ENTRY_POINT_NAME__",
-                        mainClassArgs: [__MAIN_CLASS_ARGS__],
-                        assetCount: __ASSET_COUNT__,
-                        preloadLogoPath: "__PRELOAD_LOGO_PATH__",
-                        runtimeCoreScriptSize: __RUNTIME_CORE_SCRIPT_SIZE__,
-                        runtimeCoreWasmSize: __RUNTIME_CORE_WASM_SIZE__
-                    };
-                    root.libfdxPublishedAssets = [__PUBLISHED_ASSETS__];
-                    root.libfdxShaderCompilerIdentity = "__SHADER_COMPILER_IDENTITY__";
-                    var modulePromise = null;
-                    var runtimeWasmPromise = null;
-                    var loadedScripts = {};
-                    var scriptUrl = (document.currentScript && document.currentScript.src) || "scripts/fdx-loader.js";
-                    var pageUrl = document.baseURI || window.location.href;
-                    var runtimePreload = {
-                        script: { size: config.runtimeCoreScriptSize, loadedBytes: 0, complete: false },
-                        wasm: { size: config.runtimeCoreWasmSize, loadedBytes: 0, complete: false }
-                    };
-                    root.libfdxRuntimePreload = runtimePreload;
-
-                    function loaderBaseUrl(path) {
-                        return new URL(path, scriptUrl).href;
-                    }
-
-                    function pageBaseUrl(path) {
-                        return new URL(path, pageUrl).href;
-                    }
-
-                    function normalizeAssetPath(path) {
-                        path = (path || "").replace(/\\\\/g, "/");
-                        while (path.indexOf("./") === 0) path = path.substring(2);
-                        while (path.indexOf("/") === 0) path = path.substring(1);
-                        if (path.indexOf("assets/") === 0) path = path.substring(7);
-                        return path;
-                    }
-
-                    function loadImage(buffer) {
-                        var blob = new Blob([buffer]);
-                        if (root.createImageBitmap) {
-                            return root.createImageBitmap(blob);
-                        }
-                        return new Promise(function(resolve, reject) {
-                            var image = new Image();
-                            var url = URL.createObjectURL(blob);
-                            image.onload = function() {
-                                URL.revokeObjectURL(url);
-                                resolve(image);
-                            };
-                            image.onerror = function(error) {
-                                URL.revokeObjectURL(url);
-                                reject(error);
-                            };
-                            image.src = url;
-                        });
-                    }
-
-                    function decodeBootstrapImage(path, buffer) {
-                        return loadImage(buffer).then(function(image) {
-                            var canvas = document.createElement("canvas");
-                            canvas.width = image.width || image.naturalWidth;
-                            canvas.height = image.height || image.naturalHeight;
-                            var context = canvas.getContext("2d");
-                            context.drawImage(image, 0, 0);
-                            if (typeof image.close === "function") image.close();
-                            var rgba = context.getImageData(0, 0, canvas.width, canvas.height).data;
-                            var copy = new Uint8Array(rgba.length);
-                            copy.set(rgba);
-                            root.libfdxImageData = root.libfdxImageData || Object.create(null);
-                            root.libfdxImageData[path] = { width: canvas.width, height: canvas.height, rgba: copy };
-                            root.libfdxImageData["assets/" + path] = root.libfdxImageData[path];
-                        });
-                    }
-
-                    function preloadBootstrapLogo() {
-                        var path = normalizeAssetPath(config.preloadLogoPath);
-                        if (!path) {
-                            return Promise.resolve();
-                        }
-                        root.libfdxAssets = root.libfdxAssets || Object.create(null);
-                        var existing = root.libfdxAssets[path] || root.libfdxAssets["assets/" + path];
-                        if (existing && root.libfdxImageData && root.libfdxImageData[path]) {
-                            return Promise.resolve();
-                        }
-                        return fetch(pageBaseUrl("assets/" + path)).then(function(response) {
-                            if (!response.ok) {
-                                throw new Error("Could not preload bootstrap image " + path + ": " + response.status);
-                            }
-                            return response.arrayBuffer();
-                        }).then(function(buffer) {
-                            root.libfdxAssets[path] = buffer;
-                            root.libfdxAssets["assets/" + path] = buffer;
-                            return decodeBootstrapImage(path, buffer);
-                        });
-                    }
-
-                    function updateRuntimeBytes(entry, loadedBytes) {
-                        var next = Math.max(entry.loadedBytes, Math.min(entry.size, loadedBytes));
-                        entry.loadedBytes = next;
-                    }
-
-                    function completeRuntimeFile(entry) {
-                        updateRuntimeBytes(entry, entry.size);
-                        if (entry.complete) {
-                            return;
-                        }
-                        entry.complete = true;
-                    }
-
-                    function fetchRuntimeWasm() {
-                        var entry = runtimePreload.wasm;
-                        var url = loaderBaseUrl("fdx.wasm");
-                        return fetch(url).then(function(response) {
-                            if (!response.ok) {
-                                throw new Error("Could not preload runtime module " + url + ": " + response.status);
-                            }
-                            if (!response.body || typeof response.body.getReader !== "function") {
-                                return response.arrayBuffer().then(function(buffer) {
-                                    updateRuntimeBytes(entry, buffer.byteLength);
-                                    completeRuntimeFile(entry);
-                                    return new Uint8Array(buffer);
-                                });
-                            }
-                            var reader = response.body.getReader();
-                            var chunks = [];
-                            var received = 0;
-                            function read() {
-                                return reader.read().then(function(result) {
-                                    if (result.done) {
-                                        var bytes = new Uint8Array(received);
-                                        var offset = 0;
-                                        for (var i = 0; i < chunks.length; i++) {
-                                            bytes.set(chunks[i], offset);
-                                            offset += chunks[i].byteLength;
-                                        }
-                                        completeRuntimeFile(entry);
-                                        return bytes;
-                                    }
-                                    chunks.push(result.value);
-                                    received += result.value.byteLength;
-                                    updateRuntimeBytes(entry, received);
-                                    return read();
-                                });
-                            }
-                            return read();
-                        });
-                    }
-
-                    function loadRuntimeWasm() {
-                        if (!runtimeWasmPromise) {
-                            runtimeWasmPromise = runtimePreload.wasm.size > 0
-                                    ? fetchRuntimeWasm()
-                                    : Promise.resolve(null);
-                        }
-                        return runtimeWasmPromise;
-                    }
-
-                    function loadScript(url) {
-                        if (loadedScripts[url]) {
-                            return loadedScripts[url];
-                        }
-                        loadedScripts[url] = new Promise(function(resolve, reject) {
-                            var script = document.createElement("script");
-                            script.type = "text/javascript";
-                            script.src = url;
-                            script.onload = resolve;
-                            script.onerror = function() {
-                                reject(new Error("Could not load script: " + url));
-                            };
-                            document.head.appendChild(script);
-                        });
-                        return loadedScripts[url];
-                    }
-
-                    function javaArrayLength(source) {
-                        if (!source) return 0;
-                        if (typeof source.length === "number") return source.length;
-                        if (source.data && typeof source.data.length === "number") return source.data.length;
-                        if (source.$data && typeof source.$data.length === "number") return source.$data.length;
-                        return 0;
-                    }
-
-                    function copyJavaArray(source, ctor) {
-                        var length = javaArrayLength(source);
-                        var target = new ctor(length);
-                        if (!source || length === 0) return target;
-                        var data = source.data || source.$data || source;
-                        if (ArrayBuffer.isView(data)) {
-                            target.set(new ctor(data.buffer, data.byteOffset, Math.min(length, data.length)));
-                            return target;
-                        }
-                        for (var i = 0; i < length; i++) {
-                            target[i] = data[i];
-                        }
-                        return target;
-                    }
-
-                    function base64(bytes) {
-                        var binary = "";
-                        for (var i = 0; i < bytes.length; i++) {
-                            binary += String.fromCharCode(bytes[i]);
-                        }
-                        return btoa(binary);
-                    }
-
-                    function writeInt(bytes, value) {
-                        bytes.push(value & 255);
-                        bytes.push((value >> 8) & 255);
-                        bytes.push((value >> 16) & 255);
-                        bytes.push((value >> 24) & 255);
-                    }
-
-                    function utf8Bytes(text) {
-                        return new TextEncoder().encode(text || "");
-                    }
-
-                    function wire(status, kind, output, diagnostics, reflection, targetInterface) {
-                        var out = output || new Uint8Array(0);
-                        var diag = utf8Bytes(diagnostics || "");
-                        var reflected = reflection || new Uint8Array(0);
-                        var translated = targetInterface || new Uint8Array(0);
-                        var bytes = [70, 68, 88, 82];
-                        writeInt(bytes, 2);
-                        writeInt(bytes, status);
-                        writeInt(bytes, kind);
-                        writeInt(bytes, out.length);
-                        writeInt(bytes, diag.length);
-                        writeInt(bytes, reflected.length);
-                        writeInt(bytes, translated.length);
-                        for (var i = 0; i < out.length; i++) {
-                            bytes.push(out[i]);
-                        }
-                        for (var j = 0; j < diag.length; j++) {
-                            bytes.push(diag[j]);
-                        }
-                        for (var k = 0; k < reflected.length; k++) {
-                            bytes.push(reflected[k]);
-                        }
-                        for (var m = 0; m < translated.length; m++) {
-                            bytes.push(translated[m]);
-                        }
-                        return base64(bytes);
-                    }
-
-                    function showError(prefix, error) {
-                        var details = prefix + "\\n";
-                        if (error) {
-                            var message = error.message || String(error);
-                            var stack = error.stack || "";
-                            details += message;
-                            if (stack && stack.indexOf(message) < 0) {
-                                details += "\\n" + stack;
-                            }
-                            else if (stack) {
-                                details += "\\n" + stack;
-                            }
-                        }
-                        else {
-                            details += "Unknown error";
-                        }
-                        console.error(details);
-                        var existing = document.getElementById("libfdx-error");
-                        var output = existing || document.createElement("pre");
-                        output.id = "libfdx-error";
-                        output.textContent = details;
-                        if (!existing) document.body.appendChild(output);
-                    }
-
-                    function installShaderCompiler(module) {
-                        if (root.libfdxShaderCompileBase64) {
-                            return;
-                        }
-                        if (typeof module.cwrap !== "function"
-                                || typeof module.lengthBytesUTF8 !== "function"
-                                || typeof module.stringToUTF8 !== "function"
-                                || typeof module.UTF8ToString !== "function") {
-                            return;
-                        }
-
-                        var compile;
-                        var status;
-                        var kind;
-                        var output;
-                        var size;
-                        var diagnostics;
-                        var reflection;
-                        var reflectionSize;
-                        var targetInterface;
-                        var targetInterfaceSize;
-                        var freeResult;
-                        try {
-                            compile = module.cwrap("fdx_shaderc_compile_wgsl_handle", "number",
-                                    ["number", "number", "number", "number", "number", "number", "number"]);
-                            status = module.cwrap("fdx_shaderc_result_status", "number", ["number"]);
-                            kind = module.cwrap("fdx_shaderc_result_output_kind", "number", ["number"]);
-                            output = module.cwrap("fdx_shaderc_result_output", "number", ["number"]);
-                            size = module.cwrap("fdx_shaderc_result_output_size", "number", ["number"]);
-                            diagnostics = module.cwrap("fdx_shaderc_result_diagnostics", "number", ["number"]);
-                            reflection = module.cwrap("fdx_shaderc_result_reflection", "number", ["number"]);
-                            reflectionSize = module.cwrap("fdx_shaderc_result_reflection_size", "number", ["number"]);
-                            targetInterface = module.cwrap(
-                                    "fdx_shaderc_result_target_interface", "number", ["number"]);
-                            targetInterfaceSize = module.cwrap(
-                                    "fdx_shaderc_result_target_interface_size", "number", ["number"]);
-                            freeResult = module.cwrap("fdx_shaderc_result_free", null, ["number"]);
-                        } catch (ignored) {
-                            return;
-                        }
-
-                        root.libfdxShaderCompileBase64 = function(source, target, stage, entryPoint, glslProfile, glslEsProfile) {
-                            var sourceSize = module.lengthBytesUTF8(source);
-                            var entrySize = module.lengthBytesUTF8(entryPoint);
-                            var glslSize = module.lengthBytesUTF8(glslProfile);
-                            var glslEsSize = module.lengthBytesUTF8(glslEsProfile);
-                            var sourcePtr = module._malloc(sourceSize + 1);
-                            var entryPtr = module._malloc(entrySize + 1);
-                            var glslPtr = module._malloc(glslSize + 1);
-                            var glslEsPtr = module._malloc(glslEsSize + 1);
-                            var handle = 0;
-                            try {
-                                module.stringToUTF8(source, sourcePtr, sourceSize + 1);
-                                module.stringToUTF8(entryPoint, entryPtr, entrySize + 1);
-                                module.stringToUTF8(glslProfile, glslPtr, glslSize + 1);
-                                module.stringToUTF8(glslEsProfile, glslEsPtr, glslEsSize + 1);
-                                handle = compile(sourcePtr, sourceSize, target, stage, entryPtr, glslPtr, glslEsPtr);
-                                if (!handle) {
-                                    throw new Error("Native shader compiler returned no result handle");
-                                }
-                                var resultStatus = status(handle);
-                                var resultKind = kind(handle);
-                                var resultSize = size(handle);
-                                if (resultSize < 0) {
-                                    throw new Error("Native shader compiler returned a negative output size");
-                                }
-                                var resultOutput = new Uint8Array(0);
-                                if (resultSize > 0) {
-                                    var outputPtr = output(handle);
-                                    if (!outputPtr) {
-                                        throw new Error("Native shader compiler returned a null output pointer");
-                                    }
-                                    resultOutput = module.HEAPU8.slice(outputPtr, outputPtr + resultSize);
-                                }
-                                var diagnosticPtr = diagnostics(handle);
-                                var diagnosticText = diagnosticPtr ? module.UTF8ToString(diagnosticPtr) : "";
-                                var reflectedSize = reflectionSize(handle);
-                                if (reflectedSize < 0) {
-                                    throw new Error("Native shader compiler returned a negative reflection size");
-                                }
-                                var resultReflection = new Uint8Array(0);
-                                if (reflectedSize > 0) {
-                                    var reflectionPtr = reflection(handle);
-                                    if (!reflectionPtr) {
-                                        throw new Error("Native shader compiler returned a null reflection pointer");
-                                    }
-                                    resultReflection = module.HEAPU8.slice(
-                                            reflectionPtr, reflectionPtr + reflectedSize);
-                                }
-                                var translatedSize = targetInterfaceSize(handle);
-                                if (translatedSize < 0) {
-                                    throw new Error("Native shader compiler returned a negative target-interface size");
-                                }
-                                var resultTargetInterface = new Uint8Array(0);
-                                if (translatedSize > 0) {
-                                    var targetInterfacePtr = targetInterface(handle);
-                                    if (!targetInterfacePtr) {
-                                        throw new Error(
-                                                "Native shader compiler returned a null target-interface pointer");
-                                    }
-                                    resultTargetInterface = module.HEAPU8.slice(
-                                            targetInterfacePtr, targetInterfacePtr + translatedSize);
-                                }
-                                return wire(resultStatus, resultKind, resultOutput, diagnosticText,
-                                        resultReflection, resultTargetInterface);
-                            } finally {
-                                if (handle) {
-                                    freeResult(handle);
-                                }
-                                module._free(sourcePtr);
-                                module._free(entryPtr);
-                                module._free(glslPtr);
-                                module._free(glslEsPtr);
-                            }
-                        };
-                    }
-
-                    function ensureModule() {
-                        if (root.libfdxCoreModule) {
-                            return Promise.resolve(root.libfdxCoreModule);
-                        }
-                        if (modulePromise) {
-                            return modulePromise;
-                        }
-                        if (typeof root.FdxModule !== "function") {
-                            return Promise.reject(new Error("libfdx core Emscripten module script was not loaded"));
-                        }
-                        modulePromise = loadRuntimeWasm().then(function(bytes) {
-                            if (!bytes) {
-                                return root.FdxModule({
-                                    locateFile: function(path) {
-                                        return path === "fdx.wasm" ? loaderBaseUrl(path) : path;
-                                    }
-                                });
-                            }
-                            return new Promise(function(resolve, reject) {
-                                var factory;
-                                try {
-                                    factory = root.FdxModule({
-                                        instantiateWasm: function(imports, success) {
-                                            WebAssembly.instantiate(bytes, imports).then(function(result) {
-                                                try {
-                                                    success(result.instance);
-                                                } catch (error) {
-                                                    reject(error);
-                                                }
-                                            }, reject);
-                                            return {};
-                                        }
-                                    });
-                                } catch (error) {
-                                    reject(error);
-                                    return;
-                                }
-                                Promise.resolve(factory).then(resolve, reject);
-                            });
-                        }).then(function(module) {
-                            installShaderCompiler(module);
-                            root.libfdxCoreModule = module;
-                            return module;
-                        });
-                        return modulePromise;
-                    }
-
-                    function loadRuntimeCore() {
-                        var scriptPromise = loadScript(loaderBaseUrl("fdx.js")).then(function() {
-                            completeRuntimeFile(runtimePreload.script);
-                        });
-                        return Promise.all([scriptPromise, loadRuntimeWasm()]).then(ensureModule);
-                    }
-
-                    function rasterize(fontBytes, codePoints, pixelSize, padding, atlasWidth) {
-                        var module = root.libfdxCoreModule;
-                        if (!module) {
-                            throw new Error("libfdx FreeType Emscripten module is not ready");
-                        }
-
-                        var font = copyJavaArray(fontBytes, Int8Array);
-                        var points = copyJavaArray(codePoints, Int32Array);
-                        var fontPtr = 0;
-                        var codePointPtr = 0;
-                        var metricIntsPtr = 0;
-                        var metricFloatsPtr = 0;
-                        var rgbaPtr = 0;
-                        var glyphIntsPtr = 0;
-                        var glyphFloatsPtr = 0;
-                        var kerningIntsPtr = 0;
-
-                        try {
-                            fontPtr = module._malloc(Math.max(1, font.byteLength));
-                            codePointPtr = module._malloc(Math.max(1, points.byteLength));
-                            metricIntsPtr = module._malloc(16);
-                            metricFloatsPtr = module._malloc(12);
-                            module.HEAP8.set(font, fontPtr);
-                            module.HEAP32.set(points, codePointPtr >> 2);
-
-                            var measured = module._fdx_freetype_rasterize(fontPtr, font.byteLength, codePointPtr, points.length,
-                                    pixelSize, padding, atlasWidth, metricIntsPtr, metricFloatsPtr, 0, 0, 0, 0, 0, 0, 0, 0);
-                            if (!measured) {
-                                throw new Error("FreeType failed to measure native web font");
-                            }
-
-                            var metricInts = new Int32Array(module.HEAP32.buffer, metricIntsPtr, 4);
-                            var metricFloats = new Float32Array(module.HEAPF32.buffer, metricFloatsPtr, 3);
-                            var width = metricInts[0];
-                            var height = metricInts[1];
-                            var glyphCount = metricInts[2];
-                            var kerningCount = metricInts[3];
-                            if (width <= 0 || height <= 0 || glyphCount < 0 || kerningCount < 0) {
-                                throw new Error("FreeType returned invalid native web font metrics");
-                            }
-
-                            var rgbaSize = width * height * 4;
-                            rgbaPtr = module._malloc(Math.max(1, rgbaSize));
-                            glyphIntsPtr = module._malloc(Math.max(1, glyphCount * 5 * 4));
-                            glyphFloatsPtr = module._malloc(Math.max(1, glyphCount * 3 * 4));
-                            kerningIntsPtr = module._malloc(Math.max(1, kerningCount * 3 * 4));
-
-                            var rasterized = module._fdx_freetype_rasterize(fontPtr, font.byteLength, codePointPtr, points.length,
-                                    pixelSize, padding, atlasWidth, metricIntsPtr, metricFloatsPtr, rgbaPtr, rgbaSize,
-                                    glyphIntsPtr, glyphCount * 5, glyphFloatsPtr, glyphCount * 3, kerningIntsPtr, kerningCount * 3);
-                            if (!rasterized) {
-                                throw new Error("FreeType failed to rasterize native web font");
-                            }
-
-                            return {
-                                nativeSize: metricFloats[0],
-                                lineHeight: metricFloats[1],
-                                baseLine: metricFloats[2],
-                                atlasWidth: width,
-                                atlasHeight: height,
-                                glyphCount: glyphCount,
-                                kerningCount: kerningCount,
-                                rgba: new Int8Array(module.HEAPU8.slice(rgbaPtr, rgbaPtr + rgbaSize).buffer),
-                                glyphInts: new Int32Array(module.HEAP32.slice(glyphIntsPtr >> 2, (glyphIntsPtr >> 2) + glyphCount * 5).buffer),
-                                glyphFloats: new Float32Array(module.HEAPF32.slice(glyphFloatsPtr >> 2, (glyphFloatsPtr >> 2) + glyphCount * 3).buffer),
-                                kerningInts: new Int32Array(module.HEAP32.slice(kerningIntsPtr >> 2, (kerningIntsPtr >> 2) + kerningCount * 3).buffer)
-                            };
-                        } finally {
-                            if (kerningIntsPtr) module._free(kerningIntsPtr);
-                            if (glyphFloatsPtr) module._free(glyphFloatsPtr);
-                            if (glyphIntsPtr) module._free(glyphIntsPtr);
-                            if (rgbaPtr) module._free(rgbaPtr);
-                            if (metricFloatsPtr) module._free(metricFloatsPtr);
-                            if (metricIntsPtr) module._free(metricIntsPtr);
-                            if (codePointPtr) module._free(codePointPtr);
-                            if (fontPtr) module._free(fontPtr);
-                        }
-                    }
-
-                    function prepareTeaVmApp() {
-                        if (config.wasm) {
-                            return loadScript(pageBaseUrl(config.targetFileName + "-runtime.js")).then(function() {
-                                return TeaVM.wasmGC.load(pageBaseUrl(config.targetFileName)).then(function(teavm) {
-                                    return function() {
-                                        var entry = teavm.exports[config.entryPointName];
-                                        if (typeof entry !== "function") {
-                                            throw new Error("TeaVM Wasm entry point was not found: "
-                                                    + config.entryPointName);
-                                        }
-                                        return entry(config.mainClassArgs);
-                                    };
-                                });
-                            });
-                        }
-                        return loadScript(pageBaseUrl(config.targetFileName)).then(function() {
-                            return function() {
-                                var entry = root[config.entryPointName];
-                                if (typeof entry !== "function") {
-                                    throw new Error("TeaVM JavaScript entry point was not found: "
-                                            + config.entryPointName);
-                                }
-                                return entry(config.mainClassArgs);
-                            };
-                        });
-                    }
-
-                    function start() {
-                        var assetBase = pageBaseUrl("assets/");
-                        console.log("%clibfdx assets: " + assetBase + " (" + config.assetCount + " files)", "color:#d50000;font-weight:bold");
-                        return Promise.all([preloadBootstrapLogo(), loadRuntimeCore(), prepareTeaVmApp()])
-                                .then(function(prepared) {
-                                    return prepared[2]();
-                                });
-                    }
-
-                    root.libfdxPreloadRuntimeCore = loadRuntimeCore;
-                    root.libfdxFreeTypeRasterize = rasterize;
-
-                    root.addEventListener("error", function(event) {
-                        showError("libfdx runtime error", event.error || event.message);
-                    });
-                    root.addEventListener("unhandledrejection", function(event) {
-                        showError("libfdx promise rejection", event.reason);
-                    });
-                    root.addEventListener("load", function() {
-                        start().catch(function(error) {
-                            showError("libfdx startup failed", error);
-                            throw error;
-                        });
-                    });
-                })(typeof window !== "undefined" ? window : globalThis);
-                """;
-        return source
-                .replace("__WASM__", Boolean.toString(app.isWasm()))
-                .replace("__TARGET_FILE_NAME__", js(app.getTargetFileName()))
-                .replace("__ENTRY_POINT_NAME__", js(app.getEntryPointName()))
-                .replace("__MAIN_CLASS_ARGS__", app.getMainClassArgs())
-                .replace("__ASSET_COUNT__", Integer.toString(assets.size()))
-                .replace("__PRELOAD_LOGO_PATH__", js(WebAssets.DEFAULT_PRELOAD_LOGO_PATH))
-                .replace("__RUNTIME_CORE_SCRIPT_SIZE__", Long.toString(runtimeCoreScriptSize))
-                .replace("__RUNTIME_CORE_WASM_SIZE__", Long.toString(runtimeCoreWasmSize))
-                .replace("__SHADER_COMPILER_IDENTITY__", js(shaderCompilerIdentity))
-                .replace("__PUBLISHED_ASSETS__", publishedAssetsJs(assets))
-                .trim() + "\n";
-    }
-
-    private static String publishedAssetsJs(List<WebAsset> assets) {
-        StringBuilder entries = new StringBuilder();
-        for (WebAsset asset : assets) {
-            if (!entries.isEmpty()) entries.append(',');
-            entries.append("{path:\"").append(js(asset.getPath())).append("\",size:")
-                    .append(asset.getSize()).append('}');
-        }
-        return entries.toString();
     }
 
     private static void copyRuntimeScripts(Path root, List<Path> runtimeClasspath) throws IOException {
@@ -941,16 +370,13 @@ public final class WebAppWriter {
                     .filter(candidate -> !candidate.isDirectory() && isRuntimeScript(candidate.getName()))
                     .sorted(Comparator.comparing(ZipEntry::getName))
                     .toList();
-            // WASM-bearing JARs identify themselves automatically. A JavaScript-only runtime JAR opts in once at
-            // artifact build time; application users never maintain a list of individual runtime filenames.
-            boolean webRuntimeJar = zip.getEntry(WEB_RUNTIME_MARKER_PATH) != null
-                    || containsPublishableWebAssembly(jarPath, runtimeEntries);
-            if (!webRuntimeJar) {
-                return;
-            }
+            boolean webRuntimeJar = containsPublishableWebAssembly(jarPath, runtimeEntries);
 
             Set<String> archivePaths = new HashSet<>();
             for (ZipEntry entry : runtimeEntries) {
+                if (!webRuntimeJar) {
+                    continue;
+                }
                 String origin = jarPath + "!/" + entry.getName();
                 String resourcePath = normalizeRuntimeScriptPath(entry.getName(), origin);
                 if (!archivePaths.add(resourcePath)) {
@@ -971,7 +397,7 @@ public final class WebAppWriter {
             String origin = jarPath + "!/" + entry.getName();
             String resourcePath = normalizeRuntimeScriptPath(entry.getName(), origin);
             if (!isExcludedRuntimeScript(resourcePath)
-                    && !resourcePath.equalsIgnoreCase(GENERATED_LOADER_PATH)) {
+                    && !resourcePath.equalsIgnoreCase(LEGACY_LOADER_PATH)) {
                 return true;
             }
         }
@@ -986,12 +412,12 @@ public final class WebAppWriter {
         }
 
         String portableKey = resourcePath.toLowerCase(Locale.ROOT);
-        String loaderKey = GENERATED_LOADER_PATH.toLowerCase(Locale.ROOT);
+        String loaderKey = LEGACY_LOADER_PATH.toLowerCase(Locale.ROOT);
         if (portableKey.equals(loaderKey)) {
             return;
         }
         if (portableKey.startsWith(loaderKey + "/")) {
-            throw new IOException("Runtime script path conflicts with generated loader '" + GENERATED_LOADER_PATH
+            throw new IOException("Runtime script path conflicts with legacy loader '" + LEGACY_LOADER_PATH
                     + "': '" + resourcePath + "' from " + candidate.origin());
         }
         String existingPortablePath = portablePaths.get(portableKey);
@@ -1064,6 +490,7 @@ public final class WebAppWriter {
         String firstSegment = separator < 0 ? resourcePath : resourcePath.substring(0, separator);
         return firstSegment.equalsIgnoreCase("META-INF")
                 || firstSegment.equalsIgnoreCase("WEB-INF")
+                || resourcePath.equalsIgnoreCase(WebWorkerSource.RESOURCE)
                 // TeaVM packages compiler inputs as JavaScript resources; they are not webapp runtime scripts.
                 || resourcePath.regionMatches(true, 0, TEAVM_INTERNAL_RESOURCE_PREFIX, 0,
                         TEAVM_INTERNAL_RESOURCE_PREFIX.length());

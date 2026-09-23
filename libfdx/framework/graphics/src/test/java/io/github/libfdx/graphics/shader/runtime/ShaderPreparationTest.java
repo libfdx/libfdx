@@ -813,6 +813,46 @@ class ShaderPreparationTest {
         assertSame(a.readyPass(), b.readyPass());
     }
 
+    @Test void elapsedBudgetBoundsSubmissionsAndRotatesPastSlowPendingOperations() {
+        long[] now = {0};
+        Fixture f = new Fixture(4, 8, 16, () -> now[0]);
+        f.onStart = () -> now[0] += 2;
+        var first = f.service.request(f, request("first"));
+        var second = f.service.request(f, request("second"));
+        f.service.update(0);
+        assertEquals(0, f.starts);
+        assertThrows(FdxException.class, () -> f.service.update(-1));
+        f.service.update(1);
+        assertEquals(1, f.starts);
+        f.service.update(1);
+        assertEquals(2, f.starts);
+        f.jobs.getFirst().onPoll = () -> now[0] += 2;
+        f.jobs.getLast().done = true;
+        f.service.update(1);
+        assertEquals(PREPARING, first.state());
+        assertEquals(PREPARING, second.state());
+        f.service.update(1);
+        assertEquals(READY, second.state(), "Slow pending work must not monopolize the budget");
+        f.jobs.getFirst().done = true;
+        f.service.dispose();
+        for (int i = 0; i < 4 && !f.service.disposeAsync().isDone(); i++) f.service.update(1);
+        assertTrue(f.service.disposeAsync().isDone());
+    }
+
+    @Test void elapsedBudgetDefersRemainingScopeCallbacks() {
+        long[] now = {0};
+        Fixture f = new Fixture(4, 8, 16, () -> now[0]);
+        int[] callbacks = {0};
+        for (int i = 0; i < 2; i++) {
+            var scope = f.service.createScope("empty-" + i);
+            f.service.prepareAsync(scope.seal()).onSuccess(report -> { callbacks[0]++; now[0] += 2; });
+        }
+        f.service.updateLoading(1);
+        assertEquals(1, callbacks[0]);
+        f.service.updateLoading(1);
+        assertEquals(2, callbacks[0]);
+    }
+
     private static ShaderRequest request(String variant) {
         return ShaderRequest.builder(ShaderPassId.FORWARD)
                 .renderPass(RenderPassCompatibility.layout(TARGET)).variantKey(variant).build();
@@ -829,8 +869,12 @@ class ShaderPreparationTest {
         long revision;
         int starts;
         boolean failStart, instrument;
+        Runnable onStart;
 
         Fixture(int inFlight, int publications, int idle) {
+            this(inFlight, publications, idle, System::nanoTime);
+        }
+        Fixture(int inFlight, int publications, int idle, java.util.function.LongSupplier clock) {
             device = (GraphicsDevice) Proxy.newProxyInstance(GraphicsDevice.class.getClassLoader(),
                     new Class<?>[] {GraphicsDevice.class}, (proxy, method, args) -> switch (method.getName()) {
                         case "resourceDomain" -> domain;
@@ -838,7 +882,7 @@ class ShaderPreparationTest {
                         case "shaderPreparationCapabilities" -> capabilities;
                         default -> throw new AssertionError("Unexpected device call: " + method);
                     });
-            service = new ShaderPreparation(device, new ShaderPreparationOptions(inFlight, publications, idle));
+            service = new ShaderPreparation(device, new ShaderPreparationOptions(inFlight, publications, idle), clock);
         }
         @Override public GraphicsDevice preparationDevice() { return device; }
         @Override public boolean supports(ShaderRequest request) { return true; }
@@ -848,6 +892,7 @@ class ShaderPreparationTest {
         }
         @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
             starts++;
+            if (onStart != null) onStart.run();
             if (failStart) throw new FdxException("submission failed");
             Job job = new Job(request, revision);
             if (instrument) job.trace = new ShaderPreparationTrace();
@@ -863,11 +908,12 @@ class ShaderPreparationTest {
         ShaderPreparationTrace trace;
         @Override public ShaderPreparationTrace trace() { return trace; }
         boolean done, failDispose;
+        Runnable onPoll;
         RuntimeException failure;
         int cancels, disposals, released, finishes, loadingAdvances;
 
         Job(ShaderRequest request, long revision) { this.request = request; this.revision = revision; }
-        @Override public boolean isDone() { return done; }
+        @Override public boolean isDone() { if (onPoll != null) onPoll.run(); return done; }
         @Override public void advanceLoading() { loadingAdvances++; }
         @Override public ShaderPreparationPhase phase() { return ShaderPreparationPhase.COMPILATION; }
         @Override public ShaderPreparedResult finish() {

@@ -21,6 +21,9 @@ import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphRenderTechniqueP
 import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphRenderVariant;
 import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphRuntimeGraph;
 import io.github.libfdx.math.ClipDepthRange;
+import io.github.libfdx.core.FdxFuture;
+import io.github.libfdx.graphics.shader.internal.ShaderCompilationTasks;
+import java.util.function.Consumer;
 
 /**
  * Framework-owned graph-composed PBR technique for ModelBatch's common
@@ -64,6 +67,12 @@ public final class StandardPbrTechnique {
     private StandardPbrTechnique(GraphicsContext graphics, ShaderGraph surfaceGraph,
             ShaderGraph vertexGraph, ShaderGraph lightingGraph,
             ShaderGraphRuntimeGraph surfaceCompilation, boolean prepareSources) {
+        this(graphics, surfaceGraph, vertexGraph, lightingGraph, surfaceCompilation, prepareSources, null);
+    }
+
+    private StandardPbrTechnique(GraphicsContext graphics, ShaderGraph surfaceGraph,
+            ShaderGraph vertexGraph, ShaderGraph lightingGraph,
+            ShaderGraphRuntimeGraph surfaceCompilation, boolean prepareSources, StandardPbrSourcePreparer preparer) {
         if (graphics == null || surfaceGraph == null
                 || vertexGraph == null || lightingGraph == null) {
             throw new FdxException(
@@ -78,7 +87,7 @@ public final class StandardPbrTechnique {
                 || graphics.device().capabilities().supports(
                         GraphicsFeature.COMPLETE_RENDER_PIPELINE_STATE);
         GraphicsCapabilities capabilities = graphics.device().capabilities();
-        deferred = prepareSources ? new DeferredCustomization(capabilities, surfaceGraph, vertexGraph, lightingGraph) : null;
+        deferred = prepareSources ? new DeferredCustomization(capabilities, surfaceGraph, vertexGraph, lightingGraph, preparer) : null;
         customization = prepareSources ? null : compileCustomization(capabilities, surfaceGraph, vertexGraph, lightingGraph, surfaceCompilation);
         ShaderGraphRenderTechniquePass[] passes =
                 new ShaderGraphRenderTechniquePass[
@@ -128,8 +137,11 @@ public final class StandardPbrTechnique {
     /** Creates standard source definitions without compiling graphs, generating WGSL or creating
      * native modules. Source generation runs inside the provider's preparation operation. */
     static ShaderGraphRenderTechnique preparationTechnique(GraphicsContext graphics) {
+        return preparationTechnique(graphics, null);
+    }
+    static ShaderGraphRenderTechnique preparationTechnique(GraphicsContext graphics, StandardPbrSourcePreparer preparer) {
         return new StandardPbrTechnique(graphics, StandardPbrSurfaceGraph.create(), StandardPbrVertexGraph.create(),
-                StandardPbrLightingGraph.create(), null, true).technique();
+                StandardPbrLightingGraph.create(), null, true, preparer).technique();
     }
 
     private ShaderModuleSource source(boolean skinned, boolean alphaTest, boolean textured) {
@@ -142,18 +154,35 @@ public final class StandardPbrTechnique {
         final ShaderGraph surface, vertex, lighting;
         final ShaderModuleSource[] sources = new ShaderModuleSource[8];
         volatile PbrGraphCustomization ready;
-        DeferredCustomization(GraphicsCapabilities capabilities, ShaderGraph surface, ShaderGraph vertex, ShaderGraph lighting) {
+        final StandardPbrSourcePreparer preparer;
+        DeferredCustomization(GraphicsCapabilities capabilities, ShaderGraph surface, ShaderGraph vertex, ShaderGraph lighting,
+                StandardPbrSourcePreparer preparer) {
             this.capabilities = capabilities; this.surface = surface; this.vertex = vertex; this.lighting = lighting;
+            this.preparer = preparer;
             for (int i = 0; i < sources.length; i++) {
                 final int variant = i;
                 sources[i] = ShaderModuleSource.deferred("vertexMain", "fragmentMain",
-                        () -> generate().shader((variant & 1) != 0, (variant & 2) != 0, (variant & 4) != 0));
+                        () -> generate().shader((variant & 1) != 0, (variant & 2) != 0, (variant & 4) != 0),
+                        execute -> ShaderCompilationTasks.then(generateAsync(execute), execute,
+                                value -> FdxFuture.completed(value.shader((variant & 1) != 0, (variant & 2) != 0, (variant & 4) != 0))));
             }
         }
         // Only CPU preparation workers call this monitor. Owner-thread default lookup never waits.
         synchronized PbrGraphCustomization generate() {
             if (ready == null) ready = compileCustomization(capabilities, surface, vertex, lighting, null);
             return ready;
+        }
+        synchronized FdxFuture<PbrGraphCustomization> generateAsync(Consumer<Runnable> execute) {
+            if (ready != null) return FdxFuture.completed(ready);
+            if (preparer == null) return ShaderCompilationTasks.submit(execute, this::generate);
+            // Each caller gets its own restore continuation. Never tie shared work to the first
+            // scope's executor: that scope can be paused or cancelled while another remains live.
+            ShaderProfile profile = profile(capabilities);
+            return ShaderCompilationTasks.then(preparer.prepare(profile, execute), execute, result -> {
+                if (result.profile() != profile) throw new FdxException("PBR worker returned a different profile");
+                synchronized (this) { if (ready == null) ready = result.restore(); }
+                return FdxFuture.completed(ready);
+            });
         }
         GraphMaterial defaults() {
             PbrGraphCustomization value = ready;
@@ -164,13 +193,20 @@ public final class StandardPbrTechnique {
     private static PbrGraphCustomization compileCustomization(GraphicsCapabilities capabilities,
             ShaderGraph surfaceGraph, ShaderGraph vertexGraph, ShaderGraph lightingGraph,
             ShaderGraphRuntimeGraph surfaceCompilation) {
-        ShaderProfile profile = capabilities
+        return compileCustomization(profile(capabilities), capabilities, surfaceGraph, vertexGraph, lightingGraph, surfaceCompilation);
+    }
+    private static ShaderProfile profile(GraphicsCapabilities capabilities) {
+        return capabilities
                 .supports(ShaderProfile.PORTABLE_WEBGPU)
                         ? ShaderProfile.PORTABLE_WEBGPU
                         : capabilities.supports(
                                 ShaderProfile.PORTABLE_WEBGL2)
                                         ? ShaderProfile.PORTABLE_WEBGL2
                                         : ShaderProfile.NATIVE;
+    }
+    static PbrGraphCustomization compileCustomization(ShaderProfile profile, GraphicsCapabilities capabilities,
+            ShaderGraph surfaceGraph, ShaderGraph vertexGraph, ShaderGraph lightingGraph,
+            ShaderGraphRuntimeGraph surfaceCompilation) {
         ShaderGraphCompiler compiler = new ShaderGraphCompiler();
         ShaderGraphCompileOptions options =
                 ShaderGraphCompileOptions.builder()

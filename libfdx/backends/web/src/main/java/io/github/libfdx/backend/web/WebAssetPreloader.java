@@ -49,6 +49,7 @@ public final class WebAssetPreloader {
         if (installed) {
             return;
         }
+        WebRuntimeBootstrap.installMetadata();
         beginInstall();
         // Packaging discovers shared classpath resources after TeaVM compilation.
         // Prefer that complete inventory; custom hosts may still use compile metadata.

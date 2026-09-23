@@ -22,6 +22,9 @@ import java.nio.ByteBuffer;
 public interface GLApi {
     /** Actual bounded CPU workers supplied by this platform adapter; zero means unavailable. */
     default int shaderPreparationWorkers() { return 0; }
+    /** Soft CPU budget per loading advance, checked between source continuations. Zero disables
+     * the time limit. This cannot preempt a generator or bound a native GL call. */
+    default long shaderLoadingBudgetNanos() { return 0; }
     /** Schedules source-only work without running it inline. The task must never call GL.
      * May be called by the owner, compiler workers or storage completion threads, concurrently
      * with closeShaderPreparation(). Saturation/closure must reject, never execute on the caller. */

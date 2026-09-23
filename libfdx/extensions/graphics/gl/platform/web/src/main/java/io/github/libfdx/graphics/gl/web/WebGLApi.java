@@ -31,6 +31,7 @@ import java.nio.ByteBuffer;
  * @author xpenatan
  */
 final class WebGLApi implements GLApi {
+    @Override public long shaderLoadingBudgetNanos() { return 2_000_000L; }
     private Boolean parallelCompilationSupported;
     @Override public boolean supportsParallelShaderCompilation() {
         if (parallelCompilationSupported == null)

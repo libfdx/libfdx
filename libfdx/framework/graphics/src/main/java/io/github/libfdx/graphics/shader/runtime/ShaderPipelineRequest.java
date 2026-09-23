@@ -34,6 +34,9 @@ public final class ShaderPipelineRequest {
 
     /** Invokes source generation on the provider's CPU preparation execution path. */
     public ShaderModuleDescriptor sourceDescriptor() { return source.generate(); }
+    /** Async source preparation; continuations still belong to the provider's executor. */
+    public io.github.libfdx.core.FdxFuture<ShaderModuleDescriptor> sourceDescriptorAsync(
+            java.util.function.Consumer<Runnable> execute) { return source.generateAsync(execute); }
     public RenderPipelineDescriptor pipelineDescriptor(ShaderModule preparedModule) {
         return state.snapshotState().shaderModule(Objects.requireNonNull(preparedModule, "preparedModule"));
     }

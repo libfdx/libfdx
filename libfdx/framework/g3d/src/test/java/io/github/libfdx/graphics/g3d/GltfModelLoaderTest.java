@@ -1,6 +1,7 @@
 package io.github.libfdx.graphics.g3d;
 
 import io.github.libfdx.assets.AssetDescriptor;
+import io.github.libfdx.assets.AssetExecutor;
 import io.github.libfdx.assets.AssetHandle;
 import io.github.libfdx.assets.AssetLoadContext;
 import io.github.libfdx.assets.AssetLoader;
@@ -45,6 +46,157 @@ import static org.junit.jupiter.api.Assertions.*;
 final class GltfModelLoaderTest {
     private static final float EPSILON = 0.0001f;
     private final Matrix4 matrixOut = new Matrix4();
+
+    @Test void multiplePrimitivesYieldBetweenUploadsAndCleanUpCancellationAndFailure() {
+        for (int outcome = 0; outcome < 3; outcome++) {
+            JsonValue root = new JsonReader().parse(skinnedGltf());
+            JsonValue primitives = root.require("meshes").require(0).require("primitives");
+            String primitive = primitives.require(0).toJson();
+            for (int i = 1; i < 6; i++) primitives.add(new JsonReader().parse(primitive));
+            Map<String,FdxFuture<byte[]>> reads = Map.of("many.gltf", FdxFuture.completed(root.toJson().getBytes(StandardCharsets.UTF_8)));
+            FileSystem files = (FileSystem)Proxy.newProxyInstance(FileSystem.class.getClassLoader(), new Class<?>[]{FileSystem.class},
+                    (proxy, method, args) -> file((String)args[0], reads, new HashMap<>()));
+            var graphics = new FakeGraphicsContext();
+            var manager = new DefaultAssetManager(files);
+            G3DAssetLoaders.register(manager, graphics);
+            try {
+                var handle = manager.load(AssetDescriptor.of("many.gltf", Model.class));
+                int previousBuffers = 0;
+                for (int step = 0; step < 1000 && !handle.future().isDone(); step++) {
+                    manager.update(1, Long.MAX_VALUE);
+                    int buffers = graphics.device.buffers.size();
+                    assertTrue(buffers - previousBuffers <= 1, "A finalization step uploaded multiple primitives");
+                    previousBuffers = buffers;
+                    if (buffers == 2 && outcome == 1) manager.unload("many.gltf");
+                    if (buffers == 2 && outcome == 2) graphics.device.failBufferWrite = true;
+                }
+                if (outcome == 0) assertEquals(6, handle.future().get().nodes().get(0).parts().size());
+                else {
+                    assertTrue(handle.future().isFailed());
+                    assertTrue(graphics.device.buffers.stream().allMatch(FakeBuffer::isDisposed));
+                }
+            } finally { manager.dispose(); }
+            assertTrue(graphics.device.buffers.stream().allMatch(FakeBuffer::isDisposed));
+        }
+    }
+
+    @Test void injectedImageAndMipmapJobsGateGpuCreationAndRespectFailureAndCancellation() {
+        for (int outcome = 0; outcome < 3; outcome++) {
+            JsonValue root = new JsonReader().parse(skinnedGltf());
+            root.put("images", JsonValue.array().add(JsonValue.object().put("uri", "data:image/png;base64,AA==")));
+            root.put("samplers", JsonValue.array().add(JsonValue.object().put("minFilter", 9987)));
+            root.put("textures", JsonValue.array().add(JsonValue.object().put("source", 0).put("sampler", 0)));
+            root.put("materials", JsonValue.array().add(JsonValue.object().put("pbrMetallicRoughness",
+                    JsonValue.object().put("baseColorTexture", JsonValue.object().put("index", 0)))));
+            root.require("meshes").require(0).require("primitives").require(0).put("material", 0);
+            Map<String,FdxFuture<byte[]>> reads = Map.of("worker.gltf", FdxFuture.completed(root.toJson().getBytes(StandardCharsets.UTF_8)));
+            FileSystem files = (FileSystem)Proxy.newProxyInstance(FileSystem.class.getClassLoader(),new Class<?>[]{FileSystem.class},
+                    (proxy,method,args) -> file((String)args[0],reads,new HashMap<>()));
+            var manager = new DefaultAssetManager(files);
+            var graphics = new FakeGraphicsContext();
+            FdxFuture<ImageData> decoded = FdxFuture.pending();
+            FdxFuture<ByteBuffer[]> prepared = FdxFuture.pending();
+            int[] calls = {0};
+            G3DAssetLoaders.register(manager, graphics, (path,bytes) -> decoded, (source,width,height,srgb,alpha) -> {
+                calls[0]++; assertEquals(2,width); assertEquals(2,height); assertTrue(srgb); assertFalse(alpha);
+                return prepared;
+            });
+            try {
+                var handle = manager.load(AssetDescriptor.of("worker.gltf",Model.class));
+                manager.update(); assertFalse(handle.future().isDone());
+                ImageData image = new ImageData(2,2,ByteBuffer.allocateDirect(16));
+                decoded.complete(image); manager.update();
+                assertEquals(1,calls[0]); assertEquals(0,graphics.device.texturesCreated);
+                assertTrue(graphics.device.buffers.isEmpty()); assertFalse(handle.future().isDone());
+                if (outcome == 2) manager.dispose();
+                if (outcome == 1) prepared.completeExceptionally(new FdxException("worker rejected image"));
+                else prepared.complete(io.github.libfdx.graphics.TextureMipmaps.rgba8(image.rgba(),2,2,true,false));
+                if (outcome != 2) manager.update();
+                if (outcome == 0) { assertNotNull(handle.future().get()); assertEquals(1,graphics.device.texturesCreated); }
+                else { assertTrue(handle.future().isFailed()); assertEquals(0,graphics.device.texturesCreated); assertTrue(graphics.device.buffers.isEmpty()); }
+            } finally { manager.dispose(); }
+        }
+    }
+
+    @Test void largePrimitiveCompletesThroughBudgetedUpdatesWithoutLosingTriangles() {
+        JsonValue root=new JsonReader().parse(skinnedGltf());
+        int triangles=5000;
+        ByteBuffer indices=ByteBuffer.allocate(triangles*6).order(ByteOrder.LITTLE_ENDIAN);
+        for(int i=0;i<triangles;i++)indices.putShort((short)0).putShort((short)1).putShort((short)2);
+        int buffer=root.require("buffers").arrayValues().size();
+        root.require("buffers").add(JsonValue.object().put("byteLength",indices.capacity())
+                .put("uri","data:application/octet-stream;base64,"+Base64.getEncoder().encodeToString(indices.array())));
+        int view=root.require("bufferViews").arrayValues().size();
+        root.require("bufferViews").add(JsonValue.object().put("buffer",buffer).put("byteLength",indices.capacity()));
+        int accessor=root.require("accessors").arrayValues().size();
+        root.require("accessors").add(JsonValue.object().put("bufferView",view).put("componentType",5123)
+                .put("count",triangles*3).put("type","SCALAR"));
+        root.require("meshes").require(0).require("primitives").require(0).put("indices",accessor);
+        Map<String,FdxFuture<byte[]>> reads=Map.of("large.gltf",FdxFuture.completed(root.toJson().getBytes(StandardCharsets.UTF_8)));
+        Map<String,Integer> counts=new HashMap<>();
+        FileSystem files=(FileSystem)Proxy.newProxyInstance(FileSystem.class.getClassLoader(),new Class<?>[]{FileSystem.class},
+                (proxy,method,args)->file((String)args[0],reads,counts));
+        DefaultAssetManager manager=new DefaultAssetManager(files);
+        G3DAssetLoaders.register(manager,new FakeGraphicsContext());
+        try {
+            AssetHandle<Model> handle=manager.load(AssetDescriptor.of("large.gltf",Model.class));
+            int frames=0;
+            while(!handle.future().isDone() && frames++<1000) {
+                manager.update(1,Long.MAX_VALUE);assertTrue(manager.lastUpdateTaskCount()<=1);
+            }
+            Mesh mesh=handle.future().get().nodes().get(0).parts().get(0).meshPart().mesh();
+            assertEquals(triangles*3,mesh.vertexCount());assertTrue(frames>triangles/256);
+            float[] positions=mesh.sourcePositions();
+            for(int i=9;i<positions.length;i++)assertEquals(positions[i%9],positions[i]);
+        } finally {manager.dispose();}
+    }
+
+    @Test
+    void pendingWorkerPreparationLeavesFrameUpdatesFreeAndUploadsOnOwnerThread() throws Exception {
+        var tasks = new java.util.ArrayDeque<Runnable>();
+        AssetExecutor executor = new AssetExecutor() {
+            private boolean disposed;
+            @Override public boolean submit(Runnable task) { tasks.add(task); return true; }
+            @Override public void dispose() { disposed = true; }
+            @Override public boolean isDisposed() { return disposed; }
+        };
+        Map<String, FdxFuture<byte[]>> reads = Map.of("model.gltf",
+                FdxFuture.completed(skinnedGltf().getBytes(StandardCharsets.UTF_8)));
+        Map<String, Integer> counts = new HashMap<>();
+        FileSystem files = (FileSystem) Proxy.newProxyInstance(FileSystem.class.getClassLoader(),
+                new Class<?>[] {FileSystem.class}, (proxy, method, args) -> file((String) args[0], reads, counts));
+        FakeGraphicsContext graphics = new FakeGraphicsContext();
+        DefaultAssetManager manager = new DefaultAssetManager(files, executor);
+        G3DAssetLoaders.register(manager, graphics);
+        try {
+            AssetHandle<Model> model = manager.load(AssetDescriptor.of("model.gltf", Model.class));
+            manager.update(1, Long.MAX_VALUE);
+            assertFalse(tasks.isEmpty());
+            // Leave the worker stalled: the application must remain free to advance frames.
+            for (int frame = 0; frame < 20; frame++) {
+                assertFalse(manager.update(4, 1_000_000L));
+                assertTrue(graphics.device.buffers.isEmpty());
+            }
+            for (int step = 0; step < 100 && !model.future().isDone(); step++) {
+                Runnable work = tasks.poll();
+                if (work != null) {
+                    Thread worker = new Thread(work, "gltf-test-worker");
+                    worker.start();
+                    worker.join(5000);
+                    assertFalse(worker.isAlive(), "CPU preparation did not return");
+                }
+                manager.update(1, Long.MAX_VALUE);
+            }
+            Model loaded = model.future().get();
+            assertNotNull(loaded);
+            assertFalse(graphics.device.buffers.isEmpty());
+            assertEquals(3, loaded.nodes().get(0).parts().get(0).meshPart().mesh().vertexCount());
+        } finally {
+            manager.dispose();
+            executor.dispose();
+        }
+        assertTrue(graphics.device.buffers.stream().allMatch(FakeBuffer::isDisposed));
+    }
 
     @Test void malformedTextureCoordinateAndTangentAttributesFailBeforeGpuAllocation() {
         for (int invalid = 0; invalid < 4; invalid++) {
@@ -188,6 +340,18 @@ final class GltfModelLoaderTest {
             assertTrue(failed.future().isFailed());
             assertEquals(3, graphics.device.texturesCreated);
             assertEquals(3, graphics.device.texturesDisposed);
+            // Cancel between texture upload and model publication: partial GPU resources are owned.
+            manager.unload("models/A.gltf");
+            graphics.device.failTextureWrite = false;
+            AssetHandle<Model> cancelled = manager.load(AssetDescriptor.of("models/A.gltf", Model.class));
+            for (int step = 0; step < 100 && graphics.device.texturesCreated < 4; step++) {
+                manager.update(1, Long.MAX_VALUE);
+            }
+            assertEquals(4, graphics.device.texturesCreated);
+            assertFalse(cancelled.isLoaded());
+            manager.unload("models/A.gltf");
+            assertTrue(cancelled.future().isFailed());
+            assertEquals(4, graphics.device.texturesDisposed);
         } finally {
             manager.dispose();
         }
@@ -506,11 +670,13 @@ final class GltfModelLoaderTest {
     }
 
     private static final class FakeGraphicsContext implements GraphicsContext {
+        private final Thread applicationThread = Thread.currentThread();
         private static final ProviderId PROVIDER_ID = ProviderId.of("test");
         private final FakeGraphicsDevice device = new FakeGraphicsDevice();
 
         @Override
         public FakeGraphicsDevice device() {
+            assertSame(applicationThread, Thread.currentThread());
             return device;
         }
 
@@ -530,6 +696,7 @@ final class GltfModelLoaderTest {
 
         @Override
         public ProviderId providerId() {
+            assertSame(applicationThread, Thread.currentThread());
             return PROVIDER_ID;
         }
 
@@ -568,7 +735,9 @@ final class GltfModelLoaderTest {
             texturesCreated++;
             return (Texture)Proxy.newProxyInstance(Texture.class.getClassLoader(), new Class<?>[] {Texture.class},
                     (proxy, method, args) -> switch (method.getName()) {
-                        case "width", "height" -> 1;
+                        case "width" -> descriptor.width();
+                        case "height" -> descriptor.height();
+                        case "mipLevelCount" -> descriptor.mipLevelCount();
                         case "dispose" -> { texturesDisposed++; yield null; }
                         case "hashCode" -> System.identityHashCode(proxy);
                         case "equals" -> proxy == args[0];
@@ -584,7 +753,7 @@ final class GltfModelLoaderTest {
 
         @Override
         public void writeTextureMipLevels(Texture texture, ByteBuffer... levels) {
-            assertEquals(1, levels.length);
+            assertEquals(texture.mipLevelCount(), levels.length);
             writeTexture(texture, levels[0]);
         }
 

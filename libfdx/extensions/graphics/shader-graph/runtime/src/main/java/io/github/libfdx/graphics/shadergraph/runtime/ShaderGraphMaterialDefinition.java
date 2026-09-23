@@ -89,6 +89,14 @@ public final class ShaderGraphMaterialDefinition {
                 compilation.graph(), compilation);
     }
 
+    /** Restores a successful CPU graph compilation. Sources must belong to the supplied immutable
+     * graph and come from the same compiler version; this factory does not parse or compile WGSL.
+     * Used by platform workers returning source text while material state stays application-owned. */
+    public static ShaderGraphMaterialDefinition compiled(ShaderGraph graph, String wgsl, String libraryWgsl) {
+        ShaderGraphCompiledInterface empty = ShaderGraphCompiledInterface.empty("fdx-graph-interface-v1");
+        return compiled(new ShaderGraphRuntimeGraph(graph, wgsl, libraryWgsl, empty, empty));
+    }
+
     public ShaderGraph graph() {
         return graph;
     }

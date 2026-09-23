@@ -127,6 +127,15 @@ commit or package them.
 
 ## Local web serving
 
+Generated `index.html` starts the TeaVM application directly: the JavaScript target
+loads the application script, and the Wasm target uses TeaVM's companion runtime
+to load the application Wasm and call its entry point. The Java web backend then
+loads `scripts/fdx.js` and initializes `scripts/fdx.wasm` asynchronously before
+creating preload or game listeners. No `fdx-loader.js` is generated. The page's
+inline JSON contains the packaged asset inventory and native compiler cache identity;
+keep that data when customizing the page. Paths resolve relative to the page, so
+the complete generated directory can be served from a subdirectory.
+
 The local web runner serves files with bounded buffers and supports GET, HEAD,
 and single HTTP byte ranges. This allows deferred assets and streamed audio to
 request small slices without loading whole files into the server. Unsatisfiable

@@ -29,6 +29,7 @@ import io.github.libfdx.graphics.GraphicsFeature;
 import io.github.libfdx.tests.graphics.Billboard3DTest;
 import io.github.libfdx.tests.graphics.AssetLoadingTest;
 import io.github.libfdx.tests.graphics.GltfLoadingTest;
+import io.github.libfdx.tests.graphics.ConcurrentGltfLoadingTest;
 import io.github.libfdx.tests.graphics.TiledMapTest;
 import io.github.libfdx.tests.graphics.CameraControllersShowcaseTest;
 import io.github.libfdx.tests.graphics.CircleTest;
@@ -257,6 +258,9 @@ public final class TestSelector {
             descriptor(GltfLoadingTest.class,
                     "Loads a glTF by path and waits for external buffers and images.", "Runtime", 960, 640,
                     GltfLoadingTest::new),
+            descriptor(ConcurrentGltfLoadingTest.class,
+                    "Loads twelve distinct glTF models concurrently with shared dependencies.", "Runtime", 960, 640,
+                    ConcurrentGltfLoadingTest::new),
             descriptor(AudioPlaybackTest.class,
                     "Exercises WAV playback, pitch, panning and sound lifetimes.", "Runtime", 640, 480,
                     AudioPlaybackTest::new),

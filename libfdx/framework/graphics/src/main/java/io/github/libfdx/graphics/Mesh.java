@@ -164,6 +164,18 @@ public final class Mesh implements Disposable {
             float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords, float[] sourcePbr,
             float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive, int[] sourceJoints,
             float[] sourceWeights, boolean retainSourceData, float[] sourceTexCoords1, float[] sourceTangents) {
+        this(graphics, id, vertexLayout, vertices, vertexCount, indices, indexCount, bounds,
+                sourcePositions, sourceColors, sourceBakedColors, sourceNormals, sourceTexCoords, sourcePbr,
+                sourceBakedPbr, sourceEmissive, sourceBakedEmissive, sourceJoints, sourceWeights, retainSourceData,
+                sourceTexCoords1, sourceTangents, null);
+    }
+
+    private Mesh(GraphicsContext graphics, String id, VertexLayout vertexLayout, float[] vertices, int vertexCount,
+            short[] indices, int indexCount, BoundingBox bounds, float[] sourcePositions, float[] sourceColors,
+            float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords, float[] sourcePbr,
+            float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive, int[] sourceJoints,
+            float[] sourceWeights, boolean retainSourceData, float[] sourceTexCoords1, float[] sourceTangents,
+            ByteBuffer preparedVertices) {
         if (graphics == null) {
             throw new FdxException("GraphicsContext cannot be null");
         }
@@ -209,7 +221,7 @@ public final class Mesh implements Disposable {
         try {
             vertexBuffer = graphics.device().createBuffer(BufferDescriptor.staticVertex(this.id + " vertices",
                     vertexByteCount));
-            graphics.device().writeBuffer(vertexBuffer, floats(vertices, vertexByteCount));
+            graphics.device().writeBuffer(vertexBuffer, preparedVertices != null ? preparedVertices : floats(vertices, vertexByteCount));
             if (indexCount > 0) {
                 int indexByteCount = indexCount * 2;
                 indexBuffer = graphics.device().createBuffer(BufferDescriptor.staticIndex(this.id + " indices",
@@ -480,117 +492,188 @@ public final class Mesh implements Disposable {
             float[] sourcePbr, float[] sourceBakedPbr, float[] sourceEmissive, float[] sourceBakedEmissive,
             int[] sourceJoints, float[] sourceWeights, BoundingBox bounds, boolean retainSourceData,
             float[] sourceTexCoords1, float[] sourceTangents) {
-        if (sourcePositions == null || sourcePositions.length == 0 || sourcePositions.length % 3 != 0) {
-            throw new FdxException("3D position/color meshes require xyz source positions");
-        }
-        int vertexCount = sourcePositions.length / 3;
-        if (sourceColors == null || sourceColors.length != vertexCount * 4) {
-            throw new FdxException("3D position/color meshes require rgba source colors");
-        }
-        if (sourceBakedColors != null && sourceBakedColors.length != vertexCount * 4) {
-            throw new FdxException("3D position/color meshes require rgba baked source colors");
-        }
-        if (sourceNormals != null && sourceNormals.length != vertexCount * 3) {
-            throw new FdxException("3D position/color meshes require xyz source normals");
-        }
-        if (sourceTexCoords != null && sourceTexCoords.length != vertexCount * 2) {
-            throw new FdxException("3D position/color meshes require uv source texture coordinates");
-        }
-        if (sourcePbr != null && sourcePbr.length != vertexCount * 3) {
-            throw new FdxException("3D position/color meshes require ao/metallic/roughness source values");
-        }
-        if (sourceBakedPbr != null && sourceBakedPbr.length != vertexCount * 3) {
-            throw new FdxException("3D position/color meshes require baked ao/metallic/roughness source values");
-        }
-        if (sourceEmissive != null && sourceEmissive.length != vertexCount * 3) {
-            throw new FdxException("3D position/color meshes require rgb source emissive values");
-        }
-        if (sourceBakedEmissive != null && sourceBakedEmissive.length != vertexCount * 3) {
-            throw new FdxException("3D position/color meshes require baked rgb source emissive values");
-        }
-        boolean pbrLayout = sourceNormals != null && sourceTexCoords != null && sourcePbr != null
-                && sourceEmissive != null;
-        boolean hasSkinning = sourceJoints != null || sourceWeights != null;
-        boolean textured = sourceTexCoords1 != null || sourceTangents != null;
-        if (textured && !pbrLayout) throw new FdxException("Extended texture attributes require a PBR mesh");
-        if (sourceTexCoords1 != null && sourceTexCoords1.length != vertexCount * 2
-                || sourceTangents != null && sourceTangents.length != vertexCount * 4)
-            throw new FdxException("Extended texture attribute count must match positions");
-        if (hasSkinning && !pbrLayout) {
-            throw new FdxException("Skinned 3D meshes require retained PBR vertex attributes");
-        }
-        if (hasSkinning) {
-            if (sourceJoints == null || sourceJoints.length != vertexCount * 4) {
-                throw new FdxException("Skinned 3D meshes require four joint indices per vertex");
-            }
-            if (sourceWeights == null || sourceWeights.length != vertexCount * 4) {
-                throw new FdxException("Skinned 3D meshes require four joint weights per vertex");
-            }
-            for (int i=0;i<sourceWeights.length;i++) {
-                if (!Float.isFinite(sourceWeights[i]) || sourceWeights[i] < 0 || sourceJoints[i] < 0
-                        || sourceJoints[i] > 16_777_216)
-                    throw new FdxException("Skinning requires finite nonnegative weights and exactly representable joint indices");
-            }
-        }
-        int floatsPerVertex = hasSkinning ? PBR_SKINNED_FLOATS_PER_VERTEX
-                : pbrLayout ? PBR_FLOATS_PER_VERTEX : POSITION_COLOR_FLOATS_PER_VERTEX;
-        if (textured) floatsPerVertex += 6;
-        float[] vertices = new float[vertexCount * floatsPerVertex];
-        int out = 0;
-        for (int i = 0; i < vertexCount; i++) {
-            int positionOffset = i * 3;
-            int colorOffset = i * 4;
-            vertices[out++] = sourcePositions[positionOffset];
-            vertices[out++] = sourcePositions[positionOffset + 1];
-            vertices[out++] = sourcePositions[positionOffset + 2];
-            if (pbrLayout) {
-                int normalOffset = i * 3;
-                int texCoordOffset = i * 2;
-                vertices[out++] = sourceNormals[normalOffset];
-                vertices[out++] = sourceNormals[normalOffset + 1];
-                vertices[out++] = sourceNormals[normalOffset + 2];
-                vertices[out++] = sourceTexCoords[texCoordOffset];
-                vertices[out++] = sourceTexCoords[texCoordOffset + 1];
-            }
-            vertices[out++] = sourceColors[colorOffset];
-            vertices[out++] = sourceColors[colorOffset + 1];
-            vertices[out++] = sourceColors[colorOffset + 2];
-            vertices[out++] = sourceColors[colorOffset + 3];
-            if (pbrLayout) {
-                int pbrOffset = i * 3;
-                int emissiveOffset = i * 3;
-                vertices[out++] = sourcePbr[pbrOffset];
-                vertices[out++] = sourcePbr[pbrOffset + 1];
-                vertices[out++] = sourcePbr[pbrOffset + 2];
-                vertices[out++] = sourceEmissive[emissiveOffset];
-                vertices[out++] = sourceEmissive[emissiveOffset + 1];
-                vertices[out++] = sourceEmissive[emissiveOffset + 2];
-            }
-            if (hasSkinning) {
-                int influenceOffset = i * 4;
-                vertices[out++] = sourceJoints[influenceOffset];
-                vertices[out++] = sourceJoints[influenceOffset + 1];
-                vertices[out++] = sourceJoints[influenceOffset + 2];
-                vertices[out++] = sourceJoints[influenceOffset + 3];
-                vertices[out++] = sourceWeights[influenceOffset];
-                vertices[out++] = sourceWeights[influenceOffset + 1];
-                vertices[out++] = sourceWeights[influenceOffset + 2];
-                vertices[out++] = sourceWeights[influenceOffset + 3];
-            }
-            if (textured) {
-                vertices[out++] = sourceTexCoords1 == null ? 0 : sourceTexCoords1[i*2];
-                vertices[out++] = sourceTexCoords1 == null ? 0 : sourceTexCoords1[i*2+1];
-                for (int c = 0; c < 4; c++) vertices[out++] = sourceTangents == null ? 0 : sourceTangents[i*4+c];
-            }
-        }
-        return new Mesh(graphics, id, textured ? (hasSkinning ? PBR_TEXTURED_SKINNED_LAYOUT : PBR_TEXTURED_LAYOUT)
-                : hasSkinning ? PBR_SKINNED_LAYOUT : pbrLayout ? PBR_LAYOUT
-                : POSITION_COLOR_LAYOUT, vertices, vertexCount,
-                null, 0, bounds, sourcePositions, sourceColors, sourceBakedColors, sourceNormals, sourceTexCoords,
-                sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, sourceJoints, sourceWeights,
-                retainSourceData, sourceTexCoords1, sourceTangents);
+        PositionColor3DPreparation preparation = preparePositionColor3D(sourcePositions, sourceColors, sourceBakedColors,
+                sourceNormals, sourceTexCoords, sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive,
+                sourceJoints, sourceWeights, bounds, retainSourceData, sourceTexCoords1, sourceTangents);
+        while (!preparation.step(4096)) { }
+        return preparation.upload(graphics, id);
     }
 
+    /** Begins CPU-only vertex packing. Input arrays and bounds are borrowed and must remain unchanged
+     * until upload completes. Call step on one preparation thread; publish completed state before
+     * upload on the graphics thread. Staging is GC-managed and may be abandoned on cancellation. */
+    public static PositionColor3DPreparation preparePositionColor3D(float[] sourcePositions, float[] sourceColors, float[] sourceBakedColors,
+            float[] sourceNormals, float[] sourceTexCoords, float[] sourcePbr, float[] sourceBakedPbr,
+            float[] sourceEmissive, float[] sourceBakedEmissive, int[] sourceJoints, float[] sourceWeights,
+            BoundingBox bounds, boolean retainSourceData, float[] sourceTexCoords1, float[] sourceTangents) {
+        return new PositionColor3DPreparation(sourcePositions, sourceColors, sourceBakedColors,
+                sourceNormals, sourceTexCoords, sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive,
+                sourceJoints, sourceWeights, bounds, retainSourceData, sourceTexCoords1, sourceTangents);
+    }
+
+    /** CPU staging with bounded vertex work. No graphics calls occur before upload. */
+    public static final class PositionColor3DPreparation {
+        private final float[] sourcePositions, sourceColors, sourceBakedColors, sourceNormals, sourceTexCoords,
+                sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, sourceWeights, sourceTexCoords1, sourceTangents;
+        private final int[] sourceJoints;
+        private final BoundingBox bounds;
+        private final boolean retainSourceData;
+        private boolean pbrLayout, hasSkinning, textured;
+        private int vertexCount, floatsPerVertex, cursor;
+        private final float[] vertices;
+        private final ByteBuffer uploadBytes;
+        private final java.nio.FloatBuffer uploadFloats;
+
+        private PositionColor3DPreparation(float[] sourcePositions, float[] sourceColors, float[] sourceBakedColors,
+            float[] sourceNormals, float[] sourceTexCoords, float[] sourcePbr, float[] sourceBakedPbr,
+            float[] sourceEmissive, float[] sourceBakedEmissive, int[] sourceJoints, float[] sourceWeights,
+            BoundingBox bounds, boolean retainSourceData, float[] sourceTexCoords1, float[] sourceTangents) {
+            this.sourcePositions = sourcePositions;
+            this.sourceColors = sourceColors;
+            this.sourceBakedColors = sourceBakedColors;
+            this.sourceNormals = sourceNormals;
+            this.sourceTexCoords = sourceTexCoords;
+            this.sourcePbr = sourcePbr;
+            this.sourceBakedPbr = sourceBakedPbr;
+            this.sourceEmissive = sourceEmissive;
+            this.sourceBakedEmissive = sourceBakedEmissive;
+            this.sourceJoints = sourceJoints;
+            this.sourceWeights = sourceWeights;
+            this.bounds = bounds;
+            this.retainSourceData = retainSourceData;
+            this.sourceTexCoords1 = sourceTexCoords1;
+            this.sourceTangents = sourceTangents;
+            if (sourcePositions == null || sourcePositions.length == 0 || sourcePositions.length % 3 != 0) {
+                throw new FdxException("3D position/color meshes require xyz source positions");
+            }
+            vertexCount = sourcePositions.length / 3;
+            if (sourceColors == null || sourceColors.length != vertexCount * 4) {
+                throw new FdxException("3D position/color meshes require rgba source colors");
+            }
+            if (sourceBakedColors != null && sourceBakedColors.length != vertexCount * 4) {
+                throw new FdxException("3D position/color meshes require rgba baked source colors");
+            }
+            if (sourceNormals != null && sourceNormals.length != vertexCount * 3) {
+                throw new FdxException("3D position/color meshes require xyz source normals");
+            }
+            if (sourceTexCoords != null && sourceTexCoords.length != vertexCount * 2) {
+                throw new FdxException("3D position/color meshes require uv source texture coordinates");
+            }
+            if (sourcePbr != null && sourcePbr.length != vertexCount * 3) {
+                throw new FdxException("3D position/color meshes require ao/metallic/roughness source values");
+            }
+            if (sourceBakedPbr != null && sourceBakedPbr.length != vertexCount * 3) {
+                throw new FdxException("3D position/color meshes require baked ao/metallic/roughness source values");
+            }
+            if (sourceEmissive != null && sourceEmissive.length != vertexCount * 3) {
+                throw new FdxException("3D position/color meshes require rgb source emissive values");
+            }
+            if (sourceBakedEmissive != null && sourceBakedEmissive.length != vertexCount * 3) {
+                throw new FdxException("3D position/color meshes require baked rgb source emissive values");
+            }
+            pbrLayout = sourceNormals != null && sourceTexCoords != null && sourcePbr != null
+                    && sourceEmissive != null;
+            hasSkinning = sourceJoints != null || sourceWeights != null;
+            textured = sourceTexCoords1 != null || sourceTangents != null;
+            if (textured && !pbrLayout) throw new FdxException("Extended texture attributes require a PBR mesh");
+            if (sourceTexCoords1 != null && sourceTexCoords1.length != vertexCount * 2
+                    || sourceTangents != null && sourceTangents.length != vertexCount * 4)
+                throw new FdxException("Extended texture attribute count must match positions");
+            if (hasSkinning && !pbrLayout) {
+                throw new FdxException("Skinned 3D meshes require retained PBR vertex attributes");
+            }
+            if (hasSkinning) {
+                if (sourceJoints == null || sourceJoints.length != vertexCount * 4) {
+                    throw new FdxException("Skinned 3D meshes require four joint indices per vertex");
+                }
+                if (sourceWeights == null || sourceWeights.length != vertexCount * 4) {
+                    throw new FdxException("Skinned 3D meshes require four joint weights per vertex");
+                }
+                for (int i=0;i<sourceWeights.length;i++) {
+                    if (!Float.isFinite(sourceWeights[i]) || sourceWeights[i] < 0 || sourceJoints[i] < 0
+                            || sourceJoints[i] > 16_777_216)
+                        throw new FdxException("Skinning requires finite nonnegative weights and exactly representable joint indices");
+                }
+            }
+            floatsPerVertex = hasSkinning ? PBR_SKINNED_FLOATS_PER_VERTEX
+                    : pbrLayout ? PBR_FLOATS_PER_VERTEX : POSITION_COLOR_FLOATS_PER_VERTEX;
+            if (textured) floatsPerVertex += 6;
+
+            vertices = new float[Math.multiplyExact(vertexCount, floatsPerVertex)];
+            uploadBytes = ByteBuffer.allocateDirect(Math.multiplyExact(vertices.length, Float.BYTES)).order(ByteOrder.nativeOrder());
+            uploadFloats = uploadBytes.asFloatBuffer();
+        }
+
+        /** Packs at most maxVertices vertices; returns true when upload can begin. Positive budgets only. */
+        public boolean step(int maxVertices) {
+            if (maxVertices <= 0) throw new FdxException("Mesh preparation vertex budget must be positive");
+            int end = cursor + Math.min(maxVertices, vertexCount - cursor);
+            int start = cursor * floatsPerVertex, out = start;
+            for (int i = cursor; i < end; i++) {
+                int positionOffset = i * 3;
+                int colorOffset = i * 4;
+                vertices[out++] = sourcePositions[positionOffset];
+                vertices[out++] = sourcePositions[positionOffset + 1];
+                vertices[out++] = sourcePositions[positionOffset + 2];
+                if (pbrLayout) {
+                    int normalOffset = i * 3;
+                    int texCoordOffset = i * 2;
+                    vertices[out++] = sourceNormals[normalOffset];
+                    vertices[out++] = sourceNormals[normalOffset + 1];
+                    vertices[out++] = sourceNormals[normalOffset + 2];
+                    vertices[out++] = sourceTexCoords[texCoordOffset];
+                    vertices[out++] = sourceTexCoords[texCoordOffset + 1];
+                }
+                vertices[out++] = sourceColors[colorOffset];
+                vertices[out++] = sourceColors[colorOffset + 1];
+                vertices[out++] = sourceColors[colorOffset + 2];
+                vertices[out++] = sourceColors[colorOffset + 3];
+                if (pbrLayout) {
+                    int pbrOffset = i * 3;
+                    int emissiveOffset = i * 3;
+                    vertices[out++] = sourcePbr[pbrOffset];
+                    vertices[out++] = sourcePbr[pbrOffset + 1];
+                    vertices[out++] = sourcePbr[pbrOffset + 2];
+                    vertices[out++] = sourceEmissive[emissiveOffset];
+                    vertices[out++] = sourceEmissive[emissiveOffset + 1];
+                    vertices[out++] = sourceEmissive[emissiveOffset + 2];
+                }
+                if (hasSkinning) {
+                    int influenceOffset = i * 4;
+                    vertices[out++] = sourceJoints[influenceOffset];
+                    vertices[out++] = sourceJoints[influenceOffset + 1];
+                    vertices[out++] = sourceJoints[influenceOffset + 2];
+                    vertices[out++] = sourceJoints[influenceOffset + 3];
+                    vertices[out++] = sourceWeights[influenceOffset];
+                    vertices[out++] = sourceWeights[influenceOffset + 1];
+                    vertices[out++] = sourceWeights[influenceOffset + 2];
+                    vertices[out++] = sourceWeights[influenceOffset + 3];
+                }
+                if (textured) {
+                    vertices[out++] = sourceTexCoords1 == null ? 0 : sourceTexCoords1[i*2];
+                    vertices[out++] = sourceTexCoords1 == null ? 0 : sourceTexCoords1[i*2+1];
+                    for (int c = 0; c < 4; c++) vertices[out++] = sourceTangents == null ? 0 : sourceTangents[i*4+c];
+                }
+            }
+
+            uploadFloats.put(vertices, start, out - start);
+            cursor = end;
+            return cursor == vertexCount;
+        }
+
+        /** Creates an owned mesh on the graphics thread once prepared. Source data is copied as in
+         * positionColor3D. Upload failure releases partial buffers. Individual driver calls cannot
+         * be preempted. Reuse is allowed while the borrowed inputs remain unchanged. */
+        public Mesh upload(GraphicsContext graphics, String id) {
+            if (cursor != vertexCount) throw new FdxException("Mesh preparation is not complete");
+            return new Mesh(graphics, id, textured ? (hasSkinning ? PBR_TEXTURED_SKINNED_LAYOUT : PBR_TEXTURED_LAYOUT)
+                    : hasSkinning ? PBR_SKINNED_LAYOUT : pbrLayout ? PBR_LAYOUT
+                    : POSITION_COLOR_LAYOUT, vertices, vertexCount,
+                    null, 0, bounds, sourcePositions, sourceColors, sourceBakedColors, sourceNormals, sourceTexCoords,
+                    sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, sourceJoints, sourceWeights,
+                    retainSourceData, sourceTexCoords1, sourceTangents, uploadBytes.duplicate());
+        }
+    }
     /**
      * Returns the ID.
      *

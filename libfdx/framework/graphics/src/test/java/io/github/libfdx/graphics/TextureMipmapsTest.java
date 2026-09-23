@@ -8,6 +8,21 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class TextureMipmapsTest {
+    @Test void incrementalMipsYieldAndRetainInputRangeAndExactOutput() {
+        ByteBuffer input=ByteBuffer.allocate(5*3*4+8);
+        input.position(4);
+        for(int i=0;i<5*3;i++)input.put((byte)80).put((byte)120).put((byte)160).put((byte)255);
+        input.limit(input.position()).position(4);
+        var work=TextureMipmaps.prepareRgba8(input,5,3,true,true);
+        int steps=0;
+        while(!work.step(1)){steps++;assertThrows(FdxException.class,work::result);}
+        assertTrue(steps>=17);
+        assertEquals(4,input.position());assertEquals(64,input.limit());
+        for(ByteBuffer level:work.result())while(level.hasRemaining()) {
+            assertEquals(80,level.get()&255);assertEquals(120,level.get()&255);
+            assertEquals(160,level.get()&255);assertEquals(255,level.get()&255);
+        }
+    }
     @Test void oddDimensionsIncludeTheFinalRowAndColumnAndCopyOnlyTheActiveSourceRange() {
         ByteBuffer source = ByteBuffer.allocate(44);
         source.position(4);

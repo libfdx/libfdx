@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.LongSupplier;
 
 /**
  * Application-owned preparation queue and resource residency service for one native domain.
@@ -30,6 +31,7 @@ public final class ShaderPreparation implements Disposable {
     private final GraphicsDevice device;
     private final Object domain;
     private final ShaderPreparationOptions options;
+    private final LongSupplier updateClock;
     private final Map<Key, Entry> lookup = new HashMap<>();
     private final List<Entry> entries = new ArrayList<>();
     private final List<ShaderPreparationScope> scopes = new ArrayList<>();
@@ -38,7 +40,7 @@ public final class ShaderPreparation implements Disposable {
     private long forgottenPreloadDeclarations;
     private final ArrayDeque<Runnable> callbacks = new ArrayDeque<>();
     private final FdxFuture<Void> drained = newFuture();
-    private int active, submissionTurn;
+    private int active, submissionTurn, pollCursor;
     private long clock, frameIndex, entrySequence;
     private boolean disposed, updating;
 
@@ -51,9 +53,14 @@ public final class ShaderPreparation implements Disposable {
     }
 
     public ShaderPreparation(GraphicsDevice device, ShaderPreparationOptions options) {
+        this(device, options, System::nanoTime);
+    }
+
+    ShaderPreparation(GraphicsDevice device, ShaderPreparationOptions options, LongSupplier updateClock) {
         this.device = Objects.requireNonNull(device, "device");
         domain = Objects.requireNonNull(device.resourceDomain(), "resourceDomain");
         this.options = Objects.requireNonNull(options, "options");
+        this.updateClock = Objects.requireNonNull(updateClock, "updateClock");
     }
 
     public GraphicsDevice device() { return device; }
@@ -170,8 +177,14 @@ public final class ShaderPreparation implements Disposable {
      * them; renderers select compatible old passes explicitly during hot reload.
      */
     public void update() {
-        update(false);
+        update(false, Long.MAX_VALUE);
     }
+
+    /** Like {@link #update()}, with a cooperative elapsed-time budget in nanoseconds. Checks the
+     * budget between provider operations, submissions and callbacks; an individual operation cannot
+     * be interrupted. Zero performs no work; negative budgets fail. Polling rotates between updates
+     * so a slow pending operation cannot starve other pending operations. */
+    public void update(long maxNanos) { update(false, maxNanos); }
 
     /**
      * Explicit loading-screen update. Additionally allows providers with owner-thread compilation
@@ -179,12 +192,23 @@ public final class ShaderPreparation implements Disposable {
      * Runtime requests on these providers remain unsupported unless already preloaded.
      */
     public void updateLoading() {
-        update(true);
+        update(true, Long.MAX_VALUE);
     }
 
-    private void update(boolean loading) {
+    /** Loading-screen variant of {@link #update(long)}. A provider's single native compiler call
+     * can exceed the budget; use {@link #update(long)} during gameplay on nonblocking providers. */
+    public void updateLoading(long maxNanos) { update(true, maxNanos); }
+
+    private boolean withinBudget(long start, long maxNanos) {
+        return maxNanos == Long.MAX_VALUE || updateClock.getAsLong() - start < maxNanos;
+    }
+
+    private void update(boolean loading, long maxNanos) {
         requireThread();
+        if (maxNanos < 0) throw new FdxException("Shader update budget cannot be negative");
         if (updating) throw new FdxException("ShaderPreparation.update cannot be called recursively");
+        if (maxNanos == 0) return;
+        long start = updateClock.getAsLong();
         updating = true;
         frameIndex++;
         Throwable callbackFailure = null;
@@ -194,8 +218,10 @@ public final class ShaderPreparation implements Disposable {
                 catch (Throwable failure) { callbackFailure = combine(callbackFailure, failure); }
             }
             int remaining = options.maxPublicationsPerUpdate();
-            for (int i = 0; i < entries.size(); i++) {
-                Entry entry = entries.get(i);
+            int entryCount = entries.size();
+            for (int i = 0; i < entryCount && withinBudget(start, maxNanos); i++) {
+                if (pollCursor >= entries.size()) pollCursor = 0;
+                Entry entry = entries.get(pollCursor++);
                 if (!disposed && entry.state != ShaderPreparationState.CANCELLED
                         && entry.state != ShaderPreparationState.READY
                         && entry.key.provider.revision() != entry.key.revision) {
@@ -221,7 +247,7 @@ public final class ShaderPreparation implements Disposable {
             }
             if (!disposed) {
                 int submissions = options.maxInFlight();
-                while (active < options.maxInFlight() && submissions-- > 0) {
+                while (active < options.maxInFlight() && submissions-- > 0 && withinBudget(start, maxNanos)) {
                     // Every fourth opportunity prefers preload, so visible work cannot starve it.
                     boolean runtimeFirst = (++submissionTurn & 3) != 0;
                     Entry entry = nextQueued(runtimeFirst, loading);
@@ -242,7 +268,7 @@ public final class ShaderPreparation implements Disposable {
                 }
             }
             int scopeCount = scopes.size();
-            for (int i = 0; i < scopeCount; i++) {
+            for (int i = 0; i < scopeCount && withinBudget(start, maxNanos); i++) {
                 ShaderPreparationScope scope = scopes.get(i);
                 if (scope.submitted && !scope.completion.isDone() && scope.settled()) {
                     try { scope.complete(); }
@@ -257,7 +283,7 @@ public final class ShaderPreparation implements Disposable {
                 catch (Throwable failure) { callbackFailure = combine(callbackFailure, failure); }
             }
             // Bound listeners too, including late registrations and listeners adding listeners.
-            for (int i = 0; i < options.maxPublicationsPerUpdate(); i++) {
+            for (int i = 0; i < options.maxPublicationsPerUpdate() && withinBudget(start, maxNanos); i++) {
                 Runnable callback;
                 synchronized (callbacks) { callback = callbacks.pollFirst(); }
                 if (callback == null) break;

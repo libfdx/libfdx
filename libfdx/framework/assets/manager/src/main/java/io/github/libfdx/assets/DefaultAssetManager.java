@@ -14,6 +14,7 @@ import io.github.libfdx.files.FileSystem;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 
 /**
  * Application-thread-owned asset manager with a budgeted completion queue.
@@ -40,6 +41,7 @@ import java.util.function.LongSupplier;
  */
 public final class DefaultAssetManager implements AssetManager {
     private final ObjectMap<Class<?>, AssetLoader<?>> loaders = new ObjectMap<Class<?>, AssetLoader<?>>();
+    private final ObjectMap<Class<?>, Disposable> preparations = new ObjectMap<>();
     private final ObjectMap<String, Handle<?>> handles = new ObjectMap<String, Handle<?>>();
     private final Array<Handle<?>> handleValues = new Array<Handle<?>>();
     private final Array<Scope> scopes = new Array<Scope>(false, 0);
@@ -265,7 +267,8 @@ public final class DefaultAssetManager implements AssetManager {
         loaders.put(type, loader);
     }
 
-    /** Releases parents before their dependencies. The borrowed executor remains application-owned. */
+    /** Releases parents before dependencies, then disposes manager-owned CPU preparation resources.
+     * Registered loaders and the executor remain borrowed. */
     @Override
     public void dispose() {
         checkThread();
@@ -306,6 +309,13 @@ public final class DefaultAssetManager implements AssetManager {
             }
         }
         loaders.clear();
+        for (ObjectIterator<Disposable> it = preparations.values().iterator(); it.hasNext();) {
+            Disposable resource = it.next();
+            if (resource == null) continue; // A reentrant factory may be finishing during shutdown.
+            try { resource.dispose(); }
+            catch (Throwable error) { cleanupFailure = combine(cleanupFailure, error); }
+        }
+        preparations.clear();
         while (true) {
             QueueStep step;
             synchronized (updateTasks) {
@@ -763,6 +773,30 @@ public final class DefaultAssetManager implements AssetManager {
             managed = true;
         }
 
+        @Override public <T extends Disposable> T preparationResource(Class<T> type, Supplier<? extends T> factory) {
+            checkPending();
+            Objects.requireNonNull(type, "preparation type"); Objects.requireNonNull(factory, "preparation factory");
+            if (preparations.containsKey(type)) {
+                Disposable resource = preparations.get(type);
+                if (resource == null) throw new FdxException("Recursive preparation resource creation: " + type.getName());
+                return type.cast(resource);
+            }
+            preparations.put(type, null);
+            try {
+                T resource = Objects.requireNonNull(factory.get(), "preparation resource");
+                try { checkPending(); }
+                catch (RuntimeException | Error failure) {
+                    try { resource.dispose(); } catch (RuntimeException | Error cleanup) { failure.addSuppressed(cleanup); }
+                    throw failure;
+                }
+                preparations.put(type, resource);
+                return resource;
+            } catch (RuntimeException | Error failure) {
+                preparations.remove(type);
+                throw failure;
+            }
+        }
+
         @Override
         public <T> FdxFuture<T> dependency(AssetDescriptor<T> descriptor) {
             checkPending();
@@ -823,6 +857,26 @@ public final class DefaultAssetManager implements AssetManager {
             PreparationTask<T> pending = new PreparationTask<T>(owner, () -> FdxFuture.supply(task));
             enqueue(pending);
             return pending.future;
+        }
+
+        @Override public FdxFuture<Void> asyncSteps(FdxTask<Boolean> step) {
+            checkPending();
+            if (step == null) throw new FdxException("Preparation step cannot be null");
+            if (executor != null) return AssetLoadContext.super.asyncSteps(step);
+            FdxFuture<Void> result = FdxFuture.pending();
+            scheduleStep(step, result);
+            return result;
+        }
+
+        private void scheduleStep(FdxTask<Boolean> step, FdxFuture<Void> result) {
+            try {
+                async(step).onSuccess(done -> {
+                    if (done) result.complete(null);
+                    else scheduleStep(step, result);
+                }).onFailure(result::completeExceptionally);
+            } catch (RuntimeException | Error failure) {
+                result.completeExceptionally(failure);
+            }
         }
 
         @Override

@@ -23,11 +23,11 @@ public final class ShaderTranslationCache {
         this.compiler = compiler; this.cache = cache;
     }
 
-    /** Invoked on a preparation worker. Both cache decoding and native misses use that executor. */
+    /** Cache decoding uses the preparation executor; native misses may use a platform worker. */
     public FdxFuture<RuntimeShaderCompileResult> compileAsync(RuntimeShaderCompileRequest request,
             Consumer<Runnable> execute) {
         String identity = cache != null && cache.enabled() ? compiler.cacheIdentity() : null;
-        if (identity == null || identity.isBlank()) return ShaderCompilationTasks.submit(execute, () -> compiler.compile(request));
+        if (identity == null || identity.isBlank()) return compiler.compileAsync(request, execute);
         ShaderCacheLayer layer = request.target() == RuntimeShaderCompileTarget.VULKAN_SPIRV ? ShaderCacheLayer.SPIRV
                 : request.target() == RuntimeShaderCompileTarget.WGPU_WGSL
                 || request.target() == RuntimeShaderCompileTarget.WEBGPU_WGSL ? ShaderCacheLayer.SOURCE : ShaderCacheLayer.TRANSLATION;
@@ -41,12 +41,13 @@ public final class ShaderTranslationCache {
                 cache.rejected(key);
             }
             cache.compilerInvoked(key);
-            RuntimeShaderCompileResult compiled = compiler.compile(request);
-            if (valid(request, compiled)) {
-                byte[] encoded = NativeRuntimeShaderResultEnvelope.encode(compiled);
-                if (encoded.length <= ShaderArtifactCache.MAX_PAYLOAD_BYTES) cache.writeAsync(key, encoded);
-            }
-            return FdxFuture.completed(compiled);
+            return ShaderCompilationTasks.then(compiler.compileAsync(request, execute), execute, compiled -> {
+                if (valid(request, compiled)) {
+                    byte[] encoded = NativeRuntimeShaderResultEnvelope.encode(compiled);
+                    if (encoded.length <= ShaderArtifactCache.MAX_PAYLOAD_BYTES) cache.writeAsync(key, encoded);
+                }
+                return FdxFuture.completed(compiled);
+            });
         });
     }
 

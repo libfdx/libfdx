@@ -19,6 +19,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * @author xpenatan
  */
 final class JsonTest {
+    @Test void incrementalReaderYieldsInsideStringsAndNestedContainers() {
+        String text = "{\"long\":\"" + "x".repeat(20000) + "\\uD83D\\uDE00\",\"nested\":[true,null,{\"n\":-1.25e2}]}";
+        JsonReader reader = new JsonReader().begin(text);
+        int steps = 0;
+        while (!reader.step(31)) {
+            steps++;
+            assertThrows(io.github.libfdx.core.FdxException.class, reader::result);
+        }
+        assertTrue(steps > 600);
+        assertEquals("x".repeat(20000) + "\uD83D\uDE00", reader.result().require("long").stringValue());
+        assertEquals(-125f, reader.result().require("nested").require(2).require("n").floatValue());
+        for (String invalid : new String[] {"[1,]", "{\"a\":1,}", "{\"a\" 1}", "true false", "\"\\uD800\""}) {
+            JsonReader bad = new JsonReader().begin(invalid);
+            assertThrows(io.github.libfdx.core.FdxException.class, () -> { while (!bad.step(1)) { } });
+        }
+    }
     @Test
     void parsesTypedTree() {
         JsonValue root = new JsonReader().parse("{\"name\":\"Ada\",\"level\":3,\"active\":true,"

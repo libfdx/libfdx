@@ -13,6 +13,8 @@ final class WebRuntimeCoreProvider implements RuntimeCoreProvider {
     private final FontRasterizer fontRasterizer = new WebFreeTypeFontRasterizer();
     private final WebRuntimeShaderCompiler shaderCompiler = new WebRuntimeShaderCompiler();
 
+    void dispose() { shaderCompiler.dispose(); }
+
     /**
      * Returns the font rasterizer.
      *

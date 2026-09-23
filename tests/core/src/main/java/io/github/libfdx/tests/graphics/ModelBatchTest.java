@@ -3,8 +3,8 @@ package io.github.libfdx.tests.graphics;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
 import io.github.libfdx.assets.AssetDescriptor;
-import io.github.libfdx.assets.AssetManager;
 import io.github.libfdx.assets.DefaultAssetManager;
+import io.github.libfdx.assets.AssetExecutor;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.FdxFuture;
@@ -46,6 +46,7 @@ import java.util.Locale;
  * @author xpenatan
  */
 public final class ModelBatchTest extends ApplicationAdapter {
+    private final AssetExecutor executor;
     public static final String DEFAULT_GLTF_ASSET = "data/g3d/gltf/DamagedHelmet/DamagedHelmet.gltf";
 
     private final long exitAfterFrames;
@@ -59,7 +60,9 @@ public final class ModelBatchTest extends ApplicationAdapter {
     private Display display;
     private Logger logger;
     private TestFpsLogger fpsLogger;
-    private AssetManager assets;
+    private DefaultAssetManager assets;
+    private long loadingFrames, maxLoadingUpdateNanos;
+    private boolean loadingOnlyPreparation;
     private Runnable assetSetup;
     private GraphicsContext graphics;
     private ModelBatch batch;
@@ -102,6 +105,13 @@ public final class ModelBatchTest extends ApplicationAdapter {
     /** Desktop/platform harness injection. Owns a disposable export destination; manifest text
      * has already been loaded by the platform before shader recipe import. */
     public ModelBatchTest(long exitAfterFrames, String gltfAsset, ShaderPreloadCapture.Destination exportDestination, String preloadManifest) {
+        this(exitAfterFrames, gltfAsset, exportDestination, preloadManifest, null);
+    }
+
+    /** Takes ownership of the optional preparation executor and export destination. */
+    public ModelBatchTest(long exitAfterFrames, String gltfAsset, ShaderPreloadCapture.Destination exportDestination,
+            String preloadManifest, AssetExecutor executor) {
+        this.executor = executor;
         this.exitAfterFrames = exitAfterFrames;
         this.exportDestination = exportDestination;
         this.preloadManifest = preloadManifest;
@@ -122,7 +132,7 @@ public final class ModelBatchTest extends ApplicationAdapter {
         graphics = fdx.graphics().main();
         logger = fdx.logger();
         fpsLogger = TestFpsLogger.create(logger, "ModelBatchTest");
-        assets = new DefaultAssetManager(fdx.files());
+        assets = new DefaultAssetManager(fdx.files(), executor);
         G3DAssetLoaders.register(assets, graphics);
 
         Environment environment = new Environment()
@@ -140,7 +150,11 @@ public final class ModelBatchTest extends ApplicationAdapter {
             environment.neutralToneMapping(Float.parseFloat(
                     System.getProperty("libfdx.test.pbrExposure", "1.35")));
         }
-        if (Boolean.getBoolean("libfdx.test.shaderAsync")) {
+        var shaderCapabilities = graphics.device().shaderPreparationCapabilities();
+        loadingOnlyPreparation = !shaderCapabilities.runtimeNonblocking();
+        if (Boolean.getBoolean("libfdx.test.shaderAsync") || !Boolean.getBoolean("libfdx.test.shaderGraphPbr")
+                && shaderCapabilities.cpuExecution() != io.github.libfdx.graphics.shader.runtime.ShaderPreparationCapabilities.Execution.UNAVAILABLE
+                && shaderCapabilities.nativeExecution() != io.github.libfdx.graphics.shader.runtime.ShaderPreparationCapabilities.Execution.UNAVAILABLE) {
             preparation = new ShaderPreparation(graphics);
             if (exportDestination != null || preloadManifest != null) shaderCapture = preparation.captureRuntime("ModelBatchTest");
             shaderPlan = new ModelShaderPlan(graphics);
@@ -185,6 +199,8 @@ public final class ModelBatchTest extends ApplicationAdapter {
     public void render() {
         boolean assetsFinished = assets.update(4, 1_000_000L);
         if (assetSetup != null) {
+            loadingFrames++;
+            maxLoadingUpdateNanos = Math.max(maxLoadingUpdateNanos, assets.lastUpdateNanos());
             if (!assetsFinished) {
                 graphics.clear(0.02f, 0.025f, 0.04f, 1.0f);
                 return;
@@ -195,7 +211,7 @@ public final class ModelBatchTest extends ApplicationAdapter {
         }
         if (preparation != null) {
             if (preload == null && (preloadManifest != null || Boolean.getBoolean("libfdx.test.shaderPreload")
-                    || Boolean.getBoolean("libfdx.test.shaderLoadingOnly"))) {
+                    || Boolean.getBoolean("libfdx.test.shaderLoadingOnly") || loadingOnlyPreparation)) {
                 preload = preparation.createScope("model level");
                 shaderPlan.surfaceTarget(graphics.currentFrame());
                 if (preloadManifest != null) {
@@ -207,7 +223,7 @@ public final class ModelBatchTest extends ApplicationAdapter {
                 }
                 preloadCompletion = preparation.prepareAsync(preload.seal());
             }
-            if (preload != null && Boolean.getBoolean("libfdx.test.shaderLoadingOnly")) preparation.updateLoading();
+            if (preload != null && (Boolean.getBoolean("libfdx.test.shaderLoadingOnly") || loadingOnlyPreparation)) preparation.updateLoading();
             else preparation.update();
             if (preloadCompletion != null) {
                 if (!preloadCompletion.isDone()) {
@@ -287,6 +303,8 @@ public final class ModelBatchTest extends ApplicationAdapter {
      */
     @Override
     public void dispose() {
+        logger.info("ModelBatchTest loading: frames=" + loadingFrames
+                + ", maxUpdateMs=" + maxLoadingUpdateNanos / 1_000_000.0);
         boolean cancelledLoading = assetSetup != null;
         assetSetup = null;
         if (batch != null) {
@@ -301,8 +319,8 @@ public final class ModelBatchTest extends ApplicationAdapter {
         if (exportDestination instanceof Disposable disposable) disposable.dispose();
         graphShaderProvider = null;
         if (assets != null) {
-            assets.dispose();
-            assets = null;
+            try { assets.dispose(); }
+            finally { if (executor != null) executor.dispose(); assets = null; }
         }
         if (model != null) {
             model.dispose();

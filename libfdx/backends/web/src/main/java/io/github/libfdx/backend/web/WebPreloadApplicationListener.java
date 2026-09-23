@@ -3,7 +3,8 @@ package io.github.libfdx.backend.web;
 /**
  * Defines the context-aware web startup preloading screen lifecycle.
  *
- * <p>The backend submits the first rendered frame before it starts heavyweight asset and native-runtime loading.
+ * <p>The backend prepares the native runtime and bootstrap logo before creating this listener, then submits
+ * the first rendered preload frame before starting the remaining startup asset downloads.
  * The supplied context and its UI Kit root are borrowed for this lifecycle and are disposed by the backend after
  * {@link #dispose(WebPreloadContext)} returns.</p>
  *

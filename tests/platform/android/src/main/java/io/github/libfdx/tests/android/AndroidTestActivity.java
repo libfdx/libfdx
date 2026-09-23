@@ -6,6 +6,12 @@ import android.os.Bundle;
 import io.github.libfdx.application.ApplicationListener;
 import io.github.libfdx.backend.android.AndroidApplicationActivity;
 import io.github.libfdx.backend.android.AndroidApplicationConfig;
+import io.github.libfdx.backend.android.AndroidAssetExecutor;
+import io.github.libfdx.tests.graphics.GltfLoadingTest;
+import io.github.libfdx.tests.graphics.ConcurrentGltfLoadingTest;
+import io.github.libfdx.testsupport.graphics.ConcurrentGltfObserver;
+import io.github.libfdx.tests.graphics.ModelBatchTest;
+import io.github.libfdx.testsupport.graphics.GltfLoadingObserver;
 import io.github.libfdx.backend.android.AndroidGraphicsFailureMode;
 import io.github.libfdx.backend.android.AndroidGlesProvider;
 import io.github.libfdx.backend.android.AndroidTextEditorStyle;
@@ -88,10 +94,11 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
         configurePlatformTestProperties();
         String testName = selectedTestName();
         if (isSelector(testName)) {
-            return new TestChooserApplication(new String[] { graphicsName() }, graphicsName(), null, true, true);
+            return new TestChooserApplication(new String[] { graphicsName() }, graphicsName(), null, true, true,
+                    AndroidTestActivity::createSharedTest);
         }
         if (TestSelector.AUTO_TEST_NAME.equalsIgnoreCase(testName)) {
-            return new AutoTestApplication();
+            return new AutoTestApplication(null, true, AndroidTestActivity::createSharedTest);
         }
         ApplicationListener test;
         if ("WGPUAndroidDeviceLossTest".equalsIgnoreCase(testName)) return new WGPUAndroidDeviceLossTest();
@@ -115,7 +122,7 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
                 test = new ShaderPreloadingTest(longProperty("libfdx.test.frames", 0L),
                         destination.isEmpty() ? null : new AndroidShaderPreloadDestination(shaderFile(destination)), json);
             } catch (IOException failure) { throw new FdxException("Could not load the shader preload manifest", failure); }
-        } else test = TestSelector.create(testName, longProperty("libfdx.test.frames", 0L));
+        } else test = createSharedTest(testName, longProperty("libfdx.test.frames", 0L));
         String startupStage = System.getProperty("libfdx.test.wgpuStartupListenerFault", "");
         if (!startupStage.isEmpty()) test = new WGPUStartupFaultListener(test, startupStage);
         if (Boolean.getBoolean("libfdx.test.autoChild")) {
@@ -123,6 +130,17 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
             return managedTest;
         }
         return test;
+    }
+
+    private static ApplicationListener createSharedTest(String name, long frames) {
+        if ("ConcurrentGltfLoadingTest".equalsIgnoreCase(name))
+            return new ConcurrentGltfLoadingTest(frames, ConcurrentGltfObserver.NONE, new AndroidAssetExecutor(2, 8));
+        if ("GltfLoadingTest".equalsIgnoreCase(name))
+            return new GltfLoadingTest(frames, GltfLoadingObserver.NONE, new AndroidAssetExecutor(2, 8));
+        if ("ModelBatchTest".equalsIgnoreCase(name))
+            return new ModelBatchTest(frames, System.getProperty("libfdx.test.modelAsset", ModelBatchTest.DEFAULT_GLTF_ASSET),
+                    null, null, new AndroidAssetExecutor(2, 8));
+        return TestSelector.create(name, frames);
     }
 
     @Override protected void onDestroy() {

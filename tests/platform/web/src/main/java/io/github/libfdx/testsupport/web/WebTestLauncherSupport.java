@@ -26,6 +26,8 @@ import io.github.libfdx.testsupport.TestSelector;
 import io.github.libfdx.testsupport.graphics.FramebufferCapture;
 import io.github.libfdx.tests.graphics.ModelBatchTest;
 import io.github.libfdx.tests.graphics.GltfLoadingTest;
+import io.github.libfdx.tests.graphics.ConcurrentGltfLoadingTest;
+import io.github.libfdx.testsupport.graphics.ConcurrentGltfFixtures;
 import io.github.libfdx.tests.web.WebGPUShaderPreparationTest;
 import io.github.libfdx.tests.web.WebGPUDeviceLossTest;
 import io.github.libfdx.tests.web.WebGLContextLossTest;
@@ -68,6 +70,8 @@ public final class WebTestLauncherSupport {
         applyCaptureOrbitDefault(args, capture, captureEvery);
         System.setProperty("libfdx.test.modelAsset", modelAsset);
         String testName = selectedTestName(requestedTestName, mode, frames);
+        if ("GltfLoadingTest".equals(testName) || "ModelBatchTest".equals(testName)
+                || "ConcurrentGltfLoadingTest".equals(testName)) WebLoadingProbe.start();
         syncSelectedTest(testName);
         System.out.println("[info] WebTestLauncher starting " + testName
                 + " with " + graphicsName + " " + runtimeName
@@ -82,7 +86,14 @@ public final class WebTestLauncherSupport {
                 .deferAssets("streaming/", "atlas/", "deferred-image/")
                 .graphics(graphicsProvider);
 
+        if (hasQuery("bootstrapProbe")) {
+            WebBootstrapProbe.start(config);
+            return;
+        }
         ApplicationListener selectedTest = test(testName, frames, modelAsset, webgpu);
+        if ("ConcurrentGltfLoadingTest".equalsIgnoreCase(testName)) {
+            config.deferAssets(ConcurrentGltfFixtures.deferredDirectories());
+        }
         if ("GltfLoadingTest".equalsIgnoreCase(testName)) {
             // Exclude exact files from startup downloads, retaining their server/manifest entries.
             config.deferAssets("streaming/", "atlas/", "deferred-image/",
@@ -163,6 +174,7 @@ public final class WebTestLauncherSupport {
                 return;
             }
             try {
+                WebLoadingProbe.finish();
                 managed.verifyCompleted();
                 publishAutomaticResult("PASS", "Observation and backend cleanup completed");
             } catch (Throwable error) {
@@ -190,6 +202,11 @@ public final class WebTestLauncherSupport {
     }
 
     private static ApplicationListener test(String testName, long frames, String modelAsset, boolean webgpu) {
+        if ("ConcurrentGltfLoadingTest".equalsIgnoreCase(testName))
+            return new ConcurrentGltfLoadingTest(frames, new WebConcurrentGltfProbe());
+        if ("WebPbrSourceTest".equalsIgnoreCase(testName)) return new io.github.libfdx.tests.web.WebPbrSourceTest(hasQuery("autoChild"));
+        if ("WebShaderWorkerTest".equalsIgnoreCase(testName)) return new io.github.libfdx.tests.web.WebShaderWorkerTest(hasQuery("autoChild"));
+        if ("WebAssetPreparationTest".equalsIgnoreCase(testName)) return new io.github.libfdx.tests.web.WebAssetPreparationTest(hasQuery("autoChild"));
         if ("GltfLoadingTest".equalsIgnoreCase(testName)) {
             return new GltfLoadingTest(frames, new WebGltfDownloadProbe());
         }

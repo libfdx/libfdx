@@ -11,6 +11,22 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class PngRgbaDecoderTest {
+    @Test void incrementalDecodePreservesPixelsAcrossSmallStepsAndRejectsCorruption() throws Exception {
+        byte[] raw = {0,10,20,30,0,40,50,60,127, 2,1,2,3,4,5,6,7,8};
+        byte[] encoded = png(2,2,raw);
+        PngRgbaDecoder.Decoder decoder = PngRgbaDecoder.begin(encoded);
+        int steps=0;
+        try {
+            while(!decoder.step(1)) { assertThrows(FdxException.class,decoder::result);steps++; }
+            assertTrue(steps>encoded.length);
+            byte[] pixels=new byte[16];decoder.result().rgba().get(pixels);
+            assertArrayEquals(new byte[] {10,20,30,0,40,50,60,127,11,22,33,4,45,56,67,(byte)135},pixels);
+        } finally {decoder.close();}
+        encoded[encoded.length-1]^=1;
+        PngRgbaDecoder.Decoder bad=PngRgbaDecoder.begin(encoded);
+        try {assertThrows(FdxException.class,()->{while(!bad.step(3)) { }});}
+        finally {bad.close();}
+    }
     @Test void decodesImageIoPngExactlyIncludingHiddenRgbAndPartialAlpha() throws Exception {
         BufferedImage source=new BufferedImage(64,17,BufferedImage.TYPE_INT_ARGB);
         Random random=new Random(90210);

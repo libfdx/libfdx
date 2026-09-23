@@ -88,17 +88,23 @@ final class WGPUWebPreparation extends WGPUPreparation {
                 prepareSource();
             }
             // Storage completions queue continuations; ordinary polling never runs this work.
-            for (int step = 0; step < 32 && !done && !loadingWork.isEmpty(); step++) loadingWork.remove().run();
+            long startedAt = System.nanoTime();
+            for (int step = 0; step < 32 && !done && !loadingWork.isEmpty(); step++) {
+                loadingWork.remove().run();
+                // Soft budget: an individual source callback/native submission cannot be preempted.
+                if (System.nanoTime() - startedAt >= 2_000_000L) break;
+            }
         }
 
         private void prepareSource() {
             Consumer<Runnable> execute = trace.executor(work -> { checkCancelled(); loadingWork.add(work); });
-            FdxFuture<ShaderModuleDescriptor> sourceReady = ShaderCompilationTasks.then(
+            FdxFuture<ShaderModuleDescriptor> generated = ShaderCompilationTasks.then(
                     ShaderCompilationTasks.submit(execute, () -> {
                         checkCancelled();
                         trace.enter(ShaderPreparationPhase.SOURCE);
-                        return request.sourceDescriptor();
-                    }), execute, source -> {
+                        return request.sourceDescriptorAsync(execute);
+                    }), execute, pending -> pending);
+            FdxFuture<ShaderModuleDescriptor> sourceReady = ShaderCompilationTasks.then(generated, execute, source -> {
                         checkCancelled();
                         trace.enter(ShaderPreparationPhase.TRANSLATION);
                         cacheEligible = source.targetArtifact() == null && cache != null && cache.enabled();

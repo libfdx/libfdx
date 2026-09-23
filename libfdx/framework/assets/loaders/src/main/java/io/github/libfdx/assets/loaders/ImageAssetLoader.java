@@ -14,6 +14,7 @@ import org.teavm.jso.JSBody;
 import org.teavm.jso.JSFunctor;
 import org.teavm.jso.JSObject;
 import org.teavm.jso.typedarrays.Int8Array;
+import org.teavm.jso.typedarrays.Uint8Array;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -28,6 +29,13 @@ import java.nio.ByteBuffer;
  */
 @Include("libfdx_native_image.h")
 public final class ImageAssetLoader implements AssetLoader<ImageData> {
+    private final ImageDecoder decoder;
+
+    /** Uses the manager-owned platform decoder when available (a shared worker on web). */
+    public ImageAssetLoader() { decoder = null; }
+
+    /** Borrows a CPU decoder for all managed requests, including deferred files. */
+    public ImageAssetLoader(ImageDecoder decoder) { this.decoder = java.util.Objects.requireNonNull(decoder); }
     /**
      * Runs the register step.
      *
@@ -56,9 +64,10 @@ public final class ImageAssetLoader implements AssetLoader<ImageData> {
      */
     @Override
     public FdxFuture<ImageData> load(final AssetLoadContext context, final AssetDescriptor<ImageData> descriptor) {
+        ImageDecoder selected = decoder != null ? decoder : ImageDecoder.platformDefault(context);
         FdxFuture<ImageData> result = FdxFuture.pending();
         context.readBytes(context.files().internal(descriptor.path()))
-                .onSuccess(bytes -> context.asyncFuture(() -> decodeAsync(descriptor.path(), bytes))
+                .onSuccess(bytes -> context.asyncFuture(() -> selected.decodeAsync(descriptor.path(), bytes))
                         .onSuccess(result::complete).onFailure(result::completeExceptionally))
                 .onFailure(result::completeExceptionally);
         return result;
@@ -73,6 +82,11 @@ public final class ImageAssetLoader implements AssetLoader<ImageData> {
     public static ImageData decode(byte[] bytes) {
         return decode(null, bytes);
     }
+
+    /** Decodes supported raw RGB/RGBA8 PNG layouts without platform services, preserving hidden
+     * RGB. Returns null for other formats/layouts; malformed supported PNGs fail explicitly.
+     * CPU-only and synchronous: worker entry points may use this without a browser document. */
+    public static ImageData decodeRawPng(byte[] bytes) { return PngRgbaDecoder.decode(bytes); }
 
     /**
      * Runs the decode step.
@@ -107,35 +121,129 @@ public final class ImageAssetLoader implements AssetLoader<ImageData> {
      * Prepares image pixels, including deferred browser images. May complete inline
      * on the caller (CPU decoding) or later on the browser event loop. Managed loads
      * dispatch this through the preparation executor and deliver through update.
+     * On browsers, raw PNG work is sliced between animation frames; other formats
+     * use browser decoding and bounded pixel transfers between frames.
+     * Cancellation of a managed request does not interrupt
+     * an already running decode; it completes and releases its staging state.
      * Raw RGB/RGBA8 non-interlaced PNG preserves RGB at alpha zero; other browser
      * layouts use canvas conversion, which can lose that hidden RGB and precision.
      * The input bytes must remain unchanged until completion. No global cache is added.
      */
     public static FdxFuture<ImageData> decodeAsync(String path,byte[] bytes) {
         try {
-            ImageData png=PngRgbaDecoder.decode(bytes);
-            if(png!=null) return FdxFuture.completed(png);
             if(!isBrowserRuntime()) return FdxFuture.completed(decode(path,bytes));
             // TeaVM C needs a direct target guard to prune browser interop during dependency analysis.
             if(PlatformDetector.isLowLevel()) return FdxFuture.completed(decode(path,bytes));
-            ImageData cached=decodeWithBrowser(path);
-            if(cached!=null) return FdxFuture.completed(cached);
+            PngRgbaDecoder.Decoder png = PngRgbaDecoder.begin(bytes);
+            if (png != null) {
+                FdxFuture<ImageData> result = FdxFuture.pending();
+                new BrowserPngDecode(png, path, bytes, result).schedule();
+                return result;
+            }
+            return decodeBrowserAsync(path, bytes);
+        } catch(RuntimeException | Error error) { return FdxFuture.failed(error); }
+    }
+
+    private static FdxFuture<ImageData> decodeBrowserAsync(String path, byte[] bytes) {
+        try {
+            if (path != null && !path.isEmpty()) {
+                String normalized = normalizePath(path);
+                int width = browserImageWidth(normalized), height = browserImageHeight(normalized);
+                Int8Array pixels = browserImageRgba(normalized);
+                if (width > 0 && height > 0 && pixels != null) {
+                    FdxFuture<ImageData> cached = FdxFuture.pending();
+                    copyBrowserPixels(width, height, pixels, cached);
+                    return cached;
+                }
+            }
             if(bytes==null || bytes.length==0 || bytes.length>64*1024*1024) throw new FdxException("Encoded image size is invalid");
             FdxFuture<ImageData> result=FdxFuture.pending();
             Int8Array encoded=Int8Array.create(bytes.length);
             encoded.set(bytes);
             decodeBrowserBytes(encoded,(width,height,pixels) -> {
-                ImageData image;
-                try {
-                    byte[] rgba=pixels.copyToJavaArray();
-                    ByteBuffer buffer=ByteBuffer.allocateDirect(rgba.length); buffer.put(rgba).flip();
-                    image=new ImageData(width,height,buffer);
-                } catch(RuntimeException | Error error) { result.completeExceptionally(error); return; }
-                result.complete(image);
+                copyBrowserPixels(width, height, pixels, result);
             },error -> result.completeExceptionally(new FdxException("Browser image decode failed: "+error)));
             return result;
         } catch(RuntimeException | Error error) { return FdxFuture.failed(error); }
     }
+
+    private static void copyBrowserPixels(int width, int height, Int8Array pixels, FdxFuture<ImageData> result) {
+        try {
+            new BrowserPixelCopy(width, height, pixels, result).schedule();
+        } catch (RuntimeException | Error error) { result.completeExceptionally(error); }
+    }
+
+    /** Copies directly into Java buffer storage, avoiding a large Wasm GC array round trip. */
+    private static final class BrowserPixelCopy {
+        final int width, height;
+        final Int8Array pixels;
+        final ByteBuffer buffer;
+        final FdxFuture<ImageData> result;
+        int offset;
+
+        BrowserPixelCopy(int width, int height, Int8Array pixels, FdxFuture<ImageData> result) {
+            if (width < 1 || height < 1 || (long) width * height > 16777216L
+                    || pixels.getLength() != width * height * 4) throw new FdxException("Invalid browser image pixels");
+            this.width = width; this.height = height; this.pixels = pixels; this.result = result;
+            buffer = ByteBuffer.allocateDirect(width * height * 4);
+        }
+
+        void schedule() { nextDecodeFrame(this::run); }
+
+        void run() {
+            try {
+                // Recreate the view after yielding: Wasm memory may have grown between frames.
+                Uint8Array target = Uint8Array.fromJavaBuffer(buffer);
+                long deadline = System.nanoTime() + 1_000_000L;
+                for (int steps = 0; steps < 64; steps++) {
+                    int end = Math.min(offset + 262144, buffer.capacity());
+                    copyPixelRange(pixels, target, offset, end);
+                    offset = end;
+                    if (offset == buffer.capacity()) {
+                        result.complete(new ImageData(width, height, buffer));
+                        return;
+                    }
+                    if (System.nanoTime() >= deadline) break;
+                }
+                schedule();
+            } catch (RuntimeException | Error error) { result.completeExceptionally(error); }
+        }
+    }
+
+    @JSBody(params={"source", "target", "start", "end"},
+            script="target.set(source.subarray(start,end),start);")
+    private static native void copyPixelRange(Int8Array source, Uint8Array target, int start, int end);
+
+    /** Browser decode slices yield to presentation/input while retaining exact PNG channels. */
+    private static final class BrowserPngDecode {
+        final PngRgbaDecoder.Decoder decoder;
+        final String path;
+        final byte[] bytes;
+        final FdxFuture<ImageData> result;
+        BrowserPngDecode(PngRgbaDecoder.Decoder decoder, String path, byte[] bytes, FdxFuture<ImageData> result) {
+            this.decoder=decoder;this.path=path;this.bytes=bytes;this.result=result;
+        }
+        void schedule() { nextDecodeFrame(this::run); }
+        void run() {
+            try {
+                long deadline=System.nanoTime()+1_000_000L;
+                for(int steps=0;steps<64;steps++) {
+                    if(decoder.step(8192)) {
+                        ImageData image=decoder.result();
+                        if(image!=null) result.complete(image);
+                        else decodeBrowserAsync(path,bytes).onSuccess(result::complete).onFailure(result::completeExceptionally);
+                        return;
+                    }
+                    if(System.nanoTime()>=deadline)break;
+                }
+                schedule();
+            } catch(RuntimeException | Error error) {decoder.close();result.completeExceptionally(error);}
+        }
+    }
+
+    @JSFunctor private interface DecodeStep extends JSObject { void run(); }
+    @JSBody(params="step", script="requestAnimationFrame(function(){step();});")
+    private static native void nextDecodeFrame(DecodeStep step);
 
     private static boolean isBrowserRuntime() {
         try { return PlatformDetector.isJavaScript() || PlatformDetector.isWebAssemblyGC(); }

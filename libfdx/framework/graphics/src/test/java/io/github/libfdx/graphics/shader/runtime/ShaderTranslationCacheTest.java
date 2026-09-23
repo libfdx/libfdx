@@ -15,6 +15,49 @@ final class ShaderTranslationCacheTest {
     private static final RuntimeShaderCompileRequest REQUEST = RuntimeShaderCompileRequest
             .builder("wgsl input", RuntimeShaderCompileTarget.WGPU_WGSL).build();
 
+    @Test void asyncCompilerMissRemainsPendingAndPersistsOnlyAfterValidatedCompletion() {
+        Store store = new Store();
+        FdxFuture<RuntimeShaderCompileResult> pending = FdxFuture.pending();
+        RuntimeShaderCompiler compiler = asynchronousCompiler(pending);
+        ArrayDeque<Runnable> work = new ArrayDeque<>();
+        var cache = new ShaderTranslationCache(compiler, new ShaderArtifactCache(store));
+        var result = cache.compileAsync(REQUEST, work::add);
+        drain(work);
+        assertFalse(result.isDone());
+        assertTrue(store.records.isEmpty());
+        pending.complete(RuntimeShaderCompileResult.text(REQUEST.source(), ShaderReflectionDecoderTest.runtimeFixture()));
+        assertFalse(result.isDone()); // Completion is marshalled onto the preparation executor.
+        drain(work);
+        assertTrue(result.get().success());
+        assertEquals(1, store.records.size());
+        var replay = cache.compileAsync(REQUEST, work::add);
+        drain(work);
+        assertArrayEquals(result.get().reflection().bytes(), replay.get().reflection().bytes());
+    }
+
+    @Test void asyncCompilerFailurePropagatesWithoutWritingCache() {
+        Store store = new Store();
+        FdxFuture<RuntimeShaderCompileResult> pending = FdxFuture.pending();
+        var compiler = asynchronousCompiler(pending);
+        var cached = new ShaderTranslationCache(compiler, new ShaderArtifactCache(store)).compileAsync(REQUEST, Runnable::run);
+        var uncached = new ShaderTranslationCache(compiler, null).compileAsync(REQUEST, Runnable::run);
+        pending.completeExceptionally(new IllegalStateException("worker terminated"));
+        assertTrue(cached.isFailed());
+        assertTrue(uncached.isFailed());
+        assertTrue(store.records.isEmpty());
+    }
+
+    private static RuntimeShaderCompiler asynchronousCompiler(FdxFuture<RuntimeShaderCompileResult> pending) {
+        return new RuntimeShaderCompiler() {
+            @Override public String cacheIdentity() { return "async-compiler"; }
+            @Override public RuntimeShaderCompileResult compile(RuntimeShaderCompileRequest request) {
+                throw new AssertionError("Synchronous compile must not run on an async cache miss");
+            }
+            @Override public FdxFuture<RuntimeShaderCompileResult> compileAsync(RuntimeShaderCompileRequest request,
+                    java.util.function.Consumer<Runnable> execute) { return pending; }
+        };
+    }
+
     @Test void pendingReadReleasesExecutorAndFreshAdapterRestoresReflectionWithoutCompiling() {
         Store store = new Store();
         Compiler compiler = new Compiler();

@@ -35,6 +35,25 @@ tasks.register<JavaExec>("validate_web_graphics") {
     }
 }
 
+tasks.register<JavaExec>("validate_web_bootstrap") {
+    group = "verification"
+    description = "Checks app-first JS/Wasm startup, delayed/failed downloads and disposal on WebGL/WebGPU."
+    dependsOn("libfdx_web_js_tests_webgl_build", "libfdx_web_wasm_tests_webgl_build")
+    classpath = graphicsMatrixRunner
+    mainClass.set("io.github.libfdx.testsupport.runner.WebBootstrapRunner")
+    workingDir(rootProject.projectDir)
+    systemProperties(gradle.startParameter.systemPropertiesArgs.filterKeys { it.startsWith("libfdx.test.") })
+    environment("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")
+    environment("PLAYWRIGHT_BROWSERS_PATH", layout.buildDirectory.dir("browsers").get().asFile.absolutePath)
+    doFirst {
+        val temporaryDirectory = layout.buildDirectory.dir("tmp/browser-runner").get().asFile
+        temporaryDirectory.mkdirs()
+        systemProperty("java.io.tmpdir", temporaryDirectory.absolutePath)
+        systemProperty("libfdx.test.autoWebJsDirectory", tasks.named<io.github.libfdx.gradle.LibfdxRunWebTask>("libfdx_web_js_tests_webgl_run").get().webappDir.get().asFile.absolutePath)
+        systemProperty("libfdx.test.autoWebWasmDirectory", tasks.named<io.github.libfdx.gradle.LibfdxRunWebTask>("libfdx_web_wasm_tests_webgl_run").get().webappDir.get().asFile.absolutePath)
+    }
+}
+
 tasks.register<JavaExec>("install_test_browser") {
     group = "verification"
     description = "Downloads the Chromium version used by the web graphics validation task."

@@ -26,6 +26,42 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GLPreparationTest {
+    @Test void loadingBudgetYieldsBetweenContinuationsAndLaterAdvancesComplete() {
+        Fixture f = new Fixture(); f.loading = true; f.gl.loadingBudget = 1;
+        f.operation.prepareLoading(); f.operation.advanceLoading();
+        assertEquals(0,f.gl.compiles);
+        f.gl.linkComplete = true;
+        for (int i=0;i<100&&!f.operation.isDone();i++) f.operation.advanceLoading();
+        assertTrue(f.operation.isDone()); assertEquals(2,f.gl.compiles);
+        f.operation.finish().dispose(); f.operation.dispose(); f.attachment.dispose();
+    }
+    @Test void pendingAsyncSourceNeverCompilesOnPollAndFailureOrCancellationCannotSubmitGpuWork() {
+        for (int outcome = 0; outcome < 3; outcome++) {
+            Fixture f = new Fixture(); f.loading = true;
+            var pending = FdxFuture.<ShaderModuleDescriptor>pending();
+            var source = io.github.libfdx.graphics.shader.ShaderModuleSource.deferred("vertexMain","fragmentMain",
+                    () -> { throw new AssertionError("Sync source invoked"); }, execute -> pending);
+            var request = new ShaderPipelineRequest(source, new RenderPipelineDescriptor().colorFormat(TextureFormat.RGBA8_UNORM),
+                    ShaderPassId.FORWARD,0);
+            var operation = new GLPreparationOperation((GLGraphicsDevice) f.attachment.device(), f.attachment,
+                    f.gl.api,f.provider,f.attachment.resourceDomain(),request,f.compilers,f.compilers,null);
+            operation.prepareLoading(); operation.advanceLoading();
+            assertFalse(operation.isDone()); assertEquals(0,f.gl.compiles);
+            if (outcome == 2) operation.cancel();
+            if (outcome == 1) pending.completeExceptionally(new IllegalStateException("source failed"));
+            else pending.complete(f.request.sourceDescriptor());
+            assertEquals(0,f.gl.compiles);
+            operation.advanceLoading();
+            if (outcome == 0) {
+                assertEquals(2,f.gl.compiles); f.gl.linkComplete = true;
+                assertTrue(operation.isDone()); operation.finish().dispose();
+            } else {
+                assertTrue(operation.isDone()); assertEquals(0,f.gl.compiles);
+                assertThrows(RuntimeException.class,operation::finish);
+            }
+            operation.dispose(); f.attachment.dispose();
+        }
+    }
     @Test void delayedTranslationCompletionOnlyQueuesWorkerWorkAndOwnerPublishes() throws Exception {
         Fixture f = new Fixture(); f.heldTranslation = FdxFuture.pending();
         f.operation.prepareAsync(); f.gl.runWorkers();
@@ -364,6 +400,7 @@ class GLPreparationTest {
     }
 
     static final class FakeGL implements InvocationHandler {
+        long loadingBudget;
         final ConcurrentLinkedQueue<Runnable> work = new ConcurrentLinkedQueue<>();
         volatile boolean closed;
         final Thread owner = Thread.currentThread();
@@ -387,6 +424,7 @@ class GLPreparationTest {
             assertSame(owner, Thread.currentThread(), "Native GL calls must stay on the context owner");
             return switch (method.getName()) {
                 case "shaderPreparationWorkers" -> workers;
+                case "shaderLoadingBudgetNanos" -> loadingBudget;
                 case "supportsParallelShaderCompilation" -> parallel;
                 case "isContextLost" -> lost;
                 case "compileShader" -> { compiles++; yield null; }

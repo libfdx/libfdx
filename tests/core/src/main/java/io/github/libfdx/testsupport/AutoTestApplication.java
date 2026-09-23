@@ -52,6 +52,7 @@ public final class AutoTestApplication extends ApplicationAdapter {
 
     private final CompletionHandler completionHandler;
     private final boolean failOnComplete;
+    private final java.util.function.BiFunction<String, Long, ApplicationListener> testFactory;
     private Fdx fdx;
     private Application application;
     private Display display;
@@ -93,6 +94,12 @@ public final class AutoTestApplication extends ApplicationAdapter {
      * @param failOnComplete the fail on complete
      */
     public AutoTestApplication(CompletionHandler completionHandler, boolean failOnComplete) {
+        this(completionHandler, failOnComplete, TestSelector::create);
+    }
+
+    public AutoTestApplication(CompletionHandler completionHandler, boolean failOnComplete,
+            java.util.function.BiFunction<String, Long, ApplicationListener> testFactory) {
+        this.testFactory = testFactory;
         this.completionHandler = completionHandler;
         this.failOnComplete = failOnComplete;
     }
@@ -305,7 +312,7 @@ public final class AutoTestApplication extends ApplicationAdapter {
         timing.restart();
         System.out.println("[info] Auto test " + (currentIndex + 1) + "/" + tests.length + ": " + descriptor.name());
         try {
-            currentTest = descriptor.create(MANAGED_TEST_FRAME_LIMIT);
+            currentTest = testFactory.apply(descriptor.name(), MANAGED_TEST_FRAME_LIMIT);
             currentTest.create(fdx);
             currentTest.resize(display.width(), display.height());
         } catch (Throwable error) {

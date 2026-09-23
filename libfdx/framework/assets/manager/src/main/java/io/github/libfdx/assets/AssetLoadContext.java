@@ -2,6 +2,8 @@ package io.github.libfdx.assets;
 
 import io.github.libfdx.core.FdxFuture;
 import io.github.libfdx.core.FdxTask;
+import io.github.libfdx.core.Disposable;
+import java.util.function.Supplier;
 import io.github.libfdx.files.FileSystem;
 import io.github.libfdx.files.FileHandle;
 
@@ -19,6 +21,18 @@ public interface AssetLoadContext {
      * @return the files
      */
     FileSystem files();
+
+    /** Returns a borrowed CPU preparation resource shared by this manager's loads, creating it
+     * once per concrete type on the application thread. The factory transfers a new non-null
+     * resource to the manager, which disposes it after cancelling/releasing assets. It must not
+     * recursively request the same type. Never access this method from preparation workers.
+     * Resources must tolerate disposal while asynchronous CPU jobs are pending and prevent late
+     * results from being published. They must not own GPU resources or application state.
+     * Custom contexts may return null without invoking the factory when ownership is unsupported;
+     * callers must retain a cooperative/executor fallback. Only valid while this load is pending. */
+    default <T extends Disposable> T preparationResource(Class<T> type, Supplier<? extends T> factory) {
+        return null;
+    }
 
     /**
      * Requests a borrowed dependency and retains it for the parent load/asset.
@@ -60,6 +74,19 @@ public interface AssetLoadContext {
      * @return the pending preparation result
      */
     <T> FdxFuture<T> async(FdxTask<T> task);
+
+    /**
+     * Runs CPU-only preparation in bounded steps until a step returns true.
+     * Each step must return promptly and must not touch graphics or context methods.
+     * The default manager yields between steps under its update budget without an
+     * executor; with an executor it drains the steps on that worker. Captured state
+     * must contain only GC-managed staging data, not resources requiring explicit
+     * cleanup on cancellation. Cancellation may let the current worker finish.
+     * Custom contexts default to draining inside one async task.
+     */
+    default FdxFuture<Void> asyncSteps(FdxTask<Boolean> step) {
+        return async(() -> { while (!step.run()) { } return null; });
+    }
 
     /**
      * Starts whole-file acquisition on the configured executor/cooperative queue
