@@ -58,19 +58,27 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class ShaderGraphProviderMigrationTest {
-    @Test void loadingOnlyPreparationAdvancesThroughProviderWrapper() {
+    @Test
+    void loadingOnlyPreparationAdvancesThroughProviderWrapper() {
         var graphics = new FakeGraphicsContext();
         boolean[] advanced = {false};
         graphics.device.preparation = new io.github.libfdx.graphics.shader.runtime.ShaderPreparationOperation() {
-            @Override public void advanceLoading() { advanced[0] = true; }
-            @Override public boolean isDone() { return advanced[0]; }
-            @Override public io.github.libfdx.graphics.shader.runtime.ShaderPreparationPhase phase() {
+            @Override
+            public void advanceLoading() { advanced[0] = true; }
+            @Override
+            public boolean isDone() { return advanced[0]; }
+            @Override
+            public io.github.libfdx.graphics.shader.runtime.ShaderPreparationPhase phase() {
                 return io.github.libfdx.graphics.shader.runtime.ShaderPreparationPhase.SOURCE;
             }
-            @Override public io.github.libfdx.graphics.shader.runtime.ShaderPreparedResult finish() { throw new UnsupportedOperationException(); }
-            @Override public void cancel() { }
-            @Override public void dispose() { }
-            @Override public boolean isDisposed() { return false; }
+            @Override
+            public io.github.libfdx.graphics.shader.runtime.ShaderPreparedResult finish() { throw new UnsupportedOperationException(); }
+            @Override
+            public void cancel() { }
+            @Override
+            public void dispose() { }
+            @Override
+            public boolean isDisposed() { return false; }
         };
         var program = ShaderGraphRenderProgram.builder(ShaderPassId.FORWARD,
                 ShaderModuleDescriptor.wgsl("loading", "@vertex fn vertexMain() {}")
@@ -422,7 +430,8 @@ final class ShaderGraphProviderMigrationTest {
     private static final class FakeGraphicsDevice
             implements GraphicsDevice {
         private io.github.libfdx.graphics.shader.runtime.ShaderPreparationOperation preparation;
-        @Override public io.github.libfdx.graphics.shader.runtime.ShaderPreparationOperation prepareRenderPipeline(
+        @Override
+        public io.github.libfdx.graphics.shader.runtime.ShaderPreparationOperation prepareRenderPipeline(
                 io.github.libfdx.graphics.shader.runtime.ShaderPipelineRequest request) { return preparation; }
         private final GraphicsCapabilities capabilities =
                 GraphicsCapabilities.builder()

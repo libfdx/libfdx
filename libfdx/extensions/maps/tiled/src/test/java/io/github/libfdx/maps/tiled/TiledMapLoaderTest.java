@@ -29,7 +29,8 @@ final class TiledMapLoaderTest {
     private static final String COLLECTION_A = "tiled/images/collection-a.png";
     private static final String COLLECTION_B = "tiled/images/collection-b.png";
 
-    @Test void sparseCollectionsLoadDependenciesBeforeBindingAndUseNativeImageCrops() {
+    @Test
+    void sparseCollectionsLoadDependenciesBeforeBindingAndUseNativeImageCrops() {
         Fixture fixture = new Fixture(64); // The 100-million-wide ID span must not consume the tile/cell budget.
         var cpu = fixture.manager.acquire(AssetDescriptor.of(COLLECTION_MAP, TileMap.class)); fixture.drain();
         assertEquals(2, fixture.readCounts.size()); assertEquals(0, fixture.uploads);
@@ -57,7 +58,8 @@ final class TiledMapLoaderTest {
         cpu.dispose(); fixture.close();
     }
 
-    @Test void sparseHolesInvalidCropsAndOverlappingRangesFailBeforeTextureLoading() {
+    @Test
+    void sparseHolesInvalidCropsAndOverlappingRangesFailBeforeTextureLoading() {
         rejectCollection(map -> {
             JsonValue data = map.require("layers").require(0).require("data"), changed = JsonValue.array().add(2);
             for (int i = 1; i < data.size(); i++) { changed.add(data.require(i)); }
@@ -73,7 +75,8 @@ final class TiledMapLoaderTest {
         rejectCollection(null, atlas -> atlas.require("tiles").require(0).put("image", "../../../escape.png"), "root");
     }
 
-    @Test void collectionImageFailuresReleaseAllPreparedTextures() {
+    @Test
+    void collectionImageFailuresReleaseAllPreparedTextures() {
         for (boolean wrongSize : new boolean[]{false, true}) {
             Fixture fixture = new Fixture(); fixture.graphics();
             if (wrongSize) {
@@ -105,7 +108,8 @@ final class TiledMapLoaderTest {
         } finally { fixture.close(); }
     }
 
-    @Test void imageLayersLoadOnlyGraphicsDependenciesAndSharePagesAcrossScopes() {
+    @Test
+    void imageLayersLoadOnlyGraphicsDependenciesAndSharePagesAcrossScopes() {
         Fixture fixture=new Fixture();
         JsonValue map=root();
         JsonValue image=JsonValue.object().put("id",12).put("type","imagelayer").put("image","images/terrain.png")
@@ -132,7 +136,8 @@ final class TiledMapLoaderTest {
         second.dispose(); assertTrue(texture.isDisposed()); assertEquals(1,fixture.disposals);
         cpu.dispose(); fixture.close();
     }
-    @Test void imageLayerDimensionsAndPathsFailClearlyAndMissingDimensionsResolveAtBinding() {
+    @Test
+    void imageLayerDimensionsAndPathsFailClearlyAndMissingDimensionsResolveAtBinding() {
         for(boolean omitDimensions:new boolean[]{true,false}) {
             Fixture fixture=new Fixture(); fixture.graphics();
             JsonValue image=JsonValue.object().put("id",1).put("type","imagelayer").put("image","images/terrain.png");
@@ -152,7 +157,8 @@ final class TiledMapLoaderTest {
                 .put("image","images/terrain.png").put("transparentcolor","#00ff00"))),"transparentcolor");
     }
 
-    @Test void groupsAnimationsAndParallaxSurviveBudgetedCpuAndGraphicsLoading() {
+    @Test
+    void groupsAnimationsAndParallaxSurviveBudgetedCpuAndGraphicsLoading() {
         Fixture fixture = new Fixture(); fixture.graphics();
         AssetLease<TileMapAsset> lease = fixture.manager.acquire(AssetDescriptor.of("tiled/motion.tmj", TileMapAsset.class));
         fixture.drain();
@@ -171,7 +177,8 @@ final class TiledMapLoaderTest {
         Texture image = first.texture(); lease.dispose(); assertTrue(image.isDisposed()); fixture.close();
     }
 
-    @Test void nestedReferencesIdsAndAnimationBoundsAreValidated() {
+    @Test
+    void nestedReferencesIdsAndAnimationBoundsAreValidated() {
         reject(map -> {
             JsonValue layers=map.require("layers");
             JsonValue original=layers.require(0).require("data"), changed=JsonValue.array().add(1000);
@@ -194,7 +201,8 @@ final class TiledMapLoaderTest {
                 .put("animation",JsonValue.array().add(JsonValue.object().put("tileid",0).put("duration",0))))),"duration");
     }
 
-    @Test void loadsCpuMapWithExternalAtlasAllFlagsSparseMetadataAndObjects() {
+    @Test
+    void loadsCpuMapWithExternalAtlasAllFlagsSparseMetadataAndObjects() {
         Fixture fixture = new Fixture();
         AssetLease<TileMap> lease = fixture.manager.acquire(AssetDescriptor.of(MAP, TileMap.class));
         fixture.drain();
@@ -232,7 +240,8 @@ final class TiledMapLoaderTest {
         fixture.close();
     }
 
-    @Test void pendingExternalAtlasPreventsMapPublicationWithinOneStepBudgets() {
+    @Test
+    void pendingExternalAtlasPreventsMapPublicationWithinOneStepBudgets() {
         Fixture fixture = new Fixture();
         FdxFuture<byte[]> read = fixture.delay(ATLAS);
         AssetLease<TileMap> lease = fixture.manager.acquire(AssetDescriptor.of(MAP, TileMap.class));
@@ -242,7 +251,8 @@ final class TiledMapLoaderTest {
         fixture.drain(); assertTrue(lease.isLoaded()); fixture.close();
     }
 
-    @Test void twoDifferentMapScopesShareAtlasAndGpuImagesUntilFinalRelease() {
+    @Test
+    void twoDifferentMapScopesShareAtlasAndGpuImagesUntilFinalRelease() {
         Fixture fixture = new Fixture(); fixture.graphics();
         FdxFuture<byte[]> image = fixture.delay(IMAGE);
         AssetScope a = fixture.manager.createScope(), b = fixture.manager.createScope();
@@ -268,7 +278,8 @@ final class TiledMapLoaderTest {
         assertEquals(2, fixture.disposals);
     }
 
-    @Test void cancellingOnePendingMapKeepsOtherMapsDependenciesAlive() {
+    @Test
+    void cancellingOnePendingMapKeepsOtherMapsDependenciesAlive() {
         Fixture fixture = new Fixture(); fixture.graphics();
         FdxFuture<byte[]> image = fixture.delay(IMAGE);
         AssetScope a = fixture.manager.createScope(), b = fixture.manager.createScope();
@@ -282,7 +293,8 @@ final class TiledMapLoaderTest {
         fixture.close(); assertEquals(2, fixture.disposals);
     }
 
-    @Test void failedExternalReadPropagatesAndRetriedMapCanLoad() {
+    @Test
+    void failedExternalReadPropagatesAndRetriedMapCanLoad() {
         Fixture fixture = new Fixture();
         FdxFuture<byte[]> atlas = fixture.delay(ATLAS);
         AssetLease<TileMap> first = fixture.manager.acquire(AssetDescriptor.of(MAP, TileMap.class));
@@ -293,7 +305,8 @@ final class TiledMapLoaderTest {
         fixture.drain(); assertTrue(retry.isLoaded()); fixture.close();
     }
 
-    @Test void cancelledMapAttemptCannotPublishOverItsRetry() {
+    @Test
+    void cancelledMapAttemptCannotPublishOverItsRetry() {
         Fixture fixture = new Fixture(); fixture.graphics();
         FdxFuture<byte[]> atlas = fixture.delay(ATLAS);
         AssetLease<TileMapAsset> old = fixture.manager.acquire(AssetDescriptor.of(MAP, TileMapAsset.class));
@@ -305,7 +318,8 @@ final class TiledMapLoaderTest {
         assertEquals(2, fixture.uploads); fixture.close(); assertEquals(2, fixture.disposals);
     }
 
-    @Test void failedBindingReleasesUploadedImagesWithoutPartiallyPublishingMap() {
+    @Test
+    void failedBindingReleasesUploadedImagesWithoutPartiallyPublishingMap() {
         Fixture fixture = new Fixture(); fixture.graphics(); fixture.wrongImageSize = true;
         AssetLease<TileMapAsset> lease = fixture.manager.acquire(AssetDescriptor.of(MAP, TileMapAsset.class));
         fixture.drain();
@@ -314,7 +328,8 @@ final class TiledMapLoaderTest {
         assertNull(fixture.manager.find(IMAGE, Texture.class)); fixture.close();
     }
 
-    @Test void invalidGidFailsBeforeImagesAreRequested() {
+    @Test
+    void invalidGidFailsBeforeImagesAreRequested() {
         Fixture fixture = new Fixture(); fixture.graphics();
         JsonValue json = root();
         JsonValue data = JsonValue.array();
@@ -327,7 +342,8 @@ final class TiledMapLoaderTest {
         assertTrue(failure(lease).contains("layer 2")); fixture.close();
     }
 
-    @Test void malformedCountsRangesAndUnsignedIdsFailWithSourceContext() {
+    @Test
+    void malformedCountsRangesAndUnsignedIdsFailWithSourceContext() {
         reject(map -> map.put("width", 0), "width");
         reject(map -> map.put("width", 99999999), "limit");
         reject(map -> map.require("layers").require(0).put("data", JsonValue.array().add(1)), "count");
@@ -347,7 +363,8 @@ final class TiledMapLoaderTest {
         reject(map -> map.require("layers").require(2).require("objects").require(4).put("width", 0), "object 5");
     }
 
-    @Test void unsupportedRuntimeFeaturesFailInsteadOfSilentlyChangingTheMap() {
+    @Test
+    void unsupportedRuntimeFeaturesFailInsteadOfSilentlyChangingTheMap() {
         reject(map -> map.put("orientation", "isometric"), "orientation");
         reject(map -> map.put("infinite", true), "infinite");
         reject(map -> map.require("layers").require(0).put("type", "group"), "layer");
@@ -362,7 +379,8 @@ final class TiledMapLoaderTest {
         reject(map -> map.require("properties").require(0).put("type", "class"), "property");
     }
 
-    @Test void propertyTypesAreStrictAndRelativePathsStayPortable() {
+    @Test
+    void propertyTypesAreStrictAndRelativePathsStayPortable() {
         reject(map -> map.require("properties").require(0).put("value", 7), "string");
         reject(map -> map.require("properties").require(1).put("value", "9.8"), "number");
         reject(map -> map.require("properties").require(3).put("value", "#oops"), "color");
@@ -372,7 +390,8 @@ final class TiledMapLoaderTest {
         assertThrows(FdxException.class, () -> TiledReader.resolve(MAP, "https://example.com/image.png"));
     }
 
-    @Test void cellLimitIncludesAllLayersAndLayerOffsetsVisibilityAndOpacityAreRetained() {
+    @Test
+    void cellLimitIncludesAllLayersAndLayerOffsetsVisibilityAndOpacityAreRetained() {
         Fixture fixture = new Fixture(100); // One 96-cell layer fits; the second does not.
         AssetLease<TileMap> failed = fixture.manager.acquire(AssetDescriptor.of(MAP, TileMap.class));
         fixture.drain(); assertTrue(failed.future().isFailed()); fixture.close();

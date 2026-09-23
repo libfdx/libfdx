@@ -17,7 +17,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AndroidVulkanPipelineCacheTest {
-    @ParameterizedTest @ValueSource(strings = {"identity", "initialize", "snapshot", "merge"})
+    @ParameterizedTest
+    @ValueSource(strings = {"identity", "initialize", "snapshot", "merge"})
     void nativeLossIsNotAnOptionalCacheMiss(String stage) {
         Store store = new Store(); store.read.complete(null);
         NativeCache nativeCache = new NativeCache();
@@ -46,7 +47,8 @@ class AndroidVulkanPipelineCacheTest {
         assertEquals(0, nativeCache.references);
         assertThrows(GraphicsContextLostException.class, cache::beginNative);
     }
-    @Test void nativeInitializationWaitsForStorageAndPublishesOnceToWorkers() {
+    @Test
+    void nativeInitializationWaitsForStorageAndPublishesOnceToWorkers() {
         Store store = new Store();
         NativeCache nativeCache = new NativeCache();
         ShaderArtifactCache artifacts = new ShaderArtifactCache(store);
@@ -84,7 +86,8 @@ class AndroidVulkanPipelineCacheTest {
         assertEquals(1, freshArtifacts.metrics(ShaderCacheLayer.DRIVER_PIPELINE).hits());
     }
 
-    @Test void rejectionRewritesTheDriverRecordAndAllocationFailureLeavesCompilationAvailable() {
+    @Test
+    void rejectionRewritesTheDriverRecordAndAllocationFailureLeavesCompilationAvailable() {
         Store store = new Store();
         ShaderArtifactCache artifacts = new ShaderArtifactCache(store);
         NativeCache nativeCache = new NativeCache(); nativeCache.result = 2;
@@ -106,7 +109,8 @@ class AndroidVulkanPipelineCacheTest {
         assertEquals(0, failedStore.writes);
     }
 
-    @Test void closedExecutorFailsThePendingInitializationWithoutCallingNativeCode() {
+    @Test
+    void closedExecutorFailsThePendingInitializationWithoutCallingNativeCode() {
         Store store = new Store(); NativeCache nativeCache = new NativeCache();
         AndroidVulkanPipelineCache cache = new AndroidVulkanPipelineCache(nativeCache, new ShaderArtifactCache(store),
                 task -> { throw new RejectedExecutionException("closed"); });
@@ -116,7 +120,8 @@ class AndroidVulkanPipelineCacheTest {
         assertEquals(0, nativeCache.initializations);
     }
 
-    @Test void confirmedDriverHitsAvoidNativeSnapshotCopies() {
+    @Test
+    void confirmedDriverHitsAvoidNativeSnapshotCopies() {
         Store store = new Store(); store.read.complete(null);
         NativeCache nativeCache = new NativeCache(); nativeCache.hit = true;
         ShaderArtifactCache artifacts = new ShaderArtifactCache(store);
@@ -129,7 +134,8 @@ class AndroidVulkanPipelineCacheTest {
         assertEquals(1, artifacts.metrics(ShaderCacheLayer.DRIVER_PIPELINE).pipelineCacheHits());
     }
 
-    @Test void identityIncludesVendorDeviceDriverApiPointerSizeAndEveryUuidByte() {
+    @Test
+    void identityIncludesVendorDeviceDriverApiPointerSizeAndEveryUuidByte() {
         byte[] identity = new NativeCache().identity();
         var original = AndroidVulkanPipelineCache.key(identity);
         for (int offset : new int[]{0, 4, 8, 12, 16, 20, 35}) {
@@ -140,7 +146,8 @@ class AndroidVulkanPipelineCacheTest {
         assertThrows(IllegalArgumentException.class, () -> AndroidVulkanPipelineCache.key(Arrays.copyOf(identity, 35)));
     }
 
-    @Test void pendingMergeRetainsDeviceUntilStorageCompletesAndFailurePermitsRetry() {
+    @Test
+    void pendingMergeRetainsDeviceUntilStorageCompletesAndFailurePermitsRetry() {
         Store store = new Store(); store.read.complete(null); store.holdUpdate = true;
         NativeCache nativeCache = new NativeCache();
         ShaderArtifactCache artifacts = new ShaderArtifactCache(store);
@@ -163,7 +170,8 @@ class AndroidVulkanPipelineCacheTest {
         assertEquals(9, new ShaderArtifactCache(fresh).readAsync(AndroidVulkanPipelineCache.key(nativeCache.identity())).get()[32]);
     }
 
-    @Test void independentNativeSnapshotsMergeAgainstLatestStoreContents() {
+    @Test
+    void independentNativeSnapshotsMergeAgainstLatestStoreContents() {
         Store store = new Store(); store.read.complete(null);
         NativeCache first = new NativeCache(), second = new NativeCache();
         first.snapshot[32] = 1; second.snapshot[32] = 2;
@@ -189,8 +197,10 @@ class AndroidVulkanPipelineCacheTest {
         private void fail(String stage) {
             if (stage.equals(failureAt)) throw new GraphicsContextLostException(AndroidVulkanProvider.ID);
         }
-        @Override public void requireUsable() { if (lost) throw new GraphicsContextLostException(AndroidVulkanProvider.ID); }
-        @Override public void observe(Throwable failure) { if (failure instanceof GraphicsContextLostException) lost = true; }
+        @Override
+        public void requireUsable() { if (lost) throw new GraphicsContextLostException(AndroidVulkanProvider.ID); }
+        @Override
+        public void observe(Throwable failure) { if (failure instanceof GraphicsContextLostException) lost = true; }
         int initializations, snapshots, result = 1;
         int references, merges;
         boolean hit;
@@ -198,21 +208,28 @@ class AndroidVulkanPipelineCacheTest {
         byte[] restored;
         final byte[] snapshot = ByteBuffer.allocate(40).order(ByteOrder.LITTLE_ENDIAN)
                 .putInt(32).putInt(1).putInt(1).putInt(2).array();
-        @Override public byte[] identity() {
+        @Override
+        public byte[] identity() {
             fail("identity");
             return ByteBuffer.allocate(36).order(ByteOrder.LITTLE_ENDIAN)
                     .putInt(1).putInt(2).putInt(3).putInt(4).putInt(8).array();
         }
-        @Override public int initialize(byte[] bytes) { fail("initialize"); initializations++; restored = bytes; return result; }
-        @Override public byte[] snapshot() { fail("snapshot"); snapshots++; return snapshot; }
-        @Override public void retain() { references++; }
-        @Override public void release() { assertTrue(references > 0); references--; }
-        @Override public byte[] merge(byte[] current, byte[] incoming) {
+        @Override
+        public int initialize(byte[] bytes) { fail("initialize"); initializations++; restored = bytes; return result; }
+        @Override
+        public byte[] snapshot() { fail("snapshot"); snapshots++; return snapshot; }
+        @Override
+        public void retain() { references++; }
+        @Override
+        public void release() { assertTrue(references > 0); references--; }
+        @Override
+        public byte[] merge(byte[] current, byte[] incoming) {
             fail("merge");
             assertTrue(references > 0); merges++;
             byte[] result = incoming.clone(); result[32] |= current[32]; return result;
         }
-        @Override public long[] statistics() { return new long[]{creations, hit ? creations : 0, hit ? creations : 0, hit ? 0 : creations}; }
+        @Override
+        public long[] statistics() { return new long[]{creations, hit ? creations : 0, hit ? creations : 0, hit ? 0 : creations}; }
     }
 
     private static final class Store implements ShaderCacheStore {
@@ -222,8 +239,10 @@ class AndroidVulkanPipelineCacheTest {
         boolean holdUpdate;
         FdxFuture<Void> pendingUpdate;
         UnaryOperator<byte[]> update;
-        @Override public boolean supportsAtomicUpdate() { return true; }
-        @Override public FdxFuture<Void> updateAsync(String key, UnaryOperator<byte[]> transform) {
+        @Override
+        public boolean supportsAtomicUpdate() { return true; }
+        @Override
+        public FdxFuture<Void> updateAsync(String key, UnaryOperator<byte[]> transform) {
             update = transform; pendingUpdate = FdxFuture.pending();
             if (!holdUpdate) finishUpdate();
             return pendingUpdate;
@@ -232,8 +251,11 @@ class AndroidVulkanPipelineCacheTest {
             try { record = update.apply(record); writes++; pendingUpdate.complete(null); }
             catch (Throwable error) { pendingUpdate.completeExceptionally(error); }
         }
-        @Override public FdxFuture<byte[]> readAsync(String key) { reads++; return read; }
-        @Override public FdxFuture<Void> writeAsync(String key, byte[] bytes) { writes++; record = bytes.clone(); return FdxFuture.completed(null); }
-        @Override public FdxFuture<Void> removeAsync(String key) { return FdxFuture.completed(null); }
+        @Override
+        public FdxFuture<byte[]> readAsync(String key) { reads++; return read; }
+        @Override
+        public FdxFuture<Void> writeAsync(String key, byte[] bytes) { writes++; record = bytes.clone(); return FdxFuture.completed(null); }
+        @Override
+        public FdxFuture<Void> removeAsync(String key) { return FdxFuture.completed(null); }
     }
 }

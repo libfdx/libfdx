@@ -42,15 +42,20 @@ public final class AndroidVulkanLifecycleTest extends ApplicationAdapter {
     private int sessions;
     private Session session;
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         require(mode.equals("pause") || mode.equals("surface"), "Unknown Vulkan lifecycle mode");
         session = new Session(fdx, ++sessions);
         log("SESSION_CREATE id=" + sessions + " mode=" + mode);
     }
-    @Override public void render() { session.render(); }
-    @Override public void pause() { log("PAUSE session=" + sessions); }
-    @Override public void resume() { log("RESUME session=" + sessions); }
-    @Override public void dispose() { session.close(); }
+    @Override
+    public void render() { session.render(); }
+    @Override
+    public void pause() { log("PAUSE session=" + sessions); }
+    @Override
+    public void resume() { log("RESUME session=" + sessions); }
+    @Override
+    public void dispose() { session.close(); }
 
     private final class Session {
         final GraphicsAttachment graphics;
@@ -202,7 +207,8 @@ public final class AndroidVulkanLifecycleTest extends ApplicationAdapter {
         void waitUntilDrained(Runnable continuation) {
             long expires = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
             owner.post(new Runnable() {
-                @Override public void run() {
+                @Override
+                public void run() {
                     require(System.nanoTime() < expires, "Android Vulkan jobs failed to drain");
                     for (ShaderPreparationOperation job : held) {
                         if (!job.isDone()) { owner.postDelayed(this, 10); return; }

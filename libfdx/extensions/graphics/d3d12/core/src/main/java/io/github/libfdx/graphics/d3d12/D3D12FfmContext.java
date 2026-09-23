@@ -1230,7 +1230,8 @@ final class D3D12FfmContext implements AutoCloseable {
         final int[] types;
         MemorySegment root = D3D12Ffm.NULL, state = D3D12Ffm.NULL;
         ComputePipeline(int[] types) { this.types = types; }
-        @Override public void close() { D3D12Ffm.release(state); D3D12Ffm.release(root); state = root = D3D12Ffm.NULL; }
+        @Override
+        public void close() { D3D12Ffm.release(state); D3D12Ffm.release(root); state = root = D3D12Ffm.NULL; }
     }
 
     long createBuffer(int size, int usage) {

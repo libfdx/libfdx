@@ -30,8 +30,10 @@ public final class TiledMapLoader implements AssetLoader<TileMap> {
         assets.registerLoader(io.github.libfdx.maps.TileChunk.class, new TiledChunkLoader(maxCells));
         assets.registerLoader(TileMap.class, loader);
     }
-    @Override public Class<TileMap> type() { return TileMap.class; }
-    @Override public FdxFuture<TileMap> load(AssetLoadContext context, AssetDescriptor<TileMap> descriptor) {
+    @Override
+    public Class<TileMap> type() { return TileMap.class; }
+    @Override
+    public FdxFuture<TileMap> load(AssetLoadContext context, AssetDescriptor<TileMap> descriptor) {
         FdxFuture<TileMap> result = FdxFuture.pending();
         context.readBytes(context.files().internal(descriptor.path())).onSuccess(bytes ->
                 context.async(() -> new TiledReader(descriptor.path(), maxCells).readMap(bytes))
@@ -51,8 +53,10 @@ public final class TiledMapLoader implements AssetLoader<TileMap> {
     private static final class AtlasLoader implements AssetLoader<TileAtlas> {
         private final int maxTiles;
         AtlasLoader(int maxTiles) { this.maxTiles = maxTiles; }
-        @Override public Class<TileAtlas> type() { return TileAtlas.class; }
-        @Override public FdxFuture<TileAtlas> load(AssetLoadContext context, AssetDescriptor<TileAtlas> descriptor) {
+        @Override
+        public Class<TileAtlas> type() { return TileAtlas.class; }
+        @Override
+        public FdxFuture<TileAtlas> load(AssetLoadContext context, AssetDescriptor<TileAtlas> descriptor) {
             FdxFuture<TileAtlas> result = FdxFuture.pending();
             context.readBytes(context.files().internal(descriptor.path())).onSuccess(bytes ->
                     context.async(() -> new TiledReader(descriptor.path(), maxTiles).readAtlas(bytes))

@@ -14,8 +14,10 @@ import io.github.libfdx.maps.ImageLayer;
 
 /** Format-neutral graphics binding; the application separately registers its CPU TileMap loader. */
 final class TileMapAssetLoader implements AssetLoader<TileMapAsset> {
-    @Override public Class<TileMapAsset> type() { return TileMapAsset.class; }
-    @Override public FdxFuture<TileMapAsset> load(AssetLoadContext context, AssetDescriptor<TileMapAsset> descriptor) {
+    @Override
+    public Class<TileMapAsset> type() { return TileMapAsset.class; }
+    @Override
+    public FdxFuture<TileMapAsset> load(AssetLoadContext context, AssetDescriptor<TileMapAsset> descriptor) {
         FdxFuture<TileMapAsset> result = FdxFuture.pending();
         TextureLoadOptions options = TextureLoadOptions.from(descriptor);
         context.dependency(AssetDescriptor.of(descriptor.path(), TileMap.class)).onSuccess(map -> {

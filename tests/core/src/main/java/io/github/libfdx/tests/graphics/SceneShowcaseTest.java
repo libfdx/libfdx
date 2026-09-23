@@ -57,7 +57,8 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
     private float yaw=.62f,pitch=.4f,distance=11.8f,uiScale=1,uiLeft,uiTop;
     private String providerLabel,message="PREPARING THE GALLERY",drawStats="WARMING UP",timeStats="CPU RECORD / WARMING UP",budgetStats="";
     private final InputAdapter controls=new InputAdapter() {
-        @Override public boolean keyDown(KeyEvent event) {
+        @Override
+        public boolean keyDown(KeyEvent event) {
             switch (event.key()) {
                 case NUM_1 -> desired=EffectQuality.LOW;
                 case NUM_2 -> desired=EffectQuality.BALANCED;
@@ -71,23 +72,28 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
             }
             return true;
         }
-        @Override public boolean pointerDown(PointerEvent event) {
+        @Override
+        public boolean pointerDown(PointerEvent event) {
             if (activate(uiX(event.x()),uiY(event.y()))) return true;
             dragging=insideView(uiX(event.x()),uiY(event.y())); lastX=event.x(); lastY=event.y();
             return dragging;
         }
-        @Override public boolean pointerUp(PointerEvent event) { boolean used=dragging; dragging=false; return used; }
-        @Override public boolean pointerMoved(PointerEvent event) {
+        @Override
+        public boolean pointerUp(PointerEvent event) { boolean used=dragging; dragging=false; return used; }
+        @Override
+        public boolean pointerMoved(PointerEvent event) {
             if (!dragging) return false;
             yaw-=(event.x()-lastX)*.008f;
             pitch=Math.max(.12f,Math.min(.85f,pitch+(event.y()-lastY)*.006f));
             lastX=event.x(); lastY=event.y(); return true;
         }
-        @Override public boolean scrolled(PointerEvent event) {
+        @Override
+        public boolean scrolled(PointerEvent event) {
             if (!insideView(uiX(event.x()),uiY(event.y()))) return false;
             distance=Math.max(8,Math.min(17,distance+event.scrollY()*.6f)); return true;
         }
-        @Override public boolean touchDown(TouchEvent event) { return activate(uiX(event.point().x()),uiY(event.point().y())); }
+        @Override
+        public boolean touchDown(TouchEvent event) { return activate(uiX(event.point().x()),uiY(event.point().y())); }
     };
 
     public SceneShowcaseTest(long frames) { this(frames, null); }
@@ -97,7 +103,8 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
         super(frames); desired=EffectQuality.BALANCED; this.executor=executor;
     }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, getClass().getSimpleName());
         providerLabel=graphics.providerId().value().toUpperCase(java.util.Locale.ROOT);
         if (!ImageBasedLighting3D.isSupported(graphics))
@@ -189,7 +196,8 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
         scene.add(instance); if(caster) shadowCasters.add(instance); return instance;
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         updateLayout();
         if (!ready) {
             boolean complete=assets.update(4,1_000_000);
@@ -361,9 +369,12 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
         return micros/1000+"."+Long.toString(1000+micros%1000).substring(1);
     }
 
-    @Override public void pause() { platformPaused=true; dragging=false; }
-    @Override public void resume() { platformPaused=false; }
-    @Override public void dispose() {
+    @Override
+    public void pause() { platformPaused=true; dragging=false; }
+    @Override
+    public void resume() { platformPaused=false; }
+    @Override
+    public void dispose() {
         if(disposed) return;
         disposed=true;
         if(input!=null) input.removeProcessor(controls);
@@ -412,8 +423,10 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
             }
         }
         long bytes() { return scene.estimatedBytes()+post.estimatedBytes(); }
-        @Override public boolean isDisposed() { return disposed; }
-        @Override public void dispose() {
+        @Override
+        public boolean isDisposed() { return disposed; }
+        @Override
+        public void dispose() {
             if(disposed)return; disposed=true;
             try { SceneShowcaseTest.dispose(scene); } finally { SceneShowcaseTest.dispose(post); }
         }

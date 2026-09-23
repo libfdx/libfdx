@@ -107,6 +107,8 @@ public final class Lighting2D implements Disposable {
     }
     private void updateAmbient() { effect.parameters.setFloat4(ambientCount,ambientR,ambientG,ambientB,lightCount); }
     private void ensureOpen() { if(isDisposed())throw new FdxException("Lighting2D disposed"); }
-    @Override public boolean isDisposed(){return effect.isDisposed();}
-    @Override public void dispose(){effect.dispose();}
+    @Override
+    public boolean isDisposed(){return effect.isDisposed();}
+    @Override
+    public void dispose(){effect.dispose();}
 }

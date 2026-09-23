@@ -51,7 +51,8 @@ final class ShaderCompilerRegistryTest {
             .compiler("test-assembler", "1")
             .build();
 
-    @Test void asynchronousCompilationUsesTheSameArtifactAndVerifierChecks() {
+    @Test
+    void asynchronousCompilationUsesTheSameArtifactAndVerifierChecks() {
         ShaderCompilerRegistry registry = ShaderCompilerRegistry.builder()
                 .compiler(new CustomCompiler("1")).verifier(new CustomVerifier("1")).build();
         ShaderTargetCompileRequest request = customRequest(CUSTOM_ENVIRONMENT, ShaderTargetOptions.empty(),

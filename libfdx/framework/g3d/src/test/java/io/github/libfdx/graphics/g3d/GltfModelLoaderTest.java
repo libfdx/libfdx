@@ -47,7 +47,8 @@ final class GltfModelLoaderTest {
     private static final float EPSILON = 0.0001f;
     private final Matrix4 matrixOut = new Matrix4();
 
-    @Test void multiplePrimitivesYieldBetweenUploadsAndCleanUpCancellationAndFailure() {
+    @Test
+    void multiplePrimitivesYieldBetweenUploadsAndCleanUpCancellationAndFailure() {
         for (int outcome = 0; outcome < 3; outcome++) {
             JsonValue root = new JsonReader().parse(skinnedGltf());
             JsonValue primitives = root.require("meshes").require(0).require("primitives");
@@ -80,7 +81,8 @@ final class GltfModelLoaderTest {
         }
     }
 
-    @Test void injectedImageAndMipmapJobsGateGpuCreationAndRespectFailureAndCancellation() {
+    @Test
+    void injectedImageAndMipmapJobsGateGpuCreationAndRespectFailureAndCancellation() {
         for (int outcome = 0; outcome < 3; outcome++) {
             JsonValue root = new JsonReader().parse(skinnedGltf());
             root.put("images", JsonValue.array().add(JsonValue.object().put("uri", "data:image/png;base64,AA==")));
@@ -118,7 +120,8 @@ final class GltfModelLoaderTest {
         }
     }
 
-    @Test void largePrimitiveCompletesThroughBudgetedUpdatesWithoutLosingTriangles() {
+    @Test
+    void largePrimitiveCompletesThroughBudgetedUpdatesWithoutLosingTriangles() {
         JsonValue root=new JsonReader().parse(skinnedGltf());
         int triangles=5000;
         ByteBuffer indices=ByteBuffer.allocate(triangles*6).order(ByteOrder.LITTLE_ENDIAN);
@@ -171,9 +174,12 @@ final class GltfModelLoaderTest {
         var tasks = new java.util.ArrayDeque<Runnable>();
         AssetExecutor executor = new AssetExecutor() {
             private boolean disposed;
-            @Override public boolean submit(Runnable task) { tasks.add(task); return true; }
-            @Override public void dispose() { disposed = true; }
-            @Override public boolean isDisposed() { return disposed; }
+            @Override
+            public boolean submit(Runnable task) { tasks.add(task); return true; }
+            @Override
+            public void dispose() { disposed = true; }
+            @Override
+            public boolean isDisposed() { return disposed; }
         };
         Map<String, FdxFuture<byte[]>> reads = Map.of("model.gltf",
                 FdxFuture.completed(skinnedGltf().getBytes(StandardCharsets.UTF_8)));
@@ -213,7 +219,8 @@ final class GltfModelLoaderTest {
         assertTrue(graphics.device.buffers.stream().allMatch(FakeBuffer::isDisposed));
     }
 
-    @Test void malformedTextureCoordinateAndTangentAttributesFailBeforeGpuAllocation() {
+    @Test
+    void malformedTextureCoordinateAndTangentAttributesFailBeforeGpuAllocation() {
         for (int invalid = 0; invalid < 4; invalid++) {
             JsonValue root = new JsonReader().parse(skinnedGltf());
             JsonValue primitive = root.require("meshes").require(0).require("primitives").require(0);
@@ -235,7 +242,8 @@ final class GltfModelLoaderTest {
         }
     }
 
-    @Test void importsSecondaryUvsAndSuppliedMirroredTangentsWithoutChangingCompactMeshes() {
+    @Test
+    void importsSecondaryUvsAndSuppliedMirroredTangentsWithoutChangingCompactMeshes() {
         JsonValue root = new JsonReader().parse(skinnedGltf());
         JsonValue attributes = root.require("meshes").require(0).require("primitives").require(0).require("attributes");
         attributes.put("TEXCOORD_1", floatAccessor(root, "VEC2", .2f,.3f, .4f,.5f, .6f,.7f));
@@ -249,7 +257,8 @@ final class GltfModelLoaderTest {
         } finally { model.dispose(); }
     }
 
-    @Test void requiredExtensionsAndVersionFailBeforeGpuAllocationWhileUnknownOptionalExtensionsAreIgnored() {
+    @Test
+    void requiredExtensionsAndVersionFailBeforeGpuAllocationWhileUnknownOptionalExtensionsAreIgnored() {
         var graphics=new FakeGraphicsContext();var loader=new GltfModelLoader(graphics);
         for(String field:new String[]{
                 "\"extensionsUsed\":[\"VENDOR_unknown\"],\"extensionsRequired\":[\"VENDOR_unknown\"],",
@@ -264,7 +273,8 @@ final class GltfModelLoaderTest {
         Model model=loader.loadModelBytes("optional.gltf",supported.getBytes(StandardCharsets.UTF_8));model.dispose();
     }
 
-    @Test void sparsePositionAccessorWithNoBaseProducesTheSameSkinnedPrimitive() {
+    @Test
+    void sparsePositionAccessorWithNoBaseProducesTheSameSkinnedPrimitive() {
         var root=new io.github.libfdx.json.JsonReader().parse(skinnedGltf());
         root.require("buffers").add(io.github.libfdx.json.JsonValue.object().put("byteLength",3).put("uri","data:application/octet-stream;base64,AAEC"));
         int indexView=root.require("bufferViews").arrayValues().size();
@@ -298,8 +308,10 @@ final class GltfModelLoaderTest {
         DefaultAssetManager manager = new DefaultAssetManager(files);
         G3DAssetLoaders.register(manager, graphics);
         manager.registerLoader(ImageData.class, new AssetLoader<ImageData>() {
-            @Override public Class<ImageData> type() { return ImageData.class; }
-            @Override public FdxFuture<ImageData> load(AssetLoadContext context, AssetDescriptor<ImageData> descriptor) {
+            @Override
+            public Class<ImageData> type() { return ImageData.class; }
+            @Override
+            public FdxFuture<ImageData> load(AssetLoadContext context, AssetDescriptor<ImageData> descriptor) {
                 FdxFuture<ImageData> result = FdxFuture.pending();
                 context.readBytes(context.files().internal(descriptor.path())).onSuccess(bytes ->
                         result.complete(new ImageData(1, 1, ByteBuffer.allocateDirect(4))))
@@ -395,7 +407,8 @@ final class GltfModelLoaderTest {
         assertEquals(0, graphics.device.texturesCreated);
     }
 
-    @Test void invalidSkinsAndHierarchyFailBeforeGpuCreation() {
+    @Test
+    void invalidSkinsAndHierarchyFailBeforeGpuCreation() {
         List<java.util.function.Consumer<JsonValue>> corruptions = List.of(
                 root -> root.require("nodes").require(1).put("children", JsonValue.array().add(0)),
                 root -> root.require("nodes").require(0).put("children", JsonValue.array().add(.5)),
@@ -423,7 +436,8 @@ final class GltfModelLoaderTest {
         }
     }
 
-    @Test void normalizesWeightsSeparatelyFromSharedColorAccessorAndAcceptsExtraInverseBinds() {
+    @Test
+    void normalizesWeightsSeparatelyFromSharedColorAccessorAndAcceptsExtraInverseBinds() {
         JsonValue root = new JsonReader().parse(skinnedGltf());
         JsonValue attributes = root.require("meshes").require(0).require("primitives").require(0).require("attributes");
         int weights = floatAccessor(root,"VEC4", .5f,0,0,0, .5f,0,0,0, .5f,0,0,0);
@@ -438,7 +452,8 @@ final class GltfModelLoaderTest {
         } finally { model.dispose(); }
     }
 
-    @Test void importsForestWithoutScenesAndDisambiguatesCollidingNodeNames() {
+    @Test
+    void importsForestWithoutScenesAndDisambiguatesCollidingNodeNames() {
         JsonValue root = new JsonReader().parse(skinnedGltf());
         root.put("scenes", JsonValue.array());
         // Rebuild the root without its optional scene selector.
@@ -456,7 +471,8 @@ final class GltfModelLoaderTest {
         } finally { model.dispose(); }
     }
 
-    @Test void importsMixedStepAndCubicTracksWithoutResamplingTheirIndependentTimelines() {
+    @Test
+    void importsMixedStepAndCubicTracksWithoutResamplingTheirIndependentTimelines() {
         JsonValue root = new JsonReader().parse(skinnedGltf());
         int times = floatAccessor(root, "SCALAR", 1, 3);
         int values = floatAccessor(root, "VEC3", 0,0,0, 0,1,0, 0,2,0, 0,6,0, 0,9,0, 0,0,0);
@@ -489,7 +505,8 @@ final class GltfModelLoaderTest {
         } finally { model.dispose(); }
     }
 
-    @Test void malformedAnimationDeclarationsFailDuringCpuPreparation() {
+    @Test
+    void malformedAnimationDeclarationsFailDuringCpuPreparation() {
         List<java.util.function.Consumer<JsonValue>> corruptions = List.of(
                 root -> root.require("animations").require(0).require("samplers").require(0).put("input", 99),
                 root -> root.require("animations").require(0).require("samplers").require(0).put("interpolation", "CUBICSPLINE"),
@@ -732,8 +749,10 @@ final class GltfModelLoaderTest {
         private boolean rangeInitialization;
         private int rangeCalls;
 
-        @Override public boolean supportsBufferRangeInitialization() { return rangeInitialization; }
-        @Override public void initializeBufferRange(Buffer buffer, int offset, ByteBuffer data) {
+        @Override
+        public boolean supportsBufferRangeInitialization() { return rangeInitialization; }
+        @Override
+        public void initializeBufferRange(Buffer buffer, int offset, ByteBuffer data) {
             assertSame(applicationThread, Thread.currentThread());
             io.github.libfdx.graphics.BufferInitialization.validate(buffer, offset, data);
             FakeBuffer target = (FakeBuffer) buffer;

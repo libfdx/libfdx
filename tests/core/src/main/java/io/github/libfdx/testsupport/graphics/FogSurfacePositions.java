@@ -58,8 +58,10 @@ public final class FogSurfacePositions implements Disposable {
     }
 
     public Texture texture() { return target.color(); }
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if(disposed)return;
         disposed=true; batch.dispose(); shader.dispose(); target.dispose();
     }
@@ -81,13 +83,16 @@ public final class FogSurfacePositions implements Disposable {
                     .colorTargets(ColorTargetState.opaque(TextureFormat.RGBA8_UNORM))
                     .vertexLayout(Mesh.PBR_LAYOUT).depthTestEnabled(true).depthWriteEnabled(true));
         }
-        @Override public boolean canRender(Renderable3D renderable) { return true; }
-        @Override public void begin(RenderContext3D context) {
+        @Override
+        public boolean canRender(Renderable3D renderable) { return true; }
+        @Override
+        public void begin(RenderContext3D context) {
             pass=context.pass();
             context.camera().combined().copyValues(matrix,0);
             parameters.setFloatMatrix(projection,matrix,0);
         }
-        @Override public void render(Renderable3D renderable) {
+        @Override
+        public void render(Renderable3D renderable) {
             MeshPart part=renderable.meshPart(); Mesh mesh=part.mesh();
             renderable.worldTransform().copyValues(matrix,0);
             parameters.setFloatMatrix(model,matrix,0);
@@ -99,8 +104,11 @@ public final class FogSurfacePositions implements Disposable {
                 pass.drawIndexed(indices,1,part.firstIndex(),0,0);
             } else pass.draw(part.vertexCount()>0?part.vertexCount():mesh.vertexCount(),1,part.firstVertex(),0);
         }
-        @Override public void end() { pass=null; }
-        @Override public boolean isDisposed() { return module.isDisposed(); }
-        @Override public void dispose() { pipeline.dispose(); module.dispose(); }
+        @Override
+        public void end() { pass=null; }
+        @Override
+        public boolean isDisposed() { return module.isDisposed(); }
+        @Override
+        public void dispose() { pipeline.dispose(); module.dispose(); }
     }
 }

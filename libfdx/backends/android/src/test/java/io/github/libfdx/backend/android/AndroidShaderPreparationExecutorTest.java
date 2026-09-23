@@ -9,7 +9,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AndroidShaderPreparationExecutorTest {
-    @Test void shutdownReturnsWhileNativeWorkDrainsAndNeverRunsWorkOnTheCaller() throws Exception {
+    @Test
+    void shutdownReturnsWhileNativeWorkDrainsAndNeverRunsWorkOnTheCaller() throws Exception {
         AndroidShaderPreparationExecutor executor = new AndroidShaderPreparationExecutor(1);
         CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1), drained = new CountDownLatch(1);
         AtomicReference<Thread> worker = new AtomicReference<>();

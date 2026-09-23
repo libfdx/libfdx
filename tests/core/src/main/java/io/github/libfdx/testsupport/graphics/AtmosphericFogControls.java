@@ -49,6 +49,8 @@ public final class AtmosphericFogControls implements Disposable {
 
     public void render(float delta) { root.update(delta); root.render(); }
     public void resize(int width, int height) { root.resize(width, height); }
-    @Override public boolean isDisposed() { return root.isDisposed(); }
-    @Override public void dispose() { root.dispose(); }
+    @Override
+    public boolean isDisposed() { return root.isDisposed(); }
+    @Override
+    public void dispose() { root.dispose(); }
 }

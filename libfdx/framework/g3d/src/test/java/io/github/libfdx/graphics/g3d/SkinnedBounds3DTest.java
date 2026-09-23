@@ -16,7 +16,8 @@ final class SkinnedBounds3DTest {
         return new SkinningPalette(new Skin("test",new Skeleton(bones)));
     }
 
-    @Test void jointBoxesEncloseIndependentlySkinnedVerticesAcrossRandomAffinePoses() {
+    @Test
+    void jointBoxesEncloseIndependentlySkinnedVerticesAcrossRandomAffinePoses() {
         Random random=new Random(94013);
         int vertices=128,jointCount=5;
         float[] positions=new float[vertices*3],weights=new float[vertices*4]; int[] joints=new int[weights.length];
@@ -51,7 +52,8 @@ final class SkinnedBounds3DTest {
         }
     }
 
-    @Test void preparationOwnsItsBoundsAndInvalidPaletteDoesNotChangeOutput() {
+    @Test
+    void preparationOwnsItsBoundsAndInvalidPaletteDoesNotChangeOutput() {
         float[] positions={1,2,3},weights={1,0,0,0}; int[] joints={0,0,0,0};
         SkinnedBounds3D prepared=new SkinnedBounds3D(positions,joints,weights,1);
         positions[0]=99; weights[0]=0; joints[0]=12;

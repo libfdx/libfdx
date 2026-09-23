@@ -34,7 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class ModelBatchShaderProviderOwnershipTest {
     private static final ProviderId PROVIDER_ID = ProviderId.of("model-batch-ownership-test");
 
-    @Test void optionalCullingUsesFlushCameraAndTransformsBeforeShaderSelection() {
+    @Test
+    void optionalCullingUsesFlushCameraAndTransformsBeforeShaderSelection() {
         var graphics=new FakeGraphicsContext();var provider=new CountingShaderProvider();
         var batch=new ModelBatch(graphics,new ModelBatchConfig().shaderProvider(provider));
         Mesh mesh=Mesh.coloredTriangle(graphics,"culling");

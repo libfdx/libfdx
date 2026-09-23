@@ -197,10 +197,12 @@ public final class FogCourtyard2D implements Disposable {
                 (color >>> 16 & 255) / 255f, (color >>> 8 & 255) / 255f, 1);
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         scenery.dispose(); actors.dispose(); overlay.dispose(); fog.dispose();
     }
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 }

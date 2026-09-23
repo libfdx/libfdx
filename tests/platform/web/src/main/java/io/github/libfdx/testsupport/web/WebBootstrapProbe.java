@@ -16,10 +16,12 @@ final class WebBootstrapProbe {
         WebApplicationBackend backend = new WebApplicationBackend();
         install(() -> { backend.dispose(); record("disposed"); });
         config.preloadApplication(new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) { record("preload"); }
+            @Override
+            public void create(Fdx fdx) { record("preload"); }
         });
         backend.start(config, new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 var assets = WebGeneratedAssets.assets();
                 for (int index = 0; index < assets.size(); index++) {
                     var asset = assets.get(index);
@@ -32,7 +34,8 @@ final class WebBootstrapProbe {
         record("startReturned");
     }
 
-    @JSFunctor private interface Action extends JSObject { void run(); }
+    @JSFunctor
+    private interface Action extends JSObject { void run(); }
 
     @JSBody(params = "dispose", script = """
             window.libfdxBootstrapProbe={preload:0,created:0,disposed:0,startReturned:0,dispose:dispose,assets:{}};

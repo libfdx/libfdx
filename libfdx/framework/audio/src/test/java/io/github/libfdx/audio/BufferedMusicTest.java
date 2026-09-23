@@ -12,7 +12,8 @@ import static org.junit.jupiter.api.Assertions.*;
 final class BufferedMusicTest {
     private static final MusicBuffering SMALL = new MusicBuffering(4, 3);
 
-    @Test void boundedQueuePlaysWholeTrackAndSeekWhileStoppedRetainsItsPosition() {
+    @Test
+    void boundedQueuePlaysWholeTrackAndSeekWhileStoppedRetainsItsPosition() {
         Device audio = new Device(); Input source = new Input(15, true);
         Output music = (Output) audio.createMusic(source, SMALL);
         music.play(); pump(audio, 10);
@@ -25,7 +26,8 @@ final class BufferedMusicTest {
         assertEquals(List.of(9,10,11,12,13,14), music.heard.subList(15,21));
         audio.dispose(); assertTrue(source.isDisposed()); assertTrue(music.isDisposed());
     }
-    @Test void halfOpenLoopsHaveNoRepeatedBoundarySamplesAndSuspendPreservesPause() {
+    @Test
+    void halfOpenLoopsHaveNoRepeatedBoundarySamplesAndSuspendPreservesPause() {
         Device audio = new Device(); Output music = (Output) audio.createMusic(new Input(20,true),SMALL);
         music.loop(3,8).play(); pump(audio,8);
         music.consume(7); pump(audio,4); music.consume(5); pump(audio,4);
@@ -38,7 +40,8 @@ final class BufferedMusicTest {
         audio.resume().get(); audio.update(); music.consume(1); audio.update();
         assertEquals(position+1,music.positionFrames()); audio.dispose();
     }
-    @Test void pendingReadCannotPublishOldSamplesAfterSeekAndUnderrunsRecoverWithoutSkipping() {
+    @Test
+    void pendingReadCannotPublishOldSamplesAfterSeekAndUnderrunsRecoverWithoutSkipping() {
         Device audio = new Device(); Input input = new Input(100,true); input.delayed = true;
         Output music = (Output) audio.createMusic(input,SMALL); music.play(); audio.update();
         music.seek(40); input.complete(); audio.update();
@@ -52,7 +55,8 @@ final class BufferedMusicTest {
         assertEquals(List.of(40,41,42,43,44,45,46,47,48,49,50),music.heard);
         audio.dispose(); input.complete(); assertTrue(input.isDisposed());
     }
-    @Test void failureAndCapacityKeepOwnershipLocalAndSequentialRestartIsExplicit() {
+    @Test
+    void failureAndCapacityKeepOwnershipLocalAndSequentialRestartIsExplicit() {
         Device audio = new Device(); Input a = new Input(40,true), b = new Input(40,true);
         Output first = (Output)audio.createMusic(a,SMALL), second = (Output)audio.createMusic(b,SMALL);
         first.play(); second.play(); a.delayed = true; audio.update();
@@ -68,7 +72,8 @@ final class BufferedMusicTest {
         assertThrows(FdxException.class,()->replacement.seek(0));
         audio.dispose(); assertTrue(b.isDisposed()); assertTrue(sequential.isDisposed());
     }
-    @Test void shortUnknownTrackStartsWithoutTwoBuffersAndTruncatedKnownInputFails() {
+    @Test
+    void shortUnknownTrackStartsWithoutTwoBuffersAndTruncatedKnownInputFails() {
         Device audio = new Device(); Input unknown = new Input(3,false); unknown.unknown = true;
         Output music = (Output)audio.createMusic(unknown,SMALL); music.play(); pump(audio,8);
         assertEquals(MusicState.PLAYING,music.state()); music.consume(3); audio.update();
@@ -77,7 +82,8 @@ final class BufferedMusicTest {
         Music failed = audio.createMusic(truncated,SMALL).play(); pump(audio,8);
         assertEquals(MusicState.FAILED,failed.state()); assertTrue(truncated.isDisposed()); audio.dispose();
     }
-    @Test void mixerMultipliesBusAndMasterGainWithoutChangingPitchOrTouchingRecycledVoices() {
+    @Test
+    void mixerMultipliesBusAndMasterGainWithoutChangingPitchOrTouchingRecycledVoices() {
         Device audio = new Device(); AudioMixer mixer = new AudioMixer(audio);
         Sound sound = audio.createSound(new PcmData(1,8000,new short[]{1}));
         mixer.masterGain(.5f).busGain(AudioBus.SFX,.4f).busGain(AudioBus.UI,.8f);
@@ -92,7 +98,8 @@ final class BufferedMusicTest {
         assertEquals(.1f,audio.voiceParameters[0],0.00001f);
         mixer.dispose(); assertFalse(sound.isDisposed()); assertEquals(0,audio.activeVoices()); audio.dispose();
     }
-    @Test void mixerCrossfadeIsCadenceIndependentAndBorrowsBothTracks() {
+    @Test
+    void mixerCrossfadeIsCadenceIndependentAndBorrowsBothTracks() {
         Device audio = new Device(); AudioMixer mixer = new AudioMixer(audio);
         Output a = (Output)audio.createMusic(new Input(100,true),SMALL);
         Output b = (Output)audio.createMusic(new Input(100,true),SMALL);
@@ -114,12 +121,18 @@ final class BufferedMusicTest {
         final int length; final boolean seekable; long advertised; boolean unknown, delayed, disposed;
         int reads, count, destinationOffset; long offset; short[] destination; FdxFuture<Integer> pending;
         Input(int length,boolean seekable) { this.length=length; advertised=length; this.seekable=seekable; }
-        @Override public int channels() { return 1; }
-        @Override public int sampleRate() { return 8000; }
-        @Override public long frames() { return unknown ? -1 : advertised; }
-        @Override public int maxReadFrames() { return 4; }
-        @Override public boolean isSeekable() { return seekable; }
-        @Override public FdxFuture<Integer> read(long offset,short[] destination,int start,int count) {
+        @Override
+        public int channels() { return 1; }
+        @Override
+        public int sampleRate() { return 8000; }
+        @Override
+        public long frames() { return unknown ? -1 : advertised; }
+        @Override
+        public int maxReadFrames() { return 4; }
+        @Override
+        public boolean isSeekable() { return seekable; }
+        @Override
+        public FdxFuture<Integer> read(long offset,short[] destination,int start,int count) {
             assertFalse(disposed); assertTrue(pending==null || pending.isDone());
             this.offset=offset; this.destination=destination; destinationOffset=start; this.count=count; reads++;
             pending=FdxFuture.pending(); FdxFuture<Integer> result=pending; if(!delayed) complete(); return result;
@@ -130,12 +143,15 @@ final class BufferedMusicTest {
             for(int i=0;i<actual;i++) destination[destinationOffset+i]=(short)(offset+i);
             pending.complete(actual==0 ? -1 : actual);
         }
-        @Override public void update() { }
-        @Override public void dispose() {
+        @Override
+        public void update() { }
+        @Override
+        public void dispose() {
             disposed=true;
             if(pending!=null && !pending.isDone()) pending.completeExceptionally(new FdxException("Closed"));
         }
-        @Override public boolean isDisposed() { return disposed; }
+        @Override
+        public boolean isDisposed() { return disposed; }
     }
     private static final class Output extends BufferedMusic {
         final ArrayDeque<short[]> queue=new ArrayDeque<>(); final List<Integer> heard=new ArrayList<>();
@@ -148,37 +164,61 @@ final class BufferedMusicTest {
             }
             if(queue.isEmpty()) playing=false;
         }
-        @Override protected void enqueue(short[] samples,int frames) { queue.add(java.util.Arrays.copyOf(samples,frames)); }
-        @Override protected int processed() { int result=finished; finished=0; return result; }
-        @Override protected int sampleOffset() { return offset; }
-        @Override protected void startPlayback() { playing=true; }
-        @Override protected void pausePlayback() { playing=false; }
-        @Override protected void clearPlayback() { queue.clear(); offset=finished=0; playing=false; }
-        @Override protected void parameters(float gain,float pan) { outputGain = gain; }
-        @Override protected void closePlayback() { clearPlayback(); }
+        @Override
+        protected void enqueue(short[] samples,int frames) { queue.add(java.util.Arrays.copyOf(samples,frames)); }
+        @Override
+        protected int processed() { int result=finished; finished=0; return result; }
+        @Override
+        protected int sampleOffset() { return offset; }
+        @Override
+        protected void startPlayback() { playing=true; }
+        @Override
+        protected void pausePlayback() { playing=false; }
+        @Override
+        protected void clearPlayback() { queue.clear(); offset=finished=0; playing=false; }
+        @Override
+        protected void parameters(float gain,float pan) { outputGain = gain; }
+        @Override
+        protected void closePlayback() { clearPlayback(); }
     }
     private static final class Device extends PooledAudio {
         final float[] voiceParameters = new float[3];
         Device() { super(1); }
-        @Override protected boolean supportsMusic() { return true; }
-        @Override protected BufferedMusic openMusic(PcmStream source,MusicBuffering buffering) { return new Output(this,source,buffering); }
-        @Override public ProviderId providerId() { return ProviderId.of("music_test"); }
-        @Override public <T> T as() { throw new UnsupportedOperationException(); }
-        @Override protected void checkDevice() { }
-        @Override protected Object upload(PcmData pcm) { return pcm; }
-        @Override protected void release(Object resource) { }
-        @Override protected void start(int slot,Object resource,float gain,float pitch,float pan,boolean loop,boolean paused) {
+        @Override
+        protected boolean supportsMusic() { return true; }
+        @Override
+        protected BufferedMusic openMusic(PcmStream source,MusicBuffering buffering) { return new Output(this,source,buffering); }
+        @Override
+        public ProviderId providerId() { return ProviderId.of("music_test"); }
+        @Override
+        public <T> T as() { throw new UnsupportedOperationException(); }
+        @Override
+        protected void checkDevice() { }
+        @Override
+        protected Object upload(PcmData pcm) { return pcm; }
+        @Override
+        protected void release(Object resource) { }
+        @Override
+        protected void start(int slot,Object resource,float gain,float pitch,float pan,boolean loop,boolean paused) {
             parametersSlot(slot,gain,pitch,pan);
         }
-        @Override protected void stopSlot(int slot) { }
-        @Override protected void pauseSlot(int slot) { }
-        @Override protected void resumeSlot(int slot) { }
-        @Override protected void parametersSlot(int slot,float gain,float pitch,float pan) {
+        @Override
+        protected void stopSlot(int slot) { }
+        @Override
+        protected void pauseSlot(int slot) { }
+        @Override
+        protected void resumeSlot(int slot) { }
+        @Override
+        protected void parametersSlot(int slot,float gain,float pitch,float pan) {
             voiceParameters[0]=gain; voiceParameters[1]=pitch; voiceParameters[2]=pan;
         }
-        @Override protected boolean finished(int slot) { return false; }
-        @Override protected FdxFuture<Void> activate() { return FdxFuture.completed(null); }
-        @Override protected boolean platformSuspended() { return false; }
-        @Override protected void closeDevice() { }
+        @Override
+        protected boolean finished(int slot) { return false; }
+        @Override
+        protected FdxFuture<Void> activate() { return FdxFuture.completed(null); }
+        @Override
+        protected boolean platformSuspended() { return false; }
+        @Override
+        protected void closeDevice() { }
     }
 }

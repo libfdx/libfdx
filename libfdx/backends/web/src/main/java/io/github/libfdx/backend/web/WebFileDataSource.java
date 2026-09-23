@@ -23,11 +23,15 @@ final class WebFileDataSource implements FileDataSource {
         this.path = path; this.maximum = maximum; this.memory = memory; this.cached = cached;
         length = memory != null ? memory.length : cached != null ? cached.getLength() : -1;
     }
-    @Override public long length() { return length; }
-    @Override public boolean isSeekable() { return true; }
-    @Override public int maxReadBytes() { return maximum; }
+    @Override
+    public long length() { return length; }
+    @Override
+    public boolean isSeekable() { return true; }
+    @Override
+    public int maxReadBytes() { return maximum; }
 
-    @Override public FdxFuture<Integer> read(long offset, byte[] destination, int start, int count) {
+    @Override
+    public FdxFuture<Integer> read(long offset, byte[] destination, int start, int count) {
         try {
             FileDataSource.validate(offset, destination, start, count, maximum);
             if (disposed) { throw new FdxException("File input is disposed: " + path); }
@@ -66,16 +70,20 @@ final class WebFileDataSource implements FileDataSource {
             return result;
         } catch (RuntimeException | Error error) { return FdxFuture.failed(error); }
     }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) { return; }
         disposed = true;
         FdxFuture<Integer> current = pending; pending = null;
         if (request != null) { abort(request); request = null; }
         if (current != null) { current.completeExceptionally(new FdxException("File input closed during read: " + path)); }
     }
-    @Override public boolean isDisposed() { return disposed; }
-    @JSFunctor private interface Success extends JSObject { void accept(Int8Array bytes, double totalLength); }
-    @JSFunctor private interface Failure extends JSObject { void accept(String error); }
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @JSFunctor
+    private interface Success extends JSObject { void accept(Int8Array bytes, double totalLength); }
+    @JSFunctor
+    private interface Failure extends JSObject { void accept(String error); }
     @JSBody(params = "controller", script = "controller.abort();")
     private static native void abort(JSObject controller);
 

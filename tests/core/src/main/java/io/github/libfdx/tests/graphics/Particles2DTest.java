@@ -44,7 +44,8 @@ public final class Particles2DTest extends ApplicationAdapter {
 
     public Particles2DTest(long exitAfterFrames) { this.exitAfterFrames = exitAfterFrames; }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         application = fdx.app(); display = fdx.displays().main(); graphics = fdx.graphics().main(); logger = fdx.logger();
         fpsLogger = TestFpsLogger.create(logger, "Particles2DTest");
         volume = new ParticleVolume(96, 128, 64).bounds(-2.15f, -0.55f, -2.05f, 1.8f, 2.5f, 1.8f);
@@ -68,7 +69,8 @@ public final class Particles2DTest extends ApplicationAdapter {
 
     private void simulate(float delta) { fire.update(delta); smoke.update(delta); sparks.update(delta); snow.update(delta); }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         float elapsed = application.deltaTime();
         float delta = timing.advance(elapsed);
         time += delta;
@@ -110,7 +112,8 @@ public final class Particles2DTest extends ApplicationAdapter {
         }
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (solids != null) { solids.dispose(); solids = null; }
         if (renderer != null) { renderer.dispose(); renderer = null; }
         if (!created || (exitAfterFrames > 0 && frames < exitAfterFrames) || (!capture.isEmpty() && !captured))

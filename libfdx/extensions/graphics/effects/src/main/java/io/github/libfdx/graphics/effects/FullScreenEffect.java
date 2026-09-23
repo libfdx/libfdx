@@ -129,8 +129,10 @@ final class FullScreenEffect implements Disposable {
         if(failure instanceof RuntimeException runtime)throw runtime;
         if(failure instanceof Error error)throw error;
     }
-    @Override public boolean isDisposed(){return disposed;}
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed(){return disposed;}
+    @Override
+    public void dispose() {
         if(disposed)return; disposed=true;
         Throwable failure=null;
         for(int i=0;i<pipelineCount;i++)failure=close(pipelines[i],failure);

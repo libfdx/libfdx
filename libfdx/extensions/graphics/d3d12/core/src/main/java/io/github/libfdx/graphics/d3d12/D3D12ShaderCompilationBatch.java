@@ -55,7 +55,8 @@ final class D3D12ShaderCompilationBatch {
 
         private Task(Callable<T> job) { this.job = job; }
 
-        @Override public void run() {
+        @Override
+        public void run() {
             try { result = job.call(); }
             catch (Throwable error) { failure = error; }
         }

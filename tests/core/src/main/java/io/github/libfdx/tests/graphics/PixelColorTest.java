@@ -31,7 +31,8 @@ public final class PixelColorTest extends GraphicsParityTest {
     private SpriteBatch sprites;
 
     public PixelColorTest(long frames) { super(frames); }
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, "PixelColorTest");
         raw = texture("raw", TextureFormat.RGBA8_UNORM, 1, 1, new int[] {0x802008ff});
         srgb = texture("sRGB", TextureFormat.RGBA8_UNORM_SRGB, 1, 1, new int[] {0x802008ff});
@@ -61,7 +62,8 @@ public final class PixelColorTest extends GraphicsParityTest {
         for (int rgba : colors) bytes.put((byte) (rgba >>> 24)).put((byte) (rgba >>> 16)).put((byte) (rgba >>> 8)).put((byte) rgba);
         bytes.flip(); graphics.device().writeTexture(texture, bytes); return texture;
     }
-    @Override public void render() {
+    @Override
+    public void render() {
         viewport.update(framebufferWidth(), framebufferHeight());
         GraphicsFrame frame = graphics.currentFrame();
         targetGraph.render(targetCamera,null,targetInstances);
@@ -84,7 +86,8 @@ public final class PixelColorTest extends GraphicsParityTest {
     private void draw(Texture texture, float x, float y, float width, float height) {
         sprites.draw(texture, viewport.clipX(x), viewport.clipY(y), viewport.clipWidth(width), viewport.clipHeight(height));
     }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         dispose(sprites); dispose(modelBatch);
         for (Model model : models) dispose(model);
         dispose(targetGraph); dispose(raw); dispose(srgb); dispose(checker);

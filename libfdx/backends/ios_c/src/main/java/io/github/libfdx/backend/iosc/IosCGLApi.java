@@ -268,9 +268,11 @@ final class IosCGLApi implements GLApi {
         IosCOpenGLES.glBufferSubData(IosCOpenGLES.ARRAY_BUFFER, 0, data.remaining(), data);
     }
 
-    @Override public boolean supportsBufferRangeInitialization() { return true; }
+    @Override
+    public boolean supportsBufferRangeInitialization() { return true; }
 
-    @Override public void bufferSubData(int offset, ByteBuffer data) {
+    @Override
+    public void bufferSubData(int offset, ByteBuffer data) {
         IosCOpenGLES.glBufferSubData(IosCOpenGLES.ARRAY_BUFFER, offset, data.remaining(), data);
     }
 

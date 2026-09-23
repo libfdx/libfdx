@@ -51,15 +51,19 @@ public final class PlatformerMenuInput extends InputAdapter implements Disposabl
             });
         } catch (RuntimeException error) { activationPending=false; logger.warn("Platformer audio activation failed: "+error.getMessage()); }
     }
-    @Override public boolean keyDown(KeyEvent event) { if (!event.repeat()) activate(); return false; }
-    @Override public boolean pointerDown(PointerEvent event) {
+    @Override
+    public boolean keyDown(KeyEvent event) { if (!event.repeat()) activate(); return false; }
+    @Override
+    public boolean pointerDown(PointerEvent event) {
         activate(); return event.button()==MouseButton.LEFT && press(event.x(),event.y(),true);
     }
-    @Override public boolean pointerUp(PointerEvent event) {
+    @Override
+    public boolean pointerUp(PointerEvent event) {
         if (event.button()==MouseButton.LEFT && controls!=null) controls.pointerControl(0);
         return false;
     }
-    @Override public boolean touchDown(TouchEvent event) {
+    @Override
+    public boolean touchDown(TouchEvent event) {
         activate(); return event.point()!=null && press(event.point().x(),event.point().y(),false);
     }
     private boolean press(float windowX,float windowY,boolean mouse) {
@@ -84,6 +88,8 @@ public final class PlatformerMenuInput extends InputAdapter implements Disposabl
         }
         return false;
     }
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() { if (!disposed) { disposed=true; actions.dispose(); commands=0; controls=null; } }
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() { if (!disposed) { disposed=true; actions.dispose(); commands=0; controls=null; } }
 }

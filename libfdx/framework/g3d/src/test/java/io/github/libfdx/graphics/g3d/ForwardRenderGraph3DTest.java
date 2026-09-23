@@ -12,7 +12,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class ForwardRenderGraph3DTest {
-    @Test void modelTargetForwardsAllColorsDepthAndResolveAndReusesUnchangedMetadata() {
+    @Test
+    void modelTargetForwardsAllColorsDepthAndResolveAndReusesUnchangedMetadata() {
         Fixture f=new Fixture();
         ModelBatch batch=new ModelBatch(f.graphics,new ModelBatchConfig().shaderProvider(f.provider));
         TextureView first=view(TextureFormat.RGBA8_UNORM,64,32,4);
@@ -33,7 +34,8 @@ final class ForwardRenderGraph3DTest {
                 new TextureView[]{first},new TextureView[]{view(TextureFormat.RGBA8_UNORM,32,32,1)},depth));
     }
 
-    @Test void forwardGraphOwnsOnlyItsResourcesAndKeepsPriorViewsOnFailedResize() {
+    @Test
+    void forwardGraphOwnsOnlyItsResourcesAndKeepsPriorViewsOnFailedResize() {
         Fixture f=new Fixture();
         var graph=new ForwardRenderGraph3D(f.graphics,new ModelBatchConfig().shaderProvider(f.provider),TextureFormat.RGBA8_UNORM,1);
         assertThrows(FdxException.class,()->graph.target("scene"));
@@ -50,7 +52,8 @@ final class ForwardRenderGraph3DTest {
         assertThrows(FdxException.class,()->graph.target("missing"));
     }
 
-    @Test void forwardPathEndsBorrowedBatchAndPassEvenWhenEachStageFails() {
+    @Test
+    void forwardPathEndsBorrowedBatchAndPassEvenWhenEachStageFails() {
         Fixture f=new Fixture(); OffscreenTarget target=new OffscreenTarget(f.device,true); target.resize(8,8);
         var path=new ForwardRenderPath3D(f.graphics,target,true);
         FdxException primary=new FdxException("render"), secondary=new FdxException("batch end");
@@ -125,7 +128,8 @@ final class ForwardRenderGraph3DTest {
             case "providerId" -> ID; default -> throw new AssertionError(m);
         });
     }
-    @SuppressWarnings("unchecked") private static <T> T proxy(Class<T> type,InvocationHandler handler){
+    @SuppressWarnings("unchecked")
+    private static <T> T proxy(Class<T> type,InvocationHandler handler){
         return (T)Proxy.newProxyInstance(type.getClassLoader(),new Class[]{type},handler);
     }
 }

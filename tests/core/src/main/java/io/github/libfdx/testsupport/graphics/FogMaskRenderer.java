@@ -133,7 +133,8 @@ public final class FogMaskRenderer implements Disposable {
         pass.draw(6, 1, 0, 0); pass.end();
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) return; disposed = true;
         if (pipeline != null) pipeline.dispose();
         if (alphaPipeline != null) alphaPipeline.dispose();
@@ -141,5 +142,6 @@ public final class FogMaskRenderer implements Disposable {
         if (mask != null) mask.dispose();
         if (vertices != null) vertices.dispose();
     }
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 }

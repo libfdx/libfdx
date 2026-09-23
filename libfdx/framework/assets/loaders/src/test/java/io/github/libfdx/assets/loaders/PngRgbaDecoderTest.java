@@ -11,7 +11,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class PngRgbaDecoderTest {
-    @Test void incrementalDecodePreservesPixelsAcrossSmallStepsAndRejectsCorruption() throws Exception {
+    @Test
+    void incrementalDecodePreservesPixelsAcrossSmallStepsAndRejectsCorruption() throws Exception {
         byte[] raw = {0,10,20,30,0,40,50,60,127, 2,1,2,3,4,5,6,7,8};
         byte[] encoded = png(2,2,raw);
         PngRgbaDecoder.Decoder decoder = PngRgbaDecoder.begin(encoded);
@@ -27,7 +28,8 @@ final class PngRgbaDecoderTest {
         try {assertThrows(FdxException.class,()->{while(!bad.step(3)) { }});}
         finally {bad.close();}
     }
-    @Test void decodesImageIoPngExactlyIncludingHiddenRgbAndPartialAlpha() throws Exception {
+    @Test
+    void decodesImageIoPngExactlyIncludingHiddenRgbAndPartialAlpha() throws Exception {
         BufferedImage source=new BufferedImage(64,17,BufferedImage.TYPE_INT_ARGB);
         Random random=new Random(90210);
         for(int y=0;y<17;y++) for(int x=0;x<64;x++) source.setRGB(x,y,x%7==0 ? random.nextInt()&0x00ffffff : random.nextInt());
@@ -41,7 +43,8 @@ final class PngRgbaDecoderTest {
             assertEquals(expected&255,rgba.get()&255); assertEquals(expected>>>24,rgba.get()&255);
         }
     }
-    @Test void allFiveFiltersAndSplitIdatRecoverIndependentReferencePixels() throws Exception {
+    @Test
+    void allFiveFiltersAndSplitIdatRecoverIndependentReferencePixels() throws Exception {
         // 1-pixel-wide rows: filter left/diagonal inputs are zero, previous row is known.
         byte[][] expected={{20,40,60,0},{10,30,50,127},{30,60,90,(byte)255},{16,32,48,64},{4,8,12,16}};
         byte[] scanlines=new byte[25];
@@ -57,7 +60,8 @@ final class PngRgbaDecoderTest {
         ByteBuffer rgba=image.rgba();
         for(byte[] row:expected) for(byte value:row) assertEquals(value,rgba.get());
     }
-    @Test void rejectsCrcTruncationAndDecompressionBeyondDeclaredExtent() throws Exception {
+    @Test
+    void rejectsCrcTruncationAndDecompressionBeyondDeclaredExtent() throws Exception {
         byte[] png=png(1,1,new byte[]{0,10,20,30,40});
         byte[] bad=png.clone(); bad[29]^=1;
         assertThrows(FdxException.class,() -> PngRgbaDecoder.decode(bad));
@@ -67,7 +71,8 @@ final class PngRgbaDecoderTest {
         assertThrows(FdxException.class,() -> PngRgbaDecoder.decode(png(8192,8192,new byte[5])));
         assertNull(PngRgbaDecoder.decode(new byte[]{1,2,3}));
     }
-    @Test void otherFormatsStillUsePlatformFallbackWithNoTeaVmRuntimeOnJvm() throws Exception {
+    @Test
+    void otherFormatsStillUsePlatformFallbackWithNoTeaVmRuntimeOnJvm() throws Exception {
         ImageData jpeg=ImageAssetLoader.decodeAsync(null,encode(new BufferedImage(3,2,BufferedImage.TYPE_INT_RGB),"jpg")).get();
         assertEquals(3,jpeg.width()); assertEquals(2,jpeg.height());
         assertTrue(ImageAssetLoader.decodeAsync(null,new byte[]{1,2,3}).isFailed());

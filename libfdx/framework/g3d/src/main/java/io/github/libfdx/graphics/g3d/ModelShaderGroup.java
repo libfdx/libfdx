@@ -198,8 +198,10 @@ public final class ModelShaderGroup implements Disposable {
     }
 
     private void requireActive() { if (disposed) throw new FdxException("Model shader group is disposed"); }
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         for (Member member : members) { member.releasePending(); member.releaseReady(); }

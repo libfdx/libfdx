@@ -58,7 +58,8 @@ public final class PlatformerApplication extends ApplicationAdapter {
     public PlatformerApplication(long exitAfterFrames,AssetExecutor executor) {
         this.exitAfterFrames=exitAfterFrames; this.executor=executor; effects=new AssetLease[EFFECTS.length];
     }
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         if (fdx==null) throw new IllegalArgumentException("fdx required");
         application=fdx.app(); graphics=fdx.graphics().main(); display=fdx.displays().main();
         input=fdx.input(); logger=fdx.logger(); audio=fdx.audio();
@@ -95,7 +96,8 @@ public final class PlatformerApplication extends ApplicationAdapter {
         hud.loading=true; hud.failed=false; hud.status="LOADING LEVEL"; hud.heading="LOADING";
         controls.enabled(false); simulationClock.pause(); menu.state(true,true);
     }
-    @Override public void render() {
+    @Override
+    public void render() {
         if (disposed || application==null) return;
         GraphicsFrame frame=graphics.currentFrame();
         view.update(display.width(),display.height(),frame.width(),frame.height()); controls.layout(view);
@@ -246,11 +248,13 @@ public final class PlatformerApplication extends ApplicationAdapter {
         if(current!=null && current.music()!=null && current.music().failure()==null) current.music().play();
         if(retiring!=null && retiring.music()!=null && retiring.music().failure()==null) retiring.music().play();
     }
-    @Override public void pause() {
+    @Override
+    public void pause() {
         systemPaused=true; simulationClock.pause();
         if(controls!=null) controls.enabled(false); if(menu!=null) menu.enabled(false); pauseMusic();
     }
-    @Override public void resume() {
+    @Override
+    public void resume() {
         systemPaused=false; if(menu!=null) menu.enabled(true);
         if(!paused && !hud.loading && !hud.failed) { simulationClock.resume(); resumeMusic(); }
     }
@@ -261,7 +265,8 @@ public final class PlatformerApplication extends ApplicationAdapter {
             logger.info("Platformer captured framebuffer to "+path);
         } catch(Exception failure) { throw new FdxException("Could not capture platformer framebuffer",failure); }
     }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if(disposed) return; disposed=true;
         Throwable failure=null;
         if(input!=null) input.removeProcessor(router);

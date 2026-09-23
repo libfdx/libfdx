@@ -7,7 +7,8 @@ import static org.lwjgl.glfw.GLFW.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class DesktopGamepadsTest {
-    @Test void standardizedButtonsAndTriggerRangesAreCopiedIntoReusableState() {
+    @Test
+    void standardizedButtonsAndTriggerRangesAreCopiedIntoReusableState() {
         try(GLFWGamepadState source=GLFWGamepadState.calloc()) {
             GamepadState target=new GamepadState();
             source.buttons(GLFW_GAMEPAD_BUTTON_A,(byte)GLFW_PRESS);

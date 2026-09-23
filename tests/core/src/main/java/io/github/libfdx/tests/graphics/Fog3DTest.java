@@ -37,7 +37,8 @@ public final class Fog3DTest extends GraphicsParityTest {
 
     public Fog3DTest(long frames) { super(frames); }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, "Fog3DTest");
         input = fdx.input();
         sun = new DirectionalLight().direction(-.65f,-1,-.35f)
@@ -66,7 +67,8 @@ public final class Fog3DTest extends GraphicsParityTest {
                 .radiusRange(6,22).keyboardEnabled(false)
                 .pointerRegion((x,y)->y>120 && y<display.height()-112);
         movementInput = new InputAdapter() {
-            @Override public boolean keyDown(KeyEvent event) {
+            @Override
+            public boolean keyDown(KeyEvent event) {
                 int bit=movementBit(event.key()); movementTaps|=bit; return bit!=0;
             }
         };
@@ -117,7 +119,8 @@ public final class Fog3DTest extends GraphicsParityTest {
         float step=Math.min(length,delta*2.7f);
         movement.move(dx/length*step,dz/length*step);
     }
-    @Override public void render() {
+    @Override
+    public void render() {
         float delta=Math.min(application.deltaTime(),.05f);
         float sideways=(input.isKeyPressed(Key.D)||input.isKeyPressed(Key.RIGHT)||(movementTaps&1)!=0?1:0)
                 -(input.isKeyPressed(Key.A)||input.isKeyPressed(Key.LEFT)||(movementTaps&2)!=0?1:0);
@@ -145,8 +148,10 @@ public final class Fog3DTest extends GraphicsParityTest {
         batch.end();
         hud.render(delta); finishFrame();
     }
-    @Override public void resize(int width,int height) { if(hud!=null)hud.resize(width,height); }
-    @Override public void dispose() {
+    @Override
+    public void resize(int width,int height) { if(hud!=null)hud.resize(width,height); }
+    @Override
+    public void dispose() {
         if(input!=null&&movementInput!=null)input.removeProcessor(movementInput);
         dispose(hud);dispose(cameraInput);dispose(batch);dispose(shadows);
         for(Model model:models)dispose(model);

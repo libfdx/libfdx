@@ -19,7 +19,8 @@ public final class ForwardRenderPath3D implements RenderPath3D {
         if (graphics==null || target==null) throw new FdxException("Forward path requires a context and target");
         this.graphics=graphics; this.target=target; this.clear=clear;
     }
-    @Override public void render(Batch3D batch, Camera camera, Environment environment,
+    @Override
+    public void render(Batch3D batch, Camera camera, Environment environment,
             ObjectIterable<? extends ModelInstance> instances) {
         if(disposed) throw new FdxException("ForwardRenderPath3D disposed");
         if(batch==null || camera==null || instances==null) throw new FdxException("Forward scene inputs cannot be null");
@@ -36,6 +37,8 @@ public final class ForwardRenderPath3D implements RenderPath3D {
     private static Throwable append(Throwable first,Throwable next){
         if(first==null)return next; if(first!=next)first.addSuppressed(next); return first;
     }
-    @Override public boolean isDisposed(){return disposed;}
-    @Override public void dispose(){disposed=true;}
+    @Override
+    public boolean isDisposed(){return disposed;}
+    @Override
+    public void dispose(){disposed=true;}
 }

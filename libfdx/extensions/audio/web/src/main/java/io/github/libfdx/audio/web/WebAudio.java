@@ -24,11 +24,16 @@ public final class WebAudio extends PooledAudio {
     public static final ProviderId ID = ProviderId.of("web_audio");
     private final JSObject engine;
     WebAudio(int maxVoices) { super(maxVoices); engine = open(maxVoices); }
-    @Override public ProviderId providerId() { return ID; }
+    @Override
+    public ProviderId providerId() { return ID; }
     /** Returns this live provider view. */
-    @SuppressWarnings("unchecked") @Override public <T> T as() { checkLive(); return (T) this; }
-    @Override protected void checkDevice() { }
-    @Override protected Object upload(PcmData pcm) {
+    @SuppressWarnings("unchecked")
+    @Override
+    public <T> T as() { checkLive(); return (T) this; }
+    @Override
+    protected void checkDevice() { }
+    @Override
+    protected Object upload(PcmData pcm) {
         JSObject buffer = createBuffer(engine, pcm.channels(), pcm.frames(), pcm.sampleRate());
         for (int c = 0; c < pcm.channels(); c++) {
             Float32Array data = channel(buffer, c);
@@ -36,28 +41,40 @@ public final class WebAudio extends PooledAudio {
         }
         return buffer;
     }
-    @Override protected void release(Object resource) { /* Detached AudioBuffers are garbage-collected. */ }
-    @Override protected void start(int slot, Object resource, float gain, float pitch, float pan, boolean loop, boolean paused) {
+    @Override
+    protected void release(Object resource) { /* Detached AudioBuffers are garbage-collected. */ }
+    @Override
+    protected void start(int slot, Object resource, float gain, float pitch, float pan, boolean loop, boolean paused) {
         try {
             configure(engine, slot, (JSObject) resource, pitch, loop);
             parametersSlot(slot, gain, pitch, pan);
             if (!paused) resumeSlot(slot);
         } catch (RuntimeException | Error error) { stopSlot(slot); throw error; }
     }
-    @Override protected void stopSlot(int slot) { stop(engine, slot, true); }
-    @Override protected void pauseSlot(int slot) { stop(engine, slot, false); }
-    @Override protected void resumeSlot(int slot) { play(engine, slot); }
-    @Override protected void parametersSlot(int slot, float gain, float pitch, float pan) { params(engine, slot, gain, pitch, pan); }
-    @Override protected boolean finished(int slot) { return ended(engine, slot); }
-    @Override protected boolean platformSuspended() { return suspended(engine); }
-    @Override protected FdxFuture<Void> activate() {
+    @Override
+    protected void stopSlot(int slot) { stop(engine, slot, true); }
+    @Override
+    protected void pauseSlot(int slot) { stop(engine, slot, false); }
+    @Override
+    protected void resumeSlot(int slot) { play(engine, slot); }
+    @Override
+    protected void parametersSlot(int slot, float gain, float pitch, float pan) { params(engine, slot, gain, pitch, pan); }
+    @Override
+    protected boolean finished(int slot) { return ended(engine, slot); }
+    @Override
+    protected boolean platformSuspended() { return suspended(engine); }
+    @Override
+    protected FdxFuture<Void> activate() {
         FdxFuture<Void> result = FdxFuture.pending();
         activate(engine, () -> result.complete(null), message -> result.completeExceptionally(new FdxException(message)));
         return result;
     }
-    @Override protected void closeDevice() { close(engine); }
-    @Override protected boolean supportsMusic() { return true; }
-    @Override protected BufferedMusic openMusic(PcmStream source, MusicBuffering buffering) {
+    @Override
+    protected void closeDevice() { close(engine); }
+    @Override
+    protected boolean supportsMusic() { return true; }
+    @Override
+    protected BufferedMusic openMusic(PcmStream source, MusicBuffering buffering) {
         return new BrowserMusic(source,buffering);
     }
     private final class BrowserMusic extends BufferedMusic {
@@ -66,7 +83,8 @@ public final class WebAudio extends PooledAudio {
             super(WebAudio.this,source,buffering);
             playback = WebMusicQueue.create(engine,buffering.buffers(),source.channels(),source.sampleRate());
         }
-        @Override protected void enqueue(short[] samples,int frames) {
+        @Override
+        protected void enqueue(short[] samples,int frames) {
             JSObject buffer = createBuffer(engine,channels(),frames,sampleRate());
             for (int c = 0; c < channels(); c++) {
                 Float32Array data = channel(buffer,c);
@@ -74,16 +92,25 @@ public final class WebAudio extends PooledAudio {
             }
             WebMusicQueue.enqueue(playback,buffer);
         }
-        @Override protected int processed() { return WebMusicQueue.processed(playback); }
-        @Override protected int sampleOffset() { return WebMusicQueue.offset(playback); }
-        @Override protected void startPlayback() { WebMusicQueue.play(playback); }
-        @Override protected void pausePlayback() { WebMusicQueue.pause(playback); }
-        @Override protected void clearPlayback() { WebMusicQueue.clear(playback); }
-        @Override protected void parameters(float gain,float pan) { WebMusicQueue.parameters(playback,gain,pan); }
-        @Override protected void closePlayback() { WebMusicQueue.close(playback); }
+        @Override
+        protected int processed() { return WebMusicQueue.processed(playback); }
+        @Override
+        protected int sampleOffset() { return WebMusicQueue.offset(playback); }
+        @Override
+        protected void startPlayback() { WebMusicQueue.play(playback); }
+        @Override
+        protected void pausePlayback() { WebMusicQueue.pause(playback); }
+        @Override
+        protected void clearPlayback() { WebMusicQueue.clear(playback); }
+        @Override
+        protected void parameters(float gain,float pan) { WebMusicQueue.parameters(playback,gain,pan); }
+        @Override
+        protected void closePlayback() { WebMusicQueue.close(playback); }
     }
-    @JSFunctor private interface Success extends JSObject { void run(); }
-    @JSFunctor private interface Failure extends JSObject { void run(String message); }
+    @JSFunctor
+    private interface Success extends JSObject { void run(); }
+    @JSFunctor
+    private interface Failure extends JSObject { void run(String message); }
 
     @JSBody(params = "count", script = """
         if (!globalThis.AudioContext) throw new Error('Web Audio is unavailable');

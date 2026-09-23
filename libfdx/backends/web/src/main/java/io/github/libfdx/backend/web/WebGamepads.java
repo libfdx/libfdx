@@ -44,8 +44,10 @@ final class WebGamepads implements Disposable {
         for(GamepadButton button:BUTTONS) removed.state().button(button,false);
         registry.disconnect(removed);
     }
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if(disposed) return; disposed=true; Throwable failure=null;
         for(int i=0;i<slots.length;i++) if(slots[i]!=null) {
             try { disconnect(i); } catch (RuntimeException | Error error) {

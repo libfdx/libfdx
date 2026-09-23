@@ -10,7 +10,8 @@ import java.util.Arrays;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class WavStreamTest {
-    @Test void multiGigabyteTrackOpensWithOnlyHeadersAndDecodesBoundedSeekedFrames() {
+    @Test
+    void multiGigabyteTrackOpensWithOnlyHeadersAndDecodesBoundedSeekedFrames() {
         SyntheticFile file=new SyntheticFile(1_000_000_000L,2,16,true);
         PcmStream stream=WavStream.open(file,64,null).get();
         assertEquals(44,file.bytesRead); assertEquals(1_000_000_000L,stream.frames());
@@ -26,7 +27,8 @@ final class WavStreamTest {
         stream.dispose(); assertTrue(file.disposed);
     }
 
-    @Test void partialPendingReadsComposeWithoutBlockingAndHonorSequentialOffsets() {
+    @Test
+    void partialPendingReadsComposeWithoutBlockingAndHonorSequentialOffsets() {
         SyntheticFile file=new SyntheticFile(7,1,8,false); file.delay=true; file.partial=3;
         FdxFuture<PcmStream> opening=WavStream.open(file,4,null);
         assertFalse(opening.isDone());
@@ -46,7 +48,8 @@ final class WavStreamTest {
         stream.dispose();
     }
 
-    @Test void fullWorkerQueueRetriesAndClosingQueuedOrPendingReadsPreventsLateWrites() {
+    @Test
+    void fullWorkerQueueRetriesAndClosingQueuedOrPendingReadsPreventsLateWrites() {
         SyntheticFile file=new SyntheticFile(20,2,16,true);
         ManualExecutor executor=new ManualExecutor();
         PcmStream stream=WavStream.open(file,8,executor).get();
@@ -67,7 +70,8 @@ final class WavStreamTest {
         assertTrue(read.isFailed()); for(short sample:samples) { assertEquals(91,sample); }
     }
 
-    @Test void malformedOrTruncatedHeadersCloseInputAndRuntimeTruncationFailsCleanly() {
+    @Test
+    void malformedOrTruncatedHeadersCloseInputAndRuntimeTruncationFailsCleanly() {
         SyntheticFile invalid=new SyntheticFile(20,2,16,true); invalid.header[0]='X';
         assertTrue(WavStream.open(invalid,8,null).isFailed()); assertTrue(invalid.disposed);
         invalid=new SyntheticFile(20,2,16,true); invalid.header[22]=3;
@@ -81,10 +85,13 @@ final class WavStreamTest {
 
     private static final class ManualExecutor implements AssetExecutor {
         boolean accept; Runnable task;
-        @Override public boolean submit(Runnable runnable) { if(!accept || task!=null) return false; task=runnable; return true; }
+        @Override
+        public boolean submit(Runnable runnable) { if(!accept || task!=null) return false; task=runnable; return true; }
         void run() { Runnable run=task; task=null; if(run!=null) run.run(); }
-        @Override public void dispose() { }
-        @Override public boolean isDisposed() { return false; }
+        @Override
+        public void dispose() { }
+        @Override
+        public boolean isDisposed() { return false; }
     }
     /** Virtual PCM payload makes track size independent of actual test memory/disk use. */
     private static final class SyntheticFile implements FileDataSource {
@@ -106,10 +113,14 @@ final class WavStreamTest {
         static short sample(long frame,int channel) { return (short)(frame*17+channel*1000); }
         void tag(int at,String text) { for(int i=0;i<4;i++) header[at+i]=(byte)text.charAt(i); }
         void number(int at,long value,int bytes) { for(int i=0;i<bytes;i++) header[at+i]=(byte)(value>>>(i*8)); }
-        @Override public long length() { return size; }
-        @Override public boolean isSeekable() { return seekable; }
-        @Override public int maxReadBytes() { return 128; }
-        @Override public FdxFuture<Integer> read(long offset,byte[] target,int start,int count) {
+        @Override
+        public long length() { return size; }
+        @Override
+        public boolean isSeekable() { return seekable; }
+        @Override
+        public int maxReadBytes() { return 128; }
+        @Override
+        public FdxFuture<Integer> read(long offset,byte[] target,int start,int count) {
             FileDataSource.validate(offset,target,start,count,128);
             if(disposed || !seekable && offset!=position || pending!=null) return FdxFuture.failed(new FdxException("Invalid synthetic input state"));
             maxRequested=Math.max(maxRequested,count); this.offset=offset; this.target=target; this.start=start; this.count=count;
@@ -134,10 +145,12 @@ final class WavStreamTest {
             position=offset+actual; bytesRead+=actual;
             result.complete(actual==0&&count>0?-1:actual);
         }
-        @Override public void dispose() {
+        @Override
+        public void dispose() {
             disposed=true;
             if(pending!=null) { FdxFuture<Integer> result=pending; pending=null; result.completeExceptionally(new FdxException("closed")); }
         }
-        @Override public boolean isDisposed() { return disposed; }
+        @Override
+        public boolean isDisposed() { return disposed; }
     }
 }

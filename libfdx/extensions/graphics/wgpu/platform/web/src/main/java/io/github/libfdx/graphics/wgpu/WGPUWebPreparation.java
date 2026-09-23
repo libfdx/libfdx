@@ -41,7 +41,8 @@ final class WGPUWebPreparation extends WGPUPreparation {
     private ShaderArtifactCache cache;
     private boolean closed;
 
-    @Override void initialize(WGPUContext context, int workers) {
+    @Override
+    void initialize(WGPUContext context, int workers) {
         this.context = context;
         domain = context.resourceDomain();
         cache = context.configuration().shaderCache();
@@ -50,9 +51,11 @@ final class WGPUWebPreparation extends WGPUPreparation {
                 cache != null && cache.enabled(), false);
     }
 
-    @Override ShaderPreparationCapabilities capabilities() { return capabilities; }
+    @Override
+    ShaderPreparationCapabilities capabilities() { return capabilities; }
 
-    @Override ShaderPreparationOperation submit(ShaderPipelineRequest request) {
+    @Override
+    ShaderPreparationOperation submit(ShaderPipelineRequest request) {
         context.requireDeviceUsable("prepare a browser render pipeline");
         if (closed) throw new FdxException("WebGPU preparation is closed");
         domain.retainPreparation();
@@ -61,7 +64,8 @@ final class WGPUWebPreparation extends WGPUPreparation {
         return job;
     }
 
-    @Override public void close() {
+    @Override
+    public void close() {
         if (closed) return;
         closed = true;
         for (Job job : new ArrayList<>(jobs)) job.cancel();
@@ -81,7 +85,8 @@ final class WGPUWebPreparation extends WGPUPreparation {
 
         Job(ShaderPipelineRequest request) { this.request = request; }
 
-        @Override public void advanceLoading() {
+        @Override
+        public void advanceLoading() {
             if (done || cancelled) return;
             if (!started) {
                 started = true;
@@ -146,7 +151,8 @@ final class WGPUWebPreparation extends WGPUPreparation {
                 inputs = WGPUGraphicsDevice.createRenderPipelineInputs(context.nativeDevice(), domain, null,
                         request.pipelineDescriptor(module), module);
                 callback = new WGPUCreateRenderPipelineAsyncCallback() {
-                    @Override protected void onCallback(WGPUCreatePipelineAsyncStatus status,
+                    @Override
+                    protected void onCallback(WGPUCreatePipelineAsyncStatus status,
                             WGPURenderPipeline pipeline, String message) {
                         // Retire the native callback only after its C++ virtual call has returned.
                         Window.setTimeout(() -> complete(status, pipeline, message), 0);
@@ -218,11 +224,15 @@ final class WGPUWebPreparation extends WGPUPreparation {
             finally { release(); }
         }
 
-        @Override public boolean isDone() { return done; }
-        @Override public ShaderPreparationPhase phase() { return trace.phase(); }
-        @Override public ShaderPreparationTrace trace() { return trace; }
+        @Override
+        public boolean isDone() { return done; }
+        @Override
+        public ShaderPreparationPhase phase() { return trace.phase(); }
+        @Override
+        public ShaderPreparationTrace trace() { return trace; }
 
-        @Override public ShaderPreparedResult finish() {
+        @Override
+        public ShaderPreparedResult finish() {
             if (!done || finished || disposed) throw new FdxException("WebGPU preparation cannot be published now");
             finished = true;
             try {
@@ -240,20 +250,23 @@ final class WGPUWebPreparation extends WGPUPreparation {
             } finally { discard(); }
         }
 
-        @Override public void cancel() {
+        @Override
+        public void cancel() {
             cancelled = true;
             loadingWork.clear();
             if (!submitted) done = true;
             if (done) discard();
         }
 
-        @Override public void dispose() {
+        @Override
+        public void dispose() {
             if (disposed) return;
             if (!done) throw new FdxException("WebGPU preparation callback has not drained");
             disposed = true;
             discard();
         }
 
-        @Override public boolean isDisposed() { return disposed; }
+        @Override
+        public boolean isDisposed() { return disposed; }
     }
 }

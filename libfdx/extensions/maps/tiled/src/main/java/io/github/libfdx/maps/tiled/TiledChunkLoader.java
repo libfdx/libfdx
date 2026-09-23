@@ -14,8 +14,10 @@ public final class TiledChunkLoader implements AssetLoader<TileChunk> {
         if(maxCells<1)throw new FdxException("Chunk cell limit must be positive");
         this.maxCells=maxCells;
     }
-    @Override public Class<TileChunk> type(){return TileChunk.class;}
-    @Override public FdxFuture<TileChunk> load(AssetLoadContext context,AssetDescriptor<TileChunk> descriptor) {
+    @Override
+    public Class<TileChunk> type(){return TileChunk.class;}
+    @Override
+    public FdxFuture<TileChunk> load(AssetLoadContext context,AssetDescriptor<TileChunk> descriptor) {
         FdxFuture<TileChunk> result=FdxFuture.pending();
         context.readBytes(context.files().internal(descriptor.path())).onSuccess(bytes ->
                 context.async(() -> new TiledReader(descriptor.path(),maxCells).readChunk(bytes))

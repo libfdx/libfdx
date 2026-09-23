@@ -9,7 +9,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class AtlasDataTest {
-    @Test void roundTripRetainsOriginalGeometryEscapingAndCopiesMembership() {
+    @Test
+    void roundTripRetainsOriginalGeometryEscapingAndCopiesMembership() {
         AtlasData.Page[] pages={new AtlasData.Page("hero-0.png",64,32)};
         String name="walk/\u00f1\"\\pose";
         AtlasData.Sprite[] sprites={new AtlasData.Sprite(name,0,3,5,12,16,32,24,2,1,.25f,0)};
@@ -20,7 +21,8 @@ final class AtlasDataTest {
         assertEquals(-1,parsed.indexOf("missing")); assertEquals(2,parsed.sprite(0).trimX());
         assertEquals(1,parsed.sprite(0).trimY()); assertEquals(.25f,parsed.sprite(0).pivotX());
     }
-    @Test void acceptsReorderedAndUnknownPropertiesAtEveryLevel() {
+    @Test
+    void acceptsReorderedAndUnknownPropertiesAtEveryLevel() {
         AtlasData data=parse("""
                 {
                   "editor": {"revision": 3},
@@ -35,7 +37,8 @@ final class AtlasDataTest {
         assertEquals(.25f,data.sprite(0).pivotX());
         assertEquals(data.encode(),parse(data.encode()).encode());
     }
-    @Test void rejectsInvalidJsonRequiredFieldsAndOldText() {
+    @Test
+    void rejectsInvalidJsonRequiredFieldsAndOldText() {
         for(String json:new String[]{"{}", "[]", "null", "{", "libfdx-atlas 1 straight\n",
                 "{\"version\":1,\"alpha\":\"straight\",\"pages\":{},\"sprites\":[]}",
                 "{\"version\":1,\"alpha\":\"straight\",\"pages\":[],\"sprites\":[{}]}"}) {
@@ -49,7 +52,8 @@ final class AtlasDataTest {
         assertThrows(FdxException.class,() -> parse(JsonWriter.compact(root)));
         assertThrows(FdxException.class,() -> AtlasData.parse(new byte[AtlasData.MAX_BYTES+1]));
     }
-    @Test void rejectsUnsafePathsInvalidCropReferencesAndNumericCoercion() {
+    @Test
+    void rejectsUnsafePathsInvalidCropReferencesAndNumericCoercion() {
         for(String path:new String[]{"../page.png","/page.png","a//b.png","a/./b.png","C:page.png","a\\b.png"}) {
             JsonValue root=valid(); root.require("pages").require(0).put("image",path);
             assertThrows(FdxException.class,() -> parse(JsonWriter.compact(root)));
@@ -69,7 +73,8 @@ final class AtlasDataTest {
         JsonValue root=valid(); root.require("sprites").add(root.require("sprites").require(0));
         assertThrows(FdxException.class,() -> parse(JsonWriter.compact(root)));
     }
-    @Test void retainsMembershipAndPixelLimits() {
+    @Test
+    void retainsMembershipAndPixelLimits() {
         JsonValue root=valid(); JsonValue pages=JsonValue.array();
         for(int i=0;i<=AtlasData.MAX_PAGES;i++) pages.add(root.require("pages").require(0));
         root.put("pages",pages);

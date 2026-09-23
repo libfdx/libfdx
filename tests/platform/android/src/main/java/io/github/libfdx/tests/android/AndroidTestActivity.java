@@ -143,7 +143,8 @@ public class AndroidTestActivity extends AndroidApplicationActivity {
         return TestSelector.create(name, frames);
     }
 
-    @Override protected void onDestroy() {
+    @Override
+    protected void onDestroy() {
         super.onDestroy();
         if (shaderCacheStore != null) {
             shaderCacheStore.flushAsync().onSuccess(ignored -> {

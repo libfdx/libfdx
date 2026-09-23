@@ -13,13 +13,16 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DesktopAutoRunnerTest {
-    @TempDir Path directory;
+    @TempDir
+    Path directory;
 
-    @Test void matrixContinuesAfterCrashTimeoutAndEarlyExitAndWritesEveryResult() throws Exception {
+    @Test
+    void matrixContinuesAfterCrashTimeoutAndEarlyExitAndWritesEveryResult() throws Exception {
         verifyMatrix(false);
     }
 
-    @Test void shutdownHangIsKilledBeforeWholeProcessDeadlineAndMatrixContinues() throws Exception {
+    @Test
+    void shutdownHangIsKilledBeforeWholeProcessDeadlineAndMatrixContinues() throws Exception {
         verifyMatrix(true);
     }
 
@@ -57,7 +60,8 @@ class DesktopAutoRunnerTest {
         }
     }
 
-    @Test void launchErrorIsRecordedAndStaleCompletionIsRemoved() throws Exception {
+    @Test
+    void launchErrorIsRecordedAndStaleCompletionIsRemoved() throws Exception {
         Path marker = directory.resolve("stale.complete");
         Files.writeString(marker, "old success");
         var result = GraphicsMatrixRunner.runProcess(List.of(directory.resolve("missing-java").toString()),

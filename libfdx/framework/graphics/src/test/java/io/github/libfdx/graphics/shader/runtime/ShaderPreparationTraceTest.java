@@ -7,7 +7,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ShaderPreparationTraceTest {
-    @Test void transitionsAreMeasuredWithoutPollingAndSnapshotsStayImmutable() {
+    @Test
+    void transitionsAreMeasuredWithoutPollingAndSnapshotsStayImmutable() {
         AtomicLong clock = new AtomicLong(-100);
         ShaderPreparationTrace trace = new ShaderPreparationTrace(clock::get);
         clock.addAndGet(10); trace.enter(ShaderPreparationPhase.SOURCE);
@@ -31,7 +32,8 @@ class ShaderPreparationTraceTest {
         assertEquals(ShaderPreparationPhase.COMPLETE, trace.phase());
     }
 
-    @Test void scopedWorkRestoresNestedContextEvenWhenItThrows() {
+    @Test
+    void scopedWorkRestoresNestedContextEvenWhenItThrows() {
         ShaderPreparationTrace a = new ShaderPreparationTrace(), b = new ShaderPreparationTrace();
         ArrayDeque<Runnable> queue = new ArrayDeque<>();
         a.executor(queue::add).accept(() -> {
@@ -46,7 +48,8 @@ class ShaderPreparationTraceTest {
         assertNull(ShaderPreparationTrace.current());
     }
 
-    @Test void interleavedStorageCallbacksAndLateWritesBelongToInitiatingOperation() throws Exception {
+    @Test
+    void interleavedStorageCallbacksAndLateWritesBelongToInitiatingOperation() throws Exception {
         DelayedStore store = new DelayedStore();
         ShaderArtifactCache cache = new ShaderArtifactCache(store);
         ShaderCacheKey key = ShaderCacheKey.of(ShaderCacheLayer.DXIL, "test");
@@ -94,8 +97,11 @@ class ShaderPreparationTraceTest {
         final FdxFuture<Void> write = FdxFuture.pending();
         int reads;
         byte[] record;
-        @Override public FdxFuture<byte[]> readAsync(String key) { return reads++ == 0 ? readA : readB; }
-        @Override public FdxFuture<Void> writeAsync(String key, byte[] value) { record = value; return write; }
-        @Override public FdxFuture<Void> removeAsync(String key) { return FdxFuture.completed(null); }
+        @Override
+        public FdxFuture<byte[]> readAsync(String key) { return reads++ == 0 ? readA : readB; }
+        @Override
+        public FdxFuture<Void> writeAsync(String key, byte[] value) { record = value; return write; }
+        @Override
+        public FdxFuture<Void> removeAsync(String key) { return FdxFuture.completed(null); }
     }
 }

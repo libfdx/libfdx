@@ -18,7 +18,8 @@ public final class WebShaderCacheStoreTest extends ApplicationAdapter {
     private String survivor;
     private long deadline;
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         application = fdx.app();
         String name = "libfdx-store-validation-" + System.currentTimeMillis();
         first = new WebShaderCacheStore(name, ShaderArtifactCache.MAX_RECORD_BYTES);
@@ -32,7 +33,8 @@ public final class WebShaderCacheStoreTest extends ApplicationAdapter {
         deadline = System.currentTimeMillis() + 15000;
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         check(System.currentTimeMillis() < deadline, "IndexedDB checks timed out");
         switch (step) {
             case 0 -> {
@@ -94,7 +96,8 @@ public final class WebShaderCacheStoreTest extends ApplicationAdapter {
         if (!condition) throw new IllegalStateException(message);
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (first != null) first.dispose();
         if (second != null) second.dispose();
     }

@@ -30,8 +30,10 @@ final class DefaultAssetManagerScopeTest {
     private DefaultAssetManager manager() {
         DefaultAssetManager result = new DefaultAssetManager(files);
         result.registerLoader(Asset.class, new AssetLoader<Asset>() {
-            @Override public Class<Asset> type() { return Asset.class; }
-            @Override public FdxFuture<Asset> load(AssetLoadContext context, AssetDescriptor<Asset> descriptor) {
+            @Override
+            public Class<Asset> type() { return Asset.class; }
+            @Override
+            public FdxFuture<Asset> load(AssetLoadContext context, AssetDescriptor<Asset> descriptor) {
                 String path = descriptor.path();
                 starts.merge(path, 1, Integer::sum);
                 for (String child : graph.getOrDefault(path, new String[0])) {
@@ -440,11 +442,13 @@ final class DefaultAssetManagerScopeTest {
         int disposals;
         boolean throwOnDispose;
         Asset(String path) { this.path = path; }
-        @Override public void dispose() {
+        @Override
+        public void dispose() {
             disposals++;
             disposed.add(path);
             if (throwOnDispose) { throw new FdxException("dispose " + path); }
         }
-        @Override public boolean isDisposed() { return disposals != 0; }
+        @Override
+        public boolean isDisposed() { return disposals != 0; }
     }
 }

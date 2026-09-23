@@ -18,11 +18,14 @@ import java.nio.charset.StandardCharsets;
  * @author xpenatan
  */
 final class DesktopCGLApi implements GLApi {
-    @Override public boolean supportsDepthTextures() { return true; }
-    @Override public void texImageDepth32F(int width, int height) {
+    @Override
+    public boolean supportsDepthTextures() { return true; }
+    @Override
+    public void texImageDepth32F(int width, int height) {
         DesktopCOpenGL.glTexImage2D(DesktopCOpenGL.TEXTURE_2D, 0, 0x8CAC, width, height, 0, 0x1902, 0x1406, Address.fromLong(0L));
     }
-    @Override public void framebufferDepthTexture2D(int texture) {
+    @Override
+    public void framebufferDepthTexture2D(int texture) {
         DesktopCOpenGL.glFramebufferTexture2D(DesktopCOpenGL.FRAMEBUFFER, 0x8D00, DesktopCOpenGL.TEXTURE_2D, texture, 0);
     }
 
@@ -267,9 +270,11 @@ final class DesktopCGLApi implements GLApi {
         DesktopCOpenGL.glBufferSubData(DesktopCOpenGL.ARRAY_BUFFER, 0, data.remaining(), data);
     }
 
-    @Override public boolean supportsBufferRangeInitialization() { return true; }
+    @Override
+    public boolean supportsBufferRangeInitialization() { return true; }
 
-    @Override public void bufferSubData(int offset, ByteBuffer data) {
+    @Override
+    public void bufferSubData(int offset, ByteBuffer data) {
         DesktopCOpenGL.glBufferSubData(DesktopCOpenGL.ARRAY_BUFFER, offset, data.remaining(), data);
     }
 

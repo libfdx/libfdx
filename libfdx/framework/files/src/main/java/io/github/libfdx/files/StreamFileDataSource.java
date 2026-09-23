@@ -17,11 +17,15 @@ final class StreamFileDataSource implements FileDataSource {
     StreamFileDataSource(InputStream stream, FdxTask<InputStream> opener, long length, int maximum) {
         this.stream = stream; this.opener = opener; this.length = length; this.maximum = maximum;
     }
-    @Override public long length() { return length; }
-    @Override public boolean isSeekable() { return opener != null; }
-    @Override public int maxReadBytes() { return maximum; }
+    @Override
+    public long length() { return length; }
+    @Override
+    public boolean isSeekable() { return opener != null; }
+    @Override
+    public int maxReadBytes() { return maximum; }
 
-    @Override public synchronized FdxFuture<Integer> read(long offset, byte[] destination, int start, int count) {
+    @Override
+    public synchronized FdxFuture<Integer> read(long offset, byte[] destination, int start, int count) {
         try {
             FileDataSource.validate(offset, destination, start, count, maximum);
             if (disposed) { throw new FdxException("File input is disposed"); }
@@ -53,12 +57,14 @@ final class StreamFileDataSource implements FileDataSource {
             return FdxFuture.completed(read);
         } catch (Throwable error) { return FdxFuture.failed(error); }
     }
-    @Override public synchronized void dispose() {
+    @Override
+    public synchronized void dispose() {
         if (disposed) { return; }
         disposed = true;
         try { stream.close(); }
         catch (Exception error) { throw new FdxException("Could not close file input", error); }
         finally { stream = null; }
     }
-    @Override public synchronized boolean isDisposed() { return disposed; }
+    @Override
+    public synchronized boolean isDisposed() { return disposed; }
 }

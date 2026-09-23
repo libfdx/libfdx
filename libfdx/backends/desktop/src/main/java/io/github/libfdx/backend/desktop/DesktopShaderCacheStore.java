@@ -44,7 +44,8 @@ public final class DesktopShaderCacheStore implements ShaderCacheStore, Disposab
         this.maxBytes = maxBytes;
     }
 
-    @Override public FdxFuture<byte[]> readAsync(String key) {
+    @Override
+    public FdxFuture<byte[]> readAsync(String key) {
         Path entry = entry(key);
         return submit(() -> readEntry(entry));
     }
@@ -65,7 +66,8 @@ public final class DesktopShaderCacheStore implements ShaderCacheStore, Disposab
         }
     }
 
-    @Override public FdxFuture<Void> writeAsync(String key, byte[] bytes) {
+    @Override
+    public FdxFuture<Void> writeAsync(String key, byte[] bytes) {
         Path entry = entry(key);
         if (bytes == null || bytes.length < 1 || bytes.length > ShaderArtifactCache.MAX_RECORD_BYTES) {
             throw new IllegalArgumentException("Shader cache record size is out of bounds");
@@ -76,9 +78,11 @@ public final class DesktopShaderCacheStore implements ShaderCacheStore, Disposab
         }));
     }
 
-    @Override public boolean supportsAtomicUpdate() { return true; }
+    @Override
+    public boolean supportsAtomicUpdate() { return true; }
 
-    @Override public FdxFuture<Void> updateAsync(String key, UnaryOperator<byte[]> update) {
+    @Override
+    public FdxFuture<Void> updateAsync(String key, UnaryOperator<byte[]> update) {
         Path entry = entry(key);
         Objects.requireNonNull(update, "update");
         return submit(() -> withWriteLock(() -> {
@@ -126,7 +130,8 @@ public final class DesktopShaderCacheStore implements ShaderCacheStore, Disposab
         } while (true);
     }
 
-    @Override public FdxFuture<Void> removeAsync(String key) {
+    @Override
+    public FdxFuture<Void> removeAsync(String key) {
         Path entry = entry(key);
         return submit(() -> {
             if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return null;
@@ -186,6 +191,8 @@ public final class DesktopShaderCacheStore implements ShaderCacheStore, Disposab
         return future;
     }
 
-    @Override public void dispose() { executor.dispose(); }
-    @Override public boolean isDisposed() { return executor.isDisposed(); }
+    @Override
+    public void dispose() { executor.dispose(); }
+    @Override
+    public boolean isDisposed() { return executor.isDisposed(); }
 }

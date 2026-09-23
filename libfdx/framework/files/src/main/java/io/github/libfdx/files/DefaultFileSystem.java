@@ -495,7 +495,8 @@ public final class DefaultFileSystem implements FileSystem {
             return files.readBytes(this);
         }
 
-        @Override public FdxFuture<FileDataSource> openRead(int maxReadBytes) {
+        @Override
+        public FdxFuture<FileDataSource> openRead(int maxReadBytes) {
             return files.openRead(this, maxReadBytes);
         }
 

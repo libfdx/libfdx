@@ -88,9 +88,12 @@ public final class WebGLContextLossChecks {
     private ShaderProvider provider() {
         GraphicsDevice device = attachment.device();
         return new ShaderProvider() {
-            @Override public GraphicsDevice preparationDevice() { return device; }
-            @Override public boolean supports(ShaderRequest request) { return true; }
-            @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+            @Override
+            public GraphicsDevice preparationDevice() { return device; }
+            @Override
+            public boolean supports(ShaderRequest request) { return true; }
+            @Override
+            public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
                 return device.prepareRenderPipeline(packet());
             }
         };
@@ -256,13 +259,20 @@ public final class WebGLContextLossChecks {
             return p;
             """)
     private static native JSObject instrument(WebGLRenderingContext gl);
-    @JSBody(params = "p", script = "p.ext.loseContext();") private static native void lose(JSObject p);
-    @JSBody(params = "p", script = "p.ext.restoreContext();") private static native void restore(JSObject p);
-    @JSBody(params = "p", script = "return p.lost;") private static native boolean lossDelivered(JSObject p);
-    @JSBody(params = "p", script = "return p.restored;") private static native boolean restoreDelivered(JSObject p);
-    @JSBody(params = "p", script = "return p.deletes;") private static native int deletes(JSObject p);
-    @JSBody(params = "gl", script = "return gl.isContextLost();") private static native boolean rawLost(WebGLRenderingContext gl);
-    @JSBody(params = "canvas", script = "canvas.parentElement.remove();") private static native void remove(HTMLCanvasElement canvas);
+    @JSBody(params = "p", script = "p.ext.loseContext();")
+    private static native void lose(JSObject p);
+    @JSBody(params = "p", script = "p.ext.restoreContext();")
+    private static native void restore(JSObject p);
+    @JSBody(params = "p", script = "return p.lost;")
+    private static native boolean lossDelivered(JSObject p);
+    @JSBody(params = "p", script = "return p.restored;")
+    private static native boolean restoreDelivered(JSObject p);
+    @JSBody(params = "p", script = "return p.deletes;")
+    private static native int deletes(JSObject p);
+    @JSBody(params = "gl", script = "return gl.isContextLost();")
+    private static native boolean rawLost(WebGLRenderingContext gl);
+    @JSBody(params = "canvas", script = "canvas.parentElement.remove();")
+    private static native void remove(HTMLCanvasElement canvas);
     @JSBody(params = {"canvas", "name"}, script = "canvas.previousElementSibling.textContent=name+' — PASS';")
     private static native void passed(HTMLCanvasElement canvas, String name);
     @JSBody(script = "document.getElementById('loss-status').textContent='PASS: 6 losses · 6 recovery renders';")

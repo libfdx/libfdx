@@ -73,7 +73,8 @@ public final class TextureMipsTest extends GraphicsParityTest {
 
     public TextureMipsTest(long frames) { super(frames); }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, "TextureMipsTest");
         graphics.device().capabilities().require(GraphicsFeature.TEXTURE_MIP_LEVELS);
         assets = new DefaultAssetManager(fdx.files(), null);
@@ -139,7 +140,8 @@ public final class TextureMipsTest extends GraphicsParityTest {
         return texture;
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         if (!hud.hasFont()) {
             assets.update(4, 1_000_000);
             hud.font(font.poll());
@@ -229,7 +231,8 @@ public final class TextureMipsTest extends GraphicsParityTest {
         return bytes;
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         dispose(hud); dispose(font); dispose(assets);
         dispose(pipeline); dispose(shader); dispose(vertexBuffer);
         dispose(table); dispose(linear); dispose(none); dispose(nearest); dispose(floating);

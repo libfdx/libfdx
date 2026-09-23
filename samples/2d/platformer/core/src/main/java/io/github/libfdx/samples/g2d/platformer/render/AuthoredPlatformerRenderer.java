@@ -104,20 +104,35 @@ public final class AuthoredPlatformerRenderer {
         private final SpriteBatch batch;
         private final PixelArtViewport view;
         PixelBatch(SpriteBatch batch,PixelArtViewport view) { this.batch=batch; this.view=view; }
-        @Override public Batch2D viewport(int width,int height) { batch.viewport(width,height); return this; }
-        @Override public Batch2D color(float r,float g,float b,float a) { batch.color(r,g,b,a); return this; }
-        @Override public void begin() { batch.begin(); }
-        @Override public void begin(LoadOp load) { batch.begin(load); }
-        @Override public void begin(RenderPass pass) { batch.begin(pass); }
-        @Override public void end() { batch.end(); }
-        @Override public void draw(Texture texture,float x,float y,float w,float h) { batch.draw(texture,view.clipX(x),view.clipY(y),view.clipWidth(w),view.clipHeight(h)); }
-        @Override public void draw(Texture texture,int tx,int ty,int tw,int th,float x,float y,float w,float h) { batch.draw(texture,tx,ty,tw,th,view.clipX(x),view.clipY(y),view.clipWidth(w),view.clipHeight(h)); }
-        @Override public void draw(Texture texture,float x,float y,float w,float h,float ox,float oy,float rotation) { batch.draw(texture,view.clipX(x),view.clipY(y),view.clipWidth(w),view.clipHeight(h),view.clipWidth(ox),view.clipHeight(oy),rotation); }
-        @Override public void draw(TextureRegion region,float x,float y,float w,float h) { batch.draw(region,view.clipX(x),view.clipY(y),view.clipWidth(w),view.clipHeight(h)); }
-        @Override public void draw(TextureRegion region,float x,float y,float w,float h,float ox,float oy,float rotation) { draw(region,x,y,w,h,ox,oy,rotation,0); }
-        @Override public void draw(TextureRegion region,float x,float y,float w,float h,float ox,float oy,float rotation,int flags) { batch.draw(region,view.clipX(x),view.clipY(y),view.clipWidth(w),view.clipHeight(h),view.clipWidth(ox),view.clipHeight(oy),rotation,flags); }
-        @Override public void draw(TextureRegion region,float[] x,float[] y,int n,float w,float h,float ox,float oy,float rotation) { for(int i=0;i<n;i++) draw(region,x[i]-ox,y[i]-oy,w,h,ox,oy,rotation); }
-        @Override public boolean isDisposed() { return batch.isDisposed(); }
-        @Override public void dispose() { }
+        @Override
+        public Batch2D viewport(int width,int height) { batch.viewport(width,height); return this; }
+        @Override
+        public Batch2D color(float r,float g,float b,float a) { batch.color(r,g,b,a); return this; }
+        @Override
+        public void begin() { batch.begin(); }
+        @Override
+        public void begin(LoadOp load) { batch.begin(load); }
+        @Override
+        public void begin(RenderPass pass) { batch.begin(pass); }
+        @Override
+        public void end() { batch.end(); }
+        @Override
+        public void draw(Texture texture,float x,float y,float w,float h) { batch.draw(texture,view.clipX(x),view.clipY(y),view.clipWidth(w),view.clipHeight(h)); }
+        @Override
+        public void draw(Texture texture,int tx,int ty,int tw,int th,float x,float y,float w,float h) { batch.draw(texture,tx,ty,tw,th,view.clipX(x),view.clipY(y),view.clipWidth(w),view.clipHeight(h)); }
+        @Override
+        public void draw(Texture texture,float x,float y,float w,float h,float ox,float oy,float rotation) { batch.draw(texture,view.clipX(x),view.clipY(y),view.clipWidth(w),view.clipHeight(h),view.clipWidth(ox),view.clipHeight(oy),rotation); }
+        @Override
+        public void draw(TextureRegion region,float x,float y,float w,float h) { batch.draw(region,view.clipX(x),view.clipY(y),view.clipWidth(w),view.clipHeight(h)); }
+        @Override
+        public void draw(TextureRegion region,float x,float y,float w,float h,float ox,float oy,float rotation) { draw(region,x,y,w,h,ox,oy,rotation,0); }
+        @Override
+        public void draw(TextureRegion region,float x,float y,float w,float h,float ox,float oy,float rotation,int flags) { batch.draw(region,view.clipX(x),view.clipY(y),view.clipWidth(w),view.clipHeight(h),view.clipWidth(ox),view.clipHeight(oy),rotation,flags); }
+        @Override
+        public void draw(TextureRegion region,float[] x,float[] y,int n,float w,float h,float ox,float oy,float rotation) { for(int i=0;i<n;i++) draw(region,x[i]-ox,y[i]-oy,w,h,ox,oy,rotation); }
+        @Override
+        public boolean isDisposed() { return batch.isDisposed(); }
+        @Override
+        public void dispose() { }
     }
 }

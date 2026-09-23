@@ -9,7 +9,8 @@ import static io.github.libfdx.graphics.g3d.AnimationSampler.Interpolation.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class AnimationSamplerTest {
-    @Test void stepBoundariesClampAndInputArraysAreCopied() {
+    @Test
+    void stepBoundariesClampAndInputArraysAreCopied() {
         float[] times = {1, 2, 4};
         float[] values = {1, 2, 3, 4, 5, 6, 7, 8, 9};
         var sampler = new AnimationSampler(false, STEP, times, values);
@@ -28,7 +29,8 @@ final class AnimationSamplerTest {
         assertArrayEquals(new float[] {-1, 7, 8, 9, -1}, out);
     }
 
-    @Test void nonuniformCubicIntervalsReproduceAnAnalyticPolynomialWithPerSecondTangents() {
+    @Test
+    void nonuniformCubicIntervalsReproduceAnAnalyticPolynomialWithPerSecondTangents() {
         float[] times = {1, 3, 6};
         float[] values = new float[times.length * 9];
         for (int i = 0; i < times.length; i++) {
@@ -46,7 +48,8 @@ final class AnimationSamplerTest {
         }
     }
 
-    @Test void quaternionLinearUsesShortestArcWhileCubicPreservesAuthoredSignsAndNormalizes() {
+    @Test
+    void quaternionLinearUsesShortestArcWhileCubicPreservesAuthoredSignsAndNormalizes() {
         float[] times = {0, 2};
         float[] antipodal = {0, 0, 0, 1, 0, 0, 0, -1};
         float[] out = new float[4];
@@ -76,7 +79,8 @@ final class AnimationSamplerTest {
         assertThrows(FdxException.class, () -> zeroCrossing.sample(1, out, 0));
     }
 
-    @Test void mixedIndependentTimelinesKeepStepDiscontinuitiesAndDefaultComponents() {
+    @Test
+    void mixedIndependentTimelinesKeepStepDiscontinuitiesAndDefaultComponents() {
         var translation = new AnimationSampler(false, LINEAR, new float[] {1, 3}, new float[] {0, 2, 4, 8, 6, 0});
         var scale = new AnimationSampler(false, STEP, new float[] {0, 2, 5}, new float[] {1, 1, 1, 2, 3, 4, 5, 6, 7});
         var channel = AnimationClip.sampledTransform("node", AnimationClip.keyframe(0, 99, 99, 99), translation, null, scale);
@@ -91,7 +95,8 @@ final class AnimationSamplerTest {
         assertArrayEquals(new Matrix4().setToTranslation(1, 2, 3).values(), defaults.sample(5, out).values());
     }
 
-    @Test void malformedTracksAndOutputsFailExplicitly() {
+    @Test
+    void malformedTracksAndOutputsFailExplicitly() {
         for (float[] times : new float[][] {{}, {-1}, {Float.NaN}, {Float.POSITIVE_INFINITY}, {1, 1}, {2, 1}}) {
             assertThrows(FdxException.class, () -> new AnimationSampler(false, LINEAR, times, new float[times.length*3]));
         }
@@ -107,7 +112,8 @@ final class AnimationSamplerTest {
         assertThrows(FdxException.class, () -> AnimationClip.sampledTransform("node", AnimationClip.keyframe(0, 0, 0, 0), null, sampler, null));
     }
 
-    @Test void repeatedIndependentSamplingWritesTheExpectedTransform() {
+    @Test
+    void repeatedIndependentSamplingWritesTheExpectedTransform() {
         var translation = new AnimationSampler(false, CUBICSPLINE, new float[] {0, 2},
                 new float[] {0, 0, 0, 0, 0, 0, 1, 2, 3, 1, 2, 3, 2, 4, 6, 0, 0, 0});
         var rotation = new AnimationSampler(true, LINEAR, new float[] {0, 1}, new float[] {0, 0, 0, 1, 0, 0, 1, 0});

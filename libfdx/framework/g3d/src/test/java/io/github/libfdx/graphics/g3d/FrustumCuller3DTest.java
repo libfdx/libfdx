@@ -12,7 +12,8 @@ import static org.junit.jupiter.api.Assertions.*;
 final class FrustumCuller3DTest {
     private static final BoundingBox POINT=BoundingBox.empty();
     private static final BoundingBox BOX=BoundingBox.of(new Vector3(-.5f,-.5f,-.5f),new Vector3(.5f,.5f,.5f));
-    @Test void allClipRangesAndProjectionPlanesIncludeTheirBoundaries() {
+    @Test
+    void allClipRangesAndProjectionPlanesIncludeTheirBoundaries() {
         ClipDepthRange saved=ClipDepthRange.getDefault();ClipDepthRange.setDefault(ClipDepthRange.ZERO_TO_ONE);
         try {
             for(var range:ClipDepthRange.values())for(var projection:CameraProjection.values()) {
@@ -34,7 +35,8 @@ final class FrustumCuller3DTest {
             assertTrue(point(culler,0,0,-1e20f));assertFalse(point(culler,0,0,-.9f));
         } finally {ClipDepthRange.setDefault(saved);}
     }
-    @Test void cameraRelativePlanesRetainLocalBoundsAtLargeCoordinatesAndUncertainInputsStayVisible() {
+    @Test
+    void cameraRelativePlanesRetainLocalBoundsAtLargeCoordinatesAndUncertainInputsStayVisible() {
         float position=1e11f;
         var camera=new Camera().position(position,position,position).direction(0,0,1).viewport(4,4).nearFar(.1f,10);
         var culler=new FrustumCuller3D().update(camera);
@@ -50,7 +52,8 @@ final class FrustumCuller3DTest {
         assertThrows(FdxException.class,()->culler.update(null));
         assertThrows(FdxException.class,()->culler.isVisible(null,null));
     }
-    @Test void randomAffineBoxesMatchIndependentCornerClipTestsIncludingMirrorsAndShear() {
+    @Test
+    void randomAffineBoxesMatchIndependentCornerClipTestsIncludingMirrorsAndShear() {
         Random random=new Random(640091);var camera=new Camera().projection(CameraProjection.PERSPECTIVE).viewport(3,2)
                 .nearFar(.1f,50).position(3,4,5).direction(-.2f,-.1f,-1);
         var culler=new FrustumCuller3D().update(camera);float[] projection=new float[16];camera.combined().copyValues(projection,0);
@@ -65,7 +68,8 @@ final class FrustumCuller3DTest {
         }
         assertTrue(extra<5,"Unexpected conservative overdraw: "+extra);
     }
-    @Test void stableQueueCompactionSkipsUnknownSkinBoundsAndHonorsExplicitOverrides() {
+    @Test
+    void stableQueueCompactionSkipsUnknownSkinBoundsAndHonorsExplicitOverrides() {
         var graphics=new DefaultRenderQueue3DReuseTest.FakeGraphicsContext();
         Mesh mesh=Mesh.coloredTriangle(graphics,"bounds");
         try {
@@ -82,7 +86,8 @@ final class FrustumCuller3DTest {
             b.cullingBounds(null);queue.add(b);assertEquals(0,queue.cull(culler));
         } finally {mesh.dispose();}
     }
-    @Test void repeatedCameraRefreshPreservesVisibility() {
+    @Test
+    void repeatedCameraRefreshPreservesVisibility() {
         var culler=new FrustumCuller3D();var camera=new Camera().viewport(4,4).position(0,0,0);
         var transform=new Matrix4().setToTranslation(0,0,-3);
         int visible=0;

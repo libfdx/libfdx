@@ -13,7 +13,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GltfTexturesTest {
-    @Test void textureTransformsSelectOverrideUvAndApplyScaleThenRotationThenOffset() {
+    @Test
+    void textureTransformsSelectOverrideUvAndApplyScaleThenRotationThenOffset() {
         JsonValue info = new JsonReader().parse("""
             {"index":0,"texCoord":0,"extensions":{"KHR_texture_transform":{
               "texCoord":1,"offset":[0.3,-0.2],"rotation":1.5707963267948966,"scale":[-2,3]}}}
@@ -29,7 +30,8 @@ class GltfTexturesTest {
             assertThrows(RuntimeException.class, () -> GltfTextures.coordinates(new JsonReader().parse(invalid)));
     }
 
-    @Test void vertexBakingHonorsUvSelectionAddressingAndLinearColorInterpolation() {
+    @Test
+    void vertexBakingHonorsUvSelectionAddressingAndLinearColorInterpolation() {
         JsonValue root = root();
         root.put("samplers", JsonValue.array().add(JsonValue.object().put("magFilter", 9728).put("wrapS", 33648)));
         root.require("textures").require(0).put("sampler", 0);
@@ -45,7 +47,8 @@ class GltfTexturesTest {
         // Repeat taps straddle the seam, using texel centers rather than width-1 interpolation.
         assertEquals(.5f, binding.sample(0,0,0,0,true).red(), .000001f);
     }
-    @Test void importsEveryMinMagCombinationAndAddressMode() {
+    @Test
+    void importsEveryMinMagCombinationAndAddressMode() {
         int[] filters = {9728, 9729, 9984, 9985, 9986, 9987};
         for (int mag : new int[] {9728, 9729}) for (int min : filters) {
             JsonValue root = root();
@@ -70,7 +73,8 @@ class GltfTexturesTest {
         assertEquals(TextureWrap.REPEAT, defaults.wrapS());
     }
 
-    @Test void sharedImagesHaveDistinctColorDataAndAlphaMipsAndUnusedTexturesHaveNoUpload() {
+    @Test
+    void sharedImagesHaveDistinctColorDataAndAlphaMipsAndUnusedTexturesHaveNoUpload() {
         JsonValue root = root();
         root.put("samplers", JsonValue.array().add(JsonValue.object().put("minFilter", 9987)));
         root.require("textures").require(0).put("sampler", 0);
@@ -91,7 +95,8 @@ class GltfTexturesTest {
         assertArrayEquals(new int[] {255,0,0,128}, rgba(capture.uploads.get(2)[1]));
     }
 
-    @Test void invalidSamplerAndReferencesFailDuringDocumentPreparation() {
+    @Test
+    void invalidSamplerAndReferencesFailDuringDocumentPreparation() {
         for (String invalid : new String[] {
                 "{\"minFilter\":7}", "{\"magFilter\":9987}", "{\"wrapS\":4}",
                 "{\"wrapT\":-1}", "{\"minFilter\":9728.5}"}) {

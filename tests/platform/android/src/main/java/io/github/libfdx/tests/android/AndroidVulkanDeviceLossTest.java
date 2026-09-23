@@ -53,7 +53,8 @@ public final class AndroidVulkanDeviceLossTest extends ApplicationAdapter {
     private ShaderPreparedResult ready;
     private final String mode = System.getProperty("libfdx.test.vulkanLoss", "worker");
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         context = fdx.graphics().main().as(); device = context.device();
         nativeContext = (long) field(context, "context");
         // Let the backend finish its initial resize before the probe deliberately closes its context.
@@ -143,9 +144,12 @@ public final class AndroidVulkanDeviceLossTest extends ApplicationAdapter {
         AtomicInteger queued = new AtomicInteger();
         var service = new ShaderPreparation(context);
         ShaderProvider provider = new ShaderProvider() {
-            @Override public GraphicsDevice preparationDevice() { return device; }
-            @Override public boolean supports(ShaderRequest request) { return true; }
-            @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+            @Override
+            public GraphicsDevice preparationDevice() { return device; }
+            @Override
+            public boolean supports(ShaderRequest request) { return true; }
+            @Override
+            public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
                 var source = ShaderModuleSource.deferred("vertexMain", "fragmentMain", () -> {
                     if (request.variantKey().equals("held")) {
                         entered.countDown();

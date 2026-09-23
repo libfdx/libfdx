@@ -14,6 +14,8 @@ public final class WebAudioProvider implements AudioProvider {
         if (maxVoices < 1 || maxVoices > 256) throw new IllegalArgumentException("Voice capacity must be 1–256");
         this.maxVoices = maxVoices;
     }
-    @Override public ProviderId providerId() { return WebAudio.ID; }
-    @Override public Audio create() { return new WebAudio(maxVoices); }
+    @Override
+    public ProviderId providerId() { return WebAudio.ID; }
+    @Override
+    public Audio create() { return new WebAudio(maxVoices); }
 }

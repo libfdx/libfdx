@@ -56,8 +56,10 @@ public final class TextureLoadOptions {
     public TextureFilter filter() { return filter; }
     /** Wrap mode for both axes. */
     public TextureWrap wrap() { return wrap; }
-    @Override public boolean equals(Object other) {
+    @Override
+    public boolean equals(Object other) {
         return other instanceof TextureLoadOptions value && format == value.format && filter == value.filter && wrap == value.wrap;
     }
-    @Override public int hashCode() { return (format.ordinal() * 31 + filter.ordinal()) * 31 + wrap.ordinal(); }
+    @Override
+    public int hashCode() { return (format.ordinal() * 31 + filter.ordinal()) * 31 + wrap.ordinal(); }
 }

@@ -13,7 +13,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 final class EffectContractsTest {
     private static final ProviderId ID=ProviderId.of("effect-contract-test");
-    @Test void hdrFilteringAndBlendingAreSeparateFromRenderability() {
+    @Test
+    void hdrFilteringAndBlendingAreSeparateFromRenderability() {
         var caps=caps(false);
         assertTrue(caps.supportsColorFormat(TextureFormat.RGBA16_FLOAT));
         assertFalse(caps.supportsColorFiltering(TextureFormat.RGBA16_FLOAT));
@@ -31,7 +32,8 @@ final class EffectContractsTest {
         assertDoesNotThrow(()->pipeline.colorTargets(ColorTargetState.opaque(TextureFormat.RGBA16_FLOAT)).validate(caps));
         assertEquals(EffectQuality.HIGH,EffectQuality.bestSupported(caps(true)));
     }
-    @Test void replacementFailurePreservesPriorOutputAndReleasesPartialAllocation() {
+    @Test
+    void replacementFailurePreservesPriorOutputAndReleasesPartialAllocation() {
         var fixture=new Device(); var post=new PostProcessor(fixture.device,EffectQuality.BALANCED);
         var scene=fixture.texture(new TextureDescriptor().size(32,32));
         assertThrows(FdxException.class,post::color);
@@ -55,7 +57,8 @@ final class EffectContractsTest {
         assertFalse(scene.isDisposed());scene.dispose();
         fixture.assertClosedOnce();
     }
-    @Test void drawAndEndFailureLeaveNoActiveScopeAndCannotExposeIncompleteOutput() {
+    @Test
+    void drawAndEndFailureLeaveNoActiveScopeAndCannotExposeIncompleteOutput() {
         var fixture=new Device();var post=new PostProcessor(fixture.device,EffectQuality.LOW);
         var scene=fixture.texture(new TextureDescriptor().size(8,8));post.resize(8,8);
         fixture.failDraw=true;fixture.failEnd=true;
@@ -69,7 +72,8 @@ final class EffectContractsTest {
         assertNotNull(post.color());
         post.dispose();scene.dispose();fixture.assertClosedOnce();
     }
-    @Test void partialShaderConstructionAndInvalidLightingInputsDoNotLeakOrRecordWork() {
+    @Test
+    void partialShaderConstructionAndInvalidLightingInputsDoNotLeakOrRecordWork() {
         var failed=new Device();failed.failShader=2;
         assertThrows(FdxException.class,()->new PostProcessor(failed.device,EffectQuality.BALANCED));
         failed.assertClosedOnce();
@@ -164,14 +168,16 @@ final class EffectContractsTest {
     }
     private static final class Owned implements InvocationHandler {
         int disposals;
-        @Override public Object invoke(Object p,Method m,Object[] a) {
+        @Override
+        public Object invoke(Object p,Method m,Object[] a) {
             return switch(m.getName()) {
                 case "dispose"->{disposals++;yield null;}
                 case "isDisposed"->disposals>0;case "providerId"->ID;default->throw new AssertionError(m);
             };
         }
     }
-    @SuppressWarnings("unchecked") private static <T>T proxy(Class<T> type,InvocationHandler handler) {
+    @SuppressWarnings("unchecked")
+    private static <T>T proxy(Class<T> type,InvocationHandler handler) {
         return (T)Proxy.newProxyInstance(type.getClassLoader(),new Class<?>[]{type},handler);
     }
 }

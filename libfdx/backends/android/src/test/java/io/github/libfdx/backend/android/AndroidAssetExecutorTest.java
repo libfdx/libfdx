@@ -67,8 +67,10 @@ final class AndroidAssetExecutorTest {
         AndroidAssetExecutor executor = new AndroidAssetExecutor(1, 8);
         DefaultAssetManager manager = new DefaultAssetManager(files(), executor);
         manager.registerLoader(String.class, new AssetLoader<String>() {
-            @Override public Class<String> type() { return String.class; }
-            @Override public FdxFuture<String> load(AssetLoadContext context, AssetDescriptor<String> descriptor) {
+            @Override
+            public Class<String> type() { return String.class; }
+            @Override
+            public FdxFuture<String> load(AssetLoadContext context, AssetDescriptor<String> descriptor) {
                 if (descriptor.path().equals("independent")) {
                     return context.async(() -> {
                         assertNotSame(applicationThread, Thread.currentThread());
@@ -123,12 +125,16 @@ final class AndroidAssetExecutorTest {
         CountDownLatch release = new CountDownLatch(1);
         CountDownLatch disposed = new CountDownLatch(1);
         Disposable value = new Disposable() {
-            @Override public void dispose() { disposed.countDown(); }
-            @Override public boolean isDisposed() { return disposed.getCount() == 0; }
+            @Override
+            public void dispose() { disposed.countDown(); }
+            @Override
+            public boolean isDisposed() { return disposed.getCount() == 0; }
         };
         manager.registerLoader(Disposable.class, new AssetLoader<Disposable>() {
-            @Override public Class<Disposable> type() { return Disposable.class; }
-            @Override public FdxFuture<Disposable> load(AssetLoadContext context, AssetDescriptor<Disposable> descriptor) {
+            @Override
+            public Class<Disposable> type() { return Disposable.class; }
+            @Override
+            public FdxFuture<Disposable> load(AssetLoadContext context, AssetDescriptor<Disposable> descriptor) {
                 return context.async(() -> {
                     started.countDown();
                     await(release);

@@ -20,8 +20,10 @@ public final class AssetLoadingFixtures {
         public final Texture tile;
         public final TextureRegion logo;
         public Card(Texture tile, TextureRegion logo) { this.tile = tile; this.logo = logo; }
-        @Override public void dispose() { tile.dispose(); }
-        @Override public boolean isDisposed() { return tile.isDisposed(); }
+        @Override
+        public void dispose() { tile.dispose(); }
+        @Override
+        public boolean isDisposed() { return tile.isDisposed(); }
     }
 
     /** The worker receives a pending future immediately; the scenario controls when I/O is published. */
@@ -32,7 +34,8 @@ public final class AssetLoadingFixtures {
         Throwable failure;
         public volatile int reads;
         public DelayedImage(FileHandle delegate) { this.delegate = delegate; }
-        @Override public FdxFuture<byte[]> readBytes() {
+        @Override
+        public FdxFuture<byte[]> readBytes() {
             reads++;
             delegate.readBytes().onSuccess(this::received).onFailure(this::failed);
             return result;
@@ -47,18 +50,30 @@ public final class AssetLoadingFixtures {
             if (error != null) { result.completeExceptionally(error); }
             else if (bytes != null) { result.complete(bytes); }
         }
-        @Override public FileLocation location() { return delegate.location(); }
-        @Override public String path() { return delegate.path(); }
-        @Override public String name() { return delegate.name(); }
-        @Override public String extension() { return delegate.extension(); }
-        @Override public FileHandle parent() { return delegate.parent(); }
-        @Override public FileHandle child(String path) { return delegate.child(path); }
-        @Override public boolean exists() { return delegate.exists(); }
-        @Override public boolean isDirectory() { return delegate.isDirectory(); }
-        @Override public FdxFuture<FileMetadata> metadata() { return delegate.metadata(); }
-        @Override public FdxFuture<String> readString(Charset charset) { return delegate.readString(charset); }
-        @Override public FdxFuture<Void> writeBytes(byte[] bytes, boolean append) { return delegate.writeBytes(bytes, append); }
-        @Override public FdxFuture<Void> writeString(String text, Charset charset, boolean append) {
+        @Override
+        public FileLocation location() { return delegate.location(); }
+        @Override
+        public String path() { return delegate.path(); }
+        @Override
+        public String name() { return delegate.name(); }
+        @Override
+        public String extension() { return delegate.extension(); }
+        @Override
+        public FileHandle parent() { return delegate.parent(); }
+        @Override
+        public FileHandle child(String path) { return delegate.child(path); }
+        @Override
+        public boolean exists() { return delegate.exists(); }
+        @Override
+        public boolean isDirectory() { return delegate.isDirectory(); }
+        @Override
+        public FdxFuture<FileMetadata> metadata() { return delegate.metadata(); }
+        @Override
+        public FdxFuture<String> readString(Charset charset) { return delegate.readString(charset); }
+        @Override
+        public FdxFuture<Void> writeBytes(byte[] bytes, boolean append) { return delegate.writeBytes(bytes, append); }
+        @Override
+        public FdxFuture<Void> writeString(String text, Charset charset, boolean append) {
             return delegate.writeString(text, charset, append);
         }
     }
@@ -67,14 +82,23 @@ public final class AssetLoadingFixtures {
         public final FileSystem delegate;
         public final FileHandle delayed;
         public DelayedFiles(FileSystem delegate, FileHandle delayed) { this.delegate = delegate; this.delayed = delayed; }
-        @Override public FileHandle internal(String path) { return delayed.path().equals(path) ? delayed : delegate.internal(path); }
-        @Override public FileHandle classpath(String path) { return delegate.classpath(path); }
-        @Override public FileHandle local(String path) { return delegate.local(path); }
-        @Override public FileHandle external(String path) { return delegate.external(path); }
-        @Override public FileHandle cache(String path) { return delegate.cache(path); }
-        @Override public FileHandle temp(String prefix, String suffix) { return delegate.temp(prefix, suffix); }
-        @Override public FdxFuture<FileWatch> watch(FileHandle file) { return delegate.watch(file); }
-        @Override public ProviderId providerId() { return delegate.providerId(); }
-        @Override public <T> T as() { return delegate.as(); }
+        @Override
+        public FileHandle internal(String path) { return delayed.path().equals(path) ? delayed : delegate.internal(path); }
+        @Override
+        public FileHandle classpath(String path) { return delegate.classpath(path); }
+        @Override
+        public FileHandle local(String path) { return delegate.local(path); }
+        @Override
+        public FileHandle external(String path) { return delegate.external(path); }
+        @Override
+        public FileHandle cache(String path) { return delegate.cache(path); }
+        @Override
+        public FileHandle temp(String prefix, String suffix) { return delegate.temp(prefix, suffix); }
+        @Override
+        public FdxFuture<FileWatch> watch(FileHandle file) { return delegate.watch(file); }
+        @Override
+        public ProviderId providerId() { return delegate.providerId(); }
+        @Override
+        public <T> T as() { return delegate.as(); }
     }
 }

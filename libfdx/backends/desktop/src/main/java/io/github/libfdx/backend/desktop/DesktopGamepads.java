@@ -59,8 +59,10 @@ final class DesktopGamepads implements Disposable {
         for(GamepadButton button:BUTTONS) removed.state().button(button,false);
         registry.disconnect(removed);
     }
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if(disposed) return; disposed=true;
         Throwable failure=null;
         try {

@@ -373,7 +373,8 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             }
         };
         deviceLostCallback = new WGPUDeviceLostCallback() {
-            @Override protected void onCallback(WGPUDeviceLostReason reason, String message) {
+            @Override
+            protected void onCallback(WGPUDeviceLostReason reason, String message) {
                 resourceDomain.deviceLost("WGPU device lost (" + reason + "): " + message);
                 deviceLossNotified = true;
                 // Browser notifications can arrive after destroy/release and must return before disposal.

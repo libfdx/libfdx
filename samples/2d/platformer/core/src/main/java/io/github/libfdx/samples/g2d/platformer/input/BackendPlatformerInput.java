@@ -57,15 +57,23 @@ public final class BackendPlatformerInput implements PlatformerInput, Disposable
         if (control == 2 && pointerControl != 2) { pointerJumpPressed=true; }
         pointerControl=control;
     }
-    @Override public boolean leftDown() { return move!=null && (move.value()+touchMove.value()<-.1f || pointerControl==-1); }
-    @Override public boolean rightDown() { return move!=null && (move.value()+touchMove.value()>.1f || pointerControl==1); }
-    @Override public boolean jumpDown() { return jump!=null && (jump.down() || touchJump.down() || pointerControl==2); }
-    @Override public boolean restartDown() { return restart!=null && (restart.down() || touchJump.down()); }
-    @Override public boolean consumeJumpPress() {
+    @Override
+    public boolean leftDown() { return move!=null && (move.value()+touchMove.value()<-.1f || pointerControl==-1); }
+    @Override
+    public boolean rightDown() { return move!=null && (move.value()+touchMove.value()>.1f || pointerControl==1); }
+    @Override
+    public boolean jumpDown() { return jump!=null && (jump.down() || touchJump.down() || pointerControl==2); }
+    @Override
+    public boolean restartDown() { return restart!=null && (restart.down() || touchJump.down()); }
+    @Override
+    public boolean consumeJumpPress() {
         boolean pointer = pointerJumpPressed; pointerJumpPressed=false;
         return jump!=null && (jump.consumePressed() | touchJump.consumePressed() | pointer);
     }
-    @Override public boolean consumeRestartPress() { return restart!=null && restart.consumePressed(); }
-    @Override public boolean isDisposed() { return actions==null || actions.isDisposed(); }
-    @Override public void dispose() { if(actions!=null) actions.dispose(); }
+    @Override
+    public boolean consumeRestartPress() { return restart!=null && restart.consumePressed(); }
+    @Override
+    public boolean isDisposed() { return actions==null || actions.isDisposed(); }
+    @Override
+    public void dispose() { if(actions!=null) actions.dispose(); }
 }

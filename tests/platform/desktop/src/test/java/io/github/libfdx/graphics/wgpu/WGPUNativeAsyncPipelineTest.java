@@ -82,7 +82,8 @@ final class WGPUNativeAsyncPipelineTest {
 
         Scenario(WGPULoaderBackend loader, WGPUBackend backend) { this.loader = loader; this.backend = backend; }
 
-        @Override public void create(Fdx fdx) {
+        @Override
+        public void create(Fdx fdx) {
             graphics = fdx.graphics().main(); context = graphics.as(); application = fdx.app();
             assertEquals(loader == WGPULoaderBackend.DAWN, WGPU.isDawnBackend(), "Wrong native binary loaded");
             module = (WGPUShaderModuleHandle) graphics.device().createShaderModule(ShaderModuleDescriptor.wgsl("async callbacks", SOURCE));
@@ -114,7 +115,8 @@ final class WGPUNativeAsyncPipelineTest {
                     .depthTestEnabled(false).depthWriteEnabled(false);
         }
 
-        @Override public void render() {
+        @Override
+        public void render() {
             assertTrue(System.nanoTime() < deadline, "Async callbacks did not complete");
             context.processEvents();
             boolean complete = true;
@@ -182,7 +184,8 @@ final class WGPUNativeAsyncPipelineTest {
             } catch (Exception error) { throw new AssertionError("Could not capture native output", error); }
         }
 
-        @Override public void dispose() {
+        @Override
+        public void dispose() {
             // Never destroy callbacks or their inputs while native work is outstanding, including on assertion failure.
             if (context != null) {
                 long drainDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
@@ -218,7 +221,8 @@ final class WGPUNativeAsyncPipelineTest {
         String message;
         int calls;
         RenderResult(boolean invalid) { this.invalid = invalid; }
-        @Override protected void onCallback(WGPUCreatePipelineAsyncStatus status, WGPURenderPipeline pipeline, String message) {
+        @Override
+        protected void onCallback(WGPUCreatePipelineAsyncStatus status, WGPURenderPipeline pipeline, String message) {
             this.status = status; this.pipeline = pipeline; this.message = message; calls++;
         }
     }
@@ -231,7 +235,8 @@ final class WGPUNativeAsyncPipelineTest {
         String message;
         int calls;
         ComputeResult(boolean invalid) { this.invalid = invalid; }
-        @Override protected void onCallback(WGPUCreatePipelineAsyncStatus status, WGPUComputePipeline pipeline, String message) {
+        @Override
+        protected void onCallback(WGPUCreatePipelineAsyncStatus status, WGPUComputePipeline pipeline, String message) {
             this.status = status; this.pipeline = pipeline; this.message = message; calls++;
         }
     }

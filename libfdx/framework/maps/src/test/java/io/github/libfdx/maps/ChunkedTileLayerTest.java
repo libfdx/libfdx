@@ -6,7 +6,8 @@ import java.util.Random;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class ChunkedTileLayerTest {
-    @Test void hugeSignedGapsUseOnlyResidentCellsAndQueriesStayLocal() {
+    @Test
+    void hugeSignedGapsUseOnlyResidentCellsAndQueriesStayLocal() {
         var layer=new ChunkedTileLayer(1024,10000);
         for(int i=0;i<1000;i++)layer.put(new TileChunk(-1_000_000_000+i*1_000_000,-70,2,2).fill(1));
         var edge=new TileChunk(Integer.MAX_VALUE,Integer.MIN_VALUE,1,1).fill(7);layer.put(edge);
@@ -21,7 +22,8 @@ final class ChunkedTileLayerTest {
         assertThrows(FdxException.class,()->new TileChunk(Integer.MAX_VALUE,0,2,1));
         query.clear();assertEquals(0,query.size());
     }
-    @Test void randomRectangleQueriesMatchBruteForceAndDeduplicateBucketCrossings() {
+    @Test
+    void randomRectangleQueriesMatchBruteForceAndDeduplicateBucketCrossings() {
         var layer=new ChunkedTileLayer(400,5_000_000);
         Random random=new Random(72591);
         for(int y=-8;y<8;y++)for(int x=-12;x<12;x++) {
@@ -53,7 +55,8 @@ final class ChunkedTileLayerTest {
         assertThrows(FdxException.class,()->layer.query(Long.MIN_VALUE,Long.MIN_VALUE,Long.MAX_VALUE,Long.MAX_VALUE,tooSmall));
         assertEquals(0,tooSmall.size());
     }
-    @Test void editsOnlyChangeTheirChunkAndValidationPreservesPriorMembership() {
+    @Test
+    void editsOnlyChangeTheirChunkAndValidationPreservesPriorMembership() {
         var layer=new ChunkedTileLayer(2,8);
         var a=new TileChunk(-2,-2,2,2).fill(1);var b=new TileChunk(0,-2,2,2).fill(2);
         layer.put(a);layer.put(b);long structure=layer.revision(),original=a.revision();
@@ -70,7 +73,8 @@ final class ChunkedTileLayerTest {
         assertSame(b,layer.remove(0,-2));assertEquals(4,layer.residentCells());assertNull(layer.remove(0,-2));
         layer.clear();assertEquals(0,layer.chunkCount());assertEquals(0,layer.indexBucketCount());assertEquals(0,layer.residentCells());
     }
-    @Test void infiniteExtentIsExplicitAndFiniteMembershipRulesRemainIntact() {
+    @Test
+    void infiniteExtentIsExplicitAndFiniteMembershipRulesRemainIntact() {
         TileMap map=TileMap.infinite(16,24);
         assertTrue(map.isInfinite());assertEquals(0,map.worldWidth());assertEquals(0,map.worldHeight());
         assertThrows(FdxException.class,map::addLayer);

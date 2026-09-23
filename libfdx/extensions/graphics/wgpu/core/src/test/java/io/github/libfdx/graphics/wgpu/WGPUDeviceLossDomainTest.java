@@ -8,7 +8,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class WGPUDeviceLossDomainTest {
-    @ParameterizedTest @ValueSource(booleans = {false, true})
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
     void lossClosesAdmissionButWaitsForContextsAndNativeWork(boolean workFirst) {
         WGPUResourceDomain domain = new WGPUResourceDomain();
         int[] releases = {0};
@@ -34,7 +35,8 @@ final class WGPUDeviceLossDomainTest {
         assertEquals(1, releases[0]);
     }
 
-    @Test void anAlreadyPreparedPipelineCannotBeUsedAfterLossButCanBeDisposed() {
+    @Test
+    void anAlreadyPreparedPipelineCannotBeUsedAfterLossButCanBeDisposed() {
         WGPUResourceDomain domain = new WGPUResourceDomain();
         WGPURenderPipelineHandle pipeline = new WGPURenderPipelineHandle(domain, null, null, null,
                 new WGPUBindGroupLayout[0], 0, -1, 0, null, null);

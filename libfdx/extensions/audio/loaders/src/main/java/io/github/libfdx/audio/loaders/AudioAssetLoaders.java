@@ -30,8 +30,10 @@ public final class AudioAssetLoaders {
             throw new IllegalArgumentException("Live manager and streaming audio provider required");
         }
         assets.registerLoader(Music.class,new AssetLoader<Music>() {
-            @Override public Class<Music> type() { return Music.class; }
-            @Override public FdxFuture<Music> load(AssetLoadContext context,AssetDescriptor<Music> descriptor) {
+            @Override
+            public Class<Music> type() { return Music.class; }
+            @Override
+            public FdxFuture<Music> load(AssetLoadContext context,AssetDescriptor<Music> descriptor) {
                 var file = context.files().internal(descriptor.path());
                 FdxFuture<Music> result = FdxFuture.pending();
                 context.asyncFuture(() -> WavStream.openFile(file,buffering.framesPerBuffer(),executor)).onSuccess(pcm -> {
@@ -60,8 +62,10 @@ public final class AudioAssetLoaders {
             throw new IllegalArgumentException("Live assets/audio and positive maxFrames required");
         }
         assets.registerLoader(PcmData.class, new AssetLoader<PcmData>() {
-            @Override public Class<PcmData> type() { return PcmData.class; }
-            @Override public FdxFuture<PcmData> load(AssetLoadContext context, AssetDescriptor<PcmData> descriptor) {
+            @Override
+            public Class<PcmData> type() { return PcmData.class; }
+            @Override
+            public FdxFuture<PcmData> load(AssetLoadContext context, AssetDescriptor<PcmData> descriptor) {
                 FdxFuture<PcmData> result = FdxFuture.pending();
                 context.readBytes(context.files().internal(descriptor.path())).onSuccess(bytes -> {
                     try {
@@ -73,8 +77,10 @@ public final class AudioAssetLoaders {
             }
         });
         assets.registerLoader(Sound.class, new AssetLoader<Sound>() {
-            @Override public Class<Sound> type() { return Sound.class; }
-            @Override public FdxFuture<Sound> load(AssetLoadContext context, AssetDescriptor<Sound> descriptor) {
+            @Override
+            public Class<Sound> type() { return Sound.class; }
+            @Override
+            public FdxFuture<Sound> load(AssetLoadContext context, AssetDescriptor<Sound> descriptor) {
                 FdxFuture<PcmData> pcm = context.dependency(AssetDescriptor.of(descriptor.path(), PcmData.class));
                 return context.completeOnUpdate(() -> audio.createSound(pcm.get()));
             }

@@ -23,7 +23,8 @@ public final class DesktopShaderPreloadDestination implements ShaderPreloadCaptu
         this.directory = Objects.requireNonNull(directory).toAbsolutePath().normalize();
     }
 
-    @Override public FdxFuture<Void> writeAsync(ShaderPreloadExport snapshot) {
+    @Override
+    public FdxFuture<Void> writeAsync(ShaderPreloadExport snapshot) {
         Objects.requireNonNull(snapshot);
         FdxFuture<Void> result = FdxFuture.pending();
         try {
@@ -48,6 +49,8 @@ public final class DesktopShaderPreloadDestination implements ShaderPreloadCaptu
             catch (AtomicMoveNotSupportedException unavailable) { Files.move(temporary, destination, StandardCopyOption.REPLACE_EXISTING); }
         } finally { Files.deleteIfExists(temporary); }
     }
-    @Override public void dispose() { executor.dispose(); }
-    @Override public boolean isDisposed() { return executor.isDisposed(); }
+    @Override
+    public void dispose() { executor.dispose(); }
+    @Override
+    public boolean isDisposed() { return executor.isDisposed(); }
 }

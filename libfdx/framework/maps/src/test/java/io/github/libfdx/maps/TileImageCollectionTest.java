@@ -5,7 +5,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class TileImageCollectionTest {
-    @Test void sparseEnumerationAndRangesUseExistingIdsWithoutAllocatingTheGap() {
+    @Test
+    void sparseEnumerationAndRangesUseExistingIdsWithoutAllocatingTheGap() {
         TileImage[] images = {new TileImage(100_000_000, "b.png", 20, 12), new TileImage(0, "a.png", 12, 20)};
         TileAtlas atlas = TileAtlas.imageCollection("props", 20, 20, images, 0, 0, new MapProperties());
         images[0] = null;
@@ -19,7 +20,8 @@ final class TileImageCollectionTest {
         assertThrows(FdxException.class, () -> map.addAtlas(50, atlas));
         assertThrows(FdxException.class, () -> atlas.animation(0, new TileAnimation(new int[]{1}, new int[]{1})));
     }
-    @Test void validatesCropsIdsAndDimensionsBeforePublication() {
+    @Test
+    void validatesCropsIdsAndDimensionsBeforePublication() {
         assertThrows(FdxException.class, () -> new TileImage(0, "a", 10, 10, Integer.MAX_VALUE, 0, 1, 1));
         assertThrows(FdxException.class, () -> new TileImage(-1, "a", 10, 10));
         TileImage image = new TileImage(0, "a", 12, 20, 2, 4, 8, 8);

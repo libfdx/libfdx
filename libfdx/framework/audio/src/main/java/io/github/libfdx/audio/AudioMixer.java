@@ -133,8 +133,10 @@ public final class AudioMixer implements Disposable {
         }
         for (int i = 0; i < tracks.length; i++) { if (tracks[i] != null) { applyTrack(i); } }
     }
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if (disposed) { return; }
         disposed = true; Throwable error = null;
         if (!audio.isDisposed()) {

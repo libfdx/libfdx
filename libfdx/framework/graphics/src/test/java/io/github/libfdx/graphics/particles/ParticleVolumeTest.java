@@ -5,7 +5,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class ParticleVolumeTest {
-    @Test void sphericalDensityHasDepthAndIsCameraIndependent() {
+    @Test
+    void sphericalDensityHasDepthAndIsCameraIndependent() {
         ParticleVolume volume = new ParticleVolume(16,16,16).bounds(-1,-1,-1,2,2,2);
         volume.add(0,0,0,0.6f,1,0.8f,ParticleVolume.Medium.FIRE);
         int nonemptySlices = 0;
@@ -21,7 +22,8 @@ final class ParticleVolumeTest {
         for(float value:volume.field) assertEquals(0,value);
     }
 
-    @Test void overlappingMediaAccumulateAndOutOfBoundsDoesNotWrap() {
+    @Test
+    void overlappingMediaAccumulateAndOutOfBoundsDoesNotWrap() {
         ParticleVolume volume = new ParticleVolume(8,8,8).bounds(0,0,0,1,1,1);
         volume.add(0.5f,0.5f,0.5f,0.3f,1,0.7f,ParticleVolume.Medium.FIRE);
         float before=volume.field[((4*8+4)*8+4)*4];

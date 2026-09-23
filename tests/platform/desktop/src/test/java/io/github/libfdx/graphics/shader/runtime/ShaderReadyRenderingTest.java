@@ -29,7 +29,8 @@ final class ShaderReadyRenderingTest {
     private static final RenderTargetLayout TARGET = RenderTargetLayout.color(TextureFormat.RGBA8_UNORM);
     private static final int FRAMES = 100;
 
-    @ParameterizedTest @ValueSource(booleans = {false, true})
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
     void preparedSpriteFramesReusePipelinesAndCaptureDraws(boolean instanced) {
         Device device = new Device("gl", instanced);
         Context graphics = new Context(device);
@@ -68,7 +69,8 @@ final class ShaderReadyRenderingTest {
         } finally { batch.dispose(); device.close(service); texture.dispose(); }
     }
 
-    @ParameterizedTest @ValueSource(strings = {"cpu-test", "gl"})
+    @ParameterizedTest
+    @ValueSource(strings = {"cpu-test", "gl"})
     void preparedModelFramesReusePipelinesAndCaptureDraws(String provider) {
         Device device = new Device(provider, false);
         Context graphics = new Context(device);
@@ -105,7 +107,8 @@ final class ShaderReadyRenderingTest {
         } finally { batch.dispose(); device.close(service); plan.dispose(); mesh.dispose(); }
     }
 
-    @Test void equalTargetLayoutsRemainInterchangeableAsPipelineCacheKeys() {
+    @Test
+    void equalTargetLayoutsRemainInterchangeableAsPipelineCacheKeys() {
         var other = RenderTargetLayout.of(new TextureFormat[]{TextureFormat.RGBA8_UNORM}, TextureFormat.UNKNOWN, 1);
         assertEquals(TARGET, other);
         assertEquals(TARGET.hashCode(), other.hashCode());
@@ -128,18 +131,24 @@ final class ShaderReadyRenderingTest {
         private static final ProviderId ID = ProviderId.of("rendering-test");
         private boolean disposed;
         public ProviderId providerId() { return ID; }
-        @SuppressWarnings("unchecked") public <T> T as() { return (T) this; }
+        @SuppressWarnings("unchecked")
+        public <T> T as() { return (T) this; }
         public void dispose() { disposed = true; }
         public boolean isDisposed() { return disposed; }
     }
     private static final class Context extends Handle implements GraphicsContext {
         final Device device;
         Context(Device device) { this.device = device; }
-        @Override public GraphicsDevice device() { return device; }
-        @Override public TextureFormat surfaceFormat() { return TextureFormat.RGBA8_UNORM; }
-        @Override public GraphicsFrame currentFrame() { throw new AssertionError("Use the borrowed pass"); }
-        @Override public void clear(float r, float g, float b, float a) { throw new AssertionError(); }
-        @Override public ProviderId providerId() { return device.id; }
+        @Override
+        public GraphicsDevice device() { return device; }
+        @Override
+        public TextureFormat surfaceFormat() { return TextureFormat.RGBA8_UNORM; }
+        @Override
+        public GraphicsFrame currentFrame() { throw new AssertionError("Use the borrowed pass"); }
+        @Override
+        public void clear(float r, float g, float b, float a) { throw new AssertionError(); }
+        @Override
+        public ProviderId providerId() { return device.id; }
     }
     private static final class Device extends Handle implements GraphicsDevice {
         final ProviderId id;
@@ -153,21 +162,31 @@ final class ShaderReadyRenderingTest {
             if (instanced) builder.feature(GraphicsFeature.INSTANCED_DRAW).feature(GraphicsFeature.INDEXED_DRAW);
             capabilities = builder.build();
         }
-        @Override public GraphicsCapabilities capabilities() { return capabilities; }
-        @Override public ProviderId providerId() { return id; }
-        @Override public ShaderPreparationCapabilities shaderPreparationCapabilities() {
+        @Override
+        public GraphicsCapabilities capabilities() { return capabilities; }
+        @Override
+        public ProviderId providerId() { return id; }
+        @Override
+        public ShaderPreparationCapabilities shaderPreparationCapabilities() {
             return new ShaderPreparationCapabilities(WORKERS, WORKERS, true, 4, false, false);
         }
-        @Override public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
+        @Override
+        public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
             requests++;
             Job job = new Job(request); jobs.add(job); return job;
         }
-        @Override public Buffer createBuffer(BufferDescriptor descriptor) { return new TestBuffer(descriptor); }
-        @Override public void writeBuffer(Buffer buffer, ByteBuffer data) { writes++; }
-        @Override public Texture createTexture(TextureDescriptor descriptor) { return new TestTexture(descriptor); }
-        @Override public void writeTexture(Texture texture, ByteBuffer data) { }
-        @Override public ShaderModule createShaderModule(ShaderModuleDescriptor descriptor) { throw new AssertionError("Synchronous compilation"); }
-        @Override public RenderPipeline createRenderPipeline(RenderPipelineDescriptor descriptor) { throw new AssertionError("Synchronous compilation"); }
+        @Override
+        public Buffer createBuffer(BufferDescriptor descriptor) { return new TestBuffer(descriptor); }
+        @Override
+        public void writeBuffer(Buffer buffer, ByteBuffer data) { writes++; }
+        @Override
+        public Texture createTexture(TextureDescriptor descriptor) { return new TestTexture(descriptor); }
+        @Override
+        public void writeTexture(Texture texture, ByteBuffer data) { }
+        @Override
+        public ShaderModule createShaderModule(ShaderModuleDescriptor descriptor) { throw new AssertionError("Synchronous compilation"); }
+        @Override
+        public RenderPipeline createRenderPipeline(RenderPipelineDescriptor descriptor) { throw new AssertionError("Synchronous compilation"); }
         void complete(ShaderPreparation service) {
             service.update();
             for (Job job : jobs) job.done = true;
@@ -179,29 +198,39 @@ final class ShaderReadyRenderingTest {
     private static final class TestBuffer extends Handle implements Buffer {
         final BufferDescriptor descriptor;
         TestBuffer(BufferDescriptor descriptor) { this.descriptor = descriptor; }
-        @Override public int size() { return descriptor.size(); }
-        @Override public BufferUsage usage() { return descriptor.usage(); }
+        @Override
+        public int size() { return descriptor.size(); }
+        @Override
+        public BufferUsage usage() { return descriptor.usage(); }
     }
     private static final class TestTexture extends Handle implements Texture {
         final TextureDescriptor descriptor;
         TestTexture(TextureDescriptor descriptor) { this.descriptor = descriptor; }
-        @Override public int width() { return descriptor.width(); }
-        @Override public int height() { return descriptor.height(); }
-        @Override public TextureFormat format() { return descriptor.format(); }
-        @Override public TextureUsage usage() { return descriptor.usage(); }
+        @Override
+        public int width() { return descriptor.width(); }
+        @Override
+        public int height() { return descriptor.height(); }
+        @Override
+        public TextureFormat format() { return descriptor.format(); }
+        @Override
+        public TextureUsage usage() { return descriptor.usage(); }
     }
     private static final class Pipeline extends Handle implements RenderPipeline {
         final RenderTargetLayout target;
         Pipeline(RenderTargetLayout target) { this.target = target; }
-        @Override public RenderTargetLayout targetLayout() { return target; }
+        @Override
+        public RenderTargetLayout targetLayout() { return target; }
     }
     private static final class Job extends Handle implements ShaderPreparationOperation {
         final ShaderPipelineRequest request;
         boolean done;
         Job(ShaderPipelineRequest request) { this.request = request; }
-        @Override public boolean isDone() { return done; }
-        @Override public ShaderPreparationPhase phase() { return ShaderPreparationPhase.PUBLICATION_WAIT; }
-        @Override public ShaderPreparedResult finish() {
+        @Override
+        public boolean isDone() { return done; }
+        @Override
+        public ShaderPreparationPhase phase() { return ShaderPreparationPhase.PUBLICATION_WAIT; }
+        @Override
+        public ShaderPreparedResult finish() {
             assertTrue(done);
             ShaderReflection reflection = request.sourceDescriptor().reflection();
             if (!reflection.complete()) reflection = ShaderReflection.builder(ShaderProfile.PORTABLE_WEBGPU)
@@ -217,22 +246,35 @@ final class ShaderReadyRenderingTest {
             return new ShaderPreparedResult(ResolvedShaderPass.of(request.passId(), pipeline,
                     ShaderResourceLayout.all(reflection), request.providerRevision()), pipeline);
         }
-        @Override public void cancel() { done = true; }
+        @Override
+        public void cancel() { done = true; }
     }
     private static final class Pass extends Handle implements RenderPass {
         final RenderPassCompatibility compatibility = RenderPassCompatibility.of(TARGET, 64, 64);
         int draws, parameterBinds;
-        @Override public RenderPassCompatibility compatibility() { return compatibility; }
-        @Override public void setPipeline(RenderPipeline pipeline) { assertNotNull(pipeline); }
-        @Override public void setVertexBuffer(Buffer buffer) { }
-        @Override public void setVertexBuffer(int slot, Buffer buffer) { }
-        @Override public void setIndexBuffer(Buffer buffer) { }
-        @Override public void setTexture(int slot, Texture texture) { }
-        @Override public void setTextureBinding(int group, int binding, Texture texture) { }
-        @Override public void setTextureSamplerBinding(int group, int binding, Texture texture) { }
-        @Override public void setParameterBlock(int group, int binding, ShaderParameterBlock block) { parameterBinds++; }
-        @Override public void draw(int vertices, int instances, int firstVertex, int firstInstance) { draws++; }
-        @Override public void drawIndexed(int indices, int instances, int firstIndex, int baseVertex, int firstInstance) { draws++; }
-        @Override public void end() { }
+        @Override
+        public RenderPassCompatibility compatibility() { return compatibility; }
+        @Override
+        public void setPipeline(RenderPipeline pipeline) { assertNotNull(pipeline); }
+        @Override
+        public void setVertexBuffer(Buffer buffer) { }
+        @Override
+        public void setVertexBuffer(int slot, Buffer buffer) { }
+        @Override
+        public void setIndexBuffer(Buffer buffer) { }
+        @Override
+        public void setTexture(int slot, Texture texture) { }
+        @Override
+        public void setTextureBinding(int group, int binding, Texture texture) { }
+        @Override
+        public void setTextureSamplerBinding(int group, int binding, Texture texture) { }
+        @Override
+        public void setParameterBlock(int group, int binding, ShaderParameterBlock block) { parameterBinds++; }
+        @Override
+        public void draw(int vertices, int instances, int firstVertex, int firstInstance) { draws++; }
+        @Override
+        public void drawIndexed(int indices, int instances, int firstIndex, int baseVertex, int firstInstance) { draws++; }
+        @Override
+        public void end() { }
     }
 }

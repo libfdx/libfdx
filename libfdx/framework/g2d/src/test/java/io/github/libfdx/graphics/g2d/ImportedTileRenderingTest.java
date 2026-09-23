@@ -13,7 +13,8 @@ import java.lang.reflect.Proxy;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class ImportedTileRenderingTest {
-    @Test void sparseRowsMatchDensePainterOrderAcrossUnequalChunksAndOverhangs() {
+    @Test
+    void sparseRowsMatchDensePainterOrderAcrossUnequalChunksAndOverhangs() {
         var dense=new io.github.libfdx.maps.TileMap(4,4,8,8);var cells=dense.addLayer();
         var sparse=io.github.libfdx.maps.TileMap.infinite(8,8);
         var layer=new io.github.libfdx.maps.ChunkedTileLayer(3,16);sparse.addChunkedLayer(layer);
@@ -47,7 +48,8 @@ final class ImportedTileRenderingTest {
         assertEquals(-3,batch.x[0]);assertEquals(-1,batch.y[0]);
     }
 
-    @Test void imageTintParallaxAndTopLeftAnchorComposeThroughGroups() {
+    @Test
+    void imageTintParallaxAndTopLeftAnchorComposeThroughGroups() {
         var map=new io.github.libfdx.maps.TileMap(2,2,16,16).parallaxOrigin(10,20);
         ImageLayer image=new ImageLayer("sky.png",8,4,2,20,false,false);
         image.offset(3,4).parallax(.5f,2).opacity(.5f).tint(0xff804080);
@@ -65,7 +67,8 @@ final class ImportedTileRenderingTest {
         image.tint(0xffffff00); assertEquals(0,renderer.render(map,tiles,batch,100,40));
         tiles.clear(); assertNull(tiles.findImage("sky.png"));
     }
-    @Test void repeatedImagesCoverNegativeViewCoordinatesWithBoundedCopyCount() {
+    @Test
+    void repeatedImagesCoverNegativeViewCoordinatesWithBoundedCopyCount() {
         var map=new io.github.libfdx.maps.TileMap(4,3,16,16);
         ImageLayer image=new ImageLayer("repeat.png",0,0,3,19,true,true); map.addImageLayer(image);
         TileSet tiles=new TileSet().imageRegion("repeat.png",region(8,4));
@@ -79,7 +82,8 @@ final class ImportedTileRenderingTest {
         image.visible(false); assertEquals(0,renderer.render(map,tiles,batch,0,0));
         assertThrows(FdxException.class,() -> renderer.imageRepeatLimit(0));
     }
-    @Test void groupedParallaxUsesWorldCameraCenterAndCullsAtShiftedBounds() {
+    @Test
+    void groupedParallaxUsesWorldCameraCenterAndCullsAtShiftedBounds() {
         var map = new io.github.libfdx.maps.TileMap(1,1,16,16).parallaxOrigin(10,20);
         var layer = new io.github.libfdx.maps.TileLayer(1,1).fill(1);
         layer.offset(3,4).parallax(.5f, 2).opacity(.5f);
@@ -105,7 +109,8 @@ final class ImportedTileRenderingTest {
         assertEquals(148,batch.x[0]); assertEquals(130,batch.y[0]);
     }
 
-    @Test void animationSharesPhaseAndUsesBaseImagesWithoutRecursiveReferences() {
+    @Test
+    void animationSharesPhaseAndUsesBaseImagesWithoutRecursiveReferences() {
         TextureRegion a=region(16,16), b=region(16,32), replacement=region(20,40);
         TileSet tiles=new TileSet().atlasRegion(10,a,0,0).atlasRegion(11,b,0,0);
         TileAnimation sequence=new TileAnimation(new int[] {0,1},new int[] {100,200});
@@ -123,7 +128,8 @@ final class ImportedTileRenderingTest {
         tiles.animationTime(300); assertSame(a,tiles.region(10));
         tiles.clear(); assertEquals(0,tiles.size()); assertNull(tiles.region(10));
     }
-    @Test void nativeSizedTilesRemainVisibleOutsideTheirCellsAndRespectOffsets() {
+    @Test
+    void nativeSizedTilesRemainVisibleOutsideTheirCellsAndRespectOffsets() {
         var map = new io.github.libfdx.maps.TileMap(2, 2, 16, 16);
         var layer = map.addLayer().tile(0, 0, 1, 4);
         layer.offset(3, 5);
@@ -136,7 +142,8 @@ final class ImportedTileRenderingTest {
         batch.count = 0;
         assertEquals(0, renderer.render(map, tiles, batch, 0, 0, 15, 36, 1, 5));
     }
-    @Test void renderOrderInterleavesObjectsAndLayersAndRestoresOpacity() {
+    @Test
+    void renderOrderInterleavesObjectsAndLayersAndRestoresOpacity() {
         var map = new io.github.libfdx.maps.TileMap(2, 1, 16, 16).renderOrder(true, true);
         map.addLayer().fill(1).opacity(.5f);
         MapObject object = new MapObject(1, "", "", MapObject.Shape.TILE, 7, 8, 12, 24, -30, true, .5f,
@@ -152,7 +159,8 @@ final class ImportedTileRenderingTest {
         assertEquals(.5, batch.alpha[0]); assertEquals(.5, batch.alpha[2]); assertEquals(1, batch.alpha[3]);
         assertEquals(1, batch.currentAlpha);
     }
-    @Test void rotatedObjectCullingUsesItsTransformedBounds() {
+    @Test
+    void rotatedObjectCullingUsesItsTransformedBounds() {
         var map = new io.github.libfdx.maps.TileMap(1, 1, 16, 16);
         MapObject object = new MapObject(1, "", "", MapObject.Shape.TILE, 0, 0, 10, 30, 90, true, 1,
                 1, 0, new float[] {0,0, 0,30, 10,30, 10,0}, new MapProperties());
@@ -161,7 +169,8 @@ final class ImportedTileRenderingTest {
         assertEquals(1, new TileMapRenderer().render(map, tiles, new RecordingBatch(), 0, 0, -25, 1, 5, 5));
         assertEquals(0, new TileMapRenderer().render(map, tiles, new RecordingBatch(), 0, 0, 1, 15, 5, 5));
     }
-    @Test void compatibilityTypesRetainFluentReturnsAndCanonicalStorage() {
+    @Test
+    void compatibilityTypesRetainFluentReturnsAndCanonicalStorage() {
         TileMap map = new TileMap(1, 1, 16, 16);
         TileLayer layer = map.addLayer().tile(0, 0, 1).visible(true);
         assertSame(layer, ((io.github.libfdx.maps.TileMap)map).layer(0));
@@ -180,23 +189,38 @@ final class ImportedTileRenderingTest {
         final float[] x = new float[16], y = new float[16], width = new float[16], height = new float[16],
                 rotation = new float[16], alpha = new float[16], red=new float[16],green=new float[16],blue=new float[16];
         final int[] flags = new int[16]; int count; float currentAlpha = 1,currentRed=1,currentGreen=1,currentBlue=1;
-        @Override public void begin() { }
-        @Override public void begin(LoadOp op) { }
-        @Override public void begin(RenderPass pass) { }
-        @Override public Batch2D color(float r,float g,float b,float a) { currentAlpha = a; currentRed=r;currentGreen=g;currentBlue=b;return this; }
-        @Override public Batch2D viewport(int w,int h) { return this; }
-        @Override public void draw(Texture t,float x,float y,float w,float h) { }
-        @Override public void draw(Texture t,float x,float y,float w,float h,float ox,float oy,float r) { }
-        @Override public void draw(Texture t,int sx,int sy,int sw,int sh,float x,float y,float w,float h) { }
-        @Override public void draw(TextureRegion t,float x,float y,float w,float h) { draw(t,x,y,w,h,0,0,0,0); }
-        @Override public void draw(TextureRegion t,float x,float y,float w,float h,float ox,float oy,float r) { draw(t,x,y,w,h,ox,oy,r,0); }
-        @Override public void draw(TextureRegion t,float x,float y,float w,float h,float ox,float oy,float r,int f) {
+        @Override
+        public void begin() { }
+        @Override
+        public void begin(LoadOp op) { }
+        @Override
+        public void begin(RenderPass pass) { }
+        @Override
+        public Batch2D color(float r,float g,float b,float a) { currentAlpha = a; currentRed=r;currentGreen=g;currentBlue=b;return this; }
+        @Override
+        public Batch2D viewport(int w,int h) { return this; }
+        @Override
+        public void draw(Texture t,float x,float y,float w,float h) { }
+        @Override
+        public void draw(Texture t,float x,float y,float w,float h,float ox,float oy,float r) { }
+        @Override
+        public void draw(Texture t,int sx,int sy,int sw,int sh,float x,float y,float w,float h) { }
+        @Override
+        public void draw(TextureRegion t,float x,float y,float w,float h) { draw(t,x,y,w,h,0,0,0,0); }
+        @Override
+        public void draw(TextureRegion t,float x,float y,float w,float h,float ox,float oy,float r) { draw(t,x,y,w,h,ox,oy,r,0); }
+        @Override
+        public void draw(TextureRegion t,float x,float y,float w,float h,float ox,float oy,float r,int f) {
             this.x[count]=x; this.y[count]=y; width[count]=w; height[count]=h; rotation[count]=r; flags[count]=f;
             alpha[count]=currentAlpha; red[count]=currentRed;green[count]=currentGreen;blue[count]=currentBlue;count++;
         }
-        @Override public void draw(TextureRegion t,float[] x,float[] y,int n,float w,float h,float ox,float oy,float r) { }
-        @Override public void end() { }
-        @Override public void dispose() { }
-        @Override public boolean isDisposed() { return false; }
+        @Override
+        public void draw(TextureRegion t,float[] x,float[] y,int n,float w,float h,float ox,float oy,float r) { }
+        @Override
+        public void end() { }
+        @Override
+        public void dispose() { }
+        @Override
+        public boolean isDisposed() { return false; }
     }
 }

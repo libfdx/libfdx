@@ -17,7 +17,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Timeout(15)
 final class AndroidShaderCacheStoreTest {
-    @Test void freshStoreReadsAtomicallyWrittenArtifactsAndRejectsPaths() throws Exception {
+    @Test
+    void freshStoreReadsAtomicallyWrittenArtifactsAndRejectsPaths() throws Exception {
         Path directory = directory();
         ShaderCacheKey key = ShaderCacheKey.of(ShaderCacheLayer.SPIRV, "test-input");
         AndroidShaderCacheStore first = new AndroidShaderCacheStore(directory, 32 * 1024 * 1024);
@@ -38,7 +39,8 @@ final class AndroidShaderCacheStoreTest {
         assertTrue(second.readAsync(key.digest()).isFailed());
     }
 
-    @Test void storageBudgetEvictsOldEntriesWithoutTouchingOtherFiles() throws Exception {
+    @Test
+    void storageBudgetEvictsOldEntriesWithoutTouchingOtherFiles() throws Exception {
         Path directory = directory();
         Path unrelated = directory.resolve("game-data");
         Files.write(unrelated, "preserve".getBytes(StandardCharsets.UTF_8));
@@ -56,7 +58,8 @@ final class AndroidShaderCacheStoreTest {
         } finally { store.dispose(); }
     }
 
-    @Test void unavailableDirectoryBecomesAMissWithoutFailingTheCacheClient() throws Exception {
+    @Test
+    void unavailableDirectoryBecomesAMissWithoutFailingTheCacheClient() throws Exception {
         Path path = directory().resolve("file");
         Files.write(path, "occupied".getBytes(StandardCharsets.UTF_8));
         AndroidShaderCacheStore store = new AndroidShaderCacheStore(path, 32 * 1024 * 1024);
@@ -68,7 +71,8 @@ final class AndroidShaderCacheStoreTest {
         } finally { store.dispose(); }
     }
 
-    @Test void independentStoresSerializeReadMergeWriteAndDisposalDrainsAcceptedUpdates() throws Exception {
+    @Test
+    void independentStoresSerializeReadMergeWriteAndDisposalDrainsAcceptedUpdates() throws Exception {
         Path directory = directory();
         AndroidShaderCacheStore first = new AndroidShaderCacheStore(directory, 32 * 1024 * 1024);
         AndroidShaderCacheStore second = new AndroidShaderCacheStore(directory, 32 * 1024 * 1024);
@@ -99,7 +103,8 @@ final class AndroidShaderCacheStoreTest {
         } finally { release.countDown(); first.dispose(); second.dispose(); }
     }
 
-    @Test void aggregateMergePreservesNewerDataFromAnIndependentWriter() throws Exception {
+    @Test
+    void aggregateMergePreservesNewerDataFromAnIndependentWriter() throws Exception {
         Path directory = directory();
         AndroidShaderCacheStore first = new AndroidShaderCacheStore(directory, 32 * 1024 * 1024);
         AndroidShaderCacheStore second = new AndroidShaderCacheStore(directory, 32 * 1024 * 1024);

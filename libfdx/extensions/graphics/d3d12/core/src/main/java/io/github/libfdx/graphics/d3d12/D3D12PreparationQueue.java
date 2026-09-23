@@ -72,7 +72,8 @@ final class D3D12PreparationQueue implements AutoCloseable {
         return job;
     }
 
-    @Override public void close() {
+    @Override
+    public void close() {
         if (closed) return;
         closed = true;
         for (Job job : jobs) job.cancel();
@@ -115,7 +116,8 @@ final class D3D12PreparationQueue implements AutoCloseable {
 
         Job(ShaderPipelineRequest request, MemorySegment device) { this.request = request; this.device = device; }
 
-        @Override public void run() {
+        @Override
+        public void run() {
             try {
                 checkCancelled();
                 trace.enter(ShaderPreparationPhase.SOURCE);
@@ -251,10 +253,14 @@ final class D3D12PreparationQueue implements AutoCloseable {
             Packet packet = output.getAndSet(null);
             if (packet != null) packet.close();
         }
-        @Override public boolean isDone() { context.detectDeviceLoss(); return done; }
-        @Override public ShaderPreparationPhase phase() { return trace.phase(); }
-        @Override public ShaderPreparationTrace trace() { return trace; }
-        @Override public ShaderPreparedResult finish() {
+        @Override
+        public boolean isDone() { context.detectDeviceLoss(); return done; }
+        @Override
+        public ShaderPreparationPhase phase() { return trace.phase(); }
+        @Override
+        public ShaderPreparationTrace trace() { return trace; }
+        @Override
+        public ShaderPreparedResult finish() {
             if (!done || finished) throw new FdxException("D3D12 preparation cannot be published now");
             finished = true;
             context.detectDeviceLoss();
@@ -287,18 +293,21 @@ final class D3D12PreparationQueue implements AutoCloseable {
                 jobs.remove(this);
             }
         }
-        @Override public void cancel() {
+        @Override
+        public void cancel() {
             cancelled = true;
             if (done) { discard(); jobs.remove(this); }
         }
-        @Override public void dispose() {
+        @Override
+        public void dispose() {
             if (disposed) return;
             if (!done) throw new FdxException("D3D12 native preparation has not drained");
             disposed = true;
             discard();
             jobs.remove(this);
         }
-        @Override public boolean isDisposed() { return disposed; }
+        @Override
+        public boolean isDisposed() { return disposed; }
     }
 
     private static final class Packet implements AutoCloseable {
@@ -309,7 +318,8 @@ final class D3D12PreparationQueue implements AutoCloseable {
         Packet(D3D12FfmContext.Pipeline pipeline, MemorySegment device, ShaderRenderBindings resources) {
             this.pipeline = pipeline; this.device = device; this.resources = resources;
         }
-        @Override public void close() {
+        @Override
+        public void close() {
             if (closed) return;
             closed = true;
             try { if (pipeline != null) pipeline.close(); }
@@ -319,10 +329,15 @@ final class D3D12PreparationQueue implements AutoCloseable {
 
     /** Pure worker-owned reflection view; it never enters a context or native resource registry. */
     private record MetadataModule(ShaderReflection reflection) implements ShaderModule {
-        @Override public ShaderLanguage language() { return ShaderLanguage.HLSL; }
-        @Override public ProviderId providerId() { return D3D12Provider.ID; }
-        @Override public <T> T as() { throw new FdxException("Preparation metadata has no native module"); }
-        @Override public void dispose() { }
-        @Override public boolean isDisposed() { return false; }
+        @Override
+        public ShaderLanguage language() { return ShaderLanguage.HLSL; }
+        @Override
+        public ProviderId providerId() { return D3D12Provider.ID; }
+        @Override
+        public <T> T as() { throw new FdxException("Preparation metadata has no native module"); }
+        @Override
+        public void dispose() { }
+        @Override
+        public boolean isDisposed() { return false; }
     }
 }

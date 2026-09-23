@@ -52,8 +52,10 @@ public abstract class BufferedMusic implements Music {
         if (disposed) { throw new FdxException("Music is disposed"); }
         if (failure != null) { throw new FdxException("Music playback failed", failure); }
     }
-    @Override public final Audio audio() { return owner; }
-    @Override public final Music play() {
+    @Override
+    public final Audio audio() { return owner; }
+    @Override
+    public final Music play() {
         check();
         if ((state == MusicState.ENDED || state == MusicState.STOPPED) && consumed && !seekable) {
             throw new FdxException("Consumed sequential music requires a new source");
@@ -65,29 +67,34 @@ public abstract class BufferedMusic implements Music {
         desired = true; paused = false;
         state = owner.isSuspended() ? MusicState.PAUSED : MusicState.BUFFERING; return this;
     }
-    @Override public final Music pause() {
+    @Override
+    public final Music pause() {
         check(); pump(owner.isSuspended());
         if (desired) { paused = true; pausePlayback(); state = MusicState.PAUSED; }
         return this;
     }
-    @Override public final Music stop() {
+    @Override
+    public final Music stop() {
         check(); rewind(0); desired = false; paused = false; state = MusicState.STOPPED; return this;
     }
-    @Override public final Music seek(long frame) {
+    @Override
+    public final Music seek(long frame) {
         check();
         if (!seekable) { throw new FdxException("Music source cannot seek"); }
         if (frame < 0 || frames() >= 0 && frame > frames()) { throw new IllegalArgumentException("Seek frame outside track"); }
         rewind(frame); state = desired ? paused ? MusicState.PAUSED : MusicState.BUFFERING : MusicState.STOPPED;
         return this;
     }
-    @Override public final Music loop(long start, long end) {
+    @Override
+    public final Music loop(long start, long end) {
         check();
         if (!seekable) { throw new FdxException("Looping requires a seekable music source"); }
         if (start < 0 || end <= start || frames() >= 0 && end > frames()) { throw new IllegalArgumentException("Invalid loop interval"); }
         long current = positionFrames(); loopStart = start; loopEnd = end; looping = true;
         rewind(current < start || current >= end ? start : current); return this;
     }
-    @Override public final Music looping(boolean enabled) {
+    @Override
+    public final Music looping(boolean enabled) {
         check();
         if (enabled) { return loop(loopStart, loopEnd); }
         if (looping) { long current = positionFrames(); looping = false; rewind(current); }
@@ -98,28 +105,41 @@ public abstract class BufferedMusic implements Music {
         nextFrame = position = frame; eof = false; started = starved = false;
         state = desired ? paused || owner.isSuspended() ? MusicState.PAUSED : MusicState.BUFFERING : MusicState.STOPPED;
     }
-    @Override public final Music gain(float gain) {
+    @Override
+    public final Music gain(float gain) {
         check(); if (!Float.isFinite(gain) || gain < 0 || gain > 1) { throw new IllegalArgumentException("Gain must be [0,1]"); }
         parameters(gain,pan); this.gain = gain; return this;
     }
-    @Override public final Music pan(float pan) {
+    @Override
+    public final Music pan(float pan) {
         check(); if (!Float.isFinite(pan) || pan < -1 || pan > 1) { throw new IllegalArgumentException("Pan must be [-1,1]"); }
         parameters(gain,pan); this.pan = pan; return this;
     }
-    @Override public final float gain() { return gain; }
-    @Override public final float pan() { return pan; }
-    @Override public final int channels() { return channels; }
-    @Override public final int sampleRate() { return sampleRate; }
-    @Override public final long frames() { return frames; }
-    @Override public final boolean isSeekable() { return seekable; }
-    @Override public final long positionFrames() {
+    @Override
+    public final float gain() { return gain; }
+    @Override
+    public final float pan() { return pan; }
+    @Override
+    public final int channels() { return channels; }
+    @Override
+    public final int sampleRate() { return sampleRate; }
+    @Override
+    public final long frames() { return frames; }
+    @Override
+    public final boolean isSeekable() { return seekable; }
+    @Override
+    public final long positionFrames() {
         if (!disposed && failure == null) { owner.checkLive(); pump(owner.isSuspended()); }
         return position;
     }
-    @Override public final int queuedFrames() { return queuedFrames; }
-    @Override public final int underruns() { return underruns; }
-    @Override public final MusicState state() { return disposed ? MusicState.DISPOSED : state; }
-    @Override public final Throwable failure() { return failure; }
+    @Override
+    public final int queuedFrames() { return queuedFrames; }
+    @Override
+    public final int underruns() { return underruns; }
+    @Override
+    public final MusicState state() { return disposed ? MusicState.DISPOSED : state; }
+    @Override
+    public final Throwable failure() { return failure; }
 
     /** Called by the root even while suspended, so pending I/O can complete without playing. */
     final void pump(boolean rootPaused) {
@@ -179,7 +199,8 @@ public abstract class BufferedMusic implements Music {
             head = count = queuedFrames = 0;
         }
     }
-    @Override public final void dispose() { if (!disposed) { owner.checkLive(); release(); } }
+    @Override
+    public final void dispose() { if (!disposed) { owner.checkLive(); release(); } }
     final void release() {
         if (disposed) { return; }
         disposed = true; owner.detach(this);
@@ -192,5 +213,6 @@ public abstract class BufferedMusic implements Music {
         if (error instanceof RuntimeException runtime) { throw runtime; }
         if (error instanceof Error fatal) { throw fatal; }
     }
-    @Override public final boolean isDisposed() { return disposed; }
+    @Override
+    public final boolean isDisposed() { return disposed; }
 }

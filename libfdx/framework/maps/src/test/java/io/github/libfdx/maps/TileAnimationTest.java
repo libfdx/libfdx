@@ -5,7 +5,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class TileAnimationTest {
-    @Test void copiedVariableDurationsWrapAtBoundariesAndAtExtremeClocks() {
+    @Test
+    void copiedVariableDurationsWrapAtBoundariesAndAtExtremeClocks() {
         int[] ids = {4, 7, 2}, durations = {100, 250, 50};
         TileAnimation animation = new TileAnimation(ids, durations);
         ids[0] = 99; durations[0] = 99;
@@ -22,7 +23,8 @@ final class TileAnimationTest {
                 new int[] {Integer.MAX_VALUE, Integer.MAX_VALUE}).totalDurationMillis());
     }
 
-    @Test void invalidFramesAndAtlasReferencesFailBeforeReplacingASequence() {
+    @Test
+    void invalidFramesAndAtlasReferencesFailBeforeReplacingASequence() {
         assertThrows(FdxException.class, () -> new TileAnimation(new int[0], new int[0]));
         assertThrows(FdxException.class, () -> new TileAnimation(new int[] {0}, new int[] {0}));
         assertThrows(FdxException.class, () -> new TileAnimation(new int[] {-1}, new int[] {1}));
@@ -34,7 +36,8 @@ final class TileAnimationTest {
         atlas.animation(0, null); assertNull(atlas.animation(0));
     }
 
-    @Test void groupsCopyMembershipLimitDepthAndValidateMapDimensions() {
+    @Test
+    void groupsCopyMembershipLimitDepthAndValidateMapDimensions() {
         TileLayer tile = new TileLayer(1, 1);
         MapLayer[] children = {tile};
         GroupLayer group = new GroupLayer(children);

@@ -79,7 +79,8 @@ public final class ShaderPreloadingTest extends GraphicsParityTest {
         this.manifest = manifest;
     }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, "ShaderPreloadingTest");
         shaders = new ShaderPreparation(graphics);
         if (!shaders.capabilities().runtimeNonblocking()) {
@@ -107,7 +108,8 @@ public final class ShaderPreloadingTest extends GraphicsParityTest {
         markCreated();
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         frameTick++;
         // One update boundary publishes readiness for both batches before any render pass.
         if (bootstrap == null) {
@@ -228,7 +230,8 @@ public final class ShaderPreloadingTest extends GraphicsParityTest {
         if (hud.skippedDrawsLastFrame().total() != 0) throw new FdxException("Preloaded HUD skipped a draw");
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         dispose(capture);
         dispose(models); dispose(hud);
         dispose(stream); dispose(level); dispose(bootstrap);

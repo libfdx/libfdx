@@ -10,7 +10,8 @@ import static org.junit.jupiter.api.Assertions.*;
 final class ShaderArtifactCacheTest {
     private static final ShaderCacheKey KEY = ShaderCacheKey.of(ShaderCacheLayer.DXIL, "compiler-v1", "hlsl", "vs_6_0", "-O3");
 
-    @Test void exactInputsOptionsVersionsAndLayersHaveIndependentIdentities() {
+    @Test
+    void exactInputsOptionsVersionsAndLayersHaveIndependentIdentities() {
         assertNotEquals(KEY, ShaderCacheKey.of(ShaderCacheLayer.DXIL, "compiler-v2", "hlsl", "vs_6_0", "-O3"));
         assertNotEquals(KEY, ShaderCacheKey.of(ShaderCacheLayer.DXIL, "compiler-v1", "hlsl", "vs_6_0", "-Od"));
         assertNotEquals(KEY.digest(), ShaderCacheKey.of(ShaderCacheLayer.SPIRV, "compiler-v1", "hlsl", "vs_6_0", "-O3").digest());
@@ -19,7 +20,8 @@ final class ShaderArtifactCacheTest {
         assertThrows(IllegalArgumentException.class, () -> new ShaderCacheKey(ShaderCacheLayer.DXIL, "../escape"));
     }
 
-    @Test void writeCompletionAndReadCompletionRemainAsynchronous() {
+    @Test
+    void writeCompletionAndReadCompletionRemainAsynchronous() {
         MemoryStore store = new MemoryStore();
         store.pendingWrite = FdxFuture.pending();
         ShaderArtifactCache cache = new ShaderArtifactCache(store);
@@ -42,7 +44,8 @@ final class ShaderArtifactCacheTest {
         assertEquals(1, cache.metrics(KEY.layer()).writes());
     }
 
-    @Test void corruptTruncatedStaleAndWrongKeyRecordsBecomeMissesAndAreReplaced() {
+    @Test
+    void corruptTruncatedStaleAndWrongKeyRecordsBecomeMissesAndAreReplaced() {
         MemoryStore store = new MemoryStore();
         ShaderArtifactCache cache = new ShaderArtifactCache(store);
         assertNull(cache.readAsync(KEY).get());
@@ -62,7 +65,8 @@ final class ShaderArtifactCacheTest {
         assertArrayEquals(new byte[]{4}, cache.readAsync(KEY).get());
     }
 
-    @Test void unavailableAndDisabledStorageDoNotFailPreparation() {
+    @Test
+    void unavailableAndDisabledStorageDoNotFailPreparation() {
         MemoryStore store = new MemoryStore();
         ShaderArtifactCache cache = new ShaderArtifactCache(store);
         store.pendingRead = FdxFuture.failed(new IllegalStateException("read denied"));
@@ -78,7 +82,8 @@ final class ShaderArtifactCacheTest {
         assertEquals(0, disabled.metrics(KEY.layer()).storageFailures());
     }
 
-    @Test void mergeUsesLatestValidatedRecordAndOwnsIncomingUntilDeferredCompletion() {
+    @Test
+    void mergeUsesLatestValidatedRecordAndOwnsIncomingUntilDeferredCompletion() {
         MemoryStore store = new MemoryStore();
         ShaderArtifactCache cache = new ShaderArtifactCache(store);
         cache.writeAsync(KEY, new byte[]{1});
@@ -93,7 +98,8 @@ final class ShaderArtifactCacheTest {
         assertArrayEquals(new byte[]{6}, cache.readAsync(KEY).get());
     }
 
-    @Test void corruptAggregateIsRebuiltButMergeFailureNeverReplacesTheCurrentEntry() {
+    @Test
+    void corruptAggregateIsRebuiltButMergeFailureNeverReplacesTheCurrentEntry() {
         MemoryStore store = new MemoryStore(); ShaderArtifactCache cache = new ShaderArtifactCache(store);
         store.records.put(KEY.digest(), new byte[]{0});
         assertTrue(cache.mergeAsync(KEY, new byte[]{7}, (current, added) -> {
@@ -108,7 +114,8 @@ final class ShaderArtifactCacheTest {
         assertEquals(2, cache.metrics(KEY.layer()).storageFailures());
     }
 
-    @Test void unsupportedAtomicUpdatesNeverFallBackToPlainReplacement() {
+    @Test
+    void unsupportedAtomicUpdatesNeverFallBackToPlainReplacement() {
         MemoryStore store = new MemoryStore(); store.atomic = false;
         ShaderArtifactCache cache = new ShaderArtifactCache(store);
         assertFalse(cache.supportsAtomicUpdate());
@@ -125,8 +132,10 @@ final class ShaderArtifactCacheTest {
         boolean deferUpdate, atomic = true;
         FdxFuture<Void> pendingUpdate;
         Runnable update;
-        @Override public boolean supportsAtomicUpdate() { return atomic; }
-        @Override public FdxFuture<Void> updateAsync(String key, UnaryOperator<byte[]> transform) {
+        @Override
+        public boolean supportsAtomicUpdate() { return atomic; }
+        @Override
+        public FdxFuture<Void> updateAsync(String key, UnaryOperator<byte[]> transform) {
             pendingUpdate = FdxFuture.pending();
             update = () -> {
                 try { records.put(key, transform.apply(records.get(key))); pendingUpdate.complete(null); }
@@ -136,13 +145,16 @@ final class ShaderArtifactCacheTest {
             return pendingUpdate;
         }
         void completeUpdate() { update.run(); }
-        @Override public FdxFuture<byte[]> readAsync(String key) {
+        @Override
+        public FdxFuture<byte[]> readAsync(String key) {
             return pendingRead == null ? FdxFuture.completed(records.get(key)) : pendingRead;
         }
-        @Override public FdxFuture<Void> writeAsync(String key, byte[] bytes) {
+        @Override
+        public FdxFuture<Void> writeAsync(String key, byte[] bytes) {
             records.put(key, bytes);
             return pendingWrite == null ? FdxFuture.completed(null) : pendingWrite;
         }
-        @Override public FdxFuture<Void> removeAsync(String key) { records.remove(key); return FdxFuture.completed(null); }
+        @Override
+        public FdxFuture<Void> removeAsync(String key) { records.remove(key); return FdxFuture.completed(null); }
     }
 }

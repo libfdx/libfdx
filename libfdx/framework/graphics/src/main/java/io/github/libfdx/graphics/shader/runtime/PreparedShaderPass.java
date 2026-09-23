@@ -71,12 +71,14 @@ public final class PreparedShaderPass implements Disposable {
         return new PreparedShaderPass(owner, entry);
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         owner.requireThread();
         if (disposed) return;
         disposed = true;
         owner.release(entry);
     }
 
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 }

@@ -50,7 +50,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 final class CascadedShadowMap3DTest {
-    @Test void asyncCascadesShareDefinitionsWithoutCreatingAnyShaderModule() {
+    @Test
+    void asyncCascadesShareDefinitionsWithoutCreatingAnyShaderModule() {
         FakeGraphicsContext graphics = new FakeGraphicsContext(ProviderId.of("gl"));
         graphics.device.failShader = true;
         ShaderPreparation preparation = new ShaderPreparation(graphics);
@@ -499,21 +500,31 @@ final class CascadedShadowMap3DTest {
         private int passes, failPassAt;
         private FakeRenderPass lastPass;
         private final CommandEncoder encoder = new CommandEncoder() {
-            @Override public RenderPass beginRenderPass(RenderPassDescriptor descriptor) {
+            @Override
+            public RenderPass beginRenderPass(RenderPassDescriptor descriptor) {
                 if (++passes == failPassAt) throw new FdxException("injected pass failure");
                 return lastPass = new FakeRenderPass();
             }
-            @Override public ProviderId providerId() { return providerId; }
-            @Override public <T> T as() { return null; }
+            @Override
+            public ProviderId providerId() { return providerId; }
+            @Override
+            public <T> T as() { return null; }
         };
         private final GraphicsFrame frame = new GraphicsFrame() {
-            @Override public CommandEncoder commandEncoder() { return encoder; }
-            @Override public FrameBuffer frameBuffer() { throw new UnsupportedOperationException(); }
-            @Override public TextureView colorAttachment() { throw new UnsupportedOperationException(); }
-            @Override public int width() { return 64; }
-            @Override public int height() { return 64; }
-            @Override public ProviderId providerId() { return providerId; }
-            @Override public <T> T as() { return null; }
+            @Override
+            public CommandEncoder commandEncoder() { return encoder; }
+            @Override
+            public FrameBuffer frameBuffer() { throw new UnsupportedOperationException(); }
+            @Override
+            public TextureView colorAttachment() { throw new UnsupportedOperationException(); }
+            @Override
+            public int width() { return 64; }
+            @Override
+            public int height() { return 64; }
+            @Override
+            public ProviderId providerId() { return providerId; }
+            @Override
+            public <T> T as() { return null; }
         };
 
         FakeGraphicsContext(ProviderId providerId) {

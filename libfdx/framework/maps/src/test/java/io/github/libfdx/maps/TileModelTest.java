@@ -5,7 +5,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class TileModelTest {
-    @Test void transformsMatchAllEightIndependentCornerPermutations() {
+    @Test
+    void transformsMatchAllEightIndependentCornerPermutations() {
         int[][] expected = {{0,1,2,3}, {3,2,1,0}, {1,0,3,2}, {2,3,0,1},
                 {2,1,0,3}, {1,2,3,0}, {3,0,1,2}, {0,3,2,1}};
         for (int flags = 0; flags < 8; flags++) {
@@ -15,7 +16,8 @@ final class TileModelTest {
         }
         assertThrows(FdxException.class, () -> TileTransform.check(8));
     }
-    @Test void cellEditsAndEmptyCellsClearOldTransforms() {
+    @Test
+    void cellEditsAndEmptyCellsClearOldTransforms() {
         TileLayer layer = new TileLayer(2, 1);
         layer.tile(0, 0, 1, 7); assertEquals(7, layer.transform(0, 0));
         layer.tile(0, 0, 2); assertEquals(0, layer.transform(0, 0));
@@ -25,7 +27,8 @@ final class TileModelTest {
         assertThrows(FdxException.class, () -> layer.tile(0, 0, 1, 8));
         assertThrows(FdxException.class, () -> new TileLayer(Integer.MAX_VALUE, 2));
     }
-    @Test void mixedLayerOrderAndLegacyTileIndicesUseTheSameObjects() {
+    @Test
+    void mixedLayerOrderAndLegacyTileIndicesUseTheSameObjects() {
         TileMap map = new TileMap(2, 2, 16, 16);
         TileLayer first = map.addLayer();
         ObjectLayer objects = new ObjectLayer(new MapObject[0], false);
@@ -35,7 +38,8 @@ final class TileModelTest {
         assertSame(first, map.removeLayer(0)); assertSame(objects, map.mapLayer(0));
         assertSame(last, map.layer(0)); map.clearLayers(); assertEquals(0, map.mapLayerCount());
     }
-    @Test void dimensionsAndLayerSettingsRejectNonfiniteValues() {
+    @Test
+    void dimensionsAndLayerSettingsRejectNonfiniteValues() {
         assertThrows(FdxException.class, () -> new TileMap(1, 1, Float.NaN, 1));
         assertThrows(FdxException.class, () -> new TileMap(2, 1, Float.MAX_VALUE, 1));
         TileLayer layer = new TileLayer(1, 1);
@@ -43,7 +47,8 @@ final class TileModelTest {
         assertThrows(FdxException.class, () -> layer.opacity(Float.NaN));
         assertThrows(FdxException.class, () -> layer.offset(0, Float.POSITIVE_INFINITY));
     }
-    @Test void objectSortingKeepsEditorOrderAndIsStableForEqualDepth() {
+    @Test
+    void objectSortingKeepsEditorOrderAndIsStableForEqualDepth() {
         MapObject a = object(1, 12), b = object(2, 25), c = object(3, 25);
         ObjectLayer layer = new ObjectLayer(new MapObject[] {a, b, c}, true);
         assertSame(a, layer.object(0)); assertSame(b, layer.drawObject(0)); assertSame(c, layer.drawObject(1));
@@ -51,7 +56,8 @@ final class TileModelTest {
         TileMap map = new TileMap(1, 1, 32, 32).addObjectLayer(layer);
         assertSame(c, map.findObject(3)); assertNull(map.findObject(99));
     }
-    @Test void propertiesKeepTypesAndRejectWrongAccessors() {
+    @Test
+    void propertiesKeepTypesAndRejectWrongAccessors() {
         MapProperties properties = new MapProperties().put(new MapProperty("target", MapProperty.Type.OBJECT, 8L));
         assertEquals(8, properties.get("target").longValue());
         assertThrows(FdxException.class, () -> properties.get("target").stringValue());

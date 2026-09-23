@@ -11,8 +11,10 @@ import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class TexturePackerTest {
-    @TempDir Path temp;
-    @Test void deterministicPagesTrimPivotsBleedExtrusionAndPadding() throws Exception {
+    @TempDir
+    Path temp;
+    @Test
+    void deterministicPagesTrimPivotsBleedExtrusionAndPadding() throws Exception {
         Path source=Files.createDirectory(temp.resolve("source")),out=temp.resolve("out");
         BufferedImage image=new BufferedImage(12,10,BufferedImage.TYPE_INT_ARGB);
         for(int y=2;y<7;y++) for(int x=3;x<8;x++) image.setRGB(x,y,0xffff8020);
@@ -34,7 +36,8 @@ final class TexturePackerTest {
         TexturePacker.generate(spec); Map<String,byte[]> rerun=contents(out);
         assertEquals(original.keySet(),rerun.keySet()); original.forEach((name,bytes) -> assertArrayEquals(bytes,rerun.get(name),name));
     }
-    @Test void pagesShrinkAndOnlyOwnedObsoletePagesAreRemoved() throws Exception {
+    @Test
+    void pagesShrinkAndOnlyOwnedObsoletePagesAreRemoved() throws Exception {
         Path source=Files.createDirectory(temp.resolve("source")),out=temp.resolve("out");
         for(int i=0;i<3;i++) write(source.resolve(i+".png"),solid(8,8));
         AtlasSpec spec=new AtlasSpec(source,out,"test","",16,1,1,false,0,false,0,0,4);
@@ -46,7 +49,8 @@ final class TexturePackerTest {
         assertFalse(Files.exists(out.resolve("test-2.png"))); assertEquals("keep",Files.readString(out.resolve("unrelated.txt")));
         assertArrayEquals(new byte[]{7},Files.readAllBytes(out.resolve("test-99.png")));
     }
-    @Test void invalidInputsLeavePublishedAtlasIntact() throws Exception {
+    @Test
+    void invalidInputsLeavePublishedAtlasIntact() throws Exception {
         Path source=Files.createDirectory(temp.resolve("source")),out=temp.resolve("out");
         write(source.resolve("hero.png"),solid(8,8));
         AtlasSpec spec=new AtlasSpec(source,out,"test","",16,1,1,true,1,true,0,0,1);

@@ -24,7 +24,8 @@ public final class InputActionsTest extends GraphicsParityTest {
     private String saved;
 
     public InputActionsTest(long frames) { super(frames); }
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx,"InputActionsTest"); input=fdx.input(); actions=new InputActions(input);
         move=actions.define("move",.1f); jump=actions.define("jump");
         actions.bind(move,InputBinding.key(Key.A,-1)).bind(move,InputBinding.key(Key.D));
@@ -34,7 +35,8 @@ public final class InputActionsTest extends GraphicsParityTest {
         actions.bind(jump,InputBinding.mouse(MouseButton.LEFT)).bind(jump,InputBinding.button(-1,GamepadButton.SOUTH,1));
         actions.bind(jump,InputBinding.touch(.6f,.6f,.4f,.4f,1)); saved=actions.exportBindings();
         router=new InputRouter().add(new InputAdapter() {
-            @Override public boolean keyDown(KeyEvent event) {
+            @Override
+            public boolean keyDown(KeyEvent event) {
                 if(event.repeat()) return false;
                 if(event.key()==Key.Q) { logger.info("InputActionsTest UI consumed Q"); return true; }
                 if(event.key()==Key.F1) {
@@ -51,7 +53,8 @@ public final class InputActionsTest extends GraphicsParityTest {
         ByteBuffer pixel=ByteBuffer.allocateDirect(4); pixel.putInt(-1).flip(); graphics.device().writeTexture(white,pixel);
         markCreated(); logger.info("InputActionsTest ready: gamepadCapability="+input.capabilities().supportsGamepads());
     }
-    @Override public void render() {
+    @Override
+    public void render() {
         actions.surface(Math.max(1,display.width()),Math.max(1,display.height())); actions.update();
         int pads=input.gamepads()==null ? 0 : input.gamepads().connected().size();
         if(pads!=connected) {
@@ -72,9 +75,12 @@ public final class InputActionsTest extends GraphicsParityTest {
         batch.color(actions.enabled()?.3f:.8f,.7f,.4f,1); batch.draw(white,-.85f,.65f,Math.min(jumps,16)*.1f,.08f);
         batch.end(); finishFrame();
     }
-    @Override public void pause() { clock.pause(); if(actions!=null) actions.enabled(false); }
-    @Override public void resume() { clock.resume(); if(actions!=null) actions.enabled(true); }
-    @Override public void dispose() {
+    @Override
+    public void pause() { clock.pause(); if(actions!=null) actions.enabled(false); }
+    @Override
+    public void resume() { clock.resume(); if(actions!=null) actions.enabled(true); }
+    @Override
+    public void dispose() {
         if(input!=null) input.removeProcessor(router);
         dispose(actions); dispose(batch); dispose(white); verifyDisposed();
     }

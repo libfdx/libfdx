@@ -13,8 +13,10 @@ public final class AssetLoadingMetrics {
 
     public <T> AssetLoader<T> measure(AssetLoader<T> loader) {
         return new AssetLoader<>() {
-            @Override public Class<T> type() { return loader.type(); }
-            @Override public FdxFuture<T> load(AssetLoadContext context, AssetDescriptor<T> descriptor) {
+            @Override
+            public Class<T> type() { return loader.type(); }
+            @Override
+            public FdxFuture<T> load(AssetLoadContext context, AssetDescriptor<T> descriptor) {
                 return loader.load(new Context(context, descriptor.path()), descriptor);
             }
         };
@@ -34,16 +36,24 @@ public final class AssetLoadingMetrics {
         private final String path;
         private int sequence;
         Context(AssetLoadContext delegate, String path) { this.delegate = delegate; this.path = path; }
-        @Override public FileSystem files() { return delegate.files(); }
-        @Override public <T> FdxFuture<T> dependency(AssetDescriptor<T> descriptor) { return delegate.dependency(descriptor); }
-        @Override public <T extends Disposable> T preparationResource(Class<T> type, Supplier<? extends T> factory) {
+        @Override
+        public FileSystem files() { return delegate.files(); }
+        @Override
+        public <T> FdxFuture<T> dependency(AssetDescriptor<T> descriptor) { return delegate.dependency(descriptor); }
+        @Override
+        public <T extends Disposable> T preparationResource(Class<T> type, Supplier<? extends T> factory) {
             return delegate.preparationResource(type, factory);
         }
-        @Override public <T> FdxFuture<T> completeOnUpdate(FdxTask<T> task) { return delegate.completeOnUpdate(wrap("finalize", task)); }
-        @Override public <T> FdxFuture<T> async(FdxTask<T> task) { return delegate.async(wrap("cpu", task)); }
-        @Override public FdxFuture<Void> asyncSteps(FdxTask<Boolean> task) { return delegate.asyncSteps(wrap("cpuSteps", task)); }
-        @Override public <T> FdxFuture<T> asyncFuture(FdxTask<FdxFuture<T>> task) { return delegate.asyncFuture(wrap("asyncStart", task)); }
-        @Override public FdxFuture<byte[]> readBytes(FileHandle file) { return delegate.readBytes(file); }
+        @Override
+        public <T> FdxFuture<T> completeOnUpdate(FdxTask<T> task) { return delegate.completeOnUpdate(wrap("finalize", task)); }
+        @Override
+        public <T> FdxFuture<T> async(FdxTask<T> task) { return delegate.async(wrap("cpu", task)); }
+        @Override
+        public FdxFuture<Void> asyncSteps(FdxTask<Boolean> task) { return delegate.asyncSteps(wrap("cpuSteps", task)); }
+        @Override
+        public <T> FdxFuture<T> asyncFuture(FdxTask<FdxFuture<T>> task) { return delegate.asyncFuture(wrap("asyncStart", task)); }
+        @Override
+        public FdxFuture<byte[]> readBytes(FileHandle file) { return delegate.readBytes(file); }
         private <T> FdxTask<T> wrap(String name, FdxTask<T> task) {
             Stage stage = new Stage(path, name + "-" + sequence++);
             synchronized (AssetLoadingMetrics.this) { stages.add(stage); }

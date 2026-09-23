@@ -9,7 +9,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class MeshPreparationTest {
-    @Test void packingReusesScratchAcrossVertexBatchesWithoutTruncatingTheUpload() {
+    @Test
+    void packingReusesScratchAcrossVertexBatchesWithoutTruncatingTheUpload() {
         int count = 2051;
         float[] positions = new float[count * 3], colors = new float[count * 4];
         for (int i = 0; i < count; i++) {
@@ -32,7 +33,8 @@ final class MeshPreparationTest {
         mesh.dispose();
     }
 
-    @Test void rangeUploadsRespectBudgetsTransferOnlyWhenCompleteAndCleanPartialResources() {
+    @Test
+    void rangeUploadsRespectBudgetsTransferOnlyWhenCompleteAndCleanPartialResources() {
         Device device = new Device(); device.ranges = true;
         var preparation = Mesh.preparePositionColor3D(new float[]{1,2,3}, new float[]{1,1,1,1},
                 null,null,null,null,null,null,null,null,null,null,false,null,null);
@@ -63,7 +65,8 @@ final class MeshPreparationTest {
         assertEquals(3, device.disposed);
     }
 
-    @Test void boundedPackingPreservesExtendedSkinnedLayoutAndCopiesRetainedSources() {
+    @Test
+    void boundedPackingPreservesExtendedSkinnedLayoutAndCopiesRetainedSources() {
         float[] positions = {1, 2, 3, 4, 5, 6};
         float[] colors = {1, .5f, .25f, 1, .2f, .4f, .6f, 1};
         var preparation = Mesh.preparePositionColor3D(positions, colors, null,
@@ -95,7 +98,8 @@ final class MeshPreparationTest {
         assertEquals(2, device.disposed);
     }
 
-    @Test void failedUploadDisposesItsBufferAndPreparationHasNoGpuOwnership() {
+    @Test
+    void failedUploadDisposesItsBufferAndPreparationHasNoGpuOwnership() {
         var preparation = Mesh.preparePositionColor3D(new float[]{0,0,0}, new float[]{1,1,1,1},
                 null,null,null,null,null,null,null,null,null,null,false,null,null);
         finish(preparation);

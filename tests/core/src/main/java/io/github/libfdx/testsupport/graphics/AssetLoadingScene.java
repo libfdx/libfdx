@@ -86,8 +86,10 @@ public final class AssetLoadingScene implements Disposable {
         pass.end();
     }
 
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         sprites.dispose(); hud.dispose(); font.dispose(); uiAssets.dispose();

@@ -135,11 +135,13 @@ public final class CpuSkinnedModelAnimator implements Disposable {
     public int skinCount() { return skinCount; }
     /** Returns the number of independently owned skinned mesh parts. */
     public int skinnedPartCount() { return meshes.length; }
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 
     /** Restores shared meshes, preserving instance material overrides, and releases every copy.
      * Idempotent, including when a provider reports a disposal failure. */
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed=true;
         controller.stop();

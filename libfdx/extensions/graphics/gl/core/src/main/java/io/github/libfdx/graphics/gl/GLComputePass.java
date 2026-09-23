@@ -35,7 +35,8 @@ final class GLComputePass implements ComputePass {
         if (ended) throw new FdxException("GL compute pass has ended");
     }
 
-    @Override public void setPipeline(ComputePipeline value) {
+    @Override
+    public void setPipeline(ComputePipeline value) {
         requireOpen();
         if (!(value instanceof GLComputePipeline candidate) || candidate.domain != domain) {
             throw new FdxException("GL compute pipeline belongs to another device");
@@ -45,7 +46,8 @@ final class GLComputePass implements ComputePass {
         Arrays.fill(sets, null);
     }
 
-    @Override public void setResourceSet(ShaderResourceSet set) {
+    @Override
+    public void setResourceSet(ShaderResourceSet set) {
         requireOpen();
         if (pipeline == null) throw new FdxException("Set a GL compute pipeline before its resources");
         if (set == null || set.group() >= sets.length || !pipeline.layout.physicalHash().equals(set.layout().physicalHash())) {
@@ -54,7 +56,8 @@ final class GLComputePass implements ComputePass {
         sets[set.group()] = set;
     }
 
-    @Override public void dispatch(int x, int y, int z) {
+    @Override
+    public void dispatch(int x, int y, int z) {
         requireOpen();
         validateDispatch(x, y, z, limits);
         if (pipeline == null) throw new FdxException("No GL compute pipeline is bound");
@@ -100,7 +103,8 @@ final class GLComputePass implements ComputePass {
         gl.computeMemoryBarrier();
     }
 
-    @Override public void end() {
+    @Override
+    public void end() {
         if (ended) return;
         ended = true;
         pipeline = null;
@@ -112,6 +116,9 @@ final class GLComputePass implements ComputePass {
         uniformBuffer = 0;
         uniformBytes = null;
     }
-    @Override public ProviderId providerId() { return provider; }
-    @Override @SuppressWarnings("unchecked") public <T> T as() { return (T) this; }
+    @Override
+    public ProviderId providerId() { return provider; }
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> T as() { return (T) this; }
 }

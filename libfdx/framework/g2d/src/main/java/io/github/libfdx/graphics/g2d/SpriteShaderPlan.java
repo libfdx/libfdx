@@ -74,15 +74,18 @@ public final class SpriteShaderPlan {
     private static final class Builtins implements ShaderProvider {
         private final GraphicsDevice device;
         Builtins(GraphicsDevice device) { this.device = device; }
-        @Override public GraphicsDevice preparationDevice() { return device; }
-        @Override public boolean supportsPassResolution() { return true; }
+        @Override
+        public GraphicsDevice preparationDevice() { return device; }
+        @Override
+        public boolean supportsPassResolution() { return true; }
         private SpriteShaderAbi abi(ShaderRequest request) {
             for (SpriteShaderAbi abi : SpriteShaderAbi.values()) {
                 if (abi.passId().equals(request.passId())) return abi;
             }
             return null;
         }
-        @Override public boolean supports(ShaderRequest request) {
+        @Override
+        public boolean supports(ShaderRequest request) {
             SpriteShaderAbi abi = abi(request);
             return abi != null && abi != SpriteShaderAbi.PACKED_INSTANCED_INDEXED
                     && request.renderPass() != null && request.variantKey().isEmpty()
@@ -90,7 +93,8 @@ public final class SpriteShaderPlan {
                     && device.capabilities().supports(request.profile())
                     && Arrays.equals(abi.vertexLayouts(), request.vertexLayouts());
         }
-        @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+        @Override
+        public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
             if (!supports(request)) throw new FdxException("Unsupported built-in sprite request");
             SpriteShaderAbi abi = abi(request);
             String source = switch (abi) {
@@ -112,25 +116,40 @@ public final class SpriteShaderPlan {
     private static final class ValidatedProvider implements ShaderProvider {
         private final ShaderProvider delegate;
         ValidatedProvider(ShaderProvider delegate) { this.delegate = delegate; }
-        @Override public GraphicsDevice preparationDevice() { return delegate.preparationDevice(); }
-        @Override public boolean supportsPassResolution() { return delegate.supportsPassResolution(); }
-        @Override public boolean supports(ShaderRequest request) { return delegate.supports(request); }
-        @Override public long revision() { return delegate.revision(); }
-        @Override public boolean canRenderPreparedRevision(ShaderRequest request, ResolvedShaderPass previous) {
+        @Override
+        public GraphicsDevice preparationDevice() { return delegate.preparationDevice(); }
+        @Override
+        public boolean supportsPassResolution() { return delegate.supportsPassResolution(); }
+        @Override
+        public boolean supports(ShaderRequest request) { return delegate.supports(request); }
+        @Override
+        public long revision() { return delegate.revision(); }
+        @Override
+        public boolean canRenderPreparedRevision(ShaderRequest request, ResolvedShaderPass previous) {
             return delegate.canRenderPreparedRevision(request, previous);
         }
-        @Override public ShaderPreloadRecipe preloadRecipe(ShaderRequest request, String targetRole) { return delegate.preloadRecipe(request, targetRole); }
-        @Override public ResolvedShaderPass resolve(ShaderRequest request) { return validate(request, delegate.resolve(request)); }
-        @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+        @Override
+        public ShaderPreloadRecipe preloadRecipe(ShaderRequest request, String targetRole) { return delegate.preloadRecipe(request, targetRole); }
+        @Override
+        public ResolvedShaderPass resolve(ShaderRequest request) { return validate(request, delegate.resolve(request)); }
+        @Override
+        public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
             ShaderPreparationOperation operation = delegate.beginPreparation(request);
             return new ShaderPreparationOperation() {
-                @Override public boolean isDone() { return operation.isDone(); }
-                @Override public ShaderPreparationPhase phase() { return operation.phase(); }
-            @Override public ShaderPreparationTrace trace() { return operation.trace(); }
-                @Override public void cancel() { operation.cancel(); }
-                @Override public boolean isDisposed() { return operation.isDisposed(); }
-                @Override public void dispose() { operation.dispose(); }
-                @Override public ShaderPreparedResult finish() {
+                @Override
+                public boolean isDone() { return operation.isDone(); }
+                @Override
+                public ShaderPreparationPhase phase() { return operation.phase(); }
+            @Override
+            public ShaderPreparationTrace trace() { return operation.trace(); }
+                @Override
+                public void cancel() { operation.cancel(); }
+                @Override
+                public boolean isDisposed() { return operation.isDisposed(); }
+                @Override
+                public void dispose() { operation.dispose(); }
+                @Override
+                public ShaderPreparedResult finish() {
                     ShaderPreparedResult result = operation.finish();
                     try { validate(request, result.pass()); return result; }
                     catch (Throwable failure) { result.dispose(); throw failure; }

@@ -39,6 +39,8 @@ public final class FogOfWarControls3D implements Disposable {
     public int bottomInset() { return 90; }
     public void render(float delta) { root.update(delta);root.render(); }
     public void resize(int width,int height) { root.resize(width,height); }
-    @Override public boolean isDisposed() { return root.isDisposed(); }
-    @Override public void dispose() { root.dispose(); }
+    @Override
+    public boolean isDisposed() { return root.isDisposed(); }
+    @Override
+    public void dispose() { root.dispose(); }
 }

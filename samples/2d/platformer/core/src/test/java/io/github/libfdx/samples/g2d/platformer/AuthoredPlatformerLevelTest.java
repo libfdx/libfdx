@@ -9,7 +9,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class AuthoredPlatformerLevelTest {
-    @Test void bothAuthoredLevelsHaveCollisionSpawnsAndRestartWithoutMutatingCachedData() {
+    @Test
+    void bothAuthoredLevelsHaveCollisionSpawnsAndRestartWithoutMutatingCachedData() {
         for (String name : new String[]{"meadow", "moonrise"}) {
             DefaultAssetManager assets = new DefaultAssetManager(new DefaultFileSystem().classpathResourceResolver(
                     path -> AuthoredPlatformerLevelTest.class.getResourceAsStream("/"+path)));

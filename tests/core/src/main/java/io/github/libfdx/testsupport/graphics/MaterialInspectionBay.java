@@ -39,8 +39,10 @@ public final class MaterialInspectionBay implements Disposable {
         for (var instance : strips) batch.render(instance);
     }
 
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         try { housing.dispose(); }

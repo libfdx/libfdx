@@ -74,9 +74,11 @@ class DesktopVulkanDeviceLossTest {
             @fragment fn fragmentMain() -> @location(0) vec4f { return vec4f(0, 1, 0, 1); }
             """;
 
-    @Test void workerLossInvalidatesCompletedResultAndStopsNewPreparation() {
+    @Test
+    void workerLossInvalidatesCompletedResultAndStopsNewPreparation() {
         run(new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 GraphicsAttachment context = fdx.graphics().main().as();
                 var device = context.device();
                 Object originalDomain = device.resourceDomain();
@@ -109,9 +111,11 @@ class DesktopVulkanDeviceLossTest {
         renderFreshSession();
     }
 
-    @Test void ordinaryPipelineFailureKeepsTheDeviceUsable() {
+    @Test
+    void ordinaryPipelineFailureKeepsTheDeviceUsable() {
         run(new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 GraphicsAttachment context = fdx.graphics().main().as();
                 var device = context.device();
                 Object originalDomain = device.resourceDomain();
@@ -133,7 +137,8 @@ class DesktopVulkanDeviceLossTest {
         });
     }
 
-    @ParameterizedTest @ValueSource(booleans = {false, true})
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
     void optionalCacheLossMustNotContinueAsAnUncachedSuccess(boolean snapshot) throws Exception {
         Files.createDirectories(Path.of("build"));
         var store = new DesktopShaderCacheStore(Files.createTempDirectory(Path.of("build"), "vulkan-loss-cache-"), 32 * 1024 * 1024);
@@ -141,7 +146,8 @@ class DesktopVulkanDeviceLossTest {
         provider.configuration().preparationWorkerLimit(1).shaderCache(new ShaderArtifactCache(store));
         try {
             run(provider, new ApplicationAdapter() {
-                @Override public void create(Fdx fdx) {
+                @Override
+                public void create(Fdx fdx) {
                     GraphicsAttachment context = fdx.graphics().main().as();
                     var device = context.device();
                     Object originalDomain = device.resourceDomain();
@@ -167,18 +173,23 @@ class DesktopVulkanDeviceLossTest {
         } finally { store.dispose(); }
     }
 
-    @Test void acquireLossCancelsReadyHeldAndQueuedShaders() {
+    @Test
+    void acquireLossCancelsReadyHeldAndQueuedShaders() {
         run(new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 GraphicsAttachment context = fdx.graphics().main().as();
                 var device = context.device();
                 var service = new ShaderPreparation(context);
                 CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
                 AtomicInteger queuedSources = new AtomicInteger();
                 ShaderProvider provider = new ShaderProvider() {
-                    @Override public GraphicsDevice preparationDevice() { return device; }
-                    @Override public boolean supports(ShaderRequest request) { return true; }
-                    @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+                    @Override
+                    public GraphicsDevice preparationDevice() { return device; }
+                    @Override
+                    public boolean supports(ShaderRequest request) { return true; }
+                    @Override
+                    public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
                         var source = ShaderModuleSource.deferred("vertexMain", "fragmentMain", () -> {
                             if (request.variantKey().equals("held")) {
                                 entered.countDown();
@@ -224,10 +235,12 @@ class DesktopVulkanDeviceLossTest {
         });
     }
 
-    @Test void lossClosesPreparationForEverySharedContext() {
+    @Test
+    void lossClosesPreparationForEverySharedContext() {
         var provider = new DesktopVulkanProvider(); provider.configuration().preparationWorkerLimit(1);
         run(provider, new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 GraphicsAttachment main = fdx.graphics().main().as();
                 var display = fdx.displays().create(new DisplayConfig().size(64, 64).visible(false).vSync(false));
                 var secondary = fdx.graphics().create(GraphicsConfig.provider(provider).display(display));
@@ -251,9 +264,11 @@ class DesktopVulkanDeviceLossTest {
         });
     }
 
-    @Test void presentationLossIsNotHiddenByAPendingResize() {
+    @Test
+    void presentationLossIsNotHiddenByAPendingResize() {
         run(new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 GraphicsAttachment context = fdx.graphics().main().as();
                 var nativeDevice = (VkDevice) field(context, "device");
                 assertTrue(context.beginFrame());
@@ -271,10 +286,12 @@ class DesktopVulkanDeviceLossTest {
         });
     }
 
-    @Test void lossDuringAnOpenPassRejectsDrawingAndReleasesRecordedResources() {
+    @Test
+    void lossDuringAnOpenPassRejectsDrawingAndReleasesRecordedResources() {
         AtomicReference<Object> allocation = new AtomicReference<>();
         run(new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 GraphicsAttachment context = fdx.graphics().main().as();
                 var operation = context.device().prepareRenderPipeline(request(context, "recorded"));
                 await(operation::isDone);
@@ -321,7 +338,8 @@ class DesktopVulkanDeviceLossTest {
 
     private static void renderFreshSession() {
         run(new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 GraphicsAttachment context = fdx.graphics().main().as();
                 var operation = context.device().prepareRenderPipeline(request(context, "fresh session"));
                 await(operation::isDone);
@@ -404,7 +422,8 @@ class DesktopVulkanDeviceLossTest {
             try { beforeFailure.run(); } catch (Throwable failure) { callbackFailure = failure; }
             calls.incrementAndGet(); return result;
         }
-        @Override public void close() {
+        @Override
+        public void close() {
             try { pointer.setLong(capabilities, original); }
             catch (IllegalAccessException failure) { throw new AssertionError(failure); }
             finally { arena.close(); }

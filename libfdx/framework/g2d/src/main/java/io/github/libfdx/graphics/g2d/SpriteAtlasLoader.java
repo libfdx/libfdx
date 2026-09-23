@@ -8,8 +8,10 @@ import io.github.libfdx.graphics.Texture;
 
 /** Metadata discovery and page dependencies precede budgeted application-thread binding. */
 final class SpriteAtlasLoader implements AssetLoader<SpriteAtlas> {
-    @Override public Class<SpriteAtlas> type() { return SpriteAtlas.class; }
-    @Override public FdxFuture<SpriteAtlas> load(AssetLoadContext context,AssetDescriptor<SpriteAtlas> descriptor) {
+    @Override
+    public Class<SpriteAtlas> type() { return SpriteAtlas.class; }
+    @Override
+    public FdxFuture<SpriteAtlas> load(AssetLoadContext context,AssetDescriptor<SpriteAtlas> descriptor) {
         FdxFuture<SpriteAtlas> result=FdxFuture.pending();
         TextureLoadOptions options=TextureLoadOptions.from(descriptor);
         String path=descriptor.path().replace('\\','/');

@@ -54,12 +54,19 @@ final class GLComputeModule implements ShaderModule {
         throw new FdxException("Unknown GL compute entry point " + entry);
     }
 
-    @Override public ShaderLanguage language() { return ShaderLanguage.GLSL; }
-    @Override public ShaderReflection reflection() { return reflection; }
-    @Override public ProviderId providerId() { return provider; }
-    @Override @SuppressWarnings("unchecked") public <T> T as() { return (T) this; }
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public ShaderLanguage language() { return ShaderLanguage.GLSL; }
+    @Override
+    public ShaderReflection reflection() { return reflection; }
+    @Override
+    public ProviderId providerId() { return provider; }
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> T as() { return (T) this; }
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         for (var program : programs) if (program != null) program.dispose();

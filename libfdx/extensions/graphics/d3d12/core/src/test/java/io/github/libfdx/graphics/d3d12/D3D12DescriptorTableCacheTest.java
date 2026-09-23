@@ -4,7 +4,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class D3D12DescriptorTableCacheTest {
-    @Test void samplerChangesAndTableLengthsDoNotAlias() {
+    @Test
+    void samplerChangesAndTableLengthsDoNotAlias() {
         var cache = new D3D12DescriptorTableCache(16, 16);
         long[] textures = {10, 20};
         long[] samplers = {30, 40};
@@ -19,7 +20,8 @@ class D3D12DescriptorTableCacheTest {
         assertEquals(original, cache.acquire(textures, 2, samplers, 2));
     }
 
-    @Test void repeatedDrawsReuseSnapshotsAndRewritesAllocateDistinctTables() {
+    @Test
+    void repeatedDrawsReuseSnapshotsAndRewritesAllocateDistinctTables() {
         var cache = new D3D12DescriptorTableCache(8, 4);
         long[] textures = {10, 20};
         long[] samplers = {30, 40};

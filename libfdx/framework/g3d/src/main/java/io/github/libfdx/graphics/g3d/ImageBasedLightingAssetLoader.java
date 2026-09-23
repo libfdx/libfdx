@@ -10,8 +10,10 @@ import io.github.libfdx.graphics.GraphicsContext;
 final class ImageBasedLightingAssetLoader implements AssetLoader<ImageBasedLighting3D> {
     private final GraphicsContext graphics;
     ImageBasedLightingAssetLoader(GraphicsContext graphics) { this.graphics = graphics; }
-    @Override public Class<ImageBasedLighting3D> type() { return ImageBasedLighting3D.class; }
-    @Override public FdxFuture<ImageBasedLighting3D> load(AssetLoadContext context, AssetDescriptor<ImageBasedLighting3D> descriptor) {
+    @Override
+    public Class<ImageBasedLighting3D> type() { return ImageBasedLighting3D.class; }
+    @Override
+    public FdxFuture<ImageBasedLighting3D> load(AssetLoadContext context, AssetDescriptor<ImageBasedLighting3D> descriptor) {
         FdxFuture<ImageBasedLighting3D> result = FdxFuture.pending();
         context.readBytes(context.files().internal(descriptor.path()))
                 .onSuccess(bytes -> context.async(() -> ImageBasedLightingData.decode(bytes))

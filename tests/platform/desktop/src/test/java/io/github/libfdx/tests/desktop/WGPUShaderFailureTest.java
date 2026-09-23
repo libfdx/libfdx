@@ -57,7 +57,8 @@ final class WGPUShaderFailureTest extends ApplicationAdapter {
     private RenderPipeline pipeline;
     private int renderedFrames;
 
-    @Test void invalidShaderAndPipelineDoNotPoisonLaterRendering() {
+    @Test
+    void invalidShaderAndPipelineDoNotPoisonLaterRendering() {
         WGPUProvider provider = new WGPUProvider();
         provider.configuration().backend(WGPUBackend.VULKAN).offscreenReadback(true).vSync(false);
         new DesktopApplicationBackend().start(new DesktopApplicationConfig()
@@ -66,7 +67,8 @@ final class WGPUShaderFailureTest extends ApplicationAdapter {
         assertEquals(3, renderedFrames);
     }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         application = fdx.app();
         graphics = fdx.graphics().main();
         nativeContext = graphics.as();
@@ -117,7 +119,8 @@ final class WGPUShaderFailureTest extends ApplicationAdapter {
         return ShaderModuleDescriptors.descriptor(artifact, label, source);
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         RenderPass pass = graphics.currentFrame().commandEncoder().beginRenderPass(
                 new RenderPassDescriptor().colorAttachment(graphics.currentFrame().colorAttachment())
                         .colorLoadOp(LoadOp.clear(0, 0, 0, 1)));
@@ -152,7 +155,8 @@ final class WGPUShaderFailureTest extends ApplicationAdapter {
         } catch (Exception failure) { throw new AssertionError("Could not save native frame", failure); }
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (pipeline != null) pipeline.dispose();
         if (module != null) module.dispose();
     }

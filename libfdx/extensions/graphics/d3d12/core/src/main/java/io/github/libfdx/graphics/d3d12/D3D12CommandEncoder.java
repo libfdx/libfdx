@@ -48,13 +48,15 @@ final class D3D12CommandEncoder implements CommandEncoder {
         passActive = false;
     }
 
-    @Override public io.github.libfdx.graphics.ComputePass beginComputePass(io.github.libfdx.graphics.ComputePassDescriptor descriptor) {
+    @Override
+    public io.github.libfdx.graphics.ComputePass beginComputePass(io.github.libfdx.graphics.ComputePassDescriptor descriptor) {
         context.requireFrame("begin a compute pass"); requireEnded();
         if (descriptor == null) throw new FdxException("Compute descriptor cannot be null");
         passActive = true; computePass.begin(); return computePass;
     }
 
-    @Override public void copyBufferToBuffer(Buffer source, int sourceOffset, Buffer destination, int destinationOffset, int size) {
+    @Override
+    public void copyBufferToBuffer(Buffer source, int sourceOffset, Buffer destination, int destinationOffset, int size) {
         context.requireFrame("copy buffers"); requireEnded();
         var from = context.requireBuffer(source, "Copy source");
         var to = context.requireBuffer(destination, "Copy destination");

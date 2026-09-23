@@ -10,7 +10,8 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class ChunkResidencyTest {
-    @Test void visibleRequestsPrecedePrefetchAndShareAssetDependencyBudgets() {
+    @Test
+    void visibleRequestsPrecedePrefetchAndShareAssetDependencyBudgets() {
         try(var fixture=new Fixture()) {
             fixture.sharedGate=FdxFuture.pending();
             var residency=new ChunkResidency(fixture.manager,fixture::resolve,16,16,16,2);
@@ -29,7 +30,8 @@ final class ChunkResidencyTest {
             assertNull(fixture.manager.find("-1,-1",TileChunk.class));external.dispose();assertTrue(dependency.isDisposed());
         }
     }
-    @Test void movingWindowEvictsPendingRequestsAndLateCompletionsCannotPublish() {
+    @Test
+    void movingWindowEvictsPendingRequestsAndLateCompletionsCannotPublish() {
         try(var fixture=new Fixture()) {
             FdxFuture<TileChunk> delayed=FdxFuture.pending();fixture.delayed.put("0,0",delayed);
             var residency=new ChunkResidency(fixture.manager,fixture::resolve,16,16,1,1);
@@ -53,7 +55,8 @@ final class ChunkResidencyTest {
             for(Dependency dependency:fixture.dependencies)assertEquals(1,dependency.disposals);
         }
     }
-    @Test void failureAndWrongCoordinatesRequireExplicitRetryWithoutDiscardingOtherChunks() {
+    @Test
+    void failureAndWrongCoordinatesRequireExplicitRetryWithoutDiscardingOtherChunks() {
         try(var fixture=new Fixture()) {
             fixture.delayed.put("1,0",FdxFuture.failed(new FdxException("missing chunk")));
             var residency=new ChunkResidency(fixture.manager,fixture::resolve,16,16,2,2);
@@ -71,7 +74,8 @@ final class ChunkResidencyTest {
             residency.dispose();
         }
     }
-    @Test void oversizedWindowsPreserveThePriorSelectionAndManagerClosureRejectsFurtherWork() {
+    @Test
+    void oversizedWindowsPreserveThePriorSelectionAndManagerClosureRejectsFurtherWork() {
         try(var fixture=new Fixture()) {
             var residency=new ChunkResidency(fixture.manager,fixture::resolve,16,16,1,1);
             residency.window(Integer.MAX_VALUE-15,0,(long)Integer.MAX_VALUE+1,16,0);
@@ -87,7 +91,8 @@ final class ChunkResidencyTest {
         }
     }
 
-    @Test void resolverCannotReenterResidencyMutationAndFailureCanBeRetried() {
+    @Test
+    void resolverCannotReenterResidencyMutationAndFailureCanBeRetried() {
         try(var fixture=new Fixture()) {
             var holder=new ChunkResidency[1];
             boolean[] reenter={true};

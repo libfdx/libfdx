@@ -19,10 +19,13 @@ public final class WGPUStartupFaultProvider implements GraphicsAttachmentProvide
         this.mode = mode;
     }
 
-    @Override public ProviderId providerId() { return delegate.providerId(); }
-    @Override public GraphicsAttachmentRequirements requirements() { return delegate.requirements(); }
+    @Override
+    public ProviderId providerId() { return delegate.providerId(); }
+    @Override
+    public GraphicsAttachmentRequirements requirements() { return delegate.requirements(); }
 
-    @Override public GraphicsAttachment create(GraphicsEnvironment environment) {
+    @Override
+    public GraphicsAttachment create(GraphicsEnvironment environment) {
         GraphicsAttachment attachment = delegate.create(environment);
         System.out.println("[wgpu-startup] native context ready; injected mode=" + mode);
         if(mode.equals("native-crash")) {

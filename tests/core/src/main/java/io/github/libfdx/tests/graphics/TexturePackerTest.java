@@ -34,7 +34,8 @@ public final class TexturePackerTest extends GraphicsParityTest {
     private int readyFrames;
     public TexturePackerTest(long frames) { this(frames,null); }
     public TexturePackerTest(long frames,AssetExecutor executor) { super(frames); this.executor=executor; }
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx,"TexturePackerTest");
         for(int m=0;m<2;m++) {
             DefaultAssetManager manager=managers[m]=new DefaultAssetManager(fdx.files(),executor);
@@ -48,7 +49,8 @@ public final class TexturePackerTest extends GraphicsParityTest {
         hud = new ShowcaseHud(graphics);
         sprites=new SpriteBatch(graphics); batch=new io.github.libfdx.testsupport.graphics.PixelBatch(sprites); markCreated();
     }
-    @Override public void render() {
+    @Override
+    public void render() {
         for(DefaultAssetManager manager:managers) manager.update(3,1_000_000);
         if(fallback.future().isFailed()) fallback.future().get();
         hud.font(font.poll());
@@ -185,7 +187,8 @@ public final class TexturePackerTest extends GraphicsParityTest {
     private void original(int m,int index,float x,float y,float sx,float sy,float rotation) {
         batch.draw(originals[m][index],x-8*sx,y-3*sy,32*sx,24*sy,8*sx,3*sy,rotation);
     }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         dispose(hud);
         dispose(font);
         dispose(sprites);

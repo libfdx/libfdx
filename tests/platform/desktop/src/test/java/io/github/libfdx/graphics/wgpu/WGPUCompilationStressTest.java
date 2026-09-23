@@ -62,10 +62,12 @@ final class WGPUCompilationStressTest {
     private static final String SIMPLE = VERTEX
             + "@fragment fn fragmentMain() -> @location(0) vec4f { return vec4f(0, 1, 0, 1); }";
 
-    @ParameterizedTest @ValueSource(strings = {"Vulkan", "D3D12"})
+    @ParameterizedTest
+    @ValueSource(strings = {"Vulkan", "D3D12"})
     void cancelDuringNativePipelineCall(String backend) throws Exception { nativeOverlap(backend, false); }
 
-    @ParameterizedTest @ValueSource(strings = {"Vulkan", "D3D12"})
+    @ParameterizedTest
+    @ValueSource(strings = {"Vulkan", "D3D12"})
     void shutdownDuringNativePipelineCall(String backend) throws Exception { nativeOverlap(backend, true); }
 
     private void nativeOverlap(String backend, boolean shutdown) throws Exception {
@@ -113,7 +115,8 @@ final class WGPUCompilationStressTest {
         NativeScenario(String backend, boolean shutdown, int attempt) {
             this.backend = backend; this.shutdown = shutdown; this.steps = 512 + attempt * 128;
         }
-        @Override public void create(Fdx fdx) {
+        @Override
+        public void create(Fdx fdx) {
             device = fdx.graphics().main().device(); context = fdx.graphics().main().as();
             String source = complexSource(steps);
             request = packet(fdx, ShaderModuleSource.deferred("vertexMain", "fragmentMain", () -> {
@@ -148,7 +151,8 @@ final class WGPUCompilationStressTest {
         }
     }
 
-    @ParameterizedTest @ValueSource(strings = {"Vulkan", "D3D12"})
+    @ParameterizedTest
+    @ValueSource(strings = {"Vulkan", "D3D12"})
     void queueOverflowAndRepeatedCancellationDrainEveryAcceptedJob(String backend) throws Exception {
         CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
         ArrayList<ShaderPreparationOperation> accepted = new ArrayList<>();
@@ -156,7 +160,8 @@ final class WGPUCompilationStressTest {
         WGPUContext[] capturedContext = new WGPUContext[1];
         try {
             run(backend, new ApplicationAdapter() {
-                @Override public void create(Fdx fdx) {
+                @Override
+                public void create(Fdx fdx) {
                     GraphicsDevice device = fdx.graphics().main().device(); capturedContext[0] = fdx.graphics().main().as();
                     accepted.add(device.prepareRenderPipeline(packet(fdx,
                             ShaderModuleSource.deferred("vertexMain", "fragmentMain", () -> {
@@ -270,12 +275,14 @@ final class WGPUCompilationStressTest {
             ShaderPreparationOperation job;
             ShaderPreparedResult ready;
             long deadline;
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 this.fdx = fdx; deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
                 job = fdx.graphics().main().device().prepareRenderPipeline(packet(fdx,
                         ShaderModuleSource.fixed(ShaderModuleDescriptor.wgsl("fresh after stress", SIMPLE))));
             }
-            @Override public void render() {
+            @Override
+            public void render() {
                 assertTrue(System.nanoTime() < deadline, "Fresh session did not prepare");
                 if (!job.isDone()) return;
                 ready = job.finish(); job.dispose();
@@ -302,7 +309,8 @@ final class WGPUCompilationStressTest {
                 System.out.println("FRESH_RENDER_PASS backend=" + backend + " after=" + name);
                 fdx.app().requestExit();
             }
-            @Override public void dispose() { if (ready != null) ready.dispose(); else if (job != null) job.cancel(); }
+            @Override
+            public void dispose() { if (ready != null) ready.dispose(); else if (job != null) job.cancel(); }
         });
     }
 }

@@ -179,7 +179,8 @@ final class D3D12DxcCompiler implements AutoCloseable {
         if (Thread.currentThread() != owner) throw new FdxException("DXC compiler must be used and closed on its owning thread");
     }
 
-    @Override public void close() {
+    @Override
+    public void close() {
         requireOwner();
         release(utils);
         utils = MemorySegment.NULL;

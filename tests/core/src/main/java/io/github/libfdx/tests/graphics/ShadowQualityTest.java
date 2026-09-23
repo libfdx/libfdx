@@ -52,7 +52,8 @@ public final class ShadowQualityTest extends GraphicsParityTest {
         selectedMotion = frames == 0 ? 0 : 3;
     }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, getClass().getSimpleName());
         createScene();
         for (int i = 0; i < 2; i++) {
@@ -137,7 +138,8 @@ public final class ShadowQualityTest extends GraphicsParityTest {
         for (long[] counts : passCounts) Arrays.fill(counts, 0);
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         updateLayout();
         updateQuality();
         elapsed += exitAfterFrames == 0 ? Math.min(.1f, application.deltaTime()) : 1f / 60f;
@@ -247,7 +249,8 @@ public final class ShadowQualityTest extends GraphicsParityTest {
         root.requestCompose();
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         for (int work = 0; work < 3; work++) for (int method = 0; method < 2; method++) {
             int count = samples[work];
             if (count == 0) continue;

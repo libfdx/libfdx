@@ -9,7 +9,8 @@ import java.util.Arrays;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class IblPreparerTest {
-    @Test void constantHdrEnergySurvivesEveryLevelAndEncodingIsReproducible() {
+    @Test
+    void constantHdrEnergySurvivesEveryLevelAndEncodingIsReproducible() {
         float[] source=new float[64*32*3];
         float[] color={2,4,12};
         for(int i=0;i<source.length;i++) source[i]=color[i%3];
@@ -25,7 +26,8 @@ final class IblPreparerTest {
         }
     }
 
-    @Test void diffuseMatchesAnalyticDirectionalRadianceAndBrdfMatchesIndependentHemisphereQuadrature() {
+    @Test
+    void diffuseMatchesAnalyticDirectionalRadianceAndBrdfMatchesIndependentHemisphereQuadrature() {
         float[] source=new float[256*128*3];
         for(int y=0;y<128;y++) for(int x=0;x<256;x++) {
             double ny=Math.cos(Math.PI*(y+.5)/128);
@@ -69,7 +71,8 @@ final class IblPreparerTest {
         return new double[]{A*2*Math.PI/(rows*cols),B*2*Math.PI/(rows*cols)};
     }
 
-    @Test void radianceRleAndRawAgreeAndMalformedRunsCannotOverrun() throws Exception {
+    @Test
+    void radianceRleAndRawAgreeAndMalformedRunsCannotOverrun() throws Exception {
         byte[] header="#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 4 +X 8\n".getBytes(StandardCharsets.US_ASCII);
         ByteArrayOutputStream raw=new ByteArrayOutputStream(),rle=new ByteArrayOutputStream();
         raw.write(header);rle.write(header);

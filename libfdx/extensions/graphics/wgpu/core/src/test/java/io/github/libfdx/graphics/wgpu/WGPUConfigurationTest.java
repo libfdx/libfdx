@@ -4,7 +4,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class WGPUConfigurationTest {
-    @Test void platformDefaultsRespectAvailableProcessorsAndExplicitOverrides() {
+    @Test
+    void platformDefaultsRespectAvailableProcessorsAndExplicitOverrides() {
         WGPUConfiguration configuration = new WGPUConfiguration();
         int available = Runtime.getRuntime().availableProcessors();
         assertEquals(Math.min(2, available), configuration.preparationWorkerLimitOrDefault(2));

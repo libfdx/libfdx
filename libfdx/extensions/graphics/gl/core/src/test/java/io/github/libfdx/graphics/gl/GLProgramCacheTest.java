@@ -11,7 +11,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GLProgramCacheTest {
-    @Test void freshLoadingOperationRestoresWithoutCompilingOrRelinking() {
+    @Test
+    void freshLoadingOperationRestoresWithoutCompilingOrRelinking() {
         Store store = populated();
         Run warm = new Run(store); warm.finishLoading();
         assertEquals(1, warm.f.gl.binaryRestores);
@@ -22,7 +23,8 @@ class GLProgramCacheTest {
         assertEquals(0, warm.cache.metrics(ShaderCacheLayer.DRIVER_PIPELINE).pipelineFeedbacks());
     }
 
-    @Test void ordinaryRuntimePreparationNeverImportsOrExportsEvenOnCacheHit() throws Exception {
+    @Test
+    void ordinaryRuntimePreparationNeverImportsOrExportsEvenOnCacheHit() throws Exception {
         Run runtime = new Run(populated()); runtime.f.loading = false;
         runtime.op.prepareAsync(); runtime.f.gl.runWorkers();
         assertFalse(runtime.op.isDone());
@@ -33,7 +35,8 @@ class GLProgramCacheTest {
         assertEquals(0, runtime.f.gl.binaryHints);
     }
 
-    @Test void switchingToOrdinaryPollingCannotFinishABinaryImport() {
+    @Test
+    void switchingToOrdinaryPollingCannotFinishABinaryImport() {
         Run run = new Run(populated());
         run.op.prepareLoading(); run.op.advanceLoading();
         assertEquals(1, run.f.gl.binaryRestores);
@@ -42,7 +45,8 @@ class GLProgramCacheTest {
         run.op.advanceLoading(); assertTrue(run.op.isDone()); run.disposeResult();
     }
 
-    @Test void loadingCompilationFinishesAndExportsOnlyInLoading() {
+    @Test
+    void loadingCompilationFinishesAndExportsOnlyInLoading() {
         Run run = new Run(new Store());
         run.op.prepareLoading(); run.op.advanceLoading();
         assertEquals(1, run.f.gl.binaryHints);
@@ -52,7 +56,8 @@ class GLProgramCacheTest {
         assertEquals(1, run.f.gl.binaryExports);
     }
 
-    @Test void rejectedBinaryRebuildsExistingGlslOnceAndReplacesOnlyItsRecord() {
+    @Test
+    void rejectedBinaryRebuildsExistingGlslOnceAndReplacesOnlyItsRecord() {
         Store store = populated(); store.entries.put("unrelated", new byte[] {9});
         Run run = new Run(store); run.f.gl.binaryAccepted = false; run.finishLoading();
         assertEquals(1, run.f.gl.binaryRestores);
@@ -64,7 +69,8 @@ class GLProgramCacheTest {
         new Run(store).finishLoading();
     }
 
-    @Test void linkStatusRejectionAlsoRetriesFromGlsl() {
+    @Test
+    void linkStatusRejectionAlsoRetriesFromGlsl() {
         Run run = new Run(populated());
         run.op.prepareLoading(); run.op.advanceLoading();
         run.f.gl.linkValid = false;
@@ -75,7 +81,8 @@ class GLProgramCacheTest {
         assertEquals(1, run.f.gl.binaryRestores); assertEquals(1, run.f.gl.links);
     }
 
-    @Test void corruptOrIncompatibleIdentityIsAMiss() {
+    @Test
+    void corruptOrIncompatibleIdentityIsAMiss() {
         Store store = populated();
         Run changed = new Run(store, "other-driver"); changed.finishLoading();
         assertEquals(0, changed.f.gl.binaryRestores); assertEquals(2, changed.f.gl.compiles);
@@ -85,7 +92,8 @@ class GLProgramCacheTest {
         assertEquals(1, corrupt.cache.metrics(ShaderCacheLayer.DRIVER_PIPELINE).invalidEntries());
     }
 
-    @Test void cancelledPendingReadAndLateCompletionNeverUseDestroyedContext() throws Exception {
+    @Test
+    void cancelledPendingReadAndLateCompletionNeverUseDestroyedContext() throws Exception {
         for (boolean lost : new boolean[] {false, true}) {
             Store store = populated(); store.held = FdxFuture.pending();
             Run run = new Run(store); run.f.loading = false;
@@ -99,7 +107,8 @@ class GLProgramCacheTest {
         }
     }
 
-    @Test void cancellationAfterImportDeletesUnpublishedProgram() {
+    @Test
+    void cancellationAfterImportDeletesUnpublishedProgram() {
         Run run = new Run(populated());
         run.op.prepareLoading(); run.op.advanceLoading(); run.op.cancel();
         assertTrue(run.op.isDone()); assertThrows(CancellationException.class, run.op::finish);
@@ -107,7 +116,8 @@ class GLProgramCacheTest {
         assertEquals(1, run.f.gl.deletedPrograms);
     }
 
-    @Test void exportAndStorageFailuresDoNotInvalidatePreparedResult() {
+    @Test
+    void exportAndStorageFailuresDoNotInvalidatePreparedResult() {
         Run export = new Run(new Store()); export.f.gl.exportFails = true; export.finishLoading();
         assertEquals(0, export.store.entries.size());
         Store store = new Store(); store.failWrites = true;
@@ -152,13 +162,16 @@ class GLProgramCacheTest {
         final Map<String, byte[]> entries = new HashMap<>();
         FdxFuture<byte[]> held;
         boolean failWrites;
-        @Override public FdxFuture<byte[]> readAsync(String key) {
+        @Override
+        public FdxFuture<byte[]> readAsync(String key) {
             return held != null ? held : FdxFuture.completed(entries.containsKey(key) ? entries.get(key).clone() : null);
         }
-        @Override public FdxFuture<Void> writeAsync(String key, byte[] bytes) {
+        @Override
+        public FdxFuture<Void> writeAsync(String key, byte[] bytes) {
             if (failWrites) return FdxFuture.failed(new IllegalStateException("Unavailable test storage"));
             entries.put(key, bytes.clone()); return FdxFuture.completed(null);
         }
-        @Override public FdxFuture<Void> removeAsync(String key) { entries.remove(key); return FdxFuture.completed(null); }
+        @Override
+        public FdxFuture<Void> removeAsync(String key) { entries.remove(key); return FdxFuture.completed(null); }
     }
 }

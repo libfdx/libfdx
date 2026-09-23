@@ -14,7 +14,8 @@ import java.nio.IntBuffer;
 public final class AndroidGlesProgramBinaryTest extends ApplicationAdapter {
     private Fdx fdx;
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         this.fdx = fdx;
         AndroidGlesApi gl = new AndroidGlesApi(1);
         System.out.println("[info] GLES_PROGRAM_BINARY_DRIVER vendor=" + GLES30.glGetString(GLES30.GL_VENDOR)
@@ -73,6 +74,7 @@ public final class AndroidGlesProgramBinaryTest extends ApplicationAdapter {
             gl.deleteProgram(restored); gl.deleteProgram(program); gl.deleteShader(vertex); gl.deleteShader(fragment);
         }
     }
-    @Override public void render() { fdx.app().requestExit(); }
+    @Override
+    public void render() { fdx.app().requestExit(); }
     private static void require(boolean condition, String message) { if (!condition) throw new FdxException(message); }
 }

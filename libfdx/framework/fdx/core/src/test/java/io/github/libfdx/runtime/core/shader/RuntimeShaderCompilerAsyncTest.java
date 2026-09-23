@@ -10,7 +10,8 @@ class RuntimeShaderCompilerAsyncTest {
     private static final RuntimeShaderCompileRequest INPUT = RuntimeShaderCompileRequest
             .builder("source", RuntimeShaderCompileTarget.WGPU_WGSL).build();
 
-    @Test void defaultCompilationWaitsForExecutorAndPropagatesFailures() {
+    @Test
+    void defaultCompilationWaitsForExecutorAndPropagatesFailures() {
         ArrayDeque<Runnable> work = new ArrayDeque<>();
         int[] calls = {0};
         RuntimeShaderCompiler compiler = request -> { calls[0]++; throw new IllegalStateException("invalid"); };

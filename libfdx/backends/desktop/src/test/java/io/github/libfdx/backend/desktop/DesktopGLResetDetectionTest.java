@@ -20,12 +20,14 @@ import static org.junit.jupiter.api.Assertions.*;
 @EnabledIfSystemProperty(named = "libfdx.test.nativePreparationLifecycle", matches = "true")
 @Timeout(20)
 class DesktopGLResetDetectionTest {
-    @Test void nativeResetQueriesAndFreshContextsPreserveOrdinaryGlErrors() {
+    @Test
+    void nativeResetQueriesAndFreshContextsPreserveOrdinaryGlErrors() {
         for (int session = 0; session < 3; session++) {
             new DesktopApplicationBackend().start(new DesktopApplicationConfig().size(64, 64).visible(false)
                     .vSync(false).graphics(new DesktopOpenGLProvider()), new ApplicationAdapter() {
                 private Fdx fdx;
-                @Override public void create(Fdx fdx) {
+                @Override
+                public void create(Fdx fdx) {
                     this.fdx = fdx;
                     var caps = GL.getCapabilities();
                     assertTrue(caps.OpenGL45 || caps.GL_KHR_robustness || caps.GL_ARB_robustness,
@@ -52,7 +54,8 @@ class DesktopGLResetDetectionTest {
                             + " KHR=" + caps.GL_KHR_robustness + " ARB=" + caps.GL_ARB_robustness);
                     api.closeShaderPreparation();
                 }
-                @Override public void render() { fdx.app().requestExit(); }
+                @Override
+                public void render() { fdx.app().requestExit(); }
             });
         }
     }

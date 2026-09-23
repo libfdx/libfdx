@@ -67,9 +67,11 @@ final class D3D12DeviceLossTest {
             @fragment fn fragmentMain() -> @location(0) vec4f { return vec4f(0, 1, 0, 1); }
             """;
 
-    @Test void removedDeviceCannotPublishAnAlreadyCompiledPipeline() {
+    @Test
+    void removedDeviceCannotPublishAnAlreadyCompiledPipeline() {
         run(new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 D3D12Context context = fdx.graphics().main().as();
                 var operation = context.device().prepareRenderPipeline(packet(context, ShaderModuleSource.fixed(
                         ShaderModuleDescriptor.wgsl("ready before removal", SIMPLE))));
@@ -90,9 +92,11 @@ final class D3D12DeviceLossTest {
         renderFreshSession("unpublished");
     }
 
-    @Test void removalInvalidatesReadyResultsAndCancelsQueuedAndRunningSource() {
+    @Test
+    void removalInvalidatesReadyResultsAndCancelsQueuedAndRunningSource() {
         run(new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 D3D12Context context = fdx.graphics().main().as();
                 GraphicsDevice device = context.device();
                 Object originalDomain = device.resourceDomain();
@@ -100,9 +104,12 @@ final class D3D12DeviceLossTest {
                 CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
                 AtomicInteger queuedSources = new AtomicInteger();
                 ShaderProvider provider = new ShaderProvider() {
-                    @Override public GraphicsDevice preparationDevice() { return device; }
-                    @Override public boolean supports(ShaderRequest request) { return true; }
-                    @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+                    @Override
+                    public GraphicsDevice preparationDevice() { return device; }
+                    @Override
+                    public boolean supports(ShaderRequest request) { return true; }
+                    @Override
+                    public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
                         return device.prepareRenderPipeline(packet(context, ShaderModuleSource.deferred("vertexMain", "fragmentMain", () -> {
                             if (request.variantKey().equals("held")) {
                                 entered.countDown();
@@ -154,10 +161,12 @@ final class D3D12DeviceLossTest {
         renderFreshSession("queued-source");
     }
 
-    @ParameterizedTest @ValueSource(booleans = {false, true})
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
     void removalDuringAnActiveFrameStillReleasesContextAndResources(boolean endPass) {
         run(new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 D3D12Context context = fdx.graphics().main().as();
                 var operation = context.device().prepareRenderPipeline(packet(context,
                         ShaderModuleSource.fixed(ShaderModuleDescriptor.wgsl("active frame", SIMPLE))));
@@ -186,7 +195,9 @@ final class D3D12DeviceLossTest {
         renderFreshSession(endPass ? "active-frame" : "active-pass");
     }
 
-    @Test @Timeout(120) void repeatedRemovalDuringNativePipelineCreationDrainsRetainedDeviceJobs() {
+    @Test
+    @Timeout(120)
+    void repeatedRemovalDuringNativePipelineCreationDrainsRetainedDeviceJobs() {
         int proven = 0;
         for (int attempt = 0; attempt < 6 && proven < 3; attempt++) {
             NativeRemoval scenario = new NativeRemoval(512 + attempt * 128);
@@ -215,7 +226,8 @@ final class D3D12DeviceLossTest {
         StackTraceElement[] before = {}, after = {};
 
         NativeRemoval(int steps) { this.steps = steps; }
-        @Override public void create(Fdx fdx) {
+        @Override
+        public void create(Fdx fdx) {
             D3D12Context context = fdx.graphics().main().as();
             device = context.device();
             Object domain = device.resourceDomain();
@@ -288,14 +300,16 @@ final class D3D12DeviceLossTest {
             ShaderPreparationOperation operation;
             ShaderPreparedResult ready;
             long deadline;
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 this.fdx = fdx;
                 D3D12Context context = fdx.graphics().main().as();
                 deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
                 operation = context.device().prepareRenderPipeline(packet(context,
                         ShaderModuleSource.fixed(ShaderModuleDescriptor.wgsl("recovery", SIMPLE))));
             }
-            @Override public void render() {
+            @Override
+            public void render() {
                 assertTrue(System.nanoTime() < deadline, "Fresh session did not prepare");
                 if (!operation.isDone()) return;
                 ready = operation.finish(); operation.dispose();
@@ -322,7 +336,8 @@ final class D3D12DeviceLossTest {
                 System.out.println("D3D12_RECOVERY_PASS after=" + name);
                 fdx.app().requestExit();
             }
-            @Override public void dispose() { if (ready != null) ready.dispose(); else if (operation != null) operation.cancel(); }
+            @Override
+            public void dispose() { if (ready != null) ready.dispose(); else if (operation != null) operation.cancel(); }
         });
     }
 

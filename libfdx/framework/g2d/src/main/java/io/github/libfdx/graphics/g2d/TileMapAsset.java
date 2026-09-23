@@ -15,7 +15,9 @@ public final class TileMapAsset implements Disposable {
     TileMapAsset(io.github.libfdx.maps.TileMap map, TileSet tiles) { this.map = map; this.tiles = tiles; }
     public io.github.libfdx.maps.TileMap map() { check(); return map; }
     public TileSet tiles() { check(); return tiles; }
-    @Override public void dispose() { if (!disposed) { disposed = true; tiles.clear(); } }
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() { if (!disposed) { disposed = true; tiles.clear(); } }
+    @Override
+    public boolean isDisposed() { return disposed; }
     private void check() { if (disposed) { throw new FdxException("TileMapAsset is disposed"); } }
 }

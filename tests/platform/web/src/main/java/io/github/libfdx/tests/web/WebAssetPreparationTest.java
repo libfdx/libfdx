@@ -35,7 +35,8 @@ public final class WebAssetPreparationTest extends ApplicationAdapter {
     private long deadline;
     private boolean passed;
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         this.fdx = fdx;
         deadline = System.currentTimeMillis() + 15000;
         worker = new WebAssetPreparation();
@@ -53,8 +54,10 @@ public final class WebAssetPreparationTest extends ApplicationAdapter {
         original = encoded.clone();
         AssetLoader<ImageData> defaultLoader = new AssetLoader<>() {
             private final ImageAssetLoader delegate = new ImageAssetLoader();
-            @Override public Class<ImageData> type() { return ImageData.class; }
-            @Override public FdxFuture<ImageData> load(AssetLoadContext context, AssetDescriptor<ImageData> descriptor) {
+            @Override
+            public Class<ImageData> type() { return ImageData.class; }
+            @Override
+            public FdxFuture<ImageData> load(AssetLoadContext context, AssetDescriptor<ImageData> descriptor) {
                 FdxFuture<ImageData> result = delegate.load(context, descriptor);
                 ImageDecoder decoder = ImageDecoder.platformDefault(context);
                 check(decoder instanceof WebAssetPreparation, "Default image decoder was not bound to web worker");
@@ -94,7 +97,8 @@ public final class WebAssetPreparationTest extends ApplicationAdapter {
         check(cancelled.decodeAsync(null, encoded).isFailed(), "Disposed worker accepted work");
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         fdx.graphics().main().clear(.02f,.04f,.07f,1);
         if (passed) return;
         defaultAssets.update(8, 2_000_000L);
@@ -133,7 +137,8 @@ public final class WebAssetPreparationTest extends ApplicationAdapter {
         check(image.rgba().equals(ByteBuffer.wrap(new byte[]{10,20,30,0,40,50,60,127})), "PNG lost hidden RGB/alpha");
     }
     private static void check(boolean condition,String message) { if (!condition) throw new IllegalStateException(message); }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (worker != null) worker.dispose();
         if (crashing != null) crashing.dispose();
         if (defaultAssets != null) defaultAssets.dispose();

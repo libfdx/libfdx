@@ -6,7 +6,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DefaultGraphicsReadinessTest {
-    @Test void asynchronousDeviceIsNotQueriedUntilReady() {
+    @Test
+    void asynchronousDeviceIsNotQueriedUntilReady() {
         ClipDepthRange previous=ClipDepthRange.getDefault();
         boolean[] ready={false};
         int[] queries={0};

@@ -64,13 +64,19 @@ public final class WavStream implements PcmStream {
         }).onFailure(result::completeExceptionally);
         return result;
     }
-    @Override public int channels() { return format.channels(); }
-    @Override public int sampleRate() { return format.sampleRate(); }
-    @Override public long frames() { return frames; }
-    @Override public int maxReadFrames() { return maximum; }
-    @Override public boolean isSeekable() { return source.isSeekable(); }
+    @Override
+    public int channels() { return format.channels(); }
+    @Override
+    public int sampleRate() { return format.sampleRate(); }
+    @Override
+    public long frames() { return frames; }
+    @Override
+    public int maxReadFrames() { return maximum; }
+    @Override
+    public boolean isSeekable() { return source.isSeekable(); }
 
-    @Override public FdxFuture<Integer> read(long offset, short[] destination, int start, int count) {
+    @Override
+    public FdxFuture<Integer> read(long offset, short[] destination, int start, int count) {
         Read request;
         synchronized (lock) {
             if (disposed) { return FdxFuture.failed(new FdxException("WAV stream is disposed")); }
@@ -89,7 +95,8 @@ public final class WavStream implements PcmStream {
         update(); return request.result;
     }
 
-    @Override public void update() {
+    @Override
+    public void update() {
         Read request;
         synchronized (lock) {
             if (disposed || pending == null || submitted) { return; }
@@ -102,7 +109,8 @@ public final class WavStream implements PcmStream {
             }
         } catch (RuntimeException | Error error) { request.fail(error); }
     }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         Read request;
         synchronized (lock) {
             if (disposed) { return; }
@@ -113,7 +121,8 @@ public final class WavStream implements PcmStream {
             if (request != null) { request.result.completeExceptionally(new FdxException("WAV stream closed during read")); }
         }
     }
-    @Override public boolean isDisposed() { synchronized (lock) { return disposed; } }
+    @Override
+    public boolean isDisposed() { synchronized (lock) { return disposed; } }
 
     private final class Read implements Runnable {
         final FdxFuture<Integer> result = FdxFuture.pending();
@@ -126,7 +135,8 @@ public final class WavStream implements PcmStream {
             int padding = offset + count == frames ? (int)(frames * format.frameBytes() & 1) : 0;
             bytes = count * format.frameBytes() + padding;
         }
-        @Override public void run() {
+        @Override
+        public void run() {
             while (true) {
                 synchronized (lock) { if (disposed || pending != this) { return; } }
                 int accepted;

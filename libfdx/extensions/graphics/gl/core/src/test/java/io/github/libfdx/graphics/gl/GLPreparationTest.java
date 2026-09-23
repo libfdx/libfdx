@@ -26,7 +26,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GLPreparationTest {
-    @Test void loadingBudgetYieldsBetweenContinuationsAndLaterAdvancesComplete() {
+    @Test
+    void loadingBudgetYieldsBetweenContinuationsAndLaterAdvancesComplete() {
         Fixture f = new Fixture(); f.loading = true; f.gl.loadingBudget = 1;
         f.operation.prepareLoading(); f.operation.advanceLoading();
         assertEquals(0,f.gl.compiles);
@@ -35,7 +36,8 @@ class GLPreparationTest {
         assertTrue(f.operation.isDone()); assertEquals(2,f.gl.compiles);
         f.operation.finish().dispose(); f.operation.dispose(); f.attachment.dispose();
     }
-    @Test void pendingAsyncSourceNeverCompilesOnPollAndFailureOrCancellationCannotSubmitGpuWork() {
+    @Test
+    void pendingAsyncSourceNeverCompilesOnPollAndFailureOrCancellationCannotSubmitGpuWork() {
         for (int outcome = 0; outcome < 3; outcome++) {
             Fixture f = new Fixture(); f.loading = true;
             var pending = FdxFuture.<ShaderModuleDescriptor>pending();
@@ -62,7 +64,8 @@ class GLPreparationTest {
             operation.dispose(); f.attachment.dispose();
         }
     }
-    @Test void delayedTranslationCompletionOnlyQueuesWorkerWorkAndOwnerPublishes() throws Exception {
+    @Test
+    void delayedTranslationCompletionOnlyQueuesWorkerWorkAndOwnerPublishes() throws Exception {
         Fixture f = new Fixture(); f.heldTranslation = FdxFuture.pending();
         f.operation.prepareAsync(); f.gl.runWorkers();
         assertNotNull(f.heldRequest);
@@ -76,7 +79,8 @@ class GLPreparationTest {
         var result = f.operation.finish(); f.operation.dispose(); result.dispose(); f.attachment.dispose();
     }
 
-    @Test void delayedTranslationAfterTeardownDrainsWhenWorkerContinuationIsRejected() throws Exception {
+    @Test
+    void delayedTranslationAfterTeardownDrainsWhenWorkerContinuationIsRejected() throws Exception {
         Fixture f = new Fixture(); f.heldTranslation = FdxFuture.pending();
         f.operation.prepareAsync(); f.gl.runWorkers();
         f.operation.close(false); f.gl.closed = true;
@@ -88,7 +92,8 @@ class GLPreparationTest {
         assertEquals(0, f.gl.compiles);
     }
 
-    @Test void rejectedRestoredTranslationRetriesOnlyOnceAndDisposesBothPrograms() throws Exception {
+    @Test
+    void rejectedRestoredTranslationRetriesOnlyOnceAndDisposesBothPrograms() throws Exception {
         Fixture f = new Fixture();
         var refresh = ShaderCompilerRegistry.builder().compiler(f.compiler).build();
         var operation = new GLPreparationOperation((GLGraphicsDevice) f.attachment.device(),
@@ -105,7 +110,8 @@ class GLPreparationTest {
         assertEquals(4, f.gl.compiles); assertEquals(2, f.gl.deletedPrograms);
     }
 
-    @Test void sourceWorkNeverCallsGLAndLinkStatusWaitsForProgramCompletion() throws Exception {
+    @Test
+    void sourceWorkNeverCallsGLAndLinkStatusWaitsForProgramCompletion() throws Exception {
         Fixture f = new Fixture();
         assertFalse(f.operation.isDone());
         f.generate();
@@ -123,7 +129,8 @@ class GLPreparationTest {
         assertEquals(1, f.gl.deletedPrograms); assertEquals(2, f.gl.deletedShaders);
     }
 
-    @Test void failedLinkDisposesAllPartialObjectsAfterCompletion() throws Exception {
+    @Test
+    void failedLinkDisposesAllPartialObjectsAfterCompletion() throws Exception {
         Fixture f = new Fixture(); f.generate();
         assertFalse(f.operation.isDone());
         f.gl.linkComplete = true; f.gl.linkValid = false;
@@ -134,7 +141,8 @@ class GLPreparationTest {
         assertEquals(2, f.gl.deletedShaders);
     }
 
-    @Test void cancellationBeforeSourceExecutionDoesNotSubmitNativeWork() throws Exception {
+    @Test
+    void cancellationBeforeSourceExecutionDoesNotSubmitNativeWork() throws Exception {
         Fixture f = new Fixture(); f.operation.cancel(); f.generate();
         assertTrue(f.operation.isDone());
         assertThrows(CancellationException.class, f.operation::finish);
@@ -142,7 +150,8 @@ class GLPreparationTest {
         f.operation.dispose(); f.attachment.dispose();
     }
 
-    @Test void contextLossAbandonsNativeNamesWithoutUsingTheLostContext() throws Exception {
+    @Test
+    void contextLossAbandonsNativeNamesWithoutUsingTheLostContext() throws Exception {
         Fixture f = new Fixture(); f.generate(); f.operation.isDone();
         f.gl.lost = true; f.operation.close(true);
         assertTrue(f.operation.isDone());
@@ -150,7 +159,8 @@ class GLPreparationTest {
         assertEquals(0, f.gl.deletedShaders); assertEquals(0, f.gl.deletedPrograms);
     }
 
-    @Test void completedPipelineCannotPublishAfterLossWithoutAFramePoll() throws Exception {
+    @Test
+    void completedPipelineCannotPublishAfterLossWithoutAFramePoll() throws Exception {
         Fixture f = new Fixture(); f.generate(); f.operation.isDone();
         f.gl.linkComplete = true;
         assertTrue(f.operation.isDone());
@@ -160,7 +170,8 @@ class GLPreparationTest {
         assertEquals(0, f.gl.deletedPrograms);
     }
 
-    @Test void nativePollingDetectsLossWithoutAnEarlierDomainQuery() throws Exception {
+    @Test
+    void nativePollingDetectsLossWithoutAnEarlierDomainQuery() throws Exception {
         Fixture f = new Fixture(); f.generate(); f.operation.isDone();
         f.gl.lost = true;
         assertTrue(f.operation.isDone());
@@ -169,7 +180,8 @@ class GLPreparationTest {
         assertEquals(0, f.gl.deletedPrograms); assertEquals(0, f.gl.deletedShaders);
     }
 
-    @Test void surfaceLossRejectsAlreadyCompletedPipelineWithoutAResetStatusSignal() throws Exception {
+    @Test
+    void surfaceLossRejectsAlreadyCompletedPipelineWithoutAResetStatusSignal() throws Exception {
         Fixture f = new Fixture(); f.generate(); f.operation.isDone();
         f.gl.linkComplete = true;
         assertTrue(f.operation.isDone());
@@ -181,7 +193,8 @@ class GLPreparationTest {
         assertEquals(0, f.gl.deletedPrograms);
     }
 
-    @Test void loadingAfterLossDoesNotStartSourceOrNativeWork() {
+    @Test
+    void loadingAfterLossDoesNotStartSourceOrNativeWork() {
         Fixture f = new Fixture(); f.loading = true; f.heldTranslation = FdxFuture.pending();
         f.operation.prepareLoading();
         f.gl.lost = true;
@@ -193,7 +206,8 @@ class GLPreparationTest {
         assertEquals(0, f.gl.compiles);
     }
 
-    @Test void cancellationDetectsLossBeforeDeletingNativeNames() throws Exception {
+    @Test
+    void cancellationDetectsLossBeforeDeletingNativeNames() throws Exception {
         Fixture f = new Fixture(); f.generate(); f.operation.isDone();
         f.gl.lost = true;
         f.operation.cancel();
@@ -202,7 +216,8 @@ class GLPreparationTest {
         assertEquals(0, f.gl.deletedPrograms); assertEquals(0, f.gl.deletedShaders);
     }
 
-    @Test void resourceDomainQueryDetectsLossAndNeverRevives() {
+    @Test
+    void resourceDomainQueryDetectsLossAndNeverRevives() {
         Fixture f = new Fixture();
         Object original = f.attachment.device().resourceDomain();
         f.gl.lost = true;
@@ -213,7 +228,8 @@ class GLPreparationTest {
         f.attachment.dispose();
     }
 
-    @Test void workerCompletionNeedsExplicitLoadingAdvanceWithoutDriverPolling() throws Exception {
+    @Test
+    void workerCompletionNeedsExplicitLoadingAdvanceWithoutDriverPolling() throws Exception {
         Fixture f = new Fixture();
         f.gl.parallel = false; f.gl.workers = 2;
         var capabilities = f.attachment.device().shaderPreparationCapabilities();
@@ -237,7 +253,8 @@ class GLPreparationTest {
         f.operation.dispose(); result.dispose(); f.attachment.dispose();
     }
 
-    @Test void cancelledLoadingOnlyWorkDrainsWithoutAnyNativeCompile() throws Exception {
+    @Test
+    void cancelledLoadingOnlyWorkDrainsWithoutAnyNativeCompile() throws Exception {
         Fixture f = new Fixture(); f.gl.parallel = false;
         f.operation.cancel(); f.generate();
         f.operation.advanceLoading();
@@ -247,7 +264,8 @@ class GLPreparationTest {
         f.operation.dispose(); f.attachment.dispose();
     }
 
-    @Test void ownerSourceGenerationCanUseDriverPollingDuringExplicitLoading() {
+    @Test
+    void ownerSourceGenerationCanUseDriverPollingDuringExplicitLoading() {
         Fixture f = new Fixture(); f.loading = true;
         var capabilities = f.attachment.device().shaderPreparationCapabilities();
         assertEquals(ShaderPreparationCapabilities.Execution.OWNER_THREAD, capabilities.cpuExecution());
@@ -265,7 +283,8 @@ class GLPreparationTest {
         var result = f.operation.finish(); f.operation.dispose(); result.dispose(); f.attachment.dispose();
     }
 
-    @Test void ownerPreparationWithoutDriverPollingCompletesOnlyDuringLoading() {
+    @Test
+    void ownerPreparationWithoutDriverPollingCompletesOnlyDuringLoading() {
         Fixture f = new Fixture(); f.loading = true; f.gl.parallel = false;
         f.operation.prepareLoading();
         for (int i = 0; i < 12; i++) assertFalse(f.operation.isDone());
@@ -278,7 +297,8 @@ class GLPreparationTest {
         var result = f.operation.finish(); f.operation.dispose(); result.dispose(); f.attachment.dispose();
     }
 
-    @Test void ownerTranslationCompletionWaitsForAnotherExplicitLoadingAdvance() {
+    @Test
+    void ownerTranslationCompletionWaitsForAnotherExplicitLoadingAdvance() {
         Fixture f = new Fixture(); f.loading = true; f.heldTranslation = FdxFuture.pending();
         f.operation.prepareLoading();
         for (int i = 0; i < 12; i++) assertFalse(f.operation.isDone());
@@ -295,7 +315,8 @@ class GLPreparationTest {
         var result = f.operation.finish(); f.operation.dispose(); result.dispose(); f.attachment.dispose();
     }
 
-    @Test void ownerTranslationAfterCancellationOrContextLossNeverUsesDisposedContext() {
+    @Test
+    void ownerTranslationAfterCancellationOrContextLossNeverUsesDisposedContext() {
         for (boolean contextLost : new boolean[] {false, true}) {
             Fixture f = new Fixture(); f.loading = true; f.heldTranslation = FdxFuture.pending();
             f.operation.prepareLoading(); f.operation.advanceLoading();
@@ -312,7 +333,8 @@ class GLPreparationTest {
         }
     }
 
-    @Test void ownerRejectedTranslationRebuildsOnlyDuringLoadingAndOnlyOnce() {
+    @Test
+    void ownerRejectedTranslationRebuildsOnlyDuringLoadingAndOnlyOnce() {
         Fixture f = new Fixture(); f.loading = true;
         var refresh = ShaderCompilerRegistry.builder().compiler(f.compiler).build();
         var operation = new GLPreparationOperation((GLGraphicsDevice) f.attachment.device(),
@@ -329,7 +351,8 @@ class GLPreparationTest {
         assertEquals(4, f.gl.compiles); assertEquals(2, f.gl.deletedPrograms);
     }
 
-    @Test void deviceDomainChangesOnLossAndPendingWorkNeverUsesLostContext() throws Exception {
+    @Test
+    void deviceDomainChangesOnLossAndPendingWorkNeverUsesLostContext() throws Exception {
         Fixture f = new Fixture();
         Object original = f.attachment.device().resourceDomain();
         f.generate(); f.operation.isDone();
@@ -350,11 +373,14 @@ class GLPreparationTest {
         final FakeGL gl = new FakeGL();
         final ProviderId provider = ProviderId.of("gl");
         final GLGraphicsAttachment attachment = new GLGraphicsAttachment(provider, gl.api, new GLSurface() {
-            @Override public void makeCurrent() { }
-            @Override public void swapBuffers() {
+            @Override
+            public void makeCurrent() { }
+            @Override
+            public void swapBuffers() {
                 if (surfaceLostAtSwap) throw new GraphicsContextLostException(provider);
             }
-            @Override public void releaseCurrent() { }
+            @Override
+            public void releaseCurrent() { }
         }, 64, 64, TextureFormat.RGBA8_UNORM);
         final ShaderReflection reflection = ShaderReflection.builder(ShaderProfile.PORTABLE_WEBGPU)
                 .entryPoints(ShaderEntryPoint.builder("vertexMain", ShaderStage.VERTEX).build(),
@@ -363,11 +389,16 @@ class GLPreparationTest {
                 ShaderModuleDescriptor.wgsl("test", "test source").reflection(reflection),
                 new RenderPipelineDescriptor().colorFormat(TextureFormat.RGBA8_UNORM), ShaderPassId.FORWARD, 0);
         final ShaderTargetCompiler compiler = new ShaderTargetCompiler() {
-                    @Override public ShaderCompilerId id() { return ShaderCompilerId.of("test"); }
-                    @Override public String version() { return "1"; }
-                    @Override public ShaderTargetId[] targets() { return new ShaderTargetId[] {ShaderTarget.OPENGL_GLSL.id()}; }
-                    @Override public boolean supports(ShaderTargetCompileRequest request) { return true; }
-                    @Override public FdxFuture<ShaderTargetCompileResult> compileAsync(ShaderTargetCompileRequest request,
+                    @Override
+                    public ShaderCompilerId id() { return ShaderCompilerId.of("test"); }
+                    @Override
+                    public String version() { return "1"; }
+                    @Override
+                    public ShaderTargetId[] targets() { return new ShaderTargetId[] {ShaderTarget.OPENGL_GLSL.id()}; }
+                    @Override
+                    public boolean supports(ShaderTargetCompileRequest request) { return true; }
+                    @Override
+                    public FdxFuture<ShaderTargetCompileResult> compileAsync(ShaderTargetCompileRequest request,
                             Consumer<Runnable> execute) {
                         if (loading) assertSame(gl.owner, Thread.currentThread());
                         else assertNotSame(gl.owner, Thread.currentThread());
@@ -375,7 +406,8 @@ class GLPreparationTest {
                         heldRequest = request;
                         return heldTranslation;
                     }
-                    @Override public ShaderTargetCompileResult compile(ShaderTargetCompileRequest request) {
+                    @Override
+                    public ShaderTargetCompileResult compile(ShaderTargetCompileRequest request) {
                         if (loading) assertSame(gl.owner, Thread.currentThread());
                         else assertNotSame(gl.owner, Thread.currentThread());
                         return translationResult(request);
@@ -416,7 +448,8 @@ class GLPreparationTest {
             });
             worker.start(); worker.join(5000); assertFalse(worker.isAlive());
         }
-        @Override public Object invoke(Object proxy, Method method, Object[] args) {
+        @Override
+        public Object invoke(Object proxy, Method method, Object[] args) {
             if (method.getName().equals("executeShaderPreparation")) {
                 if (closed) throw new FdxException("Test worker executor closed");
                 work.add((Runnable) args[0]); return null;

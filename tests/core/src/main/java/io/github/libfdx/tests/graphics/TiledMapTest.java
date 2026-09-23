@@ -32,7 +32,8 @@ public final class TiledMapTest extends GraphicsParityTest {
     private boolean paused, mist = true, objects = true, dragging, moved, ready;
     private int lastX, lastY, selected = -1;
     private final InputAdapter controls = new InputAdapter() {
-        @Override public boolean keyDown(KeyEvent event) {
+        @Override
+        public boolean keyDown(KeyEvent event) {
             switch (event.key()) {
                 case SPACE -> paused = !paused;
                 case P -> mist = !mist;
@@ -42,7 +43,8 @@ public final class TiledMapTest extends GraphicsParityTest {
             }
             return true;
         }
-        @Override public boolean pointerDown(PointerEvent event) {
+        @Override
+        public boolean pointerDown(PointerEvent event) {
             float x = event.x() * framebufferWidth() / (float) Math.max(1, display.width());
             float y = event.y() * framebufferHeight() / (float) Math.max(1, display.height());
             if (x >= sceneWidth) {
@@ -56,7 +58,8 @@ public final class TiledMapTest extends GraphicsParityTest {
             dragging = true; moved = false; lastX = event.x(); lastY = event.y();
             return true;
         }
-        @Override public boolean pointerMoved(PointerEvent event) {
+        @Override
+        public boolean pointerMoved(PointerEvent event) {
             if (!dragging) return false;
             int dx = event.x() - lastX, dy = event.y() - lastY;
             if (dx != 0 || dy != 0) moved = true;
@@ -64,11 +67,13 @@ public final class TiledMapTest extends GraphicsParityTest {
             panY += dy * framebufferHeight() / (float)Math.max(1, display.height()) / effectiveZoom();
             lastX = event.x(); lastY = event.y(); clampPan(); return true;
         }
-        @Override public boolean pointerUp(PointerEvent event) {
+        @Override
+        public boolean pointerUp(PointerEvent event) {
             if (dragging && !moved) select(event.x(), event.y());
             dragging = false; return true;
         }
-        @Override public boolean scrolled(PointerEvent event) {
+        @Override
+        public boolean scrolled(PointerEvent event) {
             zoom = Math.max(.65f, Math.min(2.4f, zoom - event.scrollY() * .12f)); return true;
         }
     };
@@ -77,7 +82,8 @@ public final class TiledMapTest extends GraphicsParityTest {
     /** Owns the optional asset executor. */
     public TiledMapTest(long frames, AssetExecutor executor) { super(frames); this.executor = executor; }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, getClass().getSimpleName());
         input = fdx.input();
         zoom = Math.max(.65f, Math.min(2.4f, Float.parseFloat(System.getProperty("libfdx.test.tiled.zoom", "1"))));
@@ -98,7 +104,8 @@ public final class TiledMapTest extends GraphicsParityTest {
         input.addProcessor(controls); markCreated();
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         assets.update(6, 2_000_000);
         if (map.future().isFailed()) map.future().get();
         hud.font(font.poll());
@@ -183,7 +190,8 @@ public final class TiledMapTest extends GraphicsParityTest {
         }
         batch.color(1, 1, 1, 1);
     }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (input != null) input.removeProcessor(controls);
         dispose(hud); dispose(sprites); dispose(solid); dispose(font); dispose(assets); dispose(executor);
         if (requiresCompletion() && !ready) throw new FdxException("Coastal map did not finish loading");

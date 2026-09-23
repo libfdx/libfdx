@@ -28,10 +28,14 @@ public final class ManagedTestApplication implements ApplicationListener {
                 Float.parseFloat(System.getProperty("libfdx.test.autoLoadTimeoutSeconds", "15")));
     }
 
-    @Override public void create(Fdx fdx) { application = fdx.app(); test.create(fdx); }
-    @Override public void resize(int width, int height) { test.resize(width, height); }
-    @Override public void render() { test.render(); }
-    @Override public void onFrameEnd() {
+    @Override
+    public void create(Fdx fdx) { application = fdx.app(); test.create(fdx); }
+    @Override
+    public void resize(int width, int height) { test.resize(width, height); }
+    @Override
+    public void render() { test.render(); }
+    @Override
+    public void onFrameEnd() {
         test.onFrameEnd();
         if (!observed && timing.update(application.deltaTime())) {
             observed = true;
@@ -39,9 +43,12 @@ public final class ManagedTestApplication implements ApplicationListener {
             application.requestExit();
         }
     }
-    @Override public void pause() { test.pause(); }
-    @Override public void resume() { test.resume(); }
-    @Override public void dispose() { test.dispose(); disposed = true; }
+    @Override
+    public void pause() { test.pause(); }
+    @Override
+    public void resume() { test.resume(); }
+    @Override
+    public void dispose() { test.dispose(); disposed = true; }
 
     /** Called only after backend shutdown; early window closure is not a successful run. */
     public void verifyCompleted() {

@@ -27,8 +27,10 @@ public abstract class PooledAudio implements Audio {
     protected BufferedMusic openMusic(PcmStream source, MusicBuffering buffering) {
         throw new UnsupportedOperationException("Streamed music is unsupported by this provider");
     }
-    @Override public final int maxMusicStreams() { return supportsMusic() ? music.length : 0; }
-    @Override public final Music createMusic(PcmStream source, MusicBuffering buffering) {
+    @Override
+    public final int maxMusicStreams() { return supportsMusic() ? music.length : 0; }
+    @Override
+    public final Music createMusic(PcmStream source, MusicBuffering buffering) {
         checkLive();
         if (source == null || source.isDisposed() || buffering == null || source.channels() < 1 || source.channels() > 2
                 || source.sampleRate() < 8000 || source.sampleRate() > 192000 || source.frames() == 0 || source.frames() < -1
@@ -90,7 +92,8 @@ public abstract class PooledAudio implements Audio {
         if (disposed) throw new FdxException("Audio is disposed");
         checkDevice();
     }
-    @Override public final Sound createSound(PcmData pcm) {
+    @Override
+    public final Sound createSound(PcmData pcm) {
         checkLive();
         if (pcm == null) throw new IllegalArgumentException("PCM cannot be null");
         DeviceSound sound = new DeviceSound(pcm, upload(pcm));
@@ -99,7 +102,8 @@ public abstract class PooledAudio implements Audio {
         sounds = sound;
         return sound;
     }
-    @Override public final long play(Sound sound, float gain, float pitch, float pan, boolean loop) {
+    @Override
+    public final long play(Sound sound, float gain, float pitch, float pan, boolean loop) {
         checkLive();
         validate(gain, pitch, pan);
         if (!(sound instanceof DeviceSound) || ((DeviceSound) sound).owner() != this || sound.isDisposed()) {
@@ -137,14 +141,16 @@ public abstract class PooledAudio implements Audio {
         voice.paused = false;
         stopSlot(index);
     }
-    @Override public final boolean stop(long handle) {
+    @Override
+    public final boolean stop(long handle) {
         checkLive();
         int index = slot(handle);
         if (index < 0) return false;
         stopAt(index);
         return true;
     }
-    @Override public final boolean pause(long handle) {
+    @Override
+    public final boolean pause(long handle) {
         checkLive();
         int index = liveSlot(handle);
         if (index < 0) return false;
@@ -152,7 +158,8 @@ public abstract class PooledAudio implements Audio {
         voices[index].paused = true;
         return true;
     }
-    @Override public final boolean resume(long handle) {
+    @Override
+    public final boolean resume(long handle) {
         checkLive();
         int index = liveSlot(handle);
         if (index < 0) return false;
@@ -160,7 +167,8 @@ public abstract class PooledAudio implements Audio {
         voices[index].paused = false;
         return true;
     }
-    @Override public final boolean parameters(long handle, float gain, float pitch, float pan) {
+    @Override
+    public final boolean parameters(long handle, float gain, float pitch, float pan) {
         checkLive();
         validate(gain, pitch, pan);
         int index = liveSlot(handle);
@@ -168,13 +176,15 @@ public abstract class PooledAudio implements Audio {
         parametersSlot(index, gain, pitch, pan);
         return true;
     }
-    @Override public final VoiceState state(long handle) {
+    @Override
+    public final VoiceState state(long handle) {
         checkLive();
         int index = liveSlot(handle);
         return index < 0 ? VoiceState.STOPPED : voices[index].paused || isSuspended()
                 ? VoiceState.PAUSED : VoiceState.PLAYING;
     }
-    @Override public final void update() {
+    @Override
+    public final void update() {
         checkLive();
         boolean paused = suspended || platformSuspended();
         if (!paused) {
@@ -184,14 +194,17 @@ public abstract class PooledAudio implements Audio {
         }
         for (BufferedMusic stream : music) { if (stream != null) { stream.pump(paused); } }
     }
-    @Override public final int activeVoices() {
+    @Override
+    public final int activeVoices() {
         update();
         int count = 0;
         for (int i = 0; i < voices.length; i++) if (voices[i].sound != null) count++;
         return count;
     }
-    @Override public final int maxVoices() { return voices.length; }
-    @Override public final void suspend() {
+    @Override
+    public final int maxVoices() { return voices.length; }
+    @Override
+    public final void suspend() {
         checkLive();
         activationRevision++;
         update();
@@ -202,7 +215,8 @@ public abstract class PooledAudio implements Audio {
         }
         for (BufferedMusic stream : music) { if (stream != null) { stream.pump(true); } }
     }
-    @Override public final FdxFuture<Void> resume() {
+    @Override
+    public final FdxFuture<Void> resume() {
         checkLive();
         long revision = ++activationRevision;
         FdxFuture<Void> result = FdxFuture.pending();
@@ -223,9 +237,12 @@ public abstract class PooledAudio implements Audio {
         }).onFailure(result::completeExceptionally);
         return result;
     }
-    @Override public final boolean isSuspended() { checkLive(); return suspended || platformSuspended(); }
-    @Override public final boolean isDisposed() { return disposed; }
-    @Override public final void dispose() {
+    @Override
+    public final boolean isSuspended() { checkLive(); return suspended || platformSuspended(); }
+    @Override
+    public final boolean isDisposed() { return disposed; }
+    @Override
+    public final void dispose() {
         if (disposed) return;
         checkDevice();
         Throwable failure = null;
@@ -274,17 +291,24 @@ public abstract class PooledAudio implements Audio {
             duration = pcm.durationSeconds(); channels = pcm.channels(); sampleRate = pcm.sampleRate();
         }
         PooledAudio owner() { return PooledAudio.this; }
-        @Override public double durationSeconds() { return duration; }
-        @Override public int channels() { return channels; }
-        @Override public int sampleRate() { return sampleRate; }
-        @Override public ProviderId providerId() { return PooledAudio.this.providerId(); }
-        @Override public <T> T as() {
+        @Override
+        public double durationSeconds() { return duration; }
+        @Override
+        public int channels() { return channels; }
+        @Override
+        public int sampleRate() { return sampleRate; }
+        @Override
+        public ProviderId providerId() { return PooledAudio.this.providerId(); }
+        @Override
+        public <T> T as() {
             checkLive();
             if (isDisposed()) throw new FdxException("Sound is disposed");
             throw new FdxException("This sound has no public provider-specific view");
         }
-        @Override public boolean isDisposed() { return resource == null; }
-        @Override public void dispose() {
+        @Override
+        public boolean isDisposed() { return resource == null; }
+        @Override
+        public void dispose() {
             if (isDisposed()) return;
             checkLive();
             releaseSound();

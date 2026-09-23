@@ -23,7 +23,8 @@ final class SpriteAtlasTest {
     private int uploads,disposals;
     private boolean badDimensions;
 
-    @Test void delayedPagesAndWorkerPreparationRespectBudgetAndSharedScopeOwnership() throws Exception {
+    @Test
+    void delayedPagesAndWorkerPreparationRespectBudgetAndSharedScopeOwnership() throws Exception {
         DefaultAssetManager manager=manager();
         AssetScope a=manager.createScope(),b=manager.createScope();
         var descriptor=TextureLoadOptions.PIXEL_ART.descriptor("sprites/test.atlas.json",SpriteAtlas.class);
@@ -43,7 +44,8 @@ final class SpriteAtlasTest {
         assertThrows(FdxException.class,sprite::region);
         manager.dispose(); assertEquals(2,disposals);
     }
-    @Test void pageFailureAndBindingFailureReleaseAlreadyLoadedDependencies() throws Exception {
+    @Test
+    void pageFailureAndBindingFailureReleaseAlreadyLoadedDependencies() throws Exception {
         for(boolean dimensions:new boolean[]{false,true}) {
             badDimensions=dimensions; uploads=disposals=0; reads.clear(); tasks.clear();
             DefaultAssetManager manager=manager(); var lease=manager.acquire(AssetDescriptor.of("sprites/test.atlas.json",SpriteAtlas.class));
@@ -56,7 +58,8 @@ final class SpriteAtlasTest {
             manager.dispose(); assertEquals(uploads,disposals);
         }
     }
-    @Test void trimmedQuadRotatesAndMirrorsAboutOriginalImagePivotWithoutOwningPages() {
+    @Test
+    void trimmedQuadRotatesAndMirrorsAboutOriginalImagePivotWithoutOwningPages() {
         int[] disposed={0};
         Texture texture=proxy(Texture.class,(name,args) -> switch(name) {
             case "width","height" -> 32; case "isDisposed" -> false;
@@ -119,7 +122,8 @@ final class SpriteAtlasTest {
     private static byte[] png() throws Exception {
         ByteArrayOutputStream out=new ByteArrayOutputStream(); ImageIO.write(new BufferedImage(2,2,BufferedImage.TYPE_INT_ARGB),"png",out); return out.toByteArray();
     }
-    @SuppressWarnings("unchecked") private static <T> T proxy(Class<T> type,Call call) {
+    @SuppressWarnings("unchecked")
+    private static <T> T proxy(Class<T> type,Call call) {
         return (T)Proxy.newProxyInstance(type.getClassLoader(),new Class<?>[]{type},(proxy,method,args) -> call.run(method.getName(),args));
     }
     private interface Call { Object run(String name,Object[] args); }

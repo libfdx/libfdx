@@ -486,9 +486,11 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
             this.attachment = attachment;
         }
 
-        @Override public ShaderPreparationCapabilities shaderPreparationCapabilities() { return PREPARATION_CAPABILITIES; }
+        @Override
+        public ShaderPreparationCapabilities shaderPreparationCapabilities() { return PREPARATION_CAPABILITIES; }
 
-        @Override public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
+        @Override
+        public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
             requirePreparationOwner();
             attachment.ensureNotDisposed("prepare a pipeline");
             PreparationOperation operation = new PreparationOperation(Objects.requireNonNull(request, "request"));
@@ -515,7 +517,8 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
 
             PreparationOperation(ShaderPipelineRequest request) { this.request = request; }
 
-            @Override public void advanceLoading() {
+            @Override
+            public void advanceLoading() {
                 requirePreparationOwner();
                 if (done || disposed) return;
                 ShaderModule module = null;
@@ -558,10 +561,13 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
                 }
             }
 
-            @Override public boolean isDone() { return done; }
-            @Override public ShaderPreparationPhase phase() { return phase; }
+            @Override
+            public boolean isDone() { return done; }
+            @Override
+            public ShaderPreparationPhase phase() { return phase; }
 
-            @Override public ShaderPreparedResult finish() {
+            @Override
+            public ShaderPreparedResult finish() {
                 requirePreparationOwner();
                 if (!done || finished) throw new FdxException("Desktop C Vulkan preparation cannot be published now");
                 finished = true;
@@ -578,7 +584,8 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
                 } finally { discard(); preparations.remove(this); }
             }
 
-            @Override public void cancel() {
+            @Override
+            public void cancel() {
                 requirePreparationOwner();
                 cancelled = true;
                 done = true;
@@ -590,7 +597,8 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
                 if (pipeline != null) { pipeline.dispose(); pipeline = null; }
             }
 
-            @Override public void dispose() {
+            @Override
+            public void dispose() {
                 requirePreparationOwner();
                 if (disposed) return;
                 cancel();
@@ -598,7 +606,8 @@ public final class DesktopCVulkanProvider implements GraphicsAttachmentProvider,
                 preparations.remove(this);
             }
 
-            @Override public boolean isDisposed() { return disposed; }
+            @Override
+            public boolean isDisposed() { return disposed; }
         }
 
         /**

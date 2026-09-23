@@ -501,10 +501,12 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             this.attachment = attachment;
         }
 
-        @Override public Object resourceDomain() {
+        @Override
+        public Object resourceDomain() {
             return attachment.disposed || attachment.deviceState.poll() ? closedDomain : attachment;
         }
-        @Override public ShaderPreparationCapabilities shaderPreparationCapabilities() {
+        @Override
+        public ShaderPreparationCapabilities shaderPreparationCapabilities() {
             if (preparationCapabilities == null) preparationCapabilities = new ShaderPreparationCapabilities(
                     ShaderPreparationCapabilities.Execution.WORKERS, ShaderPreparationCapabilities.Execution.WORKERS,
                     true, attachment.preparationWorkers,
@@ -512,7 +514,8 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                     attachment.shaderCache != null && attachment.shaderCache.supportsAtomicUpdate());
             return preparationCapabilities;
         }
-        @Override public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
+        @Override
+        public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
             attachment.ensureNotDisposed("prepare a pipeline");
             if (request == null) throw new FdxException("Shader pipeline request cannot be null");
             if (preparation == null) preparation = new AndroidVulkanPreparationQueue(attachment);
@@ -735,7 +738,8 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
             }
             return job;
         }
-        @Override public void close() {
+        @Override
+        public void close() {
             if (closed) return;
             closed = true;
             Throwable first = null;
@@ -780,7 +784,8 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                 attachment.deviceState.requireUsable();
             }
 
-            @Override public void run() {
+            @Override
+            public void run() {
                 try {
                     requireActive(); trace.enter(ShaderPreparationPhase.SOURCE);
                     source = request.sourceDescriptor();
@@ -874,10 +879,14 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                 if (prepared != null) try { AndroidVulkanNative.discardPreparedPipeline(prepared.pipeline()); }
                 finally { AndroidVulkanNative.releasePreparationDevice(nativeContext); }
             }
-            @Override public boolean isDone() { return done; }
-            @Override public ShaderPreparationPhase phase() { return trace.phase(); }
-            @Override public ShaderPreparationTrace trace() { return trace; }
-            @Override public ShaderPreparedResult finish() {
+            @Override
+            public boolean isDone() { return done; }
+            @Override
+            public ShaderPreparationPhase phase() { return trace.phase(); }
+            @Override
+            public ShaderPreparationTrace trace() { return trace; }
+            @Override
+            public ShaderPreparedResult finish() {
                 if (!done || finished) throw new FdxException("Android Vulkan preparation cannot be published now");
                 finished = true; requireActive();
                 attachment.ensureNotDisposed("publish a prepared pipeline");
@@ -900,21 +909,29 @@ public final class AndroidVulkanProvider implements GraphicsAttachmentProvider, 
                     finally { AndroidVulkanNative.releasePreparationDevice(nativeContext); jobs.remove(this); }
                 }
             }
-            @Override public void cancel() { cancelled = true; if (done) { discard(); jobs.remove(this); } }
-            @Override public void dispose() {
+            @Override
+            public void cancel() { cancelled = true; if (done) { discard(); jobs.remove(this); } }
+            @Override
+            public void dispose() {
                 if (disposed) return;
                 if (!done) throw new FdxException("Android Vulkan preparation has not drained");
                 disposed = true; discard(); jobs.remove(this);
             }
-            @Override public boolean isDisposed() { return disposed; }
+            @Override
+            public boolean isDisposed() { return disposed; }
         }
         private record Prepared(long pipeline, RenderPipelineDescriptor descriptor, ShaderRenderBindings bindings) { }
         private record PreparationModule(ShaderReflection reflection) implements ShaderModule {
-            @Override public ShaderLanguage language() { return ShaderLanguage.SPIRV; }
-            @Override public ProviderId providerId() { return ID; }
-            @Override public <T> T as() { throw new FdxException("Preparation metadata has no native module"); }
-            @Override public void dispose() { }
-            @Override public boolean isDisposed() { return false; }
+            @Override
+            public ShaderLanguage language() { return ShaderLanguage.SPIRV; }
+            @Override
+            public ProviderId providerId() { return ID; }
+            @Override
+            public <T> T as() { throw new FdxException("Preparation metadata has no native module"); }
+            @Override
+            public void dispose() { }
+            @Override
+            public boolean isDisposed() { return false; }
         }
     }
 

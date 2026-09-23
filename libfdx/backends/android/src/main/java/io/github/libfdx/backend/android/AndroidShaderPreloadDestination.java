@@ -31,7 +31,8 @@ public final class AndroidShaderPreloadDestination implements ShaderPreloadCaptu
         this.directory = Objects.requireNonNull(directory).toAbsolutePath().normalize();
     }
 
-    @Override public FdxFuture<Void> writeAsync(ShaderPreloadExport snapshot) {
+    @Override
+    public FdxFuture<Void> writeAsync(ShaderPreloadExport snapshot) {
         Objects.requireNonNull(snapshot);
         FdxFuture<Void> result = FdxFuture.pending();
         try {
@@ -56,6 +57,8 @@ public final class AndroidShaderPreloadDestination implements ShaderPreloadCaptu
         } finally { Files.deleteIfExists(temporary); }
     }
 
-    @Override public void dispose() { executor.shutdown(); }
-    @Override public boolean isDisposed() { return executor.isShutdown(); }
+    @Override
+    public void dispose() { executor.shutdown(); }
+    @Override
+    public boolean isDisposed() { return executor.isShutdown(); }
 }

@@ -123,12 +123,14 @@ final class GLGraphicsDevice implements GraphicsDevice {
     private ShaderCompilerRegistry refreshPreparationCompilers;
     private boolean preparationClosed;
 
-    @Override public Object resourceDomain() {
+    @Override
+    public Object resourceDomain() {
         attachment.detectContextLoss();
         return preparationClosed || resourceDomain.isLost() ? closedPreparationDomain : resourceDomain;
     }
 
-    @Override public ShaderPreparationCapabilities shaderPreparationCapabilities() {
+    @Override
+    public ShaderPreparationCapabilities shaderPreparationCapabilities() {
         if (preparationCapabilities == null) {
             attachment.makeCurrent();
             boolean parallel = gl.supportsParallelShaderCompilation();
@@ -144,7 +146,8 @@ final class GLGraphicsDevice implements GraphicsDevice {
         return preparationCapabilities;
     }
 
-    @Override public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
+    @Override
+    public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
         attachment.detectContextLoss();
         if (preparationClosed) throw new FdxException("GL shader preparation is closed");
         resourceDomain.requireUsable();
@@ -254,9 +257,11 @@ final class GLGraphicsDevice implements GraphicsDevice {
         }
     }
 
-    @Override public boolean supportsBufferRangeInitialization() { return gl.supportsBufferRangeInitialization(); }
+    @Override
+    public boolean supportsBufferRangeInitialization() { return gl.supportsBufferRangeInitialization(); }
 
-    @Override public void initializeBufferRange(Buffer buffer, int offset, ByteBuffer data) {
+    @Override
+    public void initializeBufferRange(Buffer buffer, int offset, ByteBuffer data) {
         GLBufferHandle target = GLResources.requireBuffer(buffer, resourceDomain, "Buffer");
         io.github.libfdx.graphics.BufferInitialization.validate(target, offset, data);
         attachment.makeCurrent();
@@ -460,7 +465,8 @@ final class GLGraphicsDevice implements GraphicsDevice {
         }
     }
 
-    @Override public ComputePipeline createComputePipeline(
+    @Override
+    public ComputePipeline createComputePipeline(
             ComputePipelineDescriptor descriptor) {
         resourceDomain.requireUsable();
         if (descriptor == null) throw new FdxException("Compute pipeline descriptor cannot be null");
@@ -471,7 +477,8 @@ final class GLGraphicsDevice implements GraphicsDevice {
         return new GLComputePipeline(resourceDomain, module, descriptor);
     }
 
-    @Override public ByteBuffer readBuffer(Buffer buffer, int offset, int size) {
+    @Override
+    public ByteBuffer readBuffer(Buffer buffer, int offset, int size) {
         capabilities.require(GraphicsFeature.COMPUTE);
         GLBufferHandle source = GLResources.requireBuffer(buffer, resourceDomain, "Readback buffer");
         if (source.usage() != BufferUsage.READBACK || offset < 0 || size < 0 || offset > source.size() - size) {

@@ -49,7 +49,8 @@ final class WGPUDawnPreparationTest {
     void nativeDeviceEnablesSynchronizationBeforeWorkersCanUseIt() {
         new DesktopApplicationBackend().start(new DesktopApplicationConfig().title("Dawn device synchronization")
                 .size(128, 128).visible(false).vSync(false).graphics(provider()), new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 WGPUContext context = fdx.graphics().main().as();
                 synchronized (WGPUFeatureName.CUSTOM) {
                     int previous = WGPUFeatureName.CUSTOM.getValue();
@@ -64,7 +65,8 @@ final class WGPUDawnPreparationTest {
         });
     }
 
-    @ParameterizedTest @ValueSource(booleans = {false, true})
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
     void commonPreparationRenders128DistinctShaders(boolean invalid) {
         System.setProperty("libfdx.test.shaderAsync", "true");
         System.setProperty("libfdx.test.shaderInvalidIndex", invalid ? "17" : "-1");
@@ -81,7 +83,8 @@ final class WGPUDawnPreparationTest {
         }
     }
 
-    @ParameterizedTest @ValueSource(booleans = {false, true})
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
     void lateCallbacksDrainAfterCancellationAndContextShutdown(boolean shutdown) throws Exception {
         Pending scenario = new Pending(shutdown, 1);
         try {
@@ -97,7 +100,8 @@ final class WGPUDawnPreparationTest {
         } finally { scenario.resume.countDown(); }
     }
 
-    @Test void callbacksKeepTheQueueBoundedAfterCpuWorkersHaveReturned() throws Exception {
+    @Test
+    void callbacksKeepTheQueueBoundedAfterCpuWorkersHaveReturned() throws Exception {
         Pending scenario = new Pending(true, 257);
         try {
             run(scenario);
@@ -149,7 +153,8 @@ final class WGPUDawnPreparationTest {
 
         Pending(boolean shutdown, int count) { this.shutdown = shutdown; jobs = new ShaderPreparationOperation[count]; }
 
-        @Override public void create(Fdx fdx) {
+        @Override
+        public void create(Fdx fdx) {
             GraphicsContext graphics = fdx.graphics().main();
             context = graphics.as();
             try {

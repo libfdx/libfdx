@@ -71,9 +71,11 @@ public final class ShaderRequest {
         return variantKey;
     }
 
-    @Override public int hashCode() { return hash; }
+    @Override
+    public int hashCode() { return hash; }
 
-    @Override public boolean equals(Object object) {
+    @Override
+    public boolean equals(Object object) {
         return object instanceof ShaderRequest other && passId.equals(other.passId)
                 && profile == other.profile && Objects.equals(renderPass, other.renderPass)
                 && topology == other.topology && variantKey.equals(other.variantKey)

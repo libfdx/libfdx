@@ -38,7 +38,8 @@ public final class ForwardRenderGraph3D implements RenderGraph3D {
     }
     public ForwardRenderGraph3D clearColor(float r,float g,float b,float a){ensureOpen();scene.clearColor(r,g,b,a);return this;}
     /** Returns the borrowed scene attachment set; an unknown name or unsized target fails clearly. */
-    @Override public RenderTarget3D target(String name){
+    @Override
+    public RenderTarget3D target(String name){
         ensureOpen();
         if(!"scene".equals(name))throw new FdxException("Unknown forward render target: "+name);
         if(sceneView==null)throw new FdxException("Resize the forward graph before use");
@@ -48,12 +49,15 @@ public final class ForwardRenderGraph3D implements RenderGraph3D {
     public Texture color(){ensureOpen();return scene.color();}
     public TextureOrigin origin(){return scene.origin();}
     public long estimatedBytes(){return scene.estimatedBytes();}
-    @Override public void render(Camera camera,Environment environment,ObjectIterable<? extends ModelInstance> instances){
+    @Override
+    public void render(Camera camera,Environment environment,ObjectIterable<? extends ModelInstance> instances){
         ensureOpen();path.render(batch,camera,environment,instances);
     }
     private void ensureOpen(){if(disposed)throw new FdxException("ForwardRenderGraph3D disposed");}
-    @Override public boolean isDisposed(){return disposed;}
-    @Override public void dispose(){
+    @Override
+    public boolean isDisposed(){return disposed;}
+    @Override
+    public void dispose(){
         if(disposed)return;disposed=true;
         path.dispose(); Throwable failure=null;
         try{batch.dispose();}catch(RuntimeException | Error next){failure=next;}

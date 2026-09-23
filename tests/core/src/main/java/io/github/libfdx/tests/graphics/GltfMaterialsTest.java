@@ -50,7 +50,8 @@ public final class GltfMaterialsTest extends GraphicsParityTest {
         paths = new String[] {"gltf-materials/authored.gltf", "gltf-materials/reference.gltf"};
     }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, getClass().getSimpleName());
         input = fdx.input();
         assets = new DefaultAssetManager(fdx.files());
@@ -67,7 +68,8 @@ public final class GltfMaterialsTest extends GraphicsParityTest {
         hud = new ShowcaseHud(graphics);
         markCreated();
     }
-    @Override public void render() {
+    @Override
+    public void render() {
         if (!ready) {
             ready = assets.update(2, 1_000_000);
             if (ready) {
@@ -137,7 +139,8 @@ public final class GltfMaterialsTest extends GraphicsParityTest {
         pass.end();
         if (ready) finishFrame();
     }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         for (var batch : batches) dispose(batch);
         dispose(hud); dispose(font); dispose(bay);
         dispose(assets); dispose(blitter);

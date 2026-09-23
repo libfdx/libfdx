@@ -40,7 +40,8 @@ final class WGPUCreationErrors {
 
         private Scope(String operation) { this.operation = operation; }
 
-        @Override public void close() {
+        @Override
+        public void close() {
             if (current.get() != this) throw new IllegalStateException("WGPU creation scope closed on another thread or twice");
             current.remove();
         }

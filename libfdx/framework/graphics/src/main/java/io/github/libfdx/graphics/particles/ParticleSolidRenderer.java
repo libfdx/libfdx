@@ -153,8 +153,10 @@ public final class ParticleSolidRenderer implements Disposable {
             flush();
         } finally { pass = null; count = 0; }
     }
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true; pass = null;
         try { if (buffer != null) buffer.dispose(); }

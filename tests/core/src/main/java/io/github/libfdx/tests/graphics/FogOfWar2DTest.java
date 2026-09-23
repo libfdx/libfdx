@@ -34,7 +34,8 @@ public class FogOfWar2DTest extends GraphicsParityTest {
 
     public FogOfWar2DTest(long frames) { super(frames); }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, "FogOfWar2DTest");
         input = fdx.input();
         demo = exitAfterFrames != 0;
@@ -44,31 +45,36 @@ public class FogOfWar2DTest extends GraphicsParityTest {
         cameraInput = new CameraController2D(input, camera).touchEnabled(false)
                 .pointerRegion(this::insideScene).activationListener(() -> following = false);
         controls = new InputAdapter() {
-            @Override public boolean keyDown(KeyEvent event) {
+            @Override
+            public boolean keyDown(KeyEvent event) {
                 if (event.key() == Key.SPACE) { following = true; return true; }
                 int bit = movementBit(event.key());
                 movementTaps |= bit;
                 return bit != 0;
             }
-            @Override public boolean pointerDown(PointerEvent event) {
+            @Override
+            public boolean pointerDown(PointerEvent event) {
                 if (event.button() != MouseButton.LEFT || !insideScene(event.x(), event.y())) return false;
                 destination(event.x(), event.y());
                 return true;
             }
-            @Override public boolean touchDown(TouchEvent event) {
+            @Override
+            public boolean touchDown(TouchEvent event) {
                 TouchPoint point = event.point();
                 if (point == null || touchId != -1 || !insideScene(point.x(), point.y())) return false;
                 touchId = point.id();
                 destination(point.x(), point.y());
                 return true;
             }
-            @Override public boolean touchMoved(TouchEvent event) {
+            @Override
+            public boolean touchMoved(TouchEvent event) {
                 TouchPoint point = event.point();
                 if (point == null || point.id() != touchId) return false;
                 destination(point.x(), point.y());
                 return true;
             }
-            @Override public boolean touchUp(TouchEvent event) {
+            @Override
+            public boolean touchUp(TouchEvent event) {
                 if (event.point() == null || event.point().id() != touchId) return false;
                 touchId = -1;
                 return true;
@@ -156,7 +162,8 @@ public class FogOfWar2DTest extends GraphicsParityTest {
         return false;
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         float delta = Math.min(application.deltaTime(), .05f);
         float sideways = (input.isKeyPressed(Key.D) || input.isKeyPressed(Key.RIGHT) || (movementTaps & 1) != 0 ? 1 : 0)
                 - (input.isKeyPressed(Key.A) || input.isKeyPressed(Key.LEFT) || (movementTaps & 2) != 0 ? 1 : 0);
@@ -188,9 +195,11 @@ public class FogOfWar2DTest extends GraphicsParityTest {
         hud.update(delta); hud.render(); finishFrame();
     }
 
-    @Override public void resize(int width, int height) { if (hud != null) hud.resize(width, height); }
+    @Override
+    public void resize(int width, int height) { if (hud != null) hud.resize(width, height); }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (input != null && controls != null) input.removeProcessor(controls);
         dispose(hud); dispose(cameraInput); dispose(scene);
         verifyDisposed();

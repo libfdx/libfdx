@@ -135,20 +135,24 @@ public final class ShaderWorkerTestFixture {
                 return w;
             };
             globalThis.Worker.prototype=original.prototype;
-            """) private static native void watchWorker();
-    @JSBody(script = "return globalThis.libfdxShaderTestReplies;") private static native int workerResults();
+            """)
+    private static native void watchWorker();
+    @JSBody(script = "return globalThis.libfdxShaderTestReplies;")
+    private static native int workerResults();
     @JSBody(script = """
             const original=globalThis.Worker;
             globalThis.libfdxTestWorker=original;
             globalThis.Worker=function() {
                 return new original("data:text/javascript,postMessage({ready:true});onmessage=function(){throw new Error('injected shader crash');}");
             };
-            """) private static native void crashWorker();
+            """)
+    private static native void crashWorker();
     @JSBody(script = """
             const original=globalThis.Worker;
             globalThis.libfdxTestWorker=original;
             globalThis.Worker=function() {return new original('data:text/javascript,onmessage=function(){};');};
-            """) private static native void silenceWorker();
+            """)
+    private static native void silenceWorker();
     @JSBody(script = "globalThis.libfdxTestWorker=globalThis.Worker; globalThis.Worker=function(){throw new DOMException('Injected CSP rejection','SecurityError');};")
     private static native void blockWorker();
     @JSBody(script = "globalThis.libfdxTestCreateUrl=URL.createObjectURL; URL.createObjectURL=function(){throw new Error('Injected Blob failure');};")
@@ -165,14 +169,18 @@ public final class ShaderWorkerTestFixture {
                 if(!probe.live.delete(url))probe.duplicates++;
                 probe.revoked++; revoke.call(URL,url);
             };
-            """) private static native void watchBlobUrls();
+            """)
+    private static native void watchBlobUrls();
     @JSBody(script = "return URL.createObjectURL(new Blob(['postMessage({ready:true});'],{type:'text/javascript'}));")
     private static native String customUrl();
     @JSBody(params = "url", script = "const p=globalThis.libfdxBlobProbe; return p.live.size===1 && p.live.has(url) && p.duplicates===0;")
     private static native boolean onlyBorrowedUrlRemains(String url);
-    @JSBody(params = "url", script = "URL.revokeObjectURL(url);") private static native void revokeCustomUrl(String url);
+    @JSBody(params = "url", script = "URL.revokeObjectURL(url);")
+    private static native void revokeCustomUrl(String url);
     @JSBody(script = "const p=globalThis.libfdxBlobProbe; return p.created>=6 && p.live.size===0 && p.created===p.revoked && p.duplicates===0;")
     private static native boolean allUrlsReleased();
-    @JSBody(script = "globalThis.libfdxTestWorker=globalThis.Worker; globalThis.Worker=undefined;") private static native void disableWorker();
-    @JSBody(script = "globalThis.Worker=globalThis.libfdxTestWorker; delete globalThis.libfdxTestWorker;") private static native void restoreWorker();
+    @JSBody(script = "globalThis.libfdxTestWorker=globalThis.Worker; globalThis.Worker=undefined;")
+    private static native void disableWorker();
+    @JSBody(script = "globalThis.Worker=globalThis.libfdxTestWorker; delete globalThis.libfdxTestWorker;")
+    private static native void restoreWorker();
 }

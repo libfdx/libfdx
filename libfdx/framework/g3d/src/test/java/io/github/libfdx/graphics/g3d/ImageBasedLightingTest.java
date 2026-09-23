@@ -15,7 +15,8 @@ import java.util.Random;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class ImageBasedLightingTest {
-    @Test void halfConversionMatchesJdkForEveryFinitePositiveHalfAndRoundingBoundaries() {
+    @Test
+    void halfConversionMatchesJdkForEveryFinitePositiveHalfAndRoundingBoundaries() {
         for (int bits = 0; bits < 0x7c00; bits++) {
             float value = Float.float16ToFloat((short) bits);
             assertEquals(value, ImageBasedLightingData.fromHalf(bits));
@@ -33,7 +34,8 @@ final class ImageBasedLightingTest {
             assertEquals(Float.floatToFloat16(x), ImageBasedLightingData.half(x));
         }
     }
-    @Test void fileRoundTripIsDeterministicAndRejectsMalformedPayloadBeforeUpload() {
+    @Test
+    void fileRoundTripIsDeterministicAndRejectsMalformedPayloadBeforeUpload() {
         ImageBasedLightingData data = data();
         byte[] encoded = data.encode();
         assertArrayEquals(encoded, ImageBasedLightingData.decode(encoded).encode());
@@ -60,7 +62,8 @@ final class ImageBasedLightingTest {
         spec[0][0] = Float.NaN;
         assertThrows(FdxException.class, () -> ImageBasedLightingData.of(8, spec, 4, diffuse, 4, brdf));
     }
-    @Test void uploadOwnsExactlyThreeTexturesAndRollsBackEveryFailurePosition() {
+    @Test
+    void uploadOwnsExactlyThreeTexturesAndRollsBackEveryFailurePosition() {
         for (int failAt=1; failAt<=3; failAt++) {
             Device device = new Device(failAt);
             assertEquals("Injected upload failure", assertThrows(FdxException.class,
@@ -122,14 +125,23 @@ final class ImageBasedLightingTest {
         final TextureDescriptor descriptor;
         int disposals;
         MemoryTexture(TextureDescriptor descriptor) { this.descriptor = descriptor; }
-        @Override public int width() { return descriptor.width(); }
-        @Override public int height() { return descriptor.height(); }
-        @Override public int mipLevelCount() { return descriptor.mipLevelCount(); }
-        @Override public TextureFormat format() { return descriptor.format(); }
-        @Override public TextureUsage usage() { return descriptor.usage(); }
-        @Override public ProviderId providerId() { return ProviderId.of("gl"); }
-        @Override public <T> T as() { throw new FdxException("Unavailable"); }
-        @Override public void dispose() { disposals++; }
-        @Override public boolean isDisposed() { return disposals != 0; }
+        @Override
+        public int width() { return descriptor.width(); }
+        @Override
+        public int height() { return descriptor.height(); }
+        @Override
+        public int mipLevelCount() { return descriptor.mipLevelCount(); }
+        @Override
+        public TextureFormat format() { return descriptor.format(); }
+        @Override
+        public TextureUsage usage() { return descriptor.usage(); }
+        @Override
+        public ProviderId providerId() { return ProviderId.of("gl"); }
+        @Override
+        public <T> T as() { throw new FdxException("Unavailable"); }
+        @Override
+        public void dispose() { disposals++; }
+        @Override
+        public boolean isDisposed() { return disposals != 0; }
     }
 }

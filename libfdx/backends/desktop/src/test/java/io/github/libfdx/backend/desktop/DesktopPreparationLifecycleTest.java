@@ -121,7 +121,8 @@ final class DesktopPreparationLifecycleTest {
             this.heldPhase = heldPhase;
         }
 
-        @Override public void create(Fdx fdx) {
+        @Override
+        public void create(Fdx fdx) {
             application = fdx.app();
             GraphicsDevice device = fdx.graphics().main().device();
             assertTrue(device.shaderPreparationCapabilities().runtimeNonblocking());
@@ -142,9 +143,12 @@ final class DesktopPreparationLifecycleTest {
             ShaderPipelineRequest packet = new ShaderPipelineRequest(source,
                     new RenderPipelineDescriptor().renderTargetLayout(target), ShaderPassId.FORWARD, 0);
             ShaderProvider shaderProvider = new ShaderProvider() {
-                @Override public GraphicsDevice preparationDevice() { return device; }
-                @Override public boolean supports(ShaderRequest request) { return true; }
-                @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+                @Override
+                public GraphicsDevice preparationDevice() { return device; }
+                @Override
+                public boolean supports(ShaderRequest request) { return true; }
+                @Override
+                public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
                     operation = device.prepareRenderPipeline(packet);
                     return operation;
                 }
@@ -155,7 +159,8 @@ final class DesktopPreparationLifecycleTest {
             deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         }
 
-        @Override public void render() {
+        @Override
+        public void render() {
             shaders.update();
             if (heldCache != null) {
                 if (started.getCount() == 0) release.countDown();
@@ -172,7 +177,8 @@ final class DesktopPreparationLifecycleTest {
             else assertTrue(System.nanoTime() < deadline, "The provider never started the source worker");
         }
 
-        @Override public void dispose() {
+        @Override
+        public void dispose() {
             if (scope != null) scope.dispose();
             if (shaders != null) { drained = shaders.disposeAsync(); shaders.update(); }
         }
@@ -185,7 +191,8 @@ final class DesktopPreparationLifecycleTest {
         final Map<String, byte[]> entries = new HashMap<>();
         boolean released;
         HeldCache(ControlledPreparation scenario) { this.scenario = scenario; }
-        @Override public synchronized FdxFuture<byte[]> readAsync(String key) {
+        @Override
+        public synchronized FdxFuture<byte[]> readAsync(String key) {
             if (!released && scenario.operation != null && scenario.operation.phase() == scenario.heldPhase) {
                 FdxFuture<byte[]> pending = FdxFuture.pending(); reads.add(pending); started.countDown(); return pending;
             }
@@ -197,14 +204,18 @@ final class DesktopPreparationLifecycleTest {
             synchronized (this) { released = true; pending = new ArrayList<>(reads); reads.clear(); }
             for (var read : pending) read.complete(null);
         }
-        @Override public synchronized FdxFuture<Void> writeAsync(String key, byte[] bytes) {
+        @Override
+        public synchronized FdxFuture<Void> writeAsync(String key, byte[] bytes) {
             entries.put(key, bytes.clone()); return FdxFuture.completed(null);
         }
-        @Override public synchronized FdxFuture<Void> removeAsync(String key) {
+        @Override
+        public synchronized FdxFuture<Void> removeAsync(String key) {
             entries.remove(key); return FdxFuture.completed(null);
         }
-        @Override public boolean supportsAtomicUpdate() { return true; }
-        @Override public synchronized FdxFuture<Void> updateAsync(String key, UnaryOperator<byte[]> update) {
+        @Override
+        public boolean supportsAtomicUpdate() { return true; }
+        @Override
+        public synchronized FdxFuture<Void> updateAsync(String key, UnaryOperator<byte[]> update) {
             byte[] bytes = entries.get(key);
             entries.put(key, update.apply(bytes == null ? null : bytes.clone()).clone());
             return FdxFuture.completed(null);

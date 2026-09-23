@@ -125,7 +125,8 @@ final class D3D12PreparedStages implements AutoCloseable {
         }
     }
 
-    @Override public void close() {
+    @Override
+    public void close() {
         ArrayList<MemorySegment> retired = new ArrayList<>();
         synchronized (entries) {
             if (closed) return;
@@ -145,7 +146,8 @@ final class D3D12PreparedStages implements AutoCloseable {
         final MemorySegment blob;
         Lease(Entry entry, MemorySegment blob) { this.entry = entry; this.blob = blob; }
         boolean persisted() { return entry != null && entry.persisted; }
-        @Override public void close() {
+        @Override
+        public void close() {
             if (entry == null) return;
             Entry releasing = entry;
             entry = null;

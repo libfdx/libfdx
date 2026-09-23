@@ -6,7 +6,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ShaderModuleSourceAsyncTest {
-    @Test void deferredAsyncSourceWaitsAndCopiesOnThePreparationExecutor() {
+    @Test
+    void deferredAsyncSourceWaitsAndCopiesOnThePreparationExecutor() {
         var pending = FdxFuture.<ShaderModuleDescriptor>pending();
         var source = ShaderModuleSource.deferred("vertexMain","fragmentMain",
                 () -> { throw new AssertionError("Synchronous generator invoked"); }, execute -> pending);
@@ -20,7 +21,8 @@ class ShaderModuleSourceAsyncTest {
         assertEquals("source",result.get().wgslSource());
         assertNotSame(descriptor,result.get());
     }
-    @Test void asyncFailureAndCancelledExecutorDoNotInvokeSynchronousFallback() {
+    @Test
+    void asyncFailureAndCancelledExecutorDoNotInvokeSynchronousFallback() {
         var pending = FdxFuture.<ShaderModuleDescriptor>pending();
         var source = ShaderModuleSource.deferred("v","f", () -> { throw new AssertionError(); }, execute -> pending);
         var failure = source.generateAsync(Runnable::run);

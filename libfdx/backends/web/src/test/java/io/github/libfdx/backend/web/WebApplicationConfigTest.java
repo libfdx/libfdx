@@ -7,7 +7,8 @@ import io.github.libfdx.application.ApplicationAdapter;
 import org.junit.jupiter.api.Test;
 
 final class WebApplicationConfigTest {
-    @Test void deferredPathsAreCopiedAndMatchExactFilesOrDirectoryPrefixes() {
+    @Test
+    void deferredPathsAreCopiedAndMatchExactFilesOrDirectoryPrefixes() {
         String[] paths={"./assets/music/", "levels/next.tmj"};
         WebApplicationConfig config=new WebApplicationConfig().deferAssets(paths);
         paths[0]="changed";

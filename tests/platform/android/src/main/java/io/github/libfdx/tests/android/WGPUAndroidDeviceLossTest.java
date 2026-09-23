@@ -9,7 +9,8 @@ import io.github.libfdx.graphics.wgpu.WGPUAndroidDeviceLossChecks;
 
 /** Native wgpu Destroyed notifications; selects a case with libfdx.test.wgpuLoss. */
 public final class WGPUAndroidDeviceLossTest extends ApplicationAdapter {
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         // Finish initial surface sizing before pausing the backend and controlling test frames.
         new Handler(Looper.getMainLooper()).post(() -> {
             AndroidApplicationBackend backend = fdx.app().as();

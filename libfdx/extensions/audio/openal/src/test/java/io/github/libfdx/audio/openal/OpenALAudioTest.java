@@ -14,7 +14,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class OpenALAudioTest {
-    @Test void nativeLoopbackRendersPanningPausePitchAndScopedLifetime() throws Exception {
+    @Test
+    void nativeLoopbackRendersPanningPausePitchAndScopedLifetime() throws Exception {
         OpenALAudio audio = OpenALAudio.loopback(32, 48000);
         try {
             Sound tone = audio.createSound(tone(48000));
@@ -57,7 +58,8 @@ final class OpenALAudioTest {
             sound.dispose();
         } finally { audio.dispose(); }
     }
-    @Test void thirtyTwoNativeVoicesRemainBoundedAndContextsRejectForeignResources() {
+    @Test
+    void thirtyTwoNativeVoicesRemainBoundedAndContextsRejectForeignResources() {
         OpenALAudio audio = OpenALAudio.loopback(32, 48000), other = OpenALAudio.loopback(1, 48000);
         try {
             Sound sound = audio.createSound(tone(480));
@@ -73,7 +75,8 @@ final class OpenALAudioTest {
             sound.dispose(); assertEquals(0, audio.activeVoices());
         } finally { audio.dispose(); other.dispose(); }
     }
-    @Test void nativeOneShotCompletesAndWrongThreadCallsFail() throws Exception {
+    @Test
+    void nativeOneShotCompletesAndWrongThreadCallsFail() throws Exception {
         OpenALAudio audio = OpenALAudio.loopback(1, 48000);
         try {
             Sound sound = audio.createSound(tone(480)); long voice = audio.play(sound);

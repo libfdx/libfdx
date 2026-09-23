@@ -111,12 +111,14 @@ public final class ShaderPreparationScope implements Disposable {
         completion.complete(new ShaderPreparationReport(label, items));
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         owner.requireThread();
         if (disposed) return;
         disposed = true;
         for (PreparedShaderPass member : members) member.dispose();
     }
 
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 }

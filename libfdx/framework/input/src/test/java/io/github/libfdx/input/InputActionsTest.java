@@ -4,7 +4,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class InputActionsTest {
-    @Test void shortTapsLatchAcrossRenderOnlyFramesAndRepeatDoesNotCreateAnotherPress() {
+    @Test
+    void shortTapsLatchAcrossRenderOnlyFramesAndRepeatDoesNotCreateAnotherPress() {
         DefaultInput input=new DefaultInput(); InputActions actions=new InputActions(input);
         InputAction jump=actions.define("jump"); actions.bind(jump,InputBinding.key(Key.SPACE)); input.addProcessor(actions);
         input.dispatchKeyDown(Key.SPACE); input.dispatchKeyUp(Key.SPACE);
@@ -17,13 +18,16 @@ final class InputActionsTest {
         input.dispatchKeyUp(Key.SPACE); input.dispatchKeyDown(Key.SPACE); assertTrue(jump.consumePressed());
         actions.dispose(); input.dispatchKeyUp(Key.SPACE); assertFalse(jump.down());
     }
-    @Test void alternateBindingsAggregateAndRouterRespectsUiWithoutSwallowingReleases() {
+    @Test
+    void alternateBindingsAggregateAndRouterRespectsUiWithoutSwallowingReleases() {
         DefaultInput input=new DefaultInput(); InputActions actions=new InputActions(input);
         InputAction move=actions.define("move");
         actions.bind(move,InputBinding.key(Key.A,-1)).bind(move,InputBinding.key(Key.LEFT,-1)).bind(move,InputBinding.key(Key.D));
         boolean[] modal={false}; InputRouter router=new InputRouter().add(new InputAdapter() {
-            @Override public boolean keyDown(KeyEvent e) { return modal[0]; }
-            @Override public boolean keyUp(KeyEvent e) { return modal[0]; }
+            @Override
+            public boolean keyDown(KeyEvent e) { return modal[0]; }
+            @Override
+            public boolean keyUp(KeyEvent e) { return modal[0]; }
         }).add(actions); input.addProcessor(router);
         input.dispatchKeyDown(Key.A); input.dispatchKeyDown(Key.LEFT); input.dispatchKeyUp(Key.A); actions.update();
         assertEquals(-1,move.value()); input.dispatchKeyDown(Key.D); assertEquals(0,move.value());
@@ -35,7 +39,8 @@ final class InputActionsTest {
         assertThrows(IllegalArgumentException.class,()->router.add(other));
         actions.dispose();
     }
-    @Test void gamepadsUseDeadZonesHotplugNeutralGatesAndStrongestMappedControl() {
+    @Test
+    void gamepadsUseDeadZonesHotplugNeutralGatesAndStrongestMappedControl() {
         DefaultInput input=new DefaultInput(); DefaultGamepads pads=input.gamepads().as();
         InputActions actions=new InputActions(input); InputAction move=actions.define("move",.1f), fire=actions.define("fire");
         actions.bind(move,InputBinding.axis(-1,GamepadAxis.LEFT_X,.2f,1));
@@ -53,7 +58,8 @@ final class InputActionsTest {
         a.state().axis(GamepadAxis.LEFT_X,Float.NaN); actions.update(); assertEquals(0,move.value());
         actions.dispose();
     }
-    @Test void touchRegionsTrackIndependentFingersAndUseLogicalSurfaceCoordinates() {
+    @Test
+    void touchRegionsTrackIndependentFingersAndUseLogicalSurfaceCoordinates() {
         InputBinding edge=InputBinding.touch(.6f,.6f,.4f,.4f,1);
         assertEquals(1,(double)edge.x()+edge.width(),.0000001);
         assertThrows(IllegalArgumentException.class,()->InputBinding.touch(.6f,0,.4001f,1,1));
@@ -70,7 +76,8 @@ final class InputActionsTest {
         input.dispatchTouchUp(8,20,80,0); actions.reset(); assertFalse(left.down()); assertFalse(right.down());
         actions.dispose();
     }
-    @Test void bindingsPersistByNamesAndInvalidReplacementPreservesConfigurationAndState() {
+    @Test
+    void bindingsPersistByNamesAndInvalidReplacementPreservesConfigurationAndState() {
         DefaultInput input=new DefaultInput(); InputActions actions=new InputActions(input);
         InputAction move=actions.define("move"), jump=actions.define("jump");
         actions.bind(move,InputBinding.key(Key.A,-1)).bind(move,InputBinding.axis(0,GamepadAxis.LEFT_X,.15f,1));

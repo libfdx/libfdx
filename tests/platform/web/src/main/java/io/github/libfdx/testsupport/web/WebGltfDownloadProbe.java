@@ -6,12 +6,15 @@ import org.teavm.jso.JSBody;
 
 /** Delays real responses for this fixture only; it never initiates asset requests. */
 public final class WebGltfDownloadProbe implements GltfLoadingObserver {
-    @Override public void beforeRequest() {
+    @Override
+    public void beforeRequest() {
         install(GltfLoadingTest.MODEL_PATH, GltfLoadingTest.BUFFER_PATH, GltfLoadingTest.IMAGE_PATH);
     }
 
-    @Override public void frame(boolean modelReady) { checkFrame(modelReady); }
-    @Override public void dispose() { restore(); }
+    @Override
+    public void frame(boolean modelReady) { checkFrame(modelReady); }
+    @Override
+    public void dispose() { restore(); }
 
     @JSBody(params = {"model", "buffer", "image"}, script = """
             var paths = [model, buffer, image];

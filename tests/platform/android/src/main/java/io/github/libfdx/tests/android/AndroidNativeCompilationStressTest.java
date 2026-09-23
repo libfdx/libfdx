@@ -69,7 +69,8 @@ public final class AndroidNativeCompilationStressTest extends ApplicationAdapter
     private record ShutdownSample(StackTraceElement[] ownerBefore, StackTraceElement[] worker,
             StackTraceElement[] ownerAfter) { }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         require(mode.equals("cancel") || mode.equals("shutdown"), "Unknown nativeStress mode");
         application = fdx.app();
         graphics = (GraphicsAttachment) fdx.graphics().main();
@@ -197,7 +198,8 @@ public final class AndroidNativeCompilationStressTest extends ApplicationAdapter
         }
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         require(System.nanoTime() < deadline, "Recovery rendering timed out");
         if (display != null && display.isDone() && ready == null) {
             ready = display.finish(); display.dispose();
@@ -231,7 +233,8 @@ public final class AndroidNativeCompilationStressTest extends ApplicationAdapter
         if (ready != null && frames == 30) application.requestExit();
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         closed = true;
         require(acted, "Closed before native overlap");
         if (ready != null) ready.dispose();

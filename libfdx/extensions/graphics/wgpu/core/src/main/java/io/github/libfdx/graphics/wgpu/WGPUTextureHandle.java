@@ -105,7 +105,8 @@ final class WGPUTextureHandle implements Texture {
         return label;
     }
 
-    @Override public int mipLevelCount() {
+    @Override
+    public int mipLevelCount() {
         return mipLevelCount;
     }
 
@@ -179,7 +180,8 @@ final class WGPUTextureHandle implements Texture {
         return views[0];
     }
 
-    @Override public TextureView view(int level) {
+    @Override
+    public TextureView view(int level) {
         mipWidth(level);
         return views[level];
     }

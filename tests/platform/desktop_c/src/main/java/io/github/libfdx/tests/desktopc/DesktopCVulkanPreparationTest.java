@@ -36,7 +36,8 @@ public final class DesktopCVulkanPreparationTest extends GraphicsParityTest {
 
     public DesktopCVulkanPreparationTest(long frames) { super(frames > 12 ? frames : 40); }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, "DesktopCVulkanPreparationTest");
         var capabilities = graphics.device().shaderPreparationCapabilities();
         require(capabilities.cpuExecution() == ShaderPreparationCapabilities.Execution.OWNER_THREAD
@@ -57,7 +58,8 @@ public final class DesktopCVulkanPreparationTest extends GraphicsParityTest {
                         .depthTestEnabled(false).depthWriteEnabled(false), ShaderPassId.FORWARD, 0));
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         if (polls < 12) {
             require(!display.isDone() && generated == 0, "Ordinary polling compiled a shader");
             if (++polls == 12) {
@@ -86,7 +88,8 @@ public final class DesktopCVulkanPreparationTest extends GraphicsParityTest {
         finishFrame();
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         if (ready != null) ready.dispose();

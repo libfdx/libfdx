@@ -23,12 +23,14 @@ public final class ShaderPreparedResult implements Disposable {
         return pass;
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         resources.dispose();
     }
 
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 }
 

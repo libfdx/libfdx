@@ -18,14 +18,18 @@ import static org.junit.jupiter.api.Assertions.*;
 public final class ModelShaderPlanDefaultSourceTest {
     private static final class Source implements StandardPbrSourcePreparer.Owned {
         int disposals;
-        @Override public FdxFuture<StandardPbrSources> prepare(ShaderProfile profile, Consumer<Runnable> execute) {
+        @Override
+        public FdxFuture<StandardPbrSources> prepare(ShaderProfile profile, Consumer<Runnable> execute) {
             throw new AssertionError("Construction must not compile sources");
         }
-        @Override public void dispose() { disposals++; }
-        @Override public boolean isDisposed() { return disposals != 0; }
+        @Override
+        public void dispose() { disposals++; }
+        @Override
+        public boolean isDisposed() { return disposals != 0; }
     }
 
-    @Test void ownedStrategiesAreIndependentAndDisposedOnce() {
+    @Test
+    void ownedStrategiesAreIndependentAndDisposedOnce() {
         var sources = new ArrayList<Source>();
         Supplier<StandardPbrSourcePreparer.Owned> factory = () -> {
             Source source = new Source(); sources.add(source); return source;
@@ -40,7 +44,8 @@ public final class ModelShaderPlanDefaultSourceTest {
         assertEquals(1, sources.get(1).disposals);
     }
 
-    @Test void explicitStrategiesAndCustomProvidersRemainBorrowed() {
+    @Test
+    void explicitStrategiesAndCustomProvidersRemainBorrowed() {
         Source borrowed = new Source();
         new ModelShaderPlan(graphics(() -> false), null, borrowed).dispose();
         new ModelShaderPlan(graphics(() -> false), null, null).dispose();
@@ -49,14 +54,16 @@ public final class ModelShaderPlanDefaultSourceTest {
         assertEquals(0, borrowed.disposals);
     }
 
-    @Test void constructionFailureReleasesOwnedStrategy() {
+    @Test
+    void constructionFailureReleasesOwnedStrategy() {
         Source owned = new Source(); boolean[] created = {false};
         assertThrows(IllegalStateException.class, () -> new ModelShaderPlan(graphics(() -> created[0]),
                 null, null, () -> { created[0] = true; return owned; }));
         assertEquals(1, owned.disposals);
     }
 
-    @Test void nativeDefaultsConstructWithoutWorkersOrGpuWork() {
+    @Test
+    void nativeDefaultsConstructWithoutWorkersOrGpuWork() {
         new ModelShaderPlan(graphics(() -> false)).dispose();
         new ModelShaderPlan(graphics(() -> false), null).dispose();
     }

@@ -6,7 +6,8 @@ import java.nio.ByteBuffer;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class ParticleArtworkTest {
-    @Test void spritesHaveTransparentBordersAndDistinctArtwork() {
+    @Test
+    void spritesHaveTransparentBordersAndDistinctArtwork() {
         int previousHash = 0;
         for (ParticleSprite sprite : ParticleSprite.values()) {
             ByteBuffer pixels = sprite.pixels(128);
@@ -27,7 +28,8 @@ final class ParticleArtworkTest {
         assertThrows(FdxException.class, () -> ParticleSprite.DISC.pixels(0));
     }
 
-    @Test void curvesCopyKeysAndValidateTimes() {
+    @Test
+    void curvesCopyKeysAndValidateTimes() {
         float[] keys = {0, 0, 0.25f, 1, 1, 0};
         ParticleCurve curve = new ParticleCurve(keys);
         keys[3] = 0;

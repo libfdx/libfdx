@@ -2983,7 +2983,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return job;
         }
 
-        @Override public void close() {
+        @Override
+        public void close() {
             if (closed) return;
             closed = true;
             VulkanCleanup cleanup = new VulkanCleanup();
@@ -3020,7 +3021,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             final Consumer<Runnable> execute = work -> { requireActive(); executor.execute(trace.wrap(work)); };
             Job(ShaderPipelineRequest request, VkDevice device) { this.request = request; this.device = device; }
 
-            @Override public void run() {
+            @Override
+            public void run() {
                 try {
                     requireActive(); trace.enter(ShaderPreparationPhase.SOURCE);
                     source = request.sourceDescriptor();
@@ -3111,10 +3113,14 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 Prepared prepared = output.getAndSet(null);
                 if (prepared != null) try { prepared.pipeline.release(device); } finally { domain.releasePreparation(); }
             }
-            @Override public boolean isDone() { return done; }
-            @Override public ShaderPreparationPhase phase() { return trace.phase(); }
-            @Override public ShaderPreparationTrace trace() { return trace; }
-            @Override public ShaderPreparedResult finish() {
+            @Override
+            public boolean isDone() { return done; }
+            @Override
+            public ShaderPreparationPhase phase() { return trace.phase(); }
+            @Override
+            public ShaderPreparationTrace trace() { return trace; }
+            @Override
+            public ShaderPreparedResult finish() {
                 if (!done || finished) throw new FdxException("Vulkan preparation cannot be published now");
                 finished = true; requireActive();
                 context.requireDeviceUsable("publish a prepared pipeline");
@@ -3131,21 +3137,29 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                     } catch (RuntimeException | Error error) { pipeline.dispose(); throw error; }
                 } finally { domain.releasePreparation(); jobs.remove(this); }
             }
-            @Override public void cancel() { cancelled = true; if (done) { discard(); jobs.remove(this); } }
-            @Override public void dispose() {
+            @Override
+            public void cancel() { cancelled = true; if (done) { discard(); jobs.remove(this); } }
+            @Override
+            public void dispose() {
                 if (disposed) return;
                 if (!done) throw new FdxException("Vulkan native preparation has not drained");
                 disposed = true; discard(); jobs.remove(this);
             }
-            @Override public boolean isDisposed() { return disposed; }
+            @Override
+            public boolean isDisposed() { return disposed; }
         }
         private record Prepared(VulkanPreparedPipeline pipeline, RenderPipelineDescriptor descriptor) { }
         private record VulkanPreparationModule(ShaderReflection reflection) implements ShaderModule {
-            @Override public ShaderLanguage language() { return ShaderLanguage.SPIRV; }
-            @Override public ProviderId providerId() { return ID; }
-            @Override public <T> T as() { throw new FdxException("Preparation metadata has no native module"); }
-            @Override public void dispose() { }
-            @Override public boolean isDisposed() { return false; }
+            @Override
+            public ShaderLanguage language() { return ShaderLanguage.SPIRV; }
+            @Override
+            public ProviderId providerId() { return ID; }
+            @Override
+            public <T> T as() { throw new FdxException("Preparation metadata has no native module"); }
+            @Override
+            public void dispose() { }
+            @Override
+            public boolean isDisposed() { return false; }
         }
     }
 
@@ -3161,9 +3175,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             this.context = context;
         }
 
-        @Override public Object resourceDomain() { return context.disposed || context.resourceDomain.isLost() ? closedDomain : context.resourceDomain(); }
+        @Override
+        public Object resourceDomain() { return context.disposed || context.resourceDomain.isLost() ? closedDomain : context.resourceDomain(); }
 
-        @Override public ShaderPreparationCapabilities shaderPreparationCapabilities() {
+        @Override
+        public ShaderPreparationCapabilities shaderPreparationCapabilities() {
             if (preparationCapabilities == null) preparationCapabilities = new ShaderPreparationCapabilities(
                     ShaderPreparationCapabilities.Execution.WORKERS, ShaderPreparationCapabilities.Execution.WORKERS,
                     true, context.configuration.preparationWorkerLimit(),
@@ -3172,7 +3188,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return preparationCapabilities;
         }
 
-        @Override public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
+        @Override
+        public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
             context.requireDeviceUsable("prepare a render pipeline");
             if (request == null) throw new FdxException("Shader pipeline request cannot be null");
             if (preparation == null) {
@@ -3566,9 +3583,11 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
-        @Override public boolean supportsBufferRangeInitialization() { return true; }
+        @Override
+        public boolean supportsBufferRangeInitialization() { return true; }
 
-        @Override public void initializeBufferRange(Buffer buffer, int offset, ByteBuffer data) {
+        @Override
+        public void initializeBufferRange(Buffer buffer, int offset, ByteBuffer data) {
             context.requireDeviceUsable("initialize a buffer");
             VulkanBufferHandle target = VulkanResources.requireBuffer(buffer, context.resourceDomain(), "Buffer");
             io.github.libfdx.graphics.BufferInitialization.validate(target, offset, data);
@@ -4453,7 +4472,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             }
         }
 
-        @Override protected void releaseNative(VkDevice device) {
+        @Override
+        protected void releaseNative(VkDevice device) {
             if (framebuffer != VK_NULL_HANDLE) vkDestroyFramebuffer(device, framebuffer, null);
             framebuffer = VK_NULL_HANDLE;
             if (implicitDepth) depth.texture.dispose();
@@ -4471,12 +4491,19 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             reflection = descriptor.reflection();
             if (artifact == null) throw new FdxException("Vulkan compute requires translated stage artifacts");
         }
-        @Override public ShaderReflection reflection() { return reflection; }
-        @Override public ShaderLanguage language() { return ShaderLanguage.SPIRV; }
-        @Override public ProviderId providerId() { return ID; }
-        @Override @SuppressWarnings("unchecked") public <T> T as() { return (T) this; }
-        @Override public boolean isDisposed() { return disposed; }
-        @Override public void dispose() { disposed = true; }
+        @Override
+        public ShaderReflection reflection() { return reflection; }
+        @Override
+        public ShaderLanguage language() { return ShaderLanguage.SPIRV; }
+        @Override
+        public ProviderId providerId() { return ID; }
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> T as() { return (T) this; }
+        @Override
+        public boolean isDisposed() { return disposed; }
+        @Override
+        public void dispose() { disposed = true; }
     }
 
     private static final class VulkanComputePipeline extends VulkanRecordedResource implements ComputePipeline {
@@ -4564,19 +4591,26 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             snapshots.add(snapshot);
             return snapshot;
         }
-        @Override protected void onRetired() {
+        @Override
+        protected void onRetired() {
             for (var snapshot : snapshots) snapshot.retire();
             snapshots.clear();
         }
-        @Override protected void releaseNative(VkDevice device) {
+        @Override
+        protected void releaseNative(VkDevice device) {
             if (pipeline != 0) vkDestroyPipeline(device, pipeline, null);
             if (pipelineLayout != 0) vkDestroyPipelineLayout(device, pipelineLayout, null);
             for (long value : setLayouts) if (value != 0) vkDestroyDescriptorSetLayout(device, value, null);
         }
-        @Override public ProviderId providerId() { return ID; }
-        @Override @SuppressWarnings("unchecked") public <T> T as() { return (T) this; }
-        @Override public boolean isDisposed() { return isRetired(); }
-        @Override public void dispose() { retire(); }
+        @Override
+        public ProviderId providerId() { return ID; }
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> T as() { return (T) this; }
+        @Override
+        public boolean isDisposed() { return isRetired(); }
+        @Override
+        public void dispose() { retire(); }
     }
 
     /** Immutable descriptor snapshots are reused until a bound allocation changes. */
@@ -4668,7 +4702,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
                 }
             }
         }
-        @Override protected void releaseNative(VkDevice device) {
+        @Override
+        protected void releaseNative(VkDevice device) {
             if (pool != 0) vkDestroyDescriptorPool(device, pool, null);
         }
     }
@@ -4693,20 +4728,23 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             context.requireDeviceUsable("record compute commands");
             if (ended) throw new FdxException("Vulkan compute pass has ended");
         }
-        @Override public void setPipeline(ComputePipeline value) {
+        @Override
+        public void setPipeline(ComputePipeline value) {
             requireOpen();
             if (!(value instanceof VulkanComputePipeline candidate) || candidate.context != context || candidate.isDisposed()) {
                 throw new FdxException("Invalid Vulkan compute pipeline or device");
             }
             pipeline = candidate; Arrays.fill(sets, null);
         }
-        @Override public void setResourceSet(ShaderResourceSet value) {
+        @Override
+        public void setResourceSet(ShaderResourceSet value) {
             requireOpen();
             if (pipeline == null || value == null || value.group() >= sets.length
                     || !pipeline.layout.physicalHash().equals(value.layout().physicalHash())) throw new FdxException("Mismatched Vulkan compute resources");
             sets[value.group()] = value;
         }
-        @Override public void dispatch(int x, int y, int z) {
+        @Override
+        public void dispatch(int x, int y, int z) {
             requireOpen(); validateDispatch(x, y, z, context.graphicsDevice.capabilities().limits());
             if (pipeline == null || pipeline.isDisposed()) throw new FdxException("No live Vulkan compute pipeline");
             for (int i = 0; i < pipeline.layout.bindingCount(); i++) {
@@ -4725,16 +4763,21 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             computeMemoryBarrier(context);
             snapshot.transitionImages(VK10.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
-        @Override public void end() { ended = true; pipeline = null; Arrays.fill(sets, null); }
-        @Override public ProviderId providerId() { return ID; }
-        @Override @SuppressWarnings("unchecked") public <T> T as() { return (T) this; }
+        @Override
+        public void end() { ended = true; pipeline = null; Arrays.fill(sets, null); }
+        @Override
+        public ProviderId providerId() { return ID; }
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> T as() { return (T) this; }
     }
 
     private static final class VulkanCommandEncoder implements CommandEncoder {
         private final ArrayList<VulkanComputePass> computePasses = new ArrayList<>();
         private int computePassCount;
 
-        @Override public ComputePass beginComputePass(ComputePassDescriptor descriptor) {
+        @Override
+        public ComputePass beginComputePass(ComputePassDescriptor descriptor) {
             context.requireDeviceUsable("begin a compute pass");
             if (descriptor == null) throw new FdxException("Compute descriptor cannot be null");
             ensurePreviousPassEnded();
@@ -4744,7 +4787,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             return pass;
         }
 
-        @Override public void copyBufferToBuffer(Buffer source, int sourceOffset, Buffer destination, int destinationOffset, int size) {
+        @Override
+        public void copyBufferToBuffer(Buffer source, int sourceOffset, Buffer destination, int destinationOffset, int size) {
             context.requireDeviceUsable("copy buffers"); ensurePreviousPassEnded();
             var from = VulkanResources.requireBuffer(source, context.resourceDomain(), "Copy source");
             var to = VulkanResources.requireBuffer(destination, context.resourceDomain(), "Copy destination");
@@ -6079,11 +6123,14 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
         public TextureView view() {
             return view;
         }
-        @Override public int sampleCount() { return samples; }
+        @Override
+        public int sampleCount() { return samples; }
 
-        @Override public int mipLevelCount() { return views.length; }
+        @Override
+        public int mipLevelCount() { return views.length; }
 
-        @Override public TextureView view(int mipLevel) {
+        @Override
+        public TextureView view(int mipLevel) {
             if (mipLevel < 0 || mipLevel >= views.length) throw new FdxException("Texture mip level outside range");
             return views[mipLevel];
         }
@@ -6319,7 +6366,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
      * @author xpenatan
      */
     private static final class VulkanTextureViewHandle implements TextureView {
-        @Override public int sampleCount() { return texture != null ? texture.sampleCount() : 1; }
+        @Override
+        public int sampleCount() { return texture != null ? texture.sampleCount() : 1; }
         private final VulkanContext context;
         private final VulkanTextureHandle texture;
         private final int mipLevel;

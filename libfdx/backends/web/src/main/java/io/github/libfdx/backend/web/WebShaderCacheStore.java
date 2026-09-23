@@ -32,7 +32,8 @@ public final class WebShaderCacheStore implements ShaderCacheStore, Disposable {
         state = create(databaseName, maxBytes, ShaderArtifactCache.MAX_RECORD_BYTES);
     }
 
-    @Override public FdxFuture<byte[]> readAsync(String key) {
+    @Override
+    public FdxFuture<byte[]> readAsync(String key) {
         requireKey(key);
         FdxFuture<byte[]> result = FdxFuture.pending();
         if (disposed) { result.completeExceptionally(closed()); return result; }
@@ -48,7 +49,8 @@ public final class WebShaderCacheStore implements ShaderCacheStore, Disposable {
         return result;
     }
 
-    @Override public FdxFuture<Void> writeAsync(String key, byte[] bytes) {
+    @Override
+    public FdxFuture<Void> writeAsync(String key, byte[] bytes) {
         requireKey(key);
         if (bytes == null || bytes.length < 1 || bytes.length > ShaderArtifactCache.MAX_RECORD_BYTES) {
             throw new IllegalArgumentException("Shader cache record size is out of bounds");
@@ -59,7 +61,8 @@ public final class WebShaderCacheStore implements ShaderCacheStore, Disposable {
         return operation(1, key, copy);
     }
 
-    @Override public FdxFuture<Void> removeAsync(String key) {
+    @Override
+    public FdxFuture<Void> removeAsync(String key) {
         requireKey(key);
         return operation(2, key, null);
     }
@@ -93,12 +96,14 @@ public final class WebShaderCacheStore implements ShaderCacheStore, Disposable {
         }
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         close(state);
     }
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 
     @JSFunctor
     private interface Completion extends JSObject { void complete(Uint8Array bytes, String error); }

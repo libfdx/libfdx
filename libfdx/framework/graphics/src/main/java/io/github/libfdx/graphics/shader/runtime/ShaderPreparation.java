@@ -465,7 +465,8 @@ public final class ShaderPreparation implements Disposable {
     /** Starts cancellation; call update() until the returned future completes before device teardown. */
     public FdxFuture<Void> disposeAsync() { dispose(); return drained; }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         requireThread();
         if (disposed) return;
         disposed = true;
@@ -479,7 +480,8 @@ public final class ShaderPreparation implements Disposable {
         if (failure != null) throw new FdxException("Shader preparation cancellation failed", failure);
     }
 
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 
     void requireThread() {
         if (Thread.currentThread() != applicationThread) {
@@ -557,8 +559,10 @@ public final class ShaderPreparation implements Disposable {
             return this.provider == provider && this.revision == revision && this.request.equals(request);
         }
 
-        @Override public int hashCode() { return hash; }
-        @Override public boolean equals(Object other) {
+        @Override
+        public int hashCode() { return hash; }
+        @Override
+        public boolean equals(Object other) {
             return other instanceof Key key && matches(key.provider, key.revision, key.request);
         }
     }

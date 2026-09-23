@@ -6,11 +6,16 @@ import org.teavm.jso.JSBody;
 
 /** Observes actual HTTP requests, withholding responses briefly to expose overlap and frame progress. */
 public final class WebConcurrentGltfProbe implements ConcurrentGltfObserver {
-    @Override public void beforeRequests() { install(ConcurrentGltfFixtures.joinedPaths()); }
-    @Override public void modelReady(int index) { checkModel(index); }
-    @Override public void frame(boolean allReady) { checkFrame(allReady); }
-    @Override public void dispose() { restore(); }
-    @Override public void loadingComplete(long assets, long shaders, long render, long gap) {
+    @Override
+    public void beforeRequests() { install(ConcurrentGltfFixtures.joinedPaths()); }
+    @Override
+    public void modelReady(int index) { checkModel(index); }
+    @Override
+    public void frame(boolean allReady) { checkFrame(allReady); }
+    @Override
+    public void dispose() { restore(); }
+    @Override
+    public void loadingComplete(long assets, long shaders, long render, long gap) {
         timings(assets / 1e6, shaders / 1e6, render / 1e6, gap / 1e6);
     }
 

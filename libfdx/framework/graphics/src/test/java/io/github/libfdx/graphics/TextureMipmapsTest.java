@@ -8,7 +8,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class TextureMipmapsTest {
-    @Test void incrementalMipsYieldAndRetainInputRangeAndExactOutput() {
+    @Test
+    void incrementalMipsYieldAndRetainInputRangeAndExactOutput() {
         ByteBuffer input=ByteBuffer.allocate(5*3*4+8);
         input.position(4);
         for(int i=0;i<5*3;i++)input.put((byte)80).put((byte)120).put((byte)160).put((byte)255);
@@ -23,7 +24,8 @@ final class TextureMipmapsTest {
             assertEquals(160,level.get()&255);assertEquals(255,level.get()&255);
         }
     }
-    @Test void oddDimensionsIncludeTheFinalRowAndColumnAndCopyOnlyTheActiveSourceRange() {
+    @Test
+    void oddDimensionsIncludeTheFinalRowAndColumnAndCopyOnlyTheActiveSourceRange() {
         ByteBuffer source = ByteBuffer.allocate(44);
         source.position(4);
         for (int i = 0; i < 9; i++) source.put((byte)(i == 8 ? 255 : 0)).put((byte)0).put((byte)0).put((byte)255);
@@ -40,7 +42,8 @@ final class TextureMipmapsTest {
         assertEquals(5, TextureMipmaps.levelCount(19, 11));
     }
 
-    @Test void srgbAndStraightAlphaUseLinearColorAndCoverageWeights() {
+    @Test
+    void srgbAndStraightAlphaUseLinearColorAndCoverageWeights() {
         ByteBuffer pixels = ByteBuffer.wrap(new byte[] {0,0,0,(byte)255, (byte)255,(byte)255,(byte)255,(byte)255});
         var srgb = TextureMipmaps.rgba8(pixels, 2, 1, true, false);
         assertEquals(188, srgb[1].get(0)&255);
@@ -55,7 +58,8 @@ final class TextureMipmapsTest {
         assertEquals(188, ignoredAlpha[1].get(2)&255);
     }
 
-    @Test void descriptorsGateExactLevelsAndIndependentFiltersBeforeProviderAllocation() {
+    @Test
+    void descriptorsGateExactLevelsAndIndependentFiltersBeforeProviderAllocation() {
         var basic = GraphicsCapabilities.conservativeRender();
         var capable = GraphicsCapabilities.builder().colorFormats(TextureFormat.RGBA8_UNORM)
                 .clipDepthRange(io.github.libfdx.math.ClipDepthRange.ZERO_TO_ONE)
@@ -74,7 +78,8 @@ final class TextureMipmapsTest {
         assertDoesNotThrow(() -> descriptor.validate(basic));
     }
 
-    @Test void fullUploadsRejectMissingLevelsWrongSizesAndIntegerOverflowWithoutMovingBuffers() {
+    @Test
+    void fullUploadsRejectMissingLevelsWrongSizesAndIntegerOverflowWithoutMovingBuffers() {
         Texture texture = new TestTexture(19, 11, 5);
         ByteBuffer[] chain = TextureMipmaps.rgba8(ByteBuffer.allocate(19*11*4), 19, 11, false, false);
         assertDoesNotThrow(() -> TextureUploads.validate(texture, chain));
@@ -97,7 +102,8 @@ final class TextureMipmapsTest {
         public TextureFormat format() { return TextureFormat.RGBA8_UNORM; }
         public TextureUsage usage() { return TextureUsage.SAMPLED; }
         public ProviderId providerId() { return ProviderId.of("test"); }
-        @SuppressWarnings("unchecked") public <T> T as() { return (T)this; }
+        @SuppressWarnings("unchecked")
+        public <T> T as() { return (T)this; }
         public void dispose() { }
         public boolean isDisposed() { return false; }
     }

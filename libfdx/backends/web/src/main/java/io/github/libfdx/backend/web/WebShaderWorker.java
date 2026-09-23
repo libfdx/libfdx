@@ -144,9 +144,14 @@ final class WebShaderWorker {
     @JSBody(params = {"id","source","target","stage","entry","glsl","es"}, script =
             "return {id:id,source:source,target:target,stage:stage,entry:entry,glsl:glsl,es:es};")
     private static native JSObject message(int id, String source, int target, int stage, String entry, String glsl, String es);
-    @JSBody(params = "m", script = "return m.ready === true;") private static native boolean ready(JSObject m);
-    @JSBody(params = "m", script = "return !!m.startupError;") private static native boolean startupError(JSObject m);
-    @JSBody(params = "m", script = "return m.id | 0;") private static native int id(JSObject m);
-    @JSBody(params = "m", script = "return m.error || null;") private static native String error(JSObject m);
-    @JSBody(params = "m", script = "return m.result || null;") private static native String result(JSObject m);
+    @JSBody(params = "m", script = "return m.ready === true;")
+    private static native boolean ready(JSObject m);
+    @JSBody(params = "m", script = "return !!m.startupError;")
+    private static native boolean startupError(JSObject m);
+    @JSBody(params = "m", script = "return m.id | 0;")
+    private static native int id(JSObject m);
+    @JSBody(params = "m", script = "return m.error || null;")
+    private static native String error(JSObject m);
+    @JSBody(params = "m", script = "return m.result || null;")
+    private static native String result(JSObject m);
 }

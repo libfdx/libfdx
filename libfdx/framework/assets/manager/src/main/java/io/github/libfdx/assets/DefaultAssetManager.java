@@ -773,7 +773,8 @@ public final class DefaultAssetManager implements AssetManager {
             managed = true;
         }
 
-        @Override public <T extends Disposable> T preparationResource(Class<T> type, Supplier<? extends T> factory) {
+        @Override
+        public <T extends Disposable> T preparationResource(Class<T> type, Supplier<? extends T> factory) {
             checkPending();
             Objects.requireNonNull(type, "preparation type"); Objects.requireNonNull(factory, "preparation factory");
             if (preparations.containsKey(type)) {
@@ -859,7 +860,8 @@ public final class DefaultAssetManager implements AssetManager {
             return pending.future;
         }
 
-        @Override public FdxFuture<Void> asyncSteps(FdxTask<Boolean> step) {
+        @Override
+        public FdxFuture<Void> asyncSteps(FdxTask<Boolean> step) {
             checkPending();
             if (step == null) throw new FdxException("Preparation step cannot be null");
             if (executor != null) return AssetLoadContext.super.asyncSteps(step);
@@ -890,7 +892,8 @@ public final class DefaultAssetManager implements AssetManager {
             return pending.future;
         }
 
-        @Override public <T> FdxFuture<T> asyncFuture(FdxTask<FdxFuture<T>> task) {
+        @Override
+        public <T> FdxFuture<T> asyncFuture(FdxTask<FdxFuture<T>> task) {
             checkPending();
             if (task == null) { throw new FdxException("Asset preparation task cannot be null"); }
             PreparationTask<T> pending = new PreparationTask<T>(owner, task);
@@ -1135,12 +1138,18 @@ public final class DefaultAssetManager implements AssetManager {
             rethrowCleanup(cleanupFailure);
         }
 
-        @Override public boolean isDisposed() { return released || disposed || scope != null && scope.closed; }
-        @Override public AssetDescriptor<T> descriptor() { return handle.descriptor; }
-        @Override public AssetStatus status() { return isDisposed() ? AssetStatus.UNLOADED : status; }
-        @Override public boolean isLoaded() { return !isDisposed() && status == AssetStatus.LOADED; }
-        @Override public T asset() { return isLoaded() ? handle.asset : null; }
-        @Override public FdxFuture<T> future() { return future; }
+        @Override
+        public boolean isDisposed() { return released || disposed || scope != null && scope.closed; }
+        @Override
+        public AssetDescriptor<T> descriptor() { return handle.descriptor; }
+        @Override
+        public AssetStatus status() { return isDisposed() ? AssetStatus.UNLOADED : status; }
+        @Override
+        public boolean isLoaded() { return !isDisposed() && status == AssetStatus.LOADED; }
+        @Override
+        public T asset() { return isLoaded() ? handle.asset : null; }
+        @Override
+        public FdxFuture<T> future() { return future; }
     }
 
     private final class Handle<T> implements AssetHandle<T> {
@@ -1174,10 +1183,15 @@ public final class DefaultAssetManager implements AssetManager {
             return status == AssetStatus.QUEUED || status == AssetStatus.LOADING;
         }
 
-        @Override public AssetDescriptor<T> descriptor() { return descriptor; }
-        @Override public AssetStatus status() { return status; }
-        @Override public boolean isLoaded() { return status == AssetStatus.LOADED; }
-        @Override public T asset() { return asset; }
-        @Override public FdxFuture<T> future() { return future; }
+        @Override
+        public AssetDescriptor<T> descriptor() { return descriptor; }
+        @Override
+        public AssetStatus status() { return status; }
+        @Override
+        public boolean isLoaded() { return status == AssetStatus.LOADED; }
+        @Override
+        public T asset() { return asset; }
+        @Override
+        public FdxFuture<T> future() { return future; }
     }
 }

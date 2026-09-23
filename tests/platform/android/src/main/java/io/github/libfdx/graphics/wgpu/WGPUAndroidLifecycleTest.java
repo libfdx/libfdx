@@ -55,16 +55,21 @@ public final class WGPUAndroidLifecycleTest extends ApplicationAdapter {
     private int sessions;
     private Session session;
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         session = new Session(fdx, ++sessions);
         System.out.println("[wgpu-android] SESSION_CREATE id=" + sessions + " mode=" + mode
                 + " capabilities=" + session.graphics.device().shaderPreparationCapabilities());
     }
 
-    @Override public void render() { session.render(); }
-    @Override public void pause() { System.out.println("[wgpu-android] PAUSE session=" + sessions); }
-    @Override public void resume() { System.out.println("[wgpu-android] RESUME session=" + sessions); }
-    @Override public void dispose() { session.close(); }
+    @Override
+    public void render() { session.render(); }
+    @Override
+    public void pause() { System.out.println("[wgpu-android] PAUSE session=" + sessions); }
+    @Override
+    public void resume() { System.out.println("[wgpu-android] RESUME session=" + sessions); }
+    @Override
+    public void dispose() { session.close(); }
 
     private final class Session {
         final GraphicsContext graphics;
@@ -292,7 +297,8 @@ public final class WGPUAndroidLifecycleTest extends ApplicationAdapter {
         void waitUntilDrained(Runnable continuation) {
             long expires = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
             owner.post(new Runnable() {
-                @Override public void run() {
+                @Override
+                public void run() {
                     require(System.nanoTime() < expires, "Android jobs failed to drain");
                     for (ShaderPreparationOperation job : held) {
                         if (!job.isDone() && !(loadingOnly && !closed && mode.equals("pause")

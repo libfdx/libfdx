@@ -23,12 +23,15 @@ public final class FileStreamingTest extends GraphicsParityTest {
     /** Owns the optional worker executor, closed after the asset manager. */
     public FileStreamingTest(long frames, AssetExecutor executor) { super(frames); this.executor=executor; }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx,"FileStreamingTest"); owner=Thread.currentThread();
         assets=new DefaultAssetManager(fdx.files(),executor);
         assets.registerLoader(Probe.class,new AssetLoader<Probe>() {
-            @Override public Class<Probe> type() { return Probe.class; }
-            @Override public FdxFuture<Probe> load(AssetLoadContext context,AssetDescriptor<Probe> descriptor) {
+            @Override
+            public Class<Probe> type() { return Probe.class; }
+            @Override
+            public FdxFuture<Probe> load(AssetLoadContext context,AssetDescriptor<Probe> descriptor) {
                 FdxFuture<Probe> result=FdxFuture.pending();
                 FileHandle file=context.files().internal(descriptor.path());
                 context.asyncFuture(() -> file.openRead(4096)).onSuccess(source -> {
@@ -98,7 +101,8 @@ public final class FileStreamingTest extends GraphicsParityTest {
         }).onFailure(result::completeExceptionally);
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         assets.update(2,1_000_000);
         if(assets.lastUpdateTaskCount()>2) { throw new FdxException("Read completion exceeded task budget"); }
         if(lease.future().isFailed()) { lease.future().get(); }
@@ -114,7 +118,8 @@ public final class FileStreamingTest extends GraphicsParityTest {
         }
         graphics.clear(.03f,reported?.5f:.08f,.14f,1); finishFrame();
     }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         boolean failed=lease!=null && lease.future().isFailed();
         dispose(assets); dispose(executor);
         if(failed) { return; } // Preserve the originating read failure during backend shutdown.
@@ -128,7 +133,9 @@ public final class FileStreamingTest extends GraphicsParityTest {
         final byte[] buffer=new byte[4096], cancelBuffer=new byte[32];
         boolean cancelledPending;
         Probe(FileDataSource source) { this.source=source; }
-        @Override public void dispose() { source.dispose(); }
-        @Override public boolean isDisposed() { return source.isDisposed(); }
+        @Override
+        public void dispose() { source.dispose(); }
+        @Override
+        public boolean isDisposed() { return source.isDisposed(); }
     }
 }

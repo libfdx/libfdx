@@ -95,7 +95,8 @@ final class ModelPreparedShaders implements Disposable {
         return result;
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         for (int i = 0; i < entries.length; i++) {
@@ -103,7 +104,8 @@ final class ModelPreparedShaders implements Disposable {
             entries[i] = null;
         }
     }
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 
     private static final class Entry {
         final ShaderProvider provider;

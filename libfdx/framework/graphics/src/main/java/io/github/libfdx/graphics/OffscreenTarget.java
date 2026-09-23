@@ -135,8 +135,10 @@ public final class OffscreenTarget implements Disposable {
     }
     private void ensureOpen() { if (disposed) throw new FdxException("OffscreenTarget disposed"); }
     private void ensureAllocated() { ensureOpen(); if (color == null) throw new FdxException("Resize target before use"); }
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed=true;
         Texture oldColor=color, oldRender=renderColor, oldDepth=depth;

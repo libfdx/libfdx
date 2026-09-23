@@ -8,22 +8,38 @@ package io.github.libfdx.graphics;
  */
 public interface GraphicsFrameMetrics {
     GraphicsFrameMetrics UNAVAILABLE = new GraphicsFrameMetrics() {
-        @Override public boolean available() { return false; }
-        @Override public long frameId() { return -1L; }
-        @Override public int drawCalls() { return 0; }
-        @Override public long submittedVertices() { return 0L; }
-        @Override public long submittedPrimitives() { return 0L; }
-        @Override public int programBinds() { return 0; }
-        @Override public int textureBinds() { return 0; }
-        @Override public int framebufferBinds() { return 0; }
-        @Override public int uniformUpdates() { return 0; }
-        @Override public int bufferUploads() { return 0; }
-        @Override public long bufferUploadBytes() { return 0L; }
-        @Override public int textureUploads() { return 0; }
-        @Override public long textureUploadBytes() { return 0L; }
-        @Override public long gpuFrameId() { return -1L; }
-        @Override public double gpuTimeMillis() { return Double.NaN; }
-        @Override public String renderer() { return "unavailable"; }
+        @Override
+        public boolean available() { return false; }
+        @Override
+        public long frameId() { return -1L; }
+        @Override
+        public int drawCalls() { return 0; }
+        @Override
+        public long submittedVertices() { return 0L; }
+        @Override
+        public long submittedPrimitives() { return 0L; }
+        @Override
+        public int programBinds() { return 0; }
+        @Override
+        public int textureBinds() { return 0; }
+        @Override
+        public int framebufferBinds() { return 0; }
+        @Override
+        public int uniformUpdates() { return 0; }
+        @Override
+        public int bufferUploads() { return 0; }
+        @Override
+        public long bufferUploadBytes() { return 0L; }
+        @Override
+        public int textureUploads() { return 0; }
+        @Override
+        public long textureUploadBytes() { return 0L; }
+        @Override
+        public long gpuFrameId() { return -1L; }
+        @Override
+        public double gpuTimeMillis() { return Double.NaN; }
+        @Override
+        public String renderer() { return "unavailable"; }
     };
 
     boolean available();

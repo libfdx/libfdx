@@ -228,8 +228,10 @@ public final class WebFileSystem implements FileSystem {
         return (T) this;
     }
 
-    @JSFunctor private interface ReadSuccess extends JSObject { void accept(Int8Array bytes); }
-    @JSFunctor private interface ReadFailure extends JSObject { void accept(String error); }
+    @JSFunctor
+    private interface ReadSuccess extends JSObject { void accept(Int8Array bytes); }
+    @JSFunctor
+    private interface ReadFailure extends JSObject { void accept(String error); }
     @JSBody(params = {"path", "ok", "fail"}, script = """
         fetch('assets/' + path).then(function(response) {
             if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -429,7 +431,8 @@ public final class WebFileSystem implements FileSystem {
             return files.readBytes(this);
         }
 
-        @Override public FdxFuture<FileDataSource> openRead(int maxReadBytes) {
+        @Override
+        public FdxFuture<FileDataSource> openRead(int maxReadBytes) {
             return files.openRead(this, maxReadBytes);
         }
 

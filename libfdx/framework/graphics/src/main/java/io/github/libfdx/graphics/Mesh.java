@@ -767,13 +767,15 @@ public final class Mesh implements Disposable {
             return result;
         }
 
-        @Override public void dispose() {
+        @Override
+        public void dispose() {
             if (disposed) return;
             disposed = true;
             if (mesh != null) { Mesh owned = mesh; mesh = null; owned.dispose(); }
         }
 
-        @Override public boolean isDisposed() { return disposed; }
+        @Override
+        public boolean isDisposed() { return disposed; }
     }
     /**
      * Returns the ID.

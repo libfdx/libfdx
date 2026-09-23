@@ -54,8 +54,10 @@ final class GLTextureViewHandle implements TextureView {
         return textureHandle != null ? textureHandle.mipHeight(level) : 0;
     }
 
-    @Override public int mipLevel() { return level; }
-    @Override public int sampleCount() { return textureHandle != null ? textureHandle.sampleCount() : 1; }
+    @Override
+    public int mipLevel() { return level; }
+    @Override
+    public int sampleCount() { return textureHandle != null ? textureHandle.sampleCount() : 1; }
 
     GLResourceDomain resourceDomain() {
         return resourceDomain;

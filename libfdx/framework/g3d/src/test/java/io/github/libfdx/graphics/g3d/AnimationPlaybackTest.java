@@ -26,7 +26,8 @@ final class AnimationPlaybackTest {
                 new AnimationClip.Event(0,"zero"),new AnimationClip.Event(.5f,"middle"),new AnimationClip.Event(1,"end")});
     }
 
-    @Test void crossfadeAdvancesBothClipsAndInterruptedFadePreservesTheVisiblePose() {
+    @Test
+    void crossfadeAdvancesBothClipsAndInterruptedFadePreservesTheVisiblePose() {
         DefaultModelInstance instance=instance();
         AnimationController controller=new AnimationController(instance).play(move("a",0,4),false).time(.5f);
         controller.crossFade(move("b",10,14),false,1);
@@ -49,7 +50,8 @@ final class AnimationPlaybackTest {
         assertEquals(6,y(instance),1e-6);
     }
 
-    @Test void signedAndZeroScaleSurviveTrsSamplingAndQuaternionBlending() {
+    @Test
+    void signedAndZeroScaleSurviveTrsSamplingAndQuaternionBlending() {
         DefaultModelInstance instance=instance();
         var a=AnimationClip.keyframe(0,0,1,0,0,0,0,1,-2,0,3);
         var b=AnimationClip.keyframe(0,0,1,0,0,1,0,0,-4,0,1);
@@ -67,7 +69,8 @@ final class AnimationPlaybackTest {
         assertEquals(91,output[0]); assertEquals(-4,output[9]); assertEquals(0,output[10]); assertEquals(1,output[11]); assertEquals(91,output[13]);
     }
 
-    @Test void firstCrossfadePreservesAnExistingManualPose() {
+    @Test
+    void firstCrossfadePreservesAnExistingManualPose() {
         DefaultModelInstance instance=instance();
         instance.nodeTransform("arm",new Matrix4().setToTranslation(0,8,0));
         AnimationController controller=new AnimationController(instance).crossFade(move("a",10,10),false,1);
@@ -76,12 +79,15 @@ final class AnimationPlaybackTest {
         controller.update(.5f); assertEquals(10,y(instance),1e-5);
     }
 
-    @Test void eventsCrossEveryLoopInOrderAndOverflowLeavesTimeUnchanged() {
+    @Test
+    void eventsCrossEveryLoopInOrderAndOverflowLeavesTimeUnchanged() {
         AnimationController controller=new AnimationController(instance());
         List<String> log=new ArrayList<>();
         controller.listener(new AnimationController.Listener() {
-            @Override public void onEvent(AnimationController c,AnimationClip clip,AnimationClip.Event e) { log.add(e.id()); }
-            @Override public void onLoop(AnimationController c,AnimationClip clip,long loops) { log.add("loops="+loops); }
+            @Override
+            public void onEvent(AnimationController c,AnimationClip clip,AnimationClip.Event e) { log.add(e.id()); }
+            @Override
+            public void onLoop(AnimationController c,AnimationClip clip,long loops) { log.add("loops="+loops); }
         }).maxEventsPerUpdate(5).play(marked(),true);
         assertTrue(log.isEmpty());
         assertThrows(FdxException.class,()->controller.update(2.25f));
@@ -95,12 +101,15 @@ final class AnimationPlaybackTest {
         assertEquals(List.of("middle","end","zero","loops=1"),log);
     }
 
-    @Test void nonloopingCompletionAndCallbackPlaybackChangesDoNotRepeatOldEvents() {
+    @Test
+    void nonloopingCompletionAndCallbackPlaybackChangesDoNotRepeatOldEvents() {
         AnimationController controller=new AnimationController(instance());
         List<String> log=new ArrayList<>();
         controller.listener(new AnimationController.Listener() {
-            @Override public void onEvent(AnimationController c,AnimationClip clip,AnimationClip.Event e) { log.add(e.id()); }
-            @Override public void onComplete(AnimationController c,AnimationClip clip) { log.add("complete"); }
+            @Override
+            public void onEvent(AnimationController c,AnimationClip clip,AnimationClip.Event e) { log.add(e.id()); }
+            @Override
+            public void onComplete(AnimationController c,AnimationClip clip) { log.add("complete"); }
         }).play(marked(),false).update(2).update(2);
         assertEquals(List.of("middle","end","complete"),log); assertTrue(controller.isComplete());
         log.clear();
@@ -115,7 +124,8 @@ final class AnimationPlaybackTest {
         controller.listener(null).update(.25f); assertTrue(controller.isComplete());
     }
 
-    @Test void transitionOnlyEmitsIncomingEventsAndRejectsNonfiniteControlInputs() {
+    @Test
+    void transitionOnlyEmitsIncomingEventsAndRejectsNonfiniteControlInputs() {
         AnimationController controller=new AnimationController(instance());
         List<String> log=new ArrayList<>();
         AnimationClip incoming=new AnimationClip("incoming",1,null,new AnimationClip.Event[] {new AnimationClip.Event(.25f,"new")});
@@ -128,7 +138,8 @@ final class AnimationPlaybackTest {
         assertThrows(FdxException.class,()->new AnimationClip("bad",1,null,new AnimationClip.Event[] {new AnimationClip.Event(2,"late")}));
     }
 
-    @Test void sampledCurveFailurePreservesThePreviousPoseAndPlaybackTime() {
+    @Test
+    void sampledCurveFailurePreservesThePreviousPoseAndPlaybackTime() {
         DefaultModelInstance instance=instance();
         var curve=new AnimationSampler(true,AnimationSampler.Interpolation.CUBICSPLINE,new float[] {0,1},
                 new float[] {0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,0, 0,0,0,-1, 0,0,0,0});
@@ -142,7 +153,8 @@ final class AnimationPlaybackTest {
         assertEquals(.25f,controller.timeSeconds());
     }
 
-    @Test void programmaticMatrixDefaultsRoundTripEveryZeroAndSignedScaleCombination() {
+    @Test
+    void programmaticMatrixDefaultsRoundTripEveryZeroAndSignedScaleCombination() {
         float[] trs=new float[10],scratch=new float[16];
         for (int mask=0;mask<8;mask++) for (int signs=0;signs<8;signs++) {
             float sx=(mask&1)==0 ? 0 : (signs&1)==0 ? 2 : -2;

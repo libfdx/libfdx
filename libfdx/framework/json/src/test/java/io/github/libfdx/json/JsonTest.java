@@ -19,7 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * @author xpenatan
  */
 final class JsonTest {
-    @Test void incrementalReaderYieldsInsideStringsAndNestedContainers() {
+    @Test
+    void incrementalReaderYieldsInsideStringsAndNestedContainers() {
         String text = "{\"long\":\"" + "x".repeat(20000) + "\\uD83D\\uDE00\",\"nested\":[true,null,{\"n\":-1.25e2}]}";
         JsonReader reader = new JsonReader().begin(text);
         int steps = 0;

@@ -190,9 +190,12 @@ final class D3D12Texture extends D3D12Resource implements Texture {
         return stagingMemory.asSlice(0, bytes);
     }
 
-    @Override public int mipLevelCount() { return mipViews.length; }
-    @Override public int sampleCount() { return samples; }
-    @Override public TextureView view(int level) {
+    @Override
+    public int mipLevelCount() { return mipViews.length; }
+    @Override
+    public int sampleCount() { return samples; }
+    @Override
+    public TextureView view(int level) {
         if (level < 0 || level >= mipViews.length) throw new FdxException("Texture mip level outside range");
         return mipViews[level];
     }
@@ -281,7 +284,8 @@ final class D3D12Texture extends D3D12Resource implements Texture {
 }
 
 final class D3D12TextureView implements TextureView {
-    @Override public int sampleCount() { return texture != null ? texture.sampleCount() : 1; }
+    @Override
+    public int sampleCount() { return texture != null ? texture.sampleCount() : 1; }
     private final D3D12Context context;
     private final D3D12Texture texture;
     final int mipLevel;

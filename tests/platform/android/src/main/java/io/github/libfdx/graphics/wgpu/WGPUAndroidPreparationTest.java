@@ -28,7 +28,8 @@ public final class WGPUAndroidPreparationTest extends ApplicationAdapter {
     private long deadline;
     private volatile boolean cancelled;
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         graphics = fdx.graphics().main();
         application = fdx.app();
         WGPUContext context = graphics.as();
@@ -62,7 +63,8 @@ public final class WGPUAndroidPreparationTest extends ApplicationAdapter {
         }
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         require(System.nanoTime() < deadline, "Android binding audit timed out");
         if (failure.get() != null) throw new AssertionError("Android binding worker failed", failure.get());
         var frame = graphics.currentFrame();
@@ -75,7 +77,8 @@ public final class WGPUAndroidPreparationTest extends ApplicationAdapter {
         }
     }
 
-    @Override public void dispose() { cancelled = true; }
+    @Override
+    public void dispose() { cancelled = true; }
 
     private static void require(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);

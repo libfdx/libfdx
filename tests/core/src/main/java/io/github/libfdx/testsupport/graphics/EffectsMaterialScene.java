@@ -83,8 +83,10 @@ public final class EffectsMaterialScene implements Disposable {
         albedo = nextAlbedo; normals = nextNormals;
     }
 
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         try { if (normals != null) normals.dispose(); }

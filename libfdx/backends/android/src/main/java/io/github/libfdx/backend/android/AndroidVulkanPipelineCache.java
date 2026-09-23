@@ -51,17 +51,26 @@ final class AndroidVulkanPipelineCache {
     AndroidVulkanPipelineCache(long context, ShaderArtifactCache artifacts, Consumer<Runnable> execute,
             AndroidVulkanDeviceState state) {
         this(new NativeAccess() {
-            @Override public void requireUsable() { state.requireUsable(); }
-            @Override public void observe(Throwable failure) { state.observe(failure); }
-            @Override public byte[] identity() { return AndroidVulkanNative.pipelineCacheIdentity(context); }
-            @Override public int initialize(byte[] bytes) { return AndroidVulkanNative.initializePipelineCache(context, bytes); }
-            @Override public byte[] snapshot() { return AndroidVulkanNative.snapshotPipelineCache(context); }
-            @Override public long[] statistics() { return AndroidVulkanNative.pipelineCacheStatistics(context); }
-            @Override public byte[] merge(byte[] current, byte[] incoming) {
+            @Override
+            public void requireUsable() { state.requireUsable(); }
+            @Override
+            public void observe(Throwable failure) { state.observe(failure); }
+            @Override
+            public byte[] identity() { return AndroidVulkanNative.pipelineCacheIdentity(context); }
+            @Override
+            public int initialize(byte[] bytes) { return AndroidVulkanNative.initializePipelineCache(context, bytes); }
+            @Override
+            public byte[] snapshot() { return AndroidVulkanNative.snapshotPipelineCache(context); }
+            @Override
+            public long[] statistics() { return AndroidVulkanNative.pipelineCacheStatistics(context); }
+            @Override
+            public byte[] merge(byte[] current, byte[] incoming) {
                 return AndroidVulkanNative.mergePipelineCaches(context, current, incoming);
             }
-            @Override public void retain() { AndroidVulkanNative.retainPreparationDevice(context); }
-            @Override public void release() { AndroidVulkanNative.releasePreparationDevice(context); }
+            @Override
+            public void retain() { AndroidVulkanNative.retainPreparationDevice(context); }
+            @Override
+            public void release() { AndroidVulkanNative.releasePreparationDevice(context); }
         }, artifacts, execute);
     }
 

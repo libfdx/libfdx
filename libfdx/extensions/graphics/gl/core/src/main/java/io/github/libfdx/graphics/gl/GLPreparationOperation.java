@@ -110,7 +110,8 @@ final class GLPreparationOperation implements ShaderPreparationOperation {
         if (cancelled) throw new CancellationException("GL source preparation cancelled");
     }
 
-    @Override public void advanceLoading() {
+    @Override
+    public void advanceLoading() {
         if (attachment.detectContextLoss()) close(true);
         if (done) return;
         long budget = gl.shaderLoadingBudgetNanos();
@@ -126,7 +127,8 @@ final class GLPreparationOperation implements ShaderPreparationOperation {
         if (!advance(true) && sourceDone && !driverPolling()) advance(true);
     }
 
-    @Override public boolean isDone() { return advance(false); }
+    @Override
+    public boolean isDone() { return advance(false); }
 
     private boolean driverPolling() {
         return device.shaderPreparationCapabilities().nativeExecution() == ShaderPreparationCapabilities.Execution.DRIVER_POLLING;
@@ -193,12 +195,14 @@ final class GLPreparationOperation implements ShaderPreparationOperation {
                     result = new ShaderPreparedResult(ResolvedShaderPass.of(request.passId(), pipeline,
                             bindings.layout(), request.providerRevision()), new Disposable() {
                         private boolean disposed;
-                        @Override public void dispose() {
+                        @Override
+                        public void dispose() {
                             if (disposed) return;
                             disposed = true;
                             try { pipeline.dispose(); } finally { module.dispose(); }
                         }
-                        @Override public boolean isDisposed() { return disposed; }
+                        @Override
+                        public boolean isDisposed() { return disposed; }
                     });
                 } catch (Throwable error) { pipeline.dispose(); throw error; }
             } catch (Throwable error) { module.dispose(); throw error; }
@@ -242,9 +246,12 @@ final class GLPreparationOperation implements ShaderPreparationOperation {
         finally { try { if (oldVertex != 0) gl.deleteShader(oldVertex); }
             finally { if (oldFragment != 0) gl.deleteShader(oldFragment); } }
     }
-    @Override public ShaderPreparationPhase phase() { return trace.phase(); }
-    @Override public ShaderPreparationTrace trace() { return trace; }
-    @Override public ShaderPreparedResult finish() {
+    @Override
+    public ShaderPreparationPhase phase() { return trace.phase(); }
+    @Override
+    public ShaderPreparationTrace trace() { return trace; }
+    @Override
+    public ShaderPreparedResult finish() {
         if (!done || finished) throw new FdxException("GL preparation cannot be published now");
         if (attachment.detectContextLoss()) close(true);
         finished = true;
@@ -255,7 +262,8 @@ final class GLPreparationOperation implements ShaderPreparationOperation {
         ShaderPreparedResult transfer = result; result = null;
         device.preparationFinished(this); return transfer;
     }
-    @Override public void cancel() {
+    @Override
+    public void cancel() {
         cancelled = true;
         if (sourceOnOwner) {
             synchronized (loadingWork) { loadingWork.clear(); }
@@ -266,10 +274,12 @@ final class GLPreparationOperation implements ShaderPreparationOperation {
         if (result != null) { result.dispose(); result = null; }
     }
     void close(boolean contextLost) { lost |= contextLost; cancel(); }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) return;
         if (!sourceDone) throw new FdxException("GL source preparation has not drained");
         disposed = true; cancel(); device.preparationFinished(this);
     }
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 }

@@ -39,7 +39,9 @@ public final class SpriteAtlas implements Disposable {
     public AtlasRegion region(int index) { check(); return regions[index]; }
     /** Borrowed view, or null if absent. Cache the view outside rendering loops. */
     public AtlasRegion find(String name) { check(); int i=data.indexOf(name); return i<0 ? null : regions[i]; }
-    @Override public void dispose() { disposed=true; }
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() { disposed=true; }
+    @Override
+    public boolean isDisposed() { return disposed; }
     void check() { if(disposed) throw new FdxException("SpriteAtlas is disposed"); }
 }

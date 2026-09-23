@@ -186,8 +186,10 @@ public final class PostProcessor implements Disposable {
     private void ensureOpen(){if(disposed)throw new FdxException("PostProcessor disposed");}
     private void ensureSized(){ensureOpen();if(targets==null)throw new FdxException("Resize PostProcessor before use");}
     private void ensureProcessed(){ensureSized();if(!processed)throw new FdxException("Process a scene after creation or resize before reading the output");}
-    @Override public boolean isDisposed(){return disposed;}
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed(){return disposed;}
+    @Override
+    public void dispose() {
         if(disposed)return;disposed=true;processed=false;
         Throwable failure=FullScreenEffect.close(targets,null);targets=null;
         failure=FullScreenEffect.close(presentation,failure);failure=FullScreenEffect.close(edge,failure);
@@ -220,8 +222,10 @@ public final class PostProcessor implements Disposable {
         }
         long estimatedBytes(){return output.estimatedBytes()+(toned==null?0:toned.estimatedBytes())
                 +(bloomA==null?0:bloomA.estimatedBytes()+bloomB.estimatedBytes());}
-        @Override public boolean isDisposed(){return disposed;}
-        @Override public void dispose() {
+        @Override
+        public boolean isDisposed(){return disposed;}
+        @Override
+        public void dispose() {
             if(disposed)return;disposed=true;
             Throwable failure=FullScreenEffect.close(output,null);failure=FullScreenEffect.close(toned,failure);
             failure=FullScreenEffect.close(bloomA,failure);failure=FullScreenEffect.close(bloomB,failure);

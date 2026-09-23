@@ -61,12 +61,14 @@ final class AndroidGraphicsStartupPreferences implements AndroidGraphicsStartupR
         return false;
     }
 
-    @Override public AndroidGraphicsStartupRecovery.State read() {
+    @Override
+    public AndroidGraphicsStartupRecovery.State read() {
         return new AndroidGraphicsStartupRecovery.State(preferences.getInt("selected", 0),
                 preferences.getInt("pending", -1), preferences.getInt("pid", 0), preferences.getLong("started", 0));
     }
 
-    @Override public void write(AndroidGraphicsStartupRecovery.State state) {
+    @Override
+    public void write(AndroidGraphicsStartupRecovery.State state) {
         requireCommit(preferences.edit().putInt("selected", state.selected()).putInt("pending", state.pending())
                 .putInt("pid", state.pid()).putLong("started", state.started()).commit());
     }

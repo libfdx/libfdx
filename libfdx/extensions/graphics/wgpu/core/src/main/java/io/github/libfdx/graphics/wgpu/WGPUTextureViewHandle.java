@@ -55,7 +55,8 @@ final class WGPUTextureViewHandle implements TextureView {
         return textureHandle != null ? textureHandle.mipHeight(level) : 0;
     }
 
-    @Override public int mipLevel() { return level; }
+    @Override
+    public int mipLevel() { return level; }
 
     WGPUResourceDomain resourceDomain() {
         return resourceDomain;

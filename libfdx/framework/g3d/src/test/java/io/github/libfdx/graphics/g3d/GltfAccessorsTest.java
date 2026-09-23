@@ -7,7 +7,8 @@ import java.nio.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class GltfAccessorsTest {
-    @Test void cooperativeDecodingDefersLateInvalidComponentsAndNormalValidation() {
+    @Test
+    void cooperativeDecodingDefersLateInvalidComponentsAndNormalValidation() {
         byte[] bytes = new byte[36];
         ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
         buffer.putFloat(0, 1).putFloat(16, 1).putFloat(32, 2);
@@ -27,7 +28,8 @@ final class GltfAccessorsTest {
         assertThrows(FdxException.class, () -> invalid.prepareStep(0, "POSITION", 0));
     }
 
-    @Test void cooperativeSparseAndWeightPreparationPreservesResults() {
+    @Test
+    void cooperativeSparseAndWeightPreparationPreservesResults() {
         byte[] bytes = new byte[36];
         ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
                 .putFloat(4, 2).putFloat(8, 2).putFloat(20, 1).putFloat(24, 3);
@@ -45,7 +47,8 @@ final class GltfAccessorsTest {
         assertTrue(reader.prepareStep(0,"WEIGHTS_0",1));
     }
 
-    @Test void finalMatrixColumnMayOmitTrailingPaddingInDenseAndSparseViews() {
+    @Test
+    void finalMatrixColumnMayOmitTrailingPaddingInDenseAndSparseViews() {
         byte[] bytes = {1,2,3,0, 4,5,6,0, 7,8,9,0, 9,8,7,0, 6,5,4,0, 3,2,1,0, 0,1};
         var accessor = JsonValue.object().put("bufferView",0).put("count",2).put("componentType",5121).put("type","MAT3");
         var root = root(bytes.length,accessor,view(0,23),view(24,2));
@@ -59,7 +62,8 @@ final class GltfAccessorsTest {
         root.require("bufferViews").require(0).put("byteLength",22);
         assertThrows(FdxException.class,()->new GltfAccessors(root,new byte[][]{bytes}).floats(0,9));
     }
-    @Test void sparseReplacementsSupportZeroAndStridedBasesWithoutChangingSourceBytes() {
+    @Test
+    void sparseReplacementsSupportZeroAndStridedBasesWithoutChangingSourceBytes() {
         byte[] bytes=new byte[64];ByteBuffer buffer=ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
         buffer.putFloat(0,1).putFloat(4,2).putFloat(16,3).putFloat(20,4).putFloat(32,5).putFloat(36,6);
         bytes[48]=1;buffer.putFloat(52,9).putFloat(56,10);
@@ -72,7 +76,8 @@ final class GltfAccessorsTest {
         accessor.put("bufferView",0);reader=new GltfAccessors(root,new byte[][]{bytes});
         assertArrayEquals(new float[]{1,2,9,10,5,6},reader.floats(0,2));assertEquals(3,buffer.getFloat(16));
     }
-    @Test void normalizedValuesAndPaddedMatrixColumnsAreDecodedPrecisely() {
+    @Test
+    void normalizedValuesAndPaddedMatrixColumnsAreDecodedPrecisely() {
         byte[] data={0,127,(byte)128,(byte)255,1,2,3,99,4,5,6,99,7,8,9,99};
         JsonValue normalized=JsonValue.object().put("bufferView",0).put("count",1).put("componentType",5120).put("type","VEC4").put("normalized",true);
         JsonValue matrix=JsonValue.object().put("bufferView",1).put("count",1).put("componentType",5121).put("type","MAT3");
@@ -82,7 +87,8 @@ final class GltfAccessorsTest {
         assertArrayEquals(new float[]{1,2,3,4,5,6,7,8,9},reader.floats(1,9));
         matrix.put("byteOffset",1);assertThrows(FdxException.class,()->new GltfAccessors(root,new byte[][]{data}).floats(1,9));
     }
-    @Test void rangesOverflowStrideCountsNormalizationAndSparseOrderFailBeforeDecoding() {
+    @Test
+    void rangesOverflowStrideCountsNormalizationAndSparseOrderFailBeforeDecoding() {
         byte[] bytes=new byte[32];
         JsonValue accessor=JsonValue.object().put("bufferView",0).put("count",2).put("componentType",5126).put("type","VEC3");
         JsonValue root=root(32,accessor,view(0,24));
@@ -108,7 +114,8 @@ final class GltfAccessorsTest {
         bytes[1]=2;sparse.put("count",4);assertFailure(root,bytes,"sparse count");
         sparse.put("count",2);root.require("bufferViews").require(0).put("byteStride",4);assertFailure(root,bytes,"byteStride");
     }
-    @Test void unsignedIndicesAreCheckedAndNonfiniteFloatDataIsRejected() {
+    @Test
+    void unsignedIndicesAreCheckedAndNonfiniteFloatDataIsRejected() {
         byte[] bytes={0,0,0,(byte)128};
         JsonValue accessor=JsonValue.object().put("bufferView",0).put("count",1).put("componentType",5125).put("type","SCALAR");
         JsonValue root=root(4,accessor,view(0,4));

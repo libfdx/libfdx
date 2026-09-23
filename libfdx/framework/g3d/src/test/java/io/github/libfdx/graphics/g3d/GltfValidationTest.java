@@ -11,7 +11,8 @@ final class GltfValidationTest {
         return new JsonReader().parse("{\"asset\":{\"version\":\"2.0\"}," + fields + "}");
     }
 
-    @Test void rejectsInvalidForestsAndSceneReferencesWithoutRecursion() {
+    @Test
+    void rejectsInvalidForestsAndSceneReferencesWithoutRecursion() {
         String[] invalid = {
                 "\"nodes\":[{\"children\":[0]}]",
                 "\"nodes\":[{\"children\":[1]},{\"children\":[0]}]",
@@ -41,7 +42,8 @@ final class GltfValidationTest {
         assertThrows(FdxException.class, () -> GltfValidation.document(deep));
     }
 
-    @Test void validatesSkinCommonRootSkeletonAndSelectedSceneMembership() {
+    @Test
+    void validatesSkinCommonRootSkeletonAndSelectedSceneMembership() {
         String[] invalid = {
                 "\"nodes\":[{}],\"skins\":[{\"joints\":[]}]",
                 "\"nodes\":[{},{}],\"skins\":[{\"joints\":[0,0]}]",
@@ -57,7 +59,8 @@ final class GltfValidationTest {
                 + "\"skins\":[{\"joints\":[2],\"skeleton\":1}],\"scenes\":[{\"nodes\":[0,1]}]")));
     }
 
-    @Test void validatesTransformShapeNumbersAndTrsDecomposability() {
+    @Test
+    void validatesTransformShapeNumbersAndTrsDecomposability() {
         String[] invalid = {
                 "\"translation\":[1,2]", "\"translation\":[1,2,1e80]", "\"scale\":[1,1,\"1\"]",
                 "\"rotation\":[0,0,0,0]", "\"matrix\":[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,2]",

@@ -17,7 +17,8 @@ import static io.github.libfdx.graphics.shader.runtime.ShaderPreparationCapabili
 import static org.junit.jupiter.api.Assertions.*;
 
 class SpritePreparationTest {
-    @Test void capturedBuiltInSpriteRecipeReplaysWithoutCompilingUnusedGeometryPaths() {
+    @Test
+    void capturedBuiltInSpriteRecipeReplaysWithoutCompilingUnusedGeometryPaths() {
         Fixture cold = new Fixture(false);
         var capture = cold.service.captureRuntime("sprites");
         SpriteBatch first = cold.batch();
@@ -53,7 +54,8 @@ class SpritePreparationTest {
                                     .visibility(ShaderStageVisibility.FRAGMENT).access(ShaderResourceAccess.NONE)
                                     .samplerKind(ShaderSamplerKind.UNKNOWN_FILTERING).build()).build());
 
-    @Test void constructionAndPendingDrawingNeverCompileOrUploadSprites() {
+    @Test
+    void constructionAndPendingDrawingNeverCompileOrUploadSprites() {
         Fixture f = new Fixture(false);
         SpriteBatch batch = f.batch();
         assertEquals(0, f.jobs.size());
@@ -72,7 +74,8 @@ class SpritePreparationTest {
         batch.dispose(); f.close();
     }
 
-    @Test void preloadPinsExactEntriesAcrossBatchConstructionAndSizedPasses() {
+    @Test
+    void preloadPinsExactEntriesAcrossBatchConstructionAndSizedPasses() {
         Fixture f = new Fixture(true);
         var scope = f.service.createScope("HUD");
         f.plan.include(scope, TARGET);
@@ -93,7 +96,8 @@ class SpritePreparationTest {
         assertTrue(f.jobs.stream().allMatch(job -> job.released));
     }
 
-    @Test void failedWhitePathDoesNotBlockColorAndDoesNotRetryEachFrame() {
+    @Test
+    void failedWhitePathDoesNotBlockColorAndDoesNotRetryEachFrame() {
         Fixture f = new Fixture(false);
         SpriteBatch batch = f.batch();
         f.draw(batch, 1);
@@ -117,7 +121,8 @@ class SpritePreparationTest {
         batch.dispose(); f.close();
     }
 
-    @Test void compactPendingRangeCountsLogicalSpritesAndAccumulatesAcrossBegins() {
+    @Test
+    void compactPendingRangeCountsLogicalSpritesAndAccumulatesAcrossBegins() {
         Fixture f = new Fixture(true);
         SpriteBatch batch = f.batch();
         TextureRegion region = new TextureRegion(f.texture);
@@ -201,9 +206,12 @@ class SpritePreparationTest {
         final ShaderPipelineRequest packet;
         boolean done, failed, disposed, released;
         Job(ShaderPipelineRequest packet) { this.packet = packet; }
-        @Override public boolean isDone() { return done; }
-        @Override public ShaderPreparationPhase phase() { return ShaderPreparationPhase.COMPILATION; }
-        @Override public ShaderPreparedResult finish() {
+        @Override
+        public boolean isDone() { return done; }
+        @Override
+        public ShaderPreparationPhase phase() { return ShaderPreparationPhase.COMPILATION; }
+        @Override
+        public ShaderPreparedResult finish() {
             assertTrue(done);
             if (failed) throw new IllegalStateException("invalid source");
             RenderPipeline pipeline = proxy(RenderPipeline.class, (p, m, a) -> switch (m.getName()) {
@@ -214,9 +222,12 @@ class SpritePreparationTest {
             });
             return new ShaderPreparedResult(ResolvedShaderPass.of(packet.passId(), pipeline, RESOURCES, packet.providerRevision()), pipeline);
         }
-        @Override public void cancel() { }
-        @Override public void dispose() { assertTrue(done); disposed = true; }
-        @Override public boolean isDisposed() { return disposed; }
+        @Override
+        public void cancel() { }
+        @Override
+        public void dispose() { assertTrue(done); disposed = true; }
+        @Override
+        public boolean isDisposed() { return disposed; }
     }
 
     static <T> T proxy(Class<T> type, InvocationHandler handler) {

@@ -37,7 +37,8 @@ import static io.github.libfdx.graphics.shader.runtime.ShaderPreparationCapabili
 import static org.junit.jupiter.api.Assertions.*;
 
 class ModelPreparationTest {
-    @Test void opaqueMaterialIsUnsupportedInBothPreloadAndRuntimeCaptureWithoutCallingIt() {
+    @Test
+    void opaqueMaterialIsUnsupportedInBothPreloadAndRuntimeCaptureWithoutCallingIt() {
         Fixture f = new Fixture();
         f.renderable.material().shaderProvider((renderable, context) -> { throw new AssertionError("Opaque shader callback invoked"); });
         var scope = f.service.createScope("opaque");
@@ -58,7 +59,8 @@ class ModelPreparationTest {
         batch.dispose(); scope.dispose(); f.close();
     }
 
-    @Test void opaqueBatchRendererProducesAnUnsupportedCaptureInsteadOfCompilingTheDefault() {
+    @Test
+    void opaqueBatchRendererProducesAnUnsupportedCaptureInsteadOfCompilingTheDefault() {
         Fixture f = new Fixture();
         var capture = f.service.captureRuntime("opaque batch");
         ModelBatch batch = new ModelBatch(f.graphics, new ModelBatchConfig().preparation(f.service)
@@ -71,7 +73,8 @@ class ModelPreparationTest {
         batch.dispose(); f.close();
     }
 
-    @Test void opaqueMaterialTransitionHidesEveryRequiredPassAndRestoringDefinitionsReusesReadyWork() {
+    @Test
+    void opaqueMaterialTransitionHidesEveryRequiredPassAndRestoringDefinitionsReusesReadyWork() {
         Fixture f = new Fixture();
         var group = new ModelShaderGroup(f.service, f.plan).include(f.renderable,
                 new ShaderPassId[] {ShaderPassId.FORWARD, ShaderPassId.SHADOW}, new RenderTargetLayout[] {TARGET, TARGET});
@@ -94,7 +97,8 @@ class ModelPreparationTest {
         batch.dispose(); group.dispose(); f.close();
     }
 
-    @Test void explicitPbrRendererExposesItsSharedPlanAndConsumesItsPreloadedMaterialPass() {
+    @Test
+    void explicitPbrRendererExposesItsSharedPlanAndConsumesItsPreloadedMaterialPass() {
         Fixture f = new Fixture();
         PbrShaderProvider renderer = new PbrShaderProvider(f.graphics, new PbrShaderConfig().shaderPlan(f.plan));
         assertSame(f.plan, renderer.preparationPlan());
@@ -108,7 +112,8 @@ class ModelPreparationTest {
         batch.dispose(); renderer.dispose(); scope.dispose(); f.close();
     }
 
-    @Test void independentShadowProviderMustBeReadyBeforeEitherPassCanDraw() {
+    @Test
+    void independentShadowProviderMustBeReadyBeforeEitherPassCanDraw() {
         Fixture f = new Fixture();
         MutableProvider shadowProvider = new MutableProvider(f.device);
         ModelShaderPlan shadowPlan = new ModelShaderPlan(f.graphics, shadowProvider);
@@ -130,7 +135,8 @@ class ModelPreparationTest {
         group.dispose(); shadowPlan.dispose(); f.close();
     }
 
-    @Test void shadowRevisionChangeDefersBothPassesUntilItsReplacementIsPublished() {
+    @Test
+    void shadowRevisionChangeDefersBothPassesUntilItsReplacementIsPublished() {
         Fixture f = new Fixture();
         MutableProvider shadowProvider = new MutableProvider(f.device);
         ModelShaderPlan shadowPlan = new ModelShaderPlan(f.graphics, shadowProvider);
@@ -157,7 +163,8 @@ class ModelPreparationTest {
         group.dispose(); shadowPlan.dispose(); f.close();
     }
 
-    @Test void unknownRevisionCompatibilitySkipsUntilReplacementIsReady() {
+    @Test
+    void unknownRevisionCompatibilitySkipsUntilReplacementIsReady() {
         Fixture f = new Fixture();
         MutableProvider provider = new MutableProvider(f.device);
         ModelShaderPlan plan = new ModelShaderPlan(f.graphics, provider);
@@ -173,7 +180,8 @@ class ModelPreparationTest {
         cache.dispose(); plan.dispose(); f.close();
     }
 
-    @Test void explicitlyCompatibleRevisionKeepsReadyRenderingWhenReplacementFails() {
+    @Test
+    void explicitlyCompatibleRevisionKeepsReadyRenderingWhenReplacementFails() {
         Fixture f = new Fixture();
         MutableProvider provider = new MutableProvider(f.device); provider.compatible = true;
         ModelShaderPlan plan = new ModelShaderPlan(f.graphics, provider);
@@ -195,22 +203,29 @@ class ModelPreparationTest {
         boolean compatible;
         ShaderPassId incompatiblePass;
         MutableProvider(GraphicsDevice device) { this.device = device; }
-        @Override public GraphicsDevice preparationDevice() { return device; }
-        @Override public boolean supportsPassResolution() { return true; }
-        @Override public boolean supports(ShaderRequest request) { return true; }
-        @Override public long revision() { return revision; }
-        @Override public boolean canRenderPreparedRevision(ShaderRequest request, ResolvedShaderPass previous) {
+        @Override
+        public GraphicsDevice preparationDevice() { return device; }
+        @Override
+        public boolean supportsPassResolution() { return true; }
+        @Override
+        public boolean supports(ShaderRequest request) { return true; }
+        @Override
+        public long revision() { return revision; }
+        @Override
+        public boolean canRenderPreparedRevision(ShaderRequest request, ResolvedShaderPass previous) {
             return (compatible && !request.passId().equals(incompatiblePass))
                     || ShaderProvider.super.canRenderPreparedRevision(request, previous);
         }
-        @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+        @Override
+        public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
             return device.prepareRenderPipeline(new ShaderPipelineRequest(ShaderModuleDescriptor.wgsl("fake", "fake"),
                     new RenderPipelineDescriptor().vertexLayouts(request.vertexLayouts()).primitiveTopology(request.topology())
                             .renderTargetLayout(request.renderPass().targetLayout()), request.passId(), revision));
         }
     }
 
-    @Test void oneIncompatiblePassDiscardsTheWholeOldRevisionGroup() {
+    @Test
+    void oneIncompatiblePassDiscardsTheWholeOldRevisionGroup() {
         Fixture f = new Fixture();
         MutableProvider provider = new MutableProvider(f.device); provider.compatible = true;
         ModelShaderPlan plan = new ModelShaderPlan(f.graphics, provider);
@@ -227,7 +242,8 @@ class ModelPreparationTest {
         group.dispose(); plan.dispose(); f.close();
     }
 
-    @Test void surfacePreloadIncludesTheDepthLayoutUsedByModelBatch() {
+    @Test
+    void surfacePreloadIncludesTheDepthLayoutUsedByModelBatch() {
         Fixture f = new Fixture();
         TextureView color = proxy(TextureView.class, (p, m, a) -> switch (m.getName()) {
             case "format" -> TextureFormat.RGBA8_UNORM;
@@ -247,7 +263,8 @@ class ModelPreparationTest {
         assertTrue(f.jobs.isEmpty());
         f.close();
     }
-    @Test void modelRecipeFromActualDrawReplaysAgainstAFreshPlan() {
+    @Test
+    void modelRecipeFromActualDrawReplaysAgainstAFreshPlan() {
         Fixture cold = new Fixture();
         var capture = cold.service.captureRuntime("models");
         ModelBatch first = cold.batch(null); cold.draw(first, ShaderPassId.FORWARD);
@@ -273,7 +290,8 @@ class ModelPreparationTest {
                     .entryPoints(ShaderEntryPoint.builder("vertexMain", ShaderStage.VERTEX).build(),
                             ShaderEntryPoint.builder("fragmentMain", ShaderStage.FRAGMENT).build()).build());
 
-    @Test void asyncBatchQueuesOnceSkipsPendingThenDrawsWithoutAnotherRequest() {
+    @Test
+    void asyncBatchQueuesOnceSkipsPendingThenDrawsWithoutAnotherRequest() {
         Fixture f = new Fixture();
         ModelBatch batch = f.batch(null);
         assertTrue(f.jobs.isEmpty());
@@ -292,7 +310,8 @@ class ModelPreparationTest {
         batch.dispose(); f.close();
     }
 
-    @Test void modelsSharingOnePipelineRetainTheirOwnLabelsInTheCapture() {
+    @Test
+    void modelsSharingOnePipelineRetainTheirOwnLabelsInTheCapture() {
         Fixture f = new Fixture();
         var capture = f.service.captureRuntime("models");
         ModelBatch batch = f.batch(null);
@@ -310,7 +329,8 @@ class ModelPreparationTest {
         batch.dispose(); otherMesh.dispose(); f.close();
     }
 
-    @Test void preloadSurvivesBatchConstructionWithoutAnotherPreparation() {
+    @Test
+    void preloadSurvivesBatchConstructionWithoutAnotherPreparation() {
         Fixture f = new Fixture();
         var scope = f.service.createScope("level");
         f.plan.include(scope, f.renderable, ShaderPassId.FORWARD, TARGET);
@@ -324,7 +344,8 @@ class ModelPreparationTest {
         batch.dispose(); scope.dispose(); f.close();
     }
 
-    @Test void groupKeepsShadowAndForwardHiddenUntilBothAreReadyAtFrameBoundary() {
+    @Test
+    void groupKeepsShadowAndForwardHiddenUntilBothAreReadyAtFrameBoundary() {
         Fixture f = new Fixture();
         ModelShaderGroup group = new ModelShaderGroup(f.service, f.plan).include(f.renderable,
                 new ShaderPassId[] {ShaderPassId.SHADOW, ShaderPassId.FORWARD}, new RenderTargetLayout[] {TARGET, TARGET});
@@ -346,7 +367,8 @@ class ModelPreparationTest {
         batch.dispose(); group.dispose(); f.close();
     }
 
-    @Test void oneFailedRequiredPassKeepsItsWholeGroupHiddenAndDoesNotRetry() {
+    @Test
+    void oneFailedRequiredPassKeepsItsWholeGroupHiddenAndDoesNotRetry() {
         Fixture f = new Fixture();
         ModelShaderGroup group = new ModelShaderGroup(f.service, f.plan).include(f.renderable,
                 new ShaderPassId[] {ShaderPassId.SHADOW, ShaderPassId.FORWARD}, new RenderTargetLayout[] {TARGET, TARGET});
@@ -427,9 +449,12 @@ class ModelPreparationTest {
         final ShaderPipelineRequest packet;
         boolean done, failed, disposed, released;
         Job(ShaderPipelineRequest packet) { this.packet = packet; }
-        @Override public boolean isDone() { return done; }
-        @Override public ShaderPreparationPhase phase() { return ShaderPreparationPhase.COMPILATION; }
-        @Override public ShaderPreparedResult finish() {
+        @Override
+        public boolean isDone() { return done; }
+        @Override
+        public ShaderPreparationPhase phase() { return ShaderPreparationPhase.COMPILATION; }
+        @Override
+        public ShaderPreparedResult finish() {
             assertTrue(done);
             if (failed) throw new IllegalStateException("invalid source");
             RenderPipeline pipeline = proxy(RenderPipeline.class, (p, m, a) -> switch (m.getName()) {
@@ -440,9 +465,12 @@ class ModelPreparationTest {
             });
             return new ShaderPreparedResult(ResolvedShaderPass.of(packet.passId(), pipeline, RESOURCES, packet.providerRevision()), pipeline);
         }
-        @Override public void cancel() { }
-        @Override public void dispose() { assertTrue(done); disposed = true; }
-        @Override public boolean isDisposed() { return disposed; }
+        @Override
+        public void cancel() { }
+        @Override
+        public void dispose() { assertTrue(done); disposed = true; }
+        @Override
+        public boolean isDisposed() { return disposed; }
     }
     static <T> T proxy(Class<T> type, InvocationHandler handler) {
         return type.cast(Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] {type}, handler));

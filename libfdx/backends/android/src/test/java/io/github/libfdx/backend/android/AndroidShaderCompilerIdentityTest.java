@@ -9,7 +9,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AndroidShaderCompilerIdentityTest {
-    @Test void extractedAndApkResidentLibrariesShareOnlyTheirExactBinaryIdentity() throws Exception {
+    @Test
+    void extractedAndApkResidentLibrariesShareOnlyTheirExactBinaryIdentity() throws Exception {
         Path build = Paths.get("build").toAbsolutePath();
         Files.createDirectories(build);
         Path directory = Files.createTempDirectory(build, "android-compiler-identity-");

@@ -67,8 +67,10 @@ public final class AtmosphericMist2D implements Disposable {
         overlay.end();
     }
 
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         overlay.dispose(); texture.dispose();

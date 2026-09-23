@@ -50,7 +50,8 @@ abstract class WGPUWorkerPreparation extends WGPUPreparation {
     private final Set<Job> jobs = ConcurrentHashMap.newKeySet();
     private volatile boolean closed;
 
-    @Override void initialize(WGPUContext context, int workers) {
+    @Override
+    void initialize(WGPUContext context, int workers) {
         initialize(context, workers, false);
     }
 
@@ -74,9 +75,11 @@ abstract class WGPUWorkerPreparation extends WGPUPreparation {
                 cache != null && cache.enabled(), false);
     }
 
-    @Override ShaderPreparationCapabilities capabilities() { return capabilities; }
+    @Override
+    ShaderPreparationCapabilities capabilities() { return capabilities; }
 
-    @Override ShaderPreparationOperation submit(ShaderPipelineRequest request) {
+    @Override
+    ShaderPreparationOperation submit(ShaderPipelineRequest request) {
         requireOwner();
         context.requireDeviceUsable("prepare a render pipeline");
         if (closed) throw new FdxException("WGPU preparation is closed");
@@ -111,7 +114,8 @@ abstract class WGPUWorkerPreparation extends WGPUPreparation {
         return job;
     }
 
-    @Override public void close() {
+    @Override
+    public void close() {
         requireOwner();
         if (closed) return;
         closed = true;
@@ -199,7 +203,8 @@ abstract class WGPUWorkerPreparation extends WGPUPreparation {
             return true;
         }
 
-        @Override public void advanceLoading() {
+        @Override
+        public void advanceLoading() {
             requireOwner();
             if (!nativeOnOwner || done || disposed) return;
             ShaderModuleDescriptor translated;
@@ -281,11 +286,15 @@ abstract class WGPUWorkerPreparation extends WGPUPreparation {
             finally { releaseDomain(); }
         }
 
-        @Override public boolean isDone() { return done; }
-        @Override public ShaderPreparationPhase phase() { return trace.phase(); }
-        @Override public ShaderPreparationTrace trace() { return trace; }
+        @Override
+        public boolean isDone() { return done; }
+        @Override
+        public ShaderPreparationPhase phase() { return trace.phase(); }
+        @Override
+        public ShaderPreparationTrace trace() { return trace; }
 
-        @Override public ShaderPreparedResult finish() {
+        @Override
+        public ShaderPreparedResult finish() {
             requireOwner();
             if (!done || finished || disposed) throw new FdxException("WGPU preparation cannot be published now");
             finished = true;
@@ -309,7 +318,8 @@ abstract class WGPUWorkerPreparation extends WGPUPreparation {
             }
         }
 
-        @Override public void cancel() {
+        @Override
+        public void cancel() {
             requireOwner();
             boolean retireLoading;
             synchronized (this) {
@@ -322,7 +332,8 @@ abstract class WGPUWorkerPreparation extends WGPUPreparation {
             if (done) { discard(); jobs.remove(this); }
         }
 
-        @Override public void dispose() {
+        @Override
+        public void dispose() {
             requireOwner();
             if (disposed) return;
             if (!done) throw new FdxException("WGPU native preparation has not drained");
@@ -331,6 +342,7 @@ abstract class WGPUWorkerPreparation extends WGPUPreparation {
             jobs.remove(this);
         }
 
-        @Override public boolean isDisposed() { return disposed; }
+        @Override
+        public boolean isDisposed() { return disposed; }
     }
 }

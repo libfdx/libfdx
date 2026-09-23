@@ -7,7 +7,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class BufferInitializationTest {
-    @Test void validatesRangesWithoutChangingBorrowedData() {
+    @Test
+    void validatesRangesWithoutChangingBorrowedData() {
         Buffer buffer = buffer(BufferUsage.VERTEX, 16);
         ByteBuffer data = ByteBuffer.allocate(16).position(4).limit(12);
         BufferInitialization.validate(buffer, 8, data);

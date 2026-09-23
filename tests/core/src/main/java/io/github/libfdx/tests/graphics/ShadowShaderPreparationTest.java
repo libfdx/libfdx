@@ -48,7 +48,8 @@ public final class ShadowShaderPreparationTest extends GraphicsParityTest {
 
     public ShadowShaderPreparationTest(long frames) { super(frames); }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, "ShadowShaderPreparationTest");
         shaders = new ShaderPreparation(graphics);
         if (!shaders.capabilities().runtimeNonblocking()) throw new FdxException(
@@ -87,7 +88,8 @@ public final class ShadowShaderPreparationTest extends GraphicsParityTest {
         markCreated();
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         tick++;
         if (bootstrap == null) {
             bootstrap = shaders.createScope("shadow example loading UI");
@@ -177,7 +179,8 @@ public final class ShadowShaderPreparationTest extends GraphicsParityTest {
         } finally { pass.end(); }
         if (hud.skippedDrawsLastFrame().total() != 0) throw new FdxException("Preloaded shadow example HUD skipped a draw");
     }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         dispose(capture); dispose(world); dispose(group);
         if (cascades != null) dispose(cascades); else dispose(shadow);
         dispose(hud);

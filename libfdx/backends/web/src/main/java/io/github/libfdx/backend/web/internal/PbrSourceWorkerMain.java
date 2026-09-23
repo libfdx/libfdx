@@ -21,14 +21,17 @@ public final class PbrSourceWorkerMain {
             complete(id, version, profile, result.surface(), result.library(), variants);
         } catch (RuntimeException | Error failure) { fail(id, failure.toString()); }
     }
-    @JSFunctor private interface Prepare extends JSObject { void run(int id, int version, String profile); }
+    @JSFunctor
+    private interface Prepare extends JSObject { void run(int id, int version, String profile); }
     @JSBody(params="prepare", script="""
             self.onmessage=function(e) { var m=e.data; prepare(m.id,m.version,m.profile); };
             self.postMessage({ready:true});
-            """) private static native void install(Prepare prepare);
+            """)
+    private static native void install(Prepare prepare);
     @JSBody(params={"id","version","profile","surface","library","variants"}, script="""
             self.postMessage({id:id,version:version,profile:profile,surface:surface,library:library,variants:variants});
-            """) private static native void complete(int id, int version, String profile, String surface,
+            """)
+    private static native void complete(int id, int version, String profile, String surface,
                     String library, JSArray<JSString> variants);
     @JSBody(params={"id","error"}, script="self.postMessage({id:id,error:error});")
     private static native void fail(int id, String error);

@@ -9,7 +9,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class OpenALMusicTest {
-    @Test void nativeStreamRemainsBoundedSeeksLoopsAndRecoversFromAnUnderrun() {
+    @Test
+    void nativeStreamRemainsBoundedSeeksLoopsAndRecoversFromAnUnderrun() {
         OpenALAudio audio=OpenALAudio.loopback(32,48000);
         try {
             Tone input=new Tone(); Music music=audio.createMusic(input,new MusicBuffering(1024,4));
@@ -39,7 +40,8 @@ final class OpenALMusicTest {
             music.dispose(); assertTrue(input.isDisposed());
         } finally { audio.dispose(); }
     }
-    @Test void twoMusicStreamsAndThirtyTwoEffectsShareOutputWithoutSharingCapacity() {
+    @Test
+    void twoMusicStreamsAndThirtyTwoEffectsShareOutputWithoutSharingCapacity() {
         OpenALAudio audio=OpenALAudio.loopback(32,48000);
         try {
             short[] pcm=new short[480]; java.util.Arrays.fill(pcm,(short)1000);
@@ -88,12 +90,18 @@ final class OpenALMusicTest {
         private final int channelCount;
         Tone() { this(1); }
         Tone(int channels) { channelCount = channels; }
-        @Override public int channels() { return channelCount; }
-        @Override public int sampleRate() { return 48000; }
-        @Override public long frames() { return 480000; }
-        @Override public int maxReadFrames() { return 4096; }
-        @Override public boolean isSeekable() { return true; }
-        @Override public FdxFuture<Integer> read(long offset,short[] destination,int start,int frames) {
+        @Override
+        public int channels() { return channelCount; }
+        @Override
+        public int sampleRate() { return 48000; }
+        @Override
+        public long frames() { return 480000; }
+        @Override
+        public int maxReadFrames() { return 4096; }
+        @Override
+        public boolean isSeekable() { return true; }
+        @Override
+        public FdxFuture<Integer> read(long offset,short[] destination,int start,int frames) {
             if(disposed) return FdxFuture.failed(new FdxException("Closed"));
             reads++; int actual=(int)Math.min(frames,frames()-offset);
             for(int i=0;i<actual;i++) {
@@ -103,8 +111,11 @@ final class OpenALMusicTest {
             }
             return FdxFuture.completed(actual==0 ? -1 : actual);
         }
-        @Override public void update() { }
-        @Override public void dispose() { disposed=true; }
-        @Override public boolean isDisposed() { return disposed; }
+        @Override
+        public void update() { }
+        @Override
+        public void dispose() { disposed=true; }
+        @Override
+        public boolean isDisposed() { return disposed; }
     }
 }

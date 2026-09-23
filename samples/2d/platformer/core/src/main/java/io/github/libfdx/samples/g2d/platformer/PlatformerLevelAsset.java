@@ -13,8 +13,10 @@ public record PlatformerLevelAsset(TileMapAsset map, String title, String next, 
     /** Registers the application-specific bundle loader; a silent launcher omits music dependencies explicitly. */
     public static void register(AssetManager assets, boolean musicAvailable) {
         assets.registerLoader(PlatformerLevelAsset.class, new AssetLoader<PlatformerLevelAsset>() {
-            @Override public Class<PlatformerLevelAsset> type() { return PlatformerLevelAsset.class; }
-            @Override public FdxFuture<PlatformerLevelAsset> load(AssetLoadContext context, AssetDescriptor<PlatformerLevelAsset> descriptor) {
+            @Override
+            public Class<PlatformerLevelAsset> type() { return PlatformerLevelAsset.class; }
+            @Override
+            public FdxFuture<PlatformerLevelAsset> load(AssetLoadContext context, AssetDescriptor<PlatformerLevelAsset> descriptor) {
                 FdxFuture<PlatformerLevelAsset> result = FdxFuture.pending();
                 context.dependency(TextureLoadOptions.PIXEL_ART.descriptor(descriptor.path(), TileMapAsset.class)).onSuccess(map -> {
                     try {

@@ -24,12 +24,19 @@ final class D3D12Compute {
         final ShaderModuleDescriptor descriptor;
         private boolean disposed;
         Module(D3D12Context context, ShaderModuleDescriptor descriptor) { this.context = context; this.descriptor = descriptor; }
-        @Override public ShaderLanguage language() { return ShaderLanguage.HLSL; }
-        @Override public ShaderReflection reflection() { return descriptor.reflection(); }
-        @Override public ProviderId providerId() { return context.providerId(); }
-        @Override @SuppressWarnings("unchecked") public <T> T as() { return (T) this; }
-        @Override public boolean isDisposed() { return disposed; }
-        @Override public void dispose() { disposed = true; }
+        @Override
+        public ShaderLanguage language() { return ShaderLanguage.HLSL; }
+        @Override
+        public ShaderReflection reflection() { return descriptor.reflection(); }
+        @Override
+        public ProviderId providerId() { return context.providerId(); }
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> T as() { return (T) this; }
+        @Override
+        public boolean isDisposed() { return disposed; }
+        @Override
+        public void dispose() { disposed = true; }
     }
 
     static final class Pipeline extends D3D12Resource implements ComputePipeline {
@@ -68,11 +75,17 @@ final class D3D12Compute {
             if (stage == null) throw new FdxException("Missing D3D12 compute entry point " + descriptor.entryPoint());
             return D3D12Native.createComputePipeline(context.nativeHandle(), stage.text(), entry, types, bindings, groups);
         }
-        @Override public ProviderId providerId() { return context.providerId(); }
-        @Override @SuppressWarnings("unchecked") public <T> T as() { return (T) this; }
-        @Override public boolean isDisposed() { return resourceDisposed(); }
-        @Override public void dispose() { disposeResource(); }
-        @Override void destroyNative(long contextHandle, long resourceHandle) { D3D12Native.destroyComputePipeline(contextHandle, resourceHandle); }
+        @Override
+        public ProviderId providerId() { return context.providerId(); }
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> T as() { return (T) this; }
+        @Override
+        public boolean isDisposed() { return resourceDisposed(); }
+        @Override
+        public void dispose() { disposeResource(); }
+        @Override
+        void destroyNative(long contextHandle, long resourceHandle) { D3D12Native.destroyComputePipeline(contextHandle, resourceHandle); }
     }
 
     static final class Pass implements ComputePass {
@@ -88,18 +101,21 @@ final class D3D12Compute {
             context.requireFrame("record compute commands");
             if (ended) throw new FdxException("D3D12 compute pass has ended");
         }
-        @Override public void setPipeline(ComputePipeline value) {
+        @Override
+        public void setPipeline(ComputePipeline value) {
             requireOpen();
             if (!(value instanceof Pipeline candidate) || candidate.context != context || candidate.isDisposed()) throw new FdxException("Invalid D3D12 compute pipeline or device");
             pipeline = candidate; Arrays.fill(sets, null);
         }
-        @Override public void setResourceSet(ShaderResourceSet value) {
+        @Override
+        public void setResourceSet(ShaderResourceSet value) {
             requireOpen();
             if (pipeline == null || value == null || value.group() >= sets.length
                     || !pipeline.layout.physicalHash().equals(value.layout().physicalHash())) throw new FdxException("Mismatched D3D12 compute resources");
             sets[value.group()] = value;
         }
-        @Override public void dispatch(int x, int y, int z) {
+        @Override
+        public void dispatch(int x, int y, int z) {
             requireOpen(); validateDispatch(x, y, z, context.device().capabilities().limits());
             if (pipeline == null || pipeline.isDisposed()) throw new FdxException("No live D3D12 compute pipeline");
             for (int i = 0; i < pipeline.layout.bindingCount(); i++) {
@@ -115,11 +131,15 @@ final class D3D12Compute {
             }
             D3D12Native.dispatchCompute(context.nativeHandle(), pipeline.handle, resources, offsets, x, y, z);
         }
-        @Override public void end() {
+        @Override
+        public void end() {
             if (ended) return;
             ended = true; pipeline = null; Arrays.fill(sets, null); owner.ended();
         }
-        @Override public ProviderId providerId() { return context.providerId(); }
-        @Override @SuppressWarnings("unchecked") public <T> T as() { return (T) this; }
+        @Override
+        public ProviderId providerId() { return context.providerId(); }
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> T as() { return (T) this; }
     }
 }

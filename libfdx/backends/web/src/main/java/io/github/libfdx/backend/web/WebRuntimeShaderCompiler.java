@@ -21,14 +21,16 @@ final class WebRuntimeShaderCompiler implements RuntimeShaderCompiler {
     private boolean disposed;
 
     /** Worker results complete on the browser event loop; unavailable-worker fallback uses execute. */
-    @Override public FdxFuture<RuntimeShaderCompileResult> compileAsync(RuntimeShaderCompileRequest request,
+    @Override
+    public FdxFuture<RuntimeShaderCompileResult> compileAsync(RuntimeShaderCompileRequest request,
             Consumer<Runnable> execute) {
         return worker.compile(request, execute);
     }
 
     void dispose() { disposed = true; worker.dispose(); }
     /** Fingerprinted from the compiler JS/Wasm during TeaVM compilation, without runtime I/O. */
-    @Override public String cacheIdentity() {
+    @Override
+    public String cacheIdentity() {
         String identity = compiledIdentity();
         return identity == null || identity.isEmpty() ? null : identity;
     }

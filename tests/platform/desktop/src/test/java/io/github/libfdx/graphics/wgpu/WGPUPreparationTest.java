@@ -178,16 +178,20 @@ final class WGPUPreparationTest {
         final FdxFuture<byte[]> read = FdxFuture.pending();
         final AtomicInteger reads = new AtomicInteger();
         final ShaderCacheStore store = new ShaderCacheStore() {
-            @Override public FdxFuture<byte[]> readAsync(String key) { reads.incrementAndGet(); return read; }
-            @Override public FdxFuture<Void> writeAsync(String key, byte[] bytes) { return FdxFuture.completed(null); }
-            @Override public FdxFuture<Void> removeAsync(String key) { return FdxFuture.completed(null); }
+            @Override
+            public FdxFuture<byte[]> readAsync(String key) { reads.incrementAndGet(); return read; }
+            @Override
+            public FdxFuture<Void> writeAsync(String key, byte[] bytes) { return FdxFuture.completed(null); }
+            @Override
+            public FdxFuture<Void> removeAsync(String key) { return FdxFuture.completed(null); }
         };
         ShaderPreparationOperation waiting, other;
         WGPUContext context;
         Application application;
         long deadline;
 
-        @Override public void create(Fdx fdx) {
+        @Override
+        public void create(Fdx fdx) {
             application = fdx.app();
             GraphicsContext graphics = fdx.graphics().main();
             context = graphics.as();
@@ -200,7 +204,8 @@ final class WGPUPreparationTest {
             deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         }
 
-        @Override public void render() {
+        @Override
+        public void render() {
             assertTrue(System.nanoTime() < deadline, "Cache wait occupied the single compiler worker");
             if (reads.get() == 1 && other.isDone()) {
                 other.finish().dispose();
@@ -227,7 +232,8 @@ final class WGPUPreparationTest {
         int rejected, settled, frames;
         long deadline;
 
-        @Override public void create(Fdx fdx) {
+        @Override
+        public void create(Fdx fdx) {
             graphics = fdx.graphics().main(); application = fdx.app();
             assertTrue(graphics.device().shaderPreparationCapabilities().runtimeNonblocking());
             assertEquals(dawn() ? ShaderPreparationCapabilities.Execution.NATIVE_ASYNC
@@ -240,7 +246,8 @@ final class WGPUPreparationTest {
             deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         }
 
-        @Override public void render() {
+        @Override
+        public void render() {
             assertTrue(System.nanoTime() < deadline, "Native jobs never settled");
             for (int i = 0; i < jobs.length; i++) {
                 ShaderPreparationOperation job = jobs[i];
@@ -275,7 +282,8 @@ final class WGPUPreparationTest {
             }
         }
 
-        @Override public void dispose() {
+        @Override
+        public void dispose() {
             for (ShaderPreparationOperation job : jobs) if (job != null) job.cancel();
             for (ShaderPreparedResult result : ready) result.dispose();
         }
@@ -287,7 +295,8 @@ final class WGPUPreparationTest {
         int settled;
         long deadline;
 
-        @Override public void create(Fdx fdx) {
+        @Override
+        public void create(Fdx fdx) {
             application = fdx.app();
             GraphicsContext graphics = fdx.graphics().main();
             for (int i = 0; i < jobs.length; i++) {
@@ -309,7 +318,8 @@ final class WGPUPreparationTest {
             deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
         }
 
-        @Override public void render() {
+        @Override
+        public void render() {
             assertTrue(System.nanoTime() < deadline, "Textured pipeline jobs never settled");
             for (int i = 0; i < jobs.length; i++) {
                 ShaderPreparationOperation job = jobs[i];
@@ -330,7 +340,8 @@ final class WGPUPreparationTest {
             }
         }
 
-        @Override public void dispose() {
+        @Override
+        public void dispose() {
             for (ShaderPreparationOperation job : jobs) if (job != null) job.cancel();
         }
     }
@@ -346,7 +357,8 @@ final class WGPUPreparationTest {
 
         Teardown(boolean queued) { this.queued = queued; }
 
-        @Override public void create(Fdx fdx) {
+        @Override
+        public void create(Fdx fdx) {
             application = fdx.app();
             GraphicsContext graphics = fdx.graphics().main(); nativeContext = graphics.as();
             Thread owner = Thread.currentThread();
@@ -367,7 +379,8 @@ final class WGPUPreparationTest {
             deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         }
 
-        @Override public void render() {
+        @Override
+        public void render() {
             assertTrue(System.nanoTime() < deadline);
             if (started.getCount() == 0 && (queued || completed.isDone())) application.requestExit();
         }

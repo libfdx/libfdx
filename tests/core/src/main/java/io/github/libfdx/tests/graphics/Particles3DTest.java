@@ -57,7 +57,8 @@ public final class Particles3DTest extends ApplicationAdapter {
 
     public Particles3DTest(long exitAfterFrames) { this.exitAfterFrames = exitAfterFrames; }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         application = fdx.app(); display = fdx.displays().main(); graphics = fdx.graphics().main(); logger = fdx.logger();
         fpsLogger = TestFpsLogger.create(logger, "Particles3DTest");
         occlusionFixture = System.getProperty("libfdx.test.particleOcclusion", "");
@@ -127,7 +128,8 @@ public final class Particles3DTest extends ApplicationAdapter {
 
     private void simulate(float delta) { fire.update(delta); smoke.update(delta); sparks.update(delta); snow.update(delta); }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         float elapsed = application.deltaTime();
         float delta = frozen || anchorFixture || !solidOcclusion.isEmpty() ? 0 : timing.advance(elapsed);
         time += delta;
@@ -191,7 +193,8 @@ public final class Particles3DTest extends ApplicationAdapter {
         }
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (solids != null) { solids.dispose(); solids = null; }
         if (renderer != null) { renderer.dispose(); renderer = null; }
         if (models != null) { models.dispose(); models = null; }

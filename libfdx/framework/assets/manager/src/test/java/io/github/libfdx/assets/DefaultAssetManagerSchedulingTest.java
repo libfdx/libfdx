@@ -31,12 +31,15 @@ final class DefaultAssetManagerSchedulingTest {
         manager.dispose();
     }
 
-    @Test void preparationResourcesAreSharedOnlyWithinOneManagerAndOutliveIndividualLoads() {
+    @Test
+    void preparationResourcesAreSharedOnlyWithinOneManagerAndOutliveIndividualLoads() {
         List<Preparation> made = new ArrayList<>();
         List<Preparation> borrowed = new ArrayList<>();
         AssetLoader<Asset> loader = new AssetLoader<>() {
-            @Override public Class<Asset> type() { return Asset.class; }
-            @Override public FdxFuture<Asset> load(AssetLoadContext context, AssetDescriptor<Asset> descriptor) {
+            @Override
+            public Class<Asset> type() { return Asset.class; }
+            @Override
+            public FdxFuture<Asset> load(AssetLoadContext context, AssetDescriptor<Asset> descriptor) {
                 borrowed.add(context.preparationResource(Preparation.class, () -> {
                     Preparation resource = new Preparation(); made.add(resource); return resource;
                 }));
@@ -58,7 +61,8 @@ final class DefaultAssetManagerSchedulingTest {
         assertEquals(1, made.getLast().disposals);
     }
 
-    @Test void preparationShutdownFollowsAssetCancellationAndContinuesAfterErrors() {
+    @Test
+    void preparationShutdownFollowsAssetCancellationAndContinuesAfterErrors() {
         Preparation resource = new Preparation(); resource.fail = true;
         Asset other = asset("other preparation");
         register((context, descriptor) -> {
@@ -73,7 +77,8 @@ final class DefaultAssetManagerSchedulingTest {
         manager.dispose(); assertEquals(1, resource.disposals);
     }
 
-    @Test void preparationFactoryCannotPublishAfterReentrantShutdownOrRecurse() {
+    @Test
+    void preparationFactoryCannotPublishAfterReentrantShutdownOrRecurse() {
         Preparation resource = new Preparation();
         register((context, descriptor) -> {
             assertThrows(FdxException.class, () -> context.preparationResource(Preparation.class,
@@ -85,7 +90,8 @@ final class DefaultAssetManagerSchedulingTest {
         assertEquals(1, resource.disposals);
     }
 
-    @Test void preparationLookupRejectsWorkerThreadAndCancelledContext() throws Exception {
+    @Test
+    void preparationLookupRejectsWorkerThreadAndCancelledContext() throws Exception {
         AssetLoadContext[] saved = new AssetLoadContext[1];
         register((context, descriptor) -> { saved[0] = context; return FdxFuture.pending(); });
         manager.load(descriptor("pending"));
@@ -101,11 +107,14 @@ final class DefaultAssetManagerSchedulingTest {
 
     private static final class Preparation implements Disposable {
         int disposals; boolean fail;
-        @Override public void dispose() { disposals++; if (fail) throw new FdxException("Injected preparation cleanup failure"); }
-        @Override public boolean isDisposed() { return disposals > 0; }
+        @Override
+        public void dispose() { disposals++; if (fail) throw new FdxException("Injected preparation cleanup failure"); }
+        @Override
+        public boolean isDisposed() { return disposals > 0; }
     }
 
-    @Test void cooperativeStepsYieldWithinUpdateBudgetAndCancellationStopsFurtherSteps() {
+    @Test
+    void cooperativeStepsYieldWithinUpdateBudgetAndCancellationStopsFurtherSteps() {
         int[] steps={0};
         register((context, descriptor) -> {
             FdxFuture<Asset> result=FdxFuture.pending();
@@ -402,14 +411,17 @@ final class DefaultAssetManagerSchedulingTest {
             int attempts;
             boolean accepting;
             Runnable task;
-            @Override public boolean submit(Runnable next) {
+            @Override
+            public boolean submit(Runnable next) {
                 attempts++;
                 if (!accepting) { return false; }
                 task = next;
                 return true;
             }
-            @Override public void dispose() { }
-            @Override public boolean isDisposed() { return false; }
+            @Override
+            public void dispose() { }
+            @Override
+            public boolean isDisposed() { return false; }
         }
         ControlledExecutor executor = new ControlledExecutor();
         manager = new DefaultAssetManager(files, executor);
@@ -464,9 +476,12 @@ final class DefaultAssetManagerSchedulingTest {
     @Test
     void budgetedUpdatesRemainPendingWhileExecutorIsFull() {
         AssetExecutor full = new AssetExecutor() {
-            @Override public boolean submit(Runnable task) { return false; }
-            @Override public void dispose() { }
-            @Override public boolean isDisposed() { return false; }
+            @Override
+            public boolean submit(Runnable task) { return false; }
+            @Override
+            public void dispose() { }
+            @Override
+            public boolean isDisposed() { return false; }
         };
         manager = new DefaultAssetManager(files, full);
         register((context, descriptor) -> context.async(() -> asset("A")));
@@ -519,8 +534,10 @@ final class DefaultAssetManagerSchedulingTest {
 
     private void register(BiFunction<AssetLoadContext, AssetDescriptor<Asset>, FdxFuture<Asset>> action) {
         manager.registerLoader(Asset.class, new AssetLoader<Asset>() {
-            @Override public Class<Asset> type() { return Asset.class; }
-            @Override public FdxFuture<Asset> load(AssetLoadContext context, AssetDescriptor<Asset> descriptor) {
+            @Override
+            public Class<Asset> type() { return Asset.class; }
+            @Override
+            public FdxFuture<Asset> load(AssetLoadContext context, AssetDescriptor<Asset> descriptor) {
                 return action.apply(context, descriptor);
             }
         });
@@ -555,11 +572,13 @@ final class DefaultAssetManagerSchedulingTest {
         int disposed;
         boolean throwOnDispose;
         Asset(String name) { this.name = name; }
-        @Override public void dispose() {
+        @Override
+        public void dispose() {
             disposed++;
             events.add("dispose:" + name);
             if (throwOnDispose) { throw new FdxException("dispose:" + name); }
         }
-        @Override public boolean isDisposed() { return disposed > 0; }
+        @Override
+        public boolean isDisposed() { return disposed > 0; }
     }
 }

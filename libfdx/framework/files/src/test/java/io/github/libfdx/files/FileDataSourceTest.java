@@ -9,9 +9,11 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class FileDataSourceTest {
-    @TempDir Path temporary;
+    @TempDir
+    Path temporary;
 
-    @Test void largeFileReadsOnlyRequestedRangesAndSeeksBackwards() throws Exception {
+    @Test
+    void largeFileReadsOnlyRequestedRangesAndSeeksBackwards() throws Exception {
         long size=8L*1024*1024;
         try (RandomAccessFile file=new RandomAccessFile(temporary.resolve("large.bin").toFile(),"rw")) {
             file.setLength(size); file.seek(size-4); file.write(new byte[] {11,22,33,44});
@@ -30,11 +32,13 @@ final class FileDataSourceTest {
         assertThrows(FdxException.class,() -> source.read(0,bytes,0,1).get());
     }
 
-    @Test void packagedStreamsAreSequentialAndCloseTheirUnderlyingInput() {
+    @Test
+    void packagedStreamsAreSequentialAndCloseTheirUnderlyingInput() {
         boolean[] closed={false};
         DefaultFileSystem files=new DefaultFileSystem(temporary.toFile(),temporary.toFile(),temporary.toFile())
                 .classpathResourceResolver(path -> new ByteArrayInputStream(new byte[] {1,2,3}) {
-                    @Override public void close() { closed[0]=true; }
+                    @Override
+                    public void close() { closed[0]=true; }
                 });
         FileDataSource source=files.classpath("packed.bin").openRead(2).get();
         assertFalse(source.isSeekable()); assertEquals(-1,source.length());

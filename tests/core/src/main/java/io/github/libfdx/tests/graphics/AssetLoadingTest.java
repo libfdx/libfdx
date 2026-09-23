@@ -48,7 +48,8 @@ public final class AssetLoadingTest extends GraphicsParityTest {
     private boolean advance;
     private float elapsedTime, updateClock;
     private final InputAdapter controls = new InputAdapter() {
-        @Override public boolean keyDown(KeyEvent event) {
+        @Override
+        public boolean keyDown(KeyEvent event) {
             if (event.key() != Key.SPACE) return false;
             if (loaded == COUNT) advance = true;
             return true;
@@ -99,8 +100,10 @@ public final class AssetLoadingTest extends GraphicsParityTest {
         currentLevel = assets.createScope();
         G2DAssetLoaders.register(assets, graphics);
         assets.registerLoader(Card.class, new AssetLoader<Card>() {
-            @Override public Class<Card> type() { return Card.class; }
-            @Override public FdxFuture<Card> load(AssetLoadContext context, AssetDescriptor<Card> descriptor) {
+            @Override
+            public Class<Card> type() { return Card.class; }
+            @Override
+            public FdxFuture<Card> load(AssetLoadContext context, AssetDescriptor<Card> descriptor) {
                 FdxFuture<TextureRegion> logo = context.dependency(AssetDescriptor.of(IMAGE, TextureRegion.class));
                 FdxFuture<BitmapFont> font = context.dependency(AssetDescriptor.of(FONT, BitmapFont.class));
                 FdxFuture<Card> result = FdxFuture.pending();

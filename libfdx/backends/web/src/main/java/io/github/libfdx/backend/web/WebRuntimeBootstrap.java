@@ -89,9 +89,12 @@ final class WebRuntimeBootstrap {
     @JSBody(script = "return new URL('scripts/',document.baseURI).href;")
     private static native String runtimeBaseUrl();
 
-    @JSFunctor private interface Success extends JSObject { void run(JSObject module); }
-    @JSFunctor private interface Failure extends JSObject { void run(String message); }
-    @JSFunctor private interface Ready extends JSObject { void run(); }
+    @JSFunctor
+    private interface Success extends JSObject { void run(JSObject module); }
+    @JSFunctor
+    private interface Failure extends JSObject { void run(String message); }
+    @JSFunctor
+    private interface Ready extends JSObject { void run(); }
 
     // The packaged Emscripten incoming API accepts instantiateWasm, not wasmBinary. Reject the
     // outer promise explicitly if instantiation fails: the native callback handshake would stay pending.

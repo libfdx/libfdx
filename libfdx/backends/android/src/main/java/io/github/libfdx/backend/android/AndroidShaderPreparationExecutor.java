@@ -25,6 +25,8 @@ final class AndroidShaderPreparationExecutor implements Disposable {
     }
 
     void execute(Runnable task) { executor.execute(task); }
-    @Override public void dispose() { executor.shutdown(); }
-    @Override public boolean isDisposed() { return executor.isShutdown(); }
+    @Override
+    public void dispose() { executor.shutdown(); }
+    @Override
+    public boolean isDisposed() { return executor.isShutdown(); }
 }

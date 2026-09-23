@@ -21,7 +21,8 @@ final class AndroidRuntimeShaderCompiler implements RuntimeShaderCompiler {
     private static String identity;
 
     /** Called only from preparation workers. Loading/math never acquire the file-hashing lock. */
-    @Override public String cacheIdentity() {
+    @Override
+    public String cacheIdentity() {
         if (!available()) return null;
         synchronized (IDENTITY_LOCK) {
             if (!identityAttempted) {

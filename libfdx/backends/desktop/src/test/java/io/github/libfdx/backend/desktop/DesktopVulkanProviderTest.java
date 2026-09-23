@@ -19,7 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class DesktopVulkanProviderTest {
-    @Test void lossRejectsNewWorkButRetainsNativeOwnershipUntilEveryUserReturns() {
+    @Test
+    void lossRejectsNewWorkButRetainsNativeOwnershipUntilEveryUserReturns() {
         var domain = new VulkanResourceDomain();
         AtomicInteger releases = new AtomicInteger();
         domain.setNativeRelease(releases::incrementAndGet);
@@ -78,7 +79,8 @@ final class DesktopVulkanProviderTest {
         assertEquals(1, releases.get());
     }
 
-    @Test void cacheSaveCanRetainAnActiveJobAfterOwnerTeardown() {
+    @Test
+    void cacheSaveCanRetainAnActiveJobAfterOwnerTeardown() {
         var domain = new DesktopVulkanProvider.VulkanResourceDomain();
         AtomicInteger releases = new AtomicInteger();
         domain.setNativeRelease(releases::incrementAndGet);

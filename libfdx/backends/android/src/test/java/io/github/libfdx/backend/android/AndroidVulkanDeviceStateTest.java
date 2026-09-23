@@ -7,7 +7,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AndroidVulkanDeviceStateTest {
-    @Test void reportedLossRemainsLatchedAndCancelsOnce() {
+    @Test
+    void reportedLossRemainsLatchedAndCancelsOnce() {
         AtomicBoolean nativeLost = new AtomicBoolean();
         AtomicInteger cancellations = new AtomicInteger();
         var state = new AndroidVulkanDeviceState(nativeLost::get, cancellations::incrementAndGet);
@@ -20,7 +21,8 @@ class AndroidVulkanDeviceStateTest {
         assertTrue(state.poll()); assertEquals(1, cancellations.get());
     }
 
-    @Test void typedWorkerFailureCancelsBeforeAnotherOwnerPollAndRetainsCleanupDiagnostics() {
+    @Test
+    void typedWorkerFailureCancelsBeforeAnotherOwnerPollAndRetainsCleanupDiagnostics() {
         var cleanup = new IllegalStateException("cleanup");
         var state = new AndroidVulkanDeviceState(() -> false, () -> { throw cleanup; });
         state.observe(new GraphicsContextLostException(AndroidVulkanProvider.ID));

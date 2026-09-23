@@ -7,7 +7,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class TileSamplingTest {
-    @Test void filterFootprintsStayInsideUnpaddedTilesIncludingSingleTexels() {
+    @Test
+    void filterFootprintsStayInsideUnpaddedTilesIncludingSingleTexels() {
         Texture texture = texture(384, 96);
         for (int size : new int[] {1, 2, 32}) {
             TextureRegion original = new TextureRegion(texture, 64, 32, size, size);
@@ -30,7 +31,8 @@ final class TileSamplingTest {
         }
     }
 
-    @Test void renderedTextureOriginsKeepTheirDirection() {
+    @Test
+    void renderedTextureOriginsKeepTheirDirection() {
         Texture texture = texture(64, 32);
         TextureRegion top = TextureRegion.rendered(texture, TextureOrigin.TOP_LEFT).tileSamplingRegion();
         TextureRegion bottom = TextureRegion.rendered(texture, TextureOrigin.BOTTOM_LEFT).tileSamplingRegion();
@@ -38,7 +40,8 @@ final class TileSamplingTest {
         assertEquals(.5f / 32, top.v()); assertEquals(31.5f / 32, top.v2());
     }
 
-    @Test void denseChunksObjectsFlipsAndAnimationUseCachedSamplingRegions() {
+    @Test
+    void denseChunksObjectsFlipsAndAnimationUseCachedSamplingRegions() {
         Texture texture = texture(96, 32);
         TextureRegion first = new TextureRegion(texture, 0, 0, 32, 32);
         TextureRegion second = new TextureRegion(texture, 32, 0, 32, 32);

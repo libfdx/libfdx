@@ -10,7 +10,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RenderPipelineBatchTest {
-    @Test void returnsPipelinesInOrderWithoutDisposingSuccessfulResults() {
+    @Test
+    void returnsPipelinesInOrderWithoutDisposingSuccessfulResults() {
         Fixture fixture = new Fixture();
         var first = new RenderPipelineDescriptor();
         var second = new RenderPipelineDescriptor();
@@ -21,7 +22,8 @@ class RenderPipelineBatchTest {
         assertEquals(0, fixture.device.createRenderPipelines().length);
     }
 
-    @Test void creationFailureDisposesPriorResultsAndPreservesOriginalError() {
+    @Test
+    void creationFailureDisposesPriorResultsAndPreservesOriginalError() {
         Fixture fixture = new Fixture();
         fixture.failAt = 3;
         fixture.failRelease = true;
@@ -32,7 +34,8 @@ class RenderPipelineBatchTest {
         assertEquals(1, fixture.creationFailure.getSuppressed().length);
     }
 
-    @Test void rejectsNullDescriptorsBeforeCreatingResources() {
+    @Test
+    void rejectsNullDescriptorsBeforeCreatingResources() {
         Fixture fixture = new Fixture();
         assertThrows(NullPointerException.class, () -> fixture.device.createRenderPipelines((RenderPipelineDescriptor[]) null));
         assertThrows(NullPointerException.class, () -> fixture.device.createRenderPipelines(new RenderPipelineDescriptor(), null));

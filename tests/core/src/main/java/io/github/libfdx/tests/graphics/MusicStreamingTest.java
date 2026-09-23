@@ -33,7 +33,8 @@ public final class MusicStreamingTest extends GraphicsParityTest {
     public MusicStreamingTest(long frames) { this(frames,null); }
     /** Owns the optional worker executor; music and assets close before it. */
     public MusicStreamingTest(long frames,AssetExecutor executor) { super(frames); this.executor=executor; }
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx,"MusicStreamingTest"); audio=fdx.audio();
         if(audio==null || audio.maxMusicStreams()<2) throw new FdxException("Music provider required");
         assets=new DefaultAssetManager(fdx.files(),executor);
@@ -45,16 +46,20 @@ public final class MusicStreamingTest extends GraphicsParityTest {
         mixer=new AudioMixer(audio); mixer.busGain(AudioBus.SFX,0);
         input=fdx.input(); activation=new InputAdapter() {
             private void activate() { audio.resume().onFailure(error->logger.error("Music activation failed",error)); }
-            @Override public boolean pointerDown(PointerEvent event) { activate(); return true; }
-            @Override public boolean touchDown(TouchEvent event) { activate(); return true; }
-            @Override public boolean keyDown(KeyEvent event) { activate(); return true; }
+            @Override
+            public boolean pointerDown(PointerEvent event) { activate(); return true; }
+            @Override
+            public boolean touchDown(TouchEvent event) { activate(); return true; }
+            @Override
+            public boolean keyDown(KeyEvent event) { activate(); return true; }
         };
         input.addProcessor(activation);
         batch=new SpriteBatch(graphics); white=graphics.device().createTexture(TextureDescriptor.rgba8("Music status",1,1));
         ByteBuffer pixel=ByteBuffer.allocateDirect(4); pixel.putInt(-1).flip(); graphics.device().writeTexture(white,pixel);
         markCreated();
     }
-    @Override public void render() {
+    @Override
+    public void render() {
         if(!released) {
             assets.update(3,1_000_000);
             if(assets.lastUpdateTaskCount()>3) throw new FdxException("Music loading exceeded task budget");
@@ -116,7 +121,8 @@ public final class MusicStreamingTest extends GraphicsParityTest {
         }
         batch.end(); finishFrame();
     }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if(input!=null) input.removeProcessor(activation);
         dispose(mixer); dispose(assets); dispose(executor); dispose(batch); dispose(white);
         if(requiresCompletion() && !released) throw new FdxException("Music scenario did not complete");

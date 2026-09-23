@@ -20,7 +20,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Timeout(15)
 final class DesktopShaderCacheStoreTest {
-    @Test void freshStoreReadsAtomicallyWrittenArtifactsAndRejectsPaths() throws Exception {
+    @Test
+    void freshStoreReadsAtomicallyWrittenArtifactsAndRejectsPaths() throws Exception {
         Path directory = directory();
         ShaderCacheKey key = ShaderCacheKey.of(ShaderCacheLayer.DXIL, "test-input");
         DesktopShaderCacheStore first = new DesktopShaderCacheStore(directory, 32 * 1024 * 1024);
@@ -41,7 +42,8 @@ final class DesktopShaderCacheStoreTest {
         assertTrue(second.readAsync(key.digest()).isFailed());
     }
 
-    @Test void storageBudgetEvictsOldEntriesWithoutTouchingOtherFiles() throws Exception {
+    @Test
+    void storageBudgetEvictsOldEntriesWithoutTouchingOtherFiles() throws Exception {
         Path directory = directory();
         Path unrelated = directory.resolve("game-data");
         Files.writeString(unrelated, "preserve");
@@ -59,7 +61,8 @@ final class DesktopShaderCacheStoreTest {
         } finally { store.dispose(); }
     }
 
-    @Test void unavailableDirectoryBecomesAMissWithoutFailingTheCacheClient() throws Exception {
+    @Test
+    void unavailableDirectoryBecomesAMissWithoutFailingTheCacheClient() throws Exception {
         Path path = directory().resolve("file");
         Files.writeString(path, "occupied");
         DesktopShaderCacheStore store = new DesktopShaderCacheStore(path, 32 * 1024 * 1024);
@@ -71,7 +74,8 @@ final class DesktopShaderCacheStoreTest {
         } finally { store.dispose(); }
     }
 
-    @Test void independentStoresSerializeReadMergeWriteAndDisposalDrainsAcceptedUpdates() throws Exception {
+    @Test
+    void independentStoresSerializeReadMergeWriteAndDisposalDrainsAcceptedUpdates() throws Exception {
         Path directory = directory();
         DesktopShaderCacheStore first = new DesktopShaderCacheStore(directory, 32 * 1024 * 1024);
         DesktopShaderCacheStore second = new DesktopShaderCacheStore(directory, 32 * 1024 * 1024);
@@ -102,7 +106,8 @@ final class DesktopShaderCacheStoreTest {
         } finally { release.countDown(); first.dispose(); second.dispose(); }
     }
 
-    @Test void aggregateMergePreservesNewerDataFromAnIndependentWriter() throws Exception {
+    @Test
+    void aggregateMergePreservesNewerDataFromAnIndependentWriter() throws Exception {
         Path directory = directory();
         DesktopShaderCacheStore first = new DesktopShaderCacheStore(directory, 32 * 1024 * 1024);
         DesktopShaderCacheStore second = new DesktopShaderCacheStore(directory, 32 * 1024 * 1024);
@@ -124,7 +129,8 @@ final class DesktopShaderCacheStoreTest {
         } finally { first.dispose(); second.dispose(); }
     }
 
-    @Test void lockTimeoutDoesNotInvokeTheUpdaterOrReplaceAnExistingRecord() throws Exception {
+    @Test
+    void lockTimeoutDoesNotInvokeTheUpdaterOrReplaceAnExistingRecord() throws Exception {
         Path directory = directory();
         DesktopShaderCacheStore store = new DesktopShaderCacheStore(directory, 32 * 1024 * 1024);
         String key = processKey();
@@ -142,7 +148,8 @@ final class DesktopShaderCacheStoreTest {
         } finally { store.dispose(); }
     }
 
-    @Test void separateProcessesPreserveBothWritersUnderContention() throws Exception {
+    @Test
+    void separateProcessesPreserveBothWritersUnderContention() throws Exception {
         Path directory = directory().toAbsolutePath();
         Process first = writer(directory, 1), second = writer(directory, 2);
         try {

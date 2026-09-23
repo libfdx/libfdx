@@ -159,8 +159,10 @@ public final class ChunkResidency implements Disposable {
     private void ensureOpen(){if(disposed||scope.isDisposed())throw new FdxException("ChunkResidency or its asset scope is disposed");}
     private void ensureMutable(){ensureOpen();if(updating)throw new FdxException("ChunkResidency cannot be mutated during update callbacks");}
     private static long key(int x,int y){return ((long)x<<32)|(y&0xffffffffL);}
-    @Override public boolean isDisposed(){return disposed;}
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed(){return disposed;}
+    @Override
+    public void dispose() {
         if(disposed)return;
         if(updating)throw new FdxException("ChunkResidency cannot be disposed during update callbacks");
         disposed=true;

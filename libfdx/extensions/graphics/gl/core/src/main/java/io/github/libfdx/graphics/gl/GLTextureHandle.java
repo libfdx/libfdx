@@ -53,7 +53,8 @@ final class GLTextureHandle implements Texture {
         return texture;
     }
 
-    @Override public int sampleCount() { return samples; }
+    @Override
+    public int sampleCount() { return samples; }
 
     GLResourceDomain resourceDomain() {
         return resourceDomain;
@@ -109,9 +110,11 @@ final class GLTextureHandle implements Texture {
         return views[0];
     }
 
-    @Override public int mipLevelCount() { return views.length; }
+    @Override
+    public int mipLevelCount() { return views.length; }
 
-    @Override public TextureView view(int level) {
+    @Override
+    public TextureView view(int level) {
         mipWidth(level); // Validate before indexing.
         return views[level];
     }

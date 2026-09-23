@@ -8,7 +8,8 @@ import io.github.libfdx.core.FdxException;
 public final class AndroidVulkanCacheMergeTest extends ApplicationAdapter {
     private Fdx fdx;
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         this.fdx = fdx;
         long context;
         try {
@@ -37,7 +38,8 @@ public final class AndroidVulkanCacheMergeTest extends ApplicationAdapter {
         } finally { AndroidVulkanNative.releasePreparationDevice(context); }
     }
 
-    @Override public void render() { fdx.app().requestExit(); }
+    @Override
+    public void render() { fdx.app().requestExit(); }
 
     private static void require(boolean condition, String message) {
         if (!condition) throw new FdxException(message);

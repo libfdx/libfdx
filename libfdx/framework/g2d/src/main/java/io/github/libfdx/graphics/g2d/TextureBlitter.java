@@ -106,8 +106,10 @@ public final class TextureBlitter implements Disposable {
             throw failure;
         }
     }
-    @Override public boolean isDisposed(){return disposed;}
-    @Override public void dispose(){
+    @Override
+    public boolean isDisposed(){return disposed;}
+    @Override
+    public void dispose(){
         if(disposed)return; disposed=true;
         Throwable failure=null;
         for(int i=0;i<count;i++) failure=close(pipelines[i],failure);

@@ -4,7 +4,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class FixedStepClockTest {
-    @Test void fixedInputSimulationIsEquivalentAcrossRenderCadences() {
+    @Test
+    void fixedInputSimulationIsEquivalentAcrossRenderCadences() {
         double reference = simulate(30);
         assertEquals(reference, simulate(60), 1e-10);
         assertEquals(reference, simulate(144), 1e-10);
@@ -22,7 +23,8 @@ final class FixedStepClockTest {
         assertEquals(1200, totalSteps);
         return position;
     }
-    @Test void stallsAreBoundedAndPauseDoesNotLeakRemainder() {
+    @Test
+    void stallsAreBoundedAndPauseDoesNotLeakRemainder() {
         FixedStepClock clock = new FixedStepClock(.01, 4);
         assertEquals(0, clock.advance(.005)); assertEquals(.5, clock.alpha(), 1e-12);
         assertEquals(4, clock.advance(100)); assertEquals(99.96, clock.droppedSeconds(), 1e-12);
@@ -30,7 +32,8 @@ final class FixedStepClockTest {
         clock.pause(); assertEquals(0, clock.advance(10)); assertEquals(0, clock.alpha());
         clock.resume(); assertEquals(1, clock.advance(.01)); assertEquals(0, clock.alpha());
     }
-    @Test void invalidTimingNeverMutatesClock() {
+    @Test
+    void invalidTimingNeverMutatesClock() {
         FixedStepClock clock = new FixedStepClock(.01, 4); clock.advance(.005);
         assertThrows(IllegalArgumentException.class, () -> clock.advance(Double.NaN));
         assertThrows(IllegalArgumentException.class, () -> clock.advance(-1));

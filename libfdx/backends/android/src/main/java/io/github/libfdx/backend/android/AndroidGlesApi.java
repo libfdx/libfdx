@@ -45,7 +45,8 @@ final class AndroidGlesApi implements GLApi {
         if (resetStatusQuery == -1) throw new FdxException("GLES advertises reset detection but its query is unavailable");
     }
 
-    @Override public boolean isContextLost() {
+    @Override
+    public boolean isContextLost() {
         if (!contextLost && resetStatusQuery != 0) contextLost = graphicsResetStatus(resetStatusQuery) != GLES30.GL_NO_ERROR;
         return contextLost;
     }
@@ -54,17 +55,21 @@ final class AndroidGlesApi implements GLApi {
     static native long findResetStatusQuery();
     static native int graphicsResetStatus(long query);
 
-    @Override public int shaderPreparationWorkers() { return preparationWorkers; }
-    @Override public synchronized void executeShaderPreparation(Runnable task) {
+    @Override
+    public int shaderPreparationWorkers() { return preparationWorkers; }
+    @Override
+    public synchronized void executeShaderPreparation(Runnable task) {
         if (preparationClosed) throw new FdxException("GLES shader preparation is closed");
         if (preparationExecutor == null) preparationExecutor = new AndroidShaderPreparationExecutor(preparationWorkers);
         preparationExecutor.execute(task);
     }
-    @Override public synchronized void closeShaderPreparation() {
+    @Override
+    public synchronized void closeShaderPreparation() {
         preparationClosed = true;
         if (preparationExecutor != null) preparationExecutor.dispose();
     }
-    @Override public boolean supportsParallelShaderCompilation() {
+    @Override
+    public boolean supportsParallelShaderCompilation() {
         if (parallelCompilationSupported == null) {
             String extensions = GLES30.glGetString(GLES30.GL_EXTENSIONS);
             parallelCompilationSupported = extensions != null
@@ -72,12 +77,14 @@ final class AndroidGlesApi implements GLApi {
         }
         return parallelCompilationSupported;
     }
-    @Override public boolean programCompilationComplete(int program) {
+    @Override
+    public boolean programCompilationComplete(int program) {
         GLES30.glGetProgramiv(program, COMPLETION_STATUS_KHR, preparationStatus, 0);
         return preparationStatus[0] != GLES30.GL_FALSE;
     }
 
-    @Override public String programBinaryIdentity() {
+    @Override
+    public String programBinaryIdentity() {
         if (binaryFormats != null) return binaryIdentity;
         binaryFormats = new int[0];
         GLES30.glGetIntegerv(GLES30.GL_NUM_PROGRAM_BINARY_FORMATS, preparationStatus, 0);
@@ -94,11 +101,13 @@ final class AndroidGlesApi implements GLApi {
         return binaryIdentity;
     }
 
-    @Override public void hintProgramBinaryRetrievable(int program) {
+    @Override
+    public void hintProgramBinaryRetrievable(int program) {
         GLES30.glProgramParameteri(program, GLES30.GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GLES30.GL_TRUE);
     }
 
-    @Override public boolean restoreProgramBinary(int program, GLProgramBinary binary) {
+    @Override
+    public boolean restoreProgramBinary(int program, GLProgramBinary binary) {
         boolean supported = false;
         for (int format : binaryFormats) if (format == binary.format()) supported = true;
         if (!supported) return false;
@@ -108,7 +117,8 @@ final class AndroidGlesApi implements GLApi {
         return GLES30.glGetError() == GLES30.GL_NO_ERROR;
     }
 
-    @Override public GLProgramBinary exportProgramBinary(int program, int maximumBytes) {
+    @Override
+    public GLProgramBinary exportProgramBinary(int program, int maximumBytes) {
         GLES30.glGetProgramiv(program, GLES30.GL_PROGRAM_BINARY_LENGTH, preparationStatus, 0);
         int size = preparationStatus[0];
         if (size <= 0 || size > maximumBytes) return null;
@@ -120,16 +130,20 @@ final class AndroidGlesApi implements GLApi {
         return new GLProgramBinary(format[0], result);
     }
 
-    @Override public boolean supportsDepthTextures() { return true; }
-    @Override public boolean supportsRgba16FloatTextures() {
+    @Override
+    public boolean supportsDepthTextures() { return true; }
+    @Override
+    public boolean supportsRgba16FloatTextures() {
         String extensions = GLES30.glGetString(GLES30.GL_EXTENSIONS);
         return extensions != null && (extensions.contains("GL_EXT_color_buffer_half_float")
                 || extensions.contains("GL_EXT_color_buffer_float"));
     }
-    @Override public void texImageDepth32F(int width, int height) {
+    @Override
+    public void texImageDepth32F(int width, int height) {
         GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_DEPTH_COMPONENT32F, width, height, 0, GLES30.GL_DEPTH_COMPONENT, GLES30.GL_FLOAT, null);
     }
-    @Override public void framebufferDepthTexture2D(int texture) {
+    @Override
+    public void framebufferDepthTexture2D(int texture) {
         GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_DEPTH_ATTACHMENT, GLES30.GL_TEXTURE_2D, texture, 0);
     }
 
@@ -381,9 +395,11 @@ final class AndroidGlesApi implements GLApi {
         GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, 0, data.remaining(), data);
     }
 
-    @Override public boolean supportsBufferRangeInitialization() { return true; }
+    @Override
+    public boolean supportsBufferRangeInitialization() { return true; }
 
-    @Override public void bufferSubData(int offset, ByteBuffer data) {
+    @Override
+    public void bufferSubData(int offset, ByteBuffer data) {
         GLES30.glBufferSubData(GLES30.GL_ARRAY_BUFFER, offset, data.remaining(), data);
     }
 
@@ -1063,36 +1079,43 @@ final class AndroidGlesApi implements GLApi {
         }
         return actualSource;
     }
-    @Override public boolean supportsMipTextures() { return true; }
+    @Override
+    public boolean supportsMipTextures() { return true; }
 
-    @Override public void textureFilters2D(TextureFilter min, TextureFilter mag, TextureMipmapFilter mip) {
+    @Override
+    public void textureFilters2D(TextureFilter min, TextureFilter mag, TextureMipmapFilter mip) {
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLApi.minificationFilter(min, mip));
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, toNative(mag));
     }
 
-    @Override public void textureMipRange2D(int levels) {
+    @Override
+    public void textureMipRange2D(int levels) {
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, 0x813C, 0);
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, 0x813D, levels-1);
     }
 
-    @Override public void texImage2D(TextureFormat format, int level, int width, int height, ByteBuffer data) {
+    @Override
+    public void texImage2D(TextureFormat format, int level, int width, int height, ByteBuffer data) {
         if (level == 0) { texImage2D(format, width, height, data); return; }
         GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, level, GLApi.colorInternalFormat(format),
                 width, height, 0, GLES30.GL_RGBA, GLApi.colorTransferType(format), data);
     }
 
-    @Override public void texSubImage2D(TextureFormat format, int level,
+    @Override
+    public void texSubImage2D(TextureFormat format, int level,
             int width, int height, ByteBuffer data) {
         GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, level, 0, 0, width, height, GLES30.GL_RGBA,
                 GLApi.colorTransferType(format), data);
     }
 
-    @Override public void texSubImage2D(int level, int width, int height, ByteBuffer data) {
+    @Override
+    public void texSubImage2D(int level, int width, int height, ByteBuffer data) {
         if (level == 0) { texSubImage2D(width, height, data); return; }
         GLES30.glTexSubImage2D(GLES30.GL_TEXTURE_2D, level, 0, 0, width, height, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, data);
     }
 
-    @Override public void framebufferTexture2D(int texture, int level) {
+    @Override
+    public void framebufferTexture2D(int texture, int level) {
         GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, texture, level);
     }
 

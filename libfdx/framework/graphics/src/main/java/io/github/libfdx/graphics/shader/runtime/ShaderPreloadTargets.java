@@ -18,5 +18,6 @@ public final class ShaderPreloadTargets implements Function<String, RenderTarget
         for (var entry : targets.entrySet()) if (entry.getValue().equals(target)) return entry.getKey();
         return null;
     }
-    @Override public RenderTargetLayout apply(String role) { return targets.get(role); }
+    @Override
+    public RenderTargetLayout apply(String role) { return targets.get(role); }
 }

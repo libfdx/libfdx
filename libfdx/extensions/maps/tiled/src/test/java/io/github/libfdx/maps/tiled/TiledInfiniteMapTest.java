@@ -23,7 +23,8 @@ final class TiledInfiniteMapTest {
                {"id":3,"type":"objectgroup","objects":[{"id":1,"point":true,"x":-7,"y":-9}]},
                {"id":4,"type":"imagelayer","image":"background.png"}]}
             """;
-    @Test void arbitrarySignedChunksGroupsObjectsAndParallaxUseTheUnboundedOrigin() {
+    @Test
+    void arbitrarySignedChunksGroupsObjectsAndParallaxUseTheUnboundedOrigin() {
         TileMap map=parse(json(),64);
         assertTrue(map.isInfinite());assertEquals(0,map.width());assertEquals(0,map.height());
         assertEquals(2,map.parallaxOriginX());assertEquals(-3,map.parallaxOriginY());
@@ -37,7 +38,8 @@ final class TiledInfiniteMapTest {
         assertEquals(-7,map.findObject(1).x());assertEquals(9,map.findObject(1).y());
         assertEquals(0,((ImageLayer)map.mapLayer(2)).y());
     }
-    @Test void malformedOverlapOverflowAndUnmappedIdsFailWithSourceAndLayerContext() {
+    @Test
+    void malformedOverlapOverflowAndUnmappedIdsFailWithSourceAndLayerContext() {
         reject(root->chunks(root).add(chunks(root).require(0)),"duplicate chunk");
         reject(root->chunks(root).add(chunk(-3,-1,1,1,1)),"overlap");
         reject(root->chunks(root).require(0).put("width",3),"count");
@@ -50,7 +52,8 @@ final class TiledInfiniteMapTest {
         reject(root->tileLayer(root).put("data",JsonValue.array()),"infinite");
         assertThrows(FdxException.class,()->parse(json(),5));
     }
-    @Test void standaloneChunksRetainUnsignedFlagsAndValidateBothSignedBoundaries() {
+    @Test
+    void standaloneChunksRetainUnsignedFlagsAndValidateBothSignedBoundaries() {
         var reader=new TiledReader("world/chunk.json",4);
         var result=reader.readChunk(bytes(chunk(Integer.MAX_VALUE,Integer.MIN_VALUE,1,1,3758096385L)));
         assertEquals(Integer.MAX_VALUE,result.x());assertEquals(Integer.MAX_VALUE,result.y());

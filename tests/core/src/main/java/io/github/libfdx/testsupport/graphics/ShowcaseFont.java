@@ -68,9 +68,11 @@ public final class ShowcaseFont implements Disposable {
         return result.toString();
     }
 
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         try { if (fallback != null) fallback.dispose(); }

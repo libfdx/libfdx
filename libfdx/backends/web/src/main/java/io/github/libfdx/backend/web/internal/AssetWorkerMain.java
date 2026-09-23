@@ -34,7 +34,8 @@ public final class AssetWorkerMain {
         } catch (RuntimeException | Error failure) { fail(id, failure.toString()); }
     }
 
-    @JSFunctor private interface Prepare extends JSObject {
+    @JSFunctor
+    private interface Prepare extends JSObject {
         void run(int id, boolean decode, Int8Array bytes, int width, int height, boolean srgb, boolean alphaWeighted);
     }
 

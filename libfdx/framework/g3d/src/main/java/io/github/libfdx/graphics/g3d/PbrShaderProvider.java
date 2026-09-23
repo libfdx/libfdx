@@ -851,7 +851,8 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
     private final ModelShaderPlan preparationPlan;
     private boolean disposed;
 
-    @Override public ModelShaderPlan preparationPlan() { return preparationPlan; }
+    @Override
+    public ModelShaderPlan preparationPlan() { return preparationPlan; }
 
     /**
      * Creates a PBR shader provider.

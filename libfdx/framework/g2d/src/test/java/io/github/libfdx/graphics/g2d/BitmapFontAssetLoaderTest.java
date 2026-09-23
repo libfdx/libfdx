@@ -171,7 +171,8 @@ final class BitmapFontAssetLoaderTest {
         return bytes.toByteArray();
     }
 
-    @AfterEach void cleanup() {
+    @AfterEach
+    void cleanup() {
         try { if (manager != null) manager.dispose(); }
         finally { RuntimeCore.registerProvider(previous); }
     }

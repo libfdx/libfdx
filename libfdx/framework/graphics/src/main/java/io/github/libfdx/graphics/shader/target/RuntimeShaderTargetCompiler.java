@@ -128,7 +128,8 @@ public final class RuntimeShaderTargetCompiler implements ShaderTargetCompiler {
         return assemble(request, results);
     }
 
-    @Override public FdxFuture<ShaderTargetCompileResult> compileAsync(ShaderTargetCompileRequest request,
+    @Override
+    public FdxFuture<ShaderTargetCompileResult> compileAsync(ShaderTargetCompileRequest request,
             Consumer<Runnable> execute) {
         return ShaderCompilationTasks.then(ShaderCompilationTasks.submit(execute, () -> {
             if (!supports(request)) throw new FdxException("Tint does not support the requested target");

@@ -67,7 +67,8 @@ public final class WebAssetPreparation implements ImageDecoder, TextureMipmapPre
     public int completedWorkerJobs() { return completedJobs; }
     public int fallbackJobs() { return fallbackJobs; }
 
-    @Override public FdxFuture<ImageData> decodeAsync(String path, byte[] bytes) {
+    @Override
+    public FdxFuture<ImageData> decodeAsync(String path, byte[] bytes) {
         FdxFuture<ImageData> result = FdxFuture.pending();
         if (bytes == null || bytes.length == 0 || bytes.length > MAX_INPUT) {
             result.completeExceptionally(new FdxException("Invalid encoded image size")); return result;
@@ -76,7 +77,8 @@ public final class WebAssetPreparation implements ImageDecoder, TextureMipmapPre
         return result;
     }
 
-    @Override public FdxFuture<ByteBuffer[]> prepare(ByteBuffer source, int width, int height,
+    @Override
+    public FdxFuture<ByteBuffer[]> prepare(ByteBuffer source, int width, int height,
             boolean srgb, boolean alphaWeighted) {
         FdxFuture<ByteBuffer[]> result = FdxFuture.pending();
         long pixels = (long) width * height;
@@ -232,7 +234,8 @@ public final class WebAssetPreparation implements ImageDecoder, TextureMipmapPre
         release(job); try { job.fail(failure); } finally { pump(); }
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         if (worker != null) worker.terminate();
@@ -248,7 +251,8 @@ public final class WebAssetPreparation implements ImageDecoder, TextureMipmapPre
         if (first instanceof Error error) throw error;
         if (first instanceof RuntimeException error) throw error;
     }
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 
     private record Job(int id, String path, byte[] encoded, ByteBuffer source, int width, int height,
             boolean srgb, boolean alphaWeighted, FdxFuture<ImageData> image, FdxFuture<ByteBuffer[]> mips) {
@@ -259,20 +263,30 @@ public final class WebAssetPreparation implements ImageDecoder, TextureMipmapPre
         }
     }
 
-    @JSFunctor private interface Step extends JSObject { void run(); }
-    @JSBody(params="step",script="requestAnimationFrame(function(){step();});") private static native void nextFrame(Step step);
+    @JSFunctor
+    private interface Step extends JSObject { void run(); }
+    @JSBody(params="step",script="requestAnimationFrame(function(){step();});")
+    private static native void nextFrame(Step step);
     @JSBody(script="return typeof OffscreenCanvas === 'function' && typeof createImageBitmap === 'function';")
     private static native boolean imageWorkersAvailable();
     @JSBody(params={"id","decode","bytes","width","height","srgb","alphaWeighted"},script="""
         return {id:id,decode:decode,bytes:bytes.buffer,width:width,height:height,srgb:srgb,alphaWeighted:alphaWeighted};
-        """) private static native JSObject message(int id,boolean decode,Int8Array bytes,int width,int height,boolean srgb,boolean alphaWeighted);
+        """)
+    private static native JSObject message(int id,boolean decode,Int8Array bytes,int width,int height,boolean srgb,boolean alphaWeighted);
     @JSBody(params={"source","target","start","end","offset"},script="target.set(source.subarray(start,end),offset);")
     private static native void copyRange(JSObject source,JSObject target,int start,int end,int offset);
-    @JSBody(params="m",script="return !!m.ready;") private static native boolean isReady(JSObject m);
-    @JSBody(params="m",script="return m.id;") private static native int messageId(JSObject m);
-    @JSBody(params="m",script="return m.error||null;") private static native String messageError(JSObject m);
-    @JSBody(params="m",script="return m.width;") private static native int messageWidth(JSObject m);
-    @JSBody(params="m",script="return m.height;") private static native int messageHeight(JSObject m);
-    @JSBody(params="m",script="return m.levels.length;") private static native int levelCount(JSObject m);
-    @JSBody(params={"m","i"},script="return new Int8Array(m.levels[i]);") private static native Int8Array level(JSObject m,int i);
+    @JSBody(params="m",script="return !!m.ready;")
+    private static native boolean isReady(JSObject m);
+    @JSBody(params="m",script="return m.id;")
+    private static native int messageId(JSObject m);
+    @JSBody(params="m",script="return m.error||null;")
+    private static native String messageError(JSObject m);
+    @JSBody(params="m",script="return m.width;")
+    private static native int messageWidth(JSObject m);
+    @JSBody(params="m",script="return m.height;")
+    private static native int messageHeight(JSObject m);
+    @JSBody(params="m",script="return m.levels.length;")
+    private static native int levelCount(JSObject m);
+    @JSBody(params={"m","i"},script="return new Int8Array(m.levels[i]);")
+    private static native Int8Array level(JSObject m,int i);
 }

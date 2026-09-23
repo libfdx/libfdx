@@ -139,11 +139,13 @@ public final class InputActions extends InputAdapter implements Disposable {
         for(int i=0;i<bindingCount;i++) sums[targets[i]]+=values[i];
         for(int i=0;i<actionCount;i++) actions[i].value(sums[i]);
     }
-    @Override public boolean keyDown(KeyEvent event) {
+    @Override
+    public boolean keyDown(KeyEvent event) {
         if(!enabled() || event.repeat()) return false;
         return key(event.key(),true);
     }
-    @Override public boolean keyUp(KeyEvent event) { return enabled() && key(event.key(),false); }
+    @Override
+    public boolean keyUp(KeyEvent event) { return enabled() && key(event.key(),false); }
     private boolean key(Key key,boolean down) {
         boolean matched=false;
         for(int i=0;i<bindingCount;i++) if(bindings[i].kind==InputBinding.Kind.KEY && bindings[i].key==key) {
@@ -151,8 +153,10 @@ public final class InputActions extends InputAdapter implements Disposable {
         }
         if(matched) recompute(); return matched;
     }
-    @Override public boolean pointerDown(PointerEvent event) { return enabled() && mouse(event.button(),true); }
-    @Override public boolean pointerUp(PointerEvent event) { return enabled() && mouse(event.button(),false); }
+    @Override
+    public boolean pointerDown(PointerEvent event) { return enabled() && mouse(event.button(),true); }
+    @Override
+    public boolean pointerUp(PointerEvent event) { return enabled() && mouse(event.button(),false); }
     private boolean mouse(MouseButton button,boolean down) {
         boolean matched=false;
         for(int i=0;i<bindingCount;i++) if(bindings[i].kind==InputBinding.Kind.MOUSE && bindings[i].mouse==button) {
@@ -161,7 +165,8 @@ public final class InputActions extends InputAdapter implements Disposable {
         if(matched) recompute(); return matched;
     }
     private int touch(int id) { for(int i=0;i<touchIds.length;i++) if(touching[i] && touchIds[i]==id) return i; return -1; }
-    @Override public boolean touchDown(TouchEvent event) {
+    @Override
+    public boolean touchDown(TouchEvent event) {
         if(!enabled() || event.point()==null) return false;
         TouchPoint p=event.point(); int index=touch(p.id());
         if(index<0) for(int i=0;i<touchIds.length;i++) if(!touching[i]) { index=i; break; }
@@ -169,13 +174,15 @@ public final class InputActions extends InputAdapter implements Disposable {
         touching[index]=true; touchIds[index]=p.id(); touchX[index]=p.x(); touchY[index]=p.y();
         touchValues(); recompute(); return touchHit(p.x(),p.y());
     }
-    @Override public boolean touchMoved(TouchEvent event) {
+    @Override
+    public boolean touchMoved(TouchEvent event) {
         if(!enabled() || event.point()==null) return false;
         TouchPoint p=event.point(); int index=touch(p.id()); if(index<0) return false;
         boolean wasHit=touchHit(touchX[index],touchY[index]);
         touchX[index]=p.x(); touchY[index]=p.y(); touchValues(); recompute(); return wasHit || touchHit(p.x(),p.y());
     }
-    @Override public boolean touchUp(TouchEvent event) {
+    @Override
+    public boolean touchUp(TouchEvent event) {
         if(!enabled() || event.point()==null) return false;
         int index=touch(event.point().id()); if(index<0) return false;
         touching[index]=false; touchValues(); recompute(); return true;
@@ -225,9 +232,11 @@ public final class InputActions extends InputAdapter implements Disposable {
         System.arraycopy(parsed,0,bindings,0,bindings.length); System.arraycopy(ids,0,targets,0,targets.length);
         bindingCount=count; reset();
     }
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
     /** Detaches direct registration. If routed, remove this borrowed child from its router as well. */
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if(disposed) return; reset(); disposed=true; input.removeProcessor(this);
     }
 }

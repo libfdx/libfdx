@@ -127,7 +127,8 @@ public final class DefaultRenderTarget3D implements RenderTarget3D {
         return colorAttachments.length;
     }
 
-    @Override public TextureView resolveAttachment(int index) { return resolveAttachments[index]; }
+    @Override
+    public TextureView resolveAttachment(int index) { return resolveAttachments[index]; }
 
     private static void validateView(TextureView view, int width, int height, int samples) {
         if (view.sampleCount() != samples) throw new FdxException("Target attachment sample counts differ");

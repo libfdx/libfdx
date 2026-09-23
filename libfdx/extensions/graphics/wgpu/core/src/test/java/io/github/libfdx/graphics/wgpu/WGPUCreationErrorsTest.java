@@ -8,7 +8,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class WGPUCreationErrorsTest {
-    @Test void reportsFirstCreationErrorAndClearsScopeAfterFailure() {
+    @Test
+    void reportsFirstCreationErrorAndClearsScopeAfterFailure() {
         WGPUCreationErrors errors = new WGPUCreationErrors();
         assertFalse(errors.capture("outside creation"));
         try (WGPUCreationErrors.Scope scope = errors.begin("shader module")) {
@@ -24,7 +25,8 @@ final class WGPUCreationErrorsTest {
         }
     }
 
-    @Test void doesNotCaptureAnotherDevicesError() {
+    @Test
+    void doesNotCaptureAnotherDevicesError() {
         WGPUCreationErrors first = new WGPUCreationErrors(), second = new WGPUCreationErrors();
         try (WGPUCreationErrors.Scope scope = first.begin("pipeline")) {
             assertFalse(second.capture("another device"));
@@ -34,7 +36,8 @@ final class WGPUCreationErrorsTest {
         }
     }
 
-    @Test void concurrentCallingThreadsNeverConsumeEachOthersErrors() throws Exception {
+    @Test
+    void concurrentCallingThreadsNeverConsumeEachOthersErrors() throws Exception {
         WGPUCreationErrors errors = new WGPUCreationErrors();
         try (ExecutorService executor = Executors.newSingleThreadExecutor();
                 WGPUCreationErrors.Scope owner = errors.begin("owner")) {

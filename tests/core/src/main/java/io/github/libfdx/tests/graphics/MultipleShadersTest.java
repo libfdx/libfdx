@@ -77,7 +77,8 @@ public final class MultipleShadersTest extends GraphicsParityTest {
 
     public MultipleShadersTest(long exitAfterFrames) { super(exitAfterFrames); }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, "MultipleShadersTest");
         try {
             preparePrograms();
@@ -161,7 +162,8 @@ public final class MultipleShadersTest extends GraphicsParityTest {
         markCreated();
     }
 
-    @Override public void resize(int width, int height) {
+    @Override
+    public void resize(int width, int height) {
         if (vertices != null) updateVertices();
     }
 
@@ -196,7 +198,8 @@ public final class MultipleShadersTest extends GraphicsParityTest {
         return Math.min(1.5f, Math.min(framebufferWidth() / 960f, framebufferHeight() / 720f));
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         long frameStart = System.nanoTime();
         boolean preparing = asyncPreparation != null && !asyncReported;
         if (previousFrameStart != 0) {
@@ -306,7 +309,8 @@ public final class MultipleShadersTest extends GraphicsParityTest {
         if (timerShown && (asyncPreparation == null || asyncReported)) finishFrame();
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         dispose(hud);
         dispose(font);
         dispose(assets);

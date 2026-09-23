@@ -64,15 +64,19 @@ final class DesktopNativeCompilationStressTest {
     private static final String SIMPLE = VERTEX
             + "@fragment fn fragmentMain() -> @location(0) vec4f { return vec4f(0, 1, 0, 1); }";
 
-    @ParameterizedTest @ValueSource(strings = {"Vulkan", "D3D12"})
+    @ParameterizedTest
+    @ValueSource(strings = {"Vulkan", "D3D12"})
     void cancelDuringNativePipelineCall(String backend) throws Exception { nativeOverlap(backend, false); }
 
-    @ParameterizedTest @ValueSource(strings = {"Vulkan", "D3D12"})
+    @ParameterizedTest
+    @ValueSource(strings = {"Vulkan", "D3D12"})
     void shutdownDuringNativePipelineCall(String backend) throws Exception { nativeOverlap(backend, true); }
 
-    @Test void largeSpirvModuleDoesNotConsumeTheThreadLocalNativeStack() {
+    @Test
+    void largeSpirvModuleDoesNotConsumeTheThreadLocalNativeStack() {
         run("Vulkan", new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 var translated = ShaderModuleDescriptors.requireTarget(
                         ShaderModuleDescriptor.wgsl("large SPIR-V", complexSource(512)), ShaderTarget.VULKAN_SPIRV, "Vulkan");
                 int bytes = translated.spirvFragmentWords().length * Integer.BYTES;
@@ -127,7 +131,8 @@ final class DesktopNativeCompilationStressTest {
         NativeScenario(String backend, boolean shutdown, int attempt) {
             this.backend = backend; this.shutdown = shutdown; this.steps = 512 + attempt * 128;
         }
-        @Override public void create(Fdx fdx) {
+        @Override
+        public void create(Fdx fdx) {
             device = fdx.graphics().main().device();
             String source = complexSource(steps);
             request = packet(fdx, ShaderModuleSource.deferred("vertexMain", "fragmentMain", () -> {
@@ -162,7 +167,8 @@ final class DesktopNativeCompilationStressTest {
         }
     }
 
-    @ParameterizedTest @ValueSource(strings = {"Vulkan", "D3D12"})
+    @ParameterizedTest
+    @ValueSource(strings = {"Vulkan", "D3D12"})
     void queueOverflowAndRepeatedCancellationDrainEveryAcceptedJob(String backend) throws Exception {
         CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
         ArrayList<ShaderPreparationOperation> accepted = new ArrayList<>();
@@ -170,7 +176,8 @@ final class DesktopNativeCompilationStressTest {
         GraphicsDevice[] capturedDevice = new GraphicsDevice[1];
         try {
             run(backend, new ApplicationAdapter() {
-                @Override public void create(Fdx fdx) {
+                @Override
+                public void create(Fdx fdx) {
                     GraphicsDevice device = fdx.graphics().main().device(); capturedDevice[0] = device;
                     accepted.add(device.prepareRenderPipeline(packet(fdx,
                             ShaderModuleSource.deferred("vertexMain", "fragmentMain", () -> {
@@ -285,12 +292,14 @@ final class DesktopNativeCompilationStressTest {
             ShaderPreparationOperation job;
             ShaderPreparedResult ready;
             long deadline;
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 this.fdx = fdx; deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
                 job = fdx.graphics().main().device().prepareRenderPipeline(packet(fdx,
                         ShaderModuleSource.fixed(ShaderModuleDescriptor.wgsl("fresh after stress", SIMPLE))));
             }
-            @Override public void render() {
+            @Override
+            public void render() {
                 assertTrue(System.nanoTime() < deadline, "Fresh session did not prepare");
                 if (!job.isDone()) return;
                 ready = job.finish(); job.dispose();
@@ -317,7 +326,8 @@ final class DesktopNativeCompilationStressTest {
                 System.out.println("FRESH_RENDER_PASS backend=" + backend + " after=" + name);
                 fdx.app().requestExit();
             }
-            @Override public void dispose() { if (ready != null) ready.dispose(); else if (job != null) job.cancel(); }
+            @Override
+            public void dispose() { if (ready != null) ready.dispose(); else if (job != null) job.cancel(); }
         });
     }
 }

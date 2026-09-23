@@ -11,5 +11,6 @@ public abstract class WGPUPreparation implements AutoCloseable {
     abstract void initialize(WGPUContext context, int workers);
     abstract ShaderPreparationCapabilities capabilities();
     abstract ShaderPreparationOperation submit(ShaderPipelineRequest request);
-    @Override public abstract void close();
+    @Override
+    public abstract void close();
 }

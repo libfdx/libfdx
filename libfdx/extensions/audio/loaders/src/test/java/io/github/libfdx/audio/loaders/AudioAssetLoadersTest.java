@@ -11,7 +11,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class AudioAssetLoadersTest {
-    @Test void musicOpeningFinalizationCancellationAndFailureCloseExactlyOneOwnedInput() {
+    @Test
+    void musicOpeningFinalizationCancellationAndFailureCloseExactlyOneOwnedInput() {
         // Cancellation before opening, after delivery but before creation, failed creation, and successful scope release.
         for (int phase=0; phase<4; phase++) {
             int selected=phase; int[] closed={0}, created={0}; PcmStream[] adopted={null};
@@ -61,7 +62,8 @@ final class AudioAssetLoadersTest {
             assets.dispose(); assertEquals(1,closed[0],"phase "+phase); assertEquals(phase<2 ? 0 : 1,created[0]);
         }
     }
-    @Test void asyncPcmDependencyPrecedesBudgetedDeviceUploadAndScopesShareIt() {
+    @Test
+    void asyncPcmDependencyPrecedesBudgetedDeviceUploadAndScopesShareIt() {
         FdxFuture<byte[]> bytes = FdxFuture.pending();
         Thread appThread = Thread.currentThread();
         int[] uploads = {0}, releases = {0};
@@ -96,7 +98,8 @@ final class AudioAssetLoadersTest {
             b.dispose(); assertEquals(1, releases[0]); assertNull(assets.find("tone.wav", PcmData.class));
         } finally { assets.dispose(); }
     }
-    @SuppressWarnings("unchecked") private static <T> T proxy(Class<T> type, Call call) {
+    @SuppressWarnings("unchecked")
+    private static <T> T proxy(Class<T> type, Call call) {
         return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] {type},
                 (proxy, method, args) -> call.run(method.getName(), args));
     }

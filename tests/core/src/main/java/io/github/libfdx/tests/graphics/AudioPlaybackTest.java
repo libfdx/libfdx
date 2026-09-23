@@ -43,7 +43,8 @@ public final class AudioPlaybackTest extends GraphicsParityTest {
     public AudioPlaybackTest(long frames) { this(frames, null); }
     /** Takes ownership of the optional worker executor. */
     public AudioPlaybackTest(long frames, AssetExecutor executor) { super(frames); this.executor = executor; }
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, "AudioPlaybackTest"); audio = fdx.audio();
         if (audio == null) throw new FdxException("AudioPlaybackTest requires an explicit audio provider");
         assets = new DefaultAssetManager(fdx.files(), executor);
@@ -57,9 +58,12 @@ public final class AudioPlaybackTest extends GraphicsParityTest {
         first.future().onFailure(error -> { if (!assets.isDisposed()) throw new FdxException("WAV loading failed", error); });
         input = fdx.input();
         activationInput = new InputAdapter() {
-            @Override public boolean pointerDown(PointerEvent event) { click(event.x(), event.y()); return true; }
-            @Override public boolean touchDown(TouchEvent event) { click(event.point().x(), event.point().y()); return true; }
-            @Override public boolean keyDown(KeyEvent event) {
+            @Override
+            public boolean pointerDown(PointerEvent event) { click(event.x(), event.y()); return true; }
+            @Override
+            public boolean touchDown(TouchEvent event) { click(event.point().x(), event.point().y()); return true; }
+            @Override
+            public boolean keyDown(KeyEvent event) {
                 if (event.repeat()) return false;
                 if (requiresCompletion()) { activate(); return true; }
                 switch (event.key()) {
@@ -82,7 +86,8 @@ public final class AudioPlaybackTest extends GraphicsParityTest {
         audio.resume().onSuccess(ignored -> logger.info("AudioPlaybackTest gesture activation complete"))
                 .onFailure(error -> { activationFailed = true; logger.error("Audio activation failed", error); });
     }
-    @Override public void render() {
+    @Override
+    public void render() {
         assets.update(3, 1_000_000);
         if (assets.lastUpdateTaskCount() > 3) throw new FdxException("Audio asset budget exceeded");
         hud.font(font.poll());
@@ -251,7 +256,8 @@ public final class AudioPlaybackTest extends GraphicsParityTest {
         hud.end();
         pass.end();
     }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (input != null) input.removeProcessor(activationInput);
         dispose(hud); dispose(font); dispose(assets); dispose(executor);
         if (requiresCompletion() && !released) throw new FdxException("Audio scenario did not complete activation/playback/release");

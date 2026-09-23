@@ -15,13 +15,15 @@ public final class WGPUReadbackTest extends ApplicationAdapter {
     private boolean expectedReadback;
     private int frames;
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         graphics = fdx.graphics().main();
         application = fdx.app();
         expectedReadback = !System.getProperty("libfdx.test.capture", "").isBlank();
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         GraphicsFrame frame = graphics.currentFrame();
         FrameBuffer buffer = frame.frameBuffer();
         require(buffer.supportsReadPixelsRgba8() == expectedReadback, "Incorrect readback capability");

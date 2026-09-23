@@ -69,7 +69,8 @@ public final class ModelShaderPlan implements Disposable {
             StandardPbrSourcePreparer preparer, Supplier<StandardPbrSourcePreparer.Owned> sourceFactory) {
         this.graphics = Objects.requireNonNull(graphics, "graphics");
         unavailable = new ShaderProvider() {
-            @Override public GraphicsDevice preparationDevice() { return graphics.device(); }
+            @Override
+            public GraphicsDevice preparationDevice() { return graphics.device(); }
         };
         domain = graphics.device().resourceDomain();
         profile = profile(graphics.device());
@@ -203,24 +204,29 @@ public final class ModelShaderPlan implements Disposable {
         for (int i = 0; i < collection.size(); i++) include(scope, collection.get(i), pass, target);
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         try { if (owned != null) owned.dispose(); }
         finally { if (ownedSources != null) ownedSources.dispose(); }
     }
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 
     private static final class PositionColorProvider implements ShaderProvider {
         private final GraphicsDevice device;
         PositionColorProvider(GraphicsDevice device) { this.device = device; }
-        @Override public GraphicsDevice preparationDevice() { return device; }
-        @Override public boolean supports(ShaderRequest request) {
+        @Override
+        public GraphicsDevice preparationDevice() { return device; }
+        @Override
+        public boolean supports(ShaderRequest request) {
             return request.renderPass() != null && request.variantKey().isEmpty()
                     && request.vertexLayouts().length == 1
                     && PbrShaderProvider.isPositionColorLayout(request.vertexLayouts()[0]);
         }
-        @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+        @Override
+        public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
             RenderTargetLayout target = request.renderPass().targetLayout();
             return device.prepareRenderPipeline(new ShaderPipelineRequest(
                     ShaderModuleDescriptor.wgsl("model batch position color", PbrShaderProvider.POSITION_COLOR_SHADER_SOURCE),

@@ -60,7 +60,8 @@ public final class ConcurrentGltfLoadingTest extends GraphicsParityTest {
         this.executor = executor;
     }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, "ConcurrentGltfLoadingTest");
         assets = new DefaultAssetManager(fdx.files(), executor);
         G2DAssetLoaders.register(assets, graphics);
@@ -85,7 +86,8 @@ public final class ConcurrentGltfLoadingTest extends GraphicsParityTest {
         markCreated();
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         long now = System.nanoTime();
         if (!reported && previousFrame != 0) maxLoadingGap = Math.max(maxLoadingGap, now - previousFrame);
         previousFrame = now;
@@ -148,7 +150,8 @@ public final class ConcurrentGltfLoadingTest extends GraphicsParityTest {
         finishFrame();
     }
 
-    @Override protected boolean readyForCapture() { return reported; }
+    @Override
+    protected boolean readyForCapture() { return reported; }
 
     private void drawStatus() {
         int width = framebufferWidth(), height = framebufferHeight();
@@ -164,7 +167,8 @@ public final class ConcurrentGltfLoadingTest extends GraphicsParityTest {
         pass.end();
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         try {
             if (requiresCompletion()) {
                 if (!reported || loadingFrames < 2) throw new FdxException("Concurrent models never completed");

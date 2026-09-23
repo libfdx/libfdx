@@ -185,8 +185,10 @@ public final class ParticleVolumeRenderer implements Disposable {
         block.setFloat4(layout.requireHandle("secondExtent"), other.width, other.height, other.depth, 0);
         pass.setParameterBlock(1, 0, block);
     }
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         preparedPass = null;

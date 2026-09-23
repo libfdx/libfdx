@@ -22,13 +22,20 @@ public final class WGPUStartupFaultListener implements ApplicationListener {
         }
     }
 
-    @Override public void create(Fdx fdx) { delegate.create(fdx); failOnce("create"); }
-    @Override public void resize(int width, int height) { delegate.resize(width, height); }
-    @Override public void render() { delegate.render(); failOnce("frame"); }
-    @Override public void onFrameEnd() { delegate.onFrameEnd(); }
-    @Override public void pause() { delegate.pause(); }
-    @Override public void resume() { delegate.resume(); }
-    @Override public void dispose() {
+    @Override
+    public void create(Fdx fdx) { delegate.create(fdx); failOnce("create"); }
+    @Override
+    public void resize(int width, int height) { delegate.resize(width, height); }
+    @Override
+    public void render() { delegate.render(); failOnce("frame"); }
+    @Override
+    public void onFrameEnd() { delegate.onFrameEnd(); }
+    @Override
+    public void pause() { delegate.pause(); }
+    @Override
+    public void resume() { delegate.resume(); }
+    @Override
+    public void dispose() {
         delegate.dispose();
         System.out.println("[wgpu-startup] listener resources disposed");
     }

@@ -6,11 +6,14 @@ import static org.junit.jupiter.api.Assertions.*;
 class AndroidGraphicsStartupRecoveryTest {
     private static final class MemoryStore implements AndroidGraphicsStartupRecovery.Store {
         AndroidGraphicsStartupRecovery.State state = AndroidGraphicsStartupRecovery.State.empty();
-        @Override public AndroidGraphicsStartupRecovery.State read() { return state; }
-        @Override public void write(AndroidGraphicsStartupRecovery.State value) { state = value; }
+        @Override
+        public AndroidGraphicsStartupRecovery.State read() { return state; }
+        @Override
+        public void write(AndroidGraphicsStartupRecovery.State value) { state = value; }
     }
 
-    @Test void nativeStartupCrashAdvancesOnceAndRemembersSuccessfulFallback() {
+    @Test
+    void nativeStartupCrashAdvancesOnceAndRemembersSuccessfulFallback() {
         MemoryStore store = new MemoryStore();
         AndroidGraphicsStartupRecovery first = recovery(store, false, 10);
         first.begin(0, 100);
@@ -22,14 +25,16 @@ class AndroidGraphicsStartupRecoveryTest {
         assertEquals(1, recovery(store, false, 12).firstAttempt());
     }
 
-    @Test void ordinaryTerminationAndMissingEvidenceDoNotDisablePrimary() {
+    @Test
+    void ordinaryTerminationAndMissingEvidenceDoNotDisablePrimary() {
         MemoryStore store = new MemoryStore();
         recovery(store, false, 10).begin(0, 100);
         assertEquals(0, recovery(store, false, 11).firstAttempt());
         assertEquals(-1, store.state.pending());
     }
 
-    @Test void completedStartupDoesNotAttributeLaterCrashToInitialization() {
+    @Test
+    void completedStartupDoesNotAttributeLaterCrashToInitialization() {
         MemoryStore store = new MemoryStore();
         AndroidGraphicsStartupRecovery first = recovery(store, false, 10);
         first.begin(0, 100);
@@ -37,7 +42,8 @@ class AndroidGraphicsStartupRecoveryTest {
         assertEquals(0, recovery(store, true, 11).firstAttempt());
     }
 
-    @Test void orderlyPauseOrTeardownClearsPendingMarker() {
+    @Test
+    void orderlyPauseOrTeardownClearsPendingMarker() {
         MemoryStore store = new MemoryStore();
         AndroidGraphicsStartupRecovery first = recovery(store, false, 10);
         first.begin(0, 100);
@@ -45,7 +51,8 @@ class AndroidGraphicsStartupRecoveryTest {
         assertEquals(0, recovery(store, true, 11).firstAttempt());
     }
 
-    @Test void failedFallbackExhaustsInsteadOfCyclingBackToVulkan() {
+    @Test
+    void failedFallbackExhaustsInsteadOfCyclingBackToVulkan() {
         MemoryStore store = new MemoryStore();
         recovery(store, false, 10).begin(0, 100);
         recovery(store, true, 11).begin(1, 200);
@@ -53,13 +60,15 @@ class AndroidGraphicsStartupRecoveryTest {
         assertEquals(2, recovery(store, true, 13).firstAttempt());
     }
 
-    @Test void sameProcessActivityRecreationIsNotACrash() {
+    @Test
+    void sameProcessActivityRecreationIsNotACrash() {
         MemoryStore store = new MemoryStore();
         recovery(store, false, 10).begin(0, 100);
         assertEquals(0, recovery(store, true, 10).firstAttempt());
     }
 
-    @Test void errorRetryIsRememberedOnlyAfterSuccessfulFrame() {
+    @Test
+    void errorRetryIsRememberedOnlyAfterSuccessfulFrame() {
         MemoryStore store = new MemoryStore();
         AndroidGraphicsStartupRecovery first = recovery(store, false, 10);
         first.begin(0, 100);
@@ -70,7 +79,8 @@ class AndroidGraphicsStartupRecoveryTest {
         assertEquals(1, store.state.selected());
     }
 
-    @Test void passesExactAttemptPidAndTimeToExitEvidenceLookup() {
+    @Test
+    void passesExactAttemptPidAndTimeToExitEvidenceLookup() {
         MemoryStore store = new MemoryStore();
         recovery(store, false, 10).begin(0, 100);
         new AndroidGraphicsStartupRecovery(store, (pid, started, now) -> {
@@ -81,15 +91,18 @@ class AndroidGraphicsStartupRecoveryTest {
         }, 11, 300, 2);
     }
 
-    @Test void persistenceFailureStopsBeforeEnteringNativeStartup() {
+    @Test
+    void persistenceFailureStopsBeforeEnteringNativeStartup() {
         MemoryStore store = new MemoryStore();
         AndroidGraphicsStartupRecovery recovery = recovery(store, false, 10);
         assertThrows(IllegalArgumentException.class, () -> recovery.begin(2, 100));
         assertEquals(-1, store.state.pending());
         assertThrows(IllegalStateException.class, () -> new AndroidGraphicsStartupRecovery(
                 new AndroidGraphicsStartupRecovery.Store() {
-                    @Override public AndroidGraphicsStartupRecovery.State read() { return store.state; }
-                    @Override public void write(AndroidGraphicsStartupRecovery.State state) {
+                    @Override
+                    public AndroidGraphicsStartupRecovery.State read() { return store.state; }
+                    @Override
+                    public void write(AndroidGraphicsStartupRecovery.State state) {
                         throw new IllegalStateException("Disk full");
                     }
                 }, (pid, start, end) -> false, 11, 300, 2));

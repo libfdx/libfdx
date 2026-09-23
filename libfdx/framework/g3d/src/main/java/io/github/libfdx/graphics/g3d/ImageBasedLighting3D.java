@@ -63,7 +63,8 @@ public final class ImageBasedLighting3D implements Disposable {
     public boolean isDisposed() { return disposed; }
     private void checkAlive() { if (disposed) throw new FdxException("Image-based lighting resource is disposed"); }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         try { specular.dispose(); } finally { try { diffuse.dispose(); } finally { brdf.dispose(); } }

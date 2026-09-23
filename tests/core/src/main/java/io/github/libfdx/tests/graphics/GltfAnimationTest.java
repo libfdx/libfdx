@@ -50,7 +50,8 @@ public final class GltfAnimationTest extends GraphicsParityTest {
 
     public GltfAnimationTest(long frames) { super(frames); }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, "GltfAnimationTest");
         assets = new DefaultAssetManager(fdx.files());
         G3DAssetLoaders.register(assets, graphics);
@@ -105,7 +106,8 @@ public final class GltfAnimationTest extends GraphicsParityTest {
         markCreated();
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         if (!ready) {
             boolean loaded = assets.update(2, 1_000_000);
             hud.font(font.poll());
@@ -226,7 +228,8 @@ public final class GltfAnimationTest extends GraphicsParityTest {
         }
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         for (var batch : batches) dispose(batch);
         for (var model : referenceModels) dispose(model);
         dispose(blitter);

@@ -6,7 +6,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class PlatformerMenuInputTest {
-    @Test void menuClicksAreConsumedAndVisibleTouchButtonsFollowHighDpiLetterboxing() {
+    @Test
+    void menuClicksAreConsumedAndVisibleTouchButtonsFollowHighDpiLetterboxing() {
         DefaultInput input=new DefaultInput(); InputRouter router=new InputRouter(); PlatformerView view=new PlatformerView();
         view.update(480,270,960,540);
         PlatformerMenuInput menu=new PlatformerMenuInput(input,router,view,null,null);
@@ -29,7 +30,8 @@ final class PlatformerMenuInputTest {
             input.dispatchKeyUp(Key.D); menu.state(false,false); input.dispatchKeyDown(Key.D); game.update(480,270); assertTrue(game.rightDown());
         } finally { input.removeProcessor(router); game.dispose(); menu.dispose(); }
     }
-    @Test void croppedControlsAndResizePreserveCustomKeyboardBindings() {
+    @Test
+    void croppedControlsAndResizePreserveCustomKeyboardBindings() {
         DefaultInput input=new DefaultInput(); BackendPlatformerInput game=new BackendPlatformerInput(input);
         PlatformerView view=new PlatformerView();
         try {

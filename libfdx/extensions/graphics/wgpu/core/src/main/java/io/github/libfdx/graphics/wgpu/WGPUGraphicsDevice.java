@@ -209,16 +209,19 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         this.context = context;
     }
 
-    @Override public Object resourceDomain() {
+    @Override
+    public Object resourceDomain() {
         return context.isDisposed() || context.resourceDomain().isClosed() ? closedDomain : context.resourceDomain();
     }
 
-    @Override public ShaderPreparationCapabilities shaderPreparationCapabilities() {
+    @Override
+    public ShaderPreparationCapabilities shaderPreparationCapabilities() {
         WGPUPreparation preparation = context.preparation();
         return preparation == null ? ShaderPreparationCapabilities.UNAVAILABLE : preparation.capabilities();
     }
 
-    @Override public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
+    @Override
+    public ShaderPreparationOperation prepareRenderPipeline(ShaderPipelineRequest request) {
         context.requireDeviceUsable("prepare a render pipeline");
         if (request == null) throw new FdxException("Shader pipeline request cannot be null");
         WGPUPreparation preparation = context.preparation();
@@ -277,9 +280,11 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
         context.nativeQueue().writeBuffer(wgpuBuffer.nativeBuffer(), 0, uploadData, uploadByteCount);
     }
 
-    @Override public boolean supportsBufferRangeInitialization() { return true; }
+    @Override
+    public boolean supportsBufferRangeInitialization() { return true; }
 
-    @Override public void initializeBufferRange(Buffer buffer, int offset, ByteBuffer data) {
+    @Override
+    public void initializeBufferRange(Buffer buffer, int offset, ByteBuffer data) {
         context.requireDeviceUsable("initialize a buffer");
         WGPUBufferHandle target = WGPUResources.requireBuffer(buffer, context.resourceDomain(), "Buffer");
         io.github.libfdx.graphics.BufferInitialization.validate(target, offset, data);
@@ -810,7 +815,8 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
             return result;
         }
 
-        @Override public void close() {
+        @Override
+        public void close() {
             if (closed) return;
             closed = true;
             WGPUCleanup cleanup = new WGPUCleanup();
@@ -1475,7 +1481,8 @@ final class WGPUGraphicsDevice implements GraphicsDevice {
             return value;
         }
 
-        @Override public void close() {
+        @Override
+        public void close() {
             WGPUCleanup cleanup = new WGPUCleanup();
             for (int i = owned.size() - 1; i >= 0; i--) cleanup.run(owned.get(i)::dispose);
             owned.clear();

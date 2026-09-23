@@ -73,7 +73,8 @@ public final class GltfLoadingTest extends GraphicsParityTest {
         this.executor = executor;
     }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, "GltfLoadingTest");
         assets = new DefaultAssetManager(fdx.files(), executor);
         G2DAssetLoaders.register(assets, graphics);
@@ -100,7 +101,8 @@ public final class GltfLoadingTest extends GraphicsParityTest {
         markCreated();
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         long now = System.nanoTime();
         if (previousFrameNanos != 0) maxFrameGapNanos = Math.max(maxFrameGapNanos, now - previousFrameNanos);
         previousFrameNanos = now;
@@ -165,7 +167,8 @@ public final class GltfLoadingTest extends GraphicsParityTest {
         pass.end();
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         logger.info("GltfLoadingTest timing: maxLoadingUpdateMs=" + maxLoadingUpdateNanos / 1_000_000.0
                 + ", maxModelRenderMs=" + maxModelRenderNanos / 1_000_000.0
                 + ", maxShaderUpdateMs=" + maxShaderUpdateNanos / 1_000_000.0

@@ -76,7 +76,8 @@ final class WGPUDawnPipelines implements AutoCloseable {
         for (Result result : completed) result.complete();
     }
 
-    @Override public void close() {
+    @Override
+    public void close() {
         synchronized (domain) { closed = true; }
         // The CPU workers may still be returning from submission. Shutdown is performed only
         // after they and every pending callback have retired (see drained()).
@@ -102,7 +103,8 @@ final class WGPUDawnPipelines implements AutoCloseable {
             this.module = module;
         }
 
-        @Override protected void onCallback(WGPUCreatePipelineAsyncStatus status,
+        @Override
+        protected void onCallback(WGPUCreatePipelineAsyncStatus status,
                 WGPURenderPipeline pipeline, String message) {
             this.status = status;
             this.pipeline = pipeline;

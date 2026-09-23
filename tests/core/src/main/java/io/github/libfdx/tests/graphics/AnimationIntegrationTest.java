@@ -53,7 +53,8 @@ public final class AnimationIntegrationTest extends GraphicsParityTest {
 
     public AnimationIntegrationTest(long frames) { super(frames); }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx,"AnimationIntegrationTest");
         assets=new DefaultAssetManager(fdx.files());
         G2DAssetLoaders.register(assets,graphics);
@@ -107,7 +108,8 @@ public final class AnimationIntegrationTest extends GraphicsParityTest {
         simulationFrame++;
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         assets.update(2,1_000_000);
         hud.font(font.poll());
         boolean ready=hud.hasFont();
@@ -272,7 +274,8 @@ public final class AnimationIntegrationTest extends GraphicsParityTest {
                 new AnimationClip.Event(1.5f,"return")});
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         for (var batch : batches) dispose(batch);
         for (var shadow : shadows) dispose(shadow);
         for (var animator : cpu) dispose(animator);

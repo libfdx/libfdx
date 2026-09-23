@@ -30,7 +30,8 @@ public final class OffscreenCompositionTest extends GraphicsParityTest {
     private RenderPassDescriptor regularClear, multiClear;
     private int frames, resizeCount;
     public OffscreenCompositionTest(long frames){super(frames);}
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx,"OffscreenCompositionTest");
         regular=target(1); chain=new OffscreenTarget(graphics.device(),TextureFormat.RGBA8_UNORM,null,1,TextureFilter.NEAREST); chain.resize(128,96);
         var caps=graphics.device().capabilities();
@@ -70,7 +71,8 @@ public final class OffscreenCompositionTest extends GraphicsParityTest {
                 .depthStencilAttachment(RenderPassDepthStencilAttachment.of(target.depth().view(),
                         LoadOp.clear(.7f,0,0,0),StoreOp.store(),LoadOp.load(),StoreOp.store()));
     }
-    @Override public void render(){
+    @Override
+    public void render(){
         GraphicsFrame frame=graphics.currentFrame();
         int size=((frames/10)%3+1)*32;
         Texture old=frames==0?null:regular.color();
@@ -105,7 +107,8 @@ public final class OffscreenCompositionTest extends GraphicsParityTest {
             data[i++]=red;data[i++]=green;data[i++]=blue;data[i++]=a;}
         return i;
     }
-    @Override public void dispose(){
+    @Override
+    public void dispose(){
         dispose(blitter);dispose(vertices);dispose(one);dispose(four);dispose(shader);
         dispose(chain);dispose(multisample);dispose(regular);
         logger.info("OffscreenCompositionTest resize generations="+resizeCount);

@@ -7,7 +7,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class StandardPbrSourcesTest {
-    @Test void workerRecipeMatchesCanonicalSourcesReflectionAndDefaultValuesForEveryVariantAndProfile() {
+    @Test
+    void workerRecipeMatchesCanonicalSourcesReflectionAndDefaultValuesForEveryVariantAndProfile() {
         for (ShaderProfile profile : ShaderProfile.values()) {
             var capabilities = GraphicsCapabilities.builder().profile(profile)
                     .clipDepthRange(ClipDepthRange.NEGATIVE_ONE_TO_ONE).build();
@@ -32,7 +33,8 @@ class StandardPbrSourcesTest {
         }
     }
 
-    @Test void sourcePacketRejectsIncompleteVariantsAndSnapshotsTheArray() {
+    @Test
+    void sourcePacketRejectsIncompleteVariantsAndSnapshotsTheArray() {
         String[] variants = {"a","b","c","d","e","f","g","h"};
         var packet = new StandardPbrSources(ShaderProfile.PORTABLE_WEBGL2,"surface","library",variants);
         variants[0] = "changed";

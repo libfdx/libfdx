@@ -37,10 +37,15 @@ final class GLComputePipeline implements ComputePipeline {
         domain.requireUsable();
         if (disposed) throw new FdxException("GL compute pipeline is disposed");
     }
-    @Override public ProviderId providerId() { return module.providerId(); }
-    @Override @SuppressWarnings("unchecked") public <T> T as() { return (T) this; }
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public ProviderId providerId() { return module.providerId(); }
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> T as() { return (T) this; }
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if (!disposed) { disposed = true; module.releaseFromPipeline(); }
     }
 }

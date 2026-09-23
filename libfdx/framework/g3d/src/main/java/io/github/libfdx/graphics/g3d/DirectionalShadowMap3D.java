@@ -796,9 +796,12 @@ public final class DirectionalShadowMap3D implements Disposable {
                     DirectionalShadowMap3D.this, false);
         }
 
-        @Override public ModelShaderPlan preparationPlan() { return plan; }
-        @Override public GraphicsDevice preparationDevice() { return graphics.device(); }
-        @Override public boolean supports(ShaderRequest request) {
+        @Override
+        public ModelShaderPlan preparationPlan() { return plan; }
+        @Override
+        public GraphicsDevice preparationDevice() { return graphics.device(); }
+        @Override
+        public boolean supports(ShaderRequest request) {
             if (isDisposed() || !request.passId().equals(ShaderPassId.SHADOW) || request.renderPass() == null
                     || !request.renderPass().targetLayout().hasDepthStencil()
                     || request.renderPass().targetLayout().colorAttachmentCount() != 1
@@ -807,7 +810,8 @@ public final class DirectionalShadowMap3D implements Disposable {
             return layouts.length == 1 && layouts[0].attributeCount() > 0
                     && layouts[0].attribute(0).location() == 0 && layouts[0].attribute(0).format() == VertexFormat.FLOAT32X3;
         }
-        @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+        @Override
+        public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
             boolean skinned = request.variantKey().startsWith("skinned");
             return graphics.device().prepareRenderPipeline(new ShaderPipelineRequest(
                     ShaderModuleSource.deferred("vertexMain", "fragmentMain", () -> ShaderModuleDescriptor.wgsl(
@@ -818,7 +822,8 @@ public final class DirectionalShadowMap3D implements Disposable {
                                     .depthWriteEnabled(true).depthCompare(CompareFunction.LESS_EQUAL).build())
                             .vertexLayouts(request.vertexLayouts()), request.passId(), revision()));
         }
-        @Override public ShaderPreloadRecipe preloadRecipe(ShaderRequest request, String role) {
+        @Override
+        public ShaderPreloadRecipe preloadRecipe(ShaderRequest request, String role) {
             return new ShaderPreloadRecipe("libfdx.directional-shadow", 1, role, Map.of(
                     "variant", request.variantKey(), "topology", request.topology().name(),
                     "vertexLayouts", ShaderPreloadVertexLayouts.encode(request.vertexLayouts())), Map.of());

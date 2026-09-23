@@ -29,7 +29,8 @@ import static io.github.libfdx.graphics.shader.runtime.ShaderPreparationState.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ShaderPreparationTest {
-    @Test void timingDistinguishesReadinessDemandAndActualDrawAndFreezesSnapshots() {
+    @Test
+    void timingDistinguishesReadinessDemandAndActualDrawAndFreezesSnapshots() {
         Fixture f = new Fixture(4, 8, 16);
         f.instrument = true;
         var capture = f.service.captureRuntime("timed");
@@ -60,7 +61,8 @@ class ShaderPreparationTest {
         f.service.dispose();
     }
 
-    @Test void cancelledNativeWorkKeepsItsTraceUntilDrainCompletes() {
+    @Test
+    void cancelledNativeWorkKeepsItsTraceUntilDrainCompletes() {
         Fixture f = new Fixture(1, 8, 16);
         f.instrument = true;
         var handle = f.service.request(f, request("cancelled-worker"));
@@ -81,7 +83,8 @@ class ShaderPreparationTest {
         assertEquals(ShaderPreparationPhase.COMPLETE, job.trace.phase());
     }
 
-    @Test void queuedCancellationAndUnsupportedHaveFrozenTimingsAndNoInventedPhases() {
+    @Test
+    void queuedCancellationAndUnsupportedHaveFrozenTimingsAndNoInventedPhases() {
         Fixture f = new Fixture(4, 8, 16);
         var handle = f.service.request(f, request("cancelled"));
         handle.dispose();
@@ -99,7 +102,8 @@ class ShaderPreparationTest {
         f.service.dispose();
     }
 
-    @Test void failedOperationRetainsMeasuredPhasesWithoutFirstDraw() {
+    @Test
+    void failedOperationRetainsMeasuredPhasesWithoutFirstDraw() {
         Fixture f = new Fixture(4, 8, 16);
         f.instrument = true;
         var handle = f.service.request(f, request("failure"));
@@ -124,7 +128,8 @@ class ShaderPreparationTest {
                 new ShaderPreloadRecipe("test.factory", 1, "surface", Map.of("variant", variant), Map.of()));
     }
 
-    @Test void captureObservesDrawDemandIncludingReadyHitsButNotPreloadOrPolling() {
+    @Test
+    void captureObservesDrawDemandIncludingReadyHitsButNotPreloadOrPolling() {
         Fixture f = new Fixture(4, 8, 16);
         var capture = f.service.captureRuntime("level");
         var scope = f.service.createScope("level");
@@ -145,7 +150,8 @@ class ShaderPreparationTest {
         assertEquals(7, capture.snapshot().discoveries().getFirst().logicalDraws());
     }
 
-    @Test void sharedRequirementsRetainContentOriginsAndEveryLogicalPreloadRole() {
+    @Test
+    void sharedRequirementsRetainContentOriginsAndEveryLogicalPreloadRole() {
         Fixture f = new Fixture(4, 8, 16);
         var capture = f.service.captureRuntime("shared content");
         var handle = f.service.request(f, request("shared"));
@@ -168,7 +174,8 @@ class ShaderPreparationTest {
         assertEquals(3, capture.snapshot().discoveries().getFirst().origins().size());
     }
 
-    @Test void originLimitReportsIncompleteCaptureWithoutDroppingKnownRequirementDrawCounts() {
+    @Test
+    void originLimitReportsIncompleteCaptureWithoutDroppingKnownRequirementDrawCounts() {
         Fixture f = new Fixture(4, 8, 16);
         var capture = f.service.captureRuntime("many models");
         var handle = f.service.request(f, request("shared"));
@@ -181,7 +188,8 @@ class ShaderPreparationTest {
         assertFalse(ShaderPreloadManifest.fromJson(snapshot.manifest().toJson()).diagnostics().isEmpty());
     }
 
-    @Test void captureManifestReplaysInFreshServiceWithNoRuntimePreparationMiss() {
+    @Test
+    void captureManifestReplaysInFreshServiceWithNoRuntimePreparationMiss() {
         Fixture cold = new Fixture(4, 8, 16);
         var capture = cold.service.captureRuntime("forest");
         var runtime = cold.service.request(cold, request("new-variant"));
@@ -210,7 +218,8 @@ class ShaderPreparationTest {
         assertEquals(1, replay.jobs.size());
     }
 
-    @Test void captureReportsPreloadTooLateAndLostResidencySeparately() {
+    @Test
+    void captureReportsPreloadTooLateAndLostResidencySeparately() {
         Fixture f = new Fixture(4, 8, 0);
         var preload = f.service.createScope("old level");
         preload.include(f, request("evicted"));
@@ -226,7 +235,8 @@ class ShaderPreparationTest {
         assertEquals(ShaderPreloadDiscovery.Cause.PRELOAD_TOO_LATE, capture.snapshot().discoveries().get(1).cause());
     }
 
-    @Test void captureAggregatesARequirementAcrossResidencyLossWithoutConsumingAnotherSlot() {
+    @Test
+    void captureAggregatesARequirementAcrossResidencyLossWithoutConsumingAnotherSlot() {
         Fixture f = new Fixture(4, 8, 0);
         var capture = f.service.captureRuntime("one requirement", 1);
         List<ShaderPreloadDiscovery> callbacks = new ArrayList<>(); capture.onDiscovery(callbacks::add);
@@ -256,7 +266,8 @@ class ShaderPreparationTest {
         assertEquals(1, capture.snapshot().manifest().recipes().size());
     }
 
-    @Test void captureRetryUpdatesOneDiscoveryAndOlderConsumersCannotRestoreTheFailedOutcome() {
+    @Test
+    void captureRetryUpdatesOneDiscoveryAndOlderConsumersCannotRestoreTheFailedOutcome() {
         Fixture f = new Fixture(4, 8, 16);
         var capture = f.service.captureRuntime("retry");
         List<ShaderPreloadDiscovery> callbacks = new ArrayList<>(); capture.onDiscovery(callbacks::add);
@@ -284,7 +295,8 @@ class ShaderPreparationTest {
         assertEquals(ShaderPreloadDiscovery.Cause.FAILED, failed.cause());
     }
 
-    @Test void captureRevisionAndStructuralChangesRemainDistinctRequirements() {
+    @Test
+    void captureRevisionAndStructuralChangesRemainDistinctRequirements() {
         Fixture f = new Fixture(4, 8, 16);
         var capture = f.service.captureRuntime("configuration");
         f.service.request(f, request("a")).recordDraws(origin("a"), 1, true);
@@ -296,7 +308,8 @@ class ShaderPreparationTest {
                 capture.snapshot().discoveries().get(1).cause());
     }
 
-    @Test void captureLimitAndDisposalDoNotCancelSharedNativeWork() {
+    @Test
+    void captureLimitAndDisposalDoNotCancelSharedNativeWork() {
         Fixture f = new Fixture(4, 8, 16);
         var capture = f.service.captureRuntime("bounded", 1);
         var a = f.service.request(f, request("a")); var b = f.service.request(f, request("b"));
@@ -316,7 +329,8 @@ class ShaderPreparationTest {
         assertEquals(ShaderPreparationState.PREPARING, capture.snapshot().discoveries().getFirst().state());
     }
 
-    @Test void captureExportDeliversCompletionOnlyThroughApplicationUpdate() {
+    @Test
+    void captureExportDeliversCompletionOnlyThroughApplicationUpdate() {
         Fixture f = new Fixture(4, 8, 16);
         var capture = f.service.captureRuntime("export");
         FdxFuture<Void> writing = FdxFuture.pending();
@@ -328,7 +342,8 @@ class ShaderPreparationTest {
         assertTrue(export.isDone()); assertEquals(List.of("done"), callbacks);
     }
 
-    @Test void proceduralInputsAndFailedCompilationRemainActionableInExportAndImport() {
+    @Test
+    void proceduralInputsAndFailedCompilationRemainActionableInExportAndImport() {
         Fixture f = new Fixture(4, 8, 16);
         var capture = f.service.captureRuntime("procedural");
         var handle = f.service.request(f, request("unknown"));
@@ -346,7 +361,8 @@ class ShaderPreparationTest {
         assertEquals(ShaderPreloadResolver.Status.REQUIRES_INPUT, imported.items().getFirst().status());
     }
 
-    @Test void manifestOrderAndConditionsSurviveMergingAndRoundTrip() {
+    @Test
+    void manifestOrderAndConditionsSurviveMergingAndRoundTrip() {
         var a = new ShaderPreloadRecipe("factory", 1, "surface", Map.of("z", "1", "a", "quote\""), Map.of("quality", "ultra"));
         var b = new ShaderPreloadRecipe("factory", 1, "surface", Map.of("a", "quote\"", "z", "1"), Map.of("quality", "low"));
         var first = new ShaderPreloadManifest(List.of("z", "a"), List.of(b, a, a));
@@ -356,7 +372,8 @@ class ShaderPreparationTest {
         assertEquals(first.toJson(), ShaderPreloadManifest.merge(List.of(first, second)).toJson());
     }
 
-    @Test void mergedManifestRetainsSegmentMembershipAndCompleteness() {
+    @Test
+    void mergedManifestRetainsSegmentMembershipAndCompleteness() {
         var forest = origin("forest").recipe(); var cave = origin("cave").recipe();
         var first = new ShaderPreloadManifest(List.of(new ShaderPreloadManifest.Segment("forest", List.of(forest), 3, 0)));
         var second = new ShaderPreloadManifest(List.of(new ShaderPreloadManifest.Segment("cave", List.of(cave), 0, 2)));
@@ -374,7 +391,8 @@ class ShaderPreparationTest {
                     .entryPoints(ShaderEntryPoint.builder("vs", ShaderStage.VERTEX).build(),
                             ShaderEntryPoint.builder("fs", ShaderStage.FRAGMENT).build()).build());
 
-    @Test void scopeAndRuntimeShareWorkAndPublishOnlyAtUpdate() {
+    @Test
+    void scopeAndRuntimeShareWorkAndPublishOnlyAtUpdate() {
         Fixture f = new Fixture(2, 8, 0);
         var scope = f.service.createScope("level");
         var preload = scope.include(f, request("a"));
@@ -406,7 +424,8 @@ class ShaderPreparationTest {
         assertEquals(1, f.jobs.getFirst().released);
     }
 
-    @Test void failuresAreStickyAndDoNotAbandonOtherJobs() {
+    @Test
+    void failuresAreStickyAndDoNotAbandonOtherJobs() {
         Fixture f = new Fixture(1, 8, 16);
         var scope = f.service.createScope("mixed");
         var failed = scope.include(f, request("bad"));
@@ -436,7 +455,8 @@ class ShaderPreparationTest {
         assertEquals(3, f.jobs.size());
     }
 
-    @Test void boundsInFlightPublicationAndImmediateSubmissionFailures() {
+    @Test
+    void boundsInFlightPublicationAndImmediateSubmissionFailures() {
         Fixture f = new Fixture(2, 1, 16);
         for (int i = 0; i < 6; i++) f.service.request(f, request("v" + i));
         f.service.update();
@@ -457,7 +477,8 @@ class ShaderPreparationTest {
         assertEquals(4, rejected.service.queuedCount());
     }
 
-    @Test void emptyAndCacheHitScopesAndLateListenersDispatchThroughUpdate() throws Exception {
+    @Test
+    void emptyAndCacheHitScopesAndLateListenersDispatchThroughUpdate() throws Exception {
         Fixture f = new Fixture(2, 8, 16);
         var empty = f.service.prepareAsync(f.service.createScope("empty").seal());
         List<Thread> notified = new ArrayList<>();
@@ -486,7 +507,8 @@ class ShaderPreparationTest {
         assertNotNull(handle.readyPass());
     }
 
-    @Test void callbackFailureDoesNotStarveOtherCallbacksAndRecursiveUpdateIsRejected() {
+    @Test
+    void callbackFailureDoesNotStarveOtherCallbacksAndRecursiveUpdateIsRejected() {
         Fixture f = new Fixture(1, 1, 16);
         List<String> events = new ArrayList<>();
         var first = f.service.prepareAsync(f.service.createScope("one").seal());
@@ -505,7 +527,8 @@ class ShaderPreparationTest {
         assertFalse(f.service.hasPendingWork());
     }
 
-    @Test void consumerCancellationDoesNotCancelSharedNativeWork() {
+    @Test
+    void consumerCancellationDoesNotCancelSharedNativeWork() {
         Fixture f = new Fixture(1, 8, 0);
         var first = f.service.request(f, request("a"));
         var second = first.retain();
@@ -523,7 +546,8 @@ class ShaderPreparationTest {
         assertEquals(1, f.jobs.getFirst().released);
     }
 
-    @Test void unobservedInFlightWorkCanBeReusedWithoutDuplicateAndThenRetired() {
+    @Test
+    void unobservedInFlightWorkCanBeReusedWithoutDuplicateAndThenRetired() {
         Fixture f = new Fixture(1, 8, 0);
         var first = f.service.request(f, request("a"));
         f.service.update();
@@ -538,7 +562,8 @@ class ShaderPreparationTest {
         assertEquals(1, f.jobs.getFirst().released);
     }
 
-    @Test void queuedCancellationDoesNotStartWorkAndScopeReportsCancellation() {
+    @Test
+    void queuedCancellationDoesNotStartWorkAndScopeReportsCancellation() {
         Fixture f = new Fixture(1, 8, 0);
         var scope = f.service.createScope("cancelled");
         scope.include(f, request("a"));
@@ -550,7 +575,8 @@ class ShaderPreparationTest {
         assertFalse(future.get().allReady());
     }
 
-    @Test void shutdownDrainsUncancellableNativeOperationAndDisposesLateResultExactlyOnce() {
+    @Test
+    void shutdownDrainsUncancellableNativeOperationAndDisposesLateResultExactlyOnce() {
         Fixture f = new Fixture(1, 8, 0);
         var handle = f.service.request(f, request("a"));
         f.service.update();
@@ -572,7 +598,8 @@ class ShaderPreparationTest {
         assertThrows(FdxException.class, () -> f.service.request(f, request("a")));
     }
 
-    @Test void revisionChangeRejectsLateResultButKeepsAlreadyReadyLeaseForHotReload() {
+    @Test
+    void revisionChangeRejectsLateResultButKeepsAlreadyReadyLeaseForHotReload() {
         Fixture f = new Fixture(2, 8, 0);
         var ready = f.service.request(f, request("ready"));
         var pending = f.service.request(f, request("pending"));
@@ -597,7 +624,8 @@ class ShaderPreparationTest {
         assertEquals(1, f.jobs.getFirst().released);
     }
 
-    @Test void deviceGenerationChangeCancelsAndDrainsAndForeignDomainIsRejected() {
+    @Test
+    void deviceGenerationChangeCancelsAndDrainsAndForeignDomainIsRejected() {
         Fixture f = new Fixture(1, 8, 0);
         Fixture foreign = new Fixture(1, 8, 0);
         assertThrows(FdxException.class, () -> f.service.request(foreign, request("a")));
@@ -613,7 +641,8 @@ class ShaderPreparationTest {
         assertEquals(1, f.jobs.getFirst().released);
     }
 
-    @Test void deviceGenerationChangeRetiresReadyLeasesAndRejectsLateCompletion() {
+    @Test
+    void deviceGenerationChangeRetiresReadyLeasesAndRejectsLateCompletion() {
         Fixture f = new Fixture(2, 8, 0);
         var ready = f.service.request(f, request("ready"));
         var pending = f.service.request(f, request("pending"));
@@ -638,7 +667,8 @@ class ShaderPreparationTest {
         assertEquals(1, f.jobs.getLast().released);
     }
 
-    @Test void invalidProviderResultIsReleasedAndNeverPublished() {
+    @Test
+    void invalidProviderResultIsReleasedAndNeverPublished() {
         Fixture f = new Fixture(1, 8, 0);
         var handle = f.service.request(f, request("a"));
         f.service.update();
@@ -651,7 +681,8 @@ class ShaderPreparationTest {
         assertEquals(1, f.jobs.getFirst().disposals);
     }
 
-    @Test void pinnedScopeSurvivesCapacityPressure() {
+    @Test
+    void pinnedScopeSurvivesCapacityPressure() {
         Fixture f = new Fixture(4, 8, 1);
         var pinned = f.service.createScope("level");
         var retained = pinned.include(f, request("pinned"));
@@ -668,7 +699,8 @@ class ShaderPreparationTest {
         assertEquals(2, f.jobs.stream().mapToInt(job -> job.released).sum());
     }
 
-    @Test void unsupportedProvidersNeverCallSynchronousResolve() {
+    @Test
+    void unsupportedProvidersNeverCallSynchronousResolve() {
         Fixture f = new Fixture(1, 8, 16);
         f.capabilities = ShaderPreparationCapabilities.UNAVAILABLE;
         var scope = f.service.createScope("unsupported");
@@ -682,7 +714,8 @@ class ShaderPreparationTest {
         assertNotNull(handle.failure());
     }
 
-    @Test void loadingOnlyRequiresExplicitLoadingUpdateAndRuntimeCanUsePreloadedResult() {
+    @Test
+    void loadingOnlyRequiresExplicitLoadingUpdateAndRuntimeCanUsePreloadedResult() {
         Fixture f = new Fixture(1, 8, 16);
         f.capabilities = new ShaderPreparationCapabilities(WORKERS, OWNER_THREAD, false, 1, false, false);
         var rejected = f.service.request(f, request("a"));
@@ -699,7 +732,8 @@ class ShaderPreparationTest {
         assertEquals(UNSUPPORTED, rejected.state());
     }
 
-    @Test void ordinaryUpdatesNeverAdvanceBlockingStagesAndCancellationOnlyDrains() {
+    @Test
+    void ordinaryUpdatesNeverAdvanceBlockingStagesAndCancellationOnlyDrains() {
         Fixture f = new Fixture(1, 8, 16);
         f.capabilities = new ShaderPreparationCapabilities(WORKERS, OWNER_THREAD, false, 1, false, false);
         var scope = f.service.createScope("loading");
@@ -727,7 +761,8 @@ class ShaderPreparationTest {
         assertEquals(1, job.disposals);
     }
 
-    @Test void requestsDistinguishStructuralConfigurationAndSealedScopesCannotGrow() {
+    @Test
+    void requestsDistinguishStructuralConfigurationAndSealedScopesCannotGrow() {
         Fixture f = new Fixture(4, 8, 16);
         var scope = f.service.createScope("variants");
         scope.include(f, request("a"));
@@ -743,7 +778,8 @@ class ShaderPreparationTest {
         assertEquals(3, f.starts);
     }
 
-    @Test void ownerThreadContractRejectsWorkerAccess() throws Exception {
+    @Test
+    void ownerThreadContractRejectsWorkerAccess() throws Exception {
         Fixture f = new Fixture(1, 8, 16);
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread worker = new Thread(() -> {
@@ -756,7 +792,8 @@ class ShaderPreparationTest {
         assertEquals(0, f.service.queuedCount());
     }
 
-    @Test void operationCleanupFailureStillPublishesOtherResultsAndDrains() {
+    @Test
+    void operationCleanupFailureStillPublishesOtherResultsAndDrains() {
         Fixture f = new Fixture(2, 8, 0);
         var first = f.service.request(f, request("first"));
         var second = f.service.request(f, request("second"));
@@ -774,7 +811,8 @@ class ShaderPreparationTest {
         assertEquals(1, f.jobs.getLast().released);
     }
 
-    @Test void runtimeDemandDoesNotStarvePreload() {
+    @Test
+    void runtimeDemandDoesNotStarvePreload() {
         Fixture f = new Fixture(1, 8, 16);
         var scope = f.service.createScope("preload");
         scope.include(f, request("level"));
@@ -788,7 +826,8 @@ class ShaderPreparationTest {
         assertTrue(f.service.hasPendingWork());
     }
 
-    @Test void equivalentVertexLayoutsShareAJobAndCallerArrayMutationDoesNotChangeIdentity() {
+    @Test
+    void equivalentVertexLayoutsShareAJobAndCallerArrayMutationDoesNotChangeIdentity() {
         Fixture f = new Fixture(2, 8, 16);
         var layout = VertexLayout.of(12,
                 VertexAttribute.of(0, VertexFormat.FLOAT32X3, 0));
@@ -813,7 +852,8 @@ class ShaderPreparationTest {
         assertSame(a.readyPass(), b.readyPass());
     }
 
-    @Test void elapsedBudgetBoundsSubmissionsAndRotatesPastSlowPendingOperations() {
+    @Test
+    void elapsedBudgetBoundsSubmissionsAndRotatesPastSlowPendingOperations() {
         long[] now = {0};
         Fixture f = new Fixture(4, 8, 16, () -> now[0]);
         f.onStart = () -> now[0] += 2;
@@ -839,7 +879,8 @@ class ShaderPreparationTest {
         assertTrue(f.service.disposeAsync().isDone());
     }
 
-    @Test void elapsedBudgetDefersRemainingScopeCallbacks() {
+    @Test
+    void elapsedBudgetDefersRemainingScopeCallbacks() {
         long[] now = {0};
         Fixture f = new Fixture(4, 8, 16, () -> now[0]);
         int[] callbacks = {0};
@@ -884,13 +925,18 @@ class ShaderPreparationTest {
                     });
             service = new ShaderPreparation(device, new ShaderPreparationOptions(inFlight, publications, idle), clock);
         }
-        @Override public GraphicsDevice preparationDevice() { return device; }
-        @Override public boolean supports(ShaderRequest request) { return true; }
-        @Override public long revision() { return revision; }
-        @Override public ResolvedShaderPass resolve(ShaderRequest request) {
+        @Override
+        public GraphicsDevice preparationDevice() { return device; }
+        @Override
+        public boolean supports(ShaderRequest request) { return true; }
+        @Override
+        public long revision() { return revision; }
+        @Override
+        public ResolvedShaderPass resolve(ShaderRequest request) {
             throw new AssertionError("Synchronous resolution is forbidden");
         }
-        @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+        @Override
+        public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
             starts++;
             if (onStart != null) onStart.run();
             if (failStart) throw new FdxException("submission failed");
@@ -906,17 +952,22 @@ class ShaderPreparationTest {
         final long revision;
         RenderTargetLayout target = TARGET;
         ShaderPreparationTrace trace;
-        @Override public ShaderPreparationTrace trace() { return trace; }
+        @Override
+        public ShaderPreparationTrace trace() { return trace; }
         boolean done, failDispose;
         Runnable onPoll;
         RuntimeException failure;
         int cancels, disposals, released, finishes, loadingAdvances;
 
         Job(ShaderRequest request, long revision) { this.request = request; this.revision = revision; }
-        @Override public boolean isDone() { if (onPoll != null) onPoll.run(); return done; }
-        @Override public void advanceLoading() { loadingAdvances++; }
-        @Override public ShaderPreparationPhase phase() { return ShaderPreparationPhase.COMPILATION; }
-        @Override public ShaderPreparedResult finish() {
+        @Override
+        public boolean isDone() { if (onPoll != null) onPoll.run(); return done; }
+        @Override
+        public void advanceLoading() { loadingAdvances++; }
+        @Override
+        public ShaderPreparationPhase phase() { return ShaderPreparationPhase.COMPILATION; }
+        @Override
+        public ShaderPreparedResult finish() {
             assertTrue(done);
             assertEquals(0, finishes++);
             if (failure != null) throw failure;
@@ -929,12 +980,15 @@ class ShaderPreparationTest {
                     });
             return new ShaderPreparedResult(ResolvedShaderPass.of(request.passId(), pipeline, RESOURCES, revision), pipeline);
         }
-        @Override public void cancel() { cancels++; }
-        @Override public void dispose() {
+        @Override
+        public void cancel() { cancels++; }
+        @Override
+        public void dispose() {
             assertTrue(done);
             disposals++;
             if (failDispose) throw new IllegalStateException("operation cleanup failed");
         }
-        @Override public boolean isDisposed() { return disposals != 0; }
+        @Override
+        public boolean isDisposed() { return disposals != 0; }
     }
 }

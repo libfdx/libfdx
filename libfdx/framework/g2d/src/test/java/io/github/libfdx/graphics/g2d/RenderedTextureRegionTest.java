@@ -7,7 +7,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class RenderedTextureRegionTest {
-    @Test void renderedRowsFollowDeclaredOriginWhileUploadedRegionsKeepTheirRowOrder() {
+    @Test
+    void renderedRowsFollowDeclaredOriginWhileUploadedRegionsKeepTheirRowOrder() {
         Texture texture=(Texture)Proxy.newProxyInstance(Texture.class.getClassLoader(),new Class[]{Texture.class},
                 (p,m,a)->switch(m.getName()) {
                     case "width" -> 64; case "height" -> 32; case "sampleCount" -> 1;

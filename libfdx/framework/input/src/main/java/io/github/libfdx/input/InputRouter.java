@@ -56,14 +56,24 @@ public final class InputRouter extends InputAdapter {
             return handled;
         } finally { dispatchDepth--; }
     }
-    @Override public boolean keyDown(KeyEvent event) { return route(0,event,false); }
-    @Override public boolean keyUp(KeyEvent event) { return route(1,event,true); }
-    @Override public boolean pointerDown(PointerEvent event) { return route(2,event,false); }
-    @Override public boolean pointerUp(PointerEvent event) { return route(3,event,true); }
-    @Override public boolean pointerMoved(PointerEvent event) { return route(4,event,false); }
-    @Override public boolean scrolled(PointerEvent event) { return route(5,event,false); }
-    @Override public boolean touchDown(TouchEvent event) { return route(6,event,false); }
-    @Override public boolean touchUp(TouchEvent event) { return route(7,event,true); }
-    @Override public boolean touchMoved(TouchEvent event) { return route(8,event,false); }
-    @Override public boolean textInput(TextInputEvent event) { return route(9,event,false); }
+    @Override
+    public boolean keyDown(KeyEvent event) { return route(0,event,false); }
+    @Override
+    public boolean keyUp(KeyEvent event) { return route(1,event,true); }
+    @Override
+    public boolean pointerDown(PointerEvent event) { return route(2,event,false); }
+    @Override
+    public boolean pointerUp(PointerEvent event) { return route(3,event,true); }
+    @Override
+    public boolean pointerMoved(PointerEvent event) { return route(4,event,false); }
+    @Override
+    public boolean scrolled(PointerEvent event) { return route(5,event,false); }
+    @Override
+    public boolean touchDown(TouchEvent event) { return route(6,event,false); }
+    @Override
+    public boolean touchUp(TouchEvent event) { return route(7,event,true); }
+    @Override
+    public boolean touchMoved(TouchEvent event) { return route(8,event,false); }
+    @Override
+    public boolean textInput(TextInputEvent event) { return route(9,event,false); }
 }

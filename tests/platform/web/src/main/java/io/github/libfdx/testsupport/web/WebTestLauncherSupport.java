@@ -138,7 +138,8 @@ public final class WebTestLauncherSupport {
     private static ShaderCacheStore faultStore(ShaderCacheStore delegate, String fault) {
         if (!"corrupt".equals(fault) && !"unavailable".equals(fault)) throw new IllegalArgumentException("Unknown cache fault");
         return new ShaderCacheStore() {
-            @Override public FdxFuture<byte[]> readAsync(String key) {
+            @Override
+            public FdxFuture<byte[]> readAsync(String key) {
                 if ("unavailable".equals(fault)) return FdxFuture.failed(new FdxException("Injected storage denial"));
                 FdxFuture<byte[]> result = FdxFuture.pending();
                 delegate.readAsync(key).onFailure(result::completeExceptionally).onSuccess(bytes -> {
@@ -147,11 +148,13 @@ public final class WebTestLauncherSupport {
                 });
                 return result;
             }
-            @Override public FdxFuture<Void> writeAsync(String key, byte[] bytes) {
+            @Override
+            public FdxFuture<Void> writeAsync(String key, byte[] bytes) {
                 return "unavailable".equals(fault) ? FdxFuture.failed(new FdxException("Injected storage denial"))
                         : delegate.writeAsync(key, bytes);
             }
-            @Override public FdxFuture<Void> removeAsync(String key) { return delegate.removeAsync(key); }
+            @Override
+            public FdxFuture<Void> removeAsync(String key) { return delegate.removeAsync(key); }
         };
     }
 

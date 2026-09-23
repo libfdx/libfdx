@@ -209,7 +209,8 @@ final class AnimationControllerTest {
         assertEquals(1.0f, written[11], EPSILON);
     }
 
-    @Test void cpuSkinningPreservesUv1AndTransformsMirroredTangentsAndNormals() {
+    @Test
+    void cpuSkinningPreservesUv1AndTransformsMirroredTangentsAndNormals() {
         FakeGraphicsContext graphics = new FakeGraphicsContext();
         Mesh mesh = Mesh.positionColor3D(graphics, "extended",
                 new float[] {0,0,0}, new float[] {1,1,1,1}, null,
@@ -254,7 +255,8 @@ final class AnimationControllerTest {
         animator.dispose(); model.dispose();
     }
 
-    @Test void cpuAnimatorsOwnIndependentGeometryAndRestoreSharedMeshes() {
+    @Test
+    void cpuAnimatorsOwnIndependentGeometryAndRestoreSharedMeshes() {
         FakeGraphicsContext graphics=new FakeGraphicsContext();
         DefaultModel model=skinnedModel(graphics);
         DefaultModelInstance first=new DefaultModelInstance(model),second=new DefaultModelInstance(model);
@@ -283,7 +285,8 @@ final class AnimationControllerTest {
         b.dispose(); model.dispose();
     }
 
-    @Test void cpuAnimatorUploadFailureReleasesEveryCopyAndLeavesInstanceUntouched() {
+    @Test
+    void cpuAnimatorUploadFailureReleasesEveryCopyAndLeavesInstanceUntouched() {
         FakeGraphicsContext graphics=new FakeGraphicsContext(); DefaultModel model=skinnedModel(graphics);
         DefaultModelInstance instance=new DefaultModelInstance(model); Renderable3D original=instance.skinningRenderable(0);
         int before=graphics.device.buffers.size();
@@ -296,7 +299,8 @@ final class AnimationControllerTest {
         new CpuSkinnedModelAnimator(graphics,instance).dispose(); model.dispose();
     }
 
-    @Test void explicitCullingOverridesSurviveCpuBindingAndDisposal() {
+    @Test
+    void explicitCullingOverridesSurviveCpuBindingAndDisposal() {
         FakeGraphicsContext graphics=new FakeGraphicsContext(); DefaultModel model=skinnedModel(graphics);
         DefaultModelInstance instance=new DefaultModelInstance(model).nodeCullingBounds("root",0,null);
         CpuSkinnedModelAnimator animator=new CpuSkinnedModelAnimator(graphics,instance);
@@ -311,7 +315,8 @@ final class AnimationControllerTest {
         model.dispose();
     }
 
-    @Test void throwingCpuAnimationCallbackLeavesGeometryAtTheCommittedPose() {
+    @Test
+    void throwingCpuAnimationCallbackLeavesGeometryAtTheCommittedPose() {
         FakeGraphicsContext graphics=new FakeGraphicsContext(); DefaultModel model=skinnedModel(graphics);
         DefaultModelInstance instance=new DefaultModelInstance(model);
         CpuSkinnedModelAnimator animator=new CpuSkinnedModelAnimator(graphics,instance);
@@ -325,7 +330,8 @@ final class AnimationControllerTest {
         animator.dispose(); model.dispose();
     }
 
-    @Test void cpuSkinningNormalizesLargeWeightsAndPublishesDeformedCpuAttributes() {
+    @Test
+    void cpuSkinningNormalizesLargeWeightsAndPublishesDeformedCpuAttributes() {
         FakeGraphicsContext graphics=new FakeGraphicsContext(); Mesh mesh=skinnedGpuMesh(graphics,"large-weights");
         DefaultModel model=model(); DefaultModelInstance instance=new DefaultModelInstance(model);
         instance.nodeTransform("arm",new Matrix4().setToTranslation(0,3,0));

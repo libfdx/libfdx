@@ -106,14 +106,18 @@ public final class WGPUWebPreparationChecks implements ShaderProvider {
         captureAndPreload();
     }
 
-    @Override public GraphicsDevice preparationDevice() { return graphics.device(); }
+    @Override
+    public GraphicsDevice preparationDevice() { return graphics.device(); }
 
     private void cacheCompletionOnlyQueuesLoadingWork() {
         FdxFuture<byte[]> read = FdxFuture.pending();
         ShaderArtifactCache cache = new ShaderArtifactCache(new ShaderCacheStore() {
-            @Override public FdxFuture<byte[]> readAsync(String key) { return read; }
-            @Override public FdxFuture<Void> writeAsync(String key, byte[] bytes) { return FdxFuture.completed(null); }
-            @Override public FdxFuture<Void> removeAsync(String key) { return FdxFuture.completed(null); }
+            @Override
+            public FdxFuture<byte[]> readAsync(String key) { return read; }
+            @Override
+            public FdxFuture<Void> writeAsync(String key, byte[] bytes) { return FdxFuture.completed(null); }
+            @Override
+            public FdxFuture<Void> removeAsync(String key) { return FdxFuture.completed(null); }
         });
         ShaderArtifactCache previous = context.configuration().shaderCache();
         WGPUWebPreparation isolated = new WGPUWebPreparation();
@@ -137,8 +141,10 @@ public final class WGPUWebPreparationChecks implements ShaderProvider {
         isolated.close();
         System.out.println("WEBGPU_CACHE_LOADING_PASS polls=12 compiler_invocations=0 cancelled=1");
     }
-    @Override public boolean supports(ShaderRequest request) { return true; }
-    @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+    @Override
+    public boolean supports(ShaderRequest request) { return true; }
+    @Override
+    public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
         return graphics.device().prepareRenderPipeline(packet(false));
     }
 
@@ -225,7 +231,8 @@ public final class WGPUWebPreparationChecks implements ShaderProvider {
         descriptor.getCompute().setModule(module.nativeModule());
         descriptor.getCompute().setEntryPoint(invalid ? "missingCompute" : "computeMain");
         WGPUCreateComputePipelineAsyncCallback callback = new WGPUCreateComputePipelineAsyncCallback() {
-            @Override protected void onCallback(WGPUCreatePipelineAsyncStatus status, WGPUComputePipeline pipeline, String message) {
+            @Override
+            protected void onCallback(WGPUCreatePipelineAsyncStatus status, WGPUComputePipeline pipeline, String message) {
                 Window.setTimeout(() -> {
                     try {
                         check(status == (invalid ? WGPUCreatePipelineAsyncStatus.ValidationError

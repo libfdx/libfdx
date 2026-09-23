@@ -55,7 +55,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class GLResourceOwnershipTest {
-    @Test void initialBufferRangesPreserveOffsetsAndRejectInvalidOrForeignResources() {
+    @Test
+    void initialBufferRangesPreserveOffsetsAndRejectInvalidOrForeignResources() {
         FakeGL gl = new FakeGL();
         GLGraphicsAttachment attachment = attachment(gl, new FakeSurface());
         GraphicsDevice device = attachment.device();

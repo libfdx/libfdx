@@ -29,7 +29,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @EnabledIfSystemProperty(named = "libfdx.test.nativePreparationLifecycle", matches = "true")
 @Timeout(30)
 final class DesktopVulkanCacheMergeLifecycleTest {
-    @Test void pendingNativeMergeRetainsDeviceBeyondOwnerAndStoreDisposal() throws Exception {
+    @Test
+    void pendingNativeMergeRetainsDeviceBeyondOwnerAndStoreDisposal() throws Exception {
         Files.createDirectories(Path.of("build"));
         Path directory = Files.createTempDirectory(Path.of("build"), "vulkan-merge-lifecycle-");
         DesktopShaderCacheStore store = new DesktopShaderCacheStore(directory, 32 * 1024 * 1024);
@@ -66,7 +67,8 @@ final class DesktopVulkanCacheMergeLifecycleTest {
             ShaderPreparationOperation operation;
             boolean ready;
             long deadline;
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 application = fdx.app(); deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
                 operation = fdx.graphics().main().device().prepareRenderPipeline(new ShaderPipelineRequest(
                         ShaderModuleDescriptor.wgsl("merge lifetime", """
@@ -77,14 +79,16 @@ final class DesktopVulkanCacheMergeLifecycleTest {
                             """.formatted(color)), new RenderPipelineDescriptor().colorFormat(fdx.graphics().main().surfaceFormat()),
                         ShaderPassId.FORWARD, 0));
             }
-            @Override public void render() {
+            @Override
+            public void render() {
                 assertTrue(System.nanoTime() < deadline, "Vulkan preparation/merge did not reach the barrier");
                 if (!ready && operation.isDone()) {
                     operation.finish().dispose(); operation.dispose(); ready = true;
                 }
                 if (ready && (held == null || held.entered.getCount() == 0)) application.requestExit();
             }
-            @Override public void dispose() { if (!ready) operation.cancel(); }
+            @Override
+            public void dispose() { if (!ready) operation.cancel(); }
         });
     }
 
@@ -99,11 +103,16 @@ final class DesktopVulkanCacheMergeLifecycleTest {
         final CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
         FdxFuture<Void> finished;
         HeldMerge(DesktopShaderCacheStore delegate) { this.delegate = delegate; }
-        @Override public FdxFuture<byte[]> readAsync(String key) { return delegate.readAsync(key); }
-        @Override public FdxFuture<Void> writeAsync(String key, byte[] bytes) { return delegate.writeAsync(key, bytes); }
-        @Override public FdxFuture<Void> removeAsync(String key) { return delegate.removeAsync(key); }
-        @Override public boolean supportsAtomicUpdate() { return true; }
-        @Override public FdxFuture<Void> updateAsync(String key, UnaryOperator<byte[]> update) {
+        @Override
+        public FdxFuture<byte[]> readAsync(String key) { return delegate.readAsync(key); }
+        @Override
+        public FdxFuture<Void> writeAsync(String key, byte[] bytes) { return delegate.writeAsync(key, bytes); }
+        @Override
+        public FdxFuture<Void> removeAsync(String key) { return delegate.removeAsync(key); }
+        @Override
+        public boolean supportsAtomicUpdate() { return true; }
+        @Override
+        public FdxFuture<Void> updateAsync(String key, UnaryOperator<byte[]> update) {
             finished = delegate.updateAsync(key, current -> {
                 assertNotNull(current, "Prime the stored cache so this operation calls the native merger");
                 entered.countDown();

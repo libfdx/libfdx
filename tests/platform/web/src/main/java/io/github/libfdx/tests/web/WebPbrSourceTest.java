@@ -23,7 +23,8 @@ public final class WebPbrSourceTest extends ApplicationAdapter {
     private boolean passed;
     public WebPbrSourceTest(boolean automatic) { this.automatic = automatic; }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         this.fdx = fdx; deadline = System.currentTimeMillis() + 20000;
         worker = new WebPbrSourcePreparation();
         for (ShaderProfile profile : new ShaderProfile[]{ShaderProfile.PORTABLE_WEBGL2,ShaderProfile.PORTABLE_WEBGPU}) {
@@ -47,7 +48,8 @@ public final class WebPbrSourceTest extends ApplicationAdapter {
         for (var future : accepted) check(future.isFailed(), "Shutdown left a pending caller");
         check(cancelled.prepare(ShaderProfile.PORTABLE_WEBGL2,paused::add).isFailed(), "Disposed worker accepted work");
     }
-    @Override public void render() {
+    @Override
+    public void render() {
         fdx.graphics().main().clear(.02f,.04f,.07f,1);
         if (passed) return;
         check(System.currentTimeMillis() < deadline, "PBR source worker timed out");
@@ -78,7 +80,8 @@ public final class WebPbrSourceTest extends ApplicationAdapter {
         for (int i=0;i<8;i++) check(expected.variant(i).equals(actual.variant(i)),"PBR variant source differs at "+i);
     }
     private static void check(boolean value,String message) { if(!value) throw new IllegalStateException(message); }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if(worker!=null) worker.dispose(); if(crashing!=null) crashing.dispose(); if(malformed!=null) malformed.dispose();
         if(reentrant!=null) reentrant.dispose();
         check(passed,"PBR source test ended before completion");

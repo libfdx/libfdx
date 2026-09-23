@@ -464,7 +464,8 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
         private GLComputePass[] computePasses = new GLComputePass[4];
         private int computePassCount;
 
-        @Override public ComputePass beginComputePass(
+        @Override
+        public ComputePass beginComputePass(
                 ComputePassDescriptor descriptor) {
             resourceDomain.requireUsable();
             device.capabilities().require(GraphicsFeature.COMPUTE);
@@ -480,7 +481,8 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
             return pass;
         }
 
-        @Override public void copyBufferToBuffer(Buffer source, int sourceOffset,
+        @Override
+        public void copyBufferToBuffer(Buffer source, int sourceOffset,
                 Buffer destination, int destinationOffset, int size) {
             if (!frameStarted) throw new FdxException("GL buffer copy requires an active frame");
             device.capabilities().require(GraphicsFeature.COMPUTE);

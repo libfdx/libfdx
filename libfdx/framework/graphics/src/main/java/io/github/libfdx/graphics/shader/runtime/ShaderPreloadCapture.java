@@ -12,7 +12,8 @@ import java.util.Objects;
  * preparation and preserves a final export snapshot. Native resources are never pinned by capture.
  * Only explicit draw demand is observed; preload collection and ready polling are not gameplay. */
 public final class ShaderPreloadCapture implements Disposable {
-    @FunctionalInterface public interface Destination {
+    @FunctionalInterface
+    public interface Destination {
         /** Must return without encoding large payloads or doing I/O on the caller. The platform
          * adapter writes manifest JSON and Markdown from this one immutable snapshot. */
         FdxFuture<Void> writeAsync(ShaderPreloadExport snapshot);
@@ -138,12 +139,14 @@ public final class ShaderPreloadCapture implements Disposable {
                 entry.failure != null ? entry.failure.toString() : "", entry.timings());
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         owner.requireThread(); if (disposed) return;
         frozen = snapshot(); disposed = true; owner.removeCapture(this);
         lookup.clear(); observations.clear();
     }
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 
     private static final class Observation {
         final long id, frame;

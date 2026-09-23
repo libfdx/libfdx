@@ -14,7 +14,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class D3D12ShaderCompilationBatchTest {
-    @Test void compilesConcurrentlyAndReturnsInputOrder() {
+    @Test
+    void compilesConcurrentlyAndReturnsInputOrder() {
         int workers = Math.min(8, Runtime.getRuntime().availableProcessors());
         CountDownLatch started = new CountDownLatch(workers);
         List<Callable<Integer>> jobs = new ArrayList<>();
@@ -30,7 +31,8 @@ class D3D12ShaderCompilationBatchTest {
         for (int i = 0; i < workers; i++) assertEquals(i, result.get(i));
     }
 
-    @Test void failedBatchJoinsAllJobsAndReleasesEverySuccessfulResult() {
+    @Test
+    void failedBatchJoinsAllJobsAndReleasesEverySuccessfulResult() {
         RuntimeException original = new IllegalArgumentException("shader diagnostic");
         RuntimeException cleanup = new IllegalStateException("release diagnostic");
         List<Integer> released = new ArrayList<>();
@@ -44,7 +46,8 @@ class D3D12ShaderCompilationBatchTest {
         assertArrayEquals(new Throwable[] {cleanup}, original.getSuppressed());
     }
 
-    @Test void interruptionWaitsForNativeStyleWorkAndReleasesItsResult() throws Exception {
+    @Test
+    void interruptionWaitsForNativeStyleWorkAndReleasesItsResult() throws Exception {
         CountDownLatch started = new CountDownLatch(1), finish = new CountDownLatch(1);
         AtomicBoolean released = new AtomicBoolean(), interrupted = new AtomicBoolean();
         AtomicReference<Throwable> failure = new AtomicReference<>();
@@ -76,7 +79,8 @@ class D3D12ShaderCompilationBatchTest {
         assertTrue(interrupted.get());
     }
 
-    @Test void emptyBatchDoesNotCreateWork() {
+    @Test
+    void emptyBatchDoesNotCreateWork() {
         assertEquals(List.of(), D3D12ShaderCompilationBatch.compile(List.of(), ignored -> fail()));
     }
 }

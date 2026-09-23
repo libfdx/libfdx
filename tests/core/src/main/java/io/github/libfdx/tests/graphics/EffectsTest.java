@@ -33,7 +33,8 @@ public final class EffectsTest extends GraphicsParityTest {
 
     public EffectsTest(long frames) { super(frames); }
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         initialize(fdx, "EffectsTest");
         assets = new DefaultAssetManager(fdx.files());
         G2DAssetLoaders.register(assets, graphics);
@@ -96,7 +97,8 @@ public final class EffectsTest extends GraphicsParityTest {
         }
     }
 
-    @Override public void render() {
+    @Override
+    public void render() {
         assets.update(2, 1_000_000);
         hud.font(font.poll());
         resizePanels();
@@ -157,7 +159,8 @@ public final class EffectsTest extends GraphicsParityTest {
         hud.end();
     }
 
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         for (int i = 0; i < PANEL_COUNT; i++) {
             if (samples > 0) {
                 Arrays.sort(timings[i], 0, samples);

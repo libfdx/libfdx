@@ -10,7 +10,8 @@ import io.github.libfdx.core.FdxException;
 public final class AndroidGlesResetDetectionTest extends ApplicationAdapter {
     private Fdx fdx;
 
-    @Override public void create(Fdx fdx) {
+    @Override
+    public void create(Fdx fdx) {
         this.fdx = fdx;
         require(fdx.graphics().main().providerId().equals(AndroidGlesProvider.ID), "Expected direct GLES");
         AndroidGlesApi api = new AndroidGlesApi(1);
@@ -31,6 +32,7 @@ public final class AndroidGlesResetDetectionTest extends ApplicationAdapter {
         System.out.println("[info] EGL_RESET_EXTENSIONS " + EGL14.eglQueryString(EGL14.eglGetCurrentDisplay(), EGL14.EGL_EXTENSIONS));
         api.closeShaderPreparation();
     }
-    @Override public void render() { fdx.app().requestExit(); }
+    @Override
+    public void render() { fdx.app().requestExit(); }
     private static void require(boolean condition, String message) { if (!condition) throw new FdxException(message); }
 }

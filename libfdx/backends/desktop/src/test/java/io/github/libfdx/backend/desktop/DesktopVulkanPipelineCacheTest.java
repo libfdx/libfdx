@@ -8,7 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DesktopVulkanPipelineCacheTest {
-    @Test void rejectsTruncationVersionAndForeignDeviceBeforePassingBytesToTheDriver() {
+    @Test
+    void rejectsTruncationVersionAndForeignDeviceBeforePassingBytesToTheDriver() {
         byte[] uuid = new byte[16]; uuid[4] = 9;
         byte[] bytes = ByteBuffer.allocate(40).order(ByteOrder.LITTLE_ENDIAN)
                 .putInt(32).putInt(1).putInt(10).putInt(20).put(uuid).array();

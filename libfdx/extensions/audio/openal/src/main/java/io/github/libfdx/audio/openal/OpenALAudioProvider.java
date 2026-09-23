@@ -15,6 +15,8 @@ public final class OpenALAudioProvider implements AudioProvider {
         if (maxVoices < 1 || maxVoices > 256) throw new IllegalArgumentException("Voice capacity must be 1–256");
         this.maxVoices = maxVoices; this.deviceName = deviceName;
     }
-    @Override public ProviderId providerId() { return OpenALAudio.ID; }
-    @Override public Audio create() { return new OpenALAudio(maxVoices, deviceName, 0); }
+    @Override
+    public ProviderId providerId() { return OpenALAudio.ID; }
+    @Override
+    public Audio create() { return new OpenALAudio(maxVoices, deviceName, 0); }
 }

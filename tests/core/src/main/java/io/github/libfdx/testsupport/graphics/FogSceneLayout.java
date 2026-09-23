@@ -5,7 +5,8 @@ public final class FogSceneLayout {
     static final float TREE_RADIUS = 1.15f, ROCK_RADIUS = .8f;
     static final float WALL_HALF_WIDTH = .6f, WALL_HALF_DEPTH = .7f, PILLAR_HALF_SIZE = .7f;
     public static final float[][] ROUTE = {{0,12},{0,-3},{12,-3},{12,-12},{0,-12},{0,-3},{-12,-3},{0,-3},{0,12}};
-    @FunctionalInterface public interface Props {
+    @FunctionalInterface
+    public interface Props {
         void add(int model,float x,float y,float z,float scale,float halfWidth,float halfDepth,float footprint);
     }
     public static void populate(Props props) {

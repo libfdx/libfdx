@@ -135,12 +135,14 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
         return true;
     }
 
-    @Override public GraphicsDevice preparationDevice() { return graphics.device(); }
+    @Override
+    public GraphicsDevice preparationDevice() { return graphics.device(); }
 
     /** Snapshots definitions under the provider lock; expensive native work is outside it.
      * The preparation entry owns its result independently of this provider's synchronous cache.
      * Default resource bindings remain borrowed application-thread data and must outlive use. */
-    @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+    @Override
+    public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
         final ShaderPipelineRequest packet;
         final RuntimeVariant preparedVariant;
         synchronized (this) {
@@ -153,14 +155,22 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
         }
         ShaderPreparationOperation operation = graphics.device().prepareRenderPipeline(packet);
         return new ShaderPreparationOperation() {
-            @Override public void advanceLoading() { operation.advanceLoading(); }
-            @Override public boolean isDone() { return operation.isDone(); }
-            @Override public ShaderPreparationPhase phase() { return operation.phase(); }
-            @Override public ShaderPreparationTrace trace() { return operation.trace(); }
-            @Override public void cancel() { operation.cancel(); }
-            @Override public void dispose() { operation.dispose(); }
-            @Override public boolean isDisposed() { return operation.isDisposed(); }
-            @Override public ShaderPreparedResult finish() {
+            @Override
+            public void advanceLoading() { operation.advanceLoading(); }
+            @Override
+            public boolean isDone() { return operation.isDone(); }
+            @Override
+            public ShaderPreparationPhase phase() { return operation.phase(); }
+            @Override
+            public ShaderPreparationTrace trace() { return operation.trace(); }
+            @Override
+            public void cancel() { operation.cancel(); }
+            @Override
+            public void dispose() { operation.dispose(); }
+            @Override
+            public boolean isDisposed() { return operation.isDisposed(); }
+            @Override
+            public ShaderPreparedResult finish() {
                 ShaderPreparedResult result = operation.finish();
                 try {
                     ResolvedShaderPass pass = result.pass();
@@ -196,7 +206,8 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
         }
     }
 
-    @Override public synchronized boolean canRenderPreparedRevision(ShaderRequest request, ResolvedShaderPass previous) {
+    @Override
+    public synchronized boolean canRenderPreparedRevision(ShaderRequest request, ResolvedShaderPass previous) {
         if (previous == null || !supports(request)) return false;
         if (previous.providerRevision() == revision) return true;
         RuntimeVariant variant = select(state.pass(request.passId()), request);
@@ -297,7 +308,8 @@ public final class ShaderGraphProvider implements ShaderProvider, Disposable {
         return revision;
     }
 
-    @Override public synchronized long resourceRevision() {
+    @Override
+    public synchronized long resourceRevision() {
         observeDefaultResourceRevisions();
         return resourceRevision;
     }

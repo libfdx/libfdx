@@ -80,8 +80,10 @@ public final class ShowcaseHud implements Disposable {
     }
     public void end() { batch.end(); }
     public ShaderSkippedDraws skippedDrawsLastFrame() { return batch.skippedDrawsLastFrame(); }
-    @Override public boolean isDisposed() { return disposed; }
-    @Override public void dispose() {
+    @Override
+    public boolean isDisposed() { return disposed; }
+    @Override
+    public void dispose() {
         if(disposed) return;
         disposed=true;
         try { font(null); }

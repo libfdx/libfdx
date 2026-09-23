@@ -241,7 +241,8 @@ public final class ImageAssetLoader implements AssetLoader<ImageData> {
         }
     }
 
-    @JSFunctor private interface DecodeStep extends JSObject { void run(); }
+    @JSFunctor
+    private interface DecodeStep extends JSObject { void run(); }
     @JSBody(params="step", script="requestAnimationFrame(function(){step();});")
     private static native void nextDecodeFrame(DecodeStep step);
 
@@ -250,8 +251,10 @@ public final class ImageAssetLoader implements AssetLoader<ImageData> {
         catch(LinkageError ignored) { return false; }
     }
 
-    @JSFunctor private interface Decoded extends JSObject { void accept(int width,int height,Int8Array pixels); }
-    @JSFunctor private interface DecodeFailure extends JSObject { void accept(String message); }
+    @JSFunctor
+    private interface Decoded extends JSObject { void accept(int width,int height,Int8Array pixels); }
+    @JSFunctor
+    private interface DecodeFailure extends JSObject { void accept(String message); }
     @JSBody(params={"bytes","success","failure"},script=
             "var blob=new Blob([bytes]);\n"+
             "var promise;\n"+

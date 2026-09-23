@@ -50,9 +50,12 @@ public final class MultipleShadersPreparation implements ShaderProvider, Disposa
         service.prepareAsync(scope.seal());
     }
 
-    @Override public GraphicsDevice preparationDevice() { return device; }
-    @Override public boolean supports(ShaderRequest request) { return !disposed; }
-    @Override public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
+    @Override
+    public GraphicsDevice preparationDevice() { return device; }
+    @Override
+    public boolean supports(ShaderRequest request) { return !disposed; }
+    @Override
+    public ShaderPreparationOperation beginPreparation(ShaderRequest request) {
         int index = Integer.parseInt(request.variantKey().substring("shader-".length()));
         return device.prepareRenderPipeline(packets[index]);
     }
@@ -122,12 +125,14 @@ public final class MultipleShadersPreparation implements ShaderProvider, Disposa
             } finally { missing.dispose(); }
         }
     }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         scope.dispose();
         service.disposeAsync();
         service.update();
     }
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 }

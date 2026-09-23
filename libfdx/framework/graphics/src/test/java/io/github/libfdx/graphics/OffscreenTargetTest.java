@@ -10,7 +10,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 final class OffscreenTargetTest {
     private static final ProviderId ID=ProviderId.of("target-test");
-    @Test void resizePublishesAtomicallyAndDisposesOnlyOwnedResourcesOnce() {
+    @Test
+    void resizePublishesAtomicallyAndDisposesOnlyOwnedResourcesOnce() {
         Device fixture=new Device();
         OffscreenTarget target=new OffscreenTarget(fixture.device,true);
         assertThrows(FdxException.class,target::color);
@@ -32,7 +33,8 @@ final class OffscreenTargetTest {
         assertThrows(FdxException.class,target::color);
         assertThrows(FdxException.class,()->target.resize(80,40));
     }
-    @Test void multisamplingResolvesColorAndRetainsDepthAcrossPasses() {
+    @Test
+    void multisamplingResolvesColorAndRetainsDepthAcrossPasses() {
         Device fixture=new Device();
         OffscreenTarget target=new OffscreenTarget(fixture.device,TextureFormat.RGBA8_UNORM,
                 TextureFormat.DEPTH32_FLOAT,4,TextureFilter.NEAREST);
@@ -60,7 +62,8 @@ final class OffscreenTargetTest {
         assertEquals(TextureOrigin.TOP_LEFT,target.origin());
         target.dispose();
     }
-    @Test void explicitDepthClearWinsOverLegacyAndInvalidDepthFailsBeforeRecording() {
+    @Test
+    void explicitDepthClearWinsOverLegacyAndInvalidDepthFailsBeforeRecording() {
         Device fixture=new Device();
         var target=new OffscreenTarget(fixture.device,true); target.resize(8,8);
         var descriptor=new RenderPassDescriptor().colorAttachment(target.color().view()).depthClear(1)
@@ -110,7 +113,8 @@ final class OffscreenTargetTest {
         public <T> T as(){throw new UnsupportedOperationException();}
         public void dispose(){disposals++;} public boolean isDisposed(){return disposals>0;}
     }
-    @SuppressWarnings("unchecked") private static <T> T proxy(Class<T> type,java.lang.reflect.InvocationHandler handler) {
+    @SuppressWarnings("unchecked")
+    private static <T> T proxy(Class<T> type,java.lang.reflect.InvocationHandler handler) {
         return (T)Proxy.newProxyInstance(type.getClassLoader(),new Class[]{type},handler);
     }
 }

@@ -30,7 +30,8 @@ class D3D12PipelineCacheTest {
     private static final ShaderCacheKey VERTEX = ShaderCacheKey.of(ShaderCacheLayer.DXIL, "vertex");
     private static final ShaderCacheKey FRAGMENT = ShaderCacheKey.of(ShaderCacheLayer.DXIL, "fragment");
 
-    @Test void changedNativeStateAndBindingsCannotReuseAnotherPipeline() {
+    @Test
+    void changedNativeStateAndBindingsCannotReuseAnotherPipeline() {
         List<Consumer<RenderPipelineDescriptor>> changes = List.of(
                 state -> state.colorFormat(TextureFormat.BGRA8_UNORM),
                 state -> state.primitiveTopology(PrimitiveTopology.LINE_LIST),
@@ -48,7 +49,8 @@ class D3D12PipelineCacheTest {
         }
     }
 
-    @Test void shaderCompilerAdapterAndRuntimeIdentitiesAreIndependentOfLabels() {
+    @Test
+    void shaderCompilerAdapterAndRuntimeIdentitiesAreIndependentOfLabels() {
         RenderPipelineDescriptor state = base();
         var inputs = D3D12Device.VertexInputs.from(state.vertexLayouts());
         var bindings = D3D12Device.PipelineBindings.from(ShaderRenderBindings.from(state));

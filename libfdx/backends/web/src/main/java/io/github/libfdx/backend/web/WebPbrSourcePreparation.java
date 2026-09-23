@@ -41,9 +41,11 @@ public final class WebPbrSourcePreparation implements StandardPbrSourcePreparer.
     }
     public int completedWorkerJobs() { return completed; }
     public int fallbackJobs() { return fallbacks; }
-    @Override public boolean isDisposed() { return disposed; }
+    @Override
+    public boolean isDisposed() { return disposed; }
 
-    @Override public FdxFuture<StandardPbrSources> prepare(ShaderProfile profile, Consumer<Runnable> execute) {
+    @Override
+    public FdxFuture<StandardPbrSources> prepare(ShaderProfile profile, Consumer<Runnable> execute) {
         if (profile == null || execute == null) throw new NullPointerException("PBR profile/executor");
         if (disposed) return FdxFuture.failed(new FdxException("PBR worker is disposed"));
         if (cache[profile.ordinal()] != null) return FdxFuture.completed(cache[profile.ordinal()]);
@@ -115,7 +117,8 @@ public final class WebPbrSourcePreparation implements StandardPbrSourcePreparer.
             pending.remove(request); request.result.completeExceptionally(error);
         }
     }
-    @Override public void dispose() {
+    @Override
+    public void dispose() {
         if (disposed) return;
         disposed = true;
         if (worker != null) worker.terminate();
@@ -139,16 +142,23 @@ public final class WebPbrSourcePreparation implements StandardPbrSourcePreparer.
     }
     @JSBody(params={"id","version","profile"}, script="return {id:id,version:version,profile:profile};")
     private static native JSObject message(int id, int version, String profile);
-    @JSBody(params="m", script="return m.ready===true;") private static native boolean ready(JSObject m);
-    @JSBody(params="m", script="return m.id|0;") private static native int id(JSObject m);
-    @JSBody(params="m", script="return m.error||null;") private static native String error(JSObject m);
-    @JSBody(params="m", script="return m.surface;") private static native String surface(JSObject m);
-    @JSBody(params="m", script="return m.library;") private static native String library(JSObject m);
-    @JSBody(params={"m","i"}, script="return m.variants[i];") private static native String variant(JSObject m,int i);
+    @JSBody(params="m", script="return m.ready===true;")
+    private static native boolean ready(JSObject m);
+    @JSBody(params="m", script="return m.id|0;")
+    private static native int id(JSObject m);
+    @JSBody(params="m", script="return m.error||null;")
+    private static native String error(JSObject m);
+    @JSBody(params="m", script="return m.surface;")
+    private static native String surface(JSObject m);
+    @JSBody(params="m", script="return m.library;")
+    private static native String library(JSObject m);
+    @JSBody(params={"m","i"}, script="return m.variants[i];")
+    private static native String variant(JSObject m,int i);
     @JSBody(params={"m","version","profile"}, script="""
             if(m.version!==version||m.profile!==profile||!Array.isArray(m.variants)||m.variants.length!==8) return false;
             var texts=[m.surface,m.library].concat(m.variants),size=0;
             for(var i=0;i<texts.length;i++){if(typeof texts[i]!=='string'||texts[i].length===0)return false;size+=texts[i].length;}
             return size<=8388608;
-            """) private static native boolean valid(JSObject m,int version,String profile);
+            """)
+    private static native boolean valid(JSObject m,int version,String profile);
 }

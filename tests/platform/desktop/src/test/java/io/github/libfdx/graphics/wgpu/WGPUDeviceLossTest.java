@@ -52,7 +52,8 @@ final class WGPUDeviceLossTest {
             @fragment fn fragmentMain() -> @location(0) vec4f { return vec4f(0, 1, 0, 1); }
             """;
 
-    @ParameterizedTest @ValueSource(strings = {"source", "native", "unpublished", "published", "frame"})
+    @ParameterizedTest
+    @ValueSource(strings = {"source", "native", "unpublished", "published", "frame"})
     void nativeLossInvalidatesPreparationAndDrainsSafely(String stage) throws Exception {
         WGPUContext[] retained = {null};
         ShaderPreparationOperation[] operation = {null};
@@ -65,7 +66,8 @@ final class WGPUDeviceLossTest {
         try {
             new DesktopApplicationBackend().start(new DesktopApplicationConfig().title("WGPU device loss")
                     .size(128, 128).visible(false).vSync(false).graphics(provider), new ApplicationAdapter() {
-                @Override public void create(Fdx fdx) {
+                @Override
+                public void create(Fdx fdx) {
                     GraphicsContext graphics = fdx.graphics().main();
                     WGPUContext context = graphics.as();
                     retained[0] = context;
@@ -139,7 +141,8 @@ final class WGPUDeviceLossTest {
         }
     }
 
-    @ParameterizedTest @EnumSource(value = WGPUBackend.class, names = {"VULKAN", "D3D12"})
+    @ParameterizedTest
+    @EnumSource(value = WGPUBackend.class, names = {"VULKAN", "D3D12"})
     void wgpuNativeReportedLossRejectsResultsAndRetainsPendingInputs(WGPUBackend backend) throws Exception {
         WGPUContext[] retained = {null};
         ShaderPreparationOperation[] completed = {null}, held = {null};
@@ -149,7 +152,8 @@ final class WGPUDeviceLossTest {
         try {
             new DesktopApplicationBackend().start(new DesktopApplicationConfig().title("Native wgpu loss")
                     .size(128, 128).visible(false).graphics(provider), new ApplicationAdapter() {
-                @Override public void create(Fdx fdx) {
+                @Override
+                public void create(Fdx fdx) {
                     WGPUContext context = fdx.graphics().main().as();
                     retained[0] = context;
                     Object identity = context.device().resourceDomain();
@@ -205,7 +209,8 @@ final class WGPUDeviceLossTest {
         provider.configuration().offscreenReadback(true).preparationWorkerLimit(1);
         new DesktopApplicationBackend().start(new DesktopApplicationConfig().title("WGPU loss recovery")
                 .size(128, 128).visible(false).vSync(false).graphics(provider), new ApplicationAdapter() {
-            @Override public void create(Fdx fdx) {
+            @Override
+            public void create(Fdx fdx) {
                 WGPUContext context = fdx.graphics().main().as();
                 var request = new ShaderPipelineRequest(ShaderModuleSource.fixed(ShaderModuleDescriptor.wgsl("recovery", SOURCE)),
                         new RenderPipelineDescriptor().renderTargetLayout(RenderTargetLayout.color(context.surfaceFormat()))
