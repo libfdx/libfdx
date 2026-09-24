@@ -62,8 +62,8 @@ public final class CpuSkinningMeshUpdater {
         VertexLayout layout = mesh.vertexLayout();
         skinnedPbrLayout = mesh.hasPbrSkinning();
         textured = mesh.hasPbrTextureCoordinates();
-        pbrLayout = layout == Mesh.PBR_LAYOUT || skinnedPbrLayout || textured;
-        if (!pbrLayout && layout != Mesh.POSITION_COLOR_LAYOUT) {
+        pbrLayout = Mesh.isPbrLayout(layout);
+        if (!pbrLayout && layout != Mesh.POSITION_COLOR_LAYOUT && layout != Mesh.POSITION_LAYOUT) {
             throw new FdxException("CpuSkinningMeshUpdater requires Mesh.PBR_LAYOUT, Mesh.PBR_SKINNED_LAYOUT, "
                     + "or Mesh.POSITION_COLOR_LAYOUT");
         }
@@ -183,10 +183,12 @@ public final class CpuSkinningMeshUpdater {
                 vertexFloats.put(texCoords[texCoordOffset]);
                 vertexFloats.put(texCoords[texCoordOffset + 1]);
             }
-            vertexFloats.put(colors[colorOffset]);
-            vertexFloats.put(colors[colorOffset + 1]);
-            vertexFloats.put(colors[colorOffset + 2]);
-            vertexFloats.put(colors[colorOffset + 3]);
+            if (mesh.hasVertexColors()) {
+                vertexFloats.put(colors[colorOffset]);
+                vertexFloats.put(colors[colorOffset + 1]);
+                vertexFloats.put(colors[colorOffset + 2]);
+                vertexFloats.put(colors[colorOffset + 3]);
+            }
             if (pbrLayout) {
                 int pbrOffset = vertex * 3;
                 int emissiveOffset = vertex * 3;
@@ -273,7 +275,7 @@ public final class CpuSkinningMeshUpdater {
 
     private static void validateSourceData(Mesh mesh, boolean pbrLayout, int vertexCount) {
         if (mesh.sourcePositions() == null || mesh.sourcePositions().length != vertexCount * 3
-                || mesh.sourceColors() == null || mesh.sourceColors().length != vertexCount * 4) {
+                || (mesh.hasVertexColors() && (mesh.sourceColors() == null || mesh.sourceColors().length != vertexCount * 4))) {
             throw new FdxException("CpuSkinningMeshUpdater requires retained position/color mesh source data");
         }
         if (!pbrLayout) {

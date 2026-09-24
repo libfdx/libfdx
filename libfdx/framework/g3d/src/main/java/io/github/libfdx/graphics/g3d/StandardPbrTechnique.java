@@ -94,41 +94,19 @@ public final class StandardPbrTechnique {
                         STANDARD_PASSES.length];
         for (int i = 0; i < passes.length; i++) {
             ShaderPassId passId = STANDARD_PASSES[i];
-            ShaderGraphRenderProgram staticOpaque = program(
-                    passId, false, false, false, true, "opaque");
-            ShaderGraphRenderProgram skinnedOpaque = program(
-                    passId, true, false, false, true, "opaque");
-            ShaderGraphRenderProgram staticMask = program(
-                    passId, false, true, false, true, "mask");
-            ShaderGraphRenderProgram skinnedMask = program(
-                    passId, true, true, false, true, "mask");
-            ShaderGraphRenderProgram staticBlend = program(
-                    passId, false, true, true, false, "blend");
-            ShaderGraphRenderProgram skinnedBlend = program(
-                    passId, true, true, true, false, "blend");
-            passes[i] = ShaderGraphRenderTechniquePass
-                    .builder(passId)
-                    .variants(
-                            ShaderGraphRenderVariant.builder("",
-                                    staticOpaque).build(),
-                            ShaderGraphRenderVariant.builder(
-                                    "skinned",
-                                    skinnedOpaque).build(),
-                            ShaderGraphRenderVariant.builder(
-                                    "mask", staticMask).build(),
-                            ShaderGraphRenderVariant.builder(
-                                    "skinned-mask", skinnedMask).build(),
-                            ShaderGraphRenderVariant.builder(
-                                    "blend", staticBlend).build(),
-                            ShaderGraphRenderVariant.builder(
-                                    "skinned-blend", skinnedBlend).build(),
-                            ShaderGraphRenderVariant.builder("textured", program(passId, false, false, false, true, "opaque", true)).build(),
-                            ShaderGraphRenderVariant.builder("textured-skinned", program(passId, true, false, false, true, "opaque", true)).build(),
-                            ShaderGraphRenderVariant.builder("textured-mask", program(passId, false, true, false, true, "mask", true)).build(),
-                            ShaderGraphRenderVariant.builder("textured-skinned-mask", program(passId, true, true, false, true, "mask", true)).build(),
-                            ShaderGraphRenderVariant.builder("textured-blend", program(passId, false, true, true, false, "blend", true)).build(),
-                            ShaderGraphRenderVariant.builder("textured-skinned-blend", program(passId, true, true, true, false, "blend", true)).build())
-                    .build();
+            ShaderGraphRenderVariant[] variants = new ShaderGraphRenderVariant[24];
+            int next = 0;
+            for (int bits = 0; bits < 8; bits++) {
+                boolean skinned = (bits & 1) != 0, textured = (bits & 2) != 0, colors = (bits & 4) == 0;
+                for (MaterialAlphaMode alpha : MaterialAlphaMode.values()) {
+                    boolean blend = alpha == MaterialAlphaMode.BLEND;
+                    String key = PbrShaderProvider.variantKey(skinned, alpha, textured, colors);
+                    variants[next++] = ShaderGraphRenderVariant.builder(key,
+                            program(passId, skinned, alpha != MaterialAlphaMode.OPAQUE, blend, !blend,
+                                    alpha.name(), textured, colors)).build();
+                }
+            }
+            passes[i] = ShaderGraphRenderTechniquePass.builder(passId).variants(variants).build();
         }
         technique = ShaderGraphRenderTechnique.of(
                 "libfdx.standard.pbr", passes);
@@ -144,15 +122,15 @@ public final class StandardPbrTechnique {
                 StandardPbrLightingGraph.create(), null, true, preparer).technique();
     }
 
-    private ShaderModuleSource source(boolean skinned, boolean alphaTest, boolean textured) {
-        return deferred != null ? deferred.sources[(skinned ? 1 : 0) | (alphaTest ? 2 : 0) | (textured ? 4 : 0)]
-                : ShaderModuleSource.fixed(customization.shader(skinned, alphaTest, textured));
+    private ShaderModuleSource source(boolean skinned, boolean alphaTest, boolean textured, boolean colors) {
+        return deferred != null ? deferred.sources[(skinned ? 1 : 0) | (alphaTest ? 2 : 0) | (textured ? 4 : 0) | (colors ? 0 : 8)]
+                : ShaderModuleSource.fixed(customization.shader(skinned, alphaTest, textured, colors));
     }
 
     private static final class DeferredCustomization {
         final GraphicsCapabilities capabilities;
         final ShaderGraph surface, vertex, lighting;
-        final ShaderModuleSource[] sources = new ShaderModuleSource[8];
+        final ShaderModuleSource[] sources = new ShaderModuleSource[16];
         volatile PbrGraphCustomization ready;
         final StandardPbrSourcePreparer preparer;
         DeferredCustomization(GraphicsCapabilities capabilities, ShaderGraph surface, ShaderGraph vertex, ShaderGraph lighting,
@@ -162,9 +140,9 @@ public final class StandardPbrTechnique {
             for (int i = 0; i < sources.length; i++) {
                 final int variant = i;
                 sources[i] = ShaderModuleSource.deferred("vertexMain", "fragmentMain",
-                        () -> generate().shader((variant & 1) != 0, (variant & 2) != 0, (variant & 4) != 0),
+                        () -> generate().shader((variant & 1) != 0, (variant & 2) != 0, (variant & 4) != 0, (variant & 8) == 0),
                         execute -> ShaderCompilationTasks.then(generateAsync(execute), execute,
-                                value -> FdxFuture.completed(value.shader((variant & 1) != 0, (variant & 2) != 0, (variant & 4) != 0))));
+                                value -> FdxFuture.completed(value.shader((variant & 1) != 0, (variant & 2) != 0, (variant & 4) != 0, (variant & 8) == 0))));
             }
         }
         // Only CPU preparation workers call this monitor. Owner-thread default lookup never waits.
@@ -233,15 +211,9 @@ public final class StandardPbrTechnique {
 
     private ShaderGraphRenderProgram program(ShaderPassId passId,
             boolean skinned, boolean alphaTest, boolean alphaBlend,
-            boolean depthWrite, String alphaLabel) {
-        return program(passId, skinned, alphaTest, alphaBlend, depthWrite, alphaLabel, false);
-    }
-
-    private ShaderGraphRenderProgram program(ShaderPassId passId,
-            boolean skinned, boolean alphaTest, boolean alphaBlend,
-            boolean depthWrite, String alphaLabel, boolean textured) {
+            boolean depthWrite, String alphaLabel, boolean textured, boolean colors) {
         return ShaderGraphRenderProgram.builder(passId,
-                        source(skinned, alphaTest, textured))
+                        source(skinned, alphaTest, textured, colors))
                 .label("standard graph "
                         + (skinned ? "skinned " : "")
                         + alphaLabel + " PBR " + passId)
@@ -253,8 +225,7 @@ public final class StandardPbrTechnique {
                 // Providers without explicit blend-state control retain the
                 // historical always-blended pipeline as a safe fallback.
                 .alphaBlend(alphaBlend || !alphaBlendControl)
-                .vertexLayouts(textured ? (skinned ? Mesh.PBR_TEXTURED_SKINNED_LAYOUT : Mesh.PBR_TEXTURED_LAYOUT) : skinned
-                        ? Mesh.PBR_SKINNED_LAYOUT : Mesh.PBR_LAYOUT)
+                .vertexLayouts(Mesh.pbrLayout(skinned, textured, colors))
                 .preparedDefaults(deferred != null ? deferred::defaults : customization::defaultMaterial)
                 .build();
     }

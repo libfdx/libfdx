@@ -49,7 +49,7 @@ public final class CpuSkinnedModelAnimator implements Disposable {
                 if (mesh.indexCount() != 0 || part.indexCount() != 0 || !mesh.hasPositionColor3DSource()
                         || joints.length != mesh.vertexCount()*4 || weights.length != joints.length)
                     throw new FdxException("CPU animation requires retained, nonindexed geometry and four influences: "+part.id());
-                boolean pbr=mesh.hasPbrSkinning() || mesh.hasPbrTextureCoordinates() || mesh.vertexLayout()==Mesh.PBR_LAYOUT;
+                boolean pbr=Mesh.isPbrLayout(mesh.vertexLayout());
                 if ((!pbr && mesh.vertexLayout()!=Mesh.POSITION_COLOR_LAYOUT)
                         || pbr && (mesh.sourceNormals()==null || mesh.sourceTexCoords()==null
                         || mesh.sourcePbr()==null || mesh.sourceEmissive()==null))

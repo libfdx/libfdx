@@ -65,6 +65,58 @@ public final class Mesh implements Disposable {
     public static final VertexLayout PBR_TEXTURED_LAYOUT = texturedLayout(PBR_LAYOUT);
     public static final VertexLayout PBR_TEXTURED_SKINNED_LAYOUT = texturedLayout(PBR_SKINNED_LAYOUT);
 
+    /** PBR layouts without a vertex-color channel; missing color is linear white. */
+    public static final VertexLayout PBR_NO_COLOR_LAYOUT = withoutColor(PBR_LAYOUT);
+    public static final VertexLayout PBR_NO_COLOR_SKINNED_LAYOUT = withoutColor(PBR_SKINNED_LAYOUT);
+    public static final VertexLayout PBR_NO_COLOR_TEXTURED_LAYOUT = texturedLayout(PBR_NO_COLOR_LAYOUT);
+    public static final VertexLayout PBR_NO_COLOR_TEXTURED_SKINNED_LAYOUT = texturedLayout(PBR_NO_COLOR_SKINNED_LAYOUT);
+
+    private static VertexLayout withoutColor(VertexLayout base) {
+        VertexAttribute[] attributes = new VertexAttribute[base.attributeCount() - 1];
+        int out = 0;
+        for (int i = 0; i < base.attributeCount(); i++) {
+            VertexAttribute attribute = base.attribute(i);
+            if (attribute.location() == 3) continue;
+            attributes[out++] = VertexAttribute.of(attribute.location(), attribute.format(),
+                    attribute.offset() >= 48 ? attribute.offset() - 16 : attribute.offset());
+        }
+        return VertexLayout.of(base.arrayStride() - 16, attributes);
+    }
+
+    /** Selects the standard PBR layout without allocating. */
+    public static VertexLayout pbrLayout(boolean skinned, boolean textured, boolean colors) {
+        if (colors) return textured ? (skinned ? PBR_TEXTURED_SKINNED_LAYOUT : PBR_TEXTURED_LAYOUT)
+                : skinned ? PBR_SKINNED_LAYOUT : PBR_LAYOUT;
+        return textured ? (skinned ? PBR_NO_COLOR_TEXTURED_SKINNED_LAYOUT : PBR_NO_COLOR_TEXTURED_LAYOUT)
+                : skinned ? PBR_NO_COLOR_SKINNED_LAYOUT : PBR_NO_COLOR_LAYOUT;
+    }
+
+    public static boolean isPbrLayout(VertexLayout layout) {
+        return layout == PBR_LAYOUT || layout == PBR_NO_COLOR_LAYOUT
+                || isPbrSkinnedLayout(layout) || isPbrTexturedLayout(layout);
+    }
+
+    public static boolean isPbrSkinnedLayout(VertexLayout layout) {
+        return layout == PBR_SKINNED_LAYOUT || layout == PBR_TEXTURED_SKINNED_LAYOUT
+                || layout == PBR_NO_COLOR_SKINNED_LAYOUT || layout == PBR_NO_COLOR_TEXTURED_SKINNED_LAYOUT;
+    }
+
+    public static boolean isPbrTexturedLayout(VertexLayout layout) {
+        return layout == PBR_TEXTURED_LAYOUT || layout == PBR_TEXTURED_SKINNED_LAYOUT
+                || layout == PBR_NO_COLOR_TEXTURED_LAYOUT || layout == PBR_NO_COLOR_TEXTURED_SKINNED_LAYOUT;
+    }
+
+    public static boolean isPbrColorLayout(VertexLayout layout) {
+        return layout == PBR_LAYOUT || layout == PBR_SKINNED_LAYOUT
+                || layout == PBR_TEXTURED_LAYOUT || layout == PBR_TEXTURED_SKINNED_LAYOUT;
+    }
+
+    /** Whether the standard mesh layout actually uploads a vertex-color attribute. */
+    public boolean hasVertexColors() {
+        return isPbrColorLayout(vertexLayout) || vertexLayout == POSITION_COLOR_LAYOUT
+                || vertexLayout == POSITION_NORMAL_COLOR_LAYOUT;
+    }
+
     private static VertexLayout texturedLayout(VertexLayout base) {
         VertexAttribute[] attributes = new VertexAttribute[base.attributeCount() + 2];
         for (int i = 0; i < base.attributeCount(); i++) attributes[i] = base.attribute(i);
@@ -74,10 +126,10 @@ public final class Mesh implements Disposable {
     }
 
     public boolean hasPbrTextureCoordinates() {
-        return vertexLayout == PBR_TEXTURED_LAYOUT || vertexLayout == PBR_TEXTURED_SKINNED_LAYOUT;
+        return isPbrTexturedLayout(vertexLayout);
     }
     public boolean hasPbrSkinning() {
-        return vertexLayout == PBR_SKINNED_LAYOUT || vertexLayout == PBR_TEXTURED_SKINNED_LAYOUT;
+        return isPbrSkinnedLayout(vertexLayout);
     }
 
     private final String id;
@@ -85,7 +137,9 @@ public final class Mesh implements Disposable {
     private final int vertexCount;
     private final int indexCount;
     private final BoundingBox bounds;
+    private final boolean cpuShadingSource;
     private final float[] sourcePositions;
+    private final short[] sourceIndices;
     private final float[] sourceColors;
     private final float[] sourceBakedColors;
     private final float[] sourceNormals;
@@ -148,6 +202,18 @@ public final class Mesh implements Disposable {
                 null, null, null, null, null, null, null, null, false);
     }
 
+    /**
+     * Creates a static mesh with explicit xyz positions for CPU geometry queries.
+     * Positions and the used unsigned 16-bit indices are copied and retained
+     * independently of shading attributes. The caller owns the returned mesh.
+     * Non-indexed meshes may pass null indices and an index count of zero.
+     */
+    public Mesh(GraphicsContext graphics, String id, VertexLayout vertexLayout, float[] vertices, int vertexCount,
+            short[] indices, int indexCount, BoundingBox bounds, float[] sourcePositions) {
+        this(graphics, id, vertexLayout, vertices, vertexCount, indices, indexCount, bounds, sourcePositions,
+                null, null, null, null, null, null, null, null, null, null, false);
+    }
+
     private Mesh(GraphicsContext graphics, String id, VertexLayout vertexLayout, float[] vertices, int vertexCount,
             short[] indices, int indexCount, BoundingBox bounds, float[] sourcePositions, float[] sourceColors,
             float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords, float[] sourcePbr,
@@ -194,6 +260,14 @@ public final class Mesh implements Disposable {
         if (indexCount > 0 && (indices == null || indices.length < indexCount)) {
             throw new FdxException("Mesh indices cannot be empty when index count is greater than zero");
         }
+        if (sourcePositions != null && sourcePositions.length != (long)vertexCount * 3) {
+            throw new FdxException("Mesh source positions must contain xyz values for every vertex");
+        }
+        for (int i = 0; i < indexCount; i++) {
+            if ((indices[i] & 0xffff) >= vertexCount) {
+                throw new FdxException("Mesh index is outside the vertex range");
+            }
+        }
         int vertexByteCount = vertexCount * vertexLayout.arrayStride();
         if (preparation == null) validateFloatVertexData(vertices, vertexByteCount);
         else if (preparation.uploadBytes.capacity() != vertexByteCount)
@@ -203,10 +277,12 @@ public final class Mesh implements Disposable {
         this.vertexCount = vertexCount;
         this.indexCount = indexCount;
         this.bounds = bounds != null ? bounds : BoundingBox.empty();
+        this.cpuShadingSource = retainSourceData && sourcePositions != null;
         // Geometry queries (for example editor picking) are independent of
         // optional CPU shading attributes. Keep one mesh-owned position copy
         // even when rendering uses only the uploaded GPU attributes.
         this.sourcePositions = sourcePositions != null ? copySource(preparation, 0, sourcePositions) : null;
+        this.sourceIndices = indexCount > 0 ? java.util.Arrays.copyOf(indices, indexCount) : null;
         this.sourceColors = retainSourceData && sourceColors != null ? copySource(preparation, 1, sourceColors) : null;
         this.sourceBakedColors = retainSourceData && sourceBakedColors != null ? copySource(preparation, 2, sourceBakedColors) : null;
         this.sourceNormals = retainSourceData && sourceNormals != null ? copySource(preparation, 3, sourceNormals) : null;
@@ -420,7 +496,7 @@ public final class Mesh implements Disposable {
         if (includeNormals && (sourceNormals == null || sourceNormals.length != vertexCount * 3)) {
             throw new FdxException("Static 3D meshes with normals require xyz source normals");
         }
-        if (sourceColors == null || sourceColors.length != vertexCount * 4) {
+        if ((includeColors && sourceColors == null) || (sourceColors != null && sourceColors.length != vertexCount * 4)) {
             throw new FdxException("Static 3D meshes require rgba source colors");
         }
         float[] vertices = packStatic3D(sourcePositions, sourceNormals, sourceColors, vertexCount,
@@ -492,6 +568,8 @@ public final class Mesh implements Disposable {
      * Creates a PBR mesh with optional UV1 and tangent XYZW attributes. Arrays are copied on creation;
      * retained shading arrays follow retainSourceData. Null extra attributes use zero values; tangent W
      * zero requests a derivative basis. Existing overloads keep their compact layouts.
+     * Null sourceColors omits the RGBA channel entirely; standard shaders use white instead.
+     * Supplied colors and CPU baked colors must exclude the material base-color factor.
      */
     public static Mesh positionColor3D(GraphicsContext graphics, String id, float[] sourcePositions,
             float[] sourceColors, float[] sourceBakedColors, float[] sourceNormals, float[] sourceTexCoords,
@@ -557,7 +635,7 @@ public final class Mesh implements Disposable {
                 throw new FdxException("3D position/color meshes require xyz source positions");
             }
             vertexCount = sourcePositions.length / 3;
-            if (sourceColors == null || sourceColors.length != vertexCount * 4) {
+            if (sourceColors != null && sourceColors.length != vertexCount * 4) {
                 throw new FdxException("3D position/color meshes require rgba source colors");
             }
             if (sourceBakedColors != null && sourceBakedColors.length != vertexCount * 4) {
@@ -607,6 +685,7 @@ public final class Mesh implements Disposable {
             }
             floatsPerVertex = hasSkinning ? PBR_SKINNED_FLOATS_PER_VERTEX
                     : pbrLayout ? PBR_FLOATS_PER_VERTEX : POSITION_COLOR_FLOATS_PER_VERTEX;
+            if (sourceColors == null) floatsPerVertex -= 4;
             if (textured) floatsPerVertex += 6;
 
             Math.multiplyExact(Math.multiplyExact(vertexCount, floatsPerVertex), Float.BYTES);
@@ -653,10 +732,12 @@ public final class Mesh implements Disposable {
                     vertices[out++] = sourceTexCoords[texCoordOffset];
                     vertices[out++] = sourceTexCoords[texCoordOffset + 1];
                 }
-                vertices[out++] = sourceColors[colorOffset];
-                vertices[out++] = sourceColors[colorOffset + 1];
-                vertices[out++] = sourceColors[colorOffset + 2];
-                vertices[out++] = sourceColors[colorOffset + 3];
+                if (sourceColors != null) {
+                    vertices[out++] = sourceColors[colorOffset];
+                    vertices[out++] = sourceColors[colorOffset + 1];
+                    vertices[out++] = sourceColors[colorOffset + 2];
+                    vertices[out++] = sourceColors[colorOffset + 3];
+                }
                 if (pbrLayout) {
                     int pbrOffset = i * 3;
                     int emissiveOffset = i * 3;
@@ -712,9 +793,8 @@ public final class Mesh implements Disposable {
          * Providers without range initialization use one complete write on the first step. */
         public PositionColor3DUpload beginUpload(GraphicsContext graphics, String id) {
             if (cursor != vertexCount) throw new FdxException("Mesh preparation is not complete");
-            Mesh mesh = new Mesh(graphics, id, textured ? (hasSkinning ? PBR_TEXTURED_SKINNED_LAYOUT : PBR_TEXTURED_LAYOUT)
-                    : hasSkinning ? PBR_SKINNED_LAYOUT : pbrLayout ? PBR_LAYOUT
-                    : POSITION_COLOR_LAYOUT, vertices, vertexCount,
+            Mesh mesh = new Mesh(graphics, id, pbrLayout ? pbrLayout(hasSkinning, textured, sourceColors != null)
+                    : sourceColors != null ? POSITION_COLOR_LAYOUT : POSITION_LAYOUT, vertices, vertexCount,
                     null, 0, bounds, sourcePositions, sourceColors, sourceBakedColors, sourceNormals, sourceTexCoords,
                     sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, sourceJoints, sourceWeights,
                     retainSourceData, sourceTexCoords1, sourceTangents, this, true);
@@ -841,12 +921,13 @@ public final class Mesh implements Disposable {
     }
 
     /**
-     * Returns whether this instance has position color3 d source.
+     * Returns whether this mesh has CPU positions and its optional color source.
+     * A standard layout without colors needs no color array; CPU shading uses white.
      *
      * @return true if this instance has position color3 d source; false otherwise
      */
     public boolean hasPositionColor3DSource() {
-        return sourcePositions != null && sourceColors != null;
+        return cpuShadingSource && (sourceColors != null || !hasVertexColors());
     }
 
     /**
@@ -861,7 +942,15 @@ public final class Mesh implements Disposable {
     }
 
     /**
-     * Returns the source colors.
+     * Returns borrowed, read-only unsigned 16-bit indices, or null for a
+     * non-indexed mesh. Decode a value with {@code index & 0xffff}.
+     */
+    public short[] sourceIndices() {
+        return sourceIndices;
+    }
+
+    /**
+     * Returns borrowed vertex colors, or null when absent/not retained. Missing colors are white.
      *
      * @return the source colors
      */

@@ -42,8 +42,8 @@ final class PbrShaderParameters {
     static final int MAX_SHADOW_CASCADES = 4;
     static final int MAX_BONES = SkinningShader3D.MAX_BONES;
 
-    private static final long STATIC_UNIFORM_SIZE = 1_456;
-    private static final long SKINNED_UNIFORM_SIZE = 5_568;
+    private static final long STATIC_UNIFORM_SIZE = 1_472;
+    private static final long SKINNED_UNIFORM_SIZE = 5_584;
     private static final ShaderValueType FLOAT2 =
             ShaderValueType.vector(ShaderScalarType.F32, 2);
     private static final ShaderValueType FLOAT3 =
@@ -123,6 +123,7 @@ final class PbrShaderParameters {
     final ShaderParameterHandle BONE_MATRICES;
     final ShaderParameterHandle NORMAL_OCCLUSION;
     final ShaderParameterHandle IBL_PARAMS, IBL_ROTATION;
+    final ShaderParameterHandle BASE_COLOR;
     private final ShaderParameterHandle[] textureTransforms;
 
     final ShaderParameterHandle HAS_BASE_COLOR_TEXTURE;
@@ -209,7 +210,8 @@ final class PbrShaderParameters {
                         .named("array<vec4<f32>, 10>"), 1_248, 160),
                 materialParameter("normalOcclusion", NAMED_FLOAT4, 1_408, 16),
                 environmentParameter("iblParams", NAMED_FLOAT4, 1_424, 16),
-                environmentParameter("iblRotation", NAMED_FLOAT4, 1_440, 16)
+                environmentParameter("iblRotation", NAMED_FLOAT4, 1_440, 16),
+                materialParameter("baseColor", NAMED_FLOAT4, 1_456, 16)
         };
     }
 
@@ -324,6 +326,10 @@ final class PbrShaderParameters {
     }
 
     private static ShaderReflection reflection(boolean skinned, boolean textured) {
+        return reflection(skinned, textured, true);
+    }
+
+    static ShaderReflection reflection(boolean skinned, boolean textured, boolean colors) {
         ShaderParameterLayout layout = skinned ? SKINNED_UNIFORM_LAYOUT : STATIC_UNIFORM_LAYOUT;
         long uniformSize = layout.minimumBindingSize();
         ShaderBinding uniform = ShaderBinding.builder(1, 0, "uniforms",
@@ -350,6 +356,12 @@ final class PbrShaderParameters {
                         input("uv", 2, FLOAT2), input("color", 3, FLOAT4),
                         input("pbr", 4, FLOAT3), input("emissive", 5, FLOAT3)
                 };
+        if (!colors) {
+            ShaderStageVariable[] compact = new ShaderStageVariable[vertexInputs.length - 1];
+            System.arraycopy(vertexInputs, 0, compact, 0, 3);
+            System.arraycopy(vertexInputs, 4, compact, 3, vertexInputs.length - 4);
+            vertexInputs = compact;
+        }
         if (textured) {
             ShaderStageVariable[] extended = new ShaderStageVariable[vertexInputs.length + 2];
             System.arraycopy(vertexInputs, 0, extended, 0, vertexInputs.length);
@@ -469,6 +481,7 @@ final class PbrShaderParameters {
         NORMAL_OCCLUSION = layout.requireHandle("normalOcclusion");
         IBL_PARAMS = layout.requireHandle("iblParams");
         IBL_ROTATION = layout.requireHandle("iblRotation");
+        BASE_COLOR = layout.requireHandle("baseColor");
         textureTransforms = elements(layout, layout.requireHandle("textureTransforms"));
         SKINNING_PARAMS = layout.findHandle("skinningParams");
         BONE_MATRICES = layout.findHandle("boneMatrices");

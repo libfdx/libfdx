@@ -164,7 +164,7 @@ public final class ModelShaderPlan implements Disposable {
         if (renderer != null && (!(renderer instanceof PreparedShaderProvider3D prepared)
                 || prepared.preparationPlan() != this)) return unavailable;
         Mesh mesh = renderable.meshPart().mesh();
-        return common != null && (mesh.vertexLayout() == Mesh.PBR_LAYOUT || mesh.hasPbrSkinning() || mesh.hasPbrTextureCoordinates())
+        return common != null && Mesh.isPbrLayout(mesh.vertexLayout())
                 ? common : positionColor != null ? positionColor : common;
     }
 
@@ -177,7 +177,7 @@ public final class ModelShaderPlan implements Disposable {
         if (provider(renderable) == positionColor) return "";
         Mesh mesh = renderable.meshPart().mesh();
         return PbrShaderProvider.variantKey(mesh.hasPbrSkinning(), renderable.material().alphaMode(),
-                mesh.vertexLayout() == Mesh.PBR_TEXTURED_LAYOUT || mesh.vertexLayout() == Mesh.PBR_TEXTURED_SKINNED_LAYOUT);
+                mesh.hasPbrTextureCoordinates(), mesh.hasVertexColors());
     }
 
     ShaderRequest request(Renderable3D renderable, ShaderPassId pass, RenderTargetLayout target) {

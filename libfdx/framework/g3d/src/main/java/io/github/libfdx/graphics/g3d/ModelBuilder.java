@@ -867,7 +867,7 @@ public final class ModelBuilder {
         boolean includeColors = hasUsage(usage, ModelVertexUsage.COLOR);
         boolean includeNormals = hasUsage(usage, ModelVertexUsage.NORMAL);
         if (hasUsage(usage, ModelVertexUsage.PBR_LAYOUT)) {
-            return createPbrMesh(id, vertices, meshBounds);
+            return createPbrMesh(id, vertices, meshBounds, includeColors);
         }
         if (includeNormals) {
             if (includeColors) {
@@ -887,28 +887,18 @@ public final class ModelBuilder {
     }
 
     private Mesh createPbrMesh(String id, TriangleVertices vertices,
-            BoundingBox meshBounds) {
+            BoundingBox meshBounds, boolean includeColors) {
         int vertexCount = vertices.positions.length / 3;
-        float[] colors = new float[vertexCount * 4];
+        float[] colors = includeColors ? vertices.colors : null;
         float[] textureCoordinates = new float[vertexCount * 2];
         float[] pbr = new float[vertexCount * 3];
         float[] emissive = new float[vertexCount * 3];
-        Color baseColor = MaterialAttributes.baseColor(material);
         Color emissiveFactor = MaterialAttributes.emissiveColor(material);
         float metallic = clamp(PbrAttributes.metallicFactor(material),
                 0.0f, 1.0f);
         float roughness = clamp(PbrAttributes.roughnessFactor(material),
                 0.04f, 1.0f);
         for (int vertex = 0; vertex < vertexCount; vertex++) {
-            int colorOffset = vertex * 4;
-            colors[colorOffset] = vertices.colors[colorOffset]
-                    * baseColor.red();
-            colors[colorOffset + 1] = vertices.colors[colorOffset + 1]
-                    * baseColor.green();
-            colors[colorOffset + 2] = vertices.colors[colorOffset + 2]
-                    * baseColor.blue();
-            colors[colorOffset + 3] = vertices.colors[colorOffset + 3]
-                    * baseColor.alpha();
             int pbrOffset = vertex * 3;
             pbr[pbrOffset] = 1.0f;
             pbr[pbrOffset + 1] = metallic;
@@ -1031,10 +1021,9 @@ public final class ModelBuilder {
             throw new FdxException("Model vertex usage must include POSITION");
         }
         if (hasUsage(usage, ModelVertexUsage.PBR_LAYOUT)
-                && (!hasUsage(usage, ModelVertexUsage.COLOR)
-                || !hasUsage(usage, ModelVertexUsage.NORMAL))) {
+                && !hasUsage(usage, ModelVertexUsage.NORMAL)) {
             throw new FdxException(
-                    "PBR_LAYOUT requires COLOR and NORMAL vertex usages");
+                    "PBR_LAYOUT requires NORMAL vertex usage");
         }
     }
 

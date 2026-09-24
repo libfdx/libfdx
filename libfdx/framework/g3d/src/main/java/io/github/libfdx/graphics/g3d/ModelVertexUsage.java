@@ -16,10 +16,9 @@ public final class ModelVertexUsage {
     /** Includes vertex normals. */
     public static final long NORMAL = 1L << 2;
     /**
-     * Emits the full standard-PBR vertex layout. This flag requires
-     * {@link #COLOR} and {@link #NORMAL}; material factors are read from
-     * {@link MaterialAttributes} and {@link PbrAttributes} when the mesh is
-     * built.
+     * Emits a standard-PBR vertex layout. Requires {@link #NORMAL};
+     * {@link #COLOR} is optional. Base color is applied at draw time;
+     * other PBR factors are read from {@link PbrAttributes} when built.
      */
     public static final long PBR_LAYOUT = 1L << 3;
     /** Preserves the position/color output used by the original builders. */

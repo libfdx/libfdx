@@ -184,6 +184,24 @@ final class PbrGraphCustomization {
                         : staticReflection);
     }
 
+    private final ShaderModuleDescriptor[] noColorShaders = new ShaderModuleDescriptor[8];
+
+    synchronized ShaderModuleDescriptor shader(boolean skinned, boolean alphaTest, boolean textured, boolean colors) {
+        if (colors) return shader(skinned, alphaTest, textured);
+        int variant = (skinned ? 1 : 0) | (alphaTest ? 2 : 0) | (textured ? 4 : 0);
+        if (noColorShaders[variant] == null) {
+            String source = shader(skinned, alphaTest, textured).wgslSource();
+            // Only the vertex input loses color. The fragment varying stays white.
+            int colorInput = source.indexOf("@location(3) color : vec4f,");
+            if (colorInput < 0) throw new IllegalStateException("PBR vertex color input is missing");
+            source = source.substring(0, colorInput) + source.substring(colorInput + "@location(3) color : vec4f,".length());
+            source = source.replace("output.color = input.color;", "output.color = vec4f(1.0);");
+            noColorShaders[variant] = ShaderModuleDescriptor.wgsl("model batch PBR without vertex color " + variant, source)
+                    .reflection(reflection(PbrShaderParameters.reflection(skinned, textured, false)));
+        }
+        return noColorShaders[variant];
+    }
+
     synchronized ShaderModuleDescriptor shader(boolean skinned, boolean alphaTest, boolean textured) {
         if (!textured) return shader(skinned, alphaTest);
         ShaderModuleDescriptor shader = texturedShaders[(skinned ? 1 : 0) | (alphaTest ? 2 : 0)];

@@ -251,7 +251,7 @@ final class GltfModelLoaderTest {
         Model model = new GltfModelLoader(new FakeGraphicsContext()).loadModelBytes("tangents.gltf", root.toJson().getBytes(StandardCharsets.UTF_8));
         try {
             Mesh mesh = model.nodes().get(0).parts().get(0).meshPart().mesh();
-            assertSame(Mesh.PBR_TEXTURED_SKINNED_LAYOUT, mesh.vertexLayout());
+            assertSame(Mesh.PBR_NO_COLOR_TEXTURED_SKINNED_LAYOUT, mesh.vertexLayout());
             assertArrayEquals(new float[] {.2f,.3f, .4f,.5f, .6f,.7f}, mesh.sourceTexCoords1());
             assertArrayEquals(new float[] {1,0,0,-1, 1,0,0,-1, 1,0,0,-1}, mesh.sourceTangents());
         } finally { model.dispose(); }
@@ -573,7 +573,7 @@ final class GltfModelLoaderTest {
         assertEquals(12, part.weights().length);
         assertEquals(0, part.joints()[0]);
         assertEquals(1.0f, part.weights()[0], EPSILON);
-        assertEquals(Mesh.PBR_SKINNED_LAYOUT, part.meshPart().mesh().vertexLayout());
+        assertEquals(Mesh.PBR_NO_COLOR_SKINNED_LAYOUT, part.meshPart().mesh().vertexLayout());
         assertNotNull(part.meshPart().mesh().sourcePositions());
         assertEquals(12, part.meshPart().mesh().sourceJoints().length);
         assertEquals(12, part.meshPart().mesh().sourceWeights().length);

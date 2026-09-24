@@ -517,7 +517,9 @@ public final class OutlineRenderer3D implements Disposable {
         PrimitiveTopology actualTopology = topology != null ? topology : PrimitiveTopology.TRIANGLE_LIST;
         OutlineShaderVariant variant = variant(vertexLayout);
         int slot = actualTopology.ordinal();
-        RenderPipeline pipeline = variant.pipelines[slot];
+        RenderPipeline[] pipelines = variant.pipelines.computeIfAbsent(vertexLayout,
+                ignored -> new RenderPipeline[PRIMITIVE_TOPOLOGY_COUNT]);
+        RenderPipeline pipeline = pipelines[slot];
         if (pipeline == null) {
             pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
                     .shader(variant.shader, graphics.surfaceFormat())
@@ -527,7 +529,7 @@ public final class OutlineRenderer3D implements Disposable {
                     .depthTestEnabled(false)
                     .depthWriteEnabled(false)
                     .vertexLayout(vertexLayout));
-            variant.pipelines[slot] = pipeline;
+            pipelines[slot] = pipeline;
         }
         return pipeline;
     }
@@ -544,7 +546,8 @@ public final class OutlineRenderer3D implements Disposable {
         if (Mesh.PBR_LAYOUT.equals(vertexLayout)) {
             return pbrVariant;
         }
-        if (Mesh.POSITION_NORMAL_LAYOUT.equals(vertexLayout)) {
+        if (Mesh.POSITION_NORMAL_LAYOUT.equals(vertexLayout)
+                || (Mesh.isPbrLayout(vertexLayout) && !Mesh.isPbrSkinnedLayout(vertexLayout))) {
             return positionNormalVariant;
         }
         if (Mesh.POSITION_NORMAL_COLOR_LAYOUT.equals(vertexLayout)) {
@@ -613,8 +616,7 @@ public final class OutlineRenderer3D implements Disposable {
         private final String label;
         private final ShaderModule shader;
         private final ShaderReflection reflection;
-        private final RenderPipeline[] pipelines =
-                new RenderPipeline[PRIMITIVE_TOPOLOGY_COUNT];
+        private final java.util.Map<VertexLayout, RenderPipeline[]> pipelines = new java.util.HashMap<>();
 
         OutlineShaderVariant(String label, ShaderModule shader,
                 ShaderReflection reflection) {
@@ -625,12 +627,12 @@ public final class OutlineRenderer3D implements Disposable {
 
         @Override
         public void dispose() {
-            for (int i = 0; i < pipelines.length; i++) {
-                if (pipelines[i] != null) {
-                    pipelines[i].dispose();
-                    pipelines[i] = null;
+            for (RenderPipeline[] variants : pipelines.values()) {
+                for (RenderPipeline pipeline : variants) {
+                    if (pipeline != null) pipeline.dispose();
                 }
             }
+            pipelines.clear();
             shader.dispose();
         }
 

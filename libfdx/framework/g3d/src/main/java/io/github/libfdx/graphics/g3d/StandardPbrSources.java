@@ -4,12 +4,12 @@ import io.github.libfdx.graphics.shader.ShaderProfile;
 import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphMaterialDefinition;
 import java.util.Objects;
 
-/** Immutable result of the version-1 standard PBR graph recipe. Variant bits are skinned (1),
+/** Immutable result of the version-2 standard PBR graph recipe. Variant bits are skinned (1),
  * alpha test (2), and extra texture coordinates (4). No GPU objects or mutable materials are
  * transferred. This is an in-process/worker protocol for matching library versions, not an asset
  * file format or a verifier for externally supplied shader code. */
 public final class StandardPbrSources {
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
     private final ShaderProfile profile;
     private final String surface, library;
     private final String[] variants;

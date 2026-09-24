@@ -805,8 +805,17 @@ final class GltfModelLoader implements AssetLoader<Model> {
     private ModelNodePart modelNodePart(String path, GltfDocument document, int meshIndex, int primitiveIndex,
             JsonValue primitive, Skin skin, Array<Material> materials, Mesh mesh) {
         GeometryBuilder geometry = document.geometry[meshIndex][primitiveIndex];
-        Material pbrMaterial = material(path + " material " + meshIndex + "." + primitiveIndex,
-                material(document, integer(primitive, "material", -1))).doubleSided(geometry.doubleSided);
+        int materialIndex = integer(primitive, "material", -1);
+        String materialId = path + " material " + meshIndex + "." + primitiveIndex;
+        ArrayView<JsonValue> declaredMaterials = array(document.root, "materials");
+        if(materialIndex >= 0 && materialIndex < declaredMaterials.size()) {
+            String authoredName = string(declaredMaterials.get(materialIndex), "name", "");
+            if(!authoredName.isBlank()) materialId = authoredName;
+        }
+        // Stable authored names let instance overrides also address generated LODs.
+        // Unnamed materials retain the previous path/primitive identifier.
+        Material pbrMaterial = material(materialId,
+                material(document, materialIndex)).doubleSided(geometry.doubleSided);
         materials.add(pbrMaterial);
         MeshPart meshPart = new MeshPart(path + " part " + meshIndex + "." + primitiveIndex, mesh, null, 0,
                 mesh.vertexCount());
@@ -859,6 +868,13 @@ final class GltfModelLoader implements AssetLoader<Model> {
         int colorAccessor = integer(attributes, "COLOR_0", -1);
         if (colorAccessor >= 0) {
             sourceColors = readColorAccessor(document, colorAccessor);
+            // Exporters often write an entirely white COLOR_0 stream. It is
+            // the identity multiplier, so it needs no GPU attribute either.
+            boolean white = true;
+            for (float channel : sourceColors) {
+                if (channel != 1.0f) { white = false; break; }
+            }
+            if (white) sourceColors = null;
         }
         int[] sourceJoints = null;
         float[] sourceWeights = null;
@@ -874,6 +890,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
         GltfMaterial material = material(document, integer(primitive, "material", -1));
         geometry.extended = sourceTexCoords1 != null || sourceTangents != null || material.normalImage != null;
         geometry.material(material);
+        geometry.hasColors = sourceColors != null;
         geometry.doubleSided |= material.doubleSided;
         int[] indices = primitive.get("indices") != null
                 ? readIndexAccessor(document, integer(primitive, "indices", -1))
@@ -964,7 +981,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
             normal = tangent.scale(mapped.x()).add(normal.cross(tangent).scale(handedness*mapped.y()))
                     .add(normal.scale(mapped.z())).normalize();
         }
-        Color color = material.baseColor;
+        Color color = Color.WHITE;
         if (sourceColors != null) {
             int colorOffset = index * colorComponents;
             Color vertexColor = new Color(sourceColors[colorOffset], sourceColors[colorOffset + 1],
@@ -1564,6 +1581,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
     private static final class GeometryBuilder {
         private Mesh.PositionColor3DPreparation preparedMesh;
         private boolean extended;
+        private boolean hasColors;
         private final FloatList texCoords1 = new FloatList();
         private final FloatList tangents = new FloatList();
         private final FloatList positions = new FloatList();
@@ -1596,10 +1614,12 @@ final class GltfModelLoader implements AssetLoader<Model> {
             texCoords.add(u);
             texCoords.add(v);
             Color safeColor = color != null ? color : Color.WHITE;
-            colors.add(safeColor.red());
-            colors.add(safeColor.green());
-            colors.add(safeColor.blue());
-            colors.add(safeColor.alpha());
+            if (hasColors) {
+                colors.add(safeColor.red());
+                colors.add(safeColor.green());
+                colors.add(safeColor.blue());
+                colors.add(safeColor.alpha());
+            }
             Color safeBakedColor = bakedColor != null ? bakedColor : safeColor;
             bakedColors.add(safeBakedColor.red());
             bakedColors.add(safeBakedColor.green());
@@ -1662,7 +1682,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
         }
 
         float[] colors() {
-            return colors.toArray();
+            return hasColors ? colors.toArray() : null;
         }
 
         float[] bakedColors() {

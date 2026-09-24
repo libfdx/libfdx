@@ -147,6 +147,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
                 normalOcclusion : vec4f,
                 iblParams : vec4f,
                 iblRotation : vec4f,
+                baseColor : vec4f,
                 //__PBR_SKINNED_UNIFORMS__
             };
             @group(0) @binding(0) var baseColorTexture : texture_2d<f32>;
@@ -672,7 +673,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
             @fragment
             fn fragmentMain(input : VertexOutput, @builtin(front_facing) frontFacing : bool) -> @location(0) vec4f {
                 let uv = textureUv(input, 0);
-                var base = input.color;
+                var base = input.color * uniforms.baseColor;
                 if (uniforms.textureFlags.x > 0.5) {
                     let texel = textureSample(baseColorTexture, baseColorSampler, uv);
                     var sampledColor = texel.rgb;
@@ -949,6 +950,11 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
         }
         return new ShaderGraphProvider(graphics,
                 StandardPbrTechnique.create(graphics).technique());
+    }
+
+    static String variantKey(boolean skinned, MaterialAlphaMode alphaMode, boolean textured, boolean colors) {
+        String key = variantKey(skinned, alphaMode, textured);
+        return colors ? key : key.isEmpty() ? "no-color" : key + "-no-color";
     }
 
     static String variantKey(boolean skinned,
@@ -1294,7 +1300,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
             float[] sourcePbr = mesh.sourceBakedPbr() != null ? mesh.sourceBakedPbr() : mesh.sourcePbr();
             float[] sourceEmissive = mesh.sourceBakedEmissive() != null ? mesh.sourceBakedEmissive()
                     : mesh.sourceEmissive();
-            boolean applyMaterialBaseColor = mesh.sourceBakedColors() == null;
+            boolean applyMaterialBaseColor = true;
             Camera camera = context.camera();
             int firstVertex = meshPart.firstVertex();
             int availableVertices = sourcePositions.length / 3;
@@ -1469,10 +1475,10 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
         private ColorVertex shade(WorldVertex worldVertex, float[] colors, float[] normals, float[] pbr,
                 float[] emissive, int vertex, int colorOffset, WorldVertex faceNormal, float[] worldMatrix,
                 Material material, boolean applyMaterialBaseColor, RenderContext3D context) {
-            float red = colors[colorOffset];
-            float green = colors[colorOffset + 1];
-            float blue = colors[colorOffset + 2];
-            float alpha = colors[colorOffset + 3];
+            float red = colors == null ? 1.0f : colors[colorOffset];
+            float green = colors == null ? 1.0f : colors[colorOffset + 1];
+            float blue = colors == null ? 1.0f : colors[colorOffset + 2];
+            float alpha = colors == null ? 1.0f : colors[colorOffset + 3];
             if (applyMaterialBaseColor) {
                 Color baseColor = MaterialAttributes.baseColor(material);
                 red *= baseColor.red();
@@ -2199,9 +2205,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
         public boolean canRender(Renderable3D renderable) {
             return renderable != null
                     && renderable.meshPart() != null
-                    && (renderable.meshPart().mesh().vertexLayout() == Mesh.PBR_LAYOUT
-                    || renderable.meshPart().mesh().hasPbrSkinning()
-                    || renderable.meshPart().mesh().hasPbrTextureCoordinates());
+                    && Mesh.isPbrLayout(renderable.meshPart().mesh().vertexLayout());
         }
 
         /**
@@ -2311,7 +2315,7 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
             PrimitiveTopology actualTopology = topology != null
                     ? topology : PrimitiveTopology.TRIANGLE_LIST;
             String variantKey = variantKey(skinned, alphaMode,
-                    vertexLayout == Mesh.PBR_TEXTURED_LAYOUT || vertexLayout == Mesh.PBR_TEXTURED_SKINNED_LAYOUT);
+                    Mesh.isPbrTexturedLayout(vertexLayout), Mesh.isPbrColorLayout(vertexLayout));
             RenderPassCompatibility compatibility =
                     context.renderPassCompatibility();
             for (ResolvedPassEntry entry : resolvedPassCache) {
@@ -2765,6 +2769,8 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
         }
 
         private void applyMaterial(RenderPass pass, Material material) {
+            Color tint = MaterialAttributes.baseColor(material);
+            uniforms.setUniform4f(uniforms.BASE_COLOR, tint.red(), tint.green(), tint.blue(), tint.alpha());
             Texture materialBaseColor =
                     MaterialAttributes.baseColorTexture(material);
             float lightingInfluence = lightingInfluence(material);

@@ -607,7 +607,7 @@ public final class EdgeDetectionOutlineRenderer3D implements Disposable {
             throw new FdxException(
                     "Edge-detection outline requires FLOAT32X3 position at location 0");
         }
-        if (skinned && !Mesh.PBR_SKINNED_LAYOUT.equals(layout) && !Mesh.PBR_TEXTURED_SKINNED_LAYOUT.equals(layout)) {
+        if (skinned && !Mesh.isPbrSkinnedLayout(layout)) {
             throw new FdxException(
                     "Edge-detection outline only supports the standard PBR skinned layout");
         }

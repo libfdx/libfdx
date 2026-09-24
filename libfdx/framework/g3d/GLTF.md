@@ -7,6 +7,30 @@ leases, and remain alive while a loaded model needs them. Data URIs and embedded
 buffers/images are also accepted. The loaded model owns its uploaded meshes and
 textures; consumers borrow it from their asset scope or manager.
 
+Nonblank authored material names are preserved as `Material.id()`. Unnamed
+materials retain generated path/primitive IDs. Names need not be unique: an
+application may intentionally target every part with the same name.
+
+Vertex colors and the material base-color factor remain independent. A primitive
+without `COLOR_0` uses a PBR layout without a color attribute, saving 16 GPU bytes
+per vertex (56 instead of 72 for the basic layout). An entirely white `COLOR_0`
+stream is also omitted, since it changes no channel. Other authored RGB/RGBA
+colors are preserved; absent vertex color is linear white. Textured and skinned layouts also
+omit those 16 bytes when colors are absent.
+
+`MaterialAttributes.baseColor` is applied at draw time on GPU and CPU paths:
+base color = vertex color × texture color × material factor. For runtime paint,
+borrow the shared mesh and replace an instance's material via
+`DefaultModelInstance.nodeMaterial`. Copy its material attributes and set
+`MaterialAttributes.baseColor(red, green, blue, alpha)` using linear RGB; preserve
+the original alpha when changing paint only. This does not modify geometry,
+emissive color or other instances. Apply changes before queuing renderables.
+
+Procedural callers can omit `ModelVertexUsage.COLOR` from a PBR builder usage,
+or pass null `sourceColors` to `Mesh.positionColor3D`/`preparePositionColor3D`.
+Non-null colors are vertex factors, never pre-multiplied material colors. CPU
+texture-baked colors must likewise exclude the material base-color factor.
+
 CPU document, accessor, animation and mip preparation uses the asset executor. GPU
 creation runs through the manager's update boundary on the graphics thread. A
 failed upload disposes partial resources. A single model's final upload is one
