@@ -15,6 +15,7 @@ public final class AnimationClip {
     private final float durationSeconds;
     private final NodeTransformChannel[] nodeTransformChannels;
     private final Event[] events;
+    private final NodeMorphChannel[] morphChannels;
 
     /**
      * Creates an animation clip.
@@ -40,11 +41,19 @@ public final class AnimationClip {
     /** Copies ordered application event markers. Equal-time markers retain caller order; times must
      * lie in [0,duration]. Events are application metadata, independent of glTF import. */
     public AnimationClip(String id, float durationSeconds, NodeTransformChannel[] nodeTransformChannels, Event[] events) {
+        this(id, durationSeconds, nodeTransformChannels, events, null);
+    }
+
+    /** Immutable TRS, application events and morph tracks. All arrays are copied. */
+    public AnimationClip(String id, float durationSeconds, NodeTransformChannel[] nodeTransformChannels, Event[] events, NodeMorphChannel[] morphChannels) {
         if (!Float.isFinite(durationSeconds) || durationSeconds < 0.0f) {
             throw new FdxException("Animation duration must be finite and nonnegative");
         }
         this.id = id != null ? id : "";
         this.durationSeconds = durationSeconds;
+        this.morphChannels = morphChannels == null ? new NodeMorphChannel[0] : morphChannels.clone();
+        for (NodeMorphChannel channel : this.morphChannels)
+            if (channel == null || channel.sampler().lastTime() > durationSeconds) throw new FdxException("Invalid morph animation track/duration");
         this.nodeTransformChannels = nodeTransformChannels != null
                 ? nodeTransformChannels.clone()
                 : new NodeTransformChannel[0];
@@ -164,6 +173,8 @@ public final class AnimationClip {
     NodeTransformChannel[] nodeTransformChannelsUnsafe() {
         return nodeTransformChannels;
     }
+    public NodeMorphChannel[] morphChannels() { return morphChannels.clone(); }
+    NodeMorphChannel[] morphChannelsUnsafe() { return morphChannels; }
 
     /**
      * Describes a transform channel targeting one model node.
@@ -211,6 +222,8 @@ public final class AnimationClip {
             defaults.validateDefaults();
             if(translation!=null&&translation.isRotation()||scale!=null&&scale.isRotation()||rotation!=null&&!rotation.isRotation())
                 throw new FdxException("Transform sampler kind mismatch");
+            if (translation != null && translation.components() != 3 || scale != null && scale.components() != 3)
+                throw new FdxException("Transform vector tracks need three components");
             this.nodeId=nodeId;this.defaults=defaults;this.translation=translation;this.rotation=rotation;this.scale=scale;keyframes=null;
         }
         /** Whether this channel holds independent sampler tracks instead of combined linear keyframes. */

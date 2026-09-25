@@ -359,6 +359,7 @@ public final class WebTestLauncherSupport {
         setTestProperty(args, "shaderSeed", "libfdx.test.shaderSeed");
         setTestProperty(args, "shaderInvalidIndex", "libfdx.test.shaderInvalidIndex");
         setTestProperty(args, "shaderVerifyPixels", "libfdx.test.shaderVerifyPixels");
+        setTestProperty(args, "optimizerAnimated", "libfdx.test.optimizerAnimated");
         setTestProperty(args, "driveInput", "libfdx.test.driveInput");
         setTestProperty(args, "validate", "libfdx.test.validate");
         setTestProperty(args, "visualValidate", "libfdx.test.visualValidate");

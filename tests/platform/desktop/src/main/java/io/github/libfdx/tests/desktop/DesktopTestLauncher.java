@@ -20,6 +20,8 @@ import io.github.libfdx.tests.graphics.AssetLoadingTest;
 import io.github.libfdx.tests.graphics.AudioPlaybackTest;
 import io.github.libfdx.tests.graphics.FileStreamingTest;
 import io.github.libfdx.tests.graphics.ModelBatchTest;
+import io.github.libfdx.tests.graphics.ModelLodOptimizerTest;
+import io.github.libfdx.graphics.meshoptimizer.PortableMeshLodSimplifier;
 import io.github.libfdx.tests.graphics.GltfLoadingTest;
 import io.github.libfdx.tests.graphics.ConcurrentGltfLoadingTest;
 import io.github.libfdx.testsupport.graphics.ConcurrentGltfObserver;
@@ -162,6 +164,11 @@ public final class DesktopTestLauncher {
     }
 
     private static ApplicationListener applicationListener(String testName, String graphics, boolean vSync) {
+        if ("ModelLodOptimizerTest".equals(testName)) {
+            return new ModelLodOptimizerTest(exitAfterFrames(),
+                    new PortableMeshLodSimplifier(),
+                    Boolean.getBoolean("libfdx.test.cooperativeLod") ? null : new DesktopAssetExecutor(2, 8));
+        }
         if ("ShaderPreloadingTest".equals(testName)) {
             String manifestPath = System.getProperty("libfdx.test.shaderManifest", "");
             String exportPath = System.getProperty("libfdx.test.shaderCaptureDir", "");

@@ -41,9 +41,14 @@ final class WebWorkerConnection {
     }
 
     static WebWorkerConnection bundled(String role, int timeout, Consumer<JSObject> receive, Runnable failed) {
+        try { return bundledSource(WebWorkerSource.source(), role, timeout, receive, failed); }
+        catch(RuntimeException | Error failure) { return null; }
+    }
+
+    static WebWorkerConnection bundledSource(String source, String role, int timeout, Consumer<JSObject> receive, Runnable failed) {
         if (!available()) return null;
         String url;
-        try { url = createUrl(WebWorkerSource.source(), role); }
+        try { url = createUrl(source, role); }
         catch (RuntimeException | Error failure) { return null; }
         return open(url + "#libfdx-" + role, url, timeout, receive, failed);
     }

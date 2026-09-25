@@ -27,6 +27,7 @@ dependencies {
     api(project(":libfdx:framework:ui-kit"))
     // The web compiler binds model worker defaults only in applications using G3D.
     compileOnly(project(":libfdx:framework:g3d"))
+    compileOnly(project(":libfdx:extensions:graphics:meshoptimizer:core"))
 
     runtimeOnly(project(":libfdx:framework:fdx:platform:web"))
 
@@ -63,6 +64,22 @@ val compilePreparationWorker = tasks.register<JavaExec>("compilePreparationWorke
 tasks.named<ProcessResources>("processResources") {
     dependsOn(compilePreparationWorker)
     from(workerResources)
+}
+
+// Kept separate so applications without runtime LOD do not embed the optimizer worker.
+val lodWorkerResources = layout.buildDirectory.dir("generated/resources/lodWorker")
+val compileLodWorker = tasks.register<JavaExec>("compileLodWorker") {
+    dependsOn(tasks.named("compileJava"), tasks.named(workerCompiler.classesTaskName))
+    classpath = workerCompiler.runtimeClasspath
+    mainClass.set("io.github.libfdx.backend.web.tooling.PreparationWorkerCompiler")
+    inputs.files(workerInputs, workerCompiler.runtimeClasspath)
+    outputs.dir(lodWorkerResources)
+    doFirst { args(lodWorkerResources.get().asFile.absolutePath, workerInputs.asPath,
+        "io.github.libfdx.backend.web.internal.ModelLodWorkerMain", "io/github/libfdx/backend/web/internal/lod-worker.js") }
+}
+tasks.named<ProcessResources>("processResources") {
+    dependsOn(compileLodWorker)
+    from(lodWorkerResources)
 }
 
 tasks.test {

@@ -5222,7 +5222,8 @@ public final class DesktopVulkanProvider implements GraphicsAttachmentProvider {
             try (MemoryStack stack = stackPush()) {
                 VkViewport.Buffer viewport = VkViewport.calloc(1, stack)
                         .x(x)
-                        .y(y + height)
+                        // The public origin is bottom-left; negative height starts at the native bottom edge.
+                        .y(renderTargetHeight - y)
                         .width(width)
                         .height(-height)
                         .minDepth(0.0f)

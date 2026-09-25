@@ -112,6 +112,31 @@ final class MeshPreparationTest {
         assertEquals(device.created, device.disposed);
     }
 
+    @Test
+    void indexedPreparationCopiesIndicesAndReleasesBothBuffersOnCancellationOrFailure() {
+        var preparation = Mesh.preparePositionColor3D(new float[]{0,0,0, 1,0,0, 0,1,0},null,
+                null,null,null,null,null,null,null,null,null,null,true,null,null);
+        finish(preparation);
+        Device device = new Device(); device.ranges = true;
+        assertThrows(FdxException.class,() -> preparation.beginUpload(device.graphics,"invalid",new short[]{0,1,3}));
+        assertEquals(0,device.created);
+        short[] indices = {0,1,2};
+        var upload = preparation.beginUpload(device.graphics,"indexed",indices);
+        indices[0]=2;
+        assertFalse(upload.step(4));
+        while (!upload.step(4)) { }
+        Mesh mesh = upload.take(); upload.dispose();
+        assertArrayEquals(new short[]{0,1,2},mesh.sourceIndices());
+        assertEquals(3,mesh.indexCount());
+        mesh.dispose(); assertEquals(2,device.disposed);
+        var cancelled = preparation.beginUpload(device.graphics,"cancel",indices);
+        cancelled.dispose(); cancelled.dispose(); assertEquals(4,device.disposed);
+        var failed = preparation.beginUpload(device.graphics,"fail",indices);
+        device.failWrite=true;
+        assertThrows(FdxException.class,() -> failed.step(4)); failed.dispose();
+        assertEquals(device.created,device.disposed);
+    }
+
     private static void finish(Mesh.PositionColor3DPreparation preparation) {
         int steps = 0;
         while (!preparation.step(1)) assertTrue(++steps < 32);

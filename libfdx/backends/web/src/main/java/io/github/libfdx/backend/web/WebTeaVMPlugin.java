@@ -55,6 +55,29 @@ public final class WebTeaVMPlugin implements TeaVMPlugin {
         var context = ValueType.object("io.github.libfdx.assets.AssetLoadContext");
         String worker = "io.github.libfdx.backend.web.WebAssetPreparation";
         switch (cls.getName()) {
+            case "io.github.libfdx.graphics.meshoptimizer.ModelLodExecutors" -> {
+                var method = cls.getMethod(new MethodDescriptor("create", ValueType.INTEGER,
+                        ValueType.object("io.github.libfdx.graphics.meshoptimizer.ModelLodExecutor")));
+                var program = new Program(); program.createVariable();
+                var count = program.createVariable(); var result = program.createVariable();
+                var block = program.createBasicBlock();
+                String type = "io.github.libfdx.backend.web.WebModelLodExecutor";
+                var create = new ConstructInstruction(); create.setType(type); create.setReceiver(result); block.add(create);
+                var init = new InvokeInstruction(); init.setType(InvocationType.SPECIAL);
+                init.setMethod(new MethodReference(type, "<init>", ValueType.INTEGER, ValueType.VOID));
+                init.setInstance(result); init.setArguments(count); block.add(init);
+                var exit = new ExitInstruction(); exit.setValueToReturn(result); block.add(exit);
+                method.setProgram(program);
+            }
+            case "io.github.libfdx.backend.web.WebModelLodSource" -> {
+                var method = cls.getMethod(new MethodDescriptor("source", ValueType.object("java.lang.String")));
+                var program = new Program(); program.createVariable();
+                var result = program.createVariable(); var block = program.createBasicBlock();
+                var source = new StringConstantInstruction(); source.setConstant(WebModelLodSource.source());
+                source.setReceiver(result); block.add(source);
+                var exit = new ExitInstruction(); exit.setValueToReturn(result); block.add(exit);
+                method.setProgram(program);
+            }
             case "io.github.libfdx.backend.web.WebWorkerSource" -> {
                 var method = cls.getMethod(new MethodDescriptor("source", ValueType.object("java.lang.String")));
                 var program = new Program(); program.createVariable();

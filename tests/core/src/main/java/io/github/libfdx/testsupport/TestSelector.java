@@ -44,6 +44,8 @@ import io.github.libfdx.tests.graphics.FogOfWar3DTest;
 import io.github.libfdx.tests.graphics.InstancingBasicTest;
 import io.github.libfdx.tests.graphics.MeshBasicTest;
 import io.github.libfdx.tests.graphics.ModelBatchTest;
+import io.github.libfdx.tests.graphics.ModelLodTest;
+import io.github.libfdx.tests.graphics.ModelLodOptimizerTest;
 import io.github.libfdx.tests.graphics.Outline2DTest;
 import io.github.libfdx.tests.graphics.Outline3DTest;
 import io.github.libfdx.tests.graphics.Particles2DTest;
@@ -344,6 +346,12 @@ public final class TestSelector {
                     return new ModelBatchTest(exitAfterFrames);
                 }
             }),
+            descriptor(ModelLodTest.class,
+                    "Compares full detail with adjustable model LOD, triangle counts and fallback.", "Graphics 3D", 1100, 760,
+                    ModelLodTest::new),
+            descriptor(ModelLodOptimizerTest.class,
+                    "Load a model, generate portable configurable LODs and compare geometry.", "Graphics 3D", 1380, 900,
+                    ModelLodOptimizerTest::new),
             descriptor(SkinnedModelBatchTest.class,
                     "Animates a skinned mesh to check deformation and model rendering.", "Graphics 3D", 640, 480, new TestFactory() {
                 @Override

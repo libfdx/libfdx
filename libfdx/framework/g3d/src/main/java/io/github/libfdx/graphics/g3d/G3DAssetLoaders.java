@@ -78,4 +78,14 @@ public final class G3DAssetLoaders {
         }
         return new GltfModelLoader(graphics);
     }
+
+    /**
+     * Creates a glTF/GLB loader with optional CPU attribute retention for mesh editing/LOD generation.
+     * Retention increases CPU memory use; ordinary loaders keep their existing memory policy.
+     * Register the ordinary loaders first, then replace the Model loader with this one when editing.
+     */
+    public static AssetLoader<Model> modelLoader(GraphicsContext graphics, boolean retainEditingSource) {
+        if (graphics == null) throw new FdxException("GraphicsContext cannot be null");
+        return new GltfModelLoader(graphics, retainEditingSource);
+    }
 }

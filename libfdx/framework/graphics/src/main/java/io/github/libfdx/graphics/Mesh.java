@@ -699,6 +699,7 @@ public final class Mesh implements Disposable {
          * upload can begin. Positive budgets only. A single allocation cannot be interrupted. */
         public boolean step(int maxVertices) {
             if (maxVertices <= 0) throw new FdxException("Mesh preparation vertex budget must be positive");
+            if (cursor == vertexCount && uploadBytes != null) return true;
             // Separate large allocations: a cooperative caller can yield before each one.
             if (vertices == null) { vertices = new float[Math.min(vertexCount, 1024) * floatsPerVertex]; return false; }
             if (uploadBytes == null) {
@@ -776,6 +777,34 @@ public final class Mesh implements Disposable {
             return cursor == vertexCount;
         }
 
+        /** Borrows completed CPU staging for a worker message. Requires retained source data;
+         * serialize before uploading, and do not mutate the returned arrays or buffer. */
+        public PreparedPositionColor3DData preparedData() {
+            if (!retainSourceData || cursor != vertexCount || uploadBytes == null || uploaded)
+                throw new IllegalStateException("Completed, retained, unconsumed mesh staging is required");
+            return new PreparedPositionColor3DData(copies, jointCopy, bounds,
+                    uploadBytes.asReadOnlyBuffer().order(ByteOrder.nativeOrder()));
+        }
+
+        /** Takes ownership of detached, previously packed CPU data. Used by worker transports;
+         * no vertex packing or graphics calls occur here. The caller must not mutate the data. */
+        public static PositionColor3DPreparation fromPreparedData(PreparedPositionColor3DData data) {
+            float[][] a = data.attributes();
+            PositionColor3DPreparation result = new PositionColor3DPreparation(a[0], a[1], a[2],
+                    a[3], a[4], a[7], a[8], a[9], a[10], data.joints(), a[11],
+                    data.bounds(), true, a[5], a[6]);
+            int expected = Math.multiplyExact(Math.multiplyExact(result.vertexCount, result.floatsPerVertex), Float.BYTES);
+            if (data.vertices().remaining() != expected || data.vertices().order() != ByteOrder.nativeOrder())
+                throw new IllegalArgumentException("Packed mesh extent or byte order mismatch");
+            System.arraycopy(a, 0, result.copies, 0, a.length);
+            result.jointCopy = data.joints();
+            result.uploadBytes = data.vertices().slice().order(ByteOrder.nativeOrder());
+            result.vertices = new float[Math.min(result.vertexCount, 1024) * result.floatsPerVertex];
+            result.cursor = result.vertexCount;
+            result.allocatedCopies = result.sources.length;
+            return result;
+        }
+
         /** Creates an owned mesh on the graphics thread once prepared. Source data is copied as in
          * positionColor3D. The first upload transfers CPU-prepared source copies; subsequent uploads
          * clone them on the caller thread. Upload failure releases partial buffers. Individual driver calls cannot
@@ -792,10 +821,20 @@ public final class Mesh implements Disposable {
          * the completed mesh. Dispose the upload on cancellation/failure or when no longer needed.
          * Providers without range initialization use one complete write on the first step. */
         public PositionColor3DUpload beginUpload(GraphicsContext graphics, String id) {
+            return beginUpload(graphics, id, null);
+        }
+
+        /**
+         * Creates an indexed prepared mesh. Indices are copied and interpreted as unsigned 16-bit
+         * values. They reference the prepared vertices without changing their attributes. The index
+         * buffer is uploaded at creation; vertex uploads retain the cooperative byte budget.
+         */
+        public PositionColor3DUpload beginUpload(GraphicsContext graphics, String id, short[] indices) {
             if (cursor != vertexCount) throw new FdxException("Mesh preparation is not complete");
+            if (indices != null && indices.length == 0) throw new FdxException("Indexed mesh cannot have empty indices");
             Mesh mesh = new Mesh(graphics, id, pbrLayout ? pbrLayout(hasSkinning, textured, sourceColors != null)
                     : sourceColors != null ? POSITION_COLOR_LAYOUT : POSITION_LAYOUT, vertices, vertexCount,
-                    null, 0, bounds, sourcePositions, sourceColors, sourceBakedColors, sourceNormals, sourceTexCoords,
+                    indices, indices == null ? 0 : indices.length, bounds, sourcePositions, sourceColors, sourceBakedColors, sourceNormals, sourceTexCoords,
                     sourcePbr, sourceBakedPbr, sourceEmissive, sourceBakedEmissive, sourceJoints, sourceWeights,
                     retainSourceData, sourceTexCoords1, sourceTangents, this, true);
             uploaded = true;
@@ -834,6 +873,7 @@ public final class Mesh implements Disposable {
                 }
                 return offset == bytes.capacity();
             } catch (RuntimeException | Error failure) {
+                releaseFailedBuffer(mesh.indexBuffer, failure);
                 releaseFailedBuffer(mesh.vertexBuffer, failure);
                 mesh = null; disposed = true;
                 throw failure;

@@ -27,6 +27,7 @@ public final class DefaultModelInstance implements ModelInstance {
     private final float[] appliedTransformValues = new float[Matrix4.VALUE_COUNT];
     private final float[] currentTransformValues = new float[Matrix4.VALUE_COUNT];
     private Object cpuSkinningOwner;
+    private final Vector3 boundsPoint=new Vector3();
 
     /**
      * Creates a default model instance.
@@ -65,6 +66,60 @@ public final class DefaultModelInstance implements ModelInstance {
         node.localTransform.set(localTransform != null ? localTransform : Matrix4.IDENTITY);
         updateWorldTransforms();
         return this;
+    }
+
+    /** Changes instance-local morph weights. An explicit CpuMorphModelAnimator publishes deformed
+     * geometry before drawing. Values are copied, finite, and match the node's target count. */
+    public DefaultModelInstance morphWeights(String nodeId, float... weights) {
+        InstanceNode node = node(nodeId);
+        if (weights == null || weights.length != node.morphWeights.length) throw new FdxException("Morph weight count mismatch");
+        for (float value : weights) if (!Float.isFinite(value)) throw new FdxException("Morph weights must be finite");
+        System.arraycopy(weights,0,node.morphWeights,0,weights.length); return this;
+    }
+    public int morphTargetCount(String nodeId) { return node(nodeId).morphWeights.length; }
+    public float[] copyMorphWeights(String nodeId, float[] out, int offset) {
+        float[] weights=node(nodeId).morphWeights;
+        if (out == null || offset < 0 || offset > out.length-weights.length) throw new FdxException("Morph output is too small");
+        System.arraycopy(weights,0,out,offset,weights.length); return out;
+    }
+    /** Copies local node poses/weights from an identical ordered hierarchy, updating palettes once.
+     * Returns false without mutation for incompatible node identities or target counts. Materials,
+     * root transform and playback/events are not copied. No geometry or scratch allocation occurs. */
+    public boolean copyPoseFrom(DefaultModelInstance source) {
+        if (source == null || source.instanceNodes.size() != instanceNodes.size() || source.rootNodes.size()!=rootNodes.size()) return false;
+        for (int i=0;i<instanceNodes.size();i++) {
+            InstanceNode a=source.instanceNodes.get(i),b=instanceNodes.get(i);
+            if (!a.source.id().equals(b.source.id()) || a.children.size()!=b.children.size() || a.morphWeights.length != b.morphWeights.length) return false;
+        }
+        for (int i=0;i<instanceNodes.size();i++) {
+            InstanceNode a=source.instanceNodes.get(i),b=instanceNodes.get(i);
+            b.localTransform.set(a.localTransform);
+            System.arraycopy(a.morphWeights,0,b.morphWeights,0,a.morphWeights.length);
+        }
+        updateWorldTransforms(); return true;
+    }
+
+    /** Writes conservative current-pose bounds in model/root-local coordinates, for LOD projection.
+     * Call the morph animator first when present. Returns false without changing output if any
+     * part has unknown bounds or the model has no parts; callers should retain full detail. */
+    public boolean calculatePoseBounds(BoundingBox out) {
+        if (out==null) throw new IllegalArgumentException("Bounds output is required");
+        synchronizeMutableTransform();if (instanceParts.isEmpty()) return false;
+        float minX=Float.POSITIVE_INFINITY,minY=minX,minZ=minX,maxX=Float.NEGATIVE_INFINITY,maxY=maxX,maxZ=maxX;
+        for (int i=0;i<instanceParts.size();i++) {
+            InstancePart part=instanceParts.get(i);BoundingBox box=part.renderable.cullingBounds();
+            if (box==null) return false;
+            Matrix4 local=part.renderable.skinningPalette()==null ? node(part.nodeId).modelTransform : Matrix4.IDENTITY;
+            for (int c=0;c<8;c++) {
+                boundsPoint.set((c&1)==0 ? box.min().x() : box.max().x(),(c&2)==0 ? box.min().y() : box.max().y(),(c&4)==0 ? box.min().z() : box.max().z());
+                local.transformPosition(boundsPoint,boundsPoint);
+                if (!Float.isFinite(boundsPoint.x()) || !Float.isFinite(boundsPoint.y()) || !Float.isFinite(boundsPoint.z())) return false;
+                minX=Math.min(minX,boundsPoint.x());maxX=Math.max(maxX,boundsPoint.x());
+                minY=Math.min(minY,boundsPoint.y());maxY=Math.max(maxY,boundsPoint.y());
+                minZ=Math.min(minZ,boundsPoint.z());maxZ=Math.max(maxZ,boundsPoint.z());
+            }
+        }
+        out.min().set(minX,minY,minZ);out.max().set(maxX,maxY,maxZ);return true;
     }
 
     /**
@@ -116,6 +171,9 @@ public final class DefaultModelInstance implements ModelInstance {
     /** Restores automatic current-pose bounds, static bounds, or the always-visible fallback. */
     public DefaultModelInstance resetNodeCullingBounds(String nodeId,int partIndex) {
         InstancePart part=part(nodeId,partIndex); part.cullingOverride=false;
+        if (cpuSkinningOwner instanceof CpuMorphModelAnimator && part.source.morphTargetCount()>0) {
+            part.renderable.cullingBounds(part.renderable.bounds());return this;
+        }
         boolean deformed=part.source.meshPart().mesh().hasPbrSkinning() || cpuSkinningOwner != null;
         part.renderable.cullingBounds(part.animatedBounds != null && deformed ? part.animatedBounds
                 : part.source.skin() == null ? part.renderable.bounds() : null);
@@ -253,7 +311,7 @@ public final class DefaultModelInstance implements ModelInstance {
                     part.material(), palette == null ? node.worldTransform : transform,
                     animatedBounds != null && gpuSkinning ? animatedBounds : part.meshPart().mesh().bounds(), palette);
             if (animatedBounds != null && gpuSkinning) renderable.cullingBounds(animatedBounds);
-            InstancePart instancePart=new InstancePart(part, renderable, animatedBounds);
+            InstancePart instancePart=new InstancePart(source.id(),part, renderable, animatedBounds);
             node.parts.add(instancePart);
             instanceParts.add(instancePart);
         }
@@ -296,6 +354,8 @@ public final class DefaultModelInstance implements ModelInstance {
     int animationNodeIndex(String id) { return node(id).index; }
     Matrix4 animationDefault(int index) { return instanceNodes.get(index).source.localTransform(); }
     Matrix4 animationLocal(int index) { return instanceNodes.get(index).localTransform; }
+    float[] animationMorphWeights(int index) { return instanceNodes.get(index).morphWeights; }
+    float[] animationMorphDefaults(int index) { return instanceNodes.get(index).defaultMorphWeights; }
     void applyAnimationTransforms() { updateWorldTransforms(); }
 
     void claimCpuSkinning(Object owner) {
@@ -308,6 +368,7 @@ public final class DefaultModelInstance implements ModelInstance {
     Renderable3D skinningRenderable(int index) { return instanceParts.get(index).renderable; }
     BoundingBox skinningBounds(int index) { return instanceParts.get(index).animatedBounds; }
     boolean skinningCullingOverride(int index) { return instanceParts.get(index).cullingOverride; }
+    float[] skinningMorphWeights(int index) { return node(instanceParts.get(index).nodeId).morphWeights; }
     void skinningRenderable(int index,Renderable3D renderable) { instanceParts.get(index).renderable=renderable; }
 
     private void updateModelTransform(InstanceNode node, Matrix4 parentModelTransform) {
@@ -400,6 +461,7 @@ public final class DefaultModelInstance implements ModelInstance {
         private final int index;
         private final ModelNode source;
         private final Matrix4 localTransform;
+        private final float[] defaultMorphWeights, morphWeights;
         private final Matrix4 modelTransform = new Matrix4();
         private final Matrix4 worldTransform = new Matrix4();
         private final Array<InstancePart> parts = new Array<InstancePart>();
@@ -409,16 +471,29 @@ public final class DefaultModelInstance implements ModelInstance {
             this.index = index;
             this.source = source;
             localTransform = new Matrix4(source.localTransform());
+            // CPU-only animation snapshots can carry default weights without GPU geometry.
+            int count=source.parts().isEmpty() ? source.morphWeights().length : source.parts().get(0).morphTargetCount();
+            for (int i=0;i<source.parts().size();i++) if (source.parts().get(i).morphTargetCount() != count)
+                throw new FdxException("Node primitives must share the morph target count/order");
+            float[] defaults=source.morphWeights();
+            if (defaults.length != 0 && defaults.length != count) throw new FdxException("Node default morph weight count mismatch");
+            if (defaults.length == 0) {
+                defaults=new float[count];
+                for (int i=0;i<count;i++) defaults[i]=source.parts().get(0).morphTarget(i).weight();
+            }
+            defaultMorphWeights=defaults; morphWeights=defaults.clone();
         }
     }
 
     private static final class InstancePart {
+        private final String nodeId;
         private final ModelNodePart source;
         private Renderable3D renderable;
         private final BoundingBox animatedBounds;
         private boolean cullingOverride;
 
-        InstancePart(ModelNodePart source, Renderable3D renderable, BoundingBox animatedBounds) {
+        InstancePart(String nodeId, ModelNodePart source, Renderable3D renderable, BoundingBox animatedBounds) {
+            this.nodeId=nodeId;
             this.source = source;
             this.renderable = renderable;
             this.animatedBounds = animatedBounds;

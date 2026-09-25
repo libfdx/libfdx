@@ -15,6 +15,7 @@ public final class ModelNodePart {
     private final int[] joints;
     private final float[] weights;
     private final SkinnedBounds3D skinBounds;
+    private final MorphTarget[] morphTargets;
 
     /**
      * Creates a model node part.
@@ -47,6 +48,11 @@ public final class ModelNodePart {
      * @param weights copied finite nonnegative weights per vertex, matching mesh attributes; null uses retained mesh influences
      */
     public ModelNodePart(MeshPart meshPart, Material material, Skin skin, int[] joints, float[] weights) {
+        this(meshPart, material, skin, joints, weights, null);
+    }
+
+    /** Copies the target array; immutable target deltas match the complete mesh vertex domain. */
+    public ModelNodePart(MeshPart meshPart, Material material, Skin skin, int[] joints, float[] weights, MorphTarget[] morphTargets) {
         if (meshPart == null) {
             throw new FdxException("ModelNodePart mesh part cannot be null");
         }
@@ -56,6 +62,10 @@ public final class ModelNodePart {
         this.meshPart = meshPart;
         this.material = material;
         this.skin = skin;
+        this.morphTargets = morphTargets == null ? new MorphTarget[0] : morphTargets.clone();
+        for (MorphTarget target : this.morphTargets)
+            if (target == null || target.vertexCount() != 0 && target.vertexCount() != meshPart.mesh().vertexCount())
+                throw new FdxException("Morph targets must match mesh vertices");
         int[] meshJoints=meshPart.mesh().sourceJoints();
         float[] meshWeights=meshPart.mesh().sourceWeights();
         if (skin != null && meshJoints != null && joints != null && !java.util.Arrays.equals(meshJoints,joints)
@@ -72,6 +82,9 @@ public final class ModelNodePart {
     }
 
     SkinnedBounds3D skinBounds() { return skinBounds; }
+    public int morphTargetCount() { return morphTargets.length; }
+    public MorphTarget morphTarget(int index) { return morphTargets[index]; }
+    public MorphTarget[] morphTargets() { return morphTargets.clone(); }
 
     /**
      * Returns the mesh part.

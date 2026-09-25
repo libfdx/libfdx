@@ -1,0 +1,353 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "libFDX original animated LOD tube sample"
+  },
+  "buffers": [
+    {
+      "uri": "geometry.bin",
+      "byteLength": 128404
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 9900
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 9900,
+      "byteLength": 9900
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 19800,
+      "byteLength": 6600
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 26400,
+      "byteLength": 13200
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 39600,
+      "byteLength": 6600
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 46200,
+      "byteLength": 13200
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 59400,
+      "byteLength": 9216
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 68616,
+      "byteLength": 9900
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 78516,
+      "byteLength": 9900
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 88416,
+      "byteLength": 9900
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 98316,
+      "byteLength": 9900
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 108216,
+      "byteLength": 9900
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 118116,
+      "byteLength": 9900
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 128016,
+      "byteLength": 128
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 128144,
+      "byteLength": 20
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 128164,
+      "byteLength": 80
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 128244,
+      "byteLength": 40
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 128284,
+      "byteLength": 120
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 825,
+      "type": "VEC3",
+      "min": [
+        -0.3,
+        -1,
+        -0.3
+      ],
+      "max": [
+        0.3,
+        1,
+        0.3
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 825,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 825,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 825,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 825,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 825,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5123,
+      "count": 4608,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 825,
+      "type": "VEC3",
+      "min": [
+        -0.24,
+        0,
+        -0.24
+      ],
+      "max": [
+        0.24,
+        0,
+        0.24
+      ]
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 825,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5126,
+      "count": 825,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 10,
+      "componentType": 5126,
+      "count": 825,
+      "type": "VEC3",
+      "min": [
+        -0.18,
+        0,
+        0
+      ],
+      "max": [
+        0.18,
+        0,
+        0
+      ]
+    },
+    {
+      "bufferView": 11,
+      "componentType": 5126,
+      "count": 825,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 12,
+      "componentType": 5126,
+      "count": 825,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 13,
+      "componentType": 5126,
+      "count": 2,
+      "type": "MAT4"
+    },
+    {
+      "bufferView": 14,
+      "componentType": 5126,
+      "count": 5,
+      "type": "SCALAR",
+      "min": [
+        0
+      ],
+      "max": [
+        4
+      ]
+    },
+    {
+      "bufferView": 15,
+      "componentType": 5126,
+      "count": 5,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 16,
+      "componentType": 5126,
+      "count": 10,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 17,
+      "componentType": 5126,
+      "count": 30,
+      "type": "SCALAR"
+    }
+  ],
+  "materials": [
+    {
+      "name": "copper",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.95,
+          0.35,
+          0.08,
+          1
+        ],
+        "metallicFactor": 0.2,
+        "roughnessFactor": 0.4
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "tube",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TANGENT": 3
+          },
+          "indices": 6,
+          "material": 0,
+          "targets": [
+            {
+              "POSITION": 7,
+              "NORMAL": 8,
+              "TANGENT": 9
+            },
+            {
+              "POSITION": 10,
+              "NORMAL": 11,
+              "TANGENT": 12
+            }
+          ]
+        }
+      ],
+      "weights": [
+        0.15,
+        0
+      ],
+      "extras": {
+        "targetNames": [
+          "Swell",
+          "Stretch"
+        ]
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "name": "surface",
+      "mesh": 0,
+      "weights": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "root",
+      "children": [
+        2
+      ]
+    },
+    {
+      "name": "tip"
+    }
+  ],
+  "animations": [
+    {
+      "name": "morph",
+      "samplers": [
+        {
+          "input": 14,
+          "output": 16,
+          "interpolation": "LINEAR"
+        }
+      ],
+      "channels": [
+        {
+          "sampler": 0,
+          "target": {
+            "node": 0,
+            "path": "weights"
+          }
+        }
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "nodes": [
+        0,
+        1
+      ]
+    }
+  ],
+  "scene": 0
+}

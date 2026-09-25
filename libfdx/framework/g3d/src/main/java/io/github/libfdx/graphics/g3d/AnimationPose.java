@@ -6,6 +6,7 @@ import java.util.Arrays;
 /** Controller-owned pose storage. Updates sample first, then commit the hierarchy once. */
 final class AnimationPose {
     private final DefaultModelInstance instance;
+    private final AnimationMorphPose morphs;
     private final AnimationClip.NodeTransformChannel[] active, outgoing, pending;
     private final float[] defaults, current, candidate, frozen;
     private final float[] scratch = new float[16], other = new float[10];
@@ -18,6 +19,7 @@ final class AnimationPose {
 
     AnimationPose(DefaultModelInstance instance) {
         this.instance=instance;
+        morphs=new AnimationMorphPose(instance);
         int nodes=instance.animationNodeCount();
         active=new AnimationClip.NodeTransformChannel[nodes]; outgoing=active.clone(); pending=active.clone();
         defaults=new float[Math.multiplyExact(nodes,10)]; current=defaults.clone(); candidate=defaults.clone(); frozen=defaults.clone();
@@ -41,6 +43,7 @@ final class AnimationPose {
             }
         }
         // Validate names/defaults before changing active bindings or controlled nodes.
+        morphs.bind(clip,fade,interrupted);
         for (int node=0;node<pending.length;node++) if (pending[node] != null && !initialized[node]) {
             initialized[node]=true; controlled[count++]=node;
             System.arraycopy(candidate,node*10,defaults,node*10,10);
@@ -54,6 +57,7 @@ final class AnimationPose {
         System.arraycopy(pending,0,active,0,active.length);
     }
     void apply(double time,double outgoingTime,double alpha) {
+        morphs.sample(time,outgoingTime,alpha);
         for (int i=0;i<count;i++) {
             int node=controlled[i],offset=node*10;
             sample(active[node],time,defaults,offset,candidate,offset);
@@ -68,11 +72,12 @@ final class AnimationPose {
             int node=controlled[i]; AnimationTransforms.matrix(candidate,node*10,instance.animationLocal(node));
         }
         if (count != 0) instance.applyAnimationTransforms();
+        morphs.commit();
         for (int i=0;i<count;i++) {
             int offset=controlled[i]*10; System.arraycopy(candidate,offset,current,offset,10);
         }
     }
-    void clearOutgoing() { Arrays.fill(outgoing,null); sampleOutgoing=false; }
+    void clearOutgoing() { Arrays.fill(outgoing,null); sampleOutgoing=false; morphs.clearOutgoing(); }
     private static void sample(AnimationClip.NodeTransformChannel channel,double time,float[] base,int offset,float[] out,int outOffset) {
         if (channel != null) channel.sampleTrs((float)time,out,outOffset);
         else System.arraycopy(base,offset,out,outOffset,10);

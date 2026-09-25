@@ -28,6 +28,8 @@ public final class CpuSkinningMeshUpdater {
     private final int[] joints;
     private final float[] weights;
     private final float[] bindPositions, bindNormals, bindTangents;
+    private final MorphTarget[] morphTargets;
+    private final float[] posedPositions, posedNormals, posedTangents;
     private final int vertexCount;
     private final boolean pbrLayout;
     private final boolean skinnedPbrLayout;
@@ -46,6 +48,11 @@ public final class CpuSkinningMeshUpdater {
      * @param weights four joint weights per vertex
      */
     public CpuSkinningMeshUpdater(GraphicsContext graphics, Mesh mesh, int[] joints, float[] weights) {
+        this(graphics,mesh,joints,weights,null);
+    }
+
+    /** Adds immutable morph targets in the mesh vertex domain. Morphing precedes linear skinning. */
+    public CpuSkinningMeshUpdater(GraphicsContext graphics, Mesh mesh, int[] joints, float[] weights, MorphTarget[] targets) {
         if (graphics == null) {
             throw new FdxException("CpuSkinningMeshUpdater graphics cannot be null");
         }
@@ -71,6 +78,13 @@ public final class CpuSkinningMeshUpdater {
         bindPositions = mesh.sourcePositions().clone();
         bindNormals = pbrLayout ? mesh.sourceNormals().clone() : null;
         bindTangents = mesh.sourceTangents() == null ? null : mesh.sourceTangents().clone();
+        morphTargets=targets == null ? new MorphTarget[0] : targets.clone();
+        for (MorphTarget target : morphTargets)
+            if (target == null || target.vertexCount() != 0 && target.vertexCount() != vertexCount)
+                throw new FdxException("Morph targets must match the mesh vertex domain");
+        posedPositions=morphTargets.length == 0 ? bindPositions : bindPositions.clone();
+        posedNormals=morphTargets.length == 0 || bindNormals == null ? bindNormals : bindNormals.clone();
+        posedTangents=morphTargets.length == 0 || bindTangents == null ? bindTangents : bindTangents.clone();
         vertexBytes = ByteBuffer.allocateDirect(vertexCount * layout.arrayStride()).order(ByteOrder.nativeOrder());
         vertexFloats = vertexBytes.asFloatBuffer();
     }
@@ -88,11 +102,18 @@ public final class CpuSkinningMeshUpdater {
         if (palette == null) {
             throw new FdxException("CpuSkinningMeshUpdater palette cannot be null");
         }
-        int paletteFloatCount = palette.size() * Matrix4.VALUE_COUNT;
+        return update(palette,null);
+    }
+
+    /** Updates morph and skin state together. A null palette is valid only for zero-influence
+     * geometry; null morph weights use the target defaults. No per-update storage is allocated. */
+    public CpuSkinningMeshUpdater update(SkinningPalette palette,float[] morphWeights) {
+        prepareMorph(morphWeights);
+        int paletteFloatCount = palette == null ? 0 : palette.size() * Matrix4.VALUE_COUNT;
         if (paletteValues.length != paletteFloatCount) {
             paletteValues = new float[paletteFloatCount];
         }
-        palette.copyValues(paletteValues);
+        if (palette != null) palette.copyValues(paletteValues);
         writeVertices(palette);
         vertexBytes.position(0);
         vertexBytes.limit(vertexCount * mesh.vertexLayout().arrayStride());
@@ -102,9 +123,9 @@ public final class CpuSkinningMeshUpdater {
     }
 
     private void writeVertices(SkinningPalette palette) {
-        float[] positions = bindPositions;
+        float[] positions = posedPositions;
         float[] colors = mesh.sourceColors();
-        float[] normals = bindNormals;
+        float[] normals = posedNormals;
         float[] texCoords = mesh.sourceTexCoords();
         float[] pbr = mesh.sourcePbr();
         float[] emissive = mesh.sourceEmissive();
@@ -130,7 +151,7 @@ public final class CpuSkinningMeshUpdater {
                     continue;
                 }
                 int joint = joints[influenceOffset];
-                if (joint < 0 || joint >= palette.size()) {
+                if (palette == null || joint < 0 || joint >= palette.size()) {
                     throw new FdxException("CpuSkinningMeshUpdater joint index out of range: " + joint);
                 }
                 int matrixOffset = joint * Matrix4.VALUE_COUNT;
@@ -203,7 +224,7 @@ public final class CpuSkinningMeshUpdater {
                 for (int i=0;i<8;i++) vertexFloats.put(0);
             }
             if (textured) {
-                float[] uv1 = mesh.sourceTexCoords1(), tangents = bindTangents;
+                float[] uv1 = mesh.sourceTexCoords1(), tangents = posedTangents;
                 vertexFloats.put(uv1 == null ? 0 : uv1[vertex*2]);
                 vertexFloats.put(uv1 == null ? 0 : uv1[vertex*2+1]);
                 float x = tangents == null ? 0 : tangents[vertex*4];
@@ -227,6 +248,27 @@ public final class CpuSkinningMeshUpdater {
             if (textured && tangents != null) for (int axis=0;axis<4;axis++)
                 tangents[vertex*4+axis]=vertexFloats.get(offset+stride-4+axis);
         }
+    }
+
+    private void prepareMorph(float[] values) {
+        if (values != null && values.length != morphTargets.length) throw new FdxException("Morph weight count mismatch");
+        if (values != null) for (float value : values) if (!Float.isFinite(value)) throw new FdxException("Morph weights must be finite");
+        if (morphTargets.length == 0) return;
+        System.arraycopy(bindPositions,0,posedPositions,0,bindPositions.length);
+        if (bindNormals != null) System.arraycopy(bindNormals,0,posedNormals,0,bindNormals.length);
+        if (bindTangents != null) System.arraycopy(bindTangents,0,posedTangents,0,bindTangents.length);
+        for (int target=0;target<morphTargets.length;target++) {
+            float weight=values == null ? morphTargets[target].weight() : values[target];
+            if (weight == 0) continue;
+            for (int vertex=0;vertex<vertexCount;vertex++) for (int axis=0;axis<3;axis++) {
+                posedPositions[vertex*3+axis]+=weight*morphTargets[target].delta(0,vertex,axis);
+                if (posedNormals != null) posedNormals[vertex*3+axis]+=weight*morphTargets[target].delta(1,vertex,axis);
+                if (posedTangents != null) posedTangents[vertex*4+axis]+=weight*morphTargets[target].delta(2,vertex,axis);
+            }
+        }
+        for (float value : posedPositions) if (!Float.isFinite(value)) throw new FdxException("Morphed position overflow");
+        if (posedNormals != null) for (float value : posedNormals) if (!Float.isFinite(value)) throw new FdxException("Morphed normal overflow");
+        if (posedTangents != null) for (float value : posedTangents) if (!Float.isFinite(value)) throw new FdxException("Morphed tangent overflow");
     }
 
     private static void normalizeWeights(float[] weights) {

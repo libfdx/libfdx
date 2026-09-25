@@ -18,7 +18,7 @@ dependencies {
 tasks.register<JavaExec>("validate_web_graphics") {
     group = "verification"
     description = "Builds and validates all tests on JS and Wasm with WebGL and WebGPU in isolated browsers."
-    dependsOn("libfdx_web_js_webgl_build", "libfdx_web_js_webgpu_build", "libfdx_web_wasm_webgl_build", "libfdx_web_wasm_webgpu_build")
+    dependsOn("libfdx_web_js_tests_webgl_build", "libfdx_web_js_tests_webgpu_build", "libfdx_web_wasm_tests_webgl_build", "libfdx_web_wasm_tests_webgpu_build")
     classpath = graphicsMatrixRunner
     mainClass.set("io.github.libfdx.testsupport.runner.PlatformMatrixLauncher")
     workingDir(rootProject.projectDir)
@@ -30,8 +30,8 @@ tasks.register<JavaExec>("validate_web_graphics") {
         val temporaryDirectory = layout.buildDirectory.dir("tmp/browser-runner").get().asFile
         temporaryDirectory.mkdirs()
         systemProperty("java.io.tmpdir", temporaryDirectory.absolutePath)
-        systemProperty("libfdx.test.autoWebJsDirectory", tasks.named<io.github.libfdx.gradle.LibfdxRunWebTask>("libfdx_web_js_webgl_run").get().webappDir.get().asFile.absolutePath)
-        systemProperty("libfdx.test.autoWebWasmDirectory", tasks.named<io.github.libfdx.gradle.LibfdxRunWebTask>("libfdx_web_wasm_webgl_run").get().webappDir.get().asFile.absolutePath)
+        systemProperty("libfdx.test.autoWebJsDirectory", tasks.named<io.github.libfdx.gradle.LibfdxRunWebTask>("libfdx_web_js_tests_webgl_run").get().webappDir.get().asFile.absolutePath)
+        systemProperty("libfdx.test.autoWebWasmDirectory", tasks.named<io.github.libfdx.gradle.LibfdxRunWebTask>("libfdx_web_wasm_tests_webgl_run").get().webappDir.get().asFile.absolutePath)
     }
 }
 

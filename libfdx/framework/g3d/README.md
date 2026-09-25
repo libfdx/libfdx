@@ -4,6 +4,7 @@ For imported model behavior and ownership, see the [glTF subset](GLTF.md).
 For prepared HDR environment lighting, see [image-based lighting](IBL.md).
 For budgets, fitting and optional map reuse, see [directional shadows](SHADOWS.md).
 For playback, crossfades, events and instance geometry ownership, see [animation and skinning](ANIMATION.md).
+For reusable model LOD, projected-size selection and loaded/in-memory levels, see [model LOD](LOD.md).
 
 Material textures can carry per-slot `TextureCoordinates` through
 `TextureMaterialAttribute`. The extended `Mesh.positionColor3D` overload appends UV1

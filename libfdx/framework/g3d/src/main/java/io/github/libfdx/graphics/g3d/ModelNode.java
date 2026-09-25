@@ -11,6 +11,7 @@ import io.github.libfdx.math.Matrix4;
  */
 public final class ModelNode {
     private final String id;
+    private float[] morphWeights = new float[0];
     private final Matrix4 localTransform = new Matrix4();
     private final Array<ModelNodePart> parts = new Array<ModelNodePart>();
     private final Array<ModelNode> children = new Array<ModelNode>();
@@ -76,6 +77,14 @@ public final class ModelNode {
     public String id() {
         return id;
     }
+
+    /** Sets copied default morph weights. Every morphed part must use this target order/count. */
+    public ModelNode morphWeights(float... weights) {
+        if (weights == null) throw new IllegalArgumentException("Morph weights cannot be null");
+        for (float weight : weights) if (!Float.isFinite(weight)) throw new IllegalArgumentException("Morph weights must be finite");
+        morphWeights = weights.clone(); return this;
+    }
+    public float[] morphWeights() { return morphWeights.clone(); }
 
     /**
      * Returns the local transform.

@@ -1087,12 +1087,19 @@ public final class UiG2DRenderer implements UiRenderer {
             return;
         }
         drawRegion(root, region.texture(), region.x(), region.y(), region.width(), region.height(),
-                x, y, width, height, red, green, blue, alpha);
+                x, y, width, height, red, green, blue, alpha, region.v() > region.v2());
     }
 
     private void drawRegion(UiRoot root, Texture texture, int sourceX, int sourceY, int sourceWidth,
             int sourceHeight, float x, float y, float width, float height,
             float red, float green, float blue, float alpha) {
+        drawRegion(root, texture, sourceX, sourceY, sourceWidth, sourceHeight,
+                x, y, width, height, red, green, blue, alpha, false);
+    }
+
+    private void drawRegion(UiRoot root, Texture texture, int sourceX, int sourceY, int sourceWidth,
+            int sourceHeight, float x, float y, float width, float height,
+            float red, float green, float blue, float alpha, boolean bottomLeftOrigin) {
         if (texture == null || sourceWidth <= 0 || sourceHeight <= 0
                 || width <= 0.0f || height <= 0.0f || alpha <= 0.0f) {
             return;
@@ -1127,11 +1134,16 @@ public final class UiG2DRenderer implements UiRenderer {
             clippedSourceBottom -= Math.round(bottom / height * sourceHeight);
         }
         batch.color(red, green, blue, alpha);
-        batch.draw(texture, clippedSourceX, clippedSourceY,
+        // Rendered regions carry a provider-declared V direction. Mirror both the sampled
+        // source interval and destination quad, including partially clipped UI images.
+        float destinationY = ndcY(root, clippedY, clippedHeight);
+        float destinationHeight = ndcHeight(root, clippedBottom - clippedY);
+        if (bottomLeftOrigin) destinationY += destinationHeight;
+        batch.draw(texture, clippedSourceX, bottomLeftOrigin ? texture.height() - clippedSourceBottom : clippedSourceY,
                 Math.max(1, clippedSourceRight - clippedSourceX),
                 Math.max(1, clippedSourceBottom - clippedSourceY),
-                ndcX(root, clippedX), ndcY(root, clippedY, clippedHeight),
-                ndcWidth(root, clippedRight - clippedX), ndcHeight(root, clippedBottom - clippedY));
+                ndcX(root, clippedX), destinationY,
+                ndcWidth(root, clippedRight - clippedX), bottomLeftOrigin ? -destinationHeight : destinationHeight);
     }
 
     private void drawRect(UiRoot root, UiRect rect, UiColor color) {

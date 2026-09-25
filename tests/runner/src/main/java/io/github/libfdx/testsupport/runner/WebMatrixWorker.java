@@ -116,7 +116,7 @@ public final class WebMatrixWorker {
                         + System.getProperty("libfdx.test.autoDurationSeconds", "6");
                 StringBuilder optionsQuery = new StringBuilder(url);
                 for (String option : List.of("shaderAsync", "shaderLoadingOnly", "shaderPreload", "shaderCount",
-                        "shaderSeed", "shaderInvalidIndex", "shaderVerifyPixels")) {
+                        "shaderSeed", "shaderInvalidIndex", "shaderVerifyPixels", "optimizerAnimated")) {
                     String value = System.getProperty("libfdx.test." + option);
                     if (value != null) optionsQuery.append('&').append(option).append('=')
                             .append(URLEncoder.encode(value, StandardCharsets.UTF_8));

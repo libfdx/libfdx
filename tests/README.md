@@ -173,6 +173,75 @@ browsers can throttle background rendering. Retain console errors and the final
 summary. WebGPU and WebAssembly launch tasks exercise different paths and must
 be reported separately when tested.
 
+## Model LOD
+
+Open `ModelLodTest` in the chooser, or launch it directly from the repository root:
+
+```powershell
+.\gradlew.bat :tests:platform:desktop:libfdx_desktop_jvm_tests_gl_run '-Dlibfdx.test.name=ModelLodTest'
+```
+
+The left view always renders full detail (4,096 triangles). The right view uses
+the public [model LOD API](../libfdx/framework/g3d/LOD.md) to select among 4,096,
+576 and 64 triangles. Both views use the same material, lighting and root pose.
+The three meshes are prepared once; moving the camera does not rebuild geometry.
+
+Use Near/Middle/Far, the distance slider or Distance tour to watch automatic
+switching. Preview LOD 1/2 brings the camera close so the reduced silhouette is
+easy to inspect. Full detail disables automatic selection. Adjust the pixel
+thresholds and hysteresis, switch to orthographic projection, rotate the models,
+or simulate a missing LOD 2 to observe higher-detail fallback. Reset restores
+the defaults. Distance presets/ranges adapt to viewport height and pixel density
+so each level remains reachable on different desktop sizes.
+
+A nonzero frame limit or the automatic runner exercises the actual buttons,
+checkboxes and sliders through the UI input path. Its 18 checks render subsequent
+frames and assert level selection, reduced geometry, fallback/restoration,
+independent reference state, projection changes, settings, camera tour and reset.
+Incomplete sequences fail during cleanup. For a focused desktop run:
+
+```powershell
+.\gradlew.bat validate_desktop_graphics '-Dlibfdx.test.autoTests=ModelLodTest' '-Dlibfdx.test.autoGraphics=gl,vulkan,d3d12,wgpu'
+```
+
+For repeatable single-provider captures, use a frame limit so readback/file
+output does not exhaust the automatic runner's observation interval:
+
+```powershell
+.\gradlew.bat :tests:platform:desktop:libfdx_desktop_jvm_tests_gl_run '-Dlibfdx.test.name=ModelLodTest' '-Dlibfdx.test.frames=300' '-Dlibfdx.test.width=1100' '-Dlibfdx.test.height=760' '-Dlibfdx.test.vsync=false' '-Dlibfdx.test.lodCaptures=build/model-lod/captures'
+```
+
+PPM files are written below that directory by provider and check name. Captures
+also check that both cyan models are visible and centered in their viewports.
+These runs are correctness checks, not performance benchmarks.
+
+## Generate LODs from loaded models
+
+Open **ModelLodOptimizerTest** in the platform chooser. It loads Helmet, Duck or
+Dragon, or a glTF/GLB asset path, and generates reduced meshes using the optional
+[meshoptimizer extension](../libfdx/extensions/graphics/meshoptimizer/README.md).
+It provides one to eight editable levels, Quality/Balanced/Small presets,
+triangle/error/pixel targets, border and seam options, attribute weights,
+cache/fetch optimization and hysteresis. Scroll the settings to reach advanced
+options. Generate applies the settings; the paired previews show actual geometry
+and counts. Selecting a preview level returns to a close view; Auto uses distance.
+
+With a nonzero frame limit, real UI input exercises loading, generation,
+preview/automatic selection, adding/removing levels, rebuilding, rejecting
+invalid settings and animated input, changing models and releasing old meshes.
+Frame counting begins after the asynchronous sequence completes; an incomplete
+sequence fails. Captures verify both models are visible and the duck is upright.
+
+```powershell
+.\gradlew.bat :tests:platform:desktop:libfdx_desktop_jvm_tests_gl_run '-Dlibfdx.test.name=ModelLodOptimizerTest' '-Dlibfdx.test.frames=8' '-Dlibfdx.test.width=1380' '-Dlibfdx.test.height=900' '-Dlibfdx.test.optimizerCaptures=build/model-lod/optimizer-captures'
+```
+
+Replace `tests_gl_run` with `tests_vulkan_run`, `tests_d3d12_run` or
+`tests_wgpu_run` to exercise another desktop provider. The portable Java optimizer
+is used on every platform. Web/mobile prepare cooperatively; desktop uses
+a worker unless `-Dlibfdx.test.cooperativeLod=true` is set. The example does not
+export GLBs or modify assets.
+
 ## Keeping the suite useful
 
 Keep small shape tests: they isolate geometry, shader and presentation failures

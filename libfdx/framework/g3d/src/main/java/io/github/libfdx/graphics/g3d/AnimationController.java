@@ -138,8 +138,8 @@ public final class AnimationController {
         if (instance instanceof DefaultModelInstance model) {
             if (pose == null) pose=new AnimationPose(model);
             pose.bind(target,fade,interrupted);
-        } else if (target.nodeTransformChannelsUnsafe().length != 0)
-            throw new FdxException("Node transform animation requires DefaultModelInstance");
+        } else if (target.nodeTransformChannelsUnsafe().length != 0 || target.morphChannelsUnsafe().length != 0)
+            throw new FdxException("Node transform and morph animation require DefaultModelInstance");
     }
     private void clearFade() {
         fadeDuration=fadeElapsed=0; outgoingClip=null; outgoingTime=0;

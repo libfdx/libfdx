@@ -47,11 +47,17 @@ final class GltfModelLoader implements AssetLoader<Model> {
 
     private final GraphicsContext graphics;
     private final boolean gpuPbr;
+    private final boolean retainEditingSource;
     private final ImageDecoder decoder;
     private final TextureMipmapPreparer mipmaps;
 
     GltfModelLoader(GraphicsContext graphics) {
+        this(graphics, false);
+    }
+
+    GltfModelLoader(GraphicsContext graphics, boolean retainEditingSource) {
         this.graphics = graphics;
+        this.retainEditingSource = retainEditingSource;
         this.decoder = null;
         this.mipmaps = null;
         this.gpuPbr = PbrShaderProvider.usesGpuPbrShader(graphics.providerId().value());
@@ -59,6 +65,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
 
     GltfModelLoader(GraphicsContext graphics, ImageDecoder decoder, TextureMipmapPreparer mipmaps) {
         this.graphics = graphics;
+        this.retainEditingSource = false;
         this.decoder = java.util.Objects.requireNonNull(decoder);
         this.mipmaps = mipmaps;
         // Capture the provider choice on the application thread; preparation never touches graphics.
@@ -295,7 +302,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
             ArrayView<JsonValue> primitives = array(meshes.get(mesh), "primitives");
             if (document.geometry[mesh] == null) document.geometry[mesh] = new GeometryBuilder[primitives.size()];
             if (primitive == primitives.size()) { mesh++; primitive = 0; return false; }
-            if (work == null) { work = preparePrimitive(document, primitives.get(primitive)); return false; }
+            if (work == null) { work = preparePrimitive(document, meshes.get(mesh), primitives.get(primitive)); return false; }
             if (!geometryComplete) { geometryComplete = work.step(); return false; }
             if (work.geometry.preparedMesh == null) {
                 work.geometry.preparedMesh = prepareMesh(work.geometry);
@@ -393,6 +400,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
         if (array(document.root, "nodes").isEmpty() && array(document.root, "scenes").isEmpty()) {
             for (int meshIndex = 0; meshIndex < meshes.size(); meshIndex++) {
                 ModelNode node = new ModelNode(path + " mesh " + meshIndex);
+                node.morphWeights(GltfMorphData.weights(document.root,null,meshIndex));
                 appendMeshParts(path, document, node, meshIndex, null, materials, meshResources);
                 nodes.add(node);
             }
@@ -461,7 +469,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
     private final class GeometryValidation {
         final GltfDocument document;
         final ArrayView<JsonValue> meshes;
-        int mesh, primitive, semantic, indexCursor;
+        int mesh, primitive, semantic, indexCursor, morph, morphSemantic;
         GeometryValidation(GltfDocument document) { this.document = document; meshes = array(document.root, "meshes"); }
         boolean step() {
             if (mesh == meshes.size()) return true;
@@ -483,6 +491,17 @@ final class GltfModelLoader implements AssetLoader<Model> {
                 semantic++;
                 return false;
             }
+            ArrayView<JsonValue> targets=array(value,"targets");
+            if (morph < targets.size()) {
+                String name=GltfMorphData.SEMANTICS[morphSemantic];
+                JsonValue id=targets.get(morph).get(name);
+                if (id != null) {
+                    if (!document.accessors.prepareStep(id.intValue(),"MORPH_"+name,1024)) return false;
+                    if (document.accessors.count(id.intValue()) != count) throw new FdxException("Morph accessor count differs from POSITION");
+                }
+                if (++morphSemantic == 3) { morphSemantic=0; morph++; }
+                return false;
+            }
             if (value.get("indices") != null) {
                 int[] indices = readIndexAccessor(document, integer(value, "indices", -1));
                 if (indices.length % 3 != 0) throw new FdxException("glTF triangle index count must be a multiple of three");
@@ -491,7 +510,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
                 if (indexCursor < indices.length) return false;
             } else if (count % 3 != 0) throw new FdxException("glTF unindexed triangles require a multiple of three vertices");
             validatePrimitive(document, value);
-            primitive++; semantic = 0; indexCursor = 0;
+            primitive++; semantic = 0; indexCursor = 0; morph=morphSemantic=0;
             return false;
         }
     }
@@ -500,7 +519,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
         ArrayView<JsonValue> materials = array(document.root, "materials");
         if (integer(primitive, "mode", MODE_TRIANGLES) != MODE_TRIANGLES)
             throw new FdxException("Only glTF triangle primitives are supported");
-        if (!array(primitive, "targets").isEmpty()) throw new FdxException("glTF morph targets are unsupported");
+        GltfMorphData.validate(primitive);
         JsonValue attributes = object(primitive.get("attributes"), "primitive attributes");
         if (attributes.get("JOINTS_1") != null || attributes.get("WEIGHTS_1") != null)
             throw new FdxException("glTF skinning supports one four-weight joint set");
@@ -625,6 +644,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
             JsonValue source = array(document.root, "nodes").get(index);
             ModelNode node = new ModelNode(nodeId(document, index));
             nodeTransform(source, node.localTransform());
+            node.morphWeights(GltfMorphData.weights(document.root,source,integer(source,"mesh",-1)));
             return new AssemblyNode(integer(source, "mesh", -1), source, node);
         }
         Model result() {
@@ -642,6 +662,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
             AssemblyNode(int mesh, JsonValue source, ModelNode node) {
                 this.mesh = mesh;
                 this.node = node != null ? node : new ModelNode(path + " mesh " + mesh);
+                if (node == null) this.node.morphWeights(GltfMorphData.weights(document.root,source,mesh));
                 skin = source == null ? null : skin(document, integer(source, "skin", -1));
                 primitives = mesh < 0 ? EMPTY_JSON_ARRAY : array(array(document.root, "meshes").get(mesh), "primitives");
                 children = source == null ? EMPTY_JSON_ARRAY : array(source, "children");
@@ -768,6 +789,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
         JsonValue node = object(array(document.root, "nodes").get(nodeIndex), "node");
         ModelNode modelNode = new ModelNode(nodeId(document, nodeIndex));
         nodeTransform(node, modelNode.localTransform());
+        modelNode.morphWeights(GltfMorphData.weights(document.root,node,integer(node,"mesh",-1)));
         int meshIndex = integer(node, "mesh", -1);
         if (meshIndex >= 0) {
             appendMeshParts(path, document, modelNode, meshIndex, skin(document, integer(node, "skin", -1)),
@@ -819,13 +841,12 @@ final class GltfModelLoader implements AssetLoader<Model> {
         materials.add(pbrMaterial);
         MeshPart meshPart = new MeshPart(path + " part " + meshIndex + "." + primitiveIndex, mesh, null, 0,
                 mesh.vertexCount());
-        return geometry.hasSkinning()
-                ? new ModelNodePart(meshPart, pbrMaterial, skin, geometry.joints(), geometry.weights())
-                : new ModelNodePart(meshPart, pbrMaterial);
+        return new ModelNodePart(meshPart,pbrMaterial,skin,geometry.hasSkinning() ? geometry.joints() : null,
+                geometry.hasSkinning() ? geometry.weights() : null,geometry.morphTargets);
     }
 
     private Mesh.PositionColor3DPreparation prepareMesh(GeometryBuilder geometry) {
-        boolean retainSourceData = !gpuPbr || geometry.hasSkinning();
+        boolean retainSourceData = retainEditingSource || !gpuPbr || geometry.hasSkinning() || geometry.morphTargets.length > 0;
         float[] positions = geometry.positions();
         float[] bakedColors = retainSourceData ? geometry.bakedColors() : null;
         float[] bakedPbr = retainSourceData ? geometry.bakedPbr() : null;
@@ -838,7 +859,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
                 geometry.extended ? geometry.tangents.toArray() : null);
     }
 
-    private PrimitiveWork preparePrimitive(GltfDocument document, JsonValue primitive) {
+    private PrimitiveWork preparePrimitive(GltfDocument document, JsonValue mesh, JsonValue primitive) {
         GeometryBuilder geometry = new GeometryBuilder();
         int mode = integer(primitive, "mode", MODE_TRIANGLES);
         if (mode != MODE_TRIANGLES) {
@@ -895,6 +916,14 @@ final class GltfModelLoader implements AssetLoader<Model> {
         int[] indices = primitive.get("indices") != null
                 ? readIndexAccessor(document, integer(primitive, "indices", -1))
                 : sequence(sourcePositions.length / 3);
+        geometry.morphTargets=GltfMorphData.read(document.accessors,mesh,primitive,sourcePositions,sourceNormals,indices);
+        // Retained editing geometry needs a stable tangent at each original shared vertex.
+        // Per-triangle generated tangents otherwise turn every edge into a false LOD seam.
+        if (retainEditingSource && sourceTangents == null && geometry.extended) {
+            float[] normalUv = material.slots[2] != null && material.slots[2].coordinates.set() == 1
+                    ? sourceTexCoords1 : sourceTexCoords;
+            sourceTangents = GltfIndexedTangents.generate(sourcePositions,sourceNormals,normalUv,indices);
+        }
         return new PrimitiveWork(geometry, sourcePositions, sourceNormals, sourceTexCoords, sourceColors, indices,
                 sourceJoints, sourceWeights, material, sourceTexCoords1, sourceTangents);
     }
@@ -1075,6 +1104,8 @@ final class GltfModelLoader implements AssetLoader<Model> {
             ArrayView<JsonValue> samplers = array(animation, "samplers");
             ArrayView<JsonValue> channels = array(animation, "channels");
             IntMap<GltfNodeAnimationBuilder> builders = new IntMap<GltfNodeAnimationBuilder>();
+            Array<NodeMorphChannel> morphChannels=new Array<>();
+            java.util.HashSet<Integer> morphNodes=new java.util.HashSet<>();
             float duration = 0.0f;
             for (int channelIndex = 0; channelIndex < channels.size(); channelIndex++) {
                 JsonValue channel = object(channels.get(channelIndex), "animation channel");
@@ -1099,6 +1130,14 @@ final class GltfModelLoader implements AssetLoader<Model> {
                     default -> throw new FdxException("Unsupported glTF animation interpolation");
                 };
                 float[] times = document.accessors.animationValues(integer(sampler, "input", -1), "SCALAR");
+                if ("weights".equals(path)) {
+                    int count=GltfMorphData.count(document.root,integer(nodes.get(nodeIndex),"mesh",-1));
+                    if (count == 0 || !morphNodes.add(nodeIndex)) throw new FdxException("Invalid or duplicate morph animation target");
+                    float[] weights=document.accessors.animationValues(integer(sampler,"output",-1),"SCALAR");
+                    AnimationSampler track=new AnimationSampler(count,interpolation,times,weights);
+                    morphChannels.add(new NodeMorphChannel(nodeId(document,nodeIndex),track));
+                    duration=Math.max(duration,track.lastTime()); continue;
+                }
                 float[] values = document.accessors.animationValues(integer(sampler, "output", -1),
                         animationComponents(path) == 4 ? "VEC4" : "VEC3");
                 AnimationSampler track = new AnimationSampler("rotation".equals(path), interpolation, times, values);
@@ -1119,7 +1158,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
             }
             String id = string(animation, "name", "animation-" + animationIndex);
             result.add(new AnimationClip(id, duration,
-                    nodeChannels.toArray(new AnimationClip.NodeTransformChannel[0])));
+                    nodeChannels.toArray(new AnimationClip.NodeTransformChannel[0]),null,morphChannels.toArray(new NodeMorphChannel[0])));
         }
         return result;
     }
@@ -1579,6 +1618,7 @@ final class GltfModelLoader implements AssetLoader<Model> {
      * @author xpenatan
      */
     private static final class GeometryBuilder {
+        private MorphTarget[] morphTargets = new MorphTarget[0];
         private Mesh.PositionColor3DPreparation preparedMesh;
         private boolean extended;
         private boolean hasColors;

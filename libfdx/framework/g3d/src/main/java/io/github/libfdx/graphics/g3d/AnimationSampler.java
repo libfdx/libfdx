@@ -20,8 +20,16 @@ public final class AnimationSampler {
      * require two keys. Rotation keys' squared lengths must be within 0.001 of one; tangents need
      * not be unit. Cubic rotation tangents/signs are preserved, and interpolated output is normalized. */
     public AnimationSampler(boolean rotation,Interpolation interpolation,float[] times,float[] values) {
+        this(rotation, rotation ? 4 : 3, interpolation, times, values);
+    }
+    /** Creates a vector track of arbitrary positive width, including morph weight tracks. */
+    public AnimationSampler(int components,Interpolation interpolation,float[] times,float[] values) {
+        this(false, components, interpolation, times, values);
+    }
+    private AnimationSampler(boolean rotation,int components,Interpolation interpolation,float[] times,float[] values) {
         if(interpolation==null||times==null||times.length==0||values==null)throw new FdxException("Animation sampler requires a mode, times and values");
-        this.rotation=rotation;this.interpolation=interpolation;components=rotation?4:3;
+        if (components < 1 || components > 4096) throw new FdxException("Animation vector width must be between 1 and 4096");
+        this.rotation=rotation;this.interpolation=interpolation;this.components=components;
         stride=components*(interpolation==Interpolation.CUBICSPLINE?3:1);
         if((long)times.length*stride!=values.length||interpolation==Interpolation.CUBICSPLINE&&times.length<2)
             throw new FdxException("Animation sampler value count does not match keyframes/interpolation");
@@ -40,6 +48,7 @@ public final class AnimationSampler {
     }
     public Interpolation interpolation(){return interpolation;}
     public boolean isRotation(){return rotation;}
+    public int components(){return components;}
     public int keyCount(){return times.length;}
     public float firstTime(){return times[0];}
     public float lastTime(){return times[times.length-1];}
@@ -47,13 +56,13 @@ public final class AnimationSampler {
     public float[] times(){return times.clone();}
     /** Returns copied raw values/tangents in constructor layout. */
     public float[] values(){return values.clone();}
-    /** Writes three vector or four normalized rotation components. A cubic quaternion passing through
+    /** Writes components() vector values or four normalized rotation components. A cubic quaternion passing through
      * zero, or a nonfinite evaluated component, fails explicitly instead of producing an invalid transform. */
     public void sample(float time,float[] out,int offset) {
         if(out==null||offset<0||offset>out.length-components)throw new FdxException("Animation sampler output is too small");
         int key=interval(time);
         if(rotation)rotation(key,time,out,offset,null,0,0,0,1,1,1);
-        else for(int c=0;c<3;c++)out[offset+c]=component(key,time,c);
+        else for(int c=0;c<components;c++)out[offset+c]=component(key,time,c);
     }
     int interval(float time) {
         if(!Float.isFinite(time))throw new FdxException("Animation sample time must be finite");
