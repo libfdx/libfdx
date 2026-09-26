@@ -1,6 +1,8 @@
 package io.github.libfdx.graphics.g3d;
 
-import io.github.libfdx.collections.FloatArray;
+import io.github.libfdx.collections.Array;
+import io.github.libfdx.collections.ArrayView;
+import io.github.libfdx.collections.OrderedMap;
 import io.github.libfdx.math.BoundingBox;
 import io.github.libfdx.math.Color;
 import io.github.libfdx.math.Vector3;
@@ -8,6 +10,10 @@ import io.github.libfdx.math.Vector3;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.Mesh;
+import io.github.libfdx.graphics.ColorTransfer;
+import io.github.libfdx.json.JsonReader;
+import io.github.libfdx.json.JsonValue;
+import io.github.libfdx.json.JsonWriter;
 
 
 /**
@@ -16,8 +22,400 @@ import io.github.libfdx.graphics.Mesh;
  * @author xpenatan
  */
 public final class ModelBuilder {
+    private static final ArrayView<String> SHAPE_TYPES = Array.of(
+            "BOX", "ROOF", "BEAM", "CYLINDER", "TRIANGLE", "QUAD").view();
+    private static final ArrayView<ArrayView<String>> SHAPE_PARAMETERS = Array.<ArrayView<String>>of(
+            Array.of("X", "Y", "Z", "Width", "Height", "Depth").view(),
+            Array.of("Width", "Depth", "Base", "Height").view(),
+            Array.of("Start X", "Start Y", "Start Z", "End X", "End Y", "End Z", "Width").view(),
+            Array.of("X", "Y", "Z", "Radius", "Length").view(),
+            Array.of("A X", "A Y", "A Z", "B X", "B Y", "B Z", "C X", "C Y", "C Z").view(),
+            Array.of("A X", "A Y", "A Z", "B X", "B Y", "B Z", "C X", "C Y", "C Z", "D X", "D Y", "D Z").view()).view();
     private final GraphicsContext graphics;
     private Material material = new Material("default");
+    private final OrderedMap<String, ModelShapeChunk> active = new OrderedMap<>();
+    private final Array<ModelShapePart> completed = new Array<>();
+    private final float[] color = {1, 1, 1, 1};
+    private String shapeMaterial = "default";
+    private boolean finished;
+
+    /**
+     * Starts CPU-only indexed shape construction, usable on any platform and on
+     * a worker without a graphics context. The caller owns the builder and its
+     * finished data. Upload or export that data separately; no files are written.
+     * Existing box, cylinder and plane model methods use this same shape path.
+     * Use append methods and finishShapes() on this builder. GPU model methods
+     * require the graphics-context constructor. Confine each builder to one
+     * thread; discard it after an input error. Completed arrays are borrowed
+     * read-only from their result and may be published after finishShapes().
+     */
+    public static ModelBuilder shapes() {
+        return new ModelBuilder();
+    }
+
+    /** Appends shape parameters produced by readShapes(), shape() or defaultShape().
+     * Input is borrowed for this call. Colors in this representation are sRGB
+     * and are converted to linear vertex colors. No graphics context is used. */
+    public ModelBuilder appendShape(JsonValue shape) {
+        requireOpen();
+        String type = shape.require("type").stringValue();
+        float[] p = floats(shape.require("parameters"));
+        float[] c = floats(shape.require("color"));
+        this.part(shape.require("material").stringValue()).color(
+                ColorTransfer.srgbToLinear(c[0]), ColorTransfer.srgbToLinear(c[1]),
+                ColorTransfer.srgbToLinear(c[2]), 1);
+        switch(type) {
+            case "BOX" -> this.appendBox(p[0], p[1], p[2], p[3], p[4], p[5]);
+            case "ROOF" -> this.appendRoof(p[0], p[1], p[2], p[3]);
+            case "BEAM" -> this.appendBeam(p[0], p[1], p[2], p[3], p[4], p[5], p[6]);
+            case "CYLINDER" -> this.appendCylinderX(p[0], p[1], p[2], p[3], p[4],
+                    shape.require("segments").intValue(), shape.require("smoothSides").booleanValue());
+            case "TRIANGLE" -> this.appendTriangle(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8]);
+            case "QUAD" -> this.appendQuad(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11]);
+            default -> throw new IllegalArgumentException("Unsupported shape: " + type);
+        }
+        return this;
+    }
+
+    /** Reads the existing version-1 scene representation. Returns newly owned,
+     * validated JSON parameters; it neither tessellates nor writes a model. */
+    public static JsonValue readShapes(String text) {
+        if(text == null || text.length() > 2_000_000)
+            throw new IllegalArgumentException("Invalid model shape data size");
+        JsonValue root = new JsonReader().parse(text);
+        if(root.require("version").intValue() != 1)
+            throw new IllegalArgumentException("Unsupported model shape version");
+        return validateShapes(root.require("shapes"));
+    }
+
+    /** Writes validated shape parameters in the existing scene format. The
+     * caller keeps its input; no geometry or generated asset path is stored. */
+    public static String writeShapes(JsonValue shapes) {
+        return JsonWriter.compact(JsonValue.object().put("version", 1)
+                .put("shapes", validateShapes(shapes)));
+    }
+
+    /** Returns newly owned, validated JSON parameters, limited to 4,096 shapes
+     * and a conservative 200,000-triangle budget before allocating geometry. */
+    public static JsonValue validateShapes(JsonValue shapes) {
+        if(shapes == null || !shapes.isArray() || shapes.size() == 0 || shapes.size() > 4096)
+            throw new IllegalArgumentException("A model needs 1 to 4096 shapes");
+        JsonValue result = JsonValue.array();
+        int triangles = 0;
+        for(int i = 0; i < shapes.size(); i++) {
+            JsonValue shape = shapes.get(i);
+            String type = shape.require("type").stringValue();
+            int segments = shape.get("segments") == null ? 16 : shape.get("segments").intValue();
+            result.add(shape(type, floats(shape.require("parameters")), floats(shape.require("color")),
+                    shape.get("material") == null ? "surface" : shape.get("material").stringValue(),
+                    segments, shape.get("smoothSides") != null && shape.get("smoothSides").booleanValue()));
+            triangles += "CYLINDER".equals(type) ? segments * 4 : 12;
+            if(triangles > 200_000)
+                throw new IllegalArgumentException("Model exceeds 200,000 triangles; split it into independent parts");
+        }
+        return result;
+    }
+
+    /** Creates newly owned, validated scene parameters. Box origin is its
+     * bottom center; cylinder axis is local X. Arrays are copied into JSON. */
+    public static JsonValue shape(String type, float[] parameters, float[] color,
+            String material, int segments, boolean smoothSides) {
+        int count = shapeParameterNames(type).size();
+        if(parameters == null || parameters.length != count)
+            throw new IllegalArgumentException("Invalid " + type + " parameters");
+        JsonValue values = JsonValue.array(), colors = JsonValue.array();
+        for(float value : parameters) {
+            if(!Float.isFinite(value) || Math.abs(value) > 100_000)
+                throw new IllegalArgumentException("Shape parameters must be finite and within 100 km");
+            values.add(value);
+        }
+        if(color == null || color.length != 3)
+            throw new IllegalArgumentException("Shape needs three sRGB channels");
+        for(float value : color) {
+            if(!Float.isFinite(value) || value < 0 || value > 1)
+                throw new IllegalArgumentException("sRGB channels must be between 0 and 1");
+            colors.add(value);
+        }
+        material = material == null ? "surface" : material.trim();
+        if(material.isEmpty() || material.length() > 128)
+            throw new IllegalArgumentException("Material needs a name of at most 128 characters");
+        if(segments < 3 || segments > 256)
+            throw new IllegalArgumentException("Cylinder segments must be between 3 and 256");
+        switch(type) {
+            case "BOX" -> { positiveParameter(parameters[3]); positiveParameter(parameters[4]); positiveParameter(parameters[5]); }
+            case "ROOF" -> { positiveParameter(parameters[0]); positiveParameter(parameters[1]); positiveParameter(parameters[3]); }
+            case "BEAM" -> positiveParameter(parameters[6]);
+            case "CYLINDER" -> { positiveParameter(parameters[3]); positiveParameter(parameters[4]); }
+            default -> { }
+        }
+        return JsonValue.object().put("type", type).put("parameters", values).put("color", colors)
+                .put("material", material).put("segments", segments).put("smoothSides", smoothSides);
+    }
+
+    /** Default editable arguments for one supported builder shape. */
+    public static JsonValue defaultShape(String type) {
+        float[] parameters = switch(type) {
+            case "BOX" -> new float[]{0, 0, 0, 1, 1, 1};
+            case "ROOF" -> new float[]{2, 2, 0, 1};
+            case "BEAM" -> new float[]{0, 0, 0, 0, 1, 0, .1f};
+            case "CYLINDER" -> new float[]{0, 0, 0, .5f, 1};
+            case "TRIANGLE" -> new float[]{0, 0, 0, 0, 0, 1, 1, 0, 0};
+            case "QUAD" -> new float[]{0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0};
+            default -> throw new IllegalArgumentException("Unsupported shape: " + type);
+        };
+        return shape(type, parameters, new float[]{1, 1, 1}, "surface", 16, "CYLINDER".equals(type));
+    }
+
+    /** Stable read-only names supported by the version-1 parameter format. */
+    public static ArrayView<String> shapeTypes() {
+        return SHAPE_TYPES;
+    }
+
+    /** Stable read-only parameter names in the order accepted by shape(). */
+    public static ArrayView<String> shapeParameterNames(String type) {
+        for(int i = 0; i < SHAPE_TYPES.size(); i++)
+            if(SHAPE_TYPES.get(i).equals(type)) return SHAPE_PARAMETERS.get(i);
+        throw new IllegalArgumentException("Unsupported shape: " + type);
+    }
+
+    private static float[] floats(JsonValue array) {
+        if(!array.isArray() || array.size() > 12)
+            throw new IllegalArgumentException("Invalid numeric shape data");
+        float[] values = new float[array.size()];
+        for(int i = 0; i < values.length; i++) values[i] = array.get(i).floatValue();
+        return values;
+    }
+
+    private static void positiveParameter(float value) {
+        if(value <= 0) throw new IllegalArgumentException("Shape dimensions must be positive");
+    }
+
+    private ModelBuilder() { this.graphics = null; }
+
+    /** Selects the material slot for subsequent shapes. */
+    public ModelBuilder part(String name) {
+        requireOpen();
+        if(name == null || name.isBlank()) throw new FdxException("Material slot cannot be empty");
+        shapeMaterial = name;
+        return this;
+    }
+
+    /** Sets finite linear RGBA vertex color for subsequent shapes. */
+    public ModelBuilder color(float red, float green, float blue, float alpha) {
+        requireOpen(); finite(red, green, blue, alpha);
+        color[0] = red; color[1] = green; color[2] = blue; color[3] = alpha;
+        return this;
+    }
+
+    /** Appends a box centered at the origin. */
+    public ModelBuilder appendBox(float width, float height, float depth) {
+        return appendBox(0, -height / 2, 0, width, height, depth);
+    }
+
+    /** Appends a box positioned by its bottom center, with positive dimensions. */
+    public ModelBuilder appendBox(float x, float bottomY, float z,
+            float width, float height, float depth) {
+        requireOpen(); finite(x, bottomY, z); positive(width); positive(height); positive(depth);
+        float a = x - width / 2, b = x + width / 2, c = z - depth / 2,
+                d = z + depth / 2, top = bottomY + height;
+        face(v(a,top,d),v(b,top,d),v(b,top,c),v(a,top,c));
+        face(v(a,bottomY,c),v(b,bottomY,c),v(b,bottomY,d),v(a,bottomY,d));
+        face(v(a,bottomY,d),v(b,bottomY,d),v(b,top,d),v(a,top,d));
+        face(v(b,bottomY,c),v(a,bottomY,c),v(a,top,c),v(b,top,c));
+        face(v(b,bottomY,d),v(b,bottomY,c),v(b,top,c),v(b,top,d));
+        face(v(a,bottomY,c),v(a,bottomY,d),v(a,top,d),v(a,top,c));
+        return this;
+    }
+
+    /** Appends an XZ-centered gable roof: two slopes and two ends, open underneath. */
+    public ModelBuilder appendRoof(float width, float depth, float baseY, float height) {
+        requireOpen(); positive(width); positive(depth); positive(height); finite(baseY);
+        float x = width / 2, z = depth / 2, top = baseY + height;
+        face(v(-x,baseY,z),v(x,baseY,z),v(0,top,z));
+        face(v(x,baseY,-z),v(-x,baseY,-z),v(0,top,-z));
+        face(v(-x,baseY,-z),v(-x,baseY,z),v(0,top,z),v(0,top,-z));
+        face(v(0,top,-z),v(0,top,z),v(x,baseY,z),v(x,baseY,-z));
+        return this;
+    }
+
+    /** Appends a square-section beam between distinct endpoints. */
+    public ModelBuilder appendBeam(float ax, float ay, float az,
+            float bx, float by, float bz, float width) {
+        requireOpen(); finite(ax, ay, az, bx, by, bz); positive(width);
+        Vector3 direction = new Vector3(bx - ax, by - ay, bz - az);
+        if(!Float.isFinite(direction.length()) || direction.length() < 1e-7f)
+            throw new FdxException("Beam endpoints must differ and be within finite range");
+        direction = direction.normalize();
+        Vector3 u = new Vector3().set(direction).cross(Math.abs(direction.y()) > .9f
+                ? new Vector3(1,0,0) : new Vector3(0,1,0)).normalize().scale(width / 2);
+        Vector3 w = new Vector3().set(direction).cross(u).normalize().scale(width / 2);
+        float[][] a = new float[4][], b = new float[4][];
+        int[] us = {1,-1,-1,1}, vs = {1,1,-1,-1};
+        for(int i = 0; i < 4; i++) {
+            float x = us[i]*u.x()+vs[i]*w.x(), y = us[i]*u.y()+vs[i]*w.y(), z = us[i]*u.z()+vs[i]*w.z();
+            a[i] = v(ax+x,ay+y,az+z); b[i] = v(bx+x,by+y,bz+z);
+        }
+        for(int i = 0; i < 4; i++) face(a[i],a[(i+1)%4],b[(i+1)%4],b[i]);
+        face(a[3],a[2],a[1],a[0]); face(b[0],b[1],b[2],b[3]);
+        return this;
+    }
+
+    /** Appends an arrow between distinct endpoints, with its square head
+     * proportional to length. Endpoints are borrowed only during this call. */
+    public ModelBuilder appendArrow(Vector3 from, Vector3 to) {
+        requireOpen();
+        if(from == null || to == null) throw new FdxException("Arrow endpoints cannot be null");
+        finite(from.x(), from.y(), from.z(), to.x(), to.y(), to.z());
+        Vector3 direction = to.subtract(from);
+        float length = direction.length();
+        if(!Float.isFinite(length) || length < 1e-7f)
+            throw new FdxException("Arrow endpoints must differ and be within finite range");
+        Vector3 forward = direction.normalize();
+        Vector3 reference = Math.abs(forward.dot(Vector3.Y)) < .9f ? Vector3.Y : Vector3.X;
+        Vector3 side = forward.cross(reference).normalize().scale(length * .08f);
+        Vector3 up = side.cross(forward).normalize().scale(length * .08f);
+        Vector3 center = to.subtract(forward.scale(length * .25f));
+        Vector3[] corners = {center.add(side).add(up), center.subtract(side).add(up),
+                center.subtract(side).subtract(up), center.add(side).subtract(up)};
+        float[] start = v(from.x(), from.y(), from.z()), end = v(to.x(), to.y(), to.z());
+        for(int i = 0; i < corners.length; i++) {
+            Vector3 a = corners[i], b = corners[(i + 1) % corners.length];
+            float[] av = v(a.x(), a.y(), a.z()), bv = v(b.x(), b.y(), b.z());
+            face(start, av, bv);
+            face(av, end, bv);
+        }
+        return this;
+    }
+
+    /** Creates a GPU arrow model with the current material and default vertex usages. */
+    public Model arrow(Vector3 from, Vector3 to) {
+        return arrow(from, to, ModelVertexUsage.DEFAULT);
+    }
+
+    /** Creates a GPU arrow model. The caller owns the returned model; this
+     * operation requires a graphics-context builder on the graphics thread. */
+    public Model arrow(Vector3 from, Vector3 to, long usage) {
+        return shapeModel("arrow", shapes().appendArrow(from, to).finishShapes(), usage);
+    }
+
+    /** Appends a smooth Y-axis cylinder centered at the origin, with hard caps. */
+    public ModelBuilder appendCylinder(float radius, float height, int divisions) {
+        return appendCylinder(0, 0, 0, radius, height, divisions, true, true);
+    }
+
+    /** Appends an X-axis cylinder at the given center. Smooth sides retain hard caps. */
+    public ModelBuilder appendCylinderX(float x, float y, float z, float radius,
+            float length, int divisions, boolean smoothSides) {
+        return appendCylinder(x, y, z, radius, length, divisions, smoothSides, false);
+    }
+
+    private ModelBuilder appendCylinder(float x, float y, float z, float radius,
+            float length, int divisions, boolean smooth, boolean yAxis) {
+        requireOpen(); finite(x, y, z); positive(radius); positive(length);
+        if(divisions < 3 || divisions > 1_000_000)
+            throw new FdxException("Cylinder divisions must be between 3 and 1,000,000");
+        for(int i = 0; i < divisions; i++) {
+            double a = i * Math.PI * 2 / divisions, b = ((i+1)%divisions) * Math.PI * 2 / divisions;
+            float ca = (float)Math.cos(a), sa = (float)Math.sin(a), cb = (float)Math.cos(b), sb = (float)Math.sin(b);
+            float lo = -length / 2, hi = length / 2;
+            float[][] points = {point(x,y,z,lo,radius*ca,radius*sa,yAxis),point(x,y,z,lo,radius*cb,radius*sb,yAxis),
+                    point(x,y,z,hi,radius*cb,radius*sb,yAxis),point(x,y,z,hi,radius*ca,radius*sa,yAxis)};
+            float[][] normals = smooth ? new float[][]{axis(0,ca,sa,yAxis),axis(0,cb,sb,yAxis),
+                    axis(0,cb,sb,yAxis),axis(0,ca,sa,yAxis)} : null;
+            append(points, normals);
+            float[] positive = axis(1,0,0,yAxis), negative = axis(-1,0,0,yAxis);
+            append(new float[][]{point(x,y,z,hi,0,0,yAxis),points[3],points[2]},new float[][]{positive,positive,positive});
+            append(new float[][]{point(x,y,z,lo,0,0,yAxis),points[1],points[0]},new float[][]{negative,negative,negative});
+        }
+        return this;
+    }
+
+    /** Appends an upward-facing XZ plane centered at the origin. */
+    public ModelBuilder appendPlane(float width, float depth) {
+        positive(width); positive(depth);
+        return appendQuad(-width/2,0,-depth/2, -width/2,0,depth/2,
+                width/2,0,depth/2, width/2,0,-depth/2);
+    }
+
+    /** Appends a counterclockwise triangle with a flat normal. */
+    public ModelBuilder appendTriangle(float ax, float ay, float az, float bx, float by,
+            float bz, float cx, float cy, float cz) {
+        face(v(ax,ay,az),v(bx,by,bz),v(cx,cy,cz));
+        return this;
+    }
+
+    /** Appends a counterclockwise planar convex quad, split along its first/third corners. */
+    public ModelBuilder appendQuad(float ax, float ay, float az, float bx, float by,
+            float bz, float cx, float cy, float cz, float dx, float dy, float dz) {
+        face(v(ax,ay,az),v(bx,by,bz),v(cx,cy,cz),v(dx,dy,dz));
+        return this;
+    }
+
+    /** Finishes once and returns a stable read-only view. Further shape calls are rejected. */
+    public ArrayView<ModelShapePart> finishShapes() {
+        if(!finished) {
+            var chunks = active.values().iterator();
+            while(chunks.hasNext()) completed.add(chunks.next().finish());
+            active.clear(); finished = true;
+        }
+        return completed.view();
+    }
+
+    private void face(float[]... points) { append(points, null); }
+    private void append(float[][] points, float[][] normals) {
+        requireOpen();
+        ModelShapeChunk chunk = active.get(shapeMaterial);
+        if(chunk == null || chunk.vertices() + points.length > 65_536) {
+            if(chunk != null) completed.add(chunk.finish());
+            chunk = new ModelShapeChunk(shapeMaterial); active.put(shapeMaterial, chunk);
+        }
+        chunk.face(points, color, normals);
+    }
+    private static float[] v(float x, float y, float z) { return new float[]{x,y,z}; }
+    private static float[] axis(float x, float y, float z, boolean yAxis) {
+        return yAxis ? v(-y,x,z) : v(x,y,z);
+    }
+    private static float[] point(float x, float y, float z, float a, float b, float c, boolean yAxis) {
+        float[] result = axis(a,b,c,yAxis);
+        result[0] += x; result[1] += y; result[2] += z;
+        return result;
+    }
+    private void requireOpen() { if(finished) throw new FdxException("Model shape builder is finished"); }
+    private static void positive(float value) {
+        if(!Float.isFinite(value) || value <= 0) throw new FdxException("Shape dimensions must be finite and positive");
+    }
+    private static void finite(float... values) {
+        for(float value : values) if(!Float.isFinite(value)) throw new FdxException("Shape values must be finite");
+    }
+
+    private Model shapeModel(String id, ArrayView<ModelShapePart> parts, long usage) {
+        requireGraphics();
+        validateUsage(usage);
+        Array<Mesh> meshes = new Array<>();
+        ModelNode node = new ModelNode(id);
+        try {
+            for(int p = 0; p < parts.size(); p++) {
+                ModelShapePart part = parts.get(p);
+                int[] indices = new int[part.indices().length];
+                for(int i = 0; i < indices.length; i++) indices[i] = part.indices()[i] & 0xffff;
+                boolean includeNormals = hasUsage(usage, ModelVertexUsage.NORMAL);
+                TriangleVertices vertices = triangleVertices(part.positions(), indices,
+                        hasUsage(usage, ModelVertexUsage.COLOR) ? part.colors() : null,
+                        includeNormals ? part.normals() : null, includeNormals, Color.WHITE);
+                Mesh mesh = createMesh(p == 0 ? id : id + "-" + p, vertices, usage, part.bounds());
+                meshes.add(mesh);
+                node.addPart(new ModelNodePart(new MeshPart(p == 0 ? id + " part" : id + " part-" + p,
+                        mesh, null, 0, mesh.vertexCount()), material));
+            }
+            Array<ModelNode> nodes = new Array<>(); nodes.add(node);
+            Array<Material> materials = new Array<>(); materials.add(material);
+            return new DefaultModel(nodes, materials, null, meshes);
+        }
+        catch(RuntimeException error) {
+            for(int i = 0; i < meshes.size(); i++) meshes.get(i).dispose();
+            throw error;
+        }
+    }
 
     /**
      * Creates a model builder.
@@ -139,36 +537,7 @@ public final class ModelBuilder {
      */
     public Model box(String id, float width, float height, float depth,
             long usage) {
-        validateUsage(usage);
-        if (width <= 0.0f || height <= 0.0f || depth <= 0.0f) {
-            throw new FdxException("Box dimensions must be greater than zero");
-        }
-        float hx = width * 0.5f;
-        float hy = height * 0.5f;
-        float hz = depth * 0.5f;
-        FloatArray positions = new FloatArray();
-        FloatArray colors = hasUsage(usage, ModelVertexUsage.COLOR)
-                ? new FloatArray() : null;
-        addFace(positions, colors,
-                -hx, -hy, -hz, -hx, hy, -hz, hx, hy, -hz, hx, -hy, -hz,
-                1.0f, 1.0f, 1.0f, 1.0f);
-        addFace(positions, colors,
-                -hx, -hy, hz, hx, -hy, hz, hx, hy, hz, -hx, hy, hz,
-                1.0f, 1.0f, 1.0f, 1.0f);
-        addFace(positions, colors,
-                -hx, -hy, -hz, hx, -hy, -hz, hx, -hy, hz, -hx, -hy, hz,
-                1.0f, 1.0f, 1.0f, 1.0f);
-        addFace(positions, colors,
-                -hx, hy, -hz, -hx, hy, hz, hx, hy, hz, hx, hy, -hz,
-                1.0f, 1.0f, 1.0f, 1.0f);
-        addFace(positions, colors,
-                hx, -hy, -hz, hx, hy, -hz, hx, hy, hz, hx, -hy, hz,
-                1.0f, 1.0f, 1.0f, 1.0f);
-        addFace(positions, colors,
-                -hx, -hy, -hz, -hx, -hy, hz, -hx, hy, hz, -hx, hy, -hz,
-                1.0f, 1.0f, 1.0f, 1.0f);
-        return triangles(id, positions.toArray(), null,
-                colors != null ? colors.toArray() : null, usage);
+        return shapeModel(id, shapes().appendBox(width, height, depth).finishShapes(), usage);
     }
 
     /**
@@ -325,63 +694,7 @@ public final class ModelBuilder {
      */
     public Model cylinder(String id, float radius, float height,
             int divisions, long usage) {
-        validateRoundPrimitive(radius, divisions, "Cylinder");
-        if (height <= 0.0f) {
-            throw new FdxException(
-                    "Cylinder height must be greater than zero");
-        }
-        int columns = divisions + 1;
-        int sideLowerStart = 0;
-        int sideUpperStart = columns;
-        int bottomCenter = columns * 2;
-        int bottomRingStart = bottomCenter + 1;
-        int topCenter = bottomRingStart + columns;
-        int topRingStart = topCenter + 1;
-        int vertexCount = topRingStart + columns;
-        float[] positions = new float[vertexCount * 3];
-        float[] normals = new float[vertexCount * 3];
-        float halfHeight = height * 0.5f;
-        for (int slice = 0; slice <= divisions; slice++) {
-            float angle = fullCircle(slice, divisions);
-            float normalX = (float) Math.cos(angle);
-            float normalZ = (float) Math.sin(angle);
-            float x = normalX * radius;
-            float z = normalZ * radius;
-            putVertex(positions, normals, sideLowerStart + slice,
-                    x, -halfHeight, z, normalX, 0.0f, normalZ);
-            putVertex(positions, normals, sideUpperStart + slice,
-                    x, halfHeight, z, normalX, 0.0f, normalZ);
-            putVertex(positions, normals, bottomRingStart + slice,
-                    x, -halfHeight, z, 0.0f, -1.0f, 0.0f);
-            putVertex(positions, normals, topRingStart + slice,
-                    x, halfHeight, z, 0.0f, 1.0f, 0.0f);
-        }
-        putVertex(positions, normals, bottomCenter,
-                0.0f, -halfHeight, 0.0f, 0.0f, -1.0f, 0.0f);
-        putVertex(positions, normals, topCenter,
-                0.0f, halfHeight, 0.0f, 0.0f, 1.0f, 0.0f);
-
-        int[] indices = new int[divisions * 12];
-        int index = 0;
-        for (int slice = 0; slice < divisions; slice++) {
-            int lower = sideLowerStart + slice;
-            int nextLower = lower + 1;
-            int upper = sideUpperStart + slice;
-            int nextUpper = upper + 1;
-            indices[index++] = lower;
-            indices[index++] = upper;
-            indices[index++] = nextLower;
-            indices[index++] = upper;
-            indices[index++] = nextUpper;
-            indices[index++] = nextLower;
-            indices[index++] = bottomCenter;
-            indices[index++] = bottomRingStart + slice;
-            indices[index++] = bottomRingStart + slice + 1;
-            indices[index++] = topCenter;
-            indices[index++] = topRingStart + slice + 1;
-            indices[index++] = topRingStart + slice;
-        }
-        return triangles(id, positions, indices, null, normals, usage);
+        return shapeModel(id, shapes().appendCylinder(radius, height, divisions).finishShapes(), usage);
     }
 
     /**
@@ -592,26 +905,7 @@ public final class ModelBuilder {
      * @return the plane
      */
     public Model plane(String id, float width, float depth, long usage) {
-        if (width <= 0.0f || depth <= 0.0f) {
-            throw new FdxException(
-                    "Plane dimensions must be greater than zero");
-        }
-        float halfWidth = width * 0.5f;
-        float halfDepth = depth * 0.5f;
-        float[] positions = {
-                -halfWidth, 0.0f, -halfDepth,
-                -halfWidth, 0.0f, halfDepth,
-                halfWidth, 0.0f, halfDepth,
-                halfWidth, 0.0f, -halfDepth
-        };
-        float[] normals = {
-                0.0f, 1.0f, 0.0f,
-                0.0f, 1.0f, 0.0f,
-                0.0f, 1.0f, 0.0f,
-                0.0f, 1.0f, 0.0f
-        };
-        int[] indices = {0, 1, 2, 0, 2, 3};
-        return triangles(id, positions, indices, null, normals, usage);
+        return shapeModel(id, shapes().appendPlane(width, depth).finishShapes(), usage);
     }
 
     /**
@@ -864,6 +1158,7 @@ public final class ModelBuilder {
 
     private Mesh createMesh(String id, TriangleVertices vertices, long usage,
             BoundingBox meshBounds) {
+        requireGraphics();
         boolean includeColors = hasUsage(usage, ModelVertexUsage.COLOR);
         boolean includeNormals = hasUsage(usage, ModelVertexUsage.NORMAL);
         if (hasUsage(usage, ModelVertexUsage.PBR_LAYOUT)) {
@@ -1006,6 +1301,10 @@ public final class ModelBuilder {
         }
     }
 
+    private void requireGraphics() {
+        if(graphics == null) throw new FdxException("CPU ModelBuilder: use append methods and finishShapes; GPU models require a graphics context");
+    }
+
     private static boolean hasUsage(long usage, long expected) {
         return (usage & expected) == expected;
     }
@@ -1106,34 +1405,8 @@ public final class ModelBuilder {
         return BoundingBox.of(new Vector3(minX, minY, minZ), new Vector3(maxX, maxY, maxZ));
     }
 
-    private static void addFace(FloatArray positions, FloatArray colors,
-            float x0, float y0, float z0, float x1, float y1, float z1,
-            float x2, float y2, float z2, float x3, float y3, float z3,
-            float red, float green, float blue, float alpha) {
-        addTriangle(positions, colors, x0, y0, z0, x1, y1, z1, x2, y2, z2, red, green, blue, alpha);
-        addTriangle(positions, colors, x0, y0, z0, x2, y2, z2, x3, y3, z3, red, green, blue, alpha);
-    }
 
-    private static void addTriangle(FloatArray positions, FloatArray colors,
-            float x0, float y0, float z0, float x1, float y1, float z1,
-            float x2, float y2, float z2, float red, float green, float blue, float alpha) {
-        addVertex(positions, colors, x0, y0, z0, red, green, blue, alpha);
-        addVertex(positions, colors, x1, y1, z1, red, green, blue, alpha);
-        addVertex(positions, colors, x2, y2, z2, red, green, blue, alpha);
-    }
 
-    private static void addVertex(FloatArray positions, FloatArray colors,
-            float x, float y, float z, float red, float green, float blue, float alpha) {
-        positions.add(x);
-        positions.add(y);
-        positions.add(z);
-        if (colors != null) {
-            colors.add(red);
-            colors.add(green);
-            colors.add(blue);
-            colors.add(alpha);
-        }
-    }
 
     /**
      * Represents a triangle vertices.

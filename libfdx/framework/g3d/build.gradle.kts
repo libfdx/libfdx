@@ -22,7 +22,7 @@ dependencies {
     api(project(":libfdx:extensions:graphics:shader-graph:runtime"))
     api(project(":libfdx:framework:camera"))
     api(project(":libfdx:framework:math"))
-    implementation(project(":libfdx:framework:json"))
+    api(project(":libfdx:framework:json"))
     api(project(":libfdx:framework:assets:manager"))
     api(project(":libfdx:framework:assets:loaders"))
     testImplementation(libs.junit.jupiter)

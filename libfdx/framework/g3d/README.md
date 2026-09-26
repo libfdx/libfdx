@@ -6,6 +6,37 @@ For budgets, fitting and optional map reuse, see [directional shadows](SHADOWS.m
 For playback, crossfades, events and instance geometry ownership, see [animation and skinning](ANIMATION.md).
 For reusable model LOD, projected-size selection and loaded/in-memory levels, see [model LOD](LOD.md).
 
+## Model building without a graphics context
+
+`ModelBuilder.shapes()` is the CPU-only indexed shape-building path. It supplies
+boxes, gable roofs, beams, arrows, cylinders and triangle/quad panels; the existing GPU
+`ModelBuilder` box, cylinder and plane methods use this same implementation.
+Applications can build on a worker or append one shape per preparation step:
+
+```java
+ModelBuilder builder = ModelBuilder.shapes();
+builder.part("walls").color(0.8f, 0.7f, 0.6f, 1).appendBox(4, 3, 5);
+builder.part("roof").color(0.3f, 0.1f, 0.05f, 1).appendRoof(4.5f, 5.5f, 1.5f, 1);
+ArrayView<ModelShapePart> parts = builder.finishShapes();
+```
+
+Colors are linear RGBA. Shapes with the same material slot share parts, split
+before an unsigned 16-bit index overflows. The builder owns no graphics resources
+and writes no files. A finished result owns its CPU arrays/bounds, exposed for
+read-only borrowing; copy before editing. Confine each builder to one thread,
+finish before publishing, and discard it after an input error. Calls are
+synchronous; scheduling and cancellation between calls belong to the caller.
+Upload the parts on the graphics thread or pass them directly to an exporter.
+The material string is an application slot, not a GPU material allocation.
+This is the existing `ModelBuilder`, with CPU append operations. Its immediate
+GPU model methods still require `new ModelBuilder(graphics)`.
+`readShapes`, `writeShapes`, `defaultShape`, `shapeTypes` and `shapeParameterNames`
+also live on `ModelBuilder`. They support version-1 editable JSON parameters;
+`appendShape` consumes these parameters directly. Serialized colors are sRGB,
+while the numeric `color` method accepts linear channels. The serialized format
+applies finite/range and shape-count budgets before mesh allocation. It remains
+CPU-only and writes no model files.
+
 Material textures can carry per-slot `TextureCoordinates` through
 `TextureMaterialAttribute`. The extended `Mesh.positionColor3D` overload appends UV1
 and tangent XYZW to the existing compact PBR data. Existing overloads keep their
