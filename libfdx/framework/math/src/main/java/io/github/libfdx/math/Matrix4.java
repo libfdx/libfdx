@@ -1118,16 +1118,33 @@ public final class Matrix4 {
     }
 
     /**
-     * Returns the values.
-     *
-     * @return the values
+     * Reads one element without allocating or exposing the backing array.
+     * Row and column are zero-based and must be between 0 and 3.
      */
-    public float[] values() {
-        return values.clone();
+    public float get(int row, int column) {
+        if(row < 0 || row >= 4 || column < 0 || column >= 4) {
+            throw new FdxException("Matrix4 row and column must be between 0 and 3");
+        }
+        return values[column * 4 + row];
     }
 
     /**
-     * Copies the values into the target array.
+     * Returns this matrix's live, column-major backing array without allocating.
+     * Repeated calls return the same 16-element array. Matrix operations update
+     * it in place, and writing to the array changes the matrix immediately.
+     *
+     * <p>The array is borrowed, not a snapshot. Do not modify values borrowed
+     * from read-only or shared matrices such as {@link #IDENTITY}. Use
+     * {@link #copyValues(float[], int)} with caller-owned storage when an
+     * independent snapshot is needed. Neither access method adds thread safety.</p>
+     */
+    public float[] values() {
+        return values;
+    }
+
+    /**
+     * Copies the values into caller-owned storage without allocating or retaining
+     * the target. The target can be reused across calls.
      *
      * @param target the target values
      * @param offset the target offset

@@ -84,8 +84,8 @@ public final class ShapeRenderer implements Disposable {
                     .colorLoadOp(LoadOp.load())
                     .colorStoreOp(StoreOp.store())
                     .depthEnabled(true);
-    private final float[] projection = Matrix4.IDENTITY.values();
-    private final float[] transform = Matrix4.IDENTITY.values();
+    private final float[] projection = new float[Matrix4.VALUE_COUNT];
+    private final float[] transform = new float[Matrix4.VALUE_COUNT];
     private final Matrix4 transformScratch = new Matrix4();
 
     private float[] triangleVertices;
@@ -119,6 +119,8 @@ public final class ShapeRenderer implements Disposable {
                     "ShapeRenderer initial vertex count must be greater than zero");
         }
         this.graphics = graphics;
+        Matrix4.IDENTITY.copyValues(projection, 0);
+        Matrix4.IDENTITY.copyValues(transform, 0);
         heapUploadBuffers = "psp".equals(graphics.providerId().value());
         triangleVertices = new float[initialMaxVertices
                 * SOURCE_FLOATS_PER_VERTEX];
