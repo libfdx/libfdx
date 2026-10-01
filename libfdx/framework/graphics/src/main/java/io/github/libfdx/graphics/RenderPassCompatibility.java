@@ -18,7 +18,8 @@ public final class RenderPassCompatibility {
             throw new FdxException("Render pass compatibility target layout cannot be null");
         }
         if (width < 0 || height < 0 || (width == 0) != (height == 0)) {
-            throw new FdxException("Render pass compatibility dimensions must both be zero or positive");
+            throw new FdxException(
+                    "Render pass compatibility dimensions must both be zero or positive");
         }
         this.targetLayout = targetLayout;
         this.width = width;
@@ -48,6 +49,21 @@ public final class RenderPassCompatibility {
 
     public boolean hasDimensions() {
         return width > 0;
+    }
+
+    /**
+     * Returns this immutable compatibility when dimensions match, or a copy with the supplied
+     * dimensions. Both dimensions must be zero or positive, as for {@link #of(RenderTargetLayout,
+     * int, int)}.
+     *
+     * @param width the render width
+     * @param height the render height
+     * @return compatibility with the same layout and the supplied dimensions
+     */
+    public RenderPassCompatibility withDimensions(int width, int height) {
+        return this.width == width && this.height == height
+                ? this
+                : of(targetLayout, width, height);
     }
 
     public boolean isCompatible(RenderTargetLayout layout) {

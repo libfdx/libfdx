@@ -142,6 +142,63 @@ final class ShaderParameterBlockTest {
         assertEquals(3.5f, destination.getFloat(64));
     }
 
+    @Test
+    void snapshotsPreserveRawBytesAndBufferStateForEveryAlignmentAndTail() {
+        for (int size : new int[] {0, 1, 7, 8, 9, 15, 16, 17, 128}) {
+            ShaderParameter[] parameters = new ShaderParameter[size];
+            for (int i = 0; i < size; i++) {
+                parameters[i] = ShaderParameter.of("byte" + i,
+                        ShaderValueType.scalar(ShaderScalarType.I8), i, 1, 1);
+            }
+            ShaderParameterLayout layout = ShaderParameterLayout.of(size, 1, parameters);
+            ShaderParameterBlock block = ShaderParameterBlock.allocate(layout);
+            for (int i = 0; i < size; i++) {
+                block.setSignedByte(layout.requireHandle("byte" + i), (byte) (i * 37 + 129));
+            }
+            for (ByteOrder order : new ByteOrder[] {ByteOrder.BIG_ENDIAN, ByteOrder.LITTLE_ENDIAN}) {
+                for (boolean direct : new boolean[] {false, true}) {
+                    for (int offset : new int[] {0, 1, 7, 8}) {
+                        ByteBuffer destination = (direct ? ByteBuffer.allocateDirect(size + 16)
+                                : ByteBuffer.allocate(size + 16)).order(order);
+                        for (int i = 0; i < destination.capacity(); i++) {
+                            destination.put(i, (byte) 51);
+                        }
+                        destination.position(2).mark().position(3).limit(4);
+                        block.copyTo(destination, offset);
+                        assertEquals(3, destination.position());
+                        assertEquals(4, destination.limit());
+                        assertEquals(order, destination.order());
+                        destination.reset();
+                        assertEquals(2, destination.position());
+                        destination.limit(destination.capacity());
+                        for (int i = 0; i < destination.capacity(); i++) {
+                            byte expected = i >= offset && i < offset + size
+                                    ? (byte) ((i - offset) * 37 + 129) : 51;
+                            assertEquals(expected, destination.get(i));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    void invalidSnapshotDestinationsPreserveBufferState() {
+        ShaderParameterBlock block = ShaderParameterBlock.allocate(layout());
+        ByteBuffer destination = ByteBuffer.allocate(256).position(7).mark().limit(16);
+        assertThrows(FdxException.class, () -> block.copyTo(destination, -1));
+        assertThrows(FdxException.class, () -> block.copyTo(destination, 129));
+        assertThrows(FdxException.class, () -> block.copyTo(null, 0));
+        ByteBuffer readOnly = destination.asReadOnlyBuffer().order(ByteOrder.nativeOrder());
+        assertThrows(ReadOnlyBufferException.class, () -> block.copyTo(readOnly, 64));
+        assertEquals(7, readOnly.position());
+        assertEquals(16, readOnly.limit());
+        readOnly.reset();
+        assertEquals(7, readOnly.position());
+        assertEquals(7, destination.position());
+        assertEquals(16, destination.limit());
+    }
+
     private static ShaderParameterLayout layout() {
         ShaderValueType f32 = ShaderValueType.scalar(ShaderScalarType.F32);
         ShaderValueType vec4 = ShaderValueType.vector(ShaderScalarType.F32, 4);

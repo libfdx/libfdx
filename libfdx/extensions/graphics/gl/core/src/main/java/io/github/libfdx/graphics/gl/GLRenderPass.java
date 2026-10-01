@@ -98,7 +98,8 @@ final class GLRenderPass implements RenderPass {
         GLRenderPipelineHandle nextPipeline =
                 GLResources.requirePipeline(pipeline, resourceDomain, "Render pipeline");
         if (!compatibility.isCompatible(nextPipeline.targetLayout())) {
-            throw new FdxException("GL render pipeline target layout is incompatible with the active pass");
+            throw new FdxException(
+                    "GL render pipeline target layout is incompatible with the active pass");
         }
         if (this.pipeline == nextPipeline) {
             return;
@@ -152,7 +153,8 @@ final class GLRenderPass implements RenderPass {
         if (slot < 0) {
             throw new FdxException("Vertex buffer slot cannot be negative");
         }
-        GLBufferHandle vertexBuffer = GLResources.requireBuffer(buffer, resourceDomain, "Vertex buffer");
+        GLBufferHandle vertexBuffer =
+                GLResources.requireBuffer(buffer, resourceDomain, "Vertex buffer");
         if (vertexBuffer.usage() != BufferUsage.VERTEX) {
             throw new FdxException("RenderPass.setVertexBuffer requires a vertex buffer");
         }
@@ -173,7 +175,8 @@ final class GLRenderPass implements RenderPass {
     @Override
     public void setIndexBuffer(Buffer buffer) {
         ensureOpen();
-        GLBufferHandle nextIndexBuffer = GLResources.requireBuffer(buffer, resourceDomain, "Index buffer");
+        GLBufferHandle nextIndexBuffer =
+                GLResources.requireBuffer(buffer, resourceDomain, "Index buffer");
         if (nextIndexBuffer.usage() != BufferUsage.INDEX) {
             throw new FdxException("RenderPass.setIndexBuffer requires an index buffer");
         }
@@ -567,10 +570,9 @@ final class GLRenderPass implements RenderPass {
         }
         VertexLayout layout = pipeline.vertexLayout(slot);
         gl.bindArrayBuffer(vertexBuffers[slot].buffer());
-        VertexAttribute[] attributes = layout.attributes();
         int divisor = layout.stepMode() == VertexStepMode.INSTANCE ? 1 : 0;
-        for (int i = 0; i < attributes.length; i++) {
-            VertexAttribute attribute = attributes[i];
+        for (int i = 0; i < layout.attributeCount(); i++) {
+            VertexAttribute attribute = layout.attribute(i);
             int location = attribute.location();
             ensureVertexAttributeSlot(location);
             if (!enabledVertexAttributes[location]) {
@@ -665,21 +667,11 @@ final class GLRenderPass implements RenderPass {
         if (name == null || name.length() == 0) {
             throw new FdxException("Uniform name cannot be empty");
         }
-        return gl.uniformLocation(pipeline.program(), name);
+        return pipeline.uniformLocation(name);
     }
 
     private void setTextureUniform(int slot) {
-        int textureLocation = gl.uniformLocation(pipeline.program(), "u_texture");
-        if (textureLocation >= 0) {
-            gl.uniform1i(textureLocation, slot);
-        }
-        int tintTextureLocation = gl.uniformLocation(pipeline.program(), "f_u_texture_u_sampler");
-        if (tintTextureLocation >= 0) {
-            gl.uniform1i(tintTextureLocation, slot);
-        }
-        String[] names = pipeline.textureUniformNames(slot);
-        for (String name : names) {
-            int location = gl.uniformLocation(pipeline.program(), name);
+        for (int location : pipeline.textureUniformLocations(slot)) {
             if (location >= 0) {
                 gl.uniform1i(location, slot);
             }

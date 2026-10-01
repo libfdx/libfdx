@@ -9,7 +9,12 @@ import io.github.libfdx.graphics.g2d.TextureBlitter;
 import io.github.libfdx.graphics.shader.*;
 
 /** Asymmetric translucent quadrants, explicit clear, stored depth, chained composition, resolve and repeated resize. */
-public final class OffscreenCompositionTest extends GraphicsParityTest {
+public final class OffscreenCompositionTest extends GraphicsParityTest
+        implements io.github.libfdx.testsupport.PerformanceWorkload {
+    @Override
+    public String performanceWorkload() {
+        return "samples=" + (multisample == null ? 1 : 4) + ";targets=" + (multisample == null ? 2 : 3);
+    }
     private static final VertexLayout LAYOUT=VertexLayout.of(28,
             VertexAttribute.of(0,VertexFormat.FLOAT32X3,0),VertexAttribute.of(1,VertexFormat.FLOAT32X4,12));
     private static final String SOURCE="""

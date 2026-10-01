@@ -31,6 +31,7 @@ final class GLRenderPipelineHandle implements RenderPipeline {
     private final ShaderRenderBindings resourceBindings;
     private final RenderTargetLayout targetLayout;
     private final String[][] textureUniformNames;
+    private final int[][] textureUniformLocations;
     private boolean disposed;
     private io.github.libfdx.graphics.PrimitiveState primitiveState;
     private io.github.libfdx.graphics.ColorTargetState colorState;
@@ -87,6 +88,7 @@ final class GLRenderPipelineHandle implements RenderPipeline {
         this.resourceBindings = resourceBindings;
         this.targetLayout = targetLayout;
         textureUniformNames = textureUniformNames(shaderModule, resourceBindings);
+        textureUniformLocations = new int[textureUniformNames.length][];
         shaderModule.retainForPipeline();
     }
 
@@ -148,6 +150,23 @@ final class GLRenderPipelineHandle implements RenderPipeline {
 
     String[] textureUniformNames(int slot) {
         return textureUniformNames[slot];
+    }
+
+    int uniformLocation(String name) {
+        return shaderModule.uniformLocation(name);
+    }
+
+    int[] textureUniformLocations(int slot) {
+        int[] locations = textureUniformLocations[slot];
+        if (locations == null) {
+            String[] names = textureUniformNames[slot];
+            locations = new int[names.length + 2];
+            locations[0] = uniformLocation("u_texture");
+            locations[1] = uniformLocation("f_u_texture_u_sampler");
+            for (int i = 0; i < names.length; i++) locations[i + 2] = uniformLocation(names[i]);
+            textureUniformLocations[slot] = locations;
+        }
+        return locations;
     }
 
     @Override

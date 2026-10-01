@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.TestReadiness;
+
 import io.github.libfdx.testsupport.graphics.FramebufferCapture;
 import io.github.libfdx.testsupport.graphics.TestCameraControllers;
 import io.github.libfdx.testsupport.graphics.SpotLightGallery;
@@ -33,7 +35,12 @@ import java.util.Locale;
  *
  * @author xpenatan
  */
-public final class SpotLight3DTest extends ApplicationAdapter {
+public final class SpotLight3DTest extends ApplicationAdapter implements TestReadiness {
+    @Override
+    public boolean readyForAutomaticCompletion() {
+        return created && renderedFrames >= 2;
+    }
+
     private static final Color CLEAR_COLOR = new Color(0.018f, 0.022f, 0.032f, 1.0f);
 
     private final long exitAfterFrames;

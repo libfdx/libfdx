@@ -12,6 +12,8 @@ import io.github.libfdx.graphics.g2d.*;
 
 /** Window-filling atlas inspection: source parity, trimmed pages, and shared-texture batching. */
 public final class TexturePackerTest extends GraphicsParityTest {
+    @Override
+    protected boolean readyForCapture() { return readyFrames >= 30; }
     private static final String[] NAMES={"amber","cyan","rose"};
     private static final LoadOp CLEAR=LoadOp.clear(12f/255,18f/255,28f/255,1);
     private final AssetExecutor executor;

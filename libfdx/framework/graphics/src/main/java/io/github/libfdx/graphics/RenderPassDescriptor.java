@@ -9,11 +9,16 @@ import io.github.libfdx.core.FdxException;
  * @author xpenatan
  */
 public final class RenderPassDescriptor {
+    private static final RenderPassColorAttachment[] NO_COLOR_ATTACHMENTS =
+            new RenderPassColorAttachment[0];
     private String label = "";
     private TextureView colorAttachment;
     private LoadOp colorLoadOp = LoadOp.load();
     private StoreOp colorStoreOp = StoreOp.store();
-    private RenderPassColorAttachment[] colorAttachments = new RenderPassColorAttachment[0];
+    private RenderPassColorAttachment[] colorAttachments = NO_COLOR_ATTACHMENTS;
+    private RenderPassColorAttachment[] singleColorAttachment;
+    private TextureFormat[] derivedColorFormats;
+    private RenderPassCompatibility derivedCompatibility;
     private RenderPassDepthStencilAttachment depthStencilAttachment;
     private RenderPassCompatibility compatibility;
     private boolean depthEnabled;
@@ -87,7 +92,7 @@ public final class RenderPassDescriptor {
             throw new FdxException("Render pass color attachment cannot be null");
         }
         this.colorAttachment = colorAttachment;
-        this.colorAttachments = new RenderPassColorAttachment[0];
+        this.colorAttachments = NO_COLOR_ATTACHMENTS;
         return this;
     }
 
@@ -139,15 +144,26 @@ public final class RenderPassDescriptor {
      * @return a defensive copy of the attachments
      */
     public RenderPassColorAttachment[] colorAttachments() {
+        return currentColorAttachments().clone();
+    }
+
+    private RenderPassColorAttachment[] currentColorAttachments() {
         if (colorAttachments.length > 0) {
-            return colorAttachments.clone();
+            return colorAttachments;
         }
         if (colorAttachment == null) {
-            return new RenderPassColorAttachment[0];
+            return NO_COLOR_ATTACHMENTS;
         }
-        return new RenderPassColorAttachment[] {
-                RenderPassColorAttachment.of(colorAttachment, colorLoadOp, colorStoreOp)
-        };
+        if (singleColorAttachment == null) singleColorAttachment = new RenderPassColorAttachment[1];
+        RenderPassColorAttachment current = singleColorAttachment[0];
+        if (current == null
+                || current.view() != colorAttachment
+                || current.loadOp() != colorLoadOp
+                || current.storeOp() != colorStoreOp) {
+            singleColorAttachment[0] =
+                    RenderPassColorAttachment.of(colorAttachment, colorLoadOp, colorStoreOp);
+        }
+        return singleColorAttachment;
     }
 
     /**
@@ -207,13 +223,15 @@ public final class RenderPassDescriptor {
         RenderPassCompatibility derived = deriveCompatibility();
         if (compatibility != null && derived != null
                 && !compatibility.targetLayout().equals(derived.targetLayout())) {
-            throw new FdxException("Render pass compatibility metadata does not match its attachments");
+            throw new FdxException(
+                    "Render pass compatibility metadata does not match its attachments");
         }
         if (compatibility != null && compatibility.hasDimensions()
                 && derived != null && derived.hasDimensions()
                 && (compatibility.width() != derived.width()
                 || compatibility.height() != derived.height())) {
-            throw new FdxException("Render pass compatibility dimensions do not match its attachments");
+            throw new FdxException(
+                    "Render pass compatibility dimensions do not match its attachments");
         }
         return compatibility != null ? compatibility : derived;
     }
@@ -302,7 +320,7 @@ public final class RenderPassDescriptor {
         if (capabilities == null) {
             throw new FdxException("Graphics capabilities cannot be null");
         }
-        RenderPassColorAttachment[] colors = colorAttachments();
+        RenderPassColorAttachment[] colors = currentColorAttachments();
         if (colors.length == 0 && depthStencilAttachment == null) {
             throw new FdxException("Render pass requires at least one attachment");
         }
@@ -331,6 +349,7 @@ public final class RenderPassDescriptor {
             return;
         }
         RenderPassColorAttachment first = colorAttachments[0];
+        if (first.loadOp() == colorLoadOp && first.storeOp() == colorStoreOp) return;
         colorAttachments[0] = first.resolveView() != null
                 ? RenderPassColorAttachment.resolve(first.view(), first.resolveView(),
                         colorLoadOp, colorStoreOp)
@@ -338,11 +357,16 @@ public final class RenderPassDescriptor {
     }
 
     private RenderPassCompatibility deriveCompatibility() {
-        RenderPassColorAttachment[] colors = colorAttachments();
+        RenderPassColorAttachment[] colors = currentColorAttachments();
         if (colors.length == 0 && depthStencilAttachment == null) {
             return null;
         }
-        TextureFormat[] colorFormats = new TextureFormat[colors.length];
+        if (derivedColorFormats == null || derivedColorFormats.length != colors.length) {
+            derivedColorFormats = new TextureFormat[colors.length];
+        }
+        RenderTargetLayout previous =
+                derivedCompatibility != null ? derivedCompatibility.targetLayout() : null;
+        boolean sameLayout = previous != null && previous.colorAttachmentCount() == colors.length;
         int sampleCount = depthStencilAttachment != null
                 ? depthStencilAttachment.view().sampleCount() : colors[0].view().sampleCount();
         int width = depthStencilAttachment != null
@@ -350,7 +374,8 @@ public final class RenderPassDescriptor {
         int height = depthStencilAttachment != null
                 ? depthStencilAttachment.view().height() : colors[0].view().height();
         for (int i = 0; i < colors.length; i++) {
-            colorFormats[i] = colors[i].view().format();
+            derivedColorFormats[i] = colors[i].view().format();
+            if (sameLayout && previous.colorFormat(i) != derivedColorFormats[i]) sameLayout = false;
             if (colors[i].view().sampleCount() != sampleCount) {
                 throw new FdxException("Render pass attachments have different sample counts");
             }
@@ -358,26 +383,40 @@ public final class RenderPassDescriptor {
             if (colors[i].resolveView() != null) {
                 TextureView resolve = colors[i].resolveView();
                 if (resolve.sampleCount() != 1) {
-                    throw new FdxException("Render pass resolve attachments must be single-sampled");
+                    throw new FdxException(
+                            "Render pass resolve attachments must be single-sampled");
                 }
                 if (resolve.format() != colors[i].view().format()) {
-                    throw new FdxException("Render pass resolve format does not match its color attachment");
+                    throw new FdxException(
+                            "Render pass resolve format does not match its color attachment");
                 }
                 requireMatchingDimensions(width, height, resolve, "resolve");
             }
         }
         if (depthStencilAttachment != null
                 && depthStencilAttachment.view().sampleCount() != sampleCount) {
-            throw new FdxException("Render pass depth and color attachments have different sample counts");
+            throw new FdxException(
+                    "Render pass depth and color attachments have different sample counts");
         }
         TextureFormat depthFormat = depthStencilAttachment != null
                 ? depthStencilAttachment.view().format()
                 : depthEnabled ? TextureFormat.DEPTH32_FLOAT : TextureFormat.UNKNOWN;
-        RenderTargetLayout layout = RenderTargetLayout.of(
-                colorFormats, depthFormat, sampleCount);
-        return width > 0 && height > 0
-                ? RenderPassCompatibility.of(layout, width, height)
-                : RenderPassCompatibility.layout(layout);
+        sameLayout =
+                sameLayout
+                        && previous.depthStencilFormat() == depthFormat
+                        && previous.sampleCount() == sampleCount;
+        RenderTargetLayout layout =
+                sameLayout
+                        ? previous
+                        : RenderTargetLayout.of(derivedColorFormats, depthFormat, sampleCount);
+        int knownWidth = width > 0 && height > 0 ? width : 0;
+        int knownHeight = width > 0 && height > 0 ? height : 0;
+        if (!sameLayout
+                || derivedCompatibility.width() != knownWidth
+                || derivedCompatibility.height() != knownHeight) {
+            derivedCompatibility = RenderPassCompatibility.of(layout, knownWidth, knownHeight);
+        }
+        return derivedCompatibility;
     }
 
     private static void requireMatchingDimensions(int width, int height,

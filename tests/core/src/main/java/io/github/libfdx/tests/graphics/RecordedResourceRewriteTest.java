@@ -28,7 +28,12 @@ import java.nio.ByteBuffer;
  *
  * @author xpenatan
  */
-public final class RecordedResourceRewriteTest extends GraphicsParityTest {
+public final class RecordedResourceRewriteTest extends GraphicsParityTest
+        implements io.github.libfdx.testsupport.PerformanceWorkload {
+    @Override
+    public String performanceWorkload() {
+        return "passes=2;mips=" + redLevels.length + ";vertices=" + VERTEX_COUNT;
+    }
     private static final int TEXTURE_SIZE = 2;
     private static final int VERTEX_COUNT = 6;
     private static final int BYTES_PER_VERTEX = 4 * 4;

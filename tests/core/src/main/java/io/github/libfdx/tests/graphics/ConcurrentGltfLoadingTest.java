@@ -115,8 +115,11 @@ public final class ConcurrentGltfLoadingTest extends GraphicsParityTest {
         long shaderStart = System.nanoTime();
         if (loadingOnly) shaders.updateLoading(1_000_000L); else shaders.update(1_000_000L);
         if (!reported) maxShaderUpdate = Math.max(maxShaderUpdate, System.nanoTime() - shaderStart);
-        if (shaders.failedCount() > 0 || shaders.unsupportedCount() > 0)
-            throw new FdxException("Concurrent model shader preparation failed: " + shaders.failures());
+        if (shaders.failedCount() > 0 || shaders.unsupportedCount() > 0) {
+            var failures = shaders.failures();
+            throw new FdxException("Concurrent model shader preparation failed: " + failures,
+                    failures.isEmpty() ? null : failures.get(0).failure());
+        }
         int ready = 0;
         camera.viewport(framebufferWidth(), framebufferHeight()).update();
         long renderStart = System.nanoTime();

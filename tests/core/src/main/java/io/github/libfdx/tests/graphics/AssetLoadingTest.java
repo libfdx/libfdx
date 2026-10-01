@@ -27,6 +27,8 @@ import java.nio.ByteBuffer;
 
 /** Delayed shared acquisition, budgeted finalization, and independent level scope release. */
 public final class AssetLoadingTest extends GraphicsParityTest {
+    @Override
+    protected boolean readyForCapture() { return requiresCompletion() ? scopesReleased : loaded == COUNT; }
     private static final String IMAGE = "fdx_logo_dark.png";
     private static final String FONT = "deferred-image/runtime-font.fnt";
     private static final String FONT_PAGE = "deferred-image/gray.png";

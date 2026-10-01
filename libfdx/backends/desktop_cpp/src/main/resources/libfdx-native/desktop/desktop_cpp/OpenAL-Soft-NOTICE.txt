@@ -1,0 +1,11 @@
+OpenAL Soft is distributed as an unmodified, replaceable shared library from
+the org.lwjgl:lwjgl-openal native dependency. It is licensed under the GNU
+Library General Public License, version 2 or later; see OpenAL-Soft-COPYING.txt.
+
+The native dependency used by this build identifies upstream revision:
+7f9c6de1162b1d4604b9a2f8bcd6c53021566221
+
+Upstream project, source and copyright notices:
+https://github.com/kcat/openal-soft/tree/7f9c6de1162b1d4604b9a2f8bcd6c53021566221
+Complete corresponding source archive:
+https://github.com/kcat/openal-soft/archive/7f9c6de1162b1d4604b9a2f8bcd6c53021566221.tar.gz

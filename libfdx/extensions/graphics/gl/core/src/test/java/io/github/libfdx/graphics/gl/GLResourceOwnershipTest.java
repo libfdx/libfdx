@@ -56,6 +56,53 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class GLResourceOwnershipTest {
     @Test
+    void uniformLocationsIncludeMissingResultsAndRemainOwnedByTheLinkedProgram() {
+        FakeGL gl = new FakeGL();
+        GLGraphicsAttachment attachment = attachment(gl, new FakeSurface());
+        GLShaderModuleHandle first = shader(attachment, gl, 100);
+        GLShaderModuleHandle second = shader(attachment, gl, 200);
+        try {
+            gl.resetCalls();
+            gl.uniformResult = -1;
+            assertEquals(-1, first.uniformLocation("missing"));
+            assertEquals(-1, first.uniformLocation("missing"));
+            assertEquals(1, gl.calls("uniformLocation"));
+            gl.uniformResult = 7;
+            assertEquals(7, first.uniformLocation("present"));
+            assertEquals(7, first.uniformLocation("present"));
+            gl.uniformResult = 11;
+            assertEquals(11, second.uniformLocation("present"));
+            assertEquals(7, first.uniformLocation("present"));
+            assertEquals(3, gl.calls("uniformLocation"));
+        } finally {
+            first.dispose();
+            second.dispose();
+            attachment.dispose();
+        }
+    }
+
+    @Test
+    void surfaceCompatibilityRetainsLayoutAcrossResize() {
+        FakeGL gl = new FakeGL();
+        GLGraphicsAttachment attachment = attachment(gl, new FakeSurface());
+        try {
+            attachment.beginFrame();
+            var first = attachment.currentFrame().compatibility();
+            assertSame(first, attachment.currentFrame().compatibility());
+            attachment.endFrame();
+            attachment.resize(100, 80);
+            attachment.beginFrame();
+            var resized = attachment.currentFrame().compatibility();
+            assertEquals(100, resized.width());
+            assertEquals(80, resized.height());
+            assertSame(first.targetLayout(), resized.targetLayout());
+            attachment.endFrame();
+        } finally {
+            attachment.dispose();
+        }
+    }
+
+    @Test
     void initialBufferRangesPreserveOffsetsAndRejectInvalidOrForeignResources() {
         FakeGL gl = new FakeGL();
         GLGraphicsAttachment attachment = attachment(gl, new FakeSurface());
@@ -158,7 +205,9 @@ final class GLResourceOwnershipTest {
         assertEquals(PROVIDER_ID,lost.providerId());
         assertThrows(GraphicsContextLostException.class,()->pass.setViewport(0,0,8,8));
         assertThrows(GraphicsContextLostException.class,()->device.writeBuffer(buffer,ByteBuffer.allocate(16)));
-        assertThrows(GraphicsContextLostException.class,()->device.createTexture(TextureDescriptor.rgba8("new",1,1)));
+        assertThrows(
+                GraphicsContextLostException.class,
+                () -> device.createTexture(TextureDescriptor.rgba8("new", 1, 1)));
         assertThrows(GraphicsContextLostException.class,attachment::currentFrame);
         gl.lost=false; // Native restoration cannot revive old resource identities.
         assertThrows(GraphicsContextLostException.class,attachment::beginFrame);
@@ -205,7 +254,12 @@ final class GLResourceOwnershipTest {
     void halfFloatUploadsPassFormatAndValidateEightBytesPerTexelBeforeNativeCalls() {
         FakeGL gl = new FakeGL();
         GLGraphicsAttachment attachment = attachment(gl, new FakeSurface());
-        Texture texture = attachment.device().createTexture(TextureDescriptor.rgba8("HDR", 3, 2).format(TextureFormat.RGBA16_FLOAT));
+        Texture texture =
+                attachment
+                        .device()
+                        .createTexture(
+                                TextureDescriptor.rgba8("HDR", 3, 2)
+                                        .format(TextureFormat.RGBA16_FLOAT));
         ByteBuffer pixels = ByteBuffer.allocateDirect(51);
         pixels.position(3);
         try {
@@ -226,7 +280,12 @@ final class GLResourceOwnershipTest {
     void mipUploadsValidateAllLevelsAndAttachmentCacheDistinguishesMipLevels() {
         FakeGL gl = new FakeGL();
         GLGraphicsAttachment attachment = attachment(gl, new FakeSurface());
-        Texture texture = attachment.device().createTexture(TextureDescriptor.rgba8RenderTarget("mips", 19, 11).mipLevelCount(5));
+        Texture texture =
+                attachment
+                        .device()
+                        .createTexture(
+                                TextureDescriptor.rgba8RenderTarget("mips", 19, 11)
+                                        .mipLevelCount(5));
         try {
             assertEquals(5, gl.calls("texImage2D"));
             assertSame(texture.view(2), texture.view(2));
@@ -257,8 +316,16 @@ final class GLResourceOwnershipTest {
     void pipelineCannotSilentlySelectADifferentLinkedEntryPoint() {
         FakeGL gl=new FakeGL(); GLGraphicsAttachment attachment=attachment(gl,new FakeSurface());
         var shader=shader(attachment,gl,100); gl.resetCalls();
-        var error=assertThrows(FdxException.class,()->attachment.device().createRenderPipeline(
-                RenderPipelineDescriptor.shader(shader,TextureFormat.RGBA8_UNORM).fragmentEntryPoint("other")));
+        var error =
+                assertThrows(
+                        FdxException.class,
+                        () ->
+                                attachment
+                                        .device()
+                                        .createRenderPipeline(
+                                                RenderPipelineDescriptor.shader(
+                                                                shader, TextureFormat.RGBA8_UNORM)
+                                                        .fragmentEntryPoint("other")));
         assertTrue(error.getMessage().contains("entry points")); assertEquals(0,gl.calls());
         shader.dispose(); attachment.dispose();
     }
@@ -459,7 +526,8 @@ final class GLResourceOwnershipTest {
         assertThrows(FdxException.class, () -> pass.setVertexBuffer(foreignBuffer));
         assertEquals(0, firstGl.calls());
 
-        Buffer disposedBuffer = first.device().createBuffer(BufferDescriptor.vertex("disposed", 16));
+        Buffer disposedBuffer =
+                first.device().createBuffer(BufferDescriptor.vertex("disposed", 16));
         disposedBuffer.dispose();
         firstGl.resetCalls();
         assertThrows(FdxException.class, () -> pass.setVertexBuffer(disposedBuffer));
@@ -468,12 +536,14 @@ final class GLResourceOwnershipTest {
         GLShaderModuleHandle textureShader = shader(first, firstGl, 200);
         GLRenderPipelineHandle texturePipeline = pipeline(first, firstGl, textureShader, 1);
         pass.setPipeline(texturePipeline);
-        Texture foreignTexture = second.device().createTexture(TextureDescriptor.rgba8("foreign", 2, 2));
+        Texture foreignTexture =
+                second.device().createTexture(TextureDescriptor.rgba8("foreign", 2, 2));
         firstGl.resetCalls();
         assertThrows(FdxException.class, () -> pass.setTexture(0, foreignTexture));
         assertEquals(0, firstGl.calls());
 
-        Texture disposedTexture = first.device().createTexture(TextureDescriptor.rgba8("disposed", 2, 2));
+        Texture disposedTexture =
+                first.device().createTexture(TextureDescriptor.rgba8("disposed", 2, 2));
         disposedTexture.dispose();
         firstGl.resetCalls();
         assertThrows(FdxException.class, () -> pass.setTexture(0, disposedTexture));
@@ -511,7 +581,8 @@ final class GLResourceOwnershipTest {
         GLGraphicsAttachment attachment = attachment(fakeGl, new FakeSurface());
         GLShaderModuleHandle shader = shader(attachment, fakeGl, 250);
         GLRenderPipelineHandle pipeline = pipeline(attachment, fakeGl, shader, 1);
-        Texture texture = attachment.device().createTexture(TextureDescriptor.rgba8("sampled", 2, 2));
+        Texture texture =
+                attachment.device().createTexture(TextureDescriptor.rgba8("sampled", 2, 2));
         RenderPass pass = beginSurfacePass(attachment);
         pass.setPipeline(pipeline);
 
@@ -551,7 +622,8 @@ final class GLResourceOwnershipTest {
                 VertexLayout.of(24,
                         VertexAttribute.of(0, VertexFormat.FLOAT32X2, 0),
                         VertexAttribute.of(1, VertexFormat.FLOAT32X4, 8)));
-        Buffer buffer = attachment.device().createBuffer(BufferDescriptor.vertex("vertex-state", 96));
+        Buffer buffer =
+                attachment.device().createBuffer(BufferDescriptor.vertex("vertex-state", 96));
         RenderPass pass = beginSurfacePass(attachment);
         pass.setPipeline(widePipeline);
         pass.setVertexBuffer(buffer);
@@ -576,7 +648,10 @@ final class GLResourceOwnershipTest {
     void passRejectsRenderTargetDisposedAfterBeginBeforeCallingGl() {
         FakeGL fakeGl = new FakeGL();
         GLGraphicsAttachment attachment = attachment(fakeGl, new FakeSurface());
-        Texture target = attachment.device().createTexture(TextureDescriptor.rgba8RenderTarget("target", 4, 4));
+        Texture target =
+                attachment
+                        .device()
+                        .createTexture(TextureDescriptor.rgba8RenderTarget("target", 4, 4));
         assertTrue(attachment.beginFrame());
         RenderPass pass = attachment.currentFrame().commandEncoder().beginRenderPass(RenderPassDescriptor.color(
                 target.view(), LoadOp.load(), StoreOp.store()));
@@ -618,7 +693,9 @@ final class GLResourceOwnershipTest {
         FakeGL secondGl = new FakeGL();
         GLGraphicsAttachment first = attachment(firstGl, new FakeSurface());
         GLGraphicsAttachment second = sharedAttachment(secondGl, new FakeSurface(), first);
-        Texture target = first.device().createTexture(TextureDescriptor.rgba8RenderTarget("shared-target", 4, 4));
+        Texture target =
+                first.device()
+                        .createTexture(TextureDescriptor.rgba8RenderTarget("shared-target", 4, 4));
 
         renderTo(first, target);
         renderTo(second, target);
@@ -885,6 +962,7 @@ final class GLResourceOwnershipTest {
     }
 
     private static final class FakeGL implements InvocationHandler {
+        private int uniformResult;
         private PrimitiveState appliedPrimitive;
         private final GLApi api = (GLApi) Proxy.newProxyInstance(
                 GLApi.class.getClassLoader(), new Class<?>[] { GLApi.class }, this);
@@ -927,8 +1005,10 @@ final class GLResourceOwnershipTest {
             if (method.getName().equals("bufferSubData") && args.length == 2) {
                 bufferOffset = (Integer) args[0]; bufferRemaining = ((ByteBuffer) args[1]).remaining();
             }
-            if (method.getName().equals("closeShaderPreparation")) { preparationCloses++; return null; }
-            if (method.getName().equals("applyPipelineState")) appliedPrimitive = (PrimitiveState)args[0];
+            if (method.getName().equals("closeShaderPreparation")) {
+                preparationCloses++; return null; }
+            if (method.getName().equals("applyPipelineState"))
+                appliedPrimitive = (PrimitiveState) args[0];
             if (method.getName().equals("isContextLost")) {
                 lossQueries++;
                 if (expectedSurface != null) assertSame(expectedSurface, FakeSurface.current);
@@ -940,6 +1020,7 @@ final class GLResourceOwnershipTest {
             }
             calls++;
             callsByMethod.merge(method.getName(), 1, Integer::sum);
+            if (method.getName().equals("uniformLocation")) return uniformResult;
             if (method.getName().equals(failingMethod) && calls(method.getName()) == failingCall) {
                 throw new IllegalStateException("Injected GL failure at " + method.getName());
             }

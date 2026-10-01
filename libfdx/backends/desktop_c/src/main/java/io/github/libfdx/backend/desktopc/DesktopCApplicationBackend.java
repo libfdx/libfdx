@@ -7,6 +7,8 @@ import io.github.libfdx.application.ApplicationBackend;
 import io.github.libfdx.application.ApplicationConfig;
 import io.github.libfdx.application.ApplicationLifecycle;
 import io.github.libfdx.application.ApplicationListener;
+import io.github.libfdx.audio.Audio;
+import io.github.libfdx.storage.DefaultStorage;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.Logger;
 import io.github.libfdx.core.ProviderId;
@@ -43,6 +45,7 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
     private DesktopCDisplay display;
     private GraphicsAttachment graphics;
     private DefaultInput input;
+    private Audio audio;
     private boolean running;
     private boolean disposed = true;
     private boolean listenerCreated;
@@ -105,9 +108,6 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
         if (requirements.clientApi() == GraphicsClientApi.OPENGL) {
             DesktopCGLFW.swapInterval(displayConfig.vSync() ? 1 : 0);
         }
-        fdx = new DefaultFdx(this, new DefaultDisplays(display), new DefaultGraphics(graphics), input,
-                new DefaultFileSystem(), logger);
-
         disposed = false;
         running = true;
         lifecycle = ApplicationLifecycle.CREATED;
@@ -119,6 +119,10 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
         String phase = "create";
         Throwable applicationFailure = null;
         try {
+            if (actualConfig.audio() != null) audio = actualConfig.audio().create();
+            DefaultFileSystem files = new DefaultFileSystem();
+            fdx = new DefaultFdx(this, new DefaultDisplays(display), new DefaultGraphics(graphics), input,
+                    files, new DefaultStorage(files), null, audio, logger);
             listener.create(fdx);
             listenerCreated = true;
             phase = "resize";
@@ -228,6 +232,9 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
             try {
                 DesktopCGLFW.pollEvents();
                 display.refreshSizes();
+                if (audio != null) {
+                    audio.update();
+                }
                 boolean windowSizeChanged = display.width() != lastWindowWidth || display.height() != lastWindowHeight;
                 boolean framebufferSizeChanged = display.framebufferWidth() != lastFramebufferWidth
                         || display.framebufferHeight() != lastFramebufferHeight;
@@ -253,18 +260,30 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
                 frameId++;
 
                 if (graphics == null || graphics.beginFrame()) {
+                    Throwable frameFailure = null;
                     try {
                         listener.render();
                         if (graphics != null) {
                             listener.onFrameEnd();
                         }
+                    } catch (Throwable error) {
+                        frameFailure = error;
+                        logger.error("Desktop C render callback failed", error);
+                        throw error;
                     } finally {
                         if (graphics != null) {
-                            graphics.endFrame();
+                            try {
+                                graphics.endFrame();
+                            } catch (Throwable error) {
+                                if (frameFailure == null) throw error;
+                                if (frameFailure != error) frameFailure.addSuppressed(error);
+                            }
                         }
                     }
                 }
                 if (running && !DesktopCGLFW.windowShouldClose(display.windowHandle())) {
+                    // The C runtime schedules Java threads cooperatively.
+                    Thread.yield();
                     sync(displayConfig.foregroundFps());
                 }
             } catch (Throwable error) {
@@ -311,6 +330,13 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
             }
         }
         listenerCreated = false;
+
+        Audio closingAudio = audio;
+        audio = null;
+        if (closingAudio != null) {
+            try { closingAudio.dispose(); }
+            catch (Throwable error) { failure = recordShutdownFailure(failure, "audio dispose", error); }
+        }
 
         GraphicsAttachment closingGraphics = graphics;
         graphics = null;

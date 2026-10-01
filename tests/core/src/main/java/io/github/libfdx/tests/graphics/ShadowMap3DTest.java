@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.TestReadiness;
+
 import io.github.libfdx.testsupport.graphics.FramebufferCapture;
 
 import io.github.libfdx.Fdx;
@@ -65,7 +67,12 @@ import java.util.Locale;
  *
  * @author xpenatan
  */
-public final class ShadowMap3DTest extends ApplicationAdapter {
+public final class ShadowMap3DTest extends ApplicationAdapter implements TestReadiness {
+    @Override
+    public boolean readyForAutomaticCompletion() {
+        return created && renderedFrames >= 2;
+    }
+
     private static final String DUCK_ASSET = "data/g3d/gltf/Ducky/ducky.gltf";
     private static final String DRAGON_ASSET = "data/g3d/gltf/StanfordDragon/stanfordDragon.gltf";
     private static final int ROTATING_INSTANCE_LIMIT = 15;

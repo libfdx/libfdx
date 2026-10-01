@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.TestReadiness;
+
 import io.github.libfdx.testsupport.graphics.FramebufferCapture;
 import io.github.libfdx.testsupport.graphics.TestCameraControllers;
 
@@ -35,7 +37,12 @@ import java.util.Locale;
  *
  * @author xpenatan
  */
-public final class Skybox3DTest extends ApplicationAdapter {
+public final class Skybox3DTest extends ApplicationAdapter implements TestReadiness {
+    @Override
+    public boolean readyForAutomaticCompletion() {
+        return created && renderedFrames >= 2;
+    }
+
     private static final String MODEL_ASSET = ModelBatchTest.DEFAULT_GLTF_ASSET;
 
     private final long exitAfterFrames;

@@ -76,6 +76,8 @@ public final class AutoTestApplication extends ApplicationAdapter {
     private boolean pendingSwitch;
     private boolean completed;
     private boolean summaryPrinted;
+    private float completionTimeoutSeconds;
+    private float currentTestSeconds;
     private long renderedFrames;
     private Throwable firstFailure;
     private final List<String> failures = new ArrayList<String>();
@@ -122,6 +124,7 @@ public final class AutoTestApplication extends ApplicationAdapter {
         stableFramesRequired = intProperty("libfdx.test.autoStableFrames", DEFAULT_STABLE_FRAMES_REQUIRED);
         spikeThresholdSeconds = floatProperty("libfdx.test.autoSpikeSeconds", DEFAULT_SPIKE_THRESHOLD_SECONDS);
         loadTimeoutSeconds = floatProperty("libfdx.test.autoLoadTimeoutSeconds", DEFAULT_LOAD_TIMEOUT_SECONDS);
+        completionTimeoutSeconds = floatProperty("libfdx.test.autoCompletionTimeoutSeconds", 120.0f);
         timing = new AutoTestTiming(testDurationSeconds, stableFramesRequired,
                 spikeThresholdSeconds, loadTimeoutSeconds);
         overlay = new UiToolkit(fdx.files())
@@ -202,7 +205,9 @@ public final class AutoTestApplication extends ApplicationAdapter {
             return;
         }
 
-        renderOverlayOnly(deltaSeconds);
+        // Active scenes own every framebuffer pixel, including frame-end readback.
+        // A provider may finish its native frame while servicing that readback.
+        if (currentTest == null) renderOverlayOnly(deltaSeconds);
         renderedFrames++;
         if (currentTest == null) {
             fpsLogger.frame(deltaSeconds, renderedFrames);
@@ -308,6 +313,7 @@ public final class AutoTestApplication extends ApplicationAdapter {
         TestSelector.TestDescriptor descriptor = tests[currentIndex];
         currentTestFailed = false;
         currentTestInProgress = true;
+        currentTestSeconds = 0;
         currentTestLoaded = false;
         timing.restart();
         System.out.println("[info] Auto test " + (currentIndex + 1) + "/" + tests.length + ": " + descriptor.name());
@@ -326,7 +332,16 @@ public final class AutoTestApplication extends ApplicationAdapter {
     }
 
     private void updateLoadState(float deltaSeconds) {
-        if (timing.update(deltaSeconds)) {
+        currentTestSeconds += deltaSeconds;
+        boolean ready = !(currentTest instanceof TestReadiness scene)
+                || scene.readyForAutomaticCompletion();
+        if (!ready) currentTestLoaded = false;
+        if (timing.update(deltaSeconds, ready)) {
+            pendingSwitch = true;
+        }
+        if (!ready && currentTestSeconds >= completionTimeoutSeconds) {
+            recordFailure(currentName(), "completion",
+                    new FdxException("Scene did not finish its checks within " + completionTimeoutSeconds + " seconds"));
             pendingSwitch = true;
         }
         if (!currentTestLoaded && timing.loaded()) {

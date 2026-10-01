@@ -5,6 +5,7 @@ libfdxRelease = "0.0.2"
 libfdxSnapshot = "-SNAPSHOT"
 
 easyPublishing = "0.1.2"
+jnative = "0.1.0-SNAPSHOT"
 androidGradlePlugin = "9.1.0"
 jbox2d = "-SNAPSHOT"
 jbox3d = "-SNAPSHOT"
@@ -27,6 +28,8 @@ android-library = { id = "com.android.library", version.ref = "androidGradlePlug
 easyPublishing = { id = "com.github.xpenatan.easy-publishing", version.ref = "easyPublishing" }
 
 [libraries]
+jnative-core = { module = "com.github.xpenatan.jNative:jnative-core", version.ref = "jnative" }
+jnative-interop = { module = "com.github.xpenatan.jNative:jnative-interop", version.ref = "jnative" }
 playwright = { module = "com.microsoft.playwright:playwright", version.ref = "playwright" }
 jbox2d-core = { module = "com.github.xpenatan.jBox2D:core", version.ref = "jbox2d" }
 jbox3d-core = { module = "com.github.xpenatan.jBox3D:core", version.ref = "jbox3d" }

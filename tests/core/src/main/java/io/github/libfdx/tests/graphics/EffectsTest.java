@@ -13,7 +13,14 @@ import io.github.libfdx.testsupport.graphics.ShowcaseHud;
 import java.util.Arrays;
 
 /** Visual comparison of normal lighting, scene resolution, bloom and HDR; checks target reuse/disposal. */
-public final class EffectsTest extends GraphicsParityTest {
+public final class EffectsTest extends GraphicsParityTest
+        implements io.github.libfdx.testsupport.PerformanceWorkload {
+    @Override
+    public String performanceWorkload() {
+        StringBuilder result = new StringBuilder("panels=");
+        for (EffectQuality quality : qualities) result.append(quality).append(';');
+        return result.append("size=").append(panelWidth).append('x').append(panelHeight).toString();
+    }
     private static final int PANEL_COUNT = 6;
     private final PostProcessor[] post = new PostProcessor[PANEL_COUNT];
     private final OffscreenTarget[] lit = new OffscreenTarget[PANEL_COUNT];

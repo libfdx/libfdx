@@ -1,0 +1,15 @@
+libfdx-native/desktop/desktop_cpp/CMakeLists.txt
+libfdx-native/desktop/desktop_cpp/libfdx_desktop_cpp.cpp
+libfdx-native/desktop/desktop_cpp/libfdx_glfw.cmake
+libfdx-native/desktop/desktop_cpp/libfdx_runtime_cpp.cpp
+libfdx-native/desktop/desktop_cpp/libfdx_input_cpp.cpp
+libfdx-native/desktop/desktop_cpp/libfdx_audio_cpp.cpp
+libfdx-native/desktop/desktop_cpp/OpenAL-Soft-COPYING.txt
+libfdx-native/desktop/desktop_cpp/OpenAL-Soft-NOTICE.txt
+libfdx-native/desktop/desktop_cpp/libfdx_runtime.cmake
+libfdx-native/desktop/desktop_cpp/libfdx_native_image.h
+libfdx-native/desktop/desktop_cpp/libfdx_native_image.cpp
+libfdx-native/desktop/desktop_cpp/libfdx_desktop_shaderc.h
+libfdx-native/desktop/desktop_cpp/libfdx_desktop_shaderc.cpp
+libfdx-native/desktop/desktop_cpp/libfdx_freetype.h
+libfdx-native/desktop/desktop_cpp/libfdx_freetype.cpp

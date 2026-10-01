@@ -88,9 +88,10 @@ Hosted tools and demos:
   examples and performance entry points.
 
 ## Community
-
 - [Discord](https://discord.gg/CutyWq27Gu)
-- [Patreon](https://patreon.com/libfdx)
-- [GitHub Sponsors](https://github.com/sponsors/xpenatan)
+
+## Support
+
+If this project is useful to you, consider [sponsoring](https://github.com/sponsors/xpenatan) its development.
 
 libFDX is licensed under the [Apache License 2.0](LICENSE).

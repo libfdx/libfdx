@@ -11,7 +11,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 /** Bounded reads and asynchronous file composition through the real asset update queue. */
-public final class FileStreamingTest extends GraphicsParityTest {
+public final class FileStreamingTest extends GraphicsParityTest implements io.github.libfdx.testsupport.PerformanceWorkload {
+    @Override
+    protected boolean readyForCapture() { return reported; }
+
+    @Override
+    public String performanceWorkload() {
+        return "validated=true;rangeChecks=4;text=true;empty=true;workers=" + (executor != null)
+                + ";asyncCancellation=" + probe.cancelledPending + ";timing=post-validation";
+    }
     private final AssetExecutor executor;
     private DefaultAssetManager assets;
     private AssetLease<Probe> lease;

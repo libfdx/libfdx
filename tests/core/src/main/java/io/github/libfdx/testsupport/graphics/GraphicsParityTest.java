@@ -9,12 +9,14 @@ import io.github.libfdx.core.Logger;
 import io.github.libfdx.display.Display;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.testsupport.TestFpsLogger;
+import io.github.libfdx.testsupport.TestReadiness;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-public abstract class GraphicsParityTest extends ApplicationAdapter {
+public abstract class GraphicsParityTest extends ApplicationAdapter implements TestReadiness {
     protected final long exitAfterFrames;
+    private final boolean completeScenario;
     protected Application application;
     protected Display display;
     protected GraphicsContext graphics;
@@ -30,11 +32,12 @@ public abstract class GraphicsParityTest extends ApplicationAdapter {
 
     protected GraphicsParityTest(long exitAfterFrames) {
         this.exitAfterFrames = exitAfterFrames;
+        completeScenario = exitAfterFrames != 0L || Boolean.getBoolean("libfdx.test.performance");
     }
 
     /** A negative frame limit is managed by the automatic runner; zero is interactive. */
     protected final boolean requiresCompletion() {
-        return exitAfterFrames != 0L;
+        return completeScenario;
     }
 
     protected final void initialize(Fdx fdx, String testName) {
@@ -138,6 +141,12 @@ public abstract class GraphicsParityTest extends ApplicationAdapter {
 
     /** Async scenes can defer an explicitly requested capture until their content is ready. */
     protected boolean readyForCapture() { return true; }
+
+    /** Lets the automatic runner wait for deferred loading and scripted scene validation. */
+    @Override
+    public final boolean readyForAutomaticCompletion() {
+        return created && renderedFrames >= 2 && readyForCapture();
+    }
 
     private static String stringProperty(String name, String defaultValue) {
         String value = System.getProperty(name);

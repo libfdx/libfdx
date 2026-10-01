@@ -1,6 +1,7 @@
 package io.github.libfdx.backend.desktopc;
 
 import io.github.libfdx.application.ApplicationConfig;
+import io.github.libfdx.audio.AudioProvider;
 import io.github.libfdx.display.DisplayConfig;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 
@@ -12,6 +13,17 @@ import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 public final class DesktopCApplicationConfig extends ApplicationConfig {
     private DisplayConfig displayConfig = new DisplayConfig();
     private GraphicsAttachmentProvider graphics;
+    private AudioProvider audio;
+
+    /** Optional playback service created and disposed with the application. */
+    public AudioProvider audio() {
+        return audio;
+    }
+
+    public DesktopCApplicationConfig audio(AudioProvider audio) {
+        this.audio = audio;
+        return this;
+    }
 
     /**
      * Returns the display config.

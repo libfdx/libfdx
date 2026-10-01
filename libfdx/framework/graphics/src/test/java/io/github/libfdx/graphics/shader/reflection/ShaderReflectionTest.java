@@ -7,6 +7,7 @@ import io.github.libfdx.graphics.shader.ShaderStage;
 import io.github.libfdx.graphics.shader.target.ShaderSemanticOverlay;
 import io.github.libfdx.core.FdxException;
 import org.junit.jupiter.api.Test;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -93,6 +94,53 @@ final class ShaderReflectionTest {
 
         assertFalse(original.physicallyEquivalent(locationChanged));
         assertNotEquals(original.physicalHash(), locationChanged.physicalHash());
+    }
+
+    @Test
+    void nestedPhysicalLayoutsCompareEveryMemberWithoutDependingOnNames() {
+        ShaderParameterLayout first = nestedLayout("first", ShaderScalarType.F32, 4, true);
+        assertTrue(first.physicallyEquivalent(first));
+        assertFalse(first.physicallyEquivalent(null));
+        assertTrue(first.physicallyEquivalent(nestedLayout("renamed", ShaderScalarType.F32, 4, true)));
+        assertFalse(first.physicallyEquivalent(nestedLayout("first", ShaderScalarType.I32, 4, true)));
+        assertFalse(first.physicallyEquivalent(nestedLayout("first", ShaderScalarType.F32, 8, true)));
+        assertFalse(first.physicallyEquivalent(nestedLayout("first", ShaderScalarType.F32, 4, false)));
+    }
+
+    private static ShaderParameterLayout nestedLayout(String name, ShaderScalarType scalar,
+            int offset, boolean includeSecond) {
+        ShaderParameter first = ShaderParameter.of("x", ShaderValueType.scalar(ShaderScalarType.F32), 0, 4, 4);
+        ShaderParameter second = ShaderParameter.of("y", ShaderValueType.scalar(scalar), offset, 4, 4);
+        ShaderParameter structure = ShaderParameter.builder(name, name, ShaderValueType.structure("Pair"), 0, 16, 4)
+                .members(includeSecond ? new ShaderParameter[] {first, second} : new ShaderParameter[] {first})
+                .build();
+        return ShaderParameterLayout.of(16, 4, structure);
+    }
+
+    @Test
+    void concurrentEquivalentLayoutsNeverAcceptAnIncompatibleLayout() throws Exception {
+        ShaderParameterLayout first = nestedLayout("first", ShaderScalarType.F32, 4, true);
+        ShaderParameterLayout second = nestedLayout("second", ShaderScalarType.F32, 4, true);
+        ShaderParameterLayout third = nestedLayout("third", ShaderScalarType.F32, 4, true);
+        ShaderParameterLayout incompatible = nestedLayout("wrong", ShaderScalarType.I32, 4, true);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Runnable work = () -> {
+            try {
+                for (int i = 0; i < 1000; i++) {
+                    assertTrue(first.physicallyEquivalent((i & 1) == 0 ? second : third));
+                    assertFalse(first.physicallyEquivalent(incompatible));
+                }
+            } catch (Throwable error) {
+                failure.compareAndSet(null, error);
+            }
+        };
+        Thread a = new Thread(work);
+        Thread b = new Thread(work);
+        a.start();
+        b.start();
+        a.join();
+        b.join();
+        if (failure.get() != null) throw new AssertionError(failure.get());
     }
 
     private static ShaderReflection singleOutputManifest(String logicalName, String variableName,

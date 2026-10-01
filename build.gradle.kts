@@ -106,10 +106,12 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:extensions:graphics:gl:core",
     ":libfdx:extensions:graphics:gl:platform:desktop",
     ":libfdx:extensions:graphics:gl:platform:desktop_c",
+    ":libfdx:extensions:graphics:gl:platform:desktop_cpp",
     ":libfdx:extensions:graphics:gl:platform:web",
     ":libfdx:extensions:graphics:vulkan:core",
     ":libfdx:extensions:graphics:vulkan:platform:desktop",
     ":libfdx:extensions:graphics:vulkan:platform:desktop_c",
+    ":libfdx:extensions:graphics:vulkan:platform:desktop_cpp",
     ":libfdx:extensions:graphics:vulkan:platform:android_jni",
     ":libfdx:extensions:graphics:d3d12:core",
     ":libfdx:extensions:graphics:wgpu:core",
@@ -129,11 +131,13 @@ val libfdxPublishableProjectPaths = listOf(
     ":libfdx:extensions:net:webrtc:platform:android_jni",
     ":libfdx:backends:desktop",
     ":libfdx:backends:desktop_c",
+    ":libfdx:backends:desktop_cpp",
     ":libfdx:backends:ios_c",
     ":libfdx:backends:psp",
     ":libfdx:backends:android",
     ":libfdx:backends:web",
-    ":libfdx:backends:c_shared"
+    ":libfdx:backends:c_shared",
+    ":libfdx:backends:cpp_shared"
 )
 
 easyPublishing {

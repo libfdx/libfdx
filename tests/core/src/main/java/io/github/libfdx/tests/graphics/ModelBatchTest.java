@@ -1,5 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
+import io.github.libfdx.testsupport.TestReadiness;
+
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
 import io.github.libfdx.assets.AssetDescriptor;
@@ -45,7 +47,12 @@ import java.util.Locale;
  *
  * @author xpenatan
  */
-public final class ModelBatchTest extends ApplicationAdapter {
+public final class ModelBatchTest extends ApplicationAdapter implements TestReadiness {
+    @Override
+    public boolean readyForAutomaticCompletion() {
+        return created && renderedFrames >= 2;
+    }
+
     private final AssetExecutor executor;
     public static final String DEFAULT_GLTF_ASSET = "data/g3d/gltf/DamagedHelmet/DamagedHelmet.gltf";
 

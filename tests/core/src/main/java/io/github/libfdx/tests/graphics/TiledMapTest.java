@@ -14,6 +14,8 @@ import java.nio.ByteBuffer;
 
 /** One explorable authored Tiled scene; controls exercise the imported map in place. */
 public final class TiledMapTest extends GraphicsParityTest {
+    @Override
+    protected boolean readyForCapture() { return ready; }
     private final AssetExecutor executor;
     private final TileMapRenderer renderer = new TileMapRenderer();
     private final RenderPassDescriptor screen = new RenderPassDescriptor().label("Tiled coastal village")

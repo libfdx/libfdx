@@ -1,0 +1,6 @@
+libfdx-native/desktop/vulkan_cpp/libfdx_vulkan_cpp.cpp
+libfdx-native/desktop/vulkan_cpp/libfdx_desktop_vulkan.cpp
+libfdx-native/desktop/vulkan_cpp/libfdx_desktop_vulkan.h
+libfdx-native/desktop/vulkan_cpp/libfdx_vulkan_minimal.h
+libfdx-native/desktop/vulkan_cpp/libfdx_vulkan_targets.inc
+libfdx-native/desktop/vulkan_cpp/libfdx_vulkan_compute.inc

@@ -17,6 +17,27 @@ pluginManagement {
     }
 }
 
+// Use the compiler checkout directly; no Maven publication is needed while developing it.
+val jnativeCheckout = providers.gradleProperty("jnative.dir").orElse("../jNative")
+val useLocalJNative = providers.gradleProperty("jnative.local").map(String::toBoolean)
+    .orElse(providers.gradleProperty("jnative.dir").isPresent || file(jnativeCheckout.get()).isDirectory)
+if (useLocalJNative.get()) {
+    includeBuild(jnativeCheckout.get()) {
+        name = "jnative"
+        dependencySubstitution {
+            substitute(module("com.github.xpenatan.jNative:jnative-api")).using(project(":jNative:api"))
+            substitute(module("com.github.xpenatan.jNative:jnative-core")).using(project(":jNative:core"))
+            substitute(module("com.github.xpenatan.jNative:jnative-compiler")).using(project(":jNative:compiler"))
+            substitute(module("com.github.xpenatan.jNative:jnative-backend-cpp")).using(project(":jNative:backend:cpp"))
+            substitute(module("com.github.xpenatan.jNative:jnative-toolchain-cmake")).using(project(":jNative:toolchain:cmake"))
+            substitute(module("com.github.xpenatan.jNative:jnative-runtime")).using(project(":jNative:runtime"))
+            substitute(module("com.github.xpenatan.jNative:jnative-interop")).using(project(":jNative:interop"))
+            substitute(module("com.github.xpenatan.jNative:jnative-classlib")).using(project(":jNative:classlib"))
+            substitute(module("com.github.xpenatan.jNative:jnative-cli")).using(project(":jNative:cli"))
+        }
+    }
+}
+
 include(":libfdx:framework:math")
 include(":libfdx:framework:json")
 include(":libfdx:framework:collections")
@@ -65,10 +86,12 @@ include(":libfdx:extensions:graphics:effects")
 include(":libfdx:extensions:graphics:meshoptimizer:core")
 include(":libfdx:extensions:graphics:gl:platform:desktop")
 include(":libfdx:extensions:graphics:gl:platform:desktop_c")
+include(":libfdx:extensions:graphics:gl:platform:desktop_cpp")
 include(":libfdx:extensions:graphics:gl:platform:web")
 include(":libfdx:extensions:graphics:vulkan:core")
 include(":libfdx:extensions:graphics:vulkan:platform:desktop")
 include(":libfdx:extensions:graphics:vulkan:platform:desktop_c")
+include(":libfdx:extensions:graphics:vulkan:platform:desktop_cpp")
 include(":libfdx:extensions:graphics:vulkan:platform:android_jni")
 include(":libfdx:extensions:graphics:d3d12:core")
 include(":libfdx:extensions:graphics:wgpu:core")
@@ -88,7 +111,9 @@ include(":libfdx:extensions:net:webrtc:platform:web")
 include(":libfdx:extensions:net:webrtc:platform:android_jni")
 include(":libfdx:backends:desktop")
 include(":libfdx:backends:c_shared")
+include(":libfdx:backends:cpp_shared")
 include(":libfdx:backends:desktop_c")
+include(":libfdx:backends:desktop_cpp")
 include(":libfdx:backends:ios_c")
 include(":libfdx:backends:psp")
 include(":libfdx:backends:android")
@@ -96,6 +121,7 @@ include(":libfdx:backends:web")
 include(":tests:core")
 include(":tests:platform:desktop")
 include(":tests:platform:desktop_c")
+include(":tests:platform:desktop_cpp")
 include(":tests:platform:android")
 include(":tests:platform:web")
 include(":tests:platform:psp")

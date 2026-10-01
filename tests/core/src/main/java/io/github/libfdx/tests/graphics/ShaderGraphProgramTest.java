@@ -47,7 +47,13 @@ import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphRenderProgram;
  * ShaderProvider contract, and renders an MRT/depth pass without a PBR or
  * renderer shader template.
  */
-public final class ShaderGraphProgramTest extends GraphicsParityTest {
+public final class ShaderGraphProgramTest extends GraphicsParityTest
+        implements io.github.libfdx.testsupport.PerformanceWorkload {
+    @Override
+    public String performanceWorkload() {
+        return "targets=" + (multipleTargets ? 2 : 1) + ";depth=" + explicitDepth
+                + ";size=" + TARGET_WIDTH + "x" + TARGET_HEIGHT;
+    }
     private static final int TARGET_WIDTH = 96;
     private static final int TARGET_HEIGHT = 64;
 

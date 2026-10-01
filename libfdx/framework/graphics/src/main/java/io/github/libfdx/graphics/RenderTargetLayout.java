@@ -14,6 +14,9 @@ public final class RenderTargetLayout {
     private final TextureFormat depthStencilFormat;
     private final int sampleCount;
     private final String structuralKey;
+    // Both objects describe immutable values. Keep one successful validation,
+    // published safely when a layout is shared between device threads.
+    private volatile GraphicsCapabilities validatedCapabilities;
 
     private RenderTargetLayout(TextureFormat[] colorFormats,
             TextureFormat depthStencilFormat, int sampleCount) {
@@ -80,6 +83,7 @@ public final class RenderTargetLayout {
         if (capabilities == null) {
             throw new FdxException("Graphics capabilities cannot be null");
         }
+        if (validatedCapabilities == capabilities) return;
         if (colorFormats.length > capabilities.limits().maxColorAttachments()) {
             throw new FdxException("Render target requires " + colorFormats.length
                     + " color attachments, provider limit is "
@@ -114,6 +118,7 @@ public final class RenderTargetLayout {
         if (!capabilities.supportsSampleCount(sampleCount)) {
             throw new FdxException("Graphics device does not support sample count " + sampleCount);
         }
+        validatedCapabilities = capabilities;
     }
 
     private String computeKey() {

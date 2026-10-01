@@ -45,6 +45,7 @@ public final class NativeProjectWriter {
         Files.createDirectories(sources);
         Files.createDirectories(release);
         copyNativeResources(project.getNativeResourceClasspath(), root.resolve("c/external_cpp"));
+        copyAudioRuntime(project.getNativeResourceClasspath(), release, written);
         patchTeaVmLogFlush(sources.resolve("log.c"), written);
         patchTeaVmEnumCountNarrowing(sources.resolve("core.h"), written);
         patchUnsafeTeaVmLineDirectives(sources, written);
@@ -57,6 +58,40 @@ public final class NativeProjectWriter {
         written.add(writeBuildScript(project, "app_debug", "Debug"));
         written.add(writeBuildScript(project, "app_release", "Release"));
         return Set.copyOf(written);
+    }
+
+    private static void copyAudioRuntime(List<Path> classpath, Path release, Set<Path> written) throws IOException {
+        String os = System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT);
+        String arch = System.getProperty("os.arch").toLowerCase(java.util.Locale.ROOT);
+        String name = os.contains("windows") ? "OpenAL.dll"
+                : os.contains("mac") || os.contains("darwin") ? "libopenal.dylib" : "libopenal.so";
+        String platform = os.contains("windows") ? "windows/x64"
+                : os.contains("mac") || os.contains("darwin")
+                        ? (arch.contains("aarch64") || arch.contains("arm64") ? "macos/arm64" : "macos/x64")
+                        : "linux/x64";
+        String resource = platform + "/org/lwjgl/openal/" + name;
+        Path target = release.resolve(name);
+        for (Path entry : classpath) {
+            if (Files.isDirectory(entry)) {
+                Path source = entry.resolve(resource);
+                if (Files.isRegularFile(source)) {
+                    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+                    written.add(target);
+                    return;
+                }
+            } else if (Files.isRegularFile(entry) && entry.toString().endsWith(".jar")) {
+                try (ZipFile archive = new ZipFile(entry.toFile())) {
+                    ZipEntry source = archive.getEntry(resource);
+                    if (source == null) continue;
+                    try (InputStream input = archive.getInputStream(source)) {
+                        Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    written.add(target);
+                    return;
+                }
+            }
+        }
+        // The audio provider is optional. Its loader reports a missing runtime if selected.
     }
 
     private static void patchTeaVmLogFlush(Path logSource, Set<Path> written) throws IOException {
@@ -377,6 +412,10 @@ public final class NativeProjectWriter {
                 set(LIBFDX_NATIVE_IMAGE_SOURCE "%5$s/c/external_cpp/desktop_c/libfdx_native_image.cpp")
                 set(LIBFDX_DESKTOP_SHADERC_SOURCE "%5$s/c/external_cpp/desktop_c/libfdx_desktop_shaderc.cpp")
                 set(LIBFDX_DESKTOP_VULKAN_SOURCE "%5$s/c/external_cpp/desktop_vulkan/libfdx_desktop_vulkan.cpp")
+                set(LIBFDX_VULKAN_BRIDGE_SOURCE "%5$s/c/external_cpp/desktop_vulkan/libfdx_vulkan_bridge.cpp")
+                set(LIBFDX_OPENGL_BRIDGE_SOURCE "%5$s/c/external_cpp/desktop_c/libfdx_opengl_bridge.cpp")
+                set(LIBFDX_GL_FEATURES_SOURCE "%5$s/c/external_cpp/desktop_c/libfdx_gl_features.cpp")
+                set(LIBFDX_AUDIO_SOURCE "%5$s/c/external_cpp/desktop_c/libfdx_audio.cpp")
                 set(LIBFDX_RUNTIME_FDX_FREETYPE_SOURCE "%5$s/c/external_cpp/runtime_fdx/libfdx_freetype.cpp")
                 if(WIN32)
                   set(LIBFDX_RUNTIME_FDX_LIBRARY "%5$s/c/external_cpp/windows-x64/fdx.dll")
@@ -417,6 +456,15 @@ public final class NativeProjectWriter {
                   list(APPEND SOURCES "${LIBFDX_NATIVE_IMAGE_SOURCE}")
                 endif()
                 list(APPEND SOURCES "${LIBFDX_DESKTOP_SHADERC_SOURCE}")
+                if(EXISTS "${LIBFDX_VULKAN_BRIDGE_SOURCE}")
+                  list(APPEND SOURCES "${LIBFDX_VULKAN_BRIDGE_SOURCE}")
+                endif()
+                if(EXISTS "${LIBFDX_OPENGL_BRIDGE_SOURCE}")
+                  list(APPEND SOURCES "${LIBFDX_OPENGL_BRIDGE_SOURCE}" "${LIBFDX_GL_FEATURES_SOURCE}")
+                endif()
+                if(EXISTS "${LIBFDX_AUDIO_SOURCE}")
+                  list(APPEND SOURCES "${LIBFDX_AUDIO_SOURCE}")
+                endif()
                 set(LIBFDX_HAS_DESKTOP_VULKAN OFF)
                 set(LIBFDX_DESKTOP_VULKAN_USES_SDK OFF)
                 if(EXISTS "${LIBFDX_DESKTOP_VULKAN_SOURCE}")

@@ -15,6 +15,8 @@ import io.github.libfdx.input.*;
 
 /** Interactive WAV player; bounded runs exercise pool saturation and shared resource lifetime. */
 public final class AudioPlaybackTest extends GraphicsParityTest {
+    @Override
+    protected boolean readyForCapture() { return requiresCompletion() ? released : prepared; }
     private static final LoadOp CLEAR = LoadOp.clear(.025f, .035f, .055f, 1);
     private final AssetExecutor executor;
     private Audio audio;

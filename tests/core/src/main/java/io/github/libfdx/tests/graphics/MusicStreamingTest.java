@@ -14,6 +14,8 @@ import java.nio.ByteBuffer;
 
 /** Actual bounded music loading, mixer crossfade, loop/seek and service suspension. */
 public final class MusicStreamingTest extends GraphicsParityTest {
+    @Override
+    protected boolean readyForCapture() { return requiresCompletion() ? released : phase > 0; }
     private static final LoadOp CLEAR = LoadOp.clear(.025f,.035f,.055f,1);
     private final AssetExecutor executor;
     private Audio audio;

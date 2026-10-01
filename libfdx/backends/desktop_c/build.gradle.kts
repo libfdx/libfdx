@@ -44,16 +44,22 @@ dependencies {
 
     api(project(":libfdx:framework:fdx:core"))
     api(project(":libfdx:framework:application"))
+    api(project(":libfdx:framework:audio"))
     api(project(":libfdx:framework:display"))
     api(project(":libfdx:framework:files"))
     api(project(":libfdx:framework:input"))
     api(project(":libfdx:framework:graphics"))
+    api(project(":libfdx:framework:assets:manager"))
     api(project(":libfdx:extensions:graphics:gl:core"))
     api(project(":libfdx:extensions:graphics:vulkan:core"))
     api(libs.teavm.interop)
 
     runtimeOnly(project(":libfdx:framework:fdx:platform:shared"))
     runtimeOnly(project(":libfdx:framework:fdx:platform:desktop"))
+    runtimeOnly("org.lwjgl:lwjgl-openal:${libs.versions.lwjgl.get()}:natives-windows")
+    runtimeOnly("org.lwjgl:lwjgl-openal:${libs.versions.lwjgl.get()}:natives-linux")
+    runtimeOnly("org.lwjgl:lwjgl-openal:${libs.versions.lwjgl.get()}:natives-macos")
+    runtimeOnly("org.lwjgl:lwjgl-openal:${libs.versions.lwjgl.get()}:natives-macos-arm64")
 
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)

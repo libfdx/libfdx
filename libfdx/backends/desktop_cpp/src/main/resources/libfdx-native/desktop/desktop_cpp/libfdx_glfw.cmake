@@ -1,0 +1,15 @@
+if(WIN32)
+    include(FetchContent)
+    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(libfdx_cpp_glfw
+        URL https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip
+        URL_HASH SHA256=b5ec004b2712fd08e8861dc271428f048775200a2df719ccf575143ba749a3e9)
+    FetchContent_MakeAvailable(libfdx_cpp_glfw)
+else()
+    find_package(glfw3 CONFIG REQUIRED)
+endif()
+target_link_libraries(jnative_classes PRIVATE glfw)
+target_link_libraries(jnative_app PRIVATE glfw)

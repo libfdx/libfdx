@@ -1,6 +1,7 @@
 package io.github.libfdx.tests.graphics;
 
 import io.github.libfdx.testsupport.graphics.GraphicsParityTest;
+import io.github.libfdx.testsupport.PerformanceApplication;
 
 import io.github.libfdx.Fdx;
 import io.github.libfdx.core.FdxException;
@@ -53,6 +54,8 @@ public final class ComputeBufferTest extends GraphicsParityTest {
     private Buffer storage;
     private Buffer readback;
     private ShaderResourceSet resources;
+    private ByteBuffer initial;
+    private final boolean performance = PerformanceApplication.enabled();
     private boolean commandsRecorded;
     private boolean verified;
 
@@ -81,7 +84,7 @@ public final class ComputeBufferTest extends GraphicsParityTest {
                 .label("compute readback")
                 .size(BYTE_COUNT)
                 .usage(BufferUsage.READBACK));
-        ByteBuffer initial = ByteBuffer.allocateDirect(BYTE_COUNT)
+        initial = ByteBuffer.allocateDirect(BYTE_COUNT)
                 .order(ByteOrder.nativeOrder());
         for (int value = 1; value <= VALUE_COUNT; value++) {
             initial.putInt(value);
@@ -96,11 +99,15 @@ public final class ComputeBufferTest extends GraphicsParityTest {
 
     @Override
     public void render() {
-        if (commandsRecorded && !verified) {
+        if (commandsRecorded && (!verified || performance)) {
             verifyReadback();
         }
         GraphicsFrame frame = graphics.currentFrame();
-        if (!commandsRecorded) {
+        if (!commandsRecorded || performance) {
+            if (commandsRecorded) {
+                initial.rewind();
+                graphics.device().writeBuffer(storage, initial);
+            }
             ComputePass pass = frame.commandEncoder().beginComputePass(
                     ComputePassDescriptor.create("compute buffer pass"));
             pass.setPipeline(pipeline);
@@ -119,7 +126,7 @@ public final class ComputeBufferTest extends GraphicsParityTest {
                         .label("compute result status"));
         clear.end();
         finishFrame();
-        if (verified && exitAfterFrames == 0L) {
+        if (verified && exitAfterFrames == 0L && !performance) {
             application.requestExit();
         }
     }
@@ -134,8 +141,13 @@ public final class ComputeBufferTest extends GraphicsParityTest {
                         + ": expected " + EXPECTED[i] + ", got " + actual);
             }
         }
+        if (!verified) logger.info("ComputeBufferTest verified [3, 5, 7, 9]");
         verified = true;
-        logger.info("ComputeBufferTest verified [3, 5, 7, 9]");
+    }
+
+    @Override
+    protected boolean readyForCapture() {
+        return verified;
     }
 
     @Override

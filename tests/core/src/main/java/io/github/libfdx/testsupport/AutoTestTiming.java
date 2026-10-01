@@ -47,5 +47,13 @@ final class AutoTestTiming {
         return runningSeconds >= duration;
     }
 
+    boolean update(float deltaSeconds, boolean ready) {
+        if (!ready) {
+            restart();
+            return false;
+        }
+        return update(deltaSeconds);
+    }
+
     boolean loaded() { return loaded; }
 }

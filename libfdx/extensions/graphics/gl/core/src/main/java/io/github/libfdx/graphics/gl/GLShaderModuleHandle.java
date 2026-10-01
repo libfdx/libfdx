@@ -6,6 +6,9 @@ import io.github.libfdx.graphics.shader.ShaderModule;
 import io.github.libfdx.graphics.shader.reflection.ShaderReflection;
 import io.github.libfdx.graphics.shader.target.ShaderTranslatedInterface;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Represents a GL shader module handle.
  *
@@ -16,6 +19,7 @@ final class GLShaderModuleHandle implements ShaderModule {
     private final GLApi gl;
     private final GLResourceDomain resourceDomain;
     private final int program;
+    private final Map<String, Integer> uniformLocations = new HashMap<>();
     private final ShaderReflection reflection;
     private final ShaderTranslatedInterface translatedInterface;
     private final String vertexEntryPoint, fragmentEntryPoint;
@@ -33,7 +37,15 @@ final class GLShaderModuleHandle implements ShaderModule {
 
     GLShaderModuleHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain, int program,
             ShaderReflection reflection, ShaderTranslatedInterface translatedInterface) {
-        this(providerId,gl,resourceDomain,program,reflection,translatedInterface,"vertexMain","fragmentMain");
+        this(
+                providerId,
+                gl,
+                resourceDomain,
+                program,
+                reflection,
+                translatedInterface,
+                "vertexMain",
+                "fragmentMain");
     }
 
     GLShaderModuleHandle(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain, int program,
@@ -50,13 +62,23 @@ final class GLShaderModuleHandle implements ShaderModule {
 
     void requireEntryPoints(String vertex, String fragment) {
         if (!vertexEntryPoint.equals(vertex) || !fragmentEntryPoint.equals(fragment)) {
-            throw new io.github.libfdx.core.FdxException("GL pipeline entry points differ from its linked shader module; "
-                    + "create a module with ShaderModuleDescriptor.entryPoints for the requested pair");
+            throw new io.github.libfdx.core.FdxException(
+                    "GL pipeline entry points differ from its linked shader module; create a module"
+                        + " with ShaderModuleDescriptor.entryPoints for the requested pair");
         }
     }
 
     int program() {
         return program;
+    }
+
+    int uniformLocation(String name) {
+        Integer location = uniformLocations.get(name);
+        if (location == null) {
+            location = gl.uniformLocation(program, name);
+            uniformLocations.put(name, location);
+        }
+        return location;
     }
 
     GLResourceDomain resourceDomain() {

@@ -131,7 +131,15 @@ public final class ShaderParameterBlock {
         int destinationLimit = destination.limit();
         try {
             destination.limit(destination.capacity());
-            for (int offset = 0; offset < size; offset++) {
+            int offset = 0;
+            if (destination.order() == storage.order()) {
+                // Absolute scalar copies preserve positions and raw bits, including
+                // unaligned offsets, without allocating temporary buffer views.
+                for (; offset <= size - Long.BYTES; offset += Long.BYTES) {
+                    destination.putLong(destinationOffset + offset, storage.getLong(offset));
+                }
+            }
+            for (; offset < size; offset++) {
                 destination.put(destinationOffset + offset, storage.get(offset));
             }
         }

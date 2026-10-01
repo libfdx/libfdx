@@ -27,6 +27,7 @@ public final class ShaderParameterLayout {
     private final Map<String, ShaderParameter> parameterTemplates;
     private final ConcurrentHashMap<String, ShaderParameterHandle> handles;
     private final String physicalHash;
+    private volatile long equivalentLayoutIdentity;
 
     private ShaderParameterLayout(long minimumBindingSize, long alignment, ShaderParameter[] parameters) {
         if (minimumBindingSize < 0) {
@@ -139,8 +140,23 @@ public final class ShaderParameterLayout {
     }
 
     public boolean physicallyEquivalent(ShaderParameterLayout other) {
-        return other != null && minimumBindingSize == other.minimumBindingSize && alignment == other.alignment
-                && physicalParametersEqual(parameters, other.parameters);
+        if (this == other) {
+            return true;
+        }
+        if (other == null) {
+            return false;
+        }
+        if (equivalentLayoutIdentity == other.identity) {
+            return true;
+        }
+        if (minimumBindingSize != other.minimumBindingSize || alignment != other.alignment
+                || !physicalParametersEqual(parameters, other.parameters)) {
+            return false;
+        }
+        // Unique identities and immutable physical trees make a successful result
+        // permanent. Retain one identity, not another layout or an unbounded map.
+        equivalentLayoutIdentity = other.identity;
+        return true;
     }
 
     private void validateAndRegister() {
@@ -483,12 +499,27 @@ public final class ShaderParameterLayout {
             return false;
         }
         for (int i = 0; i < first.length; i++) {
-            ShaderParameter a = first[i];
-            ShaderParameter b = second[i];
-            if (!a.valueType().equals(b.valueType()) || a.byteOffset() != b.byteOffset()
-                    || a.occupiedSize() != b.occupiedSize()
-                    || a.minimumRequiredSize() != b.minimumRequiredSize() || a.alignment() != b.alignment()
-                    || !physicalParametersEqual(a.members(), b.members())) {
+            if (!physicalParameterEqual(first[i], second[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean physicalParameterEqual(ShaderParameter first, ShaderParameter second) {
+        if (first == second) {
+            return true;
+        }
+        if (!first.valueType().equals(second.valueType()) || first.byteOffset() != second.byteOffset()
+                || first.occupiedSize() != second.occupiedSize()
+                || first.minimumRequiredSize() != second.minimumRequiredSize()
+                || first.alignment() != second.alignment() || first.memberCount() != second.memberCount()) {
+            return false;
+        }
+        // Both trees are immutable. Indexed traversal avoids the defensive array copies
+        // returned by members() on every draw-time compatibility check.
+        for (int i = 0; i < first.memberCount(); i++) {
+            if (!physicalParameterEqual(first.member(i), second.member(i))) {
                 return false;
             }
         }

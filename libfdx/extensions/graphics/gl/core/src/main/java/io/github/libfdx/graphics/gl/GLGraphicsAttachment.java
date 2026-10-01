@@ -469,7 +469,8 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
                 ComputePassDescriptor descriptor) {
             resourceDomain.requireUsable();
             device.capabilities().require(GraphicsFeature.COMPUTE);
-            if (descriptor == null || !frameStarted) throw new FdxException("GL compute requires a descriptor and active frame");
+            if (descriptor == null || !frameStarted)
+                throw new FdxException("GL compute requires a descriptor and active frame");
             ensurePreviousPassEnded();
             makeCurrent();
             if (computePassCount == computePasses.length) computePasses = Arrays.copyOf(computePasses, computePassCount * 2);
@@ -488,7 +489,8 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
             device.capabilities().require(GraphicsFeature.COMPUTE);
             ensurePreviousPassEnded();
             GLBufferHandle from = GLResources.requireBuffer(source, resourceDomain, "Copy source");
-            GLBufferHandle to = GLResources.requireBuffer(destination, resourceDomain, "Copy destination");
+            GLBufferHandle to =
+                    GLResources.requireBuffer(destination, resourceDomain, "Copy destination");
             if (sourceOffset < 0 || destinationOffset < 0 || size < 0
                     || sourceOffset > from.size() - size || destinationOffset > to.size() - size
                     || from == to && sourceOffset < destinationOffset + size && destinationOffset < sourceOffset + size) {
@@ -534,17 +536,21 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
             var explicitDepth = descriptor.depthStencilAttachment();
             GLTextureHandle depthTexture = null;
             if (explicitDepth != null) {
-                if (!textureBacked) throw new FdxException("GL explicit depth requires an offscreen color attachment");
+                if (!textureBacked)
+                    throw new FdxException(
+                            "GL explicit depth requires an offscreen color attachment");
                 var depthView = GLResources.requireTextureView(explicitDepth.view(), resourceDomain,
                         GLGraphicsAttachment.this, "Depth attachment");
                 if (!depthView.textureBacked() || !depthView.textureHandle().usage().renderAttachment()) {
-                    throw new FdxException("GL depth attachment requires a render attachment texture");
+                    throw new FdxException(
+                            "GL depth attachment requires a render attachment texture");
                 }
                 depthTexture = depthView.textureHandle();
             }
             if (textureBacked) {
                 if (!attachment.textureHandle().usage().renderAttachment()) {
-                    throw new FdxException("Color attachment texture was not created for render attachment usage");
+                    throw new FdxException(
+                            "Color attachment texture was not created for render attachment usage");
                 }
             }
             makeCurrent();
@@ -574,9 +580,13 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
             GLRenderPass renderPass = nextRenderPass();
             int passWidth = textureBacked ? attachment.width() : width;
             int passHeight = textureBacked ? attachment.height() : height;
-            renderPass.begin(textureBacked ? attachment.textureHandle() : null, depthTexture, textureBacked,
-                    width, height, RenderPassCompatibility.of(
-                            validated.targetLayout(), passWidth, passHeight));
+            renderPass.begin(
+                    textureBacked ? attachment.textureHandle() : null,
+                    depthTexture,
+                    textureBacked,
+                    width,
+                    height,
+                    validated.withDimensions(passWidth, passHeight));
             renderPassCount++;
             return renderPass;
         }
@@ -596,7 +606,8 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
 
         void ensurePassesEnded() {
             for (int i = 0; i < computePassCount; i++) {
-                if (!computePasses[i].isEnded()) throw new FdxException("GL compute pass must end before the frame");
+                if (!computePasses[i].isEnded())
+                    throw new FdxException("GL compute pass must end before the frame");
             }
             for (int i = 0; i < renderPassCount; i++) {
                 if (!renderPasses[i].isEnded()) {
@@ -607,10 +618,12 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
 
         private void ensurePreviousPassEnded() {
             if (computePassCount > 0 && !computePasses[computePassCount - 1].isEnded()) {
-                throw new FdxException("Previous GL compute pass must end before another command scope");
+                throw new FdxException(
+                        "Previous GL compute pass must end before another command scope");
             }
             if (renderPassCount > 0 && !renderPasses[renderPassCount - 1].isEnded()) {
-                throw new FdxException("Previous GL render pass must be ended before beginning another pass");
+                throw new FdxException(
+                        "Previous GL render pass must be ended before beginning another pass");
             }
         }
 
@@ -734,6 +747,23 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
      * @author xpenatan
      */
     private final class GLFrameBuffer implements FrameBuffer {
+        private RenderPassCompatibility compatibility;
+
+        @Override
+        public RenderPassCompatibility compatibility() {
+            if (compatibility == null
+                    || compatibility.targetLayout().colorFormat(0) != surfaceFormat) {
+                compatibility =
+                        RenderPassCompatibility.of(
+                                io.github.libfdx.graphics.RenderTargetLayout.color(surfaceFormat),
+                                width,
+                                height);
+            } else {
+                compatibility = compatibility.withDimensions(width, height);
+            }
+            return compatibility;
+        }
+
         /**
          * Returns the color attachment.
          *

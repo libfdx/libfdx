@@ -80,6 +80,18 @@
 #define VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO 26
 #define VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO 27
 #define VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO 28
+#define VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO 29
+#define VK_STRUCTURE_TYPE_MEMORY_BARRIER 46
+#define VK_PIPELINE_BIND_POINT_COMPUTE 1
+#define VK_SHADER_STAGE_COMPUTE_BIT 0x00000020u
+#define VK_DESCRIPTOR_TYPE_STORAGE_IMAGE 3
+#define VK_DESCRIPTOR_TYPE_STORAGE_BUFFER 7
+#define VK_BUFFER_USAGE_STORAGE_BUFFER_BIT 0x00000020u
+#define VK_IMAGE_LAYOUT_GENERAL 1
+#define VK_ACCESS_MEMORY_READ_BIT 0x00008000u
+#define VK_ACCESS_MEMORY_WRITE_BIT 0x00010000u
+#define VK_PIPELINE_STAGE_ALL_COMMANDS_BIT 0x00010000u
+#define VK_PIPELINE_STAGE_HOST_BIT 0x00004000u
 #define VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO 30
 #define VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO 31
 #define VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO 32
@@ -747,6 +759,29 @@ typedef struct VkPipelineShaderStageCreateInfo {
     const VkSpecializationInfo* pSpecializationInfo;
 } VkPipelineShaderStageCreateInfo;
 
+typedef struct VkComputePipelineCreateInfo {
+    VkStructureType sType;
+    const void* pNext;
+    VkFlags flags;
+    VkPipelineShaderStageCreateInfo stage;
+    VkPipelineLayout layout;
+    VkPipeline basePipelineHandle;
+    int32_t basePipelineIndex;
+} VkComputePipelineCreateInfo;
+
+typedef struct VkMemoryBarrier {
+    VkStructureType sType;
+    const void* pNext;
+    VkAccessFlags srcAccessMask;
+    VkAccessFlags dstAccessMask;
+} VkMemoryBarrier;
+
+typedef struct VkBufferCopy {
+    VkDeviceSize srcOffset;
+    VkDeviceSize dstOffset;
+    VkDeviceSize size;
+} VkBufferCopy;
+
 typedef struct VkVertexInputBindingDescription {
     uint32_t binding;
     uint32_t stride;
@@ -956,6 +991,8 @@ typedef PFN_vkVoidFunction (VKAPI_PTR *PFN_vkGetDeviceProcAddr)(VkDevice device,
     _(vkCmdBindPipeline) \
     _(vkCmdBindVertexBuffers) \
     _(vkCmdCopyBufferToImage) \
+    _(vkCmdCopyBuffer) \
+    _(vkCmdDispatch) \
     _(vkCmdCopyImageToBuffer) \
     _(vkCmdDraw) \
     _(vkCmdDrawIndexed) \
@@ -971,6 +1008,7 @@ typedef PFN_vkVoidFunction (VKAPI_PTR *PFN_vkGetDeviceProcAddr)(VkDevice device,
     _(vkCreateFence) \
     _(vkCreateFramebuffer) \
     _(vkCreateGraphicsPipelines) \
+    _(vkCreateComputePipelines) \
     _(vkCreateImage) \
     _(vkCreateImageView) \
     _(vkCreateInstance) \
@@ -1116,6 +1154,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexed(VkCommandBuffer commandBuffer, uint3
 VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkFlags dependencyFlags, uint32_t memoryBarrierCount, const void* pMemoryBarriers, uint32_t bufferMemoryBarrierCount, const void* pBufferMemoryBarriers, uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier* pImageMemoryBarriers);
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy* pRegions);
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy* pRegions);
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferCopy* pRegions);
+VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(VkCommandBuffer commandBuffer, uint32_t x, uint32_t y, uint32_t z);
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(VkDevice device, VkPipelineCache cache, uint32_t count, const VkComputePipelineCreateInfo* infos, const VkAllocationCallbacks* allocator, VkPipeline* pipelines);
 
 #ifdef __cplusplus
 }

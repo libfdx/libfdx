@@ -31,8 +31,7 @@ libfdx {
         minHeapSize.set(64)
         maxHeapSize.set(1024)
         obfuscated.set(false)
-        // TeaVM dev-5: use its fast analyzer and retain short paths for Windows builds.
-        fastGlobalAnalysis.set(true)
+        fastGlobalAnalysis.set(false)
         shortFileNames.set(true)
 
         target("opengl") {
