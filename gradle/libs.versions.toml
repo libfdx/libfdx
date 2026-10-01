@@ -18,7 +18,7 @@ junitPlatform = "1.13.4"
 jmh = "1.37"
 javaWebsocket = "1.5.7"
 lwjgl = "3.4.3"
-teavm = "0.16.0-dev-5"
+teavm = "0.16.0-dev-6"
 webrtcAndroid = "137.7151.05"
 webrtcJava = "0.14.0"
 
