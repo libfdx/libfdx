@@ -33,7 +33,7 @@ libfdx {
 }
 ```
 
-Available families are `desktopJvm`, `android`, `js`, `wasm`, `desktopC`,
+Available families are `desktopJvm`, `android`, `js`, `wasm`, `desktopC`, `desktopCPP`,
 `psp`, and `iosC`. Named targets produce named build/run/generate tasks.
 Inspect the tasks created for the current project rather than relying on a
 copied catalog:
@@ -52,7 +52,7 @@ one project declares several TeaVM C families, request tasks from only one
 native family in a Gradle invocation so the requested target determines TeaVM
 configuration.
 
-For desktop C builds with TeaVM `0.16.0-dev-5`, the tests configure these
+For desktop C builds with TeaVM, the tests configure these
 supported compiler options explicitly:
 
 ```kotlin
@@ -104,6 +104,62 @@ properties can be forwarded as Android intent extras with
 `forwardStringSystemProperty` and `forwardBooleanSystemProperty`. Use
 `forwardStringSystemPropertyPrefix` when a test or application owns a namespace
 of string extras.
+
+### Desktop C++ with jNative
+
+`desktopCPP` generates C++ with jNative and compiles it with CMake. Declare the
+`backend_desktop_cpp` dependency and the desired C++ graphics platform dependencies
+in the launcher project, then configure it like a desktop C target:
+
+```kotlin
+libfdx {
+    assets(layout.projectDirectory.dir("assets"))
+    desktopCPP {
+        mainClass.set("com.example.desktop.GameLauncher")
+        target("opengl") {
+            targetFileName.set("game")
+            runArgs.set(listOf("gl"))
+        }
+    }
+}
+```
+
+For this target, `libfdx_desktop_cpp_opengl_generate_debug` generates the C++
+project, `libfdx_desktop_cpp_opengl_build_debug` also compiles it, and
+`libfdx_desktop_cpp_opengl_run_debug` launches it. Replace `debug` with `release`
+for release builds. Omitting named targets produces the same tasks without the
+`_opengl` segment. A target can override the family's `mainClass` and `runArgs`.
+`-Plibfdx.desktopCPP.runArgs='gl "argument with spaces"'` overrides the complete
+launch argument list.
+
+Outputs default to the owning module's
+`build/dist/desktop-cpp/<target>/<debug|release>` (without `<target>` for unnamed builds).
+Each contains jNative's `native/src` C++ sources,
+CMake project, and `native/<debug|release>` executable directory. Assets and shared
+`libfdx-assets` resources are staged in that executable directory's `assets` folder;
+run tasks use the assets folder as their working directory. Application assets
+override shared resources. Named targets and build types have independent output,
+so multiple C++ tasks can run in one invocation, including alongside desktop C.
+
+Set `outputDir`, `cmakeExecutable`, `generator`, `cmakeArguments`,
+`cmakeBuildArguments`, and `buildTimeoutMinutes` to customize the build.
+`-Plibfdx.desktopCPP.generator=...` also selects the generator. An empty generator
+uses the [desktop backend's host default](../../backends/desktop_cpp/README.md).
+Debug generation includes Java stack traces and source locations; release disables
+them. `debugInformation` overrides that choice for both configurations. The build
+uses `sourceLayout = "PACKAGE_DIRECTORIES"` by default to keep native object
+filenames short; `sourceLayout.set("PACKAGE_FILENAME")` selects flat package filenames.
+The build task lets CMake check its native inputs on each invocation; unchanged Java inputs
+do not require regeneration. Use JDK 25 and the backend's documented native tools.
+
+`desktopCPP.sourceSet` selects the Java source set used for application classes,
+runtime dependencies, and shared assets; it defaults to `main`. This lets one
+module host both native backends while keeping their compiler and native resources
+separate. Keep desktop C on `main`, create a `cpp` source set with the C++ backend
+and provider dependencies, then set `desktopCPP { sourceSet.set("cpp") }`.
+Each family declares its own launcher. The
+[shared native test project](../../../tests/platform/desktop_native/build.gradle.kts)
+demonstrates this setup with separate OpenGL and Vulkan launchers for both families.
 
 ## Bitmap Fonts
 

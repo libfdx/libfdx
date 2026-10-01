@@ -1,11 +1,13 @@
 package io.github.libfdx.backend.desktopcpp;
 
 import com.github.xpenatan.jnative.interop.NativeImport;
+import com.github.xpenatan.jnative.interop.NativeInclude;
 import io.github.libfdx.assets.loaders.ImageData;
 import io.github.libfdx.core.FdxException;
 import java.nio.ByteBuffer;
 
 /** Native image fallback for formats not handled by the portable PNG decoder. */
+@NativeInclude("libfdx_jnative.hpp")
 public final class DesktopCppImageDecoder {
     private DesktopCppImageDecoder() {}
 

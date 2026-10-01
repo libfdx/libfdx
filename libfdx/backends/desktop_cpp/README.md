@@ -4,38 +4,60 @@ Translates the shared libFDX tests to C++ with jNative and runs them through GLF
 with OpenGL or Vulkan. The adjacent `../jNative` checkout is included directly by
 Gradle; override it with `-Pjnative.dir=E:/path/to/jNative`.
 
+The [libFDX Gradle plugin](../../tools/gradle-plugin/README.md#desktop-c-with-jnative)
+exposes this backend as `desktopCPP`, with named debug/release generation, build,
+and run tasks. The shared `tests:platform:desktop_native` module configures both
+`desktopC` and `desktopCPP`. Its `main` source set contains the TeaVM C launchers;
+`cpp` contains the jNative launchers and their dependencies. The C++ plugin targets
+use `DesktopCPPOpenGLTestLauncher` and `DesktopCPPVulkanTestLauncher`.
+
 From the libFDX root:
 
 ```powershell
-.\gradlew.bat :tests:platform:desktop_cpp:run_opengl
-.\gradlew.bat :tests:platform:desktop_cpp:run_vulkan
-.\gradlew.bat :tests:platform:desktop_cpp:run_opengl -PnativeTest=SpriteBatchTest
-.\gradlew.bat :tests:platform:desktop_cpp:run_opengl -PnativeTest=auto -PnativeBuildType=RELEASE
-.\gradlew.bat :tests:platform:desktop_cpp:verify_native
+.\gradlew.bat :tests:platform:desktop_native:libfdx_desktop_cpp_opengl_generate_debug
+.\gradlew.bat :tests:platform:desktop_native:libfdx_desktop_cpp_opengl_build_release
+.\gradlew.bat :tests:platform:desktop_native:libfdx_desktop_cpp_opengl_run_debug -PnativeTest=SpriteBatchTest -PnativeFrames=60
+.\gradlew.bat :tests:platform:desktop_native:libfdx_desktop_cpp_vulkan_run_release -PnativeTest=auto
 ```
+
+Each graphics target has `generate`, `build`, and `run` tasks with explicit
+`debug` and `release` suffixes. Build tasks generate and compile; run tasks also
+build before launching.
 
 The run tasks open the shared test chooser. `nativeTest` selects any registered
 test, `selector`, or `auto`. `nativeFrames=60` bounds chooser and individual runs;
 zero keeps them open. Automatic runs always finish the registry.
-`verify_native` builds release by default and runs the complete shared automatic registry on
-both providers, even if the first provider fails. It fails on test errors and reports
-unsupported capabilities. Deferred scenes finish loading and scripted checks before
+Automatic runs fail on test errors and report unsupported capabilities.
+Deferred scenes finish loading and scripted checks before
 the automatic runner starts its observation interval.
 It does not replace visual or interactive review. Java system properties named
 `libfdx.test.*` are forwarded to the native executable.
 
 Use JDK 25, CMake, and a C++ toolchain. Windows defaults to Visual Studio 2026;
-`nativeGenerator` or `CMAKE_GENERATOR` selects another generator. The build fetches
+`-Plibfdx.desktopCPP.generator=...` or `CMAKE_GENERATOR` selects another generator. The build fetches
 pinned GLFW, GLEW, FreeType, and zlib sources as needed and packages the existing
 runtime fdx shader compiler and OpenAL Soft shared library. Vulkan uses the installed driver. Other desktop
 platforms require their GLFW, GLEW, and OpenGL development packages.
 
-`generate_native` produces C++; `build_native` also compiles. All outputs stay in
-`tests/platform/desktop_cpp/build`. Executables and their runtime libraries are in
-`native/debug` or `native/release`, selected with `-PnativeBuildType=RELEASE`.
-The test process runs from `tests/platform/desktop_cpp/build/assets`, which contains
-the test assets and bundled framework resources. When launching the executable yourself,
-use that working directory and arguments such as `gl selector 0`.
+jNative checks absolute source and object paths against portable length limits
+before native compilation. Long checkout paths or generated class names can
+produce a `JN4010` error; the error identifies the rejected path and its limit.
+
+The shared native-test module overrides `desktopCPP.outputDir` to the root project's
+`build/tests-cpp`, keeping generated C++ object paths within that budget. Its targets
+use `build/tests-cpp/<opengl|vulkan>/<debug|release>`; other applications use the
+[plugin's default output directory](../../tools/gradle-plugin/README.md#desktop-c-with-jnative)
+unless they configure an override.
+Each contains the generated `native/src` sources and CMake
+project. Executables and runtime libraries are in `native/<debug|release>`, with
+test assets and bundled framework resources in its `assets` subdirectory.
+For example, the OpenGL release executable is
+`build/tests-cpp/opengl/release/native/release/libfdx-tests-opengl-desktop-cpp`
+(with `.exe` on Windows). Run tasks use that executable directory's `assets`
+folder as the working directory. When launching the executable yourself, use
+that working directory and arguments such as `selector 0` or `SpriteBatchTest 60`;
+the launcher selects its graphics provider. Override the complete argument list
+with `-Plibfdx.desktopCPP.runArgs='SpriteBatchTest 60'`.
 
 The backend provides native fonts, shader compilation, image decoding, keyboard,
 mouse, text input, clipboard, cursor control, sound playback, and streamed music.
@@ -51,26 +73,21 @@ on bounded workers. OpenGL prepares shader sources on workers; nonblocking drive
 compilation requires the parallel shader compile extension. Final Vulkan context
 disposal waits for its workers and submitted GPU work before releasing the native window.
 
-`verify_performance` builds both release backends and compares the same OpenGL
-`SpriteBatchStressTest` with 20,000 sprites at 960x640. It disables VSync and frame
-limits, warms up for 3 seconds, and measures 8 seconds per run, three times per
-backend in alternating order. Reports and raw logs go to
-`tests/platform/desktop_cpp/build/reports/performance`. The report includes median
-FPS and p95 frame time; the CSV retains every run. Executable hashes and launch
-arguments are saved, and completed measurements survive a later scene failure.
+For an individual native test, `-Dlibfdx.test.performance=true` disables VSync and
+frame limits, measures frame timing, and exits after the measurement. It defaults
+to a 3-second warmup and 8-second measurement. Customize these with
+`libfdx.test.performance.warmupSeconds` and `libfdx.test.performance.seconds`;
+`libfdx.test.performance.minFps` sets an optional FPS floor. Alternatively,
+`libfdx.test.performance.frames` selects a measured frame count, with
+`libfdx.test.performance.warmupFrames` controlling warmup (60 by default).
+Select one scene rather than `auto` and leave `nativeFrames=0` so the scene remains
+open until measurement completes.
 
 ```powershell
-.\gradlew.bat :tests:platform:desktop_cpp:verify_performance
+.\gradlew.bat :tests:platform:desktop_native:libfdx_desktop_cpp_opengl_run_release -PnativeTest=SpriteBatchStressTest -Dlibfdx.test.performance=true
 ```
 
-The default check requires the C++ median FPS to match or exceed the C result.
-Use `-Dperformance.minRatio=0` for measurement without a relative threshold.
-`performance.tests` accepts comma-separated test names; `performance.repeats`,
-`performance.warmupSeconds`, `performance.seconds`, and `performance.minFps`
-customize the run. For an individual native test, `-Dlibfdx.test.performance=true`
-enables the same timing and bounded exit, with settings under
-`libfdx.test.performance.*`. Frame times use the monotonic clock, including
+Frame times use the monotonic clock, including
 presentation; render-call time is reported separately. Run without competing GPU
 workloads. These measurements do not establish performance on other machines.
-The check deliberately fails when the measured C++ performance misses the floor;
-a successful native build by itself does not imply performance parity.
+A run fails when its measured FPS misses the configured floor.

@@ -40,10 +40,9 @@ public final class PerformanceApplication implements ApplicationListener {
 
     public static ApplicationListener wrap(ApplicationListener scene, String testName) {
         if (!enabled()) return scene;
-        if (testName.equals(TestSelector.SELECTOR_NAME)
-                || testName.equals(TestSelector.AUTO_TEST_NAME)) {
+        if (testName.equals(TestSelector.AUTO_TEST_NAME)) {
             throw new IllegalArgumentException(
-                    "Performance measurements require an individual test");
+                    "Performance measurements require a single scene, not the automatic suite");
         }
         return new PerformanceApplication(scene, testName);
     }

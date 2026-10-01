@@ -269,6 +269,7 @@ public final class DesktopCppApplicationBackend implements ApplicationBackend, A
         int lastFramebufferWidth = display.framebufferWidth();
         int lastFramebufferHeight = display.framebufferHeight();
         while (running && !DesktopCppGLFW.windowShouldClose(display.windowHandle())) {
+            long frameStart = System.nanoTime();
             try {
                 DesktopCppGLFW.pollEvents();
                 nativeInput.drain(input, display);
@@ -314,7 +315,7 @@ public final class DesktopCppApplicationBackend implements ApplicationBackend, A
                     }
                 }
                 if (running && !DesktopCppGLFW.windowShouldClose(display.windowHandle())) {
-                    sync(displayConfig.foregroundFps());
+                    sync(displayConfig.vSync() ? 0 : displayConfig.foregroundFps(), frameStart);
                 }
             } catch (Throwable error) {
                 logger.error("jNative application frame failed", error);
@@ -325,15 +326,16 @@ public final class DesktopCppApplicationBackend implements ApplicationBackend, A
         }
     }
 
-    private void sync(int fps) {
+    private void sync(int fps, long frameStart) {
         if (fps <= 0) {
             return;
         }
-        long sleepMillis = 1000L / fps;
-        if (sleepMillis <= 0L) {
-            return;
+        long frameNanos = 1_000_000_000L / fps;
+        long remainingNanos = frameNanos - (System.nanoTime() - frameStart);
+        while (remainingNanos > 0L) {
+            DesktopCppGLFW.waitEventsTimeout(remainingNanos / 1_000_000_000.0);
+            remainingNanos = frameNanos - (System.nanoTime() - frameStart);
         }
-        DesktopCppGLFW.waitEventsTimeout(sleepMillis / 1000.0);
     }
 
     private Throwable shutdown(ApplicationListener listener) {

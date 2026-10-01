@@ -9,6 +9,7 @@ import io.github.libfdx.assets.DefaultAssetManager;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.core.Logger;
 import io.github.libfdx.display.Display;
+import io.github.libfdx.graphics.FrameBuffer;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.LoadOp;
 import io.github.libfdx.graphics.Texture;
@@ -20,12 +21,19 @@ import io.github.libfdx.graphics.g2d.TextureRegion;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Random;
 
 public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
     public static final String NAME = "sprite_batch_stress";
+    public static final String LIBFDX_NAME = "sprite_batch_libfdx";
+    public static final String SPRITES_PROPERTY = "libfdx.benchmark.sprites";
+    public static final int DEFAULT_SPRITE_COUNT = 1500000;
     private static final String SPRITE_ASSET = "benchmark/assets/fdx.png";
-    private static final int SPRITE_COUNT = 8191;
+    private static final int INITIAL_BATCH_CAPACITY = 8191;
+    // Bound even the largest (six vertices, eight floats each) per-sprite path to 1 GiB,
+    // leaving room for the framework SpriteBatch's doubling capacities without signed-int overflow.
+    private static final int MAX_SPRITE_COUNT = (1 << 30) / (6 * 8 * Float.BYTES);
     private static final int DRAW_SIZE = 32;
     private static final float ROTATION_SPEED = 20.0f;
     private static final float MIN_SCALE = 0.5f;
@@ -37,8 +45,12 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
     private final long warmupNanos;
     private final BenchmarkFrameTiming timing;
     private final String resultPath;
-    private final float[] spriteCenterX = new float[SPRITE_COUNT];
-    private final float[] spriteCenterY = new float[SPRITE_COUNT];
+    private final int spriteCount;
+    private final boolean libfdxStyle;
+    private CpuSprite[] cpuSprites;
+    private CpuSpriteBatch cpuBatch;
+    private final float[] spriteCenterX;
+    private final float[] spriteCenterY;
     private Application application;
     private Display display;
     private AssetManager assets;
@@ -61,10 +73,34 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
     private float scaleSpeed = -1.0f;
     private int layoutWidth;
     private int layoutHeight;
+    private String capturePath = System.getProperty("libfdx.benchmark.capture");
+    private final String cpuDiagnostic = System.getProperty("libfdx.benchmark.cpuDiagnostic");
+    private boolean cpuDiagnosticCompleted;
+    private final CpuSpriteFrameProfile frameProfile;
 
+    /**
+     * Preallocates this run's sprite positions using {@link #SPRITES_PROPERTY}, or
+     * {@link #DEFAULT_SPRITE_COUNT} when the property is absent. The count must be
+     * an integer from 1 to {@value #MAX_SPRITE_COUNT}; later property changes do not affect this run.
+     *
+     * @throws FdxException if the configured sprite count is invalid
+     */
     public SpriteBatchStressBenchmark(long exitAfterNanos, String resultPath) {
+        this(exitAfterNanos, resultPath, false);
+    }
+
+    /** Selects the libFDX CPU sprite benchmark when {@code libfdxStyle} is true. */
+    public SpriteBatchStressBenchmark(long exitAfterNanos, String resultPath, boolean libfdxStyle) {
         this.exitAfterNanos = exitAfterNanos;
         this.resultPath = resultPath;
+        this.libfdxStyle = libfdxStyle;
+        if (cpuDiagnostic != null && !libfdxStyle) {
+            throw new FdxException("cpuDiagnostic requires sprite_batch_libfdx");
+        }
+        String configuredCount = System.getProperty(SPRITES_PROPERTY);
+        spriteCount = libfdxStyle && configuredCount == null ? 8191 : parseSpriteCount(configuredCount);
+        spriteCenterX = new float[libfdxStyle ? 0 : spriteCount];
+        spriteCenterY = new float[libfdxStyle ? 0 : spriteCount];
         double warmupSeconds = Double.parseDouble(System.getProperty("libfdx.benchmark.warmupSeconds", "2"));
         if (!Double.isFinite(warmupSeconds) || warmupSeconds < 0.0
                 || warmupSeconds * 1_000_000_000.0 >= Long.MAX_VALUE) {
@@ -72,6 +108,33 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
         }
         warmupNanos = (long)(warmupSeconds * 1_000_000_000.0);
         timing = new BenchmarkFrameTiming(warmupNanos);
+        boolean profile = Boolean.parseBoolean(System.getProperty("libfdx.benchmark.frameProfile", "false"));
+        if (profile && (!libfdxStyle || spriteCount != INITIAL_BATCH_CAPACITY
+                || cpuDiagnostic != null || capturePath != null)) {
+            throw new FdxException("frameProfile requires sprite_batch_libfdx with 8191 sprites and no cpuDiagnostic/capture");
+        }
+        frameProfile = profile ? new CpuSpriteFrameProfile(warmupNanos) : null;
+    }
+
+    /** Returns the number of sprites preallocated for this run. */
+    int spriteCount() {
+        return spriteCount;
+    }
+
+    static int parseSpriteCount(String value) {
+        if (value == null) {
+            return DEFAULT_SPRITE_COUNT;
+        }
+        try {
+            int count = Integer.parseInt(value.trim());
+            if (count > 0 && count <= MAX_SPRITE_COUNT) {
+                return count;
+            }
+        } catch (NumberFormatException ignored) {
+            // Report the property and supported range for all invalid values.
+        }
+        throw new FdxException(SPRITES_PROPERTY + " must be an integer between 1 and " + MAX_SPRITE_COUNT
+                + ": " + value);
     }
 
     @Override
@@ -84,21 +147,29 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
         assets = new DefaultAssetManager(fdx.files());
         logger = fdx.logger();
         G2DAssetLoaders.register(assets, graphics);
-        batch = new SpriteBatch(graphics, SPRITE_COUNT);
+        if (libfdxStyle) {
+            cpuBatch = new CpuSpriteBatch(graphics, INITIAL_BATCH_CAPACITY, spriteCount);
+            cpuBatch.frameProfile = frameProfile;
+        }
+        else batch = new SpriteBatch(graphics, INITIAL_BATCH_CAPACITY);
 
-        assets.load(AssetDescriptor.of(SPRITE_ASSET, Texture.class));
+        assets.load(AssetDescriptor.of(spriteAsset(), Texture.class));
         assetSetup = this::createLoadedAssets;
     }
 
     private void createLoadedAssets() {
-        Texture texture = assets.get(SPRITE_ASSET, Texture.class);
+        Texture texture = assets.get(spriteAsset(), Texture.class);
         sprite = new TextureRegion(texture);
+        if (libfdxStyle) {
+            cpuSprites = new CpuSprite[spriteCount];
+            for (int i = 0; i < spriteCount; i++) cpuSprites[i] = new CpuSprite(texture, 360f * i / spriteCount);
+        }
         configureViewport(framebufferWidth(), framebufferHeight());
 
         created = true;
-        logger.info(logPrefix() + " created with " + SPRITE_COUNT
+        logger.info(logPrefix() + " created with " + spriteCount
                 + " sprites, " + texture.width() + "x" + texture.height()
-                + " " + SPRITE_ASSET + " texture drawn at " + DRAW_SIZE + "x" + DRAW_SIZE
+                + " " + spriteAsset() + " texture drawn at " + DRAW_SIZE + "x" + DRAW_SIZE
                 + runLimitDescription());
     }
 
@@ -121,6 +192,14 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
             assetSetup = null;
             setup.run();
         }
+        if (cpuDiagnostic != null) {
+            if (!cpuDiagnosticCompleted) {
+                CpuSpriteDiagnostic.run(cpuDiagnostic, cpuSprites, cpuBatch);
+                cpuDiagnosticCompleted = true;
+                application.requestExit();
+            }
+            return;
+        }
         long startNanos = System.nanoTime();
         if (layoutWidth != framebufferWidth() || layoutHeight != framebufferHeight()) {
             configureViewport(framebufferWidth(), framebufferHeight());
@@ -134,11 +213,11 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
         if (rotationDegrees >= 360.0f) {
             rotationDegrees -= 360.0f;
         }
-        scale += scaleSpeed * deltaTime;
-        if (scale < MIN_SCALE) {
+        scale += scaleSpeed * deltaTime * (libfdxStyle ? 0.5f : 1f);
+        if (scale <= MIN_SCALE) {
             scale = MIN_SCALE;
             scaleSpeed = 1.0f;
-        } else if (scale > MAX_SCALE) {
+        } else if (scale >= MAX_SCALE) {
             scale = MAX_SCALE;
             scaleSpeed = -1.0f;
         }
@@ -147,20 +226,46 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
         float height = spriteHeight() * scale;
         float originX = width * 0.5f;
         float originY = height * 0.5f;
-        batch.begin(LoadOp.clear(0.0f, 0.0f, 0.0f, 1.0f));
-        if (usesInstancedBatchPath()) {
-            batch.draw(sprite, spriteCenterX, spriteCenterY, SPRITE_COUNT, width, height, originX, originY,
-                    rotationDegrees);
-        } else {
-            for (int i = 0; i < SPRITE_COUNT; i++) {
-                batch.draw(sprite, spriteCenterX[i] - originX, spriteCenterY[i] - originY,
-                        width, height, originX, originY, rotationDegrees);
+        if (libfdxStyle) {
+            long mark = frameProfile == null ? 0 : System.nanoTime();
+            cpuBatch.begin();
+            if (frameProfile != null) {
+                long now = System.nanoTime();
+                frameProfile.add(CpuSpriteFrameProfile.BEGIN, now - mark);
+                mark = now;
             }
+            for (int i = 0; i < cpuSprites.length; i++) {
+                CpuSprite current = cpuSprites[i];
+                current.rotate(ROTATION_SPEED * deltaTime);
+                current.setScale(scale);
+                current.draw(cpuBatch);
+            }
+            if (frameProfile != null) frameProfile.add(CpuSpriteFrameProfile.FILL, System.nanoTime() - mark);
+            cpuBatch.end();
+        } else {
+            batch.begin(LoadOp.clear(0.0f, 0.0f, 0.0f, 1.0f));
+            if (usesInstancedBatchPath()) {
+                batch.draw(sprite, spriteCenterX, spriteCenterY, spriteCount, width, height, originX, originY,
+                        rotationDegrees);
+            } else {
+                for (int i = 0; i < spriteCount; i++) {
+                    batch.draw(sprite, spriteCenterX[i] - originX, spriteCenterY[i] - originY,
+                            width, height, originX, originY, rotationDegrees);
+                }
+            }
+            batch.end();
         }
-        batch.end();
 
+        if (capturePath != null) {
+            captureFrame(capturePath);
+            capturePath = null;
+            // Capture consumes this frame and is excluded from benchmark timing/warmup.
+            startedAtNanos = 0;
+            return;
+        }
         long now = System.nanoTime();
         timing.recordFrame(startNanos, now);
+        if (frameProfile != null) frameProfile.recordFrame(startNanos, now);
         lastRenderNanos = now;
         renderedFrames++;
         reportIfNeeded(now);
@@ -174,6 +279,7 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
     @Override
     public void dispose() {
         assetSetup = null;
+        if (cpuBatch != null) cpuBatch.dispose();
         if (batch != null) {
             batch.dispose();
             batch = null;
@@ -182,8 +288,10 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
             assets.dispose();
             assets = null;
         }
-        if (!created) {
-            throw new FdxException("SpriteBatchStressBenchmark did not create graphics resources");
+        if (!created || cpuDiagnostic != null) {
+            // A create/load failure is already propagating through the backend's
+            // finally block. Do not replace its useful diagnostic with a cleanup error.
+            return;
         }
         long elapsedNanos = elapsedTestNanos();
         if (exitAfterNanos > 0L && elapsedNanos < exitAfterNanos) {
@@ -191,10 +299,10 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
                     + " of " + format(nanosToSeconds(exitAfterNanos)) + " required seconds");
         }
         double averageFrameFps = averageFrameFps(elapsedNanos);
-        double averageSpriteDrawsPerSecond = averageFrameFps * SPRITE_COUNT;
+        double averageSpriteDrawsPerSecond = averageFrameFps * spriteCount;
         logger.info(logPrefix() + " rendered " + renderedFrames + " frames in "
                 + format(nanosToSeconds(elapsedNanos)) + " seconds with rotating/scaling "
-                + SPRITE_COUNT + " " + DRAW_SIZE + "x" + DRAW_SIZE
+                + spriteCount + " " + DRAW_SIZE + "x" + DRAW_SIZE
                 + " sprites, average fps=" + format(averageFrameFps)
                 + ", average sprite draws/s=" + format(averageSpriteDrawsPerSecond));
         if (timing.intervals().count() == 0L) {
@@ -221,10 +329,30 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
         long frameDelta = renderedFrames - lastReportFrame;
         double fps = frameDelta * 1000000000.0 / elapsedNanos;
         logger.info(logPrefix() + " elapsed=" + format(nanosToSeconds(now - startedAtNanos))
-                + " seconds, fps=" + format(fps) + " at " + SPRITE_COUNT
+                + " seconds, fps=" + format(fps) + " at " + spriteCount
                 + " " + DRAW_SIZE + "x" + DRAW_SIZE + " sprites");
         lastReportNanos = now;
         lastReportFrame = renderedFrames;
+    }
+
+    private void captureFrame(String path) {
+        FrameBuffer frameBuffer = graphics.currentFrame().frameBuffer();
+        if (!frameBuffer.supportsReadPixelsRgba8()) {
+            throw new FdxException("Benchmark frame capture is unsupported by this graphics provider");
+        }
+        ByteBuffer pixels = frameBuffer.readPixelsRgba8();
+        byte[] rgb = new byte[layoutWidth * layoutHeight * 3];
+        for (int i = 0; i < layoutWidth * layoutHeight; i++) {
+            rgb[i * 3] = pixels.get(i * 4);
+            rgb[i * 3 + 1] = pixels.get(i * 4 + 1);
+            rgb[i * 3 + 2] = pixels.get(i * 4 + 2);
+        }
+        try (FileOutputStream output = new FileOutputStream(path)) {
+            output.write(("P6\n" + layoutWidth + " " + layoutHeight + "\n255\n").getBytes());
+            output.write(rgb);
+        } catch (IOException error) {
+            throw new FdxException("Could not capture benchmark frame: " + path, error);
+        }
     }
 
     private void writeResult(long elapsedNanos, double averageFrameFps, double averageSpriteDrawsPerSecond) {
@@ -237,7 +365,13 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
             throw new FdxException("Could not create benchmark result directory: " + parent);
         }
         try (FileOutputStream output = new FileOutputStream(file)) {
-            writeProperty(output, "benchmark", NAME);
+            writeProperty(output, "benchmark", libfdxStyle ? LIBFDX_NAME : NAME);
+            writeProperty(output, "workload", libfdxStyle ? "libfdx-cpu-expanded" : "libfdx-stress");
+            if (libfdxStyle) {
+                writeProperty(output, "vertexBytesPerSprite", "80");
+                writeProperty(output, "renderCalls", Integer.toString(cpuBatch.renderCalls()));
+                writeProperty(output, "uploadedVertexBytes", Integer.toString(cpuBatch.uploadedBytes()));
+            }
             writeProperty(output, "label", graphicsApi);
             writeProperty(output, "graphicsProvider", graphicsProvider);
             writeProperty(output, "renderer", graphics.frameMetrics().renderer());
@@ -247,9 +381,10 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
             writeProperty(output, "visible", System.getProperty("libfdx.benchmark.visible", ""));
             writeProperty(output, "vSync", System.getProperty("libfdx.benchmark.vsync", ""));
             writeProperty(output, "foregroundFps", System.getProperty("libfdx.benchmark.foregroundFps", ""));
-            writeProperty(output, "sprites", Integer.toString(SPRITE_COUNT));
+            writeProperty(output, "sprites", Integer.toString(spriteCount));
             writeProperty(output, "spriteSize", DRAW_SIZE + "x" + DRAW_SIZE);
-            writeProperty(output, "texture", SPRITE_ASSET);
+            writeProperty(output, "texture", spriteAsset());
+            writeProperty(output, "textureFormat", "RGBA8_UNORM");
             writeProperty(output, "framebufferWidth", Integer.toString(layoutWidth));
             writeProperty(output, "framebufferHeight", Integer.toString(layoutHeight));
             writeProperty(output, "randomSeed", Long.toString(RANDOM_SEED));
@@ -265,13 +400,21 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
             writeProperty(output, "measuredIntervals", Long.toString(timing.intervals().count()));
             writeProperty(output, "measuredSeconds", format(timing.intervals().totalNanos() / 1_000_000_000.0));
             writeProperty(output, "measuredFrameFps", format(timing.framesPerSecond()));
-            writeProperty(output, "measuredSpriteDrawsPerSecond", format(timing.framesPerSecond() * SPRITE_COUNT));
+            writeProperty(output, "measuredSpriteDrawsPerSecond", format(timing.framesPerSecond() * spriteCount));
             writeProperty(output, "frameTimeDefinition", "render-start-to-render-start; includes presentation and pacing");
             writeProperty(output, "cpuRenderDefinition", "render-start-to-batch-end; excludes presentation and reporting");
             writeProperty(output, "histogramFormat", "upperBoundNanos:count pairs; 32 subdivisions per power of two");
             writeProperty(output, "hitchThresholdMillis", format(FrameTimeHistogram.HITCH_NANOS / 1_000_000.0));
             writeTimings(output, "frameTime", timing.intervals());
             writeTimings(output, "cpuRender", timing.cpu());
+            if (frameProfile != null) {
+                writeProperty(output, "profileIntervals", Long.toString(frameProfile.intervals()));
+                writeProperty(output, "profileOutsideDefinition", "backend/presentation/scheduling/reporting between render end and next render start");
+                for (int i = 0; i < CpuSpriteFrameProfile.NAMES.length; i++) {
+                    writeProperty(output, "profile" + CpuSpriteFrameProfile.NAMES[i] + "TotalNanos",
+                            Long.toString(frameProfile.total(i)));
+                }
+            }
             writeProperty(output, "javaVersion", System.getProperty("java.version", ""));
             writeProperty(output, "javaVm", System.getProperty("java.vm.name", "") + " "
                     + System.getProperty("java.vm.version", ""));
@@ -301,12 +444,21 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
         if (batch != null) {
             batch.viewport(layoutWidth, layoutHeight);
         }
+        if (cpuBatch != null) cpuBatch.viewport(layoutWidth, layoutHeight);
         generateSprites();
     }
 
     private void generateSprites() {
         Random random = new Random(RANDOM_SEED);
-        for (int i = 0; i < SPRITE_COUNT; i++) {
+        if (libfdxStyle) {
+            float availableWidth = Math.max(0, layoutWidth - DRAW_SIZE);
+            float availableHeight = Math.max(0, layoutHeight - DRAW_SIZE);
+            for (int i = 0; i < spriteCount; i++) {
+                cpuSprites[i].setPosition(random.nextFloat() * availableWidth, random.nextFloat() * availableHeight);
+            }
+            return;
+        }
+        for (int i = 0; i < spriteCount; i++) {
             spriteCenterX[i] = toNormalizedX(random.nextInt(layoutWidth));
             spriteCenterY[i] = toNormalizedY(random.nextInt(layoutHeight));
         }
@@ -323,6 +475,8 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
     private float spriteWidth() {
         return 2.0f * DRAW_SIZE / layoutWidth;
     }
+
+    private String spriteAsset() { return SPRITE_ASSET; }
 
     private float spriteHeight() {
         return 2.0f * DRAW_SIZE / layoutHeight;
@@ -358,11 +512,12 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
     }
 
     private boolean usesInstancedBatchPath() {
+        if (libfdxStyle) return false;
         return "gl".equals(graphicsProvider) || "wgpu".equals(graphicsProvider) || "vulkan".equals(graphicsProvider);
     }
 
     private String logPrefix() {
-        return "SpriteBatchStressBenchmark[" + graphicsApi + "]";
+        return (libfdxStyle ? "SpriteBatchBenchmark[" : "SpriteBatchStressBenchmark[") + graphicsApi + "]";
     }
 
     private String runLimitDescription() {

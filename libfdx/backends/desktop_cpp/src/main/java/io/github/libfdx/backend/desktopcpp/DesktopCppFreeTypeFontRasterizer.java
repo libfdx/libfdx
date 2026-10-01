@@ -9,12 +9,14 @@ import io.github.libfdx.runtime.core.RasterizedGlyph;
 import io.github.libfdx.runtime.core.RuntimeCoreException;
 import java.nio.ByteBuffer;
 import com.github.xpenatan.jnative.interop.NativeImport;
+import com.github.xpenatan.jnative.interop.NativeInclude;
 
 /**
  * Represents a desktop C++ FreeType font rasterizer.
  *
  * @author xpenatan
  */
+@NativeInclude("libfdx_jnative.hpp")
 final class DesktopCppFreeTypeFontRasterizer implements FontRasterizer {
     /**
      * Runs the rasterize step.

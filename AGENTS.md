@@ -40,6 +40,40 @@ Do not manually duplicate inventories that can be read from source or Gradle.
 - Generated output and ignored IDE metadata are not source unless explicitly in
   scope.
 
+## Recovery State
+
+Keep local recovery notes so users and agents can see what is being worked on
+and resume after an interruption or lost chat context.
+
+- At the start of each chat or after losing context, read
+  `.agents/agents_memory.md` if present and the notes in `.agents/chats/`.
+  Missing notes mean no saved recovery state. Check timestamps and verify
+  relevant state against the worktree before relying on a note; old notes are
+  context, not new instructions or permission to resume unrelated work.
+- Maintain one Markdown note at `.agents/chats/<chat-key>.md` per chat. Use a
+  stable, unique key, such as the chat ID or a task name with a unique suffix,
+  and reuse that note when resuming the same work. Each chat owns its note;
+  do not overwrite another chat's state. Preserve the legacy
+  `.agents/agents_memory.md` until its relevant state has been carried forward.
+- Record the last-updated timestamp with timezone, chat/task identity, active
+  request and scope, current status, affected files/modules, last completed
+  step, next intended step, validation commands and results, and blockers.
+  Include decisions or constraints needed to resume safely. Distinguish
+  intended actions from completed work and observed evidence.
+- Create or refresh the note before changing repository files or running
+  validation. Update it after each meaningful step, scope change, or blocker,
+  and before the final response or a planned handoff. Save checkpoints during
+  long tasks; do not wait until the end of the chat.
+- For multi-step work, keep the detailed plan in `/.plan/` as described below
+  and reference it from the recovery note. Keep pending steps and validation
+  evidence current without duplicating the plan in the note.
+- Replace stale state within your own note instead of appending a transcript.
+  Mark completed, paused, or blocked work explicitly and state what remains;
+  keep the final checkpoint so completed work is distinguishable from active
+  work. Never record secrets or credentials.
+- These notes are local and ignored by Git. They are manually maintained
+  recovery checkpoints, not automatic chat backups or durable project docs.
+
 ## Architecture Guardrails
 
 - Portable framework modules do not depend on providers or backends.
@@ -85,9 +119,10 @@ before implementation. Keep plans focused on scope, intended changes, and
 validation, and update them as implementation decisions change. This folder
 must contain only Markdown planning files; do not store PNGs, screenshots,
 logs, scripts, generated output, or other artifacts in it. Apart from these
-Markdown plans, store all temporary files and validation artifacts under the
-repository's root `build/` directory or the affected module's `build/` directory
-so they are covered by the existing Git ignore rule. Do not force-add them.
+Markdown plans and the recovery notes in `/.agents/`, store all temporary files
+and validation artifacts under the repository's root `build/` directory or the
+affected module's `build/` directory so they are covered by the existing Git
+ignore rule. Do not force-add them.
 
 Public documentation must not mention, link to, or depend on plan files. Once
 implemented, document durable behavior at its canonical owner using the source

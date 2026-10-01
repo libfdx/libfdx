@@ -15,6 +15,7 @@ internal const val BITMAP_FONT_TOOL_CLASS = "io.github.libfdx.tools.font.BitmapF
 internal const val SHADER_VALIDATION_TOOL_CLASS = "io.github.libfdx.tools.shader.ShaderValidationTool"
 internal const val WEB_APP_TOOL_CLASS = "io.github.libfdx.backend.web.WebAppTool"
 internal const val DESKTOP_C_PROJECT_TOOL_CLASS = "io.github.libfdx.backend.desktopc.NativeProjectTool"
+internal const val DESKTOP_CPP_PROJECT_TOOL_CLASS = "io.github.libfdx.backend.desktopcpp.NativeProjectTool"
 internal const val PSP_PROJECT_TOOL_CLASS = "io.github.libfdx.backend.psp.PspProjectTool"
 internal const val IOS_C_PROJECT_TOOL_CLASS = "io.github.libfdx.backend.iosc.IosCProjectTool"
 

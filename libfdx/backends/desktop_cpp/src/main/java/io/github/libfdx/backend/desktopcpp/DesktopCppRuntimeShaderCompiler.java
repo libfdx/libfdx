@@ -11,12 +11,14 @@ import io.github.libfdx.runtime.core.shader.RuntimeShaderReflection;
 import io.github.libfdx.runtime.core.shader.RuntimeShaderTargetInterface;
 import java.nio.charset.StandardCharsets;
 import com.github.xpenatan.jnative.interop.NativeImport;
+import com.github.xpenatan.jnative.interop.NativeInclude;
 
 /**
  * Desktop C++ runtime shader compiler backed by the packaged runtime fdx library.
  *
  * @author xpenatan
  */
+@NativeInclude("libfdx_jnative.hpp")
 final class DesktopCppRuntimeShaderCompiler implements RuntimeShaderCompiler {
     private static final int MAX_DIAGNOSTIC_BYTES = 1024 * 1024;
 

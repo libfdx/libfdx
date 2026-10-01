@@ -20,7 +20,7 @@ final class FrameTimeHistogram {
         }
         int bucket = 0;
         if (nanos > 0L) {
-            int exponent = 63 - Long.numberOfLeadingZeros(nanos);
+            int exponent = exponent(nanos);
             int shift = Math.max(0, exponent - 5);
             bucket = 1 + exponent * SUBDIVISIONS + (int)((nanos - (1L << exponent)) >>> shift);
         }
@@ -81,6 +81,32 @@ final class FrameTimeHistogram {
             output.append(upperBoundNanos(i)).append(':').append(buckets[i]);
         }
         return output.toString();
+    }
+
+    // Primitive shifts keep recording compatible with jNative's class library.
+    private static int exponent(long value) {
+        int exponent = 0;
+        if (value >= (1L << 32)) {
+            value >>>= 32;
+            exponent += 32;
+        }
+        if (value >= (1L << 16)) {
+            value >>>= 16;
+            exponent += 16;
+        }
+        if (value >= (1L << 8)) {
+            value >>>= 8;
+            exponent += 8;
+        }
+        if (value >= (1L << 4)) {
+            value >>>= 4;
+            exponent += 4;
+        }
+        if (value >= (1L << 2)) {
+            value >>>= 2;
+            exponent += 2;
+        }
+        return exponent + (value >= 2L ? 1 : 0);
     }
 
     private long upperBoundNanos(int bucket) {

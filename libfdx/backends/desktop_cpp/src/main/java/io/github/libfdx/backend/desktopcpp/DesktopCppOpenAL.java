@@ -1,10 +1,12 @@
 package io.github.libfdx.backend.desktopcpp;
 
 import com.github.xpenatan.jnative.interop.NativeImport;
+import com.github.xpenatan.jnative.interop.NativeInclude;
 
 import java.nio.ByteBuffer;
 
 /** Native OpenAL operations. The playback service owns all handles. */
+@NativeInclude("libfdx_jnative.hpp")
 final class DesktopCppOpenAL {
     static final int AL_FALSE = 0;
     static final int AL_TRUE = 1;

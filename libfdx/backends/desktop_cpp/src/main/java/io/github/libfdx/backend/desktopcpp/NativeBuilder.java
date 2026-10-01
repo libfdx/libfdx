@@ -27,11 +27,7 @@ public final class NativeBuilder {
                         .buildRoot(buildRoot)
                         .nativeSymbols(NativeSymbols.NONE)
                         .crashReports(CrashReportMode.OFF);
-        String generator = System.getenv().getOrDefault("CMAKE_GENERATOR", "");
-        if (generator.isEmpty() && System.getProperty("os.name").startsWith("Windows")) {
-            generator = "Visual Studio 18 2026";
-        }
-        builder.generator(generator);
+        builder.generator(defaultGenerator());
         try {
             Path classes = buildRoot.resolve("native-classes");
             String replacement = "io/github/libfdx/assets/loaders/ImageAssetLoader.class";
@@ -52,6 +48,14 @@ public final class NativeBuilder {
             throw new CompilerException("Could not load desktop C++ native resources", error);
         }
         return builder;
+    }
+
+    static String defaultGenerator() {
+        String generator = System.getenv().getOrDefault("CMAKE_GENERATOR", "");
+        if (generator.isEmpty() && System.getProperty("os.name").startsWith("Windows")) {
+            generator = "Visual Studio 18 2026";
+        }
+        return generator;
     }
 
     private static void registerRuntime(

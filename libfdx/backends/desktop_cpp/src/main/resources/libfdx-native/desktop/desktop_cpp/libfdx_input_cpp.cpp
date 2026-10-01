@@ -6,21 +6,28 @@
 namespace {
 struct Input {
     std::deque<std::array<double, 8> > events;
+    double cursorX = 0;
+    double cursorY = 0;
     GLFWcursor* cursors[8] = {};
     ~Input() { for (auto cursor : cursors) if (cursor) glfwDestroyCursor(cursor); }
 };
 GLFWwindow* window(int64_t value) { return reinterpret_cast<GLFWwindow*>(static_cast<intptr_t>(value)); }
 Input* input(GLFWwindow* value) { return static_cast<Input*>(glfwGetWindowUserPointer(value)); }
 void event(GLFWwindow* value, int kind, double a, double b) {
-    double x, y;
     int left, top;
-    glfwGetCursorPos(value, &x, &y);
+    auto state = input(value);
+    double x = state->cursorX, y = state->cursorY;
     glfwGetWindowPos(value, &left, &top);
     input(value)->events.push_back({{static_cast<double>(kind), a, b, x, y, x + left, y + top, 0}});
 }
 void key(GLFWwindow* value, int key_code, int, int action, int) { event(value, 1, key_code, action); }
 void text(GLFWwindow* value, unsigned codepoint) { event(value, 2, codepoint, 0); }
-void motion(GLFWwindow* value, double, double) { event(value, 3, 0, 0); }
+void motion(GLFWwindow* value, double x, double y) {
+    auto state = input(value);
+    state->cursorX = x;
+    state->cursorY = y;
+    event(value, 3, 0, 0);
+}
 void button(GLFWwindow* value, int button_code, int action, int) { event(value, 4, button_code, action); }
 void scroll(GLFWwindow* value, double x, double y) { event(value, 5, x, y); }
 void focus(GLFWwindow* value, int focused) { event(value, 6, focused, 0); }
@@ -36,6 +43,8 @@ extern "C" void fdx_cpp_input_install(int64_t handle) {
     auto value = window(handle);
     if (glfwGetWindowUserPointer(value)) throw std::logic_error("Native window input already installed");
     std::unique_ptr<Input> state(new Input());
+    // Seed once; later OS queries may see a position beyond the current queued callback.
+    glfwGetCursorPos(value, &state->cursorX, &state->cursorY);
     glfwSetWindowUserPointer(value, state.release());
     glfwSetKeyCallback(value, key);
     glfwSetCharCallback(value, text);

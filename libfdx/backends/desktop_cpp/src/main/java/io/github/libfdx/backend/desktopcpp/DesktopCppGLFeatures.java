@@ -1,10 +1,12 @@
 package io.github.libfdx.backend.desktopcpp;
 
 import com.github.xpenatan.jnative.interop.NativeImport;
+import com.github.xpenatan.jnative.interop.NativeInclude;
 
 import java.nio.ByteBuffer;
 
 /** Native entry points for compute, multiple targets, and complete pipeline state. */
+@NativeInclude("libfdx_jnative.hpp")
 final class DesktopCppGLFeatures {
     private DesktopCppGLFeatures() {}
 

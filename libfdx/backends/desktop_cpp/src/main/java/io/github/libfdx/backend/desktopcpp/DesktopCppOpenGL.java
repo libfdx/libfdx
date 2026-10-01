@@ -1,6 +1,7 @@
 package io.github.libfdx.backend.desktopcpp;
 
 import com.github.xpenatan.jnative.interop.NativeImport;
+import com.github.xpenatan.jnative.interop.NativeInclude;
 
 import java.nio.ByteBuffer;
 
@@ -9,6 +10,7 @@ import java.nio.ByteBuffer;
  *
  * @author xpenatan
  */
+@NativeInclude("libfdx_jnative.hpp")
 final class DesktopCppOpenGL {
     @NativeImport("fdx_cpp_gl_parallel_shader_compilation")
     static native boolean enableParallelShaderCompilation(int workers);

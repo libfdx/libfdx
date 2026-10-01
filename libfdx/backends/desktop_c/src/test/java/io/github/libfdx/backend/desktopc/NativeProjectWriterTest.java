@@ -65,6 +65,28 @@ final class NativeProjectWriterTest {
         assertTrue(aggregate.indexOf("#  include <windows.h>") < aggregate.indexOf("#    include <GL/glew.h>"));
     }
 
+    @Test
+    void extractsAndIncludesPointerShimInNativeBuild() throws Exception {
+        Path root = temporaryDirectory.resolve("pointer");
+        Path sources = root.resolve("c/src");
+        Files.createDirectories(sources);
+        Path resources = Path.of(getClass().getResource("/libfdx-native/desktop/desktop_c/libfdx_input.c")
+                .toURI()).getParent().getParent().getParent().getParent();
+        NativeProjectWriter.write(NativeProject.builder()
+                .buildRoot(root)
+                .generatedSourcesDirectory(sources)
+                .releaseDirectory(root.resolve("c/release"))
+                .nativeResourceClasspath(java.util.List.of(resources))
+                .projectName("test")
+                .build());
+        assertEquals(Files.readString(resources.resolve("libfdx-native/desktop/desktop_c/libfdx_input.c")),
+                Files.readString(root.resolve("c/external_cpp/desktop_c/libfdx_input.c")));
+        assertTrue(Files.isRegularFile(root.resolve("c/external_cpp/desktop_c/libfdx_input.h")));
+        assertTrue(Files.readString(root.resolve("CMakeLists.txt"))
+                .contains("list(APPEND SOURCES \"" + root.toAbsolutePath().toString().replace('\\', '/')
+                        + "/c/external_cpp/desktop_c/libfdx_input.c\")"));
+    }
+
     private void verifyLineDirectivePatch(String newline, String name) throws Exception {
         Path root = temporaryDirectory.resolve("lines-" + name);
         Path sources = root.resolve("c/src");

@@ -94,6 +94,7 @@ fun JavaExec.configureSpriteBatchStressRun(
     systemProperty("libfdx.benchmark.result", resultFile.absolutePath)
     systemProperty("libfdx.benchmark.seconds", System.getProperty("libfdx.benchmark.seconds", "8"))
     systemProperty("libfdx.benchmark.warmupSeconds", System.getProperty("libfdx.benchmark.warmupSeconds", "2"))
+    System.getProperty("libfdx.benchmark.sprites")?.let { systemProperty("libfdx.benchmark.sprites", it) }
     listOf("device", "driver", "revision").forEach { field ->
         systemProperty("libfdx.benchmark.$field", System.getProperty("libfdx.benchmark.$field", "unspecified"))
     }
@@ -139,6 +140,25 @@ val benchmarkSpriteBatchStressGlJni = tasks.register<JavaExec>("benchmark_sprite
         glRuntimeClasspath
     )
     useLwjglJniOnJava25()
+}
+
+tasks.register<JavaExec>("benchmark_sprite_batch_libfdx_gl_jni") {
+    group = "benchmark"
+    description = "Runs the libFDX CPU sprite benchmark through libFDX OpenGL on the JVM."
+    classpath = sourceSets["main"].runtimeClasspath + glRuntimeClasspath
+    mainClass.set(benchmarkMainClass)
+    workingDir = rootProject.projectDir
+    useLwjglJniOnJava25()
+    systemProperty("libfdx.benchmark.name", "sprite_batch_libfdx")
+    systemProperty("libfdx.benchmark.graphics", "gl")
+    systemProperty("libfdx.benchmark.seconds", System.getProperty("libfdx.benchmark.seconds", "20"))
+    systemProperty("libfdx.benchmark.warmupSeconds", "5")
+    systemProperty("libfdx.benchmark.visible", "true")
+    systemProperty("libfdx.benchmark.vsync", "false")
+    systemProperty("libfdx.benchmark.foregroundFps", "0")
+    systemProperty("libfdx.benchmark.result", layout.buildDirectory.file("benchmark-results/libfdx-cpu-jvm.properties").get().asFile.absolutePath)
+    System.getProperty("libfdx.benchmark.sprites")?.let { systemProperty("libfdx.benchmark.sprites", it) }
+    System.getProperty("libfdx.benchmark.capture")?.let { systemProperty("libfdx.benchmark.capture", it) }
 }
 
 val benchmarkSpriteBatchStressWgpuJni = tasks.register<JavaExec>("benchmark_sprite_batch_stress_wgpu_jni") {
@@ -262,7 +282,7 @@ val generateSpriteBatchStressReport = tasks.register("generate_sprite_batch_stre
             appendLine()
             appendLine("- Generated: ${Instant.now()}")
             appendLine("- Report: `${reportFile.relativeTo(rootProject.projectDir).invariantSeparatorsPath}`")
-            appendLine("- Benchmark: 8191 rotating/scaling sprites")
+            appendLine("- Benchmark: rotating/scaling sprites; count is recorded per run")
             appendLine("- Sprite: 32x32 from `benchmark/assets/fdx.png`")
             appendLine("- Runtime: vSync off, foreground frame limiter off; visibility is recorded per run")
             appendLine("- Backend tuning: Vulkan and Direct3D 12 use 3 frames in flight; WGPU skips per-frame instance event polling")
@@ -278,10 +298,10 @@ val generateSpriteBatchStressReport = tasks.register("generate_sprite_batch_stre
                 appendLine("| ${index + 1} | ${result.getProperty("label")} | ${result.getProperty("graphicsProvider")} | ${result.getProperty("javaVersion")} | ${result.getProperty("measuredIntervals")} | ${result.getProperty("measuredSeconds")} | ${format(fps)} | $spriteDrawsPerSecond | ${format(relative)}% |")
             }
             appendLine()
-            appendLine("| Graphics Option | Visible | Resolution | Warm-up (s) | p50 (ms) | p95 (ms) | p99 (ms) | Worst (ms) | Hitches | CPU mean (ms) |")
-            appendLine("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+            appendLine("| Graphics Option | Sprites | Visible | Resolution | Warm-up (s) | p50 (ms) | p95 (ms) | p99 (ms) | Worst (ms) | Hitches | CPU mean (ms) |")
+            appendLine("| --- | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
             results.forEach { result ->
-                appendLine("| ${result.getProperty("label")} | ${result.getProperty("visible")} | ${result.getProperty("framebufferWidth")}x${result.getProperty("framebufferHeight")} | ${result.getProperty("warmupSeconds")} | ${result.getProperty("frameTimeP50Millis")} | ${result.getProperty("frameTimeP95Millis")} | ${result.getProperty("frameTimeP99Millis")} | ${result.getProperty("frameTimeWorstMillis")} | ${result.getProperty("frameTimeHitches")} | ${result.getProperty("cpuRenderMeanMillis")} |")
+                appendLine("| ${result.getProperty("label")} | ${result.getProperty("sprites")} | ${result.getProperty("visible")} | ${result.getProperty("framebufferWidth")}x${result.getProperty("framebufferHeight")} | ${result.getProperty("warmupSeconds")} | ${result.getProperty("frameTimeP50Millis")} | ${result.getProperty("frameTimeP95Millis")} | ${result.getProperty("frameTimeP99Millis")} | ${result.getProperty("frameTimeWorstMillis")} | ${result.getProperty("frameTimeHitches")} | ${result.getProperty("cpuRenderMeanMillis")} |")
             }
             appendLine()
             if (fastest != null && slowest != null) {

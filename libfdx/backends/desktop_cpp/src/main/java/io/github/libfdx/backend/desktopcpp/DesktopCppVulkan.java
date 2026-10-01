@@ -1,6 +1,7 @@
 package io.github.libfdx.backend.desktopcpp;
 
 import com.github.xpenatan.jnative.interop.NativeImport;
+import com.github.xpenatan.jnative.interop.NativeInclude;
 
 import io.github.libfdx.core.FdxException;
 
@@ -11,6 +12,7 @@ import java.nio.ByteBuffer;
  *
  * @author xpenatan
  */
+@NativeInclude("libfdx_jnative.hpp")
 final class DesktopCppVulkan {
     private DesktopCppVulkan() {}
 

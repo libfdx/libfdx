@@ -8,6 +8,19 @@ Establish correctness before using benchmark results as evidence. Compare
 providers with the same scene, workload, duration, visibility, and frame-limit
 settings.
 
+The [jNative performance comparisons](JNATIVE_PERFORMANCE.md) list measurements,
+runtime comparisons, and the next target.
+
+For the libFDX CPU sprite benchmark, the desktop C and C++ launchers accept
+`--frameProfile=true` with `--benchmark=sprite_batch_libfdx --sprites=8191`.
+Result properties include unrounded nanosecond totals for coarse frame components,
+paired with the measured frame intervals. This diagnostic excludes capture and
+`cpuDiagnostic` modes.
+Outside-render time includes backend work, presentation, reporting, and scheduling;
+the phase values measure CPU wall time, not GPU execution. `--cpuDiagnostic=staging`
+instead isolates the full float-array-to-direct-buffer transfer and checks every
+output float's raw bits outside timing.
+
 ## Desktop JVM
 
 Run the maintained desktop provider set with:

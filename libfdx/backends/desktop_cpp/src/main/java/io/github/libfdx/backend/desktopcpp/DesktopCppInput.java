@@ -1,6 +1,7 @@
 package io.github.libfdx.backend.desktopcpp;
 
 import com.github.xpenatan.jnative.interop.NativeImport;
+import com.github.xpenatan.jnative.interop.NativeInclude;
 
 import io.github.libfdx.input.Cursor;
 import io.github.libfdx.input.CursorShape;
@@ -9,6 +10,7 @@ import io.github.libfdx.input.Key;
 import io.github.libfdx.input.MouseButton;
 
 /** Drains GLFW events on the application thread and owns its native cursor. */
+@NativeInclude("libfdx_jnative.hpp")
 final class DesktopCppInput implements Cursor {
     private static final Key[] KEYS = Key.values();
     private static final MouseButton[] BUTTONS = MouseButton.values();
@@ -57,7 +59,8 @@ final class DesktopCppInput implements Cursor {
                 else input.dispatchPointerDown(button, x, y, screenX, screenY);
                 break;
             case 5:
-                input.dispatchScrolled(x, y, screenX, screenY, (float) event[1], (float) event[2]);
+                // GLFW scroll Y is positive upward; framework scroll Y is positive downward.
+                input.dispatchScrolled(x, y, screenX, screenY, (float) event[1], -(float) event[2]);
                 break;
             case 6:
                 if (value == 0) releasePressed(input);

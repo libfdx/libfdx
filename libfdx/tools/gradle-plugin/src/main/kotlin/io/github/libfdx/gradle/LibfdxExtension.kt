@@ -54,6 +54,10 @@ open class LibfdxExtension @Inject constructor(
         objects.newInstance(LibfdxDesktopCExtension::class.java, project, objects)
     }
 
+    val desktopCPP: LibfdxDesktopCppExtension by lazy {
+        objects.newInstance(LibfdxDesktopCppExtension::class.java, project, objects)
+    }
+
     val desktopJvm: LibfdxDesktopJvmExtension by lazy {
         objects.newInstance(LibfdxDesktopJvmExtension::class.java, project, objects)
     }
@@ -99,6 +103,11 @@ open class LibfdxExtension @Inject constructor(
     fun desktopC(action: Action<in LibfdxDesktopCExtension>) {
         declaredTargets.add(LibfdxTarget.DESKTOP_C)
         action.execute(desktopC)
+    }
+
+    fun desktopCPP(action: Action<in LibfdxDesktopCppExtension>) {
+        declaredTargets.add(LibfdxTarget.DESKTOP_CPP)
+        action.execute(desktopCPP)
     }
 
     fun desktopJvm(action: Action<in LibfdxDesktopJvmExtension>) {
@@ -696,6 +705,7 @@ internal enum class LibfdxTarget {
     DESKTOP_JVM,
     ANDROID,
     DESKTOP_C,
+    DESKTOP_CPP,
     IOS_C,
     PSP
 }

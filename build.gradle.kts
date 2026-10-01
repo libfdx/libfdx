@@ -290,16 +290,14 @@ tasks.register("benchmark_desktop") {
     dependsOn(":benchmark:platform:desktop:benchmark_desktop")
 }
 
-tasks.register("benchmark_desktop_c_debug") {
-    group = "benchmark"
-    description = "Runs the full desktop_c Debug benchmark suite and generates Markdown reports."
-    dependsOn(":benchmark:platform:desktop_c:benchmark_desktop_c_debug")
-}
-
-tasks.register("benchmark_desktop_c_release") {
-    group = "benchmark"
-    description = "Runs the full desktop_c Release benchmark suite and generates Markdown reports."
-    dependsOn(":benchmark:platform:desktop_c:benchmark_desktop_c_release")
+listOf("c", "cpp", "native").forEach { runtime ->
+    listOf("debug", "release").forEach { mode ->
+        tasks.register("benchmark_desktop_${runtime}_$mode") {
+            group = "benchmark"
+            description = "Runs the desktop_$runtime $mode benchmark suite and generates Markdown reports."
+            dependsOn(":benchmark:platform:desktop_native:benchmark_desktop_${runtime}_$mode")
+        }
+    }
 }
 
 val pagesStagingDir = layout.buildDirectory.dir("pages")

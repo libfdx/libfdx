@@ -38,6 +38,7 @@ private data class LibfdxToolClasspaths(
     val shader: Configuration,
     val web: Configuration,
     val desktopC: Configuration,
+    val desktopCpp: Configuration,
     val psp: Configuration,
     val iosC: Configuration
 )
@@ -124,6 +125,12 @@ class LibfdxGradlePlugin : Plugin<Project> {
                 "libfdxDesktopCToolClasspath",
                 ":libfdx:backends:desktop_c",
                 "backend_desktop_c"
+            ),
+            createToolClasspath(
+                project,
+                "libfdxDesktopCppToolClasspath",
+                ":libfdx:backends:desktop_cpp",
+                "backend_desktop_cpp"
             ),
             createToolClasspath(
                 project,
@@ -571,6 +578,9 @@ class LibfdxGradlePlugin : Plugin<Project> {
             registerDesktopCTargetTasks(project, extension)
             registerDesktopCTasks(project, extension, toolClasspaths.desktopC)
         }
+        if(extension.isDeclared(LibfdxTarget.DESKTOP_CPP)) {
+            registerDesktopCppTasks(project, extension, toolClasspaths.desktopCpp)
+        }
         if(extension.isDeclared(LibfdxTarget.PSP)) {
             registerPspTargetTasks(project, extension)
             registerPspTasks(project, extension, toolClasspaths.psp)
@@ -786,15 +796,19 @@ class LibfdxGradlePlugin : Plugin<Project> {
         }
     }
 
-    private fun usesLocalLibfdxRuntime(project: Project): Boolean {
-        return hasLocalLibfdxRuntimeDependency(project, mutableSetOf())
+    private fun usesLocalLibfdxRuntime(project: Project, configurationName: String = "runtimeClasspath"): Boolean {
+        return hasLocalLibfdxRuntimeDependency(project, mutableSetOf(), configurationName)
     }
 
-    private fun hasLocalLibfdxRuntimeDependency(project: Project, visited: MutableSet<String>): Boolean {
+    private fun hasLocalLibfdxRuntimeDependency(
+        project: Project,
+        visited: MutableSet<String>,
+        configurationName: String = "runtimeClasspath"
+    ): Boolean {
         if(!visited.add(project.path)) {
             return false
         }
-        val runtimeClasspath = project.configurations.findByName("runtimeClasspath") ?: return false
+        val runtimeClasspath = project.configurations.findByName(configurationName) ?: return false
         return runtimeClasspath.allDependencies
             .withType(ProjectDependency::class.java)
             .any {
@@ -1007,6 +1021,76 @@ class LibfdxGradlePlugin : Plugin<Project> {
 
     private fun configuredSystemProperty(project: Project, name: String): String? {
         return project.gradle.startParameter.systemPropertiesArgs[name] ?: System.getProperty(name)
+    }
+
+    private fun registerDesktopCppTasks(
+        project: Project,
+        extension: LibfdxExtension,
+        toolClasspath: FileCollection
+    ) {
+        val desktopCpp = extension.desktopCPP
+        val sourceSet = project.extensions.getByType<SourceSetContainer>().getByName(desktopCpp.sourceSet.get())
+        val runtimeClasspath = sourceSet.runtimeClasspath
+        val runtimeFdx = project.takeIf { usesLocalLibfdxRuntime(it, sourceSet.runtimeClasspathConfigurationName) }
+            ?.rootProject?.findProject(":libfdx:framework:fdx:platform:desktop")
+            ?.tasks?.matching { it.name == "generate_runtime_fdx_host_native" }
+        val targets = if(desktopCpp.targets.isEmpty()) listOf(null) else desktopCpp.targets.toList()
+        targets.forEach { target ->
+            val main = target?.mainClass?.orElse(desktopCpp.mainClass) ?: desktopCpp.mainClass
+            if(!main.isPresent || main.get().isBlank()) {
+                throw GradleException("desktopCPP${target?.let { " target '${it.name}'" } ?: ""} must declare mainClass.")
+            }
+            val taskBase = target?.let { targetTaskBase("libfdx_desktop_cpp", it.name) } ?: "libfdx_desktop_cpp"
+            val output = target?.let { named -> desktopCpp.outputDir.map { it.dir(safeTaskName(named.name)) } }
+                ?: desktopCpp.outputDir
+            val label = target?.displayName?.get() ?: "desktop C++"
+            val executableName = target?.targetFileName ?: desktopCpp.targetFileName
+            listOf("debug", "release").forEach { variant ->
+                val buildRoot = output.map { it.dir(variant) }
+                val generate = project.tasks.register<LibfdxDesktopCppGenerateTask>("${taskBase}_generate_$variant") {
+                    group = TASK_GROUP
+                    description = "Generates the $label $variant C++ project with jNative."
+                    runtimeFdx?.let { dependsOn(it) }
+                    this.buildRoot.set(buildRoot)
+                    mainClass.set(main)
+                    targetFileName.set(executableName)
+                    buildType.set(variant)
+                    debugInformation.set(desktopCpp.debugInformation.orElse(variant == "debug"))
+                    sourceLayout.set(desktopCpp.sourceLayout)
+                    applicationClasspath.from(runtimeClasspath)
+                    this.toolClasspath.from(toolClasspath)
+                }
+                val build = project.tasks.register<LibfdxDesktopCppBuildTask>("${taskBase}_build_$variant") {
+                    group = TASK_GROUP
+                    description = "Generates and builds the $label $variant executable with jNative."
+                    dependsOn(generate)
+                    projectDir.set(generate.flatMap { it.nativeProjectDir })
+                    buildType.set(variant)
+                    cmakeExecutable.set(desktopCpp.cmakeExecutable)
+                    generator.set(desktopCpp.generator)
+                    cmakeArguments.set(desktopCpp.cmakeArguments)
+                    cmakeBuildArguments.set(desktopCpp.cmakeBuildArguments)
+                    buildTimeoutMinutes.set(desktopCpp.buildTimeoutMinutes)
+                    this.toolClasspath.from(toolClasspath)
+                }
+                val assets = project.tasks.register<LibfdxDesktopCppAssetsTask>("${taskBase}_assets_${variant}_internal") {
+                    outputDir.set(buildRoot.map { it.dir("native/$variant/assets") })
+                    this.assets.from(extension.assets)
+                    applicationClasspath.from(runtimeClasspath)
+                }
+                generate.configure { dependsOn(assets) }
+                project.tasks.register<LibfdxDesktopCppRunTask>("${taskBase}_run_$variant") {
+                    group = TASK_GROUP
+                    description = "Generates, builds, and runs the $label $variant executable."
+                    dependsOn(build, assets)
+                    releaseDir.set(build.flatMap { it.releaseDir })
+                    targetFileName.set(executableName)
+                    runArgs.set(project.providers.gradleProperty("libfdx.desktopCPP.runArgs")
+                        .map(::parseCommandLineArguments)
+                        .orElse(target?.runArgs?.orElse(desktopCpp.runArgs) ?: desktopCpp.runArgs))
+                }
+            }
+        }
     }
 
     private fun registerDesktopCTasks(

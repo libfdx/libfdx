@@ -396,6 +396,7 @@ public final class NativeProjectWriter {
                 include_directories("%5$s/c/external_cpp/runtime_fdx")
 
                 set(SOURCES "%5$s/c/src/app_include.c")
+                list(APPEND SOURCES "%5$s/c/external_cpp/desktop_c/libfdx_input.c")
                 set(TEAVM_FASTMATH_SOURCE "%5$s/c/external_cpp/teavm_optimizations/teavm/teavm_fastmath.c")
                 set(TEAVM_MATRIX4_SOURCE "%5$s/c/external_cpp/teavm_optimizations/teavm/teavm_matrix4.c")
                 set(TEAVM_MEMORY_STATS_SOURCE "%5$s/c/external_cpp/teavm_stats/teavm_memory_stats.c")

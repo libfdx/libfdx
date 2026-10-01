@@ -81,9 +81,6 @@ public final class CCompatibilityPlugin implements TeaVMPlugin {
                                     call.setArguments(arguments);
                                 }
                                 if (!(instruction instanceof MonitorExitInstruction exit)) continue;
-                                // The 0.16.0-dev-5 data-flow builder marks the exception slot,
-                                // instead of this monitor operand, as escaping. An explicit
-                                // use preserves its dependency node and is inlined away later.
                                 var keep = new InvokeInstruction();
                                 keep.setType(InvocationType.SPECIAL);
                                 keep.setMethod(

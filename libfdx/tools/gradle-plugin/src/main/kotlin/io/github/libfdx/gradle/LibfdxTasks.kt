@@ -1033,7 +1033,9 @@ abstract class LibfdxPspPpssppCaptureTask : DefaultTask() {
     }
 }
 
-abstract class LibfdxDesktopCRunTask : DefaultTask() {
+abstract class LibfdxDesktopCRunTask @Inject constructor(
+    private val execOperations: ExecOperations
+) : DefaultTask() {
     @get:InputDirectory
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val releaseDir: DirectoryProperty
@@ -1066,11 +1068,12 @@ abstract class LibfdxDesktopCRunTask : DefaultTask() {
         else {
             command
         }
-        val process = ProcessBuilder(processCommand)
-            .directory(workingDirectory)
-            .inheritIO()
-            .start()
-        val exitCode = process.waitFor()
+        val exitCode = execOperations.exec {
+            commandLine(processCommand)
+            workingDir(workingDirectory)
+            standardInput = System.`in`
+            isIgnoreExitValue = true
+        }.exitValue
         if(exitCode != 0) {
             throw IllegalStateException("Native executable failed with exit code $exitCode")
         }

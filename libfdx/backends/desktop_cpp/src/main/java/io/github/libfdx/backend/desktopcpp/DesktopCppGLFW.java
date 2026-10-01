@@ -1,12 +1,14 @@
 package io.github.libfdx.backend.desktopcpp;
 
 import com.github.xpenatan.jnative.interop.NativeImport;
+import com.github.xpenatan.jnative.interop.NativeInclude;
 
 /**
  * Represents a jNative GLFW.
  *
  * @author xpenatan
  */
+@NativeInclude("libfdx_jnative.hpp")
 final class DesktopCppGLFW {
     static final int TRUE = 1;
     static final int FALSE = 0;

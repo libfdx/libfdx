@@ -45,6 +45,7 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
     private DesktopCDisplay display;
     private GraphicsAttachment graphics;
     private DefaultInput input;
+    private DesktopCInput nativeInput;
     private Audio audio;
     private boolean running;
     private boolean disposed = true;
@@ -93,9 +94,14 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
             display.refreshSizes();
             input = new DefaultInput(ProviderId.of("desktop_c_input"), DefaultInputCapabilities.desktop(),
                     new DefaultCursor(), new DefaultGamepads(), null, new DesktopCClipboard(windowHandle));
+            nativeInput = new DesktopCInput(windowHandle);
 
             graphics = graphicsProvider.create(new DesktopCGraphicsEnvironment(display, NativeWindow.glfw(windowHandle)));
-        } catch (RuntimeException error) {
+        } catch (RuntimeException | Error error) {
+            if (nativeInput != null) {
+                nativeInput.dispose();
+                nativeInput = null;
+            }
             if (display != null) {
                 DesktopCGLFW.destroyWindow(display.windowHandle());
                 display = null;
@@ -229,8 +235,10 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
         int lastFramebufferWidth = display.framebufferWidth();
         int lastFramebufferHeight = display.framebufferHeight();
         while (running && !DesktopCGLFW.windowShouldClose(display.windowHandle())) {
+            long frameStart = System.nanoTime();
             try {
                 DesktopCGLFW.pollEvents();
+                nativeInput.drain(input);
                 display.refreshSizes();
                 if (audio != null) {
                     audio.update();
@@ -284,7 +292,7 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
                 if (running && !DesktopCGLFW.windowShouldClose(display.windowHandle())) {
                     // The C runtime schedules Java threads cooperatively.
                     Thread.yield();
-                    sync(displayConfig.foregroundFps());
+                    sync(displayConfig.vSync() ? 0 : displayConfig.foregroundFps(), frameStart);
                 }
             } catch (Throwable error) {
                 logger.error("Desktop C application frame failed", error);
@@ -297,15 +305,16 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
 
 
 
-    private void sync(int fps) {
+    private void sync(int fps, long frameStart) {
         if (fps <= 0) {
             return;
         }
-        long sleepMillis = 1000L / fps;
-        if (sleepMillis <= 0L) {
-            return;
+        long frameNanos = 1_000_000_000L / fps;
+        long remainingNanos = frameNanos - (System.nanoTime() - frameStart);
+        while (remainingNanos > 0L) {
+            DesktopCGLFW.waitEventsTimeout(remainingNanos / 1_000_000_000.0);
+            remainingNanos = frameNanos - (System.nanoTime() - frameStart);
         }
-        DesktopCGLFW.waitEventsTimeout(sleepMillis / 1000.0);
     }
 
     private Throwable shutdown(ApplicationListener listener) {
@@ -346,6 +355,13 @@ public final class DesktopCApplicationBackend implements ApplicationBackend, App
             } catch (Throwable error) {
                 failure = recordShutdownFailure(failure, "graphics dispose", error);
             }
+        }
+
+        DesktopCInput closingNativeInput = nativeInput;
+        nativeInput = null;
+        if (closingNativeInput != null) {
+            try { closingNativeInput.dispose(); }
+            catch (Throwable error) { failure = recordShutdownFailure(failure, "pointer input dispose", error); }
         }
 
         DesktopCDisplay closingDisplay = display;

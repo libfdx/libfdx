@@ -35,6 +35,9 @@ public final class DesktopBenchmarkLauncher {
         if (normalized.length() == 0 || SpriteBatchStressBenchmark.NAME.equals(normalized)) {
             return new SpriteBatchStressBenchmark(exitAfterNanos(), System.getProperty("libfdx.benchmark.result"));
         }
+        if (SpriteBatchStressBenchmark.LIBFDX_NAME.equals(normalized)) {
+            return new SpriteBatchStressBenchmark(exitAfterNanos(), System.getProperty("libfdx.benchmark.result"), true);
+        }
         throw new FdxException("Unknown benchmark: " + benchmarkName);
     }
 
