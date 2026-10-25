@@ -1,50 +1,53 @@
 # jNative performance comparisons
 
-Runs: **2026-10-07**, Windows x64, Core Ultra 9 275HX. jNative worktree builds, TeaVM C 0.16.0, GraalVM 25.0.0.
-Medians; **bold = best measured median**. Lower is better except FPS. Each row has all three runtimes from the same round; arrows show matched jNative before → after.
-Kernels and CPU/staging: CPU 0, 10 samples/runtime/case. Rendering: normal scheduling, 4 runs/runtime, 5 s warmup + 10 s measured.
+Latest rendering runs (S8–S13): **2026-10-09**; CPU/kernel rows: **2026-10-08**. Windows x64, Core Ultra 9 275HX. jNative worktree builds, TeaVM C 0.16.0, GraalVM 25.0.0.
+**Rightmost = latest measured result; arrows retain earlier measurements. Bold = best latest median.** Lower is better except FPS. All three rendering executables include the same GL capability fix; the compiler/runtime and CPU workloads are unchanged.
+T1/T2/T4/T6 share one 500k-pass workload; T3/T5/T7 share its 1M-pass version. Each adjacent C pair also shares a workload. Historical IDs remain for comparison and reuse the same current measurement; they are not separate unresolved issues.
+CPU and trig: 20 samples/runtime/case across two rounds; other kernels and staging: 10. These use CPU 0. Rendering: normal scheduling, 4 runs/runtime, 5 s warmup + 10 s measured. Cross-session arrows alone do not establish an optimization's effect; the gains below compare retained old/new jNative executables within the same run sets.
 
 | ID | Measurement | jNative | TeaVM C | GraalVM |
 | --- | --- | ---: | ---: | ---: |
-| T1 | Trig/table baseline (ns/op) | 3.597 | 4.033 | **1.336** |
-| T1 | Cached table, 500k passes (ns/op) | 3.342 → 2.919 | 3.710 | **1.306** |
-| T1 | Cached table, 1M passes (ns/op) | 3.227 → 3.023 | 4.093 | **1.328** |
-| T1 | Optimized loop, 500k passes (ns/op) | 3.012 → 1.639 | 3.769 | **1.316** |
-| T1 | Optimized loop, 1M passes (ns/op) | 2.909 → 1.631 | 3.731 | **1.312** |
-| C1 | Cold-root kernel (ns/op) | 6.873 | 7.286 | **2.608** |
-| C1 | Cold-root after T1 (ns/op) | 7.096 → 5.984 | 8.010 | **2.681** |
-| C1 | Plain-root control (ns/op) | 5.410 | 6.663 | **2.534** |
-| C1 | Plain-root after T1 (ns/op) | 5.572 → 4.350 | 6.876 | **2.658** |
-| C2 | Array-copy kernel (ns/op) | 7.649 | 10.253 | **4.068** |
-| C2 | Array-copy after T1 (ns/op) | 8.214 → 6.682 | 9.810 | **4.126** |
-| C2 | Scalar-copy control (ns/op) | 19.788 | 16.789 | **10.998** |
-| C2 | Scalar-copy after T1 (ns/op) | 19.606 → 12.173 | 19.906 | **11.305** |
-| C3 | Scale-chain kernel (ns/op) | 7.403 | 8.619 | **4.328** |
-| C3 | Scale-chain after T1 (ns/op) | 7.341 → 4.929 | 8.509 | **4.277** |
-| C3 | Fused-scale control (ns/op) | 5.953 | 8.170 | **3.600** |
-| C3 | Fused-scale after T1 (ns/op) | 5.685 → 4.819 | 8.598 | **3.488** |
-| S1 | Full sprite CPU work (ns/sprite) | 24.463 | 21.050 | **8.957** |
-| S1 | Transform only (ns/sprite) | 10.390 | 11.375 | **3.692** |
-| S2 | Cached Sprite.draw (ns/sprite) | 21.139 | 13.587 | **4.169** |
-| S2 | Batch.draw (ns/sprite) | 14.906 | 10.802 | **3.876** |
-| S3 | Append vertices (ns/sprite) | 10.145 | 7.397 | **4.329** |
-| S3 | Direct vertex copy (ns/sprite) | 9.294 | 6.939 | **3.217** |
-| S4 | Buffer staging (µs/transfer) | 24.773 | **8.737** | 12.242 |
-| S6 | Full rendering (FPS, higher is better) | 2788.480 | 3345.970 | **4295.140** |
-| S1 | Profiled sprite fill (µs/frame) | 245.473 | 201.424 | **83.174** |
-| S4 | Profiled buffer staging (µs/frame) | 26.360 | **14.180** | 19.575 |
-| S6 | Profiled graphics upload (µs/frame) | **11.546** | 27.554 | 14.509 |
-| S6 | Profiled draw submission (µs/frame) | 23.544 | 21.173 | **10.254** |
-| S7 | Profiled outside-render time (µs/frame) | 24.762 | **23.478** | 95.991 |
+| T1 | Trig/table loop, 500k passes (ns/op) ↻ | 3.597 → 1.360 → 1.339 → 1.364 → 1.309 → 1.499 | 4.033 → 4.003 → 3.823 → 4.162 → 3.714 → 4.080 | 1.336 → 1.366 → 1.321 → 1.353 → 1.311 → **1.431** |
+| T2 | Cached-table loop, 500k passes — covered by T1 (ns/op) ↻ | 3.342 → 2.919 → 1.405 → 1.339 → 1.364 → 1.309 → 1.499 | 3.710 → 4.361 → 3.823 → 4.162 → 3.714 → 4.080 | 1.306 → 1.401 → 1.321 → 1.353 → 1.311 → **1.431** |
+| T3 | Trig/table loop, 1M passes (ns/op) ↻ | 3.227 → 3.023 → 1.278 → 1.343 → 1.302 → 1.433 | 4.093 → 3.790 → 3.950 → 3.913 → 4.135 | 1.328 → 1.262 → 1.321 → 1.281 → **1.379** |
+| T4 | Optimized loop, 500k passes (ns/op) ↻ | 3.012 → 1.639 → 1.712 → 1.800 → 1.339 → 1.364 → 1.309 → 1.499 | 3.769 → 4.078 → 4.206 → 3.823 → 4.162 → 3.714 → 4.080 | 1.316 → 1.381 → 1.415 → 1.321 → 1.353 → 1.311 → **1.431** |
+| T5 | Optimized loop, 1M passes (ns/op) ↻ | 2.909 → 1.631 → 1.669 → 1.701 → 1.278 → 1.343 → 1.302 → 1.433 | 3.731 → 3.934 → 3.883 → 3.790 → 3.950 → 3.913 → 4.135 | 1.312 → 1.339 → 1.361 → 1.262 → 1.321 → 1.281 → **1.379** |
+| T6 | Single-allocation float arrays, 500k passes (prototype → production, ns/op) ↻ | 1.417 → 1.339 → 1.364 → 1.309 → 1.499 | 4.206 → 3.823 → 4.162 → 3.714 → 4.080 | 1.415 → 1.321 → 1.353 → 1.311 → **1.431** |
+| T7 | Single-allocation float arrays, 1M passes (prototype → production, ns/op) ↻ | 1.407 → 1.278 → 1.343 → 1.302 → 1.433 | 3.883 → 3.790 → 3.950 → 3.913 → 4.135 | 1.361 → 1.262 → 1.321 → 1.281 → **1.379** |
+| C1 | Cold-root kernel (ns/op) ↻ | 6.873 → 5.892 → 5.492 → 3.803 → 4.201 | 7.286 → 8.004 → 7.758 → 7.481 → 9.715 | 2.608 → 2.756 → 2.787 → 2.756 → **3.262** |
+| C2 | Cold-root after loop optimization (ns/op) ↻ | 7.096 → 5.984 → 5.971 → 5.892 → 5.492 → 3.803 → 4.201 | 8.010 → 8.090 → 8.004 → 7.758 → 7.481 → 9.715 | 2.681 → 2.658 → 2.756 → 2.787 → 2.756 → **3.262** |
+| C3 | Plain-root control (ns/op) ↻ | 5.410 → 3.815 → 3.432 → 3.321 → 3.975 | 6.663 → 7.052 → 7.054 → 7.402 → 8.337 | 2.534 → 2.663 → 2.731 → 2.659 → **3.098** |
+| C4 | Plain-root after loop optimization (ns/op) ↻ | 5.572 → 4.350 → 4.377 → 3.815 → 3.432 → 3.321 → 3.975 | 6.876 → 6.916 → 7.052 → 7.054 → 7.402 → 8.337 | 2.658 → 2.594 → 2.663 → 2.731 → 2.659 → **3.098** |
+| C5 | Array-copy kernel (ns/op) ↻ | 7.649 → 6.262 → 5.808 → 5.295 → 6.492 | 10.253 → 10.445 → 10.428 → 10.275 → 11.342 | 4.068 → 4.203 → 4.242 → 4.200 → **5.269** |
+| C6 | Array-copy after loop optimization (ns/op) ↻ | 8.214 → 6.682 → 6.439 → 6.262 → 5.808 → 5.295 → 6.492 | 9.810 → 10.552 → 10.445 → 10.428 → 10.275 → 11.342 | 4.126 → 4.171 → 4.203 → 4.242 → 4.200 → **5.269** |
+| C7 | Scalar-copy control (ns/op) ↻ | 19.788 → 12.210 → 12.459 → 12.206 → 13.967 | 16.789 → 17.943 → 18.900 → 22.061 → 20.089 | 10.998 → 11.577 → 11.933 → 11.570 → **12.554** |
+| C8 | Scalar-copy after loop optimization (ns/op) ↻ | 19.606 → 12.173 → 12.289 → 12.210 → 12.459 → 12.206 → 13.967 | 19.906 → 17.260 → 17.943 → 18.900 → 22.061 → 20.089 | 11.305 → 11.349 → 11.577 → 11.933 → 11.570 → **12.554** |
+| C9 | Scale-chain kernel (ns/op) ↻ | 7.403 → 4.700 → 4.890 → 4.762 → **4.843** | 8.619 → 8.604 → 8.981 → 8.772 → 9.551 | 4.328 → 4.284 → 4.518 → 4.396 → 4.865 |
+| C10 | Scale-chain after loop optimization (ns/op) ↻ | 7.341 → 4.929 → 5.247 → 4.700 → 4.890 → 4.762 → **4.843** | 8.509 → 8.742 → 8.604 → 8.981 → 8.772 → 9.551 | 4.277 → 4.320 → 4.284 → 4.518 → 4.396 → 4.865 |
+| C11 | Fused-scale control (ns/op) ↻ | 5.953 → 4.609 → 4.424 → 3.748 → 3.899 | 8.170 → 8.094 → 8.460 → 8.282 → 9.040 | 3.600 → 3.614 → 3.502 → 3.518 → **3.720** |
+| C12 | Fused-scale after loop optimization (ns/op) ↻ | 5.685 → 4.819 → 5.131 → 4.609 → 4.424 → 3.748 → 3.899 | 8.598 → 8.108 → 8.094 → 8.460 → 8.282 → 9.040 | 3.488 → 3.466 → 3.614 → 3.502 → 3.518 → **3.720** |
+| S1 | Full sprite CPU work (ns/sprite) ↻ | 24.463 → 27.511 → 25.656 → 24.689 | 21.050 → 23.188 → 21.467 → 26.361 | 8.957 → 9.831 → 9.078 → **11.727** |
+| S2 | Transform only (ns/sprite) ↻ | 10.390 → 10.705 → 9.719 → 12.026 | 11.375 → 11.951 → 11.318 → 13.304 | 3.692 → 4.064 → 3.825 → **4.712** |
+| S3 | Cached CpuSprite.draw (ns/sprite) ↻ | 21.139 → 22.452 → 21.199 → 16.538 | 13.587 → 14.424 → 13.848 → 16.087 | 4.169 → 4.681 → 4.288 → **5.362** |
+| S4 | CpuSpriteBatch.draw (ns/sprite) ↻ | 14.906 → 15.626 → 13.388 → 14.022 | 10.802 → 11.689 → 10.978 → 13.117 | 3.876 → 4.322 → 4.063 → **5.044** |
+| S5 | Append vertices (ns/sprite) ↻ | 10.145 → 9.507 → 8.246 → 7.586 | 7.397 → 8.132 → 7.258 → 8.926 | 4.329 → 4.595 → 4.414 → **5.335** |
+| S6 | Direct vertex copy (ns/sprite) ↻ | 9.294 → 9.293 → 8.027 → 7.333 | 6.939 → 7.489 → 7.060 → 8.677 | 3.217 → 3.446 → 3.306 → **4.913** |
+| S7 | Buffer staging (µs/transfer) ↻ | 24.773 → 22.182 → 23.403 → 25.665 | 8.737 → 9.562 → 9.067 → **12.156** | 12.242 → 12.803 → 12.453 → 16.538 |
+| S8 | Full rendering (FPS, higher is better) ↻ | 2788.480 → 3062.920 → 2904.880 → 3028.045 → 2954.000 | 3345.970 → 3680.295 → 3372.630 → 2868.230 → 2994.690 | 4295.140 → 4701.685 → 4193.315 → 3695.330 → **3350.445** |
+| S9 | Profiled sprite fill (µs/frame) ↻ | 245.473 → 246.588 → 257.784 → 232.329 → 233.843 | 201.424 → 192.151 → 217.455 → 217.163 → 222.261 | 83.174 → 83.799 → 106.350 → 89.112 → **92.942** |
+| S10 | Profiled buffer staging (µs/frame) ↻ | 26.360 → 26.885 → 26.220 → 30.960 → 32.146 | 14.180 → 11.756 → 13.440 → 14.568 → **14.540** | 19.575 → 18.047 → 23.632 → 21.224 → 22.382 |
+| S11 | Profiled graphics upload (µs/frame) ↻ | 11.546 → 17.858 → 27.671 → 13.299 → 25.400 | 27.554 → 28.900 → 10.725 → 45.996 → 16.764 | 14.509 → 14.253 → 14.339 → 15.483 → **16.677** |
+| S12 | Profiled draw submission (µs/frame) ↻ | 23.544 → 20.629 → 19.452 → 32.175 → 4.449 | 21.173 → 17.482 → 18.913 → 24.813 → **2.420** | 10.254 → 8.186 → 10.255 → 10.865 → 11.308 |
+| S13 | Profiled outside-render time (µs/frame) ↻ | 24.762 → 24.951 → 24.339 → 29.319 → **40.737** | 23.478 → 23.081 → 23.867 → 28.238 → 41.718 | 95.991 → 79.554 → 78.289 → 103.163 → 119.919 |
 
-Baseline validation: all 336 kernel checksums and 252 application states matched; all 24 rendering/profile runs passed workload/accounting checks.
-TeaVM passed the finite timed workloads but failed full kernel verification before the first conversion result; its timings do not establish full Java conversion correctness.
-Profile rows are separate instrumented runs; their phase times are not CPU-isolate costs. Results describe these builds and this machine.
-Recorded rendering/profile results predate the texture replacement with `benchmark/assets/fdx.png`.
+**S12 fix:** reuse GL capabilities already captured for each attachment's context, instead of querying the driver on every pipeline bind. Profiling isolated variable native capability-query cost; managed validation and uniform copying were small. This shared provider improvement preserves render-state commands and applies to all three runtimes. No benchmark or jNative compiler/runtime change.
 
-**T1: 43.9–45.6% less time than the cached-table build above.** Hoist stable final input/output metadata, guard array ranges and masked indices, poll GC in bounded 64-iteration chunks, and avoid materializing array views on the stack. Atomic accesses, conversion semantics and checked fallbacks are preserved. jNative is still about **25% slower than GraalVM**; parity is not reached.
-38 backend tests and 18 Debug/Release native checks passed; 576 kernel checksum records matched within each case and round. Desktop build and 144 application state checks passed. No application FPS gain is claimed. “After T1” kernel controls use 50k passes; other rows retain their complete baseline.
-[Current T1 samples, build identities, validation and commands](../build/t1-full-20261007/commands.txt) · [Earlier table-cache results](../build/t1-static-table-20261007/commands.txt) · [Original full comparison](../build/performance-refresh-20261007/commands.txt).
+**Matched results:** jNative submission **26.289 → 4.449 µs (83.1% less time)**; all four candidate runs were 4.05–4.75 µs. Rendering **2,712.520 → 2,954.000 FPS (+8.9%)**; four nearby old/new pairs improved 0.7–29.2%. Other phases still vary: profiled upload was 25.3% slower in this set. Phase changes should not be treated as independent speedups.
 
+**Next S12 target:** prepare immutable pipeline/vertex state once and submit it through fewer native calls. Driver-free controls identify about **0.90 µs of wrapper overhead** plus **0.89 µs of additional managed work** in jNative. These are diagnostic costs, not new rendering results; GC and error handling must remain intact. [Measurements and method](../build/s12-bindings-20261009/commands.txt).
 
+**Earlier CPU gains retained:** full sprite CPU time 16.8% lower, cached draws 32.4%, batch draws 9.3%; transform/staging remain gaps. Previous compiler changes moved root registration into collecting paths and reduced primitive-array headers from 72 to 40 bytes. GraalVM still leads most CPU workloads.
 
+**Validation:** 78 GL tests passed, including capability reuse, shared contexts, state-call order and loss/disposal. All three Windows x64 native builds passed; 32 final profile/render processes passed frame accounting and identity checks, and an actual rendered frame was inspected. Other platforms were not run. Earlier compiler/GC validation is linked below; TeaVM's earlier full kernel-verification failure remains unresolved.
+
+[Current S12 investigation, samples and commands](../build/s12-performance-20261009/commands.txt) · [Previous S measurements](../build/s-performance-20261008/commands.txt) · [Previous C/T results](../build/root-handoff-20261008/commands.txt) · [Earlier C/T results](../build/c-kernels-20261008/commands.txt) · [Previous kernel/application results](../build/performance-broader-20261007/commands.txt) · [T1 runtime measurements](../build/t1-production-20261007/commands.txt) · [T2 revalidation](../build/t2-validation-20261007/commands.txt) · [Previous rerun](../build/performance-rerun-20261007/commands.txt) · [Earlier compiler results](../build/t1-full-20261007/commands.txt) · [Original comparison](../build/performance-refresh-20261007/commands.txt).

@@ -111,6 +111,8 @@ final class GLGraphicsDevice implements GraphicsDevice {
         return builder.build();
     }
     private final GraphicsCapabilities capabilities;
+    private final boolean completePipelineState;
+    private final boolean multipleTargets;
     private final ProviderId providerId;
     private final GLApi gl;
     private final GLResourceDomain resourceDomain;
@@ -188,10 +190,23 @@ final class GLGraphicsDevice implements GraphicsDevice {
         this.providerId = providerId;
         this.shaderCache = shaderCache;
         this.gl = gl;
-        capabilities = capabilities(gl.supportsDepthTextures(), gl.supportsMipTextures(), gl.supportsRgba16FloatTextures(),
-                gl.supportsCompletePipelineState(), gl.supportsMultipleTargets(), gl.supportsCompute());
+        boolean depthTextures = gl.supportsDepthTextures();
+        boolean mipTextures = gl.supportsMipTextures();
+        boolean halfTextures = gl.supportsRgba16FloatTextures();
+        completePipelineState = gl.supportsCompletePipelineState();
+        multipleTargets = gl.supportsMultipleTargets();
+        capabilities = capabilities(depthTextures, mipTextures, halfTextures,
+                completePipelineState, multipleTargets, gl.supportsCompute());
         this.resourceDomain = resourceDomain;
         this.attachment = attachment;
+    }
+
+    boolean supportsCompletePipelineState() {
+        return completePipelineState;
+    }
+
+    boolean supportsMultipleTargets() {
+        return multipleTargets;
     }
 
     /**

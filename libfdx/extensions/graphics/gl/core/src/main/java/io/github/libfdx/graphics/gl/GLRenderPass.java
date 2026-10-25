@@ -30,6 +30,8 @@ final class GLRenderPass implements RenderPass {
     private final ProviderId providerId;
     private final GLApi gl;
     private final GLResourceDomain resourceDomain;
+    private final boolean completePipelineState;
+    private final boolean multipleColorTargets;
     private GLTextureHandle renderTarget;
     private GLTextureHandle renderDepth;
     private GLMultipleTargets multipleTargets;
@@ -50,10 +52,13 @@ final class GLRenderPass implements RenderPass {
     private boolean hasUniformData;
     private boolean ended = true;
 
-    GLRenderPass(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain) {
+    GLRenderPass(ProviderId providerId, GLApi gl, GLResourceDomain resourceDomain,
+            boolean completePipelineState, boolean multipleColorTargets) {
         this.providerId = providerId;
         this.gl = gl;
         this.resourceDomain = resourceDomain;
+        this.completePipelineState = completePipelineState;
+        this.multipleColorTargets = multipleColorTargets;
     }
 
     void begin(GLTextureHandle renderTarget, GLTextureHandle renderDepth, boolean restoreDefaultFramebuffer, int restoreWidth,
@@ -119,7 +124,7 @@ final class GLRenderPass implements RenderPass {
         else {
             gl.disableAlphaBlending();
         }
-        this.pipeline.applyCompleteState();
+        this.pipeline.applyCompleteState(completePipelineState, multipleColorTargets);
         if (this.pipeline.sampledTextureCount() > 0) {
             setTextureUniform(0);
         }

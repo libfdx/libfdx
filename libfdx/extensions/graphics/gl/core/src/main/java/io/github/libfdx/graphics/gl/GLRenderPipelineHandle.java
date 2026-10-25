@@ -47,10 +47,10 @@ final class GLRenderPipelineHandle implements RenderPipeline {
         sampleState = descriptor.multisampleState();
     }
 
-    void applyCompleteState() {
-        if (primitiveState != null && gl.supportsCompletePipelineState()) {
+    void applyCompleteState(boolean completePipelineState, boolean multipleTargets) {
+        if (primitiveState != null && completePipelineState) {
             gl.applyPipelineState(primitiveState, colorState, depthState, sampleState);
-            if (gl.supportsMultipleTargets()) gl.applyColorTargets(colorStates);
+            if (multipleTargets) gl.applyColorTargets(colorStates);
         }
     }
 

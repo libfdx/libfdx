@@ -633,7 +633,8 @@ public final class GLGraphicsAttachment implements GraphicsAttachment {
             }
             GLRenderPass renderPass = renderPasses[renderPassCount];
             if (renderPass == null) {
-                renderPass = new GLRenderPass(providerId, gl, resourceDomain);
+                renderPass = new GLRenderPass(providerId, gl, resourceDomain,
+                        device.supportsCompletePipelineState(), device.supportsMultipleTargets());
                 renderPasses[renderPassCount] = renderPass;
             }
             return renderPass;
