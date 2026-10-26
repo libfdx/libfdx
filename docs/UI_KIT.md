@@ -261,6 +261,13 @@ that action while multiline text areas continue to insert a newline.
 for copying without opening a platform editor or allowing mutations. Ctrl+C,
 Ctrl+X, and Ctrl+V use `Input.clipboard()`.
 
+Text selection belongs to the focused editor within each `UiRoot`. Moving focus
+to another text field, text area, button or empty space clears the previous
+editor's selection while preserving its value and cursor position. Recomposition
+of the same focused editor keeps its selection. This also applies to read-only
+text areas used as selectable report labels, preventing stale highlights from
+remaining across several labels.
+
 Clipboard behavior is backend-owned:
 
 - JVM desktop uses the operating-system clipboard, with GLFW available for a

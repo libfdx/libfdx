@@ -2823,6 +2823,11 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         UiNode previous = focusedNode;
         if (focusedNode != null) {
+            UiTextFieldModel previousText = textModel(focusedNode);
+            if (previousText != null) {
+                // Selection belongs to the focused editor; retain its insertion position only.
+                previousText.cursor(previousText.cursor());
+            }
             notifySurfaceFocus(focusedNode, false);
             focusedNode.focused(false);
         }
