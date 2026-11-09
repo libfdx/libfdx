@@ -567,7 +567,7 @@ uses `SpriteShaderPlan.include(scope, targetLayout)` and an explicit
 loading UI scope before scheduling larger content. Scope completion reports shader
 readiness; asset readiness remains the application's responsibility.
 
-[ShaderPreloadingTest](../tests/core/src/main/java/io/github/libfdx/tests/graphics/ShaderPreloadingTest.java)
+[ShaderPreloadingTest](../tests/core/src/main/java/io/github/libfdx/tests/ShaderPreloadingTest.java)
 is an executable startup/streaming example. It prepares its SpriteBatch HUD first,
 preloads the initial ModelBatch world, keeps both drawing during a streamed preload,
 then records a deliberately unplanned material. The desktop launcher accepts

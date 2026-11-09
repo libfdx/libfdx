@@ -34,6 +34,18 @@ public final class UiToolkit {
     }
 
     /**
+     * Creates a design root. Attach input with {@code UiRoot.input(...)} to show hover,
+     * press and temporary slider drag feedback without dispatching actions or editing bound state.
+     *
+     * @param display the display
+     * @param graphics the graphics context
+     * @return the design root
+     */
+    public UiRoot previewRoot(Display display, GraphicsContext graphics) {
+        return new UiRoot(files, display, graphics, theme, true);
+    }
+
+    /**
      * Returns the files.
      *
      * @return the files

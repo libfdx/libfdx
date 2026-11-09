@@ -1,0 +1,199 @@
+package io.github.libfdx.tests;
+
+import io.github.libfdx.tests.utils.shared.GraphicsParityTest;
+
+import io.github.libfdx.Fdx;
+import io.github.libfdx.graphics.Buffer;
+import io.github.libfdx.graphics.BufferDescriptor;
+import io.github.libfdx.graphics.GraphicsFrame;
+import io.github.libfdx.graphics.LoadOp;
+import io.github.libfdx.graphics.RenderPass;
+import io.github.libfdx.graphics.RenderPassDescriptor;
+import io.github.libfdx.graphics.RenderPipeline;
+import io.github.libfdx.graphics.RenderPipelineDescriptor;
+import io.github.libfdx.graphics.shader.ShaderModule;
+import io.github.libfdx.graphics.shader.ShaderModuleDescriptor;
+import io.github.libfdx.graphics.StoreOp;
+import io.github.libfdx.graphics.Texture;
+import io.github.libfdx.graphics.TextureDescriptor;
+import io.github.libfdx.graphics.TextureFilter;
+import io.github.libfdx.graphics.VertexAttribute;
+import io.github.libfdx.graphics.VertexFormat;
+import io.github.libfdx.graphics.VertexLayout;
+
+import java.nio.ByteBuffer;
+
+/**
+ * Proves that writes after command recording do not overwrite already-recorded resource allocations.
+ *
+ * @author xpenatan
+ */
+public final class RecordedResourceRewriteTest extends GraphicsParityTest
+        implements io.github.libfdx.tests.utils.performance.PerformanceWorkload {
+    @Override
+    public String performanceWorkload() {
+        return "passes=2;mips=" + redLevels.length + ";vertices=" + VERTEX_COUNT;
+    }
+    private static final int TEXTURE_SIZE = 2;
+    private static final int VERTEX_COUNT = 6;
+    private static final int BYTES_PER_VERTEX = 4 * 4;
+    private static final VertexLayout VERTEX_LAYOUT = VertexLayout.of(BYTES_PER_VERTEX,
+            VertexAttribute.of(0, VertexFormat.FLOAT32X2, 0),
+            VertexAttribute.of(1, VertexFormat.FLOAT32X2, 8));
+    private static final float[] LEFT_VERTICES = rectangle(-0.9f, -0.65f, -0.1f, 0.65f);
+    private static final float[] RIGHT_VERTICES = rectangle(0.1f, -0.65f, 0.9f, 0.65f);
+    private static final String SHADER_SOURCE = """
+            struct VertexInput {
+                @location(0) position : vec2f,
+                @location(1) texCoord : vec2f,
+            };
+
+            struct VertexOutput {
+                @builtin(position) position : vec4f,
+                @location(0) texCoord : vec2f,
+            };
+
+            @group(0) @binding(0) var u_texture : texture_2d<f32>;
+            @group(0) @binding(1) var u_sampler : sampler;
+
+            @vertex
+            fn vertexMain(input : VertexInput) -> VertexOutput {
+                var output : VertexOutput;
+                output.position = vec4f(input.position, 0.0, 1.0);
+                output.texCoord = input.texCoord;
+                return output;
+            }
+
+            @fragment
+            fn fragmentMain(input : VertexOutput) -> @location(0) vec4f {
+                return textureSampleLevel(u_texture, u_sampler, input.texCoord, 1.0);
+            }
+            """;
+
+    private final RenderPassDescriptor firstPassDescriptor = new RenderPassDescriptor()
+            .label("recorded rewrite old allocation pass")
+            .colorLoadOp(LoadOp.clear(0.015f, 0.02f, 0.025f, 1.0f))
+            .colorStoreOp(StoreOp.store());
+    private final RenderPassDescriptor secondPassDescriptor = new RenderPassDescriptor()
+            .label("recorded rewrite new allocation pass")
+            .colorLoadOp(LoadOp.load())
+            .colorStoreOp(StoreOp.store());
+    private Buffer vertexBuffer;
+    private Texture texture;
+    private ShaderModule shaderModule;
+    private RenderPipeline pipeline;
+    private ByteBuffer leftVertices;
+    private ByteBuffer rightVertices;
+    private ByteBuffer redPixels;
+    private ByteBuffer bluePixels;
+    private ByteBuffer[] redLevels, blueLevels;
+
+    /**
+     * Creates the recorded-resource rewrite test.
+     *
+     * @param exitAfterFrames the exit after frames
+     */
+    public RecordedResourceRewriteTest(long exitAfterFrames) {
+        super(exitAfterFrames);
+    }
+
+    @Override
+    public void create(Fdx fdx) {
+        initialize(fdx, "RecordedResourceRewriteTest");
+        leftVertices = prefixed(floats(LEFT_VERTICES));
+        rightVertices = prefixed(floats(RIGHT_VERTICES));
+        redPixels = solidPixels(232, 48, 58);
+        bluePixels = solidPixels(46, 112, 232);
+        vertexBuffer = graphics.device().createBuffer(BufferDescriptor.vertex(
+                "recorded rewrite vertices", VERTEX_COUNT * BYTES_PER_VERTEX));
+        TextureDescriptor textureDescriptor = TextureDescriptor
+                .rgba8("recorded rewrite texture", TEXTURE_SIZE, TEXTURE_SIZE)
+                .filter(TextureFilter.NEAREST);
+        boolean mips = graphics.device().capabilities().supports(io.github.libfdx.graphics.GraphicsFeature.TEXTURE_MIP_LEVELS);
+        if (mips) textureDescriptor.mipLevelCount(2).filters(TextureFilter.NEAREST, TextureFilter.NEAREST,
+                io.github.libfdx.graphics.TextureMipmapFilter.NEAREST);
+        redLevels = mips ? new ByteBuffer[] {redPixels, redPixels.duplicate().limit(4)} : new ByteBuffer[] {redPixels};
+        blueLevels = mips ? new ByteBuffer[] {bluePixels, bluePixels.duplicate().limit(4)} : new ByteBuffer[] {bluePixels};
+        texture = graphics.device().createTexture(textureDescriptor);
+        shaderModule = graphics.device().createShaderModule(ShaderModuleDescriptor
+                .wgsl("recorded rewrite shader", SHADER_SOURCE));
+        pipeline = graphics.device().createRenderPipeline(RenderPipelineDescriptor
+                .shader(shaderModule, graphics.surfaceFormat())
+                .label("recorded rewrite pipeline")
+                .vertexLayout(VERTEX_LAYOUT)
+                .sampledTextureCount(1)
+                .depthWriteEnabled(false));
+        markCreated();
+        logger.info("RecordedResourceRewriteTest expects red on the left and blue on the right");
+    }
+
+    @Override
+    public void render() {
+        write(vertexBuffer, leftVertices);
+        graphics.device().writeTextureMipLevels(texture, redLevels);
+
+        GraphicsFrame frame = graphics.currentFrame();
+        firstPassDescriptor.colorAttachment(frame.colorAttachment());
+        draw(frame, firstPassDescriptor);
+
+        write(vertexBuffer, rightVertices);
+        graphics.device().writeTextureMipLevels(texture, blueLevels);
+
+        secondPassDescriptor.colorAttachment(frame.colorAttachment());
+        draw(frame, secondPassDescriptor);
+        finishFrame();
+    }
+
+    @Override
+    public void dispose() {
+        dispose(pipeline);
+        dispose(shaderModule);
+        dispose(vertexBuffer);
+        dispose(texture);
+        verifyDisposed();
+    }
+
+    private void draw(GraphicsFrame frame, RenderPassDescriptor descriptor) {
+        RenderPass pass = frame.commandEncoder().beginRenderPass(descriptor);
+        pass.setPipeline(pipeline);
+        pass.setTexture(0, texture);
+        pass.setVertexBuffer(vertexBuffer);
+        pass.draw(VERTEX_COUNT, 1, 0, 0);
+        pass.end();
+    }
+
+    private void write(Buffer buffer, ByteBuffer data) {
+        graphics.device().writeBuffer(buffer, data);
+        if (data.position() != 32) throw new io.github.libfdx.core.FdxException("Buffer upload changed the active source range");
+    }
+
+    private static ByteBuffer prefixed(ByteBuffer data) {
+        ByteBuffer result = ByteBuffer.allocateDirect(data.remaining()+32);
+        result.position(32);
+        result.put(data).flip().position(32);
+        return result;
+    }
+
+    private static ByteBuffer solidPixels(int red, int green, int blue) {
+        ByteBuffer pixels = rgba8(TEXTURE_SIZE, TEXTURE_SIZE);
+        for (int i = 0; i < TEXTURE_SIZE * TEXTURE_SIZE; i++) {
+            pixels.put((byte) red);
+            pixels.put((byte) green);
+            pixels.put((byte) blue);
+            pixels.put((byte) 255);
+        }
+        pixels.flip();
+        return pixels;
+    }
+
+    private static float[] rectangle(float left, float bottom, float right, float top) {
+        return new float[] {
+                left, top, 0.0f, 1.0f,
+                left, bottom, 0.0f, 0.0f,
+                right, bottom, 1.0f, 0.0f,
+                left, top, 0.0f, 1.0f,
+                right, bottom, 1.0f, 0.0f,
+                right, top, 1.0f, 1.0f
+        };
+    }
+}

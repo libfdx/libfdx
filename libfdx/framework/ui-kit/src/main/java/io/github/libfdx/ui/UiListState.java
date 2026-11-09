@@ -5,9 +5,10 @@ package io.github.libfdx.ui;
  *
  * @author xpenatan
  */
-public final class UiListState {
+public final class UiListState extends UiObservableState {
     private int firstVisibleIndex;
     private float firstVisibleOffset;
+    private long requestRevision;
 
     /**
      * Returns the first visible index.
@@ -15,6 +16,7 @@ public final class UiListState {
      * @return the first visible index
      */
     public int firstVisibleIndex() {
+        observeRead();
         return firstVisibleIndex;
     }
 
@@ -24,17 +26,33 @@ public final class UiListState {
      * @return the first visible offset
      */
     public float firstVisibleOffset() {
+        observeRead();
         return firstVisibleOffset;
     }
 
     /**
-     * Runs the scroll to item step.
+     * Requests an item and a pixel offset into that item, invalidating roots that
+     * observe this state. Layout clamps the request to the available scroll range.
      *
      * @param index the index
      * @param offset the offset
      */
     public void scrollToItem(int index, float offset) {
-        this.firstVisibleIndex = Math.max(0, index);
-        this.firstVisibleOffset = Math.max(0.0f, offset);
+        int targetIndex = Math.max(0, index);
+        float targetOffset = Float.isFinite(offset) ? Math.max(0.0f, offset) : 0.0f;
+        if (firstVisibleIndex == targetIndex && firstVisibleOffset == targetOffset) return;
+        firstVisibleIndex = targetIndex;
+        firstVisibleOffset = targetOffset;
+        requestRevision++;
+        notifyListeners();
+    }
+
+    long requestRevision() { return requestRevision; }
+
+    void position(int index, float offset) {
+        if (firstVisibleIndex == index && Math.abs(firstVisibleOffset - offset) < 0.001f) return;
+        firstVisibleIndex = index;
+        firstVisibleOffset = offset;
+        notifyListeners();
     }
 }

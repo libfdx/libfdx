@@ -35,6 +35,8 @@ open class LibfdxExtension @Inject constructor(
         get() = teavm.getC()
 
     val assets: ConfigurableFileCollection = project.files()
+    internal var uiPreviewDeclared = false
+    val uiPreview: LibfdxUiPreviewExtension = LibfdxUiPreviewExtension(project, objects)
     val bitmapFonts: NamedDomainObjectContainer<LibfdxBitmapFontExtension> =
         objects.domainObjectContainer(LibfdxBitmapFontExtension::class.java) { name ->
             objects.newInstance(LibfdxBitmapFontExtension::class.java, name)
@@ -76,6 +78,11 @@ open class LibfdxExtension @Inject constructor(
 
     fun assets(vararg paths: Any) {
         assets.from(*paths)
+    }
+
+    fun uiPreview(action: Action<in LibfdxUiPreviewExtension>) {
+        uiPreviewDeclared = true
+        action.execute(uiPreview)
     }
 
     fun bitmapFont(name: String, action: Action<in LibfdxBitmapFontExtension>) {

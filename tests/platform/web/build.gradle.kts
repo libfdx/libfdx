@@ -20,7 +20,7 @@ tasks.register<JavaExec>("validate_web_graphics") {
     description = "Builds and validates all tests on JS and Wasm with WebGL and WebGPU in isolated browsers."
     dependsOn("libfdx_web_js_tests_webgl_build", "libfdx_web_js_tests_webgpu_build", "libfdx_web_wasm_tests_webgl_build", "libfdx_web_wasm_tests_webgpu_build")
     classpath = graphicsMatrixRunner
-    mainClass.set("io.github.libfdx.testsupport.runner.PlatformMatrixLauncher")
+    mainClass.set("io.github.libfdx.tests.utils.runner.PlatformMatrixLauncher")
     workingDir(rootProject.projectDir)
     systemProperties(gradle.startParameter.systemPropertiesArgs.filterKeys { it.startsWith("libfdx.test.") })
     systemProperty("libfdx.test.autoPlatform", "web")
@@ -40,7 +40,7 @@ tasks.register<JavaExec>("validate_web_bootstrap") {
     description = "Checks app-first JS/Wasm startup, delayed/failed downloads and disposal on WebGL/WebGPU."
     dependsOn("libfdx_web_js_tests_webgl_build", "libfdx_web_wasm_tests_webgl_build")
     classpath = graphicsMatrixRunner
-    mainClass.set("io.github.libfdx.testsupport.runner.WebBootstrapRunner")
+    mainClass.set("io.github.libfdx.tests.utils.runner.WebBootstrapRunner")
     workingDir(rootProject.projectDir)
     systemProperties(gradle.startParameter.systemPropertiesArgs.filterKeys { it.startsWith("libfdx.test.") })
     environment("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")
@@ -99,7 +99,7 @@ libfdx {
     assets(rootProject.layout.projectDirectory.dir("tests/assets"))
 
     js {
-        mainClass.set("io.github.libfdx.tests.web.WebTestJsLauncher")
+        mainClass.set("io.github.libfdx.tests.utils.webtestlauncher.WebTestJsLauncher")
         htmlTitle.set("libfdx Tests - WebGL JS")
         canvasId.set("libfdx-canvas")
         htmlWidth.set(0)
@@ -116,7 +116,7 @@ libfdx {
         }
     }
     wasm {
-        mainClass.set("io.github.libfdx.tests.web.WebTestWasmLauncher")
+        mainClass.set("io.github.libfdx.tests.utils.webtestlauncher.WebTestWasmLauncher")
         htmlTitle.set("libfdx Tests - WebGL Wasm")
         canvasId.set("libfdx-canvas")
         htmlWidth.set(0)

@@ -1,0 +1,33 @@
+package io.github.libfdx.tests;
+
+import io.github.libfdx.tests.utils.shared.ShapeRenderTest;
+
+import io.github.libfdx.graphics.ShapeRenderer;
+
+/**
+ * Runs the square test scenario.
+ *
+ * @author xpenatan
+ */
+public final class SquareTest extends ShapeRenderTest {
+    /**
+     * Creates a square test.
+     */
+    public SquareTest() {
+        this(0L);
+    }
+
+    /**
+     * Creates a square test.
+     *
+     * @param exitAfterFrames the exit after frames
+     */
+    public SquareTest(long exitAfterFrames) {
+        super("square", exitAfterFrames);
+    }
+
+    @Override
+    protected void renderShape(ShapeRenderer shapes) {
+        shapes.filledRect(-0.55f, -0.55f, 1.10f, 1.10f, 0.20f, 0.78f, 0.48f, 1.0f);
+    }
+}

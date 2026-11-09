@@ -60,6 +60,7 @@ public final class UiG2DRenderer implements UiRenderer {
     private static final UiColor DEBUG_WINDOW_TITLE = UiColor.rgba8888(0xffd166ee);
     private static final UiColor DEBUG_WINDOW_RESIZE = UiColor.rgba8888(0xff4fd8ff);
     private static final UiColor CONTROL_DARK = UiColor.rgba8888(0x17202aff);
+    private static final UiColor PREVIEW_POINTER_FEEDBACK = UiColor.rgba8888(0x47a8ffff);
 
     private final GraphicsContext graphics;
     private final ShapeRenderer shapes;
@@ -72,6 +73,7 @@ public final class UiG2DRenderer implements UiRenderer {
     private int customImageDrawCount;
     private Batch2D batch;
     private UiRect currentClip;
+    private UiNode drawingNode;
     private boolean disposed;
 
     /**
@@ -106,6 +108,8 @@ public final class UiG2DRenderer implements UiRenderer {
         try {
             renderSubtree(root, node, pass);
             renderOverlayQueue(root, pass);
+            UiNode feedback = root.pointerFeedbackNode();
+            if (feedback != null) renderPreviewFeedback(root, feedback, pass);
             if (root.debugLines()) {
                 shapes.begin(pass);
                 renderDebugLines(root, node);
@@ -118,19 +122,50 @@ public final class UiG2DRenderer implements UiRenderer {
         }
     }
 
+    private void renderPreviewFeedback(UiRoot root, UiNode node, RenderPass pass) {
+        boolean pressed = node.pressed();
+        UiStyle style = root.styleFor(node);
+        if (style != null && (pressed ? style.pressed() : style.hover()) != null) {
+            return;
+        }
+        // Draw over both shapes and images, with the same clipping as the control.
+        UiRect worldClip = null;
+        float alpha = pressed ? 1.0f : 0.5f;
+        for (UiNode ancestor = node; ancestor != null; ancestor = ancestor.parent()) {
+            worldClip = nodeClip(ancestor, worldClip);
+            alpha *= ancestor.renderAlpha();
+        }
+        UiRect previousClip = currentClip;
+        UiNode previousNode = drawingNode;
+        shapes.begin(pass);
+        try {
+            drawingNode = node;
+            currentClip = localClip(node, worldClip);
+            drawOutline(root, node.bounds(), PREVIEW_POINTER_FEEDBACK, alpha);
+        } finally {
+            drawingNode = previousNode;
+            currentClip = previousClip;
+            shapes.end();
+        }
+    }
+
     private void renderSubtree(UiRoot root, UiNode node, RenderPass pass) {
         if (!node.visible()) {
             return;
         }
         shapes.begin(pass);
-        renderShapes(root, node, 1.0f, null);
+        float parentAlpha = 1;
+        for (UiNode parent = node.parent(); parent != null; parent = parent.parent()) {
+            parentAlpha *= parent.renderAlpha();
+        }
+        renderShapes(root, node, parentAlpha, null);
         shapes.end();
 
         boolean renderBatch = needsBatch(root, node);
         if (renderBatch) {
             Batch2D activeBatch = batch();
             activeBatch.begin(pass);
-            renderImages(root, node, 1.0f, null);
+            renderImages(root, node, parentAlpha, null);
             activeBatch.end();
         }
     }
@@ -173,8 +208,11 @@ public final class UiG2DRenderer implements UiRenderer {
             return;
         }
         UiRect previousClip = currentClip;
-        currentClip = nodeClip(node, inheritedClip);
-        float alpha = combinedAlpha(parentAlpha, node.modifier().alpha());
+        UiNode previousNode = drawingNode;
+        drawingNode = node;
+        UiRect worldClip = nodeClip(node, inheritedClip);
+        currentClip = localClip(node, worldClip);
+        float alpha = combinedAlpha(parentAlpha, node.renderAlpha());
         drawBackground(root, node, alpha);
         if (node.type() == UiNodeType.CUSTOM) {
             drawCustom(root, node, alpha);
@@ -220,13 +258,14 @@ public final class UiG2DRenderer implements UiRenderer {
             if (root.isOverlayNode(child)) {
                 overlayNodes.add(child);
             } else {
-                renderShapes(root, child, alpha, currentClip);
+                renderShapes(root, child, alpha, worldClip);
             }
         }
         if (node.type() == UiNodeType.SCROLL || node.type() == UiNodeType.TEXT_AREA) {
             drawScrollbars(root, node, alpha);
         }
         currentClip = previousClip;
+        drawingNode = previousNode;
     }
 
     private void renderImages(UiRoot root, UiNode node, float parentAlpha, UiRect inheritedClip) {
@@ -234,8 +273,11 @@ public final class UiG2DRenderer implements UiRenderer {
             return;
         }
         UiRect previousClip = currentClip;
-        currentClip = nodeClip(node, inheritedClip);
-        float alpha = combinedAlpha(parentAlpha, node.modifier().alpha());
+        UiNode previousNode = drawingNode;
+        drawingNode = node;
+        UiRect worldClip = nodeClip(node, inheritedClip);
+        currentClip = localClip(node, worldClip);
+        float alpha = combinedAlpha(parentAlpha, node.renderAlpha());
         drawBackgroundImage(root, node, alpha);
         drawImage(root, node, alpha);
         if (node.type() == UiNodeType.CUSTOM) {
@@ -251,10 +293,11 @@ public final class UiG2DRenderer implements UiRenderer {
         for (int i = 0; i < children.size(); i++) {
             UiNode child = children.get(i);
             if (!root.isOverlayNode(child)) {
-                renderImages(root, child, alpha, currentClip);
+                renderImages(root, child, alpha, worldClip);
             }
         }
         currentClip = previousClip;
+        drawingNode = previousNode;
     }
 
     private void drawBackground(UiRoot root, UiNode node, float alpha) {
@@ -444,7 +487,7 @@ public final class UiG2DRenderer implements UiRenderer {
         UiColor accent = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x47a8ffff));
         drawRect(root, trackX, y, trackWidth, trackHeight,
                 track.red(), track.green(), track.blue(), track.alpha() * sliderAlpha);
-        float progress = sliderProgress(node);
+        float progress = sliderProgress(root, node);
         if (enabled) {
             drawRect(root, trackX, y, trackWidth * progress, trackHeight,
                     accent.red(), accent.green(), accent.blue(), accent.alpha() * sliderAlpha);
@@ -1607,9 +1650,22 @@ public final class UiG2DRenderer implements UiRenderer {
         if (node.type() == UiNodeType.SCROLL || node.type() == UiNodeType.TEXT_FIELD
                 || node.type() == UiNodeType.TEXT_AREA || node.type() == UiNodeType.TABS
                 || node.modifier().clipsToBounds()) {
-            clip = intersect(node, clip, node.bounds());
+            UiRect bounds = node.bounds();
+            clip = intersect(node, clip, node.rendererRect(42,
+                    node.renderX(bounds.x()), node.renderY(bounds.y()),
+                    node.renderWidth(bounds.width()), node.renderHeight(bounds.height())));
         }
         return clip;
+    }
+
+    private UiRect localClip(UiNode node, UiRect worldClip) {
+        if (worldClip == null) return null;
+        float x = node.localX(worldClip.x());
+        float y = node.localY(worldClip.y());
+        if (!Float.isFinite(x) || !Float.isFinite(y)) return node.rendererRect(43, 0, 0, 0, 0);
+        return node.rendererRect(43, x, y,
+                Math.max(0, node.localX(worldClip.right()) - x),
+                Math.max(0, node.localY(worldClip.bottom()) - y));
     }
 
     private UiRect intersect(UiNode node, UiRect clip, UiRect rect) {
@@ -1635,6 +1691,8 @@ public final class UiG2DRenderer implements UiRenderer {
         if (!node.visible()) {
             return;
         }
+        UiNode previousNode = drawingNode;
+        drawingNode = node;
         drawOutline(root, node.bounds(), debugColor(node));
         if (node.type() == UiNodeType.WINDOW) {
             drawOutline(root, root.windowTitleBar(node), DEBUG_WINDOW_TITLE);
@@ -1644,6 +1702,7 @@ public final class UiG2DRenderer implements UiRenderer {
         for (int i = 0; i < children.size(); i++) {
             renderDebugLines(root, children.get(i));
         }
+        drawingNode = previousNode;
     }
 
     private void drawOutline(UiRoot root, UiRect rect, UiColor color) {
@@ -1966,14 +2025,14 @@ public final class UiG2DRenderer implements UiRenderer {
         return style;
     }
 
-    private float sliderProgress(UiNode node) {
+    private float sliderProgress(UiRoot root, UiNode node) {
         Object descriptor = node.descriptor();
         if (!(descriptor instanceof UiSliderModel)) {
             return 0.0f;
         }
         UiRange range = ((UiSliderModel) descriptor).range();
         float span = Math.max(0.0001f, range.maximum() - range.minimum());
-        return (range.clamp(node.floatValue()) - range.minimum()) / span;
+        return (range.clamp(root.sliderDisplayValue(node)) - range.minimum()) / span;
     }
 
     private float progressValue(UiNode node) {
@@ -2094,6 +2153,7 @@ public final class UiG2DRenderer implements UiRenderer {
     }
 
     private float ndcX(UiRoot root, float x) {
+        if (drawingNode != null) x = drawingNode.renderX(x);
         float width = Math.max(1.0f, root.renderWidth());
         float scale = root.effectiveUiScale();
         return x * scale / width * 2.0f - 1.0f;
@@ -2104,6 +2164,10 @@ public final class UiG2DRenderer implements UiRenderer {
     }
 
     private float ndcY(UiRoot root, float y, float heightValue) {
+        if (drawingNode != null) {
+            y = drawingNode.renderY(y);
+            heightValue = drawingNode.renderHeight(heightValue);
+        }
         float height = Math.max(1.0f, root.renderHeight());
         float scale = root.effectiveUiScale();
         return 1.0f - (y + heightValue) * scale / height * 2.0f;
@@ -2114,6 +2178,7 @@ public final class UiG2DRenderer implements UiRenderer {
     }
 
     private float ndcWidth(UiRoot root, float widthValue) {
+        if (drawingNode != null) widthValue = drawingNode.renderWidth(widthValue);
         float width = Math.max(1.0f, root.renderWidth());
         return widthValue * root.effectiveUiScale() / width * 2.0f;
     }
@@ -2123,6 +2188,7 @@ public final class UiG2DRenderer implements UiRenderer {
     }
 
     private float ndcHeight(UiRoot root, float heightValue) {
+        if (drawingNode != null) heightValue = drawingNode.renderHeight(heightValue);
         float height = Math.max(1.0f, root.renderHeight());
         return heightValue * root.effectiveUiScale() / height * 2.0f;
     }

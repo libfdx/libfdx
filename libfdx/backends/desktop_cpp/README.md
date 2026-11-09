@@ -1,8 +1,13 @@
 # Desktop C++ backend
 
 Translates the shared libFDX tests to C++ with jNative and runs them through GLFW
-with OpenGL or Vulkan. The adjacent `../jNative` checkout is included directly by
-Gradle; override it with `-Pjnative.dir=E:/path/to/jNative`.
+with OpenGL or Vulkan. In the root `local.properties`, set `jnative.local=true`
+to use a local checkout or `jnative.local=false` to disable it. Set
+`jnative.dir=E:/path/to/jNative` to select a checkout other than `../jNative`.
+When `jnative.local` is unset, Gradle uses a configured `jnative.dir` or
+discovers the adjacent checkout automatically. Explicit `-P` flags take
+precedence over `local.properties`, which takes precedence over
+`gradle.properties`.
 
 The [libFDX Gradle plugin](../../tools/gradle-plugin/README.md#desktop-c-with-jnative)
 exposes this backend as `desktopCPP`, with named debug/release generation, build,

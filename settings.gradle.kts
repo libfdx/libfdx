@@ -1,3 +1,5 @@
+import java.util.Properties
+
 gradle.extensions.extraProperties.set("libfdxUsePublishedLibfdx", false)
 
 pluginManagement {
@@ -17,12 +19,23 @@ pluginManagement {
     }
 }
 
+val localProperties = Properties()
+providers.fileContents(layout.settingsDirectory.file("local.properties")).asText.orNull?.let { contents ->
+    localProperties.load(contents.reader())
+}
+
+fun settingsProperty(name: String): String? =
+    gradle.startParameter.projectProperties[name]
+        ?: localProperties.getProperty(name)
+        ?: providers.gradleProperty(name).orNull
+
 // Use the compiler checkout directly; no Maven publication is needed while developing it.
-val jnativeCheckout = providers.gradleProperty("jnative.dir").orElse("../jNative")
-val useLocalJNative = providers.gradleProperty("jnative.local").map(String::toBoolean)
-    .orElse(providers.gradleProperty("jnative.dir").isPresent || file(jnativeCheckout.get()).isDirectory)
-if (useLocalJNative.get()) {
-    includeBuild(jnativeCheckout.get()) {
+val configuredJNativeDir = settingsProperty("jnative.dir")
+val jnativeCheckout = configuredJNativeDir ?: "../jNative"
+val useLocalJNative = settingsProperty("jnative.local")?.toBoolean()
+    ?: (configuredJNativeDir != null || file(jnativeCheckout).isDirectory)
+if (useLocalJNative) {
+    includeBuild(jnativeCheckout) {
         name = "jnative"
         dependencySubstitution {
             substitute(module("com.github.xpenatan.jNative:jnative-api")).using(project(":jNative:api"))
@@ -74,6 +87,7 @@ include(":libfdx:extensions:physics:box3d:core")
 include(":libfdx:extensions:physics:jolt:core")
 include(":libfdx:extensions:ui:imgui:core")
 include(":libfdx:tools:font")
+include(":libfdx:tools:ui-preview")
 include(":libfdx:tools:texturepacker")
 include(":libfdx:tools:ibl")
 include(":libfdx:tools:shader")

@@ -89,6 +89,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     private final UiTextEngine textEngine;
     private final OrderedMap<String, UiNode> retainedNodes = new OrderedMap<String, UiNode>();
     private final Array<UiNode> retainedNodeValues = new Array<UiNode>();
+    private final Array<UiNode> transitionNodes = new Array<UiNode>();
     private final Array<UiObservableState> observedStateValues = new Array<UiObservableState>();
     private final OrderedMap<String, UiAnimatable<?>> animatables = new OrderedMap<String, UiAnimatable<?>>();
     private final Array<String> animatableKeys = new Array<String>();
@@ -99,14 +100,20 @@ public final class UiRoot implements Disposable, UiStateListener {
     private final Array<UiFloatAnimatable> floatAnimatableValues = new Array<UiFloatAnimatable>();
     private final OrderedMap<String, UiScrollState> scrollStates = new OrderedMap<String, UiScrollState>();
     private final OrderedMap<String, UiListState> listStates = new OrderedMap<String, UiListState>();
+    private final Array<String> scrollStateKeys = new Array<String>();
+    private final Array<String> listStateKeys = new Array<String>();
     private final OrderedMap<String, UiRect> tooltipAnchors = new OrderedMap<String, UiRect>();
     private final Array<String> unusedNodeIdentities = new Array<String>();
     private final Array<UiNode> focusableNodes = new Array<UiNode>();
+    private final Array<UiNode> modalStack = new Array<UiNode>();
+    private final Array<UiNode> modalPreviousFocus = new Array<UiNode>();
+    private UiNode activeModal;
     private UiScope[] compositionScopes = new UiScope[64];
     private Array<?>[] compositionLists = new Array<?>[8];
     private int compositionScopeCount;
     private int compositionListCount;
     private final UiInputHandler inputHandler = new UiInputHandler(this);
+    private final boolean feedbackOnly;
     private final HitResult hitResult = new HitResult();
     private final UiPointerEvent surfacePointerEvent = new UiPointerEvent();
     private UiTheme theme = UiTheme.dark();
@@ -117,6 +124,9 @@ public final class UiRoot implements Disposable, UiStateListener {
     private UiNode rootNode;
     private UiNode hoveredNode;
     private UiNode pressedNode;
+    private int feedbackPointerId;
+    private PointerType feedbackPointerType;
+    private float feedbackSliderValue;
     private UiNode focusedNode;
     private UiNode capturedSurfaceNode;
     private int capturedSurfacePointerId;
@@ -208,9 +218,14 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     UiRoot(FileSystem files, Display display, GraphicsContext graphics, UiTheme theme) {
+        this(files, display, graphics, theme, false);
+    }
+
+    UiRoot(FileSystem files, Display display, GraphicsContext graphics, UiTheme theme, boolean feedbackOnly) {
         this.files = files;
         this.display = display;
         this.graphics = graphics;
+        this.feedbackOnly = feedbackOnly;
         this.textEngine = new UiTextEngine(files, graphics);
         this.theme = theme != null ? theme : UiTheme.dark();
         this.width = display != null ? display.width() : 0;
@@ -270,9 +285,16 @@ public final class UiRoot implements Disposable, UiStateListener {
      */
     public void update(float deltaSeconds) {
         syncDisplayMetrics();
+        if (feedbackOnly && (hoveredNode != null || pressedNode != null) && display != null && !display.focused()) {
+            clearPointerFeedback();
+        }
         ensureComposed();
         float previousElapsedSeconds = elapsedSeconds;
         elapsedSeconds += Math.max(0.0f, deltaSeconds);
+        boolean transitionChanged = false;
+        for (int i = 0; i < transitionNodes.size(); i++) {
+            transitionChanged |= transitionNodes.get(i).updateTransition(Math.max(0, deltaSeconds) * animationScale);
+        }
         boolean animationRunning = false;
         for (int i = 0; i < animatableValues.size(); i++) {
             UiAnimatable<?> animatable = animatableValues.get(i);
@@ -293,6 +315,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (animationRunning || tooltipWakeDue) {
             ensureComposed();
         }
+        if (transitionChanged) updateRenderTransforms(rootNode);
     }
 
     /**
@@ -577,6 +600,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             return this;
         }
         if (this.input != null) {
+            if (feedbackOnly) clearPointerFeedback();
             hidePlatformTextInput(this.input);
             if (inputRouter != null) inputRouter.remove(inputHandler);
             else this.input.removeProcessor(inputHandler);
@@ -632,6 +656,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (state == null) {
             state = new UiScrollState();
             scrollStates.put(id, state);
+            scrollStateKeys.add(id);
         }
         return state;
     }
@@ -642,6 +667,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (state == null) {
             state = new UiListState();
             listStates.put(id, state);
+            listStateKeys.add(id);
         }
         return state;
     }
@@ -669,6 +695,11 @@ public final class UiRoot implements Disposable, UiStateListener {
             }
         }
         node.begin(key, modifier);
+        if (node.hasTransition()) {
+            if (!transitionNodes.contains(node)) transitionNodes.add(node);
+        } else {
+            transitionNodes.removeValue(node, true);
+        }
         node.usedInComposition(compositionPass);
         return node;
     }
@@ -693,6 +724,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             return;
         }
         disposed = true;
+        if (feedbackOnly) clearPointerFeedback();
         cancelSurfaceCapture();
         notifySurfaceFocus(focusedNode, false);
         for (int i = 0; i < observedStateValues.size(); i++) {
@@ -704,6 +736,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         retainedNodes.clear();
         retainedNodeValues.clear();
+        transitionNodes.clear();
         animatables.clear();
         animatableKeys.clear();
         animatableValues.clear();
@@ -712,7 +745,12 @@ public final class UiRoot implements Disposable, UiStateListener {
         floatAnimatableValues.clear();
         scrollStates.clear();
         listStates.clear();
+        scrollStateKeys.clear();
+        listStateKeys.clear();
         tooltipAnchors.clear();
+        modalStack.clear();
+        modalPreviousFocus.clear();
+        activeModal = null;
         if (input != null) {
             hidePlatformTextInput(input);
             if (inputRouter != null) inputRouter.remove(inputHandler);
@@ -738,9 +776,14 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private void ensureComposed() {
+        for (int pass = 0; dirty && !disposed && pass < 8; pass++) composeOnce();
+    }
+
+    private void composeOnce() {
         if (!dirty || disposed) {
             return;
         }
+        dirty = false;
         for (int i = 0; i < observedStateValues.size(); i++) {
             observedStateValues.get(i).removeListener(this);
         }
@@ -756,12 +799,15 @@ public final class UiRoot implements Disposable, UiStateListener {
             if (content != null) {
                 content.build(obtainScope(rootNode, "root"));
             }
+        } catch (RuntimeException | Error failure) {
+            dirty = true;
+            throw failure;
         } finally {
             releaseCompositionScratch();
             UiComposition.CURRENT_ROOT.set(previous);
         }
+        reconcileInputState();
         disposeUnusedNodes();
-        dirty = false;
         layout();
     }
 
@@ -832,6 +878,8 @@ public final class UiRoot implements Disposable, UiStateListener {
                 retainedNodeValues.removeValue(node, true);
                 clearReferencesToNode(node);
                 removeAnimationsForNode(identity);
+                removeStatesForNode(identity);
+                transitionNodes.removeValue(node, true);
                 if (node != null) {
                     node.dispose();
                 }
@@ -887,6 +935,24 @@ public final class UiRoot implements Disposable, UiStateListener {
     private void removeAnimationsForNode(String identity) {
         removeObjectAnimationsForNode(identity);
         removeFloatAnimationsForNode(identity);
+    }
+
+    private void removeStatesForNode(String identity) {
+        String prefix = identity + ":";
+        for (int i = scrollStateKeys.size() - 1; i >= 0; i--) {
+            String key = scrollStateKeys.get(i);
+            if (key.equals(identity) || key.startsWith(prefix)) {
+                scrollStates.remove(key);
+                scrollStateKeys.removeIndex(i);
+            }
+        }
+        for (int i = listStateKeys.size() - 1; i >= 0; i--) {
+            String key = listStateKeys.get(i);
+            if (key.equals(identity) || key.startsWith(prefix)) {
+                listStates.remove(key);
+                listStateKeys.removeIndex(i);
+            }
+        }
     }
 
     private void removeObjectAnimationsForNode(String identity) {
@@ -1000,7 +1066,63 @@ public final class UiRoot implements Disposable, UiStateListener {
         return tooltipAnchors.get(tooltip.text());
     }
 
+    private boolean handlePointerFeedback(PointerEvent event, UiPointerPhase phase) {
+        if (phase != UiPointerPhase.MOVE && event.button() != MouseButton.LEFT) {
+            return false;
+        }
+        if (pressedNode != null
+                && (feedbackPointerId != event.pointerId() || feedbackPointerType != event.type())) {
+            return false;
+        }
+        float x = uiX(event.x());
+        HitResult hit = hitTestResult(x, uiY(event.y()));
+        UiNode target = feedbackEligible(hit.node) ? hit.node : null;
+        setHovered(phase == UiPointerPhase.UP && event.type() == PointerType.TOUCH ? null : target);
+        boolean handled = target != null || hit.blocked || pressedNode != null;
+        if (phase == UiPointerPhase.UP) {
+            clearFeedbackPress();
+        } else {
+            if (phase == UiPointerPhase.DOWN) {
+                clearFeedbackPress();
+                pressedNode = target;
+                feedbackPointerId = event.pointerId();
+                feedbackPointerType = event.type();
+            }
+            if (pressedNode != null) {
+                boolean slider = pressedNode.descriptor() instanceof UiSliderModel;
+                if (slider) {
+                    UiSliderModel model = (UiSliderModel)pressedNode.descriptor();
+                    feedbackSliderValue = sliderValueFromPointer(pressedNode, x, model.range());
+                }
+                pressedNode.pressed(slider || pressedNode == target);
+            }
+        }
+        return handled;
+    }
+
+    private boolean feedbackEligible(UiNode node) {
+        return inputEligible(node) && (activeModal == null || descendantOf(node, activeModal));
+    }
+
+    private void clearFeedbackPress() {
+        if (pressedNode != null) {
+            pressedNode.pressed(false);
+            pressedNode = null;
+        }
+    }
+
+    private void clearPointerFeedback() {
+        setHovered(null);
+        clearFeedbackPress();
+    }
+
+    UiNode pointerFeedbackNode() {
+        if (!feedbackOnly) return null;
+        return pressedNode != null && pressedNode.pressed() ? pressedNode : hoveredNode;
+    }
+
     boolean handlePointerMoved(PointerEvent event) {
+        if (feedbackOnly) return handlePointerFeedback(event, UiPointerPhase.MOVE);
         ensureComposed();
         float x = uiX(event.x());
         float y = uiY(event.y());
@@ -1058,6 +1180,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     boolean handlePointerDown(PointerEvent event) {
+        if (feedbackOnly) return handlePointerFeedback(event, UiPointerPhase.DOWN);
         ensureComposed();
         float x = uiX(event.x());
         float y = uiY(event.y());
@@ -1142,6 +1265,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     boolean handlePointerUp(PointerEvent event) {
+        if (feedbackOnly) return handlePointerFeedback(event, UiPointerPhase.UP);
         ensureComposed();
         float x = uiX(event.x());
         float y = uiY(event.y());
@@ -1230,6 +1354,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     boolean handleScrolled(PointerEvent event) {
+        if (feedbackOnly) return false;
         ensureComposed();
         float x = uiX(event.x());
         float y = uiY(event.y());
@@ -1251,7 +1376,9 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     boolean handleKeyDown(KeyEvent event) {
+        if (feedbackOnly) return false;
         ensureComposed();
+        reconcileInputState();
         if (focusedNode == null) {
             if (event.key() == Key.TAB || event.key() == Key.DOWN || event.key() == Key.RIGHT) {
                 return focusNext(1);
@@ -1259,7 +1386,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             if (event.key() == Key.UP || event.key() == Key.LEFT) {
                 return focusNext(-1);
             }
-            return false;
+            return activeModal != null;
         }
         UiSurfaceInput focusedSurfaceInput = surfaceInput(focusedNode);
         if (focusedSurfaceInput != null && focusedSurfaceInput.keyDown(event)) {
@@ -1339,7 +1466,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             focusedNode.activate();
             return true;
         }
-        return false;
+        return activeModal != null;
     }
 
     private boolean handleRadioKey(UiNode node, Key key) {
@@ -1358,7 +1485,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         UiRadioModel group = (UiRadioModel) node.descriptor();
         focusableNodes.clear();
         try {
-            collectRadioGroup(rootNode, group, focusableNodes);
+            collectRadioGroup(activeModal != null ? activeModal : rootNode, group, focusableNodes);
             if (focusableNodes.isEmpty()) {
                 return false;
             }
@@ -1380,7 +1507,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private void collectRadioGroup(UiNode node, UiRadioModel group, Array<UiNode> result) {
-        if (node == null || !node.visible()) {
+        if (!inputEligible(node)) {
             return;
         }
         if (node.type() == UiNodeType.RADIO_BUTTON && node.modifier().enabled()
@@ -1397,10 +1524,10 @@ public final class UiRoot implements Disposable, UiStateListener {
     private boolean focusNext(int direction) {
         focusableNodes.clear();
         try {
-            collectFocusable(rootNode, focusableNodes);
+            collectFocusable(activeModal != null ? activeModal : rootNode, focusableNodes);
             if (focusableNodes.isEmpty()) {
                 setFocused(null);
-                return false;
+                return activeModal != null;
             }
             int current = focusedNode != null ? focusableNodes.indexOf(focusedNode) : -1;
             int next = current + (direction >= 0 ? 1 : -1);
@@ -1419,7 +1546,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private void collectFocusable(UiNode node, Array<UiNode> result) {
-        if (node == null || !node.visible()) {
+        if (!inputEligible(node)) {
             return;
         }
         if (isFocusable(node)) {
@@ -1453,7 +1580,9 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     boolean handleTextInput(TextInputEvent event) {
+        if (feedbackOnly) return false;
         ensureComposed();
+        reconcileInputState();
         UiSurfaceInput focusedSurfaceInput = surfaceInput(focusedNode);
         if (focusedSurfaceInput != null && focusedSurfaceInput.textInput(event)) {
             return true;
@@ -1465,7 +1594,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             updatePlatformTextInput(focusedNode);
             return true;
         }
-        return false;
+        return activeModal != null;
     }
 
     UiNode hitTest(float x, float y) {
@@ -1557,6 +1686,15 @@ public final class UiRoot implements Disposable, UiStateListener {
         lastLayoutUiScale = scale;
         layoutPass++;
         layoutChildren(rootNode, rootBounds);
+        updateRenderTransforms(rootNode);
+        updatePlatformTextInput(focusedNode);
+    }
+
+    private void updateRenderTransforms(UiNode node) {
+        if (node == null) return;
+        node.updateRenderTransform();
+        ArrayView<UiNode> children = node.children();
+        for (int i = 0; i < children.size(); i++) updateRenderTransforms(children.get(i));
     }
 
     private void syncDisplayMetrics() {
@@ -1619,7 +1757,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private void layoutChildren(UiNode node, UiRect bounds) {
-        if (!node.visible() || node.children().isEmpty()) {
+        if (!node.visible()) {
             return;
         }
         UiInsets padding = effectivePadding(node);
@@ -1632,7 +1770,8 @@ public final class UiRoot implements Disposable, UiStateListener {
                     inner.width(), Math.max(0.0f, inner.height() - headerHeight));
         }
         if (node.type() == UiNodeType.SCROLL && node.scrollState() != null) {
-            layoutScroll(node, inner);
+            if (node.descriptor() instanceof UiVirtualListModel) layoutVirtualList(node, inner);
+            else layoutScroll(node, inner);
             layoutOverlayChildren(node, bounds);
             return;
         }
@@ -1666,6 +1805,26 @@ public final class UiRoot implements Disposable, UiStateListener {
             scrolled = scrolledViewport(node, viewport, state);
             layoutContainerChildren(node, scrolled);
             updateScrollMetrics(node, viewport, scrolled);
+        }
+    }
+
+    private void layoutVirtualList(UiNode node, UiRect viewport) {
+        UiVirtualListModel model = (UiVirtualListModel)node.descriptor();
+        ArrayView<UiNode> children = node.children();
+        for (int i = 0; i < children.size(); i++) {
+            model.measuredHeight(model.firstComposed + i,
+                    preferredSize(children.get(i), viewport.width(), Float.MAX_VALUE).height());
+        }
+        if (model.updateEstimate(children.size())) requestCompose();
+        if (model.updateMetrics(viewport.width(), viewport.height())) requestCompose();
+        if (children.size() != model.endComposed() - model.firstComposed) requestCompose();
+        float y = viewport.y() + model.top(model.firstComposed) - model.scroll.y();
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
+            float height = model.height(model.firstComposed + i);
+            layoutNode(child, child.rendererRect(RECT_LAYOUT_CHILD_INPUT,
+                    viewport.x(), y, viewport.width(), height), false, true);
+            y += height;
         }
     }
 
@@ -2035,7 +2194,11 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         UiInsets padding = effectivePadding(node);
         UiSize size;
-        if (node.type() == UiNodeType.TEXT) {
+        if (node.descriptor() instanceof UiVirtualListModel) {
+            UiVirtualListModel model = (UiVirtualListModel)node.descriptor();
+            size = node.layoutSize(SIZE_PREFERRED_BASE, availableWidth,
+                    model.preferredHeight() + padding.vertical());
+        } else if (node.type() == UiNodeType.TEXT) {
             size = textSize(node, node.text(), padding, availableWidth);
         } else if (node.type() == UiNodeType.BUTTON) {
             UiSize text = textSize(node, node.text(), padding, availableWidth);
@@ -2373,15 +2536,17 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private boolean hitTest(UiNode node, float x, float y, HitResult result) {
-        if (!node.visible()) {
+        if (!node.visible() || !node.modifier().enabled()) {
             return false;
         }
-        boolean contains = node.bounds().contains(x, y);
+        float localX = node.localX(x);
+        float localY = node.localY(y);
+        boolean contains = node.bounds().contains(localX, localY);
         if (!contains && clipsHitToBounds(node)) {
             return false;
         }
         if (node.type() == UiNodeType.WINDOW
-                && (windowTitleBar(node).contains(x, y) || windowResizeHandle(node).contains(x, y))) {
+                && (windowTitleBar(node).contains(localX, localY) || windowResizeHandle(node).contains(localX, localY))) {
             result.set(node, false);
             return true;
         }
@@ -2525,7 +2690,86 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private boolean isFocusable(UiNode node) {
-        return node != null && node.modifier().enabled() && node.modifier().focusable();
+        return inputEligible(node) && node.modifier().focusable()
+                && (activeModal == null || descendantOf(node, activeModal));
+    }
+
+    private boolean inputEligible(UiNode node) {
+        for (UiNode current = node; current != null; current = current.parent()) {
+            if (current.isDisposed() || !current.wasUsedInComposition(compositionPass)
+                    || !current.visible() || !current.modifier().enabled()) {
+                return false;
+            }
+            if (current == rootNode) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean descendantOf(UiNode node, UiNode ancestor) {
+        for (UiNode current = node; current != null; current = current.parent()) {
+            if (current == ancestor) return true;
+        }
+        return false;
+    }
+
+    private UiNode topModal(UiNode node) {
+        if (!inputEligible(node)) return null;
+        ArrayView<UiNode> children = renderChildren(node);
+        for (int i = children.size() - 1; i >= 0; i--) {
+            UiNode modal = topModal(children.get(i));
+            if (modal != null) return modal;
+        }
+        return node.type() == UiNodeType.MODAL ? node : null;
+    }
+
+    private void reconcileInputState() {
+        UiNode nextModal = topModal(rootNode);
+        UiNode restore = null;
+        int existing = nextModal != null ? modalStack.indexOf(nextModal) : -1;
+        while (!modalStack.isEmpty()) {
+            int last = modalStack.size() - 1;
+            if (nextModal != null && ((existing >= 0 && last <= existing)
+                    || (existing < 0 && inputEligible(modalStack.get(last))))) break;
+            modalStack.removeIndex(last);
+            restore = modalPreviousFocus.removeIndex(last);
+        }
+        if (nextModal != null && (modalStack.isEmpty()
+                || modalStack.get(modalStack.size() - 1) != nextModal)) {
+            modalStack.add(nextModal);
+            modalPreviousFocus.add(restore != null ? restore : focusedNode);
+        }
+        boolean modalChanged = activeModal != nextModal;
+        activeModal = nextModal;
+        if (!feedbackOnly && (modalChanged || (focusedNode != null && !isFocusable(focusedNode)))) {
+            setFocused(isFocusable(restore) ? restore : null);
+            if (focusedNode == null && activeModal != null) focusNext(1);
+        }
+        if (feedbackOnly && hoveredNode != null && !feedbackEligible(hoveredNode)) {
+            setHovered(null);
+        }
+        if (capturedSurfaceNode != null && (!inputEligible(capturedSurfaceNode)
+                || (activeModal != null && !descendantOf(capturedSurfaceNode, activeModal)))) {
+            cancelSurfaceCapture();
+        }
+        if (pressedNode != null && (!inputEligible(pressedNode)
+                || (activeModal != null && !descendantOf(pressedNode, activeModal)))) {
+            pressedNode.pressed(false);
+            pressedNode = null;
+        }
+        if (activeTextNode != null && !isFocusable(activeTextNode)) activeTextNode = null;
+        if (activeScrollNode != null && (!inputEligible(activeScrollNode)
+                || (activeModal != null && !descendantOf(activeScrollNode, activeModal)))) {
+            activeScrollNode = null;
+            activeScrollPointerMode = SCROLL_POINTER_NONE;
+        }
+        if (activeWindowNode != null && (!inputEligible(activeWindowNode)
+                || (activeModal != null && !descendantOf(activeWindowNode, activeModal)))) {
+            activeWindowNode = null;
+            activeWindowState = null;
+            activeWindowPointerMode = WINDOW_POINTER_NONE;
+        }
     }
 
     private UiSurfaceInput surfaceInput(UiNode node) {
@@ -2546,7 +2790,7 @@ public final class UiRoot implements Disposable, UiStateListener {
                 && capturedSurfacePointerType == event.type();
         UiPointerResult result = surface.pointer(surfacePointerEvent.configure(
                 phase, event.timeNanos(), event.pointerId(), event.type(), event.button(),
-                x, y, event.scrollX(), event.scrollY(), node.bounds(), captured, node.focused()));
+                node.localX(x), node.localY(y), event.scrollX(), event.scrollY(), node.bounds(), captured, node.focused()));
         if (captured) {
             rememberCapturedSurfaceEvent(event, x, y);
         }
@@ -2617,7 +2861,8 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (surface != null) {
             surface.pointer(surfacePointerEvent.configure(
                     UiPointerPhase.CANCEL, capturedSurfaceTimeNanos, capturedSurfacePointerId,
-                    capturedSurfacePointerType, capturedSurfaceButton, capturedSurfaceX, capturedSurfaceY,
+                    capturedSurfacePointerType, capturedSurfaceButton,
+                    captured.localX(capturedSurfaceX), captured.localY(capturedSurfaceY),
                     0.0f, 0.0f, captured.bounds(), true, captured.focused()));
         }
         if (pressedNode == captured) {
@@ -2681,6 +2926,8 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private int tabIndexAt(UiNode node, float x, float y) {
+        x = node.localX(x);
+        y = node.localY(y);
         int count = tabCount(node);
         if (count <= 0) {
             return -1;
@@ -2756,12 +3003,15 @@ public final class UiRoot implements Disposable, UiStateListener {
             hoveredNode.hovered(false);
         }
         hoveredNode = node;
-        tooltipHoverNode = node;
-        tooltipHoverStartSeconds = elapsedSeconds;
-        tooltipWakeSeconds = -1.0f;
         if (hoveredNode != null) {
             hoveredNode.hovered(true);
         }
+        if (feedbackOnly) {
+            return;
+        }
+        tooltipHoverNode = node;
+        tooltipHoverStartSeconds = elapsedSeconds;
+        tooltipWakeSeconds = -1.0f;
         requestCompose();
     }
 
@@ -3046,6 +3296,8 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (model == null) {
             return 0;
         }
+        x = node.localX(x);
+        y = node.localY(y);
         String value = model.value();
         UiTextStyle style = textStyleFor(node);
         UiRect bounds = textInputBounds(node);
@@ -3548,6 +3800,10 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (node == null || !node.modifier().enabled() || !isScrollable(node) || node.scrollState() == null) {
             return false;
         }
+        float worldX = pointerX;
+        float worldY = pointerY;
+        pointerX = node.localX(pointerX);
+        pointerY = node.localY(pointerY);
         UiScrollState state = node.scrollState();
         UiRect verticalTrack = scrollVerticalTrack(node);
         UiRect verticalThumb = scrollVerticalThumb(node, state);
@@ -3589,7 +3845,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         UiRect body = node.bounds().inset(effectivePadding(node));
         if (allowBodyDrag && body.contains(pointerX, pointerY) && (state.canScrollX() || state.canScrollY())) {
-            return beginScrollBodyPointer(node, pointerX, pointerY);
+            return beginScrollBodyPointer(node, worldX, worldY);
         }
         return false;
     }
@@ -3604,8 +3860,8 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         activeScrollNode = node;
         activeScrollPointerMode = SCROLL_POINTER_BODY;
-        activeScrollStartPointerX = pointerX;
-        activeScrollStartPointerY = pointerY;
+        activeScrollStartPointerX = node.localX(pointerX);
+        activeScrollStartPointerY = node.localY(pointerY);
         activeScrollStartX = state.x();
         activeScrollStartY = state.y();
         return true;
@@ -3722,6 +3978,8 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (activeScrollNode == null || activeScrollNode.scrollState() == null) {
             return;
         }
+        pointerX = activeScrollNode.localX(pointerX);
+        pointerY = activeScrollNode.localY(pointerY);
         UiScrollState state = activeScrollNode.scrollState();
         if (activeScrollPointerMode == SCROLL_POINTER_BODY) {
             float deltaX = pointerX - activeScrollStartPointerX;
@@ -3971,15 +4229,22 @@ public final class UiRoot implements Disposable, UiStateListener {
             return;
         }
         UiSliderModel model = (UiSliderModel) node.descriptor();
+        float value = sliderValueFromPointer(node, x, model.range());
+        if (model.state() != null) {
+            model.state().set(value);
+        }
+        node.floatValue(value);
+    }
+
+    float sliderDisplayValue(UiNode node) {
+        return feedbackOnly && pressedNode == node ? feedbackSliderValue : node.floatValue();
+    }
+
+    private float sliderValueFromPointer(UiNode node, float x, UiRange range) {
         float trackX = node.bounds().x() + 8.0f;
         float trackWidth = Math.max(1.0f, node.bounds().width() - 16.0f);
-        float progress = Math.max(0.0f, Math.min(1.0f, (x - trackX) / trackWidth));
-        UiRange range = model.range();
+        float progress = clamp((node.localX(x) - trackX) / trackWidth, 0.0f, 1.0f);
         float value = range.minimum() + (range.maximum() - range.minimum()) * progress;
-        float clamped = range.clamp(value);
-        if (model.state() != null) {
-            model.state().set(clamped);
-        }
-        node.floatValue(clamped);
+        return range.clamp(value);
     }
 }

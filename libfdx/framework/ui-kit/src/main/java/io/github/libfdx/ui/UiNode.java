@@ -25,6 +25,11 @@ public final class UiNode implements Disposable {
     private String key;
     private UiNode parent;
     private UiModifier modifier = UiModifier.none();
+    private UiTransitionRuntime transition;
+    private float renderScaleX = 1;
+    private float renderScaleY = 1;
+    private float renderOffsetX;
+    private float renderOffsetY;
     private String text;
     private Object value;
     private int intValue;
@@ -79,6 +84,12 @@ public final class UiNode implements Disposable {
         this.key = key;
         this.parent = null;
         this.modifier = modifier != null ? modifier : UiModifier.none();
+        if (this.modifier.transition() != null) {
+            if (transition == null) transition = new UiTransitionRuntime();
+            transition.configure(this.modifier.transitionState(), this.modifier.transition());
+        } else {
+            transition = null;
+        }
         this.text = null;
         this.value = null;
         this.intValue = 0;
@@ -105,6 +116,32 @@ public final class UiNode implements Disposable {
             childOrderRevision = Long.MIN_VALUE;
         }
     }
+
+    boolean updateTransition(float delta) { return transition != null && transition.update(delta); }
+    boolean hasTransition() { return transition != null; }
+
+    float renderAlpha() { return modifier.alpha() * (transition != null ? transition.alpha() : 1); }
+    float transitionScale() { return transition != null ? transition.scale() : 1; }
+
+    void updateRenderTransform() {
+        float parentScaleX = parent != null ? parent.renderScaleX : 1;
+        float parentScaleY = parent != null ? parent.renderScaleY : 1;
+        float localScaleX = Math.max(0, modifier.scaleX() * transitionScale());
+        float localScaleY = Math.max(0, modifier.scaleY() * transitionScale());
+        renderScaleX = parentScaleX * localScaleX;
+        renderScaleY = parentScaleY * localScaleY;
+        renderOffsetX = (parent != null ? parent.renderOffsetX : 0)
+                + parentScaleX * (bounds.x() + bounds.width() * 0.5f) * (1 - localScaleX);
+        renderOffsetY = (parent != null ? parent.renderOffsetY : 0)
+                + parentScaleY * (bounds.y() + bounds.height() * 0.5f) * (1 - localScaleY);
+    }
+
+    float renderX(float x) { return x * renderScaleX + renderOffsetX; }
+    float renderY(float y) { return y * renderScaleY + renderOffsetY; }
+    float renderWidth(float width) { return width * renderScaleX; }
+    float renderHeight(float height) { return height * renderScaleY; }
+    float localX(float x) { return renderScaleX > 0 ? (x - renderOffsetX) / renderScaleX : Float.NaN; }
+    float localY(float y) { return renderScaleY > 0 ? (y - renderOffsetY) / renderScaleY : Float.NaN; }
 
     void usedInComposition(long pass) {
         compositionPass = pass;
@@ -819,6 +856,7 @@ public final class UiNode implements Disposable {
         disposed = true;
         parent = null;
         modifier = UiModifier.none();
+        transition = null;
         text = null;
         value = null;
         action = null;

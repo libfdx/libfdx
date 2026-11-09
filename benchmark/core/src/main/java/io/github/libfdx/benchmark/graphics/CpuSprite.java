@@ -24,19 +24,22 @@ final class CpuSprite {
     final float[] vertices = new float[20];
     private final Texture texture;
     private float x, y, rotation;
-    private float width = 32, height = 32, originX = 16, originY = 16;
     private float scaleX = 1, scaleY = 1;
     private boolean dirty = true;
 
     CpuSprite(Texture texture, float rotation) {
         this.texture = texture;
         this.rotation = rotation;
+        initializeVertices(vertices, 0);
+    }
+
+    static void initializeVertices(float[] vertices, int offset) {
         float white = Float.intBitsToFloat(0xfeffffff);
-        vertices[2] = vertices[7] = vertices[12] = vertices[17] = white;
-        vertices[3] = 0; vertices[4] = 1;
-        vertices[8] = 0; vertices[9] = 0;
-        vertices[13] = 1; vertices[14] = 0;
-        vertices[18] = 1; vertices[19] = 1;
+        vertices[offset + 2] = vertices[offset + 7] = vertices[offset + 12] = vertices[offset + 17] = white;
+        vertices[offset + 3] = 0; vertices[offset + 4] = 1;
+        vertices[offset + 8] = 0; vertices[offset + 9] = 0;
+        vertices[offset + 13] = 1; vertices[offset + 14] = 0;
+        vertices[offset + 18] = 1; vertices[offset + 19] = 1;
     }
 
     void setPosition(float x, float y) {
@@ -61,60 +64,69 @@ final class CpuSprite {
         batch.draw(texture, getVertices(), 0, 20);
     }
 
-    Texture diagnosticTexture() { return texture; }
+    Texture texture() { return texture; }
 
     float[] getVertices() {
         if (dirty) {
             dirty = false;
-            float[] vertices = this.vertices;
-            float localX = -originX;
-            float localY = -originY;
-            float localX2 = localX + width;
-            float localY2 = localY + height;
-            float worldOriginX = x - localX;
-            float worldOriginY = y - localY;
-            if (scaleX != 1 || scaleY != 1) {
-                localX *= scaleX;
-                localY *= scaleY;
-                localX2 *= scaleX;
-                localY2 *= scaleY;
-            }
-            if (rotation != 0) {
-                float cos = CpuSpriteMath.cosDeg(rotation);
-                float sin = CpuSpriteMath.sinDeg(rotation);
-                float localXCos = localX * cos;
-                float localXSin = localX * sin;
-                float localYCos = localY * cos;
-                float localYSin = localY * sin;
-                float localX2Cos = localX2 * cos;
-                float localX2Sin = localX2 * sin;
-                float localY2Cos = localY2 * cos;
-                float localY2Sin = localY2 * sin;
-                float x1 = localXCos - localYSin + worldOriginX;
-                float y1 = localYCos + localXSin + worldOriginY;
-                vertices[0] = x1;
-                vertices[1] = y1;
-                float x2 = localXCos - localY2Sin + worldOriginX;
-                float y2 = localY2Cos + localXSin + worldOriginY;
-                vertices[5] = x2;
-                vertices[6] = y2;
-                float x3 = localX2Cos - localY2Sin + worldOriginX;
-                float y3 = localY2Cos + localX2Sin + worldOriginY;
-                vertices[10] = x3;
-                vertices[11] = y3;
-                vertices[15] = x1 + (x3 - x2);
-                vertices[16] = y3 - (y2 - y1);
-            } else {
-                float x1 = localX + worldOriginX;
-                float y1 = localY + worldOriginY;
-                float x2 = localX2 + worldOriginX;
-                float y2 = localY2 + worldOriginY;
-                vertices[0] = x1; vertices[1] = y1;
-                vertices[5] = x1; vertices[6] = y2;
-                vertices[10] = x2; vertices[11] = y2;
-                vertices[15] = x2; vertices[16] = y1;
-            }
+            writePositions(vertices, 0, x, y, rotation, scaleX, scaleY);
         }
         return vertices;
+    }
+
+    static void writePositions(float[] vertices, int offset, float x, float y, float rotation,
+            float scaleX, float scaleY) {
+        float localX = -16f;
+        float localY = -16f;
+        float localX2 = 16f;
+        float localY2 = 16f;
+        float worldOriginX = x + 16f;
+        float worldOriginY = y + 16f;
+        if (scaleX != 1f || scaleY != 1f) {
+            localX *= scaleX;
+            localY *= scaleY;
+            localX2 *= scaleX;
+            localY2 *= scaleY;
+        }
+        if (rotation != 0) {
+            float cos = CpuSpriteMath.cosDeg(rotation);
+            float sin = CpuSpriteMath.sinDeg(rotation);
+            float localXCos = localX * cos;
+            float localXSin = localX * sin;
+            float localYCos = localY * cos;
+            float localYSin = localY * sin;
+            float localX2Cos = localX2 * cos;
+            float localX2Sin = localX2 * sin;
+            float localY2Cos = localY2 * cos;
+            float localY2Sin = localY2 * sin;
+
+            float x1 = localXCos - localYSin + worldOriginX;
+            float y1 = localYCos + localXSin + worldOriginY;
+            vertices[offset] = x1;
+            vertices[offset + 1] = y1;
+            float x2 = localXCos - localY2Sin + worldOriginX;
+            float y2 = localY2Cos + localXSin + worldOriginY;
+            vertices[offset + 5] = x2;
+            vertices[offset + 6] = y2;
+            float x3 = localX2Cos - localY2Sin + worldOriginX;
+            float y3 = localY2Cos + localX2Sin + worldOriginY;
+            vertices[offset + 10] = x3;
+            vertices[offset + 11] = y3;
+            vertices[offset + 15] = x1 + (x3 - x2);
+            vertices[offset + 16] = y3 - (y2 - y1);
+        } else {
+            float x1 = localX + worldOriginX;
+            float y1 = localY + worldOriginY;
+            float x2 = localX2 + worldOriginX;
+            float y2 = localY2 + worldOriginY;
+            vertices[offset] = x1;
+            vertices[offset + 1] = y1;
+            vertices[offset + 5] = x1;
+            vertices[offset + 6] = y2;
+            vertices[offset + 10] = x2;
+            vertices[offset + 11] = y2;
+            vertices[offset + 15] = x2;
+            vertices[offset + 16] = y1;
+        }
     }
 }

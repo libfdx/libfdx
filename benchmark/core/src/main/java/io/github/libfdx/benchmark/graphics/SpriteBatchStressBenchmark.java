@@ -47,6 +47,8 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
     private final String resultPath;
     private final int spriteCount;
     private final boolean libfdxStyle;
+    private final String packingMode;
+    private final CpuSpritePacking packing;
     private CpuSprite[] cpuSprites;
     private CpuSpriteBatch cpuBatch;
     private final float[] spriteCenterX;
@@ -91,14 +93,27 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
 
     /** Selects the libFDX CPU sprite benchmark when {@code libfdxStyle} is true. */
     public SpriteBatchStressBenchmark(long exitAfterNanos, String resultPath, boolean libfdxStyle) {
+        this(exitAfterNanos, resultPath, libfdxStyle, null, null);
+    }
+
+    /** Selects the desktop comparison workload. The Java mode uses the built-in packer. */
+    public SpriteBatchStressBenchmark(long exitAfterNanos, String resultPath, String packingMode,
+            SpriteVertexPacker packer) {
+        this(exitAfterNanos, resultPath, true, packingMode, packer);
+    }
+
+    private SpriteBatchStressBenchmark(long exitAfterNanos, String resultPath, boolean libfdxStyle,
+            String packingMode, SpriteVertexPacker packer) {
         this.exitAfterNanos = exitAfterNanos;
         this.resultPath = resultPath;
         this.libfdxStyle = libfdxStyle;
-        if (cpuDiagnostic != null && !libfdxStyle) {
-            throw new FdxException("cpuDiagnostic requires sprite_batch_libfdx");
+        this.packingMode = packingMode;
+        if (cpuDiagnostic != null && (!libfdxStyle || packingMode != null)) {
+            throw new FdxException("cpuDiagnostic requires the original sprite_batch_libfdx workload");
         }
         String configuredCount = System.getProperty(SPRITES_PROPERTY);
         spriteCount = libfdxStyle && configuredCount == null ? 8191 : parseSpriteCount(configuredCount);
+        packing = packingMode == null ? null : new CpuSpritePacking(spriteCount, INITIAL_BATCH_CAPACITY, packer);
         spriteCenterX = new float[libfdxStyle ? 0 : spriteCount];
         spriteCenterY = new float[libfdxStyle ? 0 : spriteCount];
         double warmupSeconds = Double.parseDouble(System.getProperty("libfdx.benchmark.warmupSeconds", "2"));
@@ -150,6 +165,7 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
         if (libfdxStyle) {
             cpuBatch = new CpuSpriteBatch(graphics, INITIAL_BATCH_CAPACITY, spriteCount);
             cpuBatch.frameProfile = frameProfile;
+            if (packing != null) cpuBatch.initializePackedVertices();
         }
         else batch = new SpriteBatch(graphics, INITIAL_BATCH_CAPACITY);
 
@@ -160,11 +176,12 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
     private void createLoadedAssets() {
         Texture texture = assets.get(spriteAsset(), Texture.class);
         sprite = new TextureRegion(texture);
-        if (libfdxStyle) {
+        if (libfdxStyle && packing == null) {
             cpuSprites = new CpuSprite[spriteCount];
             for (int i = 0; i < spriteCount; i++) cpuSprites[i] = new CpuSprite(texture, 360f * i / spriteCount);
         }
         configureViewport(framebufferWidth(), framebufferHeight());
+        if (packing != null) packing.verify();
 
         created = true;
         logger.info(logPrefix() + " created with " + spriteCount
@@ -208,7 +225,8 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
         if (startedAtNanos == 0L) {
             startedAtNanos = startNanos;
         }
-        float deltaTime = application.deltaTime();
+        // Advance by frame index in the A/B experiment so both runs render the same sequence.
+        float deltaTime = packing == null ? application.deltaTime() : 1f / 60f;
         rotationDegrees += ROTATION_SPEED * deltaTime;
         if (rotationDegrees >= 360.0f) {
             rotationDegrees -= 360.0f;
@@ -234,11 +252,17 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
                 frameProfile.add(CpuSpriteFrameProfile.BEGIN, now - mark);
                 mark = now;
             }
-            for (int i = 0; i < cpuSprites.length; i++) {
-                CpuSprite current = cpuSprites[i];
-                current.rotate(ROTATION_SPEED * deltaTime);
-                current.setScale(scale);
-                current.draw(cpuBatch);
+            if (packing == null) {
+                for (int i = 0; i < cpuSprites.length; i++) {
+                    CpuSprite current = cpuSprites[i];
+                    current.rotate(ROTATION_SPEED * deltaTime);
+                    current.setScale(scale);
+                    current.draw(cpuBatch);
+                }
+            } else {
+                for (float[] sprites : packing.batches) {
+                    cpuBatch.drawPacked(sprite.texture(), packing, sprites, ROTATION_SPEED * deltaTime, scale);
+                }
             }
             if (frameProfile != null) frameProfile.add(CpuSpriteFrameProfile.FILL, System.nanoTime() - mark);
             cpuBatch.end();
@@ -366,7 +390,9 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
         }
         try (FileOutputStream output = new FileOutputStream(file)) {
             writeProperty(output, "benchmark", libfdxStyle ? LIBFDX_NAME : NAME);
-            writeProperty(output, "workload", libfdxStyle ? "libfdx-cpu-expanded" : "libfdx-stress");
+            writeProperty(output, "workload", packing != null ? "libfdx-cpu-bulk-packed"
+                    : libfdxStyle ? "libfdx-cpu-expanded" : "libfdx-stress");
+            if (packing != null) writeProperty(output, "spritePacking", packingMode);
             if (libfdxStyle) {
                 writeProperty(output, "vertexBytesPerSprite", "80");
                 writeProperty(output, "renderCalls", Integer.toString(cpuBatch.renderCalls()));
@@ -453,8 +479,17 @@ public final class SpriteBatchStressBenchmark extends ApplicationAdapter {
         if (libfdxStyle) {
             float availableWidth = Math.max(0, layoutWidth - DRAW_SIZE);
             float availableHeight = Math.max(0, layoutHeight - DRAW_SIZE);
-            for (int i = 0; i < spriteCount; i++) {
-                cpuSprites[i].setPosition(random.nextFloat() * availableWidth, random.nextFloat() * availableHeight);
+            if (packing == null) {
+                for (int i = 0; i < spriteCount; i++) {
+                    cpuSprites[i].setPosition(random.nextFloat() * availableWidth, random.nextFloat() * availableHeight);
+                }
+            } else {
+                for (float[] sprites : packing.batches) {
+                    for (int offset = 0; offset < sprites.length; offset += 3) {
+                        sprites[offset] = random.nextFloat() * availableWidth;
+                        sprites[offset + 1] = random.nextFloat() * availableHeight;
+                    }
+                }
             }
             return;
         }

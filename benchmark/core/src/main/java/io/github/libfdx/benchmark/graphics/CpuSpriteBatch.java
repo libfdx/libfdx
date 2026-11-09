@@ -163,6 +163,17 @@ final class CpuSpriteBatch {
         }
     }
 
+    void initializePackedVertices() {
+        for (int offset = 0; offset < vertices.length; offset += 20) CpuSprite.initializeVertices(vertices, offset);
+    }
+
+    void drawPacked(Texture texture, CpuSpritePacking packing, float[] sprites, float rotationStep, float scale) {
+        flush();
+        lastTexture = texture;
+        packing.pack(sprites, vertices, rotationStep, scale);
+        idx = sprites.length / 3 * 20;
+    }
+
     private void switchTexture(Texture texture) {
         flush();
         lastTexture = texture;

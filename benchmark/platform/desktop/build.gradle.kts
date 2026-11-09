@@ -142,6 +142,66 @@ val benchmarkSpriteBatchStressGlJni = tasks.register<JavaExec>("benchmark_sprite
     useLwjglJniOnJava25()
 }
 
+val spritePackingMode = providers.systemProperty("libfdx.benchmark.spritePacking")
+val spritePackingSource = layout.projectDirectory.dir("src/main/cpp")
+val spritePackingBuild = layout.buildDirectory.dir("sprite-packing-native")
+val spritePackingLibrary = spritePackingBuild.map { it.file(System.mapLibraryName("libfdx_sprite_packing")) }
+val configureSpritePackingNative = tasks.register<Exec>("configureSpritePackingNative") {
+    val jdk = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(25)) }
+    val cmakeProject = spritePackingSource.file("CMakeLists.txt")
+    inputs.file(cmakeProject)
+    inputs.property("javaHome", jdk.map { it.metadata.installationPath.asFile.absolutePath })
+    outputs.file(spritePackingBuild.map { it.file("CMakeCache.txt") })
+    doFirst {
+        val buildDir = spritePackingBuild.get().asFile.absolutePath
+        environment("JAVA_HOME", jdk.get().metadata.installationPath.asFile.absolutePath)
+        commandLine("cmake", "-S", spritePackingSource.asFile.absolutePath, "-B", buildDir,
+            "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=$buildDir",
+            "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE=$buildDir")
+    }
+}
+val buildSpritePackingNative = tasks.register<Exec>("buildSpritePackingNative") {
+    dependsOn(configureSpritePackingNative)
+    inputs.dir(spritePackingSource)
+    inputs.file(spritePackingBuild.map { it.file("CMakeCache.txt") })
+    outputs.file(spritePackingLibrary)
+    doFirst {
+        commandLine("cmake", "--build", spritePackingBuild.get().asFile.absolutePath, "--config", "Release")
+    }
+}
+
+val nativeSpriteLibrary = spritePackingBuild.map { it.file(System.mapLibraryName("libfdx_sprite_native")) }
+val buildNativeSpriteBenchmark = tasks.register<Exec>("buildNativeSpriteBenchmark") {
+    dependsOn(configureSpritePackingNative)
+    inputs.dir(spritePackingSource)
+    inputs.file(spritePackingBuild.map { it.file("CMakeCache.txt") })
+    outputs.file(nativeSpriteLibrary)
+    doFirst {
+        require(windowsX64) { "The C++ JNI sprite benchmark requires Windows x64 and MSVC" }
+        commandLine("cmake", "--build", spritePackingBuild.get().asFile.absolutePath, "--config", "Release",
+            "--target", "libfdx_sprite_native")
+    }
+}
+
+tasks.register<JavaExec>("benchmark_sprite_batch_libfdx_cpp_jni") {
+    group = "benchmark"
+    description = "Runs the libFDX sprite workload using a C++ renderer and a thin Java JNI entry point."
+    dependsOn("classes", buildNativeSpriteBenchmark)
+    mainClass.set("io.github.libfdx.benchmark.desktop.NativeSpriteBenchmarkLauncher")
+    classpath = sourceSets["main"].output
+    workingDir = rootProject.projectDir
+    useJava25Launcher()
+    systemProperty("libfdx.benchmark.nativeSpriteLibrary", nativeSpriteLibrary.get().asFile.absolutePath)
+    val result = System.getProperty("libfdx.benchmark.result")
+        ?: layout.buildDirectory.file("benchmark-results/libfdx-cpu-cpp-jni.properties").get().asFile.absolutePath
+    args("--result=$result", "--sprites=" + System.getProperty("libfdx.benchmark.sprites", "8191"),
+        "--seconds=" + System.getProperty("libfdx.benchmark.seconds", "20"),
+        "--warmupSeconds=" + System.getProperty("libfdx.benchmark.warmupSeconds", "5"),
+        "--frameProfile=" + System.getProperty("libfdx.benchmark.frameProfile", "false"))
+    System.getProperty("libfdx.benchmark.capture")?.let { args("--capture=$it") }
+    System.getProperty("libfdx.benchmark.cpuDiagnostic")?.let { args("--cpuDiagnostic=$it") }
+}
+
 tasks.register<JavaExec>("benchmark_sprite_batch_libfdx_gl_jni") {
     group = "benchmark"
     description = "Runs the libFDX CPU sprite benchmark through libFDX OpenGL on the JVM."
@@ -156,7 +216,17 @@ tasks.register<JavaExec>("benchmark_sprite_batch_libfdx_gl_jni") {
     systemProperty("libfdx.benchmark.visible", "true")
     systemProperty("libfdx.benchmark.vsync", "false")
     systemProperty("libfdx.benchmark.foregroundFps", "0")
-    systemProperty("libfdx.benchmark.result", layout.buildDirectory.file("benchmark-results/libfdx-cpu-jvm.properties").get().asFile.absolutePath)
+    val packingMode = spritePackingMode.orNull
+    require(packingMode == null || packingMode == "java" || packingMode == "cpp") { "spritePacking must be java or cpp" }
+    if (packingMode != null) systemProperty("libfdx.benchmark.spritePacking", packingMode)
+    if (packingMode == "cpp") {
+        dependsOn(buildSpritePackingNative)
+        systemProperty("libfdx.benchmark.spritePackingLibrary", spritePackingLibrary.get().asFile.absolutePath)
+    }
+    val resultName = if (packingMode == null) "libfdx-cpu-jvm" else "libfdx-cpu-jvm-$packingMode"
+    systemProperty("libfdx.benchmark.result", System.getProperty("libfdx.benchmark.result")
+        ?: layout.buildDirectory.file("benchmark-results/$resultName.properties").get().asFile.absolutePath)
+    System.getProperty("libfdx.benchmark.frameProfile")?.let { systemProperty("libfdx.benchmark.frameProfile", it) }
     System.getProperty("libfdx.benchmark.sprites")?.let { systemProperty("libfdx.benchmark.sprites", it) }
     System.getProperty("libfdx.benchmark.capture")?.let { systemProperty("libfdx.benchmark.capture", it) }
 }

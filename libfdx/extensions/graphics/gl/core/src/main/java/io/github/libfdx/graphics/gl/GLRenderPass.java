@@ -516,9 +516,7 @@ final class GLRenderPass implements RenderPass {
         }
         uniformBytes.position(0);
         uniformBytes.limit(pipeline.resourceBindings().uniformByteCount());
-        gl.bindUniformBuffer(pipeline.uniformBuffer());
-        gl.uniformBufferSubData(uniformBytes);
-        gl.bindUniformBuffer(0);
+        pipeline.uploadUniformData(gl, uniformBytes);
         uniformDataDirty = false;
     }
 

@@ -14,6 +14,13 @@ values select launcher modes. The chooser lists tests alphabetically, and
 search matches part of the class name, ignoring case. Click once to select a row and
 double-click (or double-tap) to open it. Clear restores the full list.
 
+## Adding a test
+
+Use `io.github.libfdx.tests` for the executable class. Keep dedicated helpers
+under `io.github.libfdx.tests.utils.<lowercase-test-class>`. For example,
+`UiKitTest` uses `io.github.libfdx.tests.utils.uikittest`. See the
+[repository test package rules](../AGENTS.md#change-and-validation).
+
 ## What a result proves
 
 - Unit tests check specific contracts with assertions. Gradle's `UP-TO-DATE`

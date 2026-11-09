@@ -448,7 +448,12 @@ public final class UiModifier {
     }
 
     /**
-     * Sets the transition and returns this UI modifier.
+     * Animates alpha/scale on first composition and when {@code state} changes.
+     * Values multiply this modifier's alpha/scale, around the node's center, and
+     * apply to its descendants without changing layout. Recomposition with the
+     * same state/values preserves progress. A change while running continues from
+     * the current values; a change after completion starts from the configured
+     * starting values. Passing a null transition removes the effect.
      *
      * @param state the state
      * @param transition the transition

@@ -74,12 +74,12 @@ libfdx {
 
         target("opengl") {
             displayName.set("desktop C OpenGL graphics tests")
-            mainClass.set("io.github.libfdx.tests.desktopc.DesktopCOpenGLTestLauncher")
+            mainClass.set("io.github.libfdx.tests.utils.desktopc.DesktopCOpenGLTestLauncher")
             targetFileName.set("libfdx-tests-opengl-desktop-c")
         }
         target("vulkan") {
             displayName.set("desktop C Vulkan graphics tests")
-            mainClass.set("io.github.libfdx.tests.desktopc.DesktopCVulkanTestLauncher")
+            mainClass.set("io.github.libfdx.tests.utils.desktopc.DesktopCVulkanTestLauncher")
             targetFileName.set("libfdx-tests-vulkan-desktop-c")
         }
     }
@@ -101,13 +101,13 @@ libfdx {
             .map { "-D$it=${System.getProperty(it)}" }
         target("opengl") {
             displayName.set("desktop C++ OpenGL graphics tests")
-            mainClass.set("io.github.libfdx.tests.desktopcpp.DesktopCPPOpenGLTestLauncher")
+            mainClass.set("io.github.libfdx.tests.utils.desktopcpp.DesktopCPPOpenGLTestLauncher")
             targetFileName.set("libfdx-tests-opengl-desktop-cpp")
             runArgs.set(listOf(nativeTest.get(), nativeFrames.get()) + testProperties)
         }
         target("vulkan") {
             displayName.set("desktop C++ Vulkan graphics tests")
-            mainClass.set("io.github.libfdx.tests.desktopcpp.DesktopCPPVulkanTestLauncher")
+            mainClass.set("io.github.libfdx.tests.utils.desktopcpp.DesktopCPPVulkanTestLauncher")
             targetFileName.set("libfdx-tests-vulkan-desktop-cpp")
             runArgs.set(listOf(nativeTest.get(), nativeFrames.get()) + testProperties)
         }

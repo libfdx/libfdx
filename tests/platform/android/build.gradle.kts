@@ -31,7 +31,7 @@ tasks.register<JavaExec>("validate_android_graphics") {
     description = "Installs once, then validates all tests on GLES, Vulkan and WGPU JNI with ADB recovery and a checklist."
     dependsOn("installDebug")
     classpath = graphicsMatrixRunner
-    mainClass.set("io.github.libfdx.testsupport.runner.PlatformMatrixLauncher")
+    mainClass.set("io.github.libfdx.tests.utils.runner.PlatformMatrixLauncher")
     workingDir(rootProject.projectDir)
     systemProperties(gradle.startParameter.systemPropertiesArgs.filterKeys { it.startsWith("libfdx.test.") })
     systemProperty("libfdx.test.autoPlatform", "android")
@@ -93,17 +93,17 @@ libfdx {
 
         target("gles") {
             displayName.set("Android GLES graphics tests")
-            activity.set("io.github.libfdx.tests.android.AndroidGlesTestActivity")
+            activity.set("io.github.libfdx.tests.utils.androidtestactivity.AndroidGlesTestActivity")
             runDescription.set("Installs and launches the Android GLES graphics test app.")
         }
         target("wgpu_jni") {
             displayName.set("Android WGPU JNI graphics tests")
-            activity.set("io.github.libfdx.tests.android.AndroidWgpuTestActivity")
+            activity.set("io.github.libfdx.tests.utils.androidtestactivity.AndroidWgpuTestActivity")
             runDescription.set("Installs and launches the Android WGPU JNI graphics test app.")
         }
         target("vulkan") {
             displayName.set("Android Vulkan graphics tests")
-            activity.set("io.github.libfdx.tests.android.AndroidVulkanTestActivity")
+            activity.set("io.github.libfdx.tests.utils.androidtestactivity.AndroidVulkanTestActivity")
             runDescription.set("Installs and launches the Android Vulkan graphics test app.")
         }
     }

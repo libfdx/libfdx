@@ -10,6 +10,13 @@ web application generation, and native project generation remain in their
 owning tool or backend modules; plugin tasks delegate to those modules'
 command-line entry points.
 
+## UI Preview
+
+An existing Java/desktop module can declare `libfdx { uiPreview {} }` to discover
+typed preview entries and refresh the selected entry after source or asset
+edits. See [UI Preview](../ui-preview/README.md) for setup, lifecycle, failure
+recovery, and the run/stop workflow.
+
 ## Platform Targets
 
 Apply the plugin to a launcher/export project and declare only the target

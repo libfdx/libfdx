@@ -37,6 +37,8 @@ Do not manually duplicate inventories that can be read from source or Gradle.
   it matters, and what evidence will establish success.
 - Confirm names, paths, declarations, tasks, and behavior from source or
   observed output before claiming correctness.
+- Put each method annotation on its own line above the method declaration.
+- Leave an empty line after every method or constructor.
 - Generated output and ignored IDE metadata are not source unless explicitly in
   scope.
 
@@ -93,10 +95,16 @@ Use the architecture and common API documents for the complete durable rules.
 
 ## Change And Validation
 
-In the `tests` module, reserve `io.github.libfdx.tests` and its subpackages for
-executable tests only. Place helper classes, fixtures, utilities, and test
-infrastructure in a separate package within the same module, outside that
-namespace. Do not place helper class files alongside executable tests.
+In the `tests` project, put executable tests directly in `io.github.libfdx.tests`.
+Put helpers and fixtures for one test in
+`io.github.libfdx.tests.utils.<lowercase-test-class>`. For example, helpers for
+`UiKitTest` belong in `io.github.libfdx.tests.utils.uikittest`. Put reusable
+helpers and launch infrastructure in a named package under
+`io.github.libfdx.tests.utils` that reflects their shared purpose. Apply this
+layout to new and existing tests.
+Keep a test-only probe in the backend's Java package when it needs
+package-private access. Its executable test still belongs in the root test
+package.
 
 1. Identify the smallest affected modules, public contracts, platforms, and
    consumers.

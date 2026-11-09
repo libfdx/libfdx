@@ -1041,7 +1041,10 @@ public final class UiScope {
     }
 
     /**
-     * Runs the virtual list step.
+     * Builds a vertically scrollable list, composing the visible window and one
+     * overscan item. {@code visibleCount} is the preferred viewport size in rows.
+     * Unmeasured row heights are estimated from the current window. Stable item
+     * keys retain nodes within that window; rows leaving it release their nodes.
      *
      * @param <T> the value type
      * @param items the items
@@ -1053,22 +1056,23 @@ public final class UiScope {
      */
     public <T> UiNode virtualList(ObjectIterable<T> items, UiListState state, int visibleCount, UiKey<T> key,
             UiItemContent<T> content) {
-        UiListState listState = state != null ? state : listState(null);
-        UiNode node = addNode(UiNodeType.SCROLL, "virtual-list", DEFAULT_VIRTUAL_LIST_MODIFIER);
+        UiNode node = addNode(UiNodeType.SCROLL, null, DEFAULT_VIRTUAL_LIST_MODIFIER);
+        UiListState listState = state != null ? state : root.listState(node.identity());
         node.listState(listState);
-        if (items == null || content == null) {
-            return node;
-        }
-        ArrayView<T> values = root.materialize(items);
-        int first = Math.max(0, Math.min(listState.firstVisibleIndex(), values.size()));
-        int count = Math.max(0, visibleCount);
-        int last = Math.min(values.size(), first + count);
+        UiVirtualListModel model = node.descriptor() instanceof UiVirtualListModel
+                ? (UiVirtualListModel)node.descriptor() : new UiVirtualListModel();
+        ArrayView<T> values = items != null ? root.materialize(items) : null;
+        model.configure(listState, values != null && content != null ? values.size() : 0, visibleCount);
+        node.descriptor(model);
+        node.scrollState(model.scroll);
+        int first = model.firstComposed;
+        int last = model.endComposed();
         UiScope childScope = root.obtainScope(node, node.identity());
         for (int index = first; index < last; index++) {
             T item = values.get(index);
             String itemKey = childScope.itemKey(key != null ? key.key(item) : null, index, key != null);
             UiNode itemNode = childScope.addNode(UiNodeType.ITEM, itemKey,
-                    DEFAULT_ITEM_MODIFIER);
+                    DEFAULT_VIRTUAL_LIST_MODIFIER);
             itemNode.value(item);
             content.build(root.obtainScope(itemNode, itemNode.identity()), item);
         }

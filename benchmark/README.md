@@ -11,6 +11,12 @@ settings.
 The [jNative performance comparisons](JNATIVE_PERFORMANCE.md) list measurements,
 runtime comparisons, and the next target.
 
+The default libFDX CPU sprite workload follows the per-sprite algorithm used by
+gdx-teavm's stock SpriteBatchTest. Each sprite refreshes its cached vertices when
+dirty and submits them through the batch's ordinary array-copy draw method.
+libFDX supplies the texture and graphics provider. The opt-in vertex packing
+comparison below measures a separate workload.
+
 For the libFDX CPU sprite benchmark, the desktop C and C++ launchers accept
 `--frameProfile=true` with `--benchmark=sprite_batch_libfdx --sprites=8191`.
 Result properties include unrounded nanosecond totals for coarse frame components,
@@ -22,6 +28,46 @@ instead isolates the full float-array-to-direct-buffer transfer and checks every
 output float's raw bits outside timing.
 
 ## Desktop JVM
+
+The OpenGL CPU sprite benchmark can compare Java and C++ vertex packing on the
+same JVM. The C++ mode builds a Release JNI library using CMake and a host C++
+compiler. Both modes advance the scene by a fixed step per frame and use the
+same vertex layout, upload path, and draw calls. Before warm-up they check the
+packed vertices and updated sprite state against the Java implementation.
+
+```powershell
+.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_libfdx_gl_jni '-Dlibfdx.benchmark.spritePacking=java' '-Dlibfdx.benchmark.frameProfile=true'
+.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_libfdx_gl_jni '-Dlibfdx.benchmark.spritePacking=cpp' '-Dlibfdx.benchmark.frameProfile=true'
+```
+
+The default scene contains 8,191 sprites in one batch. In these profiled runs,
+divide `profileFillTotalNanos` by `profileIntervals` to get mean packing time
+per frame, including the JNI call in C++ mode. Compare that with
+`measuredFrameFps`, `frameTimeP50Millis`, and `frameTimeP99Millis`. The result
+files are `libfdx-cpu-jvm-java.properties` and `libfdx-cpu-jvm-cpp.properties`
+under the desktop benchmark module's `build/benchmark-results/` directory.
+Set `libfdx.benchmark.result` to keep separate files for repeated runs.
+
+For the C++ implementation of the full sprite workload, use the Windows x64
+task below. Java loads a JNI library and calls it once. The library owns GLFW,
+texture loading, sprite state, batch staging, OpenGL submission, and timing.
+It mirrors the Java workload's per-sprite objects, separate vertex arrays,
+dirty-vertex updates and batch append. It renders the same 8,191 sprites with one
+indexed draw per frame through direct OpenGL calls.
+
+```powershell
+.\gradlew.bat :benchmark:platform:desktop:benchmark_sprite_batch_libfdx_cpp_jni
+.\gradlew.bat :benchmark:platform:plugin:benchmark_libfdx_desktop_c_gl_release
+.\gradlew.bat :benchmark:platform:plugin:benchmark_libfdx_desktop_cpp_gl_release
+```
+
+The C++ task uses CMake and MSVC in Release mode and defaults to 5 seconds of
+warm-up and 15 seconds measured. It accepts `libfdx.benchmark.seconds` for total
+duration, `libfdx.benchmark.warmupSeconds`, `libfdx.benchmark.frameProfile`, and
+`libfdx.benchmark.result`. Setting `libfdx.benchmark.capture` writes the first
+frame at a fixed animation step and exits before timing.
+Set `libfdx.benchmark.cpuDiagnostic=full` to run the matching CPU-only update
+and batch append loop with vertex hashes and graphics work outside timing.
 
 Run the maintained desktop provider set with:
 

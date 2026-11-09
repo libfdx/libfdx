@@ -811,6 +811,40 @@ final class GLResourceOwnershipTest {
     }
 
     @Test
+    void uniformUploadReusesOnlyMatchingSuccessfulSnapshotsFromTheOwningContext() {
+        FakeGL fake = new FakeGL();
+        FakeGL shared = new FakeGL();
+        GLGraphicsAttachment attachment = attachment(fake, new FakeSurface());
+        GLShaderModuleHandle shader = shader(attachment, fake, 402);
+        GLRenderPipelineHandle pipeline = (GLRenderPipelineHandle) attachment.device().createRenderPipeline(
+                RenderPipelineDescriptor.shader(shader, TextureFormat.RGBA8_UNORM).shaderReflection(UNIFORM_REFLECTION));
+        try {
+            ByteBuffer data = ByteBuffer.allocateDirect(20).position(4);
+            pipeline.uploadUniformData(fake.api(), data);
+            pipeline.uploadUniformData(fake.api(), ByteBuffer.allocateDirect(16));
+            assertEquals(1, fake.calls("uniformBufferSubData"));
+            assertEquals(4, data.position());
+            assertEquals(20, data.limit());
+
+            data.putInt(4, 12);
+            fake.failOn("uniformBufferSubData", 2);
+            assertThrows(IllegalStateException.class, () -> pipeline.uploadUniformData(fake.api(), data));
+            pipeline.uploadUniformData(fake.api(), data);
+            pipeline.uploadUniformData(fake.api(), data);
+            assertEquals(3, fake.calls("uniformBufferSubData"));
+
+            pipeline.uploadUniformData(shared.api(), ByteBuffer.allocateDirect(16));
+            assertEquals(1, shared.calls("uniformBufferSubData"));
+            pipeline.uploadUniformData(fake.api(), data);
+            assertEquals(4, fake.calls("uniformBufferSubData"));
+        } finally {
+            pipeline.dispose();
+            shader.dispose();
+            attachment.dispose();
+        }
+    }
+
+    @Test
     void pipelineSnapshotsStateBeforeDescriptorIsReused() {
         FakeGL fake = new FakeGL();
         GLGraphicsAttachment attachment = attachment(fake, new FakeSurface());

@@ -36,4 +36,5 @@ final class CpuSpriteMath {
 
     static float sinDeg(float degrees) { return Sin.table[(int)(degrees * DEG_TO_INDEX) & MASK]; }
     static float cosDeg(float degrees) { return Sin.table[(int)((degrees + 90) * DEG_TO_INDEX) & MASK]; }
+    static float[] sineTable() { return Sin.table; }
 }

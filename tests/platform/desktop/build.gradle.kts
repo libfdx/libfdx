@@ -136,8 +136,12 @@ fun LibfdxDesktopJvmTargetExtension.graphics(name: String, label: String) {
 libfdx {
     assets(rootProject.layout.projectDirectory.dir("tests/assets"))
 
+    uiPreview {
+        runtimeClasspath.from(interactiveGraphicsRuntimeClasspath)
+    }
+
     desktopJvm {
-        mainClass.set("io.github.libfdx.tests.desktop.DesktopTestLauncher")
+        mainClass.set("io.github.libfdx.tests.utils.desktoptestlauncher.DesktopTestLauncher")
         workingDir.set(rootProject.layout.projectDirectory)
         minHeapSize.set("64m")
         maxHeapSize.set("1g")

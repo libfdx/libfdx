@@ -10,6 +10,7 @@ import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.d3d12.D3D12Provider;
 import io.github.libfdx.graphics.wgpu.WGPUProvider;
+import java.nio.file.Path;
 
 public final class DesktopBenchmarkLauncher {
     private DesktopBenchmarkLauncher() {
@@ -32,14 +33,44 @@ public final class DesktopBenchmarkLauncher {
 
     private static ApplicationListener benchmark(String benchmarkName) {
         String normalized = benchmarkName != null ? benchmarkName.trim() : "";
+        String result = System.getProperty("libfdx.benchmark.result");
+        String packingMode = System.getProperty("libfdx.benchmark.spritePacking");
+        if (packingMode != null) {
+            if (!SpriteBatchStressBenchmark.LIBFDX_NAME.equals(normalized)) {
+                throw new FdxException("spritePacking requires sprite_batch_libfdx");
+            }
+            return switch (packingMode) {
+                case "java" -> new SpriteBatchStressBenchmark(exitAfterNanos(), result, packingMode, null);
+                case "cpp" -> {
+                    String library = System.getProperty("libfdx.benchmark.spritePackingLibrary");
+                    if (library == null || library.isBlank()) {
+                        throw new FdxException("C++ sprite packing requires libfdx.benchmark.spritePackingLibrary");
+                    }
+                    System.load(Path.of(library).toAbsolutePath().toString());
+                    yield new SpriteBatchStressBenchmark(exitAfterNanos(), result, packingMode,
+                            DesktopBenchmarkLauncher::packSprites);
+                }
+                default -> throw new FdxException("spritePacking must be java or cpp: " + packingMode);
+            };
+        }
         if (normalized.length() == 0 || SpriteBatchStressBenchmark.NAME.equals(normalized)) {
-            return new SpriteBatchStressBenchmark(exitAfterNanos(), System.getProperty("libfdx.benchmark.result"));
+            return new SpriteBatchStressBenchmark(exitAfterNanos(), result);
         }
         if (SpriteBatchStressBenchmark.LIBFDX_NAME.equals(normalized)) {
-            return new SpriteBatchStressBenchmark(exitAfterNanos(), System.getProperty("libfdx.benchmark.result"), true);
+            return new SpriteBatchStressBenchmark(exitAfterNanos(), result, true);
         }
         throw new FdxException("Unknown benchmark: " + benchmarkName);
     }
+
+    private static void packSprites(float[] sprites, float[] vertices, float[] sineTable, float rotationStep,
+            float scale) {
+        if (!packSpritesNative(sprites, vertices, sineTable, rotationStep, scale)) {
+            throw new FdxException("C++ sprite packer could not access its input or output arrays");
+        }
+    }
+
+    private static native boolean packSpritesNative(float[] sprites, float[] vertices, float[] sineTable,
+            float rotationStep, float scale);
 
     private static GraphicsAttachmentProvider graphicsProvider(String graphics, boolean vSync) {
         if ("gl".equalsIgnoreCase(graphics) || "opengl".equalsIgnoreCase(graphics)) {

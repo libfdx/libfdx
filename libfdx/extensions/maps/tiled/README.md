@@ -102,7 +102,7 @@ tile-object anchors remain their bottom-left. Layer offsets are applied
 separately, with source offset Y negated.
 
 Use a batch that maps those units into your view. The
-[runnable scenario](../../../../tests/core/src/main/java/io/github/libfdx/tests/graphics/TiledMapTest.java)
+[runnable scenario](../../../../tests/core/src/main/java/io/github/libfdx/tests/TiledMapTest.java)
 contains a small pixel-to-clip adapter and gameplay-object overlay.
 `TileMapRenderer` automatically samples tile regions between their outermost
 texel centers, preventing neighboring atlas colors from bleeding under nearest

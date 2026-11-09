@@ -10,6 +10,7 @@ import io.github.libfdx.graphics.shader.target.ShaderBindingRemap;
 import io.github.libfdx.graphics.shader.target.ShaderTargetBinding;
 import io.github.libfdx.graphics.VertexLayout;
 import io.github.libfdx.graphics.internal.ShaderRenderBindings;
+import java.nio.ByteBuffer;
 
 /**
  * Represents a GL render pipeline handle.
@@ -28,6 +29,8 @@ final class GLRenderPipelineHandle implements RenderPipeline {
     private final boolean depthWriteEnabled;
     private final boolean alphaBlendEnabled;
     private final int uniformBuffer;
+    private byte[] uploadedUniformData;
+    private boolean uniformDataUploaded;
     private final ShaderRenderBindings resourceBindings;
     private final RenderTargetLayout targetLayout;
     private final String[][] textureUniformNames;
@@ -140,6 +143,39 @@ final class GLRenderPipelineHandle implements RenderPipeline {
         return uniformBuffer;
     }
 
+    void uploadUniformData(GLApi currentGl, ByteBuffer data) {
+        // Uploads through a shared attachment invalidate the creating context's snapshot.
+        boolean owningContext = currentGl == gl;
+        if (owningContext && uniformDataUploaded && matchesUniformData(data)) {
+            return;
+        }
+        uniformDataUploaded = false;
+        if (owningContext) {
+            if (uploadedUniformData == null || uploadedUniformData.length != data.remaining()) {
+                uploadedUniformData = new byte[data.remaining()];
+            }
+            for (int i = 0; i < uploadedUniformData.length; i++) {
+                uploadedUniformData[i] = data.get(data.position() + i);
+            }
+        }
+        currentGl.bindUniformBuffer(uniformBuffer);
+        currentGl.uniformBufferSubData(data);
+        currentGl.bindUniformBuffer(0);
+        uniformDataUploaded = owningContext;
+    }
+
+    private boolean matchesUniformData(ByteBuffer data) {
+        if (uploadedUniformData.length != data.remaining()) {
+            return false;
+        }
+        for (int i = 0; i < uploadedUniformData.length; i++) {
+            if (uploadedUniformData[i] != data.get(data.position() + i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     boolean uniformBufferEnabled() {
         return uniformBuffer != 0;
     }
@@ -210,6 +246,7 @@ final class GLRenderPipelineHandle implements RenderPipeline {
             }
         }
         disposed = true;
+        uploadedUniformData = null;
         shaderModule.releaseFromPipeline();
     }
 

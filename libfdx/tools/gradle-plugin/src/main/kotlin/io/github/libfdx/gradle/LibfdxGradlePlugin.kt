@@ -78,6 +78,11 @@ class LibfdxGradlePlugin : Plugin<Project> {
             val nativeTarget = selectedNativeTarget(extension, requestedTasks)
             configureTargets(project, extension, nativeTarget, requestedTasks)
             registerTasks(project, extension, toolClasspaths)
+            if (extension.uiPreviewDeclared) {
+                val previewClasspath = createToolClasspath(project, "libfdxUiPreviewToolClasspath",
+                    ":libfdx:tools:ui-preview", "tools_ui_preview")
+                registerUiPreviewTasks(project, extension, previewClasspath)
+            }
             project.gradle.taskGraph.whenReady(object : Action<TaskExecutionGraph> {
                 override fun execute(graph: TaskExecutionGraph) {
                     val taskGraphTasks = graph.allTasks

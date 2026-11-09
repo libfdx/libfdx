@@ -102,7 +102,7 @@ final class CpuSpriteDiagnostic {
             batch.diagnosticReset();
             for (int i = 0; i < sprites.length; i++) {
                 CpuSprite current = sprites[i];
-                batch.draw(current.diagnosticTexture(), current.vertices, 0, 20);
+                batch.draw(current.texture(), current.vertices, 0, 20);
             }
         }
     }

@@ -1,6 +1,6 @@
 // Test-only JNI bridge. Context is the same canonical type used by the provider above.
 extern "C" JNIEXPORT void JNICALL
-Java_io_github_libfdx_testsupport_android_VulkanLossFixture_arm(JNIEnv* env, jclass, jlong value, jint site, jint result) {
+Java_io_github_libfdx_tests_utils_androidvulkandevicelosstest_VulkanLossFixture_arm(JNIEnv* env, jclass, jlong value, jint site, jint result) {
     auto* context = ptr<Context>(value);
     try {
         check(context, vkDeviceWaitIdle(context->device), "Vulkan loss test precondition");
@@ -12,10 +12,10 @@ Java_io_github_libfdx_testsupport_android_VulkanLossFixture_arm(JNIEnv* env, jcl
     } catch (const std::exception& error) { throwFdx(env, error); }
 }
 extern "C" JNIEXPORT jint JNICALL
-Java_io_github_libfdx_testsupport_android_VulkanLossFixture_calls(JNIEnv*, jclass) {
+Java_io_github_libfdx_tests_utils_androidvulkandevicelosstest_VulkanLossFixture_calls(JNIEnv*, jclass) {
     return vulkan_loss_test::calls.load();
 }
 extern "C" JNIEXPORT jint JNICALL
-Java_io_github_libfdx_testsupport_android_VulkanLossFixture_destructions(JNIEnv*, jclass) {
+Java_io_github_libfdx_tests_utils_androidvulkandevicelosstest_VulkanLossFixture_destructions(JNIEnv*, jclass) {
     return vulkan_loss_test::destructions.load();
 }

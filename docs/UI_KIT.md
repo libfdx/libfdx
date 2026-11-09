@@ -8,6 +8,10 @@ animations.
 Exact declarations belong to source/Javadocs. Cross-module lifecycle and
 performance rules are in [Common API](COMMON_API.md).
 
+For a desktop design preview with automatic rebuild and refresh, use the
+[UI Preview runner](../libfdx/tools/ui-preview/README.md). Shared UI remains in
+its existing module and an ordinary Java main calls it directly.
+
 ## Ownership And Lifecycle
 
 Application code creates and owns each UI root. UI is not a service on `Fdx`.
@@ -66,6 +70,9 @@ observed UI state changes and reconciles the result with retained nodes.
   keys.
 - Internal widget state survives while identity remains stable.
 - Removing a node releases retained state after any exit transition.
+- Automatically retained scroll/list state follows its node's lifetime. Named
+  state from a scope follows that scope's owner; root-scope state survives until
+  root disposal. Application-supplied state remains application-owned.
 - External game-state changes call `requestCompose()` when no observed UI state
   triggered recomposition.
 
@@ -93,6 +100,14 @@ explicit exception: they retain overflow so it remains reachable. Dynamic
 lists preserve keyed item identity. Windows retain position, size, and
 z-order. Safe-area insets and parent constraints keep content inside the active
 display.
+
+`virtualList` composes the visible vertical window and an overscan row. Its row
+count sets a preferred viewport height; unmeasured row heights use estimates
+from measured content. Wheel input, dragging and scrollbars update the observed
+`UiListState`; `scrollToItem(index, offset)` requests a pixel offset into a row
+and invalidates composition automatically. Layout clamps requests at either end.
+Rows leaving the composed window release their internal widget state; retain
+editable values explicitly in application state when they must survive that.
 
 `UiRoot` automatically uses `Display.contentScale()` for its render scale, including
 Windows display scaling when framebuffer and window sizes are equal. Framebuffer
@@ -297,6 +312,12 @@ keyboard/text focus, navigation, gestures, and drag/drop. Pointer capture keeps
 a drag active until release. Disabled, hidden, modal, and read-only state affect
 focus and hit testing consistently.
 
+Disabling or hiding a focused control or one of its ancestors clears focus and
+selection and cancels its active capture. The top visible modal takes keyboard
+focus, contains Tab/radio navigation, and consumes keys/text outside its controls.
+Closing it restores the previously focused control when that control remains
+attached, visible and enabled.
+
 One root normally owns an ordered stack of base content, overlays, popups,
 modals, toasts, and debug content. Draw and hit-test order agree. Prefer layers
 inside one root unless content truly belongs to another display, graphics
@@ -309,14 +330,18 @@ Animation state belongs to retained nodes. Recomposition changes targets;
 rendering. Stable keys retain animations, and exit transitions may keep removed
 content alive until completion.
 
-Layout-affecting animation dirties the smallest practical subtree. Render-only
-alpha, tint, offset, scale, and rotation avoid relayout. UI scale and animation
-scale support deterministic tests and accessibility behavior.
+`UiModifier.transition(state, transition)` animates retained alpha and scale on
+entry and state changes. Scale applies around the node's center to its subtree;
+rendering, clipping and hit testing use the transformed geometry, while layout
+bounds stay unchanged. Transition ticks advance without recomposition or
+relayout. Other observed state changes currently recompose and lay out the root.
+UI scale and animation scale support deterministic tests and accessibility behavior.
 
 UI rendering uses common graphics/g2d and does not import provider or backend
 classes. Batches, vertex data, glyph layout, hit-test storage, and event objects
-are reused in steady state. Normal update/layout/render paths do not allocate
-Java objects per frame.
+are reused in steady state. Idle update/layout paths reuse cached geometry;
+changing geometry, composing new content and user-created modifiers may allocate.
+Measure dynamic screens before relying on an allocation budget.
 
 ## Validation
 
@@ -328,8 +353,9 @@ conditions.
 Use stable `validationId` values when authoring reusable flows with the
 [scenario validator](../libfdx/extensions/scenario_validator/README.md#ui-selection).
 
-The repository `ui` test exposes every built-in widget in its section list. Its
+The repository `UiKitTest` exposes every built-in widget in its section list. Its
 automation covers constrained bounds, control activation, loading-indicator
 sizes, collapse composition, theme changes, Unicode editing, and an emoji
-clipboard round trip. The same screen includes Graphite, Porcelain, Cobalt,
+clipboard round trip, disabled focus, modal keyboard containment, virtual-list
+scrolling and transition captures. The same screen includes Graphite, Porcelain, Cobalt,
 Aubergine, and High Contrast theme previews plus inline-style examples.

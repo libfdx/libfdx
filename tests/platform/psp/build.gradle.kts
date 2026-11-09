@@ -46,7 +46,7 @@ libfdx {
 
         target("test") {
             displayName.set("libfdx PSP shared test selector")
-            mainClass.set("io.github.libfdx.tests.psp.PspTestSelectorLauncher")
+            mainClass.set("io.github.libfdx.tests.utils.psp.PspTestSelectorLauncher")
             targetFileName.set("libfdx-tests-psp")
         }
     }
