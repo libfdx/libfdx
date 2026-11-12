@@ -36,6 +36,7 @@ public final class UiTheme {
         styles.put("text", UiStyle.style().text(text));
         styles.put("button", UiStyle.button().text(text.wrap(false).ellipsis(true))
                 .background(UiDrawable.color(UiColor.rgba8888(0xe8ebf0ff))));
+        UiTreeView.addStyles(styles, true);
         styles.put("checkbox", controlStyle(0xd1d7e0ff, 0x2377d1ff, 0x20242cff));
         styles.put("switch", controlStyle(0xc5ccd6ff, 0x2377d1ff, 0x20242cff));
         styles.put("radio-button", controlStyle(0xc5ccd6ff, 0x2377d1ff, 0x20242cff));
@@ -72,6 +73,7 @@ public final class UiTheme {
         styles.put("text", UiStyle.style().text(text));
         styles.put("button", UiStyle.button().text(text.wrap(false).ellipsis(true))
                 .background(UiDrawable.color(UiColor.rgba8888(0x343b46ff))));
+        UiTreeView.addStyles(styles, false);
         styles.put("checkbox", controlStyle(0x242c36ff, 0x47a8ffff, 0xf2f4f8ff));
         styles.put("switch", controlStyle(0x303946ff, 0x47a8ffff, 0xf2f4f8ff));
         styles.put("radio-button", controlStyle(0x303946ff, 0x47a8ffff, 0xf2f4f8ff));

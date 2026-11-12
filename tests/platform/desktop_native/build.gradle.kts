@@ -38,15 +38,9 @@ dependencies {
     implementation(nativeSupportSourceSet.output)
     add(cppSourceSet.implementationConfigurationName, nativeSupportSourceSet.output)
     implementation(project(":tests:core"))
-    if (gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean) {
-        implementation("${libs.versions.libfdxGroup.get()}:backend_desktop_c:${libs.versions.libfdxSnapshot.get()}")
-        runtimeOnly("${libs.versions.libfdxGroup.get()}:gl_desktop_c:${libs.versions.libfdxSnapshot.get()}")
-        runtimeOnly("${libs.versions.libfdxGroup.get()}:vulkan_desktop_c:${libs.versions.libfdxSnapshot.get()}")
-    } else {
-        implementation(project(":libfdx:backends:desktop_c"))
-        runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_c"))
-        runtimeOnly(project(":libfdx:extensions:graphics:vulkan:platform:desktop_c"))
-    }
+    implementation(project(":libfdx:backends:desktop_c"))
+    runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_c"))
+    runtimeOnly(project(":libfdx:extensions:graphics:vulkan:platform:desktop_c"))
     add(cppSourceSet.implementationConfigurationName, project(":tests:core"))
     add(cppSourceSet.implementationConfigurationName, project(":libfdx:backends:desktop_cpp"))
     add(cppSourceSet.runtimeOnlyConfigurationName, project(":libfdx:extensions:graphics:gl:platform:desktop_cpp"))

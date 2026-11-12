@@ -146,6 +146,78 @@ Applying a named style later replaces it. Built-in control rendering uses each
 style's background, foreground, text, padding, state variants, and minimum
 size, so a theme does not need renderer-specific color constants.
 
+### Shapes, Textures, And Content Slots
+
+`UiStyle.shape(...)` accepts `UiShape.rectangle()`, `UiShape.rounded(radius)`,
+or `UiShape.circle()`. Rounded radii clamp to half the shorter side. A circle
+fits inside the shorter side and stays centered in rectangular bounds. The
+base style's shape applies to its surface and hit testing in every interaction
+state. Add `UiModifier.clip()` to clip descendants and their input to the shape.
+
+Colors, texture regions, and nine-patches can supply styled surfaces. Control
+background and foreground drawables also customize their internal parts,
+including checkbox indicators and slider/progress tracks and fills.
+`UiStyle.thumb(...)` customizes slider and switch thumbs. Texture regions and
+their textures remain borrowed from the application. Derive interaction styles
+from the same base style when they should retain its drawables and text settings.
+
+The content overload of `button` composes a horizontal row with the button's
+padding and modifier gap. Unstyled text inherits the button's text style.
+The button owns normal click, keyboard, focus, and enabled behavior. Interactive
+children consume their own input. Use a semantic label for an icon-only button.
+
+```java
+UiStyle rounded = UiStyle.button()
+    .shape(UiShape.rounded(12))
+    .background(UiDrawable.texture(buttonTexture));
+
+ui.button(Ui.modifier().style(rounded).gap(8).clip(), this::save, content -> {
+    content.image(saveIcon, Ui.modifier().size(20, 20));
+    content.text("Save");
+});
+
+ui.button("+", Ui.modifier().size(48, 48)
+    .style(rounded.shape(UiShape.circle()).padding(0))
+    .semanticLabel("Add item"), this::addItem);
+```
+
+Surfaces and their descendants render in composition order, including controls
+and text inside textured surfaces. The Buttons section of `UiKitTest` includes
+rounded, circle, and textured buttons with composed image/text content.
+
+Use a nine-patch for a resizable game skin. Splits are source texels, measured
+from the left, top, right, and bottom of the region. Corners retain their rendered
+size; edges stretch along one axis and the center stretches along both. For a
+high-resolution image, `borderScale` converts those source texels into logical
+UI border units (the default is 1):
+
+```java
+UiNinePatch skin = UiNinePatch.region(buttonRegion,
+    Ui.insets(280, 250, 280, 250), Ui.insets(0)).borderScale(1f / 16f);
+UiStyle playStyle = UiStyle.button().background(UiDrawable.ninePatch(skin));
+```
+
+Resizing keeps the source cuts unchanged. A destination smaller than the combined
+borders shrinks the borders proportionally to fit. Padding and explicit minimum
+size remain in UI units. The texture stays application-owned. Nine-patch preserves
+border geometry, while raster sharpness still depends on source resolution and
+display scale. The Buttons section includes width and height sliders for Play.
+
+Buttons can opt into retained press feedback through their base style.
+
+```java
+UiStyle gameButton = rounded.pressAnimation(UiPressAnimation.create()
+    .scale(0.90f).brightness(0.72f).durationMillis(80, 220));
+```
+
+`UiPressAnimation` compresses and darkens the surface and all composed content,
+then springs back on release. It handles pointer input and Enter/Space activation.
+Very short clicks complete a visible press pulse. Layout and input geometry stay
+stable, including nested controls and clicks near the edge. Animation ticks
+update retained render transforms and brightness without recomposition or layout,
+and respect `UiRoot.animationScale(...)`. A null press animation disables the
+effect. The Image + text and Play examples in `UiKitTest` demonstrate it.
+
 ### Custom Surfaces
 
 `UiScope.custom(...)` supports retained, provider-neutral custom surfaces.
@@ -195,8 +267,52 @@ runtime loading, and direct Java authoring remain headless. See
 Containers and text can be combined with buttons, checkboxes, toggle switches,
 radio-button groups, sliders, determinate progress bars, indeterminate loading
 bars and spinners, dividers, tabs, text fields, multiline text areas, images,
-disclosure/collapse panels, virtual lists, popups, tooltips, modals, and movable/resizable
+disclosure/collapse panels, trees, virtual lists, popups, tooltips, modals, and movable/resizable
 windows.
+
+### Trees
+
+Create a `UiTreeState` once from nested `UiTreeItem` values. Keys must be unique
+across the tree. Pass the state to `UiScope.tree` to display a scrollable hierarchy.
+
+```java
+private final UiTreeState files = new UiTreeState(
+    new UiTreeItem("project", "Project",
+        new UiTreeItem("assets", "Assets",
+            new UiTreeItem("logo", "logo.png")),
+        new UiTreeItem("settings", "Settings")));
+
+private void buildFiles(UiScope ui) {
+    ui.tree(Ui.modifier().fillWidth().height(220), files);
+    String key = files.selectedKey();
+    ui.text(key == null ? "Select a file" : "Selected " + key);
+    ui.button("Select logo", () -> files.select("logo"));
+}
+```
+
+Click a chevron to expand or collapse a branch and a label to select an item.
+Programmatic selection expands its ancestors and scrolls the row into view.
+Collapsing a branch preserves its selected item. The overload accepting a
+callback lets the caller decide when to accept a label selection. Themes can
+override `tree-row`, `tree-selected`, `tree-ancestor`, and `tree-disclosure`.
+The Tree section of `UiKitTest` shows the widget in use.
+
+The item-content overload accepts `UiItemContent<UiTreeItem>` to compose the
+horizontal content after the disclosure control in each 26-unit row. The tree
+retains indentation, guides, keyed identity, expansion, selection, and scrolling.
+Clicking ordinary row content selects the item. Nested controls act independently.
+Retain checkbox values outside the content callback so collapsing a branch
+preserves them. Content callbacks run during composition on the UI thread and
+their scopes are valid only during the call.
+
+```java
+ui.tree(Ui.modifier().fillWidth().height(220), files, null, (row, item) -> {
+    row.checkbox(Ui.modifier().size(20, 20), checkedStates.get(item.key()));
+    row.text(item.label(), Ui.modifier().fillWidth().weight(1));
+    row.button("...", Ui.modifier().size(22, 22).padding(0)
+        .semanticLabel("Actions for " + item.label()), () -> openActions(item.key()));
+});
+```
 
 Switches and collapse bars use `UiBooleanState`. Radio buttons share a
 `UiIntState` and select their declared value. A radio group contributes one

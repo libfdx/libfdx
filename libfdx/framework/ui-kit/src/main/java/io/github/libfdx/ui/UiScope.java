@@ -5,6 +5,7 @@ import io.github.libfdx.collections.ObjectIterable;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * Represents an ui scope.
@@ -214,6 +215,7 @@ public final class UiScope {
      */
     public UiNode scroll(UiModifier modifier, UiScrollState state, UiContent content) {
         UiNode node = addNode(UiNodeType.SCROLL, null, modifier);
+        node.descriptor(null);
         node.scrollState(state != null ? state : root.scrollState(node.identity()));
         build(node, content);
         return node;
@@ -250,6 +252,51 @@ public final class UiScope {
      */
     public UiNode scrollView(UiModifier modifier, UiScrollState state, UiContent content) {
         return scroll(modifier, state, content);
+    }
+
+    /**
+     * Builds a scrollable tree whose labels select an item and whose chevrons toggle expansion.
+     *
+     * @param modifier the tree viewport modifier
+     * @param state application-owned state for this tree
+     * @return the scroll node containing the visible rows
+     */
+    public UiNode tree(UiModifier modifier, UiTreeState state) {
+        return tree(modifier, state, null, null);
+    }
+
+    /**
+     * Builds a scrollable tree with caller-controlled selection. A label invokes the supplied
+     * action with its key. The action can accept selection by calling {@link UiTreeState#select(String)}.
+     * Disclosure updates expansion independently.
+     *
+     * @param modifier the tree viewport modifier
+     * @param state application-owned state for this tree
+     * @param onSelect label activation callback, or null to select directly
+     * @return the scroll node containing the visible rows
+     */
+    public UiNode tree(UiModifier modifier, UiTreeState state, Consumer<String> onSelect) {
+        return tree(modifier, state, onSelect, null);
+    }
+
+    /**
+     * Builds a tree with horizontal item content after each disclosure control. The callback runs
+     * during composition on the UI thread. Its scope is valid only during that call. Nested controls
+     * consume their own input, while the rest of the row selects the item. Retain editable values
+     * outside the callback so they survive collapsing a branch.
+     *
+     * @param modifier tree viewport layout and style
+     * @param state application-owned tree state
+     * @param onSelect selection callback, or null to select directly
+     * @param content item content, or null to display the default labels
+     * @return the scroll node containing the keyed rows
+     */
+    public UiNode tree(UiModifier modifier, UiTreeState state, Consumer<String> onSelect,
+            UiItemContent<UiTreeItem> content) {
+        Objects.requireNonNull(state, "Tree state required");
+        UiNode node = scroll(modifier, state.scroll(), new UiTreeView(state, onSelect, root.theme(), content));
+        node.descriptor(state);
+        return node;
     }
 
     /**
@@ -298,6 +345,23 @@ public final class UiScope {
         UiNode node = addNode(UiNodeType.BUTTON, null, interactive(modifier));
         node.text(text);
         node.action(action);
+        return node;
+    }
+
+    /**
+     * Builds a button whose children form a horizontal row. Content is composed on the UI thread
+     * using a callback-scoped UiScope. Unstyled text inherits the button's text style. Interactive
+     * children receive their own input. The action runs when the button itself is activated.
+     *
+     * @param modifier button layout and style
+     * @param action activation callback, or null for no action
+     * @param content child content, or null for an empty button
+     * @return the retained button node
+     */
+    public UiNode button(UiModifier modifier, Runnable action, UiContent content) {
+        UiNode node = addNode(UiNodeType.BUTTON, null, interactive(modifier));
+        node.action(action);
+        build(node, content);
         return node;
     }
 
@@ -1027,6 +1091,10 @@ public final class UiScope {
      * @param content the content
      */
     public <T> void items(ObjectIterable<T> items, UiKey<T> key, UiItemContent<T> content) {
+        items(DEFAULT_ITEM_MODIFIER, items, key, content);
+    }
+
+    <T> void items(UiModifier modifier, ObjectIterable<T> items, UiKey<T> key, UiItemContent<T> content) {
         if (items == null || content == null) {
             return;
         }
@@ -1034,7 +1102,7 @@ public final class UiScope {
         for (int index = 0; index < values.size(); index++) {
             T item = values.get(index);
             String itemKey = itemKey(key != null ? key.key(item) : null, index, key != null);
-            UiNode node = addNode(UiNodeType.ITEM, itemKey, DEFAULT_ITEM_MODIFIER);
+            UiNode node = addNode(UiNodeType.ITEM, itemKey, modifier);
             node.value(item);
             content.build(root.obtainScope(node, node.identity()), item);
         }

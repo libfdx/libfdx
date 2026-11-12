@@ -24,7 +24,7 @@ public final class UiKitTogglesSection implements UiContent {
         content.text("Switches", Ui.modifier().style("muted"));
         content.panel(Ui.modifier().fillWidth().padding(10.0f).gap(10.0f).style("tile"), panel -> {
             panel.toggleSwitch("Notifications",
-                    Ui.modifier().fillWidth().semanticLabel("Notifications switch")
+                    Ui.modifier().fillWidth()
                             .validationId(UiKitValidationIds.SWITCH_NOTIFICATIONS),
                     switchEnabled);
             panel.toggleSwitch("Compact controls",
@@ -42,8 +42,7 @@ public final class UiKitTogglesSection implements UiContent {
         content.row(Ui.modifier().fillWidth().gap(18.0f), row -> {
             row.radioButton("Balanced", Ui.modifier().semanticLabel("Balanced radio"), radioChoice, 0);
             row.radioButton("Quality",
-                    Ui.modifier().semanticLabel("Quality radio")
-                            .validationId(UiKitValidationIds.RADIO_QUALITY),
+                    Ui.modifier().validationId(UiKitValidationIds.RADIO_QUALITY),
                     radioChoice, 1);
             row.radioButton("Performance", Ui.modifier().semanticLabel("Performance radio"), radioChoice, 2);
         });

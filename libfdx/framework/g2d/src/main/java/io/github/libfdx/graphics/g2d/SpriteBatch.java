@@ -690,6 +690,17 @@ public final class SpriteBatch implements Batch2D {
                 originX, originY, rotationDegrees, transform);
     }
 
+    /**
+     * Draws a borrowed texture using normalized UV endpoints, including fractional texels.
+     * Reversed endpoints flip the corresponding image axis. Call between begin and end.
+     */
+    public void drawUv(Texture texture, float u, float v, float u2, float v2,
+            float x, float y, float width, float height) {
+        ensureTexture(texture);
+        ensureDrawing();
+        draw(texture, u, v, u2, v2, x, y, width, height, 0, 0, 0);
+    }
+
     private void draw(Texture texture, float u, float v, float u2, float v2,
             float x, float y, float width, float height, float originX, float originY, float rotationDegrees) {
         draw(texture, u, v, u2, v2, x, y, width, height, originX, originY, rotationDegrees, 0);
@@ -1059,7 +1070,9 @@ public final class SpriteBatch implements Batch2D {
         return (pixelX * sin + pixelY * cos) / scaleY;
     }
 
-    private void flush() {
+    /** Records queued sprites into the current pass so other renderers can draw between batches. */
+    public void flush() {
+        ensureDrawing();
         ensureProviderRevision();
         if (vertexCount == 0 && instanceCount == 0 && compactInstanceCount == 0) {
             return;

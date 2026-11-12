@@ -66,29 +66,16 @@ dependencies {
         add(if (bridge == "jni") wgpuJniRuntimeClasspath.name else wgpuRuntimeClasspath.name,
             "com.github.xpenatan.jWebGPU:webgpu-desktop-$bridge-dawn_windows_x64:${libs.versions.jwebgpu.get()}")
     }
-    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-        implementation("${libs.versions.libfdxGroup.get()}:backend_desktop:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:audio_openal:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:d3d12_core:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:wgpu_core:${libs.versions.libfdxSnapshot.get()}")
+    implementation(project(":libfdx:backends:desktop"))
+    implementation(project(":libfdx:extensions:audio:openal"))
+    implementation(project(":libfdx:extensions:graphics:d3d12:core"))
+    implementation(project(":libfdx:extensions:graphics:wgpu:core"))
 
-        glRuntimeClasspath("${libs.versions.libfdxGroup.get()}:gl_desktop:${libs.versions.libfdxSnapshot.get()}")
-        vulkanRuntimeClasspath("${libs.versions.libfdxGroup.get()}:vulkan_desktop:${libs.versions.libfdxSnapshot.get()}")
-        wgpuRuntimeClasspath("${libs.versions.libfdxGroup.get()}:wgpu_desktop_ffm:${libs.versions.libfdxSnapshot.get()}")
-        wgpuJniRuntimeClasspath("${libs.versions.libfdxGroup.get()}:wgpu_desktop_jni:${libs.versions.libfdxSnapshot.get()}")
-        runtimeFdxClasspath("${libs.versions.libfdxGroup.get()}:fdx_desktop:${libs.versions.libfdxSnapshot.get()}")
-    } else {
-        implementation(project(":libfdx:backends:desktop"))
-        implementation(project(":libfdx:extensions:audio:openal"))
-        implementation(project(":libfdx:extensions:graphics:d3d12:core"))
-        implementation(project(":libfdx:extensions:graphics:wgpu:core"))
-
-        glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
-        vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
-        wgpuRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
-        wgpuJniRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_jni"))
-        runtimeFdxClasspath(project(":libfdx:framework:fdx:platform:desktop"))
-    }
+    glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
+    vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
+    wgpuRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
+    wgpuJniRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_jni"))
+    runtimeFdxClasspath(project(":libfdx:framework:fdx:platform:desktop"))
 }
 
 tasks.named<Test>("test") {

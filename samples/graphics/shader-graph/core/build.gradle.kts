@@ -11,37 +11,19 @@ base {
     archivesName.set("sample_shader_graph_core")
 }
 
-val libfdxDependencyVersion =
-    gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
-
 dependencies {
-    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-        api("${libs.versions.libfdxGroup.get()}:application:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:camera:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:files:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:graphics:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:g2d:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:g3d:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:input:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:math:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:shader_graph_core:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:shader_graph_runtime:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:shader_graph_g2d:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:shader_graph_g3d:$libfdxDependencyVersion")
-    } else {
-        api(project(":libfdx:framework:application"))
-        implementation(project(":libfdx:framework:camera"))
-        implementation(project(":libfdx:framework:files"))
-        implementation(project(":libfdx:framework:graphics"))
-        implementation(project(":libfdx:framework:g2d"))
-        implementation(project(":libfdx:framework:g3d"))
-        implementation(project(":libfdx:framework:input"))
-        implementation(project(":libfdx:framework:math"))
-        implementation(project(":libfdx:extensions:graphics:shader-graph:core"))
-        implementation(project(":libfdx:extensions:graphics:shader-graph:runtime"))
-        implementation(project(":libfdx:extensions:graphics:shader-graph:g2d"))
-        implementation(project(":libfdx:extensions:graphics:shader-graph:g3d"))
-    }
+    api(project(":libfdx:framework:application"))
+    implementation(project(":libfdx:framework:camera"))
+    implementation(project(":libfdx:framework:files"))
+    implementation(project(":libfdx:framework:graphics"))
+    implementation(project(":libfdx:framework:g2d"))
+    implementation(project(":libfdx:framework:g3d"))
+    implementation(project(":libfdx:framework:input"))
+    implementation(project(":libfdx:framework:math"))
+    implementation(project(":libfdx:extensions:graphics:shader-graph:core"))
+    implementation(project(":libfdx:extensions:graphics:shader-graph:runtime"))
+    implementation(project(":libfdx:extensions:graphics:shader-graph:g2d"))
+    implementation(project(":libfdx:extensions:graphics:shader-graph:g3d"))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
 }

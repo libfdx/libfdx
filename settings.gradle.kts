@@ -1,7 +1,5 @@
 import java.util.Properties
 
-gradle.extensions.extraProperties.set("libfdxUsePublishedLibfdx", false)
-
 pluginManagement {
     includeBuild("libfdx/tools/gradle-plugin")
 

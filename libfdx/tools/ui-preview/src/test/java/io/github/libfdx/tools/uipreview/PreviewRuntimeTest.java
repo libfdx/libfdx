@@ -6,6 +6,8 @@ import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.files.DefaultFileSystem;
 import io.github.libfdx.graphics.*;
+import io.github.libfdx.tools.uipreview.support.PreviewEntryFixtures;
+import io.github.libfdx.ui.UiContent;
 import io.github.libfdx.ui.UiRoot;
 import io.github.libfdx.ui.UiToolkit;
 import java.io.ByteArrayInputStream;
@@ -42,15 +44,63 @@ final class PreviewRuntimeTest {
     void resolvesNamedTargetsBeforeOpeningTheWindow() {
         UiPreviewTarget showcase = UiPreviewTarget.of("showcase", "Showcase", () -> ui -> {});
         UiPreviewTarget editor = UiPreviewTarget.of("editor", "Editor", () -> ui -> {});
-        List<UiPreviewTarget> targets = List.of(showcase, editor);
-        assertEquals(0, UiPreview.initialTarget(targets, "", ""));
-        assertEquals(1, UiPreview.initialTarget(targets, "editor", ""));
-        assertEquals(0, UiPreview.initialTarget(targets, "editor", "showcase"));
-        assertEquals(0, UiPreview.initialTarget(targets, "editor", "removed"));
-        assertThrows(IllegalArgumentException.class, () -> UiPreview.initialTarget(targets, "missing", ""));
+        List<PreviewHierarchy.Item> targets = PreviewHierarchy.targets(List.of(showcase, editor));
+        assertEquals(0, PreviewHierarchy.initial(targets, "", ""));
+        assertEquals(1, PreviewHierarchy.initial(targets, "editor", ""));
+        assertEquals(0, PreviewHierarchy.initial(targets, "editor", "showcase"));
+        assertEquals(0, PreviewHierarchy.initial(targets, "editor", "removed"));
+        assertThrows(IllegalArgumentException.class, () -> PreviewHierarchy.initial(targets, "missing", ""));
         assertThrows(IllegalArgumentException.class, () -> UiPreviewTarget.of("two words", "Invalid", () -> ui -> {}));
         assertThrows(IllegalArgumentException.class,
                 () -> UiPreview.openTargets(new UiPreviewConfig(320, 240), showcase, showcase));
+    }
+
+    @Test
+    void entryHierarchyRestoresChildrenAndRootWithoutCreatingTheirContent() {
+        UiPreviewSetup unused = context -> { throw new AssertionError("Hierarchy discovery created content"); };
+        UiPreviewEntry entry = new UiPreviewEntry() {
+            @Override
+            public UiContent create(UiPreviewContext context) {
+                return unused.create(context);
+            }
+
+            @Override
+            public List<UiPreviewTarget> previewChildren() {
+                return List.of(new UiPreviewTarget("showcase", "Showcase", unused,
+                        List.of(new UiPreviewTarget("sliders", "Sliders", unused))));
+            }
+
+        };
+        String other = PreviewEntryFixtures.OverridesMain.class.getName();
+        String current = entry.getClass().getName();
+        List<String> classes = List.of(other, current);
+        List<PreviewHierarchy.Item> rows = PreviewHierarchy.entries(entry,
+                new UiPreviewConfig(960, 640).interactive(true), classes);
+        assertEquals(List.of(0, 0, 1, 2), rows.stream().map(PreviewHierarchy.Item::depth).toList());
+        assertNotNull(rows.getFirst().setup());
+        assertEquals(UiPreviewConfig.InputMode.FEEDBACK, rows.getFirst().entry().config().inputMode);
+        assertEquals(UiPreviewConfig.InputMode.LIVE, rows.getLast().entry().config().inputMode);
+        assertEquals(0, PreviewHierarchy.initial(rows, other, "", PreviewHierarchy.ENTRY_ROOT));
+        assertEquals(1, PreviewHierarchy.initial(rows, current, "sliders", PreviewHierarchy.ENTRY_ROOT));
+        assertEquals(3, PreviewHierarchy.initial(rows, current, "", "sliders"));
+        assertEquals(1, PreviewHierarchy.initial(rows, current, "", "removed"));
+        assertNull(PreviewHierarchy.entries(entry, new UiPreviewConfig(320, 240), classes).getFirst().setup());
+    }
+
+    @Test
+    void entrySelectionKeepsTheClassAndChildTogetherAndReadsLegacyTargets() throws Exception {
+        Path directory = temporary();
+        Path file = directory.resolve(PreviewSessionFiles.SELECTION_FILE_NAME);
+        try {
+            var selected = new PreviewSessionFiles.EntrySelection("demo.OtherPreview", "sliders");
+            PreviewSessionFiles.writeSelection(file, selected);
+            assertEquals(selected, PreviewSessionFiles.readSelection(file, "demo.StartingPreview"));
+            PreviewSessionFiles.write(file, "@root");
+            assertEquals(new PreviewSessionFiles.EntrySelection("demo.StartingPreview", "@root"),
+                    PreviewSessionFiles.readSelection(file, "demo.StartingPreview"));
+        } finally {
+            PreviewSnapshot.deleteOwned(directory.getParent(), directory);
+        }
     }
 
     @Test

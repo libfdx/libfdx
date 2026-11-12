@@ -30,12 +30,12 @@ public final class UiKitListsSection implements UiContent {
     private static final ArrayView<String> INVENTORY_ITEMS = Array.<String>of(INVENTORY).view();
 
     private final UiScrollState feedScroll = new UiScrollState();
-    public final UiListState inventoryList = new UiListState();
+    public final UiListState inventoryList;
     private final UiNode[] virtualLists = new UiNode[2];
 
-    public UiKitListsSection() {
+    public UiKitListsSection(UiListState inventoryList) {
+        this.inventoryList = inventoryList;
         feedScroll.scrollTo(0.0f, 8.0f);
-        inventoryList.scrollToItem(1, 0.0f);
     }
 
     @Override

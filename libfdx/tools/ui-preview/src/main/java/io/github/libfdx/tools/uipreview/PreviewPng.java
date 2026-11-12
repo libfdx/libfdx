@@ -13,21 +13,26 @@ import java.util.zip.DeflaterOutputStream;
 /** Direct PNG encoding; no ImageIO service/plugin discovery. Explicit captures may allocate. */
 final class PreviewPng {
     static void write(Path path, int width, int height, ByteBuffer rgba) throws IOException {
-        if (width <= 0 || height <= 0 || (long)width * height * 4 > rgba.limit()) {
+        write(path, width, height, rgba, 0);
+    }
+
+    static void write(Path path, int width, int height, ByteBuffer rgba, int left) throws IOException {
+        if (left < 0 || width <= left || height <= 0 || (long)width * height * 4 > rgba.limit()) {
             throw new IllegalArgumentException("Invalid RGBA frame dimensions");
         }
+        int imageWidth = width - left;
         ByteArrayOutputStream compressed = new ByteArrayOutputStream();
         try (DeflaterOutputStream pixels = new DeflaterOutputStream(compressed)) {
-            byte[] row = new byte[Math.multiplyExact(width, 4) + 1];
+            byte[] row = new byte[Math.multiplyExact(imageWidth, 4) + 1];
             for (int y = height - 1; y >= 0; y--) {
                 row[0] = 0;
-                rgba.get(y * width * 4, row, 1, row.length - 1);
+                rgba.get((y * width + left) * 4, row, 1, row.length - 1);
                 pixels.write(row);
             }
         }
         ByteArrayOutputStream header = new ByteArrayOutputStream(13);
         try (DataOutputStream data = new DataOutputStream(header)) {
-            data.writeInt(width); data.writeInt(height);
+            data.writeInt(imageWidth); data.writeInt(height);
             data.write(new byte[] {8, 6, 0, 0, 0});
         }
         Path absolute = path.toAbsolutePath().normalize();

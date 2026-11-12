@@ -11,6 +11,24 @@ import java.util.List;
 
 /** Copies mutable classpath entries; workers never execute from a directory being recompiled. */
 final class PreviewSnapshot {
+    static List<String> applicationClasspath(PreviewLaunch launch, Path snapshot) {
+        List<String> result = new ArrayList<>();
+        List<String> original = launch.strings("classpath");
+        for (String path : launch.strings("reloadClasspath")) {
+            int index = original.indexOf(path);
+            if (index < 0 || !Files.exists(Path.of(path))) continue;
+            boolean immutable = Boolean.parseBoolean(launch.values.getProperty("classpath." + index + ".immutable", "false"));
+            result.add(immutable ? path : snapshot.resolve("classpath-" + index
+                    + (Files.isDirectory(Path.of(path)) ? "" : ".jar")).toString());
+        }
+        return result;
+    }
+
+    static List<String> relocated(List<String> paths, Path from, Path to) {
+        return paths.stream().map(Path::of).map(path -> path.startsWith(from)
+                ? to.resolve(from.relativize(path)).toString() : path.toString()).toList();
+    }
+
     static List<String> copy(PreviewLaunch launch, Path directory) throws IOException {
         Files.createDirectories(directory);
         List<String> paths = launch.strings("classpath");
@@ -72,6 +90,7 @@ final class PreviewSnapshot {
         command.add("-Dlibfdx.uiPreview.stopFile=" + directory.resolve("stop.request"));
         command.add("-Dlibfdx.uiPreview.readyFile=" + directory.resolve("ready"));
         command.add("-D" + PreviewSessionFiles.TARGET_FILE + "=" + directory.resolve(PreviewSessionFiles.FILE_NAME));
+        command.add("-D" + PreviewReloadRequest.ENABLED + "=" + launch.values.getProperty("fastReload", "false"));
         List<String> assets = launch.strings("assets");
         command.add("-Dlibfdx.uiPreview.assets.count=" + assets.size());
         for (int i = 0; i < assets.size(); i++) command.add("-Dlibfdx.uiPreview.assets." + i + "=" + assets.get(i));

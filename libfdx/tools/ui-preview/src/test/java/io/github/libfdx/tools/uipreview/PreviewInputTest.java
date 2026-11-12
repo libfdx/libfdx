@@ -82,56 +82,86 @@ final class PreviewInputTest {
     }
 
     @Test
-    void pickerClicksSelectByNameWithoutActivatingThePreviewedScreen() {
-        DefaultInput input = new DefaultInput();
-        InputRouter router = new InputRouter();
-        input.addProcessor(router);
+    void treeDisclosureKeepsSelectionAndCanvasInputSeparate() {
+        DefaultInput hierarchyInput = new DefaultInput();
+        DefaultInput canvasInput = new DefaultInput();
         UiToolkit toolkit = new UiToolkit(null);
         UiRoot controls = toolkit.root(null, null).allowFontFallback(true);
         UiRoot content = toolkit.root(null, null).allowFontFallback(true);
-        List<String> targets = List.of("FirstScreen", "SecondScreen", "ThirdScreen");
+        UiPreviewSetup setup = context -> ui -> { };
+        List<PreviewHierarchy.Item> items = PreviewHierarchy.targets(List.of(
+                new UiPreviewTarget("parent", "Parent", setup, List.of(
+                        new UiPreviewTarget("group", "Group", setup, List.of(
+                                new UiPreviewTarget("child", "Child", setup))))),
+                new UiPreviewTarget("sibling", "Sibling", setup)));
         int[] selected = {0};
         int[] actions = {0};
-        try (PreviewClassPicker picker = new PreviewClassPicker(controls, input, targets, 0,
-                index -> selected[0] = index)) {
-            router.add(picker);
-            content.input(input, router).setContent(ui ->
+        var debugLines = Ui.state(false);
+        try {
+            PreviewHierarchyView hierarchy = new PreviewHierarchyView(items, 0, index -> selected[0] = index, debugLines,
+                    new PreviewRefreshStatus(null));
+            controls.input(hierarchyInput).setContent(hierarchy);
+            controls.resize(300, 400);
+            controls.update(0.3f);
+            content.input(canvasInput).setContent(ui ->
                     ui.button("Previewed action", Ui.modifier().fill(), () -> actions[0]++));
             content.resize(500, 400);
-            picker.resize(500, 400);
-            picker.render(0);
-
-            click(input, findText(controls.rootNode(), "Choose class"));
-            picker.render(0);
-            assertNotNull(findText(controls.rootNode(), "FirstScreen (current)"));
-            input.dispatchPointerDown(MouseButton.LEFT, 4, 4);
-            input.dispatchPointerUp(MouseButton.LEFT, 4, 4);
-            key(input, Key.ESCAPE);
-            picker.render(0);
-            assertNull(findText(controls.rootNode(), "ThirdScreen"));
+            content.viewport(new UiRect(220, 0, 280, 400));
+            content.update(0);
+            UiNode sibling = findLabel(controls.rootNode(), "Sibling");
+            float siblingY = sibling.bounds().y();
+            assertNull(findLabel(controls.rootNode(), "Child"));
+            click(hierarchyInput, findLabel(controls.rootNode(), "Collapse Parent"));
+            controls.update(0);
+            controls.update(0.3f);
+            assertNull(findLabel(controls.rootNode(), "Group"));
+            assertSame(sibling, findLabel(controls.rootNode(), "Sibling"));
+            assertTrue(sibling.bounds().y() < siblingY);
             assertEquals(0, selected[0]);
-
-            click(input, findText(controls.rootNode(), "Choose class"));
-            picker.render(0);
-            click(input, findText(controls.rootNode(), "ThirdScreen"));
-            picker.render(2);
+            key(hierarchyInput, Key.SPACE);
+            controls.update(0.3f);
+            click(hierarchyInput, findLabel(controls.rootNode(), "Expand Group"));
+            controls.update(0.3f);
+            UiNode parent = findLabel(controls.rootNode(), "Parent");
+            UiNode child = findLabel(controls.rootNode(), "Child");
+            assertTrue(child.bounds().x() > parent.bounds().x());
+            click(hierarchyInput, child);
             assertEquals(2, selected[0]);
-            assertNull(findText(controls.rootNode(), "ThirdScreen (current)"));
+            hierarchy.active(2);
+            controls.update(0);
+            click(hierarchyInput, findLabel(controls.rootNode(), "Collapse Group"));
+            controls.update(0.3f);
+            assertNull(findLabel(controls.rootNode(), "Child"));
+            assertEquals(2, selected[0]);
+            assertEquals(3, hierarchy.step(2, false));
+            assertEquals(0, hierarchy.step(2, true));
+            click(hierarchyInput, findLabel(controls.rootNode(), "Group"));
+            controls.update(0);
+            assertEquals(1, selected[0]);
+            assertNull(findLabel(controls.rootNode(), "Child"));
             assertEquals(0, actions[0]);
-
-            key(input, Key.TAB);
-            key(input, Key.ENTER);
-            assertEquals(1, actions[0], "The closed picker must leave the target's keyboard input available");
+            UiNode action = findLabel(content.rootNode(), "Previewed action");
+            assertEquals(280.0f, action.bounds().width());
+            canvasInput.dispatchPointerDown(MouseButton.LEFT, 100, 100);
+            canvasInput.dispatchPointerUp(MouseButton.LEFT, 100, 100);
+            assertEquals(0, actions[0]);
+            canvasInput.dispatchPointerDown(MouseButton.LEFT, content.displayX(20), content.displayY(100));
+            canvasInput.dispatchPointerUp(MouseButton.LEFT, content.displayX(20), content.displayY(100));
+            assertEquals(1, actions[0]);
+            click(hierarchyInput, findLabel(controls.rootNode(), "Debug lines"));
+            assertTrue(debugLines.get());
+            assertEquals(1, selected[0]);
+            assertEquals(1, actions[0]);
         } finally {
             content.dispose();
-            input.removeProcessor(router);
+            controls.dispose();
         }
     }
 
-    private static UiNode findText(UiNode node, String text) {
-        if (text.equals(node.text())) return node;
+    private static UiNode findLabel(UiNode node, String label) {
+        if (label.equals(node.text()) || label.equals(node.modifier().semanticLabel())) return node;
         for (int i = 0; i < node.children().size(); i++) {
-            UiNode match = findText(node.children().get(i), text);
+            UiNode match = findLabel(node.children().get(i), label);
             if (match != null) return match;
         }
         return null;

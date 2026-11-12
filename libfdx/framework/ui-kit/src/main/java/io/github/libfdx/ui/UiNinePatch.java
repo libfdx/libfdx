@@ -16,15 +16,22 @@ public final class UiNinePatch {
     private final UiInsets padding;
     private final UiSize minimumSize;
     private final boolean markerBorder;
+    private final float borderScale;
 
     private UiNinePatch(TextureRegion region, String assetPath, UiInsets splits, UiInsets padding,
             UiSize minimumSize, boolean markerBorder) {
+        this(region, assetPath, splits, padding, minimumSize, markerBorder, 1.0f);
+    }
+
+    private UiNinePatch(TextureRegion region, String assetPath, UiInsets splits, UiInsets padding,
+            UiSize minimumSize, boolean markerBorder, float borderScale) {
         this.region = region;
         this.assetPath = assetPath;
         this.splits = splits != null ? splits : UiInsets.ZERO;
         this.padding = padding != null ? padding : UiInsets.ZERO;
         this.minimumSize = minimumSize != null ? minimumSize : new UiSize(0.0f, 0.0f);
         this.markerBorder = markerBorder;
+        this.borderScale = borderScale;
     }
 
     /**
@@ -75,7 +82,30 @@ public final class UiNinePatch {
      * @return this UI nine patch for chaining
      */
     public UiNinePatch minimumSize(float width, float height) {
-        return new UiNinePatch(region, assetPath, splits, padding, new UiSize(width, height), markerBorder);
+        return new UiNinePatch(region, assetPath, splits, padding, new UiSize(width, height), markerBorder, borderScale);
+    }
+
+    /**
+     * Returns a copy with the given conversion from source texels to logical border units.
+     * For example, {@code borderScale(0.5f)} renders a 16-texel border at 8 UI units.
+     * Source cuts stay fixed when the destination changes; only edges and center stretch.
+     * Destinations smaller than the combined borders shrink those borders proportionally.
+     * Padding and explicit minimum size are in UI units and are unaffected.
+     * The region and its texture remain borrowed from the caller.
+     *
+     * @param scale finite, positive logical units per source texel; defaults to 1
+     * @return a new nine-patch sharing the source region
+     */
+    public UiNinePatch borderScale(float scale) {
+        if (!Float.isFinite(scale) || scale <= 0.0f) {
+            throw new IllegalArgumentException("Nine-patch border scale must be finite and positive");
+        }
+        return new UiNinePatch(region, assetPath, splits, padding, minimumSize, markerBorder, scale);
+    }
+
+    /** Returns logical border units per source texel. */
+    public float borderScale() {
+        return borderScale;
     }
 
     /**

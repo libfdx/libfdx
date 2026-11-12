@@ -5,6 +5,7 @@ import io.github.libfdx.ui.UiTheme;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /** Desktop development configuration. Configure before calling {@link UiPreview}. */
 public final class UiPreviewConfig {
@@ -80,6 +81,12 @@ public final class UiPreviewConfig {
         if (count < 0) throw new IllegalArgumentException("Frame count cannot be negative");
         exitAfterFrames = count;
         return this;
+    }
+
+    boolean sharesWindowWith(UiPreviewConfig other) {
+        return width == other.width && height == other.height
+                && Objects.equals(graphics, other.graphics) && assets.equals(other.assets)
+                && Objects.equals(capture, other.capture) && exitAfterFrames == other.exitAfterFrames;
     }
 
 }

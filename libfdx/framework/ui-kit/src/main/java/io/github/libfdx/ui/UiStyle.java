@@ -7,7 +7,8 @@ package io.github.libfdx.ui;
  */
 public final class UiStyle {
     private static final UiStyle DEFAULT = new UiStyle(UiDrawable.none(), UiDrawable.none(),
-            UiTextStyle.text(), UiInsets.ZERO, UiInsets.ZERO, new UiSize(0.0f, 0.0f), null, null, null, null);
+            UiTextStyle.text(), UiInsets.ZERO, UiInsets.ZERO, new UiSize(0.0f, 0.0f), null, null, null, null,
+            UiShape.rectangle(), UiDrawable.none(), null);
 
     private final UiDrawable background;
     private final UiDrawable foreground;
@@ -19,9 +20,13 @@ public final class UiStyle {
     private final UiStyle pressed;
     private final UiStyle focused;
     private final UiStyle disabled;
+    private final UiShape shape;
+    private final UiDrawable thumb;
+    private final UiPressAnimation pressAnimation;
 
     private UiStyle(UiDrawable background, UiDrawable foreground, UiTextStyle textStyle, UiInsets padding,
-            UiInsets margin, UiSize minimumSize, UiStyle hover, UiStyle pressed, UiStyle focused, UiStyle disabled) {
+            UiInsets margin, UiSize minimumSize, UiStyle hover, UiStyle pressed, UiStyle focused, UiStyle disabled,
+            UiShape shape, UiDrawable thumb, UiPressAnimation pressAnimation) {
         this.background = background != null ? background : UiDrawable.none();
         this.foreground = foreground != null ? foreground : UiDrawable.none();
         this.textStyle = textStyle != null ? textStyle : UiTextStyle.text();
@@ -32,6 +37,42 @@ public final class UiStyle {
         this.pressed = pressed;
         this.focused = focused;
         this.disabled = disabled;
+        this.shape = shape;
+        this.thumb = thumb;
+        this.pressAnimation = pressAnimation;
+    }
+
+    /** Sets retained button press feedback, or null to disable it. Use on the button's base style. */
+    public UiStyle pressAnimation(UiPressAnimation animation) {
+        return new UiStyle(background, foreground, textStyle, padding, margin, minimumSize,
+                hover, pressed, focused, disabled, shape, thumb, animation);
+    }
+
+    public UiPressAnimation pressAnimation() {
+        return pressAnimation;
+    }
+
+    /**
+     * Sets surface and hit-test geometry. The base style's shape also applies in interaction states.
+     * The clip modifier additionally clips content to this shape.
+     */
+    public UiStyle shape(UiShape shape) {
+        return new UiStyle(background, foreground, textStyle, padding, margin, minimumSize,
+                hover, pressed, focused, disabled, shape != null ? shape : UiShape.rectangle(), thumb, pressAnimation);
+    }
+
+    public UiShape shape() {
+        return shape;
+    }
+
+    /** Sets the slider or switch thumb. A null or NONE drawable keeps its default appearance. */
+    public UiStyle thumb(UiDrawable thumb) {
+        return new UiStyle(background, foreground, textStyle, padding, margin, minimumSize,
+                hover, pressed, focused, disabled, shape, thumb != null ? thumb : UiDrawable.none(), pressAnimation);
+    }
+
+    public UiDrawable thumb() {
+        return thumb;
     }
 
     /**
@@ -278,6 +319,6 @@ public final class UiStyle {
     private UiStyle copy(UiDrawable background, UiDrawable foreground, UiTextStyle textStyle, UiInsets padding,
             UiInsets margin, UiSize minimumSize, UiStyle hover, UiStyle pressed, UiStyle focused, UiStyle disabled) {
         return new UiStyle(background, foreground, textStyle, padding, margin, minimumSize, hover, pressed, focused,
-                disabled);
+                disabled, shape, thumb, pressAnimation);
     }
 }

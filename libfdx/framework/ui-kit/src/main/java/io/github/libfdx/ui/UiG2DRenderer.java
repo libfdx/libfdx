@@ -9,7 +9,6 @@ import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.RenderPassDescriptor;
 import io.github.libfdx.graphics.StoreOp;
 import io.github.libfdx.graphics.Texture;
-import io.github.libfdx.graphics.g2d.Batch2D;
 import io.github.libfdx.graphics.g2d.BitmapFont;
 import io.github.libfdx.graphics.g2d.BitmapFontGlyph;
 import io.github.libfdx.graphics.g2d.BitmapFontLayout;
@@ -61,6 +60,7 @@ public final class UiG2DRenderer implements UiRenderer {
     private static final UiColor DEBUG_WINDOW_RESIZE = UiColor.rgba8888(0xff4fd8ff);
     private static final UiColor CONTROL_DARK = UiColor.rgba8888(0x17202aff);
     private static final UiColor PREVIEW_POINTER_FEEDBACK = UiColor.rgba8888(0x47a8ffff);
+    private static final UiShape PILL_SHAPE = UiShape.rounded(Float.MAX_VALUE);
 
     private final GraphicsContext graphics;
     private final ShapeRenderer shapes;
@@ -71,9 +71,15 @@ public final class UiG2DRenderer implements UiRenderer {
     private final CustomDrawContext customDrawContext = new CustomDrawContext();
     private int customTextDrawCount;
     private int customImageDrawCount;
-    private Batch2D batch;
+    private SpriteBatch batch;
     private UiRect currentClip;
     private UiNode drawingNode;
+    private final UiSurfaceClip surfaceClip = new UiSurfaceClip();
+    private final UiNinePatchLayout patchLayout = new UiNinePatchLayout();
+    private RenderPass activePass;
+    private boolean shapesActive;
+    private boolean batchActive;
+    private boolean drawingBatch;
     private boolean disposed;
 
     /**
@@ -97,32 +103,41 @@ public final class UiG2DRenderer implements UiRenderer {
         if (disposed || root == null || node == null || shapes == null) {
             return;
         }
+        GraphicsFrame frame = graphics.currentFrame();
+        UiRect viewport = root.viewport();
+        if (viewport != null && (viewport.right() > frame.width() || viewport.bottom() > frame.height())) return;
         resetCustomDraws();
         overlayNodes.clear();
         prepareText(root, node);
-        GraphicsFrame frame = graphics.currentFrame();
         RenderPass pass = frame.commandEncoder().beginRenderPass(renderPassDescriptor
                 .colorAttachment(frame.colorAttachment())
                 .colorLoadOp(LoadOp.load())
                 .colorStoreOp(StoreOp.store()));
         try {
-            renderSubtree(root, node, pass);
-            renderOverlayQueue(root, pass);
+            activePass = pass;
+            if (viewport != null) {
+                int bottom = frame.height() - (int) viewport.bottom();
+                pass.setViewport((int) viewport.x(), bottom, (int) viewport.width(), (int) viewport.height());
+                pass.setScissor((int) viewport.x(), bottom, (int) viewport.width(), (int) viewport.height());
+            }
+            renderSubtree(root, node);
+            renderOverlayQueue(root);
             UiNode feedback = root.pointerFeedbackNode();
-            if (feedback != null) renderPreviewFeedback(root, feedback, pass);
+            if (feedback != null) renderPreviewFeedback(root, feedback);
             if (root.debugLines()) {
-                shapes.begin(pass);
+                useShapes();
                 renderDebugLines(root, node);
-                shapes.end();
             }
         } finally {
+            finishDrawing();
+            activePass = null;
             pass.end();
             resetCustomDraws();
             overlayNodes.clear();
         }
     }
 
-    private void renderPreviewFeedback(UiRoot root, UiNode node, RenderPass pass) {
+    private void renderPreviewFeedback(UiRoot root, UiNode node) {
         boolean pressed = node.pressed();
         UiStyle style = root.styleFor(node);
         if (style != null && (pressed ? style.pressed() : style.hover()) != null) {
@@ -137,43 +152,57 @@ public final class UiG2DRenderer implements UiRenderer {
         }
         UiRect previousClip = currentClip;
         UiNode previousNode = drawingNode;
-        shapes.begin(pass);
         try {
             drawingNode = node;
+            surfaceClip.node(root, node);
             currentClip = localClip(node, worldClip);
             drawOutline(root, node.bounds(), PREVIEW_POINTER_FEEDBACK, alpha);
         } finally {
             drawingNode = previousNode;
             currentClip = previousClip;
-            shapes.end();
         }
     }
 
-    private void renderSubtree(UiRoot root, UiNode node, RenderPass pass) {
+    private void renderSubtree(UiRoot root, UiNode node) {
         if (!node.visible()) {
             return;
         }
-        shapes.begin(pass);
         float parentAlpha = 1;
         for (UiNode parent = node.parent(); parent != null; parent = parent.parent()) {
             parentAlpha *= parent.renderAlpha();
         }
-        renderShapes(root, node, parentAlpha, null);
-        shapes.end();
+        renderNode(root, node, parentAlpha, null);
+    }
 
-        boolean renderBatch = needsBatch(root, node);
-        if (renderBatch) {
-            Batch2D activeBatch = batch();
-            activeBatch.begin(pass);
-            renderImages(root, node, parentAlpha, null);
-            activeBatch.end();
+    private void useShapes() {
+        if (batchActive && drawingBatch) batch.flush();
+        drawingBatch = false;
+        if (!shapesActive) {
+            shapes.begin(activePass);
+            shapesActive = true;
         }
     }
 
+    private void useBatch() {
+        if (shapesActive && !drawingBatch) shapes.flush();
+        drawingBatch = true;
+        if (!batchActive) {
+            batch().begin(activePass);
+            batchActive = true;
+        }
+    }
 
-    private void renderOverlayQueue(UiRoot root, RenderPass pass) {
+    private void finishDrawing() {
+        if (shapesActive) shapes.end();
+        if (batchActive) batch.end();
+        shapesActive = false;
+        batchActive = false;
+    }
+
+
+    private void renderOverlayQueue(UiRoot root) {
         for (int i = 0; i < overlayNodes.size(); i++) {
-            renderSubtree(root, overlayNodes.get(i), pass);
+            renderSubtree(root, overlayNodes.get(i));
         }
     }
 
@@ -203,20 +232,46 @@ public final class UiG2DRenderer implements UiRenderer {
         }
     }
 
-    private void renderShapes(UiRoot root, UiNode node, float parentAlpha, UiRect inheritedClip) {
+    private void renderNode(UiRoot root, UiNode node, float parentAlpha, UiRect inheritedClip) {
         if (!node.visible()) {
             return;
         }
         UiRect previousClip = currentClip;
         UiNode previousNode = drawingNode;
         drawingNode = node;
+        surfaceClip.node(root, node);
         UiRect worldClip = nodeClip(node, inheritedClip);
         currentClip = localClip(node, worldClip);
         float alpha = combinedAlpha(parentAlpha, node.renderAlpha());
         drawBackground(root, node, alpha);
         if (node.type() == UiNodeType.CUSTOM) {
             drawCustom(root, node, alpha);
+            renderCustomImages(root, node);
+            renderCustomText(root, node);
         }
+        drawControl(root, node, alpha);
+        drawNodeContent(root, node, alpha);
+        ArrayView<UiNode> children = root.renderChildren(node);
+        for (int i = 0; i < children.size(); i++) {
+            UiNode child = children.get(i);
+            if (root.isOverlayNode(child)) {
+                overlayNodes.add(child);
+            } else {
+                renderNode(root, child, alpha, worldClip);
+            }
+        }
+        if (node.type() == UiNodeType.SCROLL || node.type() == UiNodeType.TEXT_AREA) {
+            drawingNode = node;
+            surfaceClip.node(root, node);
+            currentClip = localClip(node, worldClip);
+            drawScrollbars(root, node, alpha);
+        }
+        currentClip = previousClip;
+        drawingNode = previousNode;
+        surfaceClip.node(root, previousNode);
+    }
+
+    private void drawControl(UiRoot root, UiNode node, float alpha) {
         if (node.type() == UiNodeType.CHECKBOX) {
             drawCheckbox(root, node, alpha);
         } else if (node.type() == UiNodeType.SWITCH) {
@@ -238,6 +293,9 @@ public final class UiG2DRenderer implements UiRenderer {
         } else if (node.type() == UiNodeType.TABS) {
             drawTabs(root, node, alpha);
         }
+    }
+
+    private void drawNodeContent(UiRoot root, UiNode node, float alpha) {
         if (isTextInput(node)) {
             drawTextSelection(root, node, alpha);
             UiTextFieldModel model = node.descriptor() instanceof UiTextFieldModel
@@ -252,52 +310,12 @@ public final class UiG2DRenderer implements UiRenderer {
         } else if (node.type() == UiNodeType.TABS && !hasBitmapFont(root, node)) {
             drawTabsFallbackText(root, node, alpha);
         }
-        ArrayView<UiNode> children = root.renderChildren(node);
-        for (int i = 0; i < children.size(); i++) {
-            UiNode child = children.get(i);
-            if (root.isOverlayNode(child)) {
-                overlayNodes.add(child);
-            } else {
-                renderShapes(root, child, alpha, worldClip);
-            }
-        }
-        if (node.type() == UiNodeType.SCROLL || node.type() == UiNodeType.TEXT_AREA) {
-            drawScrollbars(root, node, alpha);
-        }
-        currentClip = previousClip;
-        drawingNode = previousNode;
-    }
-
-    private void renderImages(UiRoot root, UiNode node, float parentAlpha, UiRect inheritedClip) {
-        if (!node.visible()) {
-            return;
-        }
-        UiRect previousClip = currentClip;
-        UiNode previousNode = drawingNode;
-        drawingNode = node;
-        UiRect worldClip = nodeClip(node, inheritedClip);
-        currentClip = localClip(node, worldClip);
-        float alpha = combinedAlpha(parentAlpha, node.renderAlpha());
-        drawBackgroundImage(root, node, alpha);
         drawImage(root, node, alpha);
-        if (node.type() == UiNodeType.CUSTOM) {
-            renderCustomImages(root, node);
-            renderCustomText(root, node);
-        }
         if (node.text() != null || isTextInput(node)) {
             drawNodeBitmapText(root, node, alpha);
         } else if (node.type() == UiNodeType.TABS) {
             drawTabsBitmapText(root, node, alpha);
         }
-        ArrayView<UiNode> children = root.renderChildren(node);
-        for (int i = 0; i < children.size(); i++) {
-            UiNode child = children.get(i);
-            if (!root.isOverlayNode(child)) {
-                renderImages(root, child, alpha, worldClip);
-            }
-        }
-        currentClip = previousClip;
-        drawingNode = previousNode;
     }
 
     private void drawBackground(UiRoot root, UiNode node, float alpha) {
@@ -312,27 +330,61 @@ public final class UiG2DRenderer implements UiRenderer {
             return;
         }
         UiStyle style = root.styleFor(node);
-        UiDrawable background = style != null ? stateStyle(node, style).background() : defaultBackground(node);
+        UiDrawable background = style != null ? UiRoot.stateStyle(node, style).background() : defaultBackground(node);
         if (background == null || background.type() == UiDrawableType.NONE) {
             return;
         }
-        if (background.type() == UiDrawableType.COLOR && background.color() != null) {
-            UiColor color = background.color();
-            drawRect(root, node.bounds(), color.red(), color.green(), color.blue(), color.alpha() * alpha);
-        } else if (background.type() == UiDrawableType.NINE_PATCH && background.ninePatch() != null
-                && background.ninePatch().region() == null) {
-            drawRect(root, node.bounds(), 0.12f, 0.14f, 0.18f, alpha);
-        }
+        drawDrawable(root, background, node.bounds(), root.shapeFor(node), alpha);
         if (node.type() == UiNodeType.WINDOW) {
             drawWindowChrome(root, node, alpha);
         }
     }
 
-    private Batch2D batch() {
+    private SpriteBatch batch() {
         if (batch == null) {
             batch = new SpriteBatch(graphics);
         }
         return batch;
+    }
+
+    private void drawDrawable(UiRoot root, UiDrawable drawable, UiRect bounds, UiShape shape, float alpha) {
+        if (drawable == null || bounds.width() <= 0 || bounds.height() <= 0) return;
+        surfaceClip.surface(shape, bounds);
+        try {
+            if (drawable.type() == UiDrawableType.COLOR && drawable.color() != null) {
+                UiColor color = drawable.color();
+                drawRect(root, bounds, color.red(), color.green(), color.blue(), color.alpha() * alpha);
+            } else if (drawable.type() == UiDrawableType.TEXTURE && drawable.region() != null) {
+                drawRegion(root, drawable.region(), bounds.x(), bounds.y(), bounds.width(), bounds.height(),
+                        1, 1, 1, alpha);
+            } else if (drawable.type() == UiDrawableType.NINE_PATCH && drawable.ninePatch() != null) {
+                if (drawable.ninePatch().region() != null) drawNinePatch(root, drawable.ninePatch(), bounds, alpha);
+                else drawRect(root, bounds, 0.12f, 0.14f, 0.18f, alpha);
+            }
+        } finally {
+            surfaceClip.clearSurface();
+        }
+    }
+
+    private boolean textured(UiDrawable drawable) {
+        return drawable != null && (drawable.type() == UiDrawableType.TEXTURE
+                || drawable.type() == UiDrawableType.NINE_PATCH);
+    }
+
+    private void drawControlPart(UiRoot root, UiStyle style, boolean foreground, UiRect bounds,
+            UiColor fallback, float alpha) {
+        UiDrawable drawable = style == null ? null : foreground ? style.foreground() : style.background();
+        UiShape shape = style != null ? root.shapeFor(drawingNode) : UiShape.rectangle();
+        if (textured(drawable)) {
+            drawDrawable(root, drawable, bounds, shape, alpha);
+        } else {
+            surfaceClip.surface(shape, bounds);
+            try {
+                drawRect(root, bounds, fallback.red(), fallback.green(), fallback.blue(), fallback.alpha() * alpha);
+            } finally {
+                surfaceClip.clearSurface();
+            }
+        }
     }
 
     private void drawCheckbox(UiRoot root, UiNode node, float alpha) {
@@ -341,13 +393,13 @@ public final class UiG2DRenderer implements UiRenderer {
         UiColor track = drawableColor(style != null ? style.background() : null, UiColor.rgba8888(0x121820ff));
         UiColor accent = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x47a8ffff));
         float localAlpha = node.modifier().enabled() ? alpha : alpha * 0.55f;
-        drawRect(root, box, track.red(), track.green(), track.blue(), track.alpha() * localAlpha);
-        drawOutline(root, box, accent, localAlpha * 0.62f);
+        drawControlPart(root, style, false, box, track, localAlpha);
+        if (root.shapeFor(node).rectangular()) drawOutline(root, box, accent, localAlpha * 0.62f);
         if (node.checked()) {
             float inset = Math.max(2.0f, box.width() * 0.16f);
-            drawRect(root, box.x() + inset, box.y() + inset,
-                    Math.max(0.0f, box.width() - inset * 2.0f), Math.max(0.0f, box.height() - inset * 2.0f),
-                    accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha);
+            UiRect indicator = node.rendererRect(5, box.x() + inset, box.y() + inset,
+                    Math.max(0, box.width() - inset * 2), Math.max(0, box.height() - inset * 2));
+            drawControlPart(root, style, true, indicator, accent, localAlpha);
         }
     }
 
@@ -381,14 +433,25 @@ public final class UiG2DRenderer implements UiRenderer {
             trackGreen += (interaction.green() - trackGreen) * interactionAmount;
             trackBlue += (interaction.blue() - trackBlue) * interactionAmount;
         }
-        drawRoundedTrack(root, trackBounds, trackRed, trackGreen, trackBlue, track.alpha() * localAlpha);
+        UiDrawable trackDrawable = style == null ? null : node.checked() ? style.foreground() : style.background();
+        if (textured(trackDrawable)) {
+            drawDrawable(root, trackDrawable, trackBounds, PILL_SHAPE, localAlpha);
+        } else {
+            drawRoundedTrack(root, trackBounds, trackRed, trackGreen, trackBlue, track.alpha() * localAlpha);
+        }
         float thumbRadius = Math.max(0.0f, height * 0.5f - 3.0f);
         float thumbCenterX = node.checked()
                 ? trackBounds.right() - height * 0.5f
                 : trackBounds.x() + height * 0.5f;
         UiColor thumb = node.checked() ? contrastingColor(on) : label;
-        drawFilledCircle(root, thumbCenterX, trackBounds.y() + height * 0.5f,
-                thumbRadius, thumb, localAlpha);
+        if (style != null && style.thumb().type() != UiDrawableType.NONE) {
+            drawDrawable(root, style.thumb(), node.rendererRect(5,
+                    thumbCenterX - thumbRadius, trackBounds.y() + height * 0.5f - thumbRadius,
+                    thumbRadius * 2, thumbRadius * 2), UiShape.circle(), localAlpha);
+        } else {
+            drawFilledCircle(root, thumbCenterX, trackBounds.y() + height * 0.5f,
+                    thumbRadius, thumb, localAlpha);
+        }
     }
 
     private void drawRadioButton(UiRoot root, UiNode node, float alpha) {
@@ -413,50 +476,20 @@ public final class UiG2DRenderer implements UiRenderer {
                     accent, localAlpha * (node.focused() ? 0.28f : 0.14f));
         }
         drawFilledCircle(root, centerX, centerY, radius, accent, localAlpha * 0.92f);
-        drawFilledCircle(root, centerX, centerY, Math.max(0.0f, radius - 2.0f), track, localAlpha);
+        if (style != null && textured(style.background())) {
+            drawDrawable(root, style.background(), box, UiShape.circle(), localAlpha);
+        } else {
+            drawFilledCircle(root, centerX, centerY, Math.max(0.0f, radius - 2.0f), track, localAlpha);
+        }
         if (node.checked()) {
-            drawFilledCircle(root, centerX, centerY, Math.max(2.0f, radius - 5.0f), accent, localAlpha);
-        }
-    }
-
-    private boolean needsBatch(UiRoot root, UiNode node) {
-        if (node == null || !node.visible()) {
-            return false;
-        }
-        if (node.image() != null || textureBackground(root, node)) {
-            return true;
-        }
-        if (node.type() == UiNodeType.CUSTOM && node.customContext() != null
-                && node.customContext().drawFunction() != null) {
-            return true;
-        }
-        if ((node.text() != null || isTextInput(node) || node.type() == UiNodeType.TABS)
-                && hasBitmapFont(root, node)) {
-            return true;
-        }
-        ArrayView<UiNode> children = root.renderChildren(node);
-        for (int i = 0; i < children.size(); i++) {
-            UiNode child = children.get(i);
-            if (!root.isOverlayNode(child) && needsBatch(root, child)) {
-                return true;
+            if (style != null && textured(style.foreground())) {
+                float size = Math.max(4, visualSize - 10);
+                drawDrawable(root, style.foreground(), node.rendererRect(5,
+                        centerX - size * 0.5f, centerY - size * 0.5f, size, size), UiShape.circle(), localAlpha);
+            } else {
+                drawFilledCircle(root, centerX, centerY, Math.max(2.0f, radius - 5.0f), accent, localAlpha);
             }
         }
-        return false;
-    }
-
-    private boolean textureBackground(UiRoot root, UiNode node) {
-        if (usesInternalBackground(node)) {
-            return false;
-        }
-        UiStyle style = root.styleFor(node);
-        UiDrawable background = style != null ? stateStyle(node, style).background() : defaultBackground(node);
-        if (node.type() == UiNodeType.MODAL && node.descriptor() instanceof UiModal) {
-            return false;
-        }
-        return background != null
-                && ((background.type() == UiDrawableType.TEXTURE && background.region() != null)
-                || (background.type() == UiDrawableType.NINE_PATCH && background.ninePatch() != null
-                && background.ninePatch().region() != null));
     }
 
     private UiRect checkboxBox(UiRoot root, UiNode node) {
@@ -485,17 +518,20 @@ public final class UiG2DRenderer implements UiRenderer {
         UiStyle style = controlStyle(root, node);
         UiColor track = drawableColor(style != null ? style.background() : null, UiColor.rgba8888(0x303946ff));
         UiColor accent = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x47a8ffff));
-        drawRect(root, trackX, y, trackWidth, trackHeight,
-                track.red(), track.green(), track.blue(), track.alpha() * sliderAlpha);
+        drawControlPart(root, style, false, node.rendererRect(5, trackX, y, trackWidth, trackHeight),
+                track, sliderAlpha);
         float progress = sliderProgress(root, node);
-        if (enabled) {
-            drawRect(root, trackX, y, trackWidth * progress, trackHeight,
-                    accent.red(), accent.green(), accent.blue(), accent.alpha() * sliderAlpha);
+        if (enabled || style != null && textured(style.foreground())) {
+            drawControlPart(root, style, true, node.rendererRect(6,
+                    trackX, y, trackWidth * progress, trackHeight), accent, sliderAlpha);
         } else {
             drawRect(root, trackX, y, trackWidth * progress, trackHeight, 0.36f, 0.43f, 0.50f, sliderAlpha);
         }
         float knobX = trackX + trackWidth * progress - 5.0f;
-        if (enabled) {
+        if (style != null && style.thumb().type() != UiDrawableType.NONE) {
+            drawDrawable(root, style.thumb(), node.rendererRect(7, knobX, y - 5, 10, 14),
+                    root.shapeFor(node), sliderAlpha);
+        } else if (enabled) {
             drawRect(root, knobX, y - 5.0f, 10.0f, 14.0f, 0.86f, 0.90f, 0.96f, sliderAlpha);
         } else {
             drawRect(root, knobX, y - 5.0f, 10.0f, 14.0f, 0.48f, 0.55f, 0.62f, sliderAlpha);
@@ -516,12 +552,12 @@ public final class UiG2DRenderer implements UiRenderer {
         UiStyle style = controlStyle(root, node);
         UiColor track = drawableColor(style != null ? style.background() : null, UiColor.rgba8888(0x28313cff));
         UiColor accent = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x63cd8fff));
-        drawRect(root, trackX, trackY, trackWidth, trackHeight,
-                track.red(), track.green(), track.blue(), track.alpha() * localAlpha);
+        drawControlPart(root, style, false, node.rendererRect(5, trackX, trackY, trackWidth, trackHeight),
+                track, localAlpha);
         float progress = progressValue(node);
-        if (enabled) {
-            drawRect(root, trackX, trackY, trackWidth * progress, trackHeight,
-                    accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha);
+        if (enabled || style != null && textured(style.foreground())) {
+            drawControlPart(root, style, true, node.rendererRect(6,
+                    trackX, trackY, trackWidth * progress, trackHeight), accent, localAlpha);
         } else {
             drawRect(root, trackX, trackY, trackWidth * progress, trackHeight, 0.36f, 0.43f, 0.50f, localAlpha);
         }
@@ -540,8 +576,8 @@ public final class UiG2DRenderer implements UiRenderer {
         UiColor track = drawableColor(style != null ? style.background() : null, UiColor.rgba8888(0x28313cff));
         UiColor accent = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x47a8ffff));
         float localAlpha = node.modifier().enabled() ? alpha : alpha * 0.55f;
-        drawRect(root, bounds.x(), y, bounds.width(), height,
-                track.red(), track.green(), track.blue(), track.alpha() * localAlpha);
+        drawControlPart(root, style, false, node.rendererRect(5, bounds.x(), y, bounds.width(), height),
+                track, localAlpha);
         float segment = Math.max(12.0f, bounds.width() * 0.32f);
         float travel = bounds.width() + segment;
         float phase = (root.elapsedSeconds() * 0.72f) % 1.0f;
@@ -549,8 +585,8 @@ public final class UiG2DRenderer implements UiRenderer {
         float clippedX = Math.max(bounds.x(), x);
         float clippedRight = Math.min(bounds.right(), x + segment);
         if (clippedRight > clippedX) {
-            drawRect(root, clippedX, y, clippedRight - clippedX, height,
-                    accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha);
+            drawControlPart(root, style, true, node.rendererRect(6, clippedX, y, clippedRight - clippedX, height),
+                    accent, localAlpha);
         }
     }
 
@@ -569,8 +605,7 @@ public final class UiG2DRenderer implements UiRenderer {
             float y = centerY + (float) Math.sin(angle) * radius - 1.5f;
             int distance = (i - leading + 8) & 7;
             float fade = 1.0f - distance / 9.0f;
-            drawRect(root, x, y, 3.0f, 3.0f,
-                    accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha * fade);
+            drawControlPart(root, style, true, node.rendererRect(5, x, y, 3, 3), accent, localAlpha * fade);
         }
     }
 
@@ -582,8 +617,8 @@ public final class UiG2DRenderer implements UiRenderer {
         UiStyle style = controlStyle(root, node);
         UiColor color = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x465362ff));
         float height = Math.min(bounds.height(), 1.0f);
-        drawRect(root, bounds.x(), bounds.y() + Math.max(0.0f, (bounds.height() - height) * 0.5f),
-                bounds.width(), height, color.red(), color.green(), color.blue(), color.alpha() * alpha);
+        drawControlPart(root, style, true, node.rendererRect(5, bounds.x(),
+                bounds.y() + Math.max(0, (bounds.height() - height) * 0.5f), bounds.width(), height), color, alpha);
     }
 
     private void drawCollapseBar(UiRoot root, UiNode node, float alpha) {
@@ -593,7 +628,7 @@ public final class UiG2DRenderer implements UiRenderer {
         UiColor surface = drawableColor(style != null ? style.background() : null, UiColor.rgba8888(0x202a35ff));
         UiColor accent = drawableColor(style != null ? style.foreground() : null, UiColor.rgba8888(0x47a8ffff));
         float localAlpha = node.modifier().enabled() ? alpha : alpha * 0.55f;
-        drawRect(root, bounds, surface.red(), surface.green(), surface.blue(), surface.alpha() * localAlpha);
+        drawControlPart(root, style, false, bounds, surface, localAlpha);
         float stateAlpha = node.checked() ? 0.11f : 0.0f;
         if (node.hovered()) {
             stateAlpha = Math.max(stateAlpha, 0.15f);
@@ -616,7 +651,10 @@ public final class UiG2DRenderer implements UiRenderer {
         float leading = Math.max(14.0f, padding.left());
         float centerX = bounds.x() + leading + 7.0f;
         float centerY = bounds.y() + headerHeight * 0.5f;
-        if (node.checked()) {
+        if (style != null && textured(style.foreground())) {
+            drawDrawable(root, style.foreground(), node.rendererRect(5,
+                    centerX - 8, centerY - 8, 16, 16), root.shapeFor(node), localAlpha);
+        } else if (node.checked()) {
             drawFilledTriangle(root,
                     centerX - 7.0f, centerY - 3.5f,
                     centerX + 7.0f, centerY - 3.5f,
@@ -649,9 +687,10 @@ public final class UiG2DRenderer implements UiRenderer {
             UiRect tab = root.tabBounds(node, i);
             boolean selected = i == active;
             if (selected) {
-                drawRect(root, tab, accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha * 0.24f);
+                float fillAlpha = style != null && textured(style.foreground()) ? localAlpha : localAlpha * 0.24f;
+                drawControlPart(root, style, true, tab, accent, fillAlpha);
             } else {
-                drawRect(root, tab, surface.red(), surface.green(), surface.blue(), surface.alpha() * localAlpha);
+                drawControlPart(root, style, false, tab, surface, localAlpha);
             }
             drawRect(root, tab.right() - 1.0f, tab.y() + 5.0f, 1.0f, Math.max(0.0f, tab.height() - 10.0f),
                     accent.red(), accent.green(), accent.blue(), accent.alpha() * localAlpha * 0.26f);
@@ -857,8 +896,7 @@ public final class UiG2DRenderer implements UiRenderer {
     }
 
     private UiTextStyle nodeTextStyle(UiRoot root, UiNode node) {
-        UiStyle style = root.styleFor(node);
-        return style != null ? stateStyle(node, style).textStyle() : UiTextStyle.text();
+        return root.textStyleFor(node);
     }
 
     private UiRect nodeTextBounds(UiRoot root, UiNode node) {
@@ -1039,56 +1077,18 @@ public final class UiG2DRenderer implements UiRenderer {
                 node.bounds().height(), 1.0f, 1.0f, 1.0f, alpha);
     }
 
-    private void drawBackgroundImage(UiRoot root, UiNode node, float alpha) {
-        if (usesInternalBackground(node)) {
-            return;
-        }
-        UiStyle style = root.styleFor(node);
-        UiDrawable background = style != null ? stateStyle(node, style).background() : null;
-        if (background == null) {
-            return;
-        }
-        if (background.type() == UiDrawableType.TEXTURE && background.region() != null) {
-            drawRegion(root, background.region(), node.bounds().x(), node.bounds().y(), node.bounds().width(),
-                    node.bounds().height(), 1.0f, 1.0f, 1.0f, alpha);
-        } else if (background.type() == UiDrawableType.NINE_PATCH && background.ninePatch() != null
-                && background.ninePatch().region() != null) {
-            drawNinePatch(root, background.ninePatch(), node.bounds(), alpha);
-        }
-    }
-
     private void drawNinePatch(UiRoot root, UiNinePatch patch, UiRect bounds, float alpha) {
-        TextureRegion source = patch.region();
-        UiInsets split = patch.splits();
-        int left = (int) Math.min(split.left(), bounds.width() * 0.5f);
-        int right = (int) Math.min(split.right(), bounds.width() * 0.5f);
-        int top = (int) Math.min(split.top(), bounds.height() * 0.5f);
-        int bottom = (int) Math.min(split.bottom(), bounds.height() * 0.5f);
-        int centerSourceWidth = Math.max(1, source.width() - left - right);
-        int centerSourceHeight = Math.max(1, source.height() - top - bottom);
-        float centerWidth = Math.max(0.0f, bounds.width() - left - right);
-        float centerHeight = Math.max(0.0f, bounds.height() - top - bottom);
-
-        drawPatchRegion(root, source, source.x(), source.y(), left, top,
-                bounds.x(), bounds.y(), left, top, alpha);
-        drawPatchRegion(root, source, source.x() + left, source.y(), centerSourceWidth, top,
-                bounds.x() + left, bounds.y(), centerWidth, top, alpha);
-        drawPatchRegion(root, source, source.x() + source.width() - right, source.y(), right, top,
-                bounds.right() - right, bounds.y(), right, top, alpha);
-
-        drawPatchRegion(root, source, source.x(), source.y() + top, left, centerSourceHeight,
-                bounds.x(), bounds.y() + top, left, centerHeight, alpha);
-        drawPatchRegion(root, source, source.x() + left, source.y() + top, centerSourceWidth, centerSourceHeight,
-                bounds.x() + left, bounds.y() + top, centerWidth, centerHeight, alpha);
-        drawPatchRegion(root, source, source.x() + source.width() - right, source.y() + top, right,
-                centerSourceHeight, bounds.right() - right, bounds.y() + top, right, centerHeight, alpha);
-
-        drawPatchRegion(root, source, source.x(), source.y() + source.height() - bottom, left, bottom,
-                bounds.x(), bounds.bottom() - bottom, left, bottom, alpha);
-        drawPatchRegion(root, source, source.x() + left, source.y() + source.height() - bottom, centerSourceWidth,
-                bottom, bounds.x() + left, bounds.bottom() - bottom, centerWidth, bottom, alpha);
-        drawPatchRegion(root, source, source.x() + source.width() - right, source.y() + source.height() - bottom,
-                right, bottom, bounds.right() - right, bounds.bottom() - bottom, right, bottom, alpha);
+        patchLayout.set(patch, bounds);
+        for (int row = 0; row < 3; row++) {
+            for (int column = 0; column < 3; column++) {
+                drawPatchRegion(root, patch.region(), patchLayout.sourceX[column], patchLayout.sourceY[row],
+                        patchLayout.sourceX[column + 1] - patchLayout.sourceX[column],
+                        patchLayout.sourceY[row + 1] - patchLayout.sourceY[row],
+                        patchLayout.targetX[column], patchLayout.targetY[row],
+                        patchLayout.targetX[column + 1] - patchLayout.targetX[column],
+                        patchLayout.targetY[row + 1] - patchLayout.targetY[row], alpha);
+            }
+        }
     }
 
     private void drawPatchRegion(UiRoot root, TextureRegion source, int x, int y, int width, int height,
@@ -1160,33 +1160,33 @@ public final class UiG2DRenderer implements UiRenderer {
                 return;
             }
         }
-        int clippedSourceX = sourceX;
-        int clippedSourceY = sourceY;
-        int clippedSourceRight = sourceX + sourceWidth;
-        int clippedSourceBottom = sourceY + sourceHeight;
-        float clippedWidth = clippedRight - clippedX;
-        float clippedHeight = clippedBottom - clippedY;
-        if (clippedX != x || clippedY != y || clippedWidth != width || clippedHeight != height) {
-            float left = Math.max(0.0f, clippedX - x);
-            float top = Math.max(0.0f, clippedY - y);
-            float right = Math.max(0.0f, x + width - clippedRight);
-            float bottom = Math.max(0.0f, y + height - clippedBottom);
-            clippedSourceX += Math.round(left / width * sourceWidth);
-            clippedSourceY += Math.round(top / height * sourceHeight);
-            clippedSourceRight -= Math.round(right / width * sourceWidth);
-            clippedSourceBottom -= Math.round(bottom / height * sourceHeight);
+        useBatch();
+        float brightness = brightness();
+        batch.color(red * brightness, green * brightness, blue * brightness, alpha);
+        float u = sourceX / (float) texture.width();
+        float v = sourceY / (float) texture.height();
+        float du = sourceWidth / (float) texture.width() / width;
+        float dv = sourceHeight / (float) texture.height() / height;
+        if (bottomLeftOrigin) {
+            v = 1 - v;
+            dv = -dv;
         }
-        batch.color(red, green, blue, alpha);
-        // Rendered regions carry a provider-declared V direction. Mirror both the sampled
-        // source interval and destination quad, including partially clipped UI images.
-        float destinationY = ndcY(root, clippedY, clippedHeight);
-        float destinationHeight = ndcHeight(root, clippedBottom - clippedY);
-        if (bottomLeftOrigin) destinationY += destinationHeight;
-        batch.draw(texture, clippedSourceX, bottomLeftOrigin ? texture.height() - clippedSourceBottom : clippedSourceY,
-                Math.max(1, clippedSourceRight - clippedSourceX),
-                Math.max(1, clippedSourceBottom - clippedSourceY),
-                ndcX(root, clippedX), destinationY,
-                ndcWidth(root, clippedRight - clippedX), bottomLeftOrigin ? -destinationHeight : destinationHeight);
+        float step = surfaceClip.active() ? rasterStep(root) : clippedBottom - clippedY;
+        for (float top = clippedY; top < clippedBottom; top += step) {
+            float bottom = Math.min(clippedBottom, top + step);
+            float left = clippedX;
+            float right = clippedRight;
+            if (surfaceClip.active()) {
+                surfaceClip.span((top + bottom) * 0.5f);
+                left = Math.max(left, surfaceClip.left);
+                right = Math.min(right, surfaceClip.right);
+            }
+            if (right <= left) continue;
+            batch.drawUv(texture, u + (left - x) * du, v + (top - y) * dv,
+                    u + (right - x) * du, v + (bottom - y) * dv,
+                    ndcX(root, left), ndcY(root, top, bottom - top),
+                    ndcWidth(root, right - left), ndcHeight(root, bottom - top));
+        }
     }
 
     private void drawRect(UiRoot root, UiRect rect, UiColor color) {
@@ -1228,11 +1228,35 @@ public final class UiG2DRenderer implements UiRenderer {
                 return;
             }
         }
-        float clippedWidth = clippedRight - clippedX;
-        float clippedHeight = clippedBottom - clippedY;
-        shapes.filledRect(ndcX(root, clippedX), ndcY(root, clippedY, clippedHeight), ndcWidth(root, clippedWidth),
-                ndcHeight(root, clippedHeight),
-                red, green, blue, alpha);
+        useShapes();
+        float brightness = brightness();
+        red *= brightness;
+        green *= brightness;
+        blue *= brightness;
+        float step = surfaceClip.active() ? rasterStep(root) : clippedBottom - clippedY;
+        for (float top = clippedY; top < clippedBottom; top += step) {
+            float bottom = Math.min(clippedBottom, top + step);
+            float left = clippedX;
+            float right = clippedRight;
+            if (surfaceClip.active()) {
+                surfaceClip.span((top + bottom) * 0.5f);
+                left = Math.max(left, surfaceClip.left);
+                right = Math.min(right, surfaceClip.right);
+            }
+            if (right <= left) continue;
+            shapes.filledRect(ndcX(root, left), ndcY(root, top, bottom - top),
+                    ndcWidth(root, right - left), ndcHeight(root, bottom - top), red, green, blue, alpha);
+        }
+    }
+
+    private float rasterStep(UiRoot root) {
+        float scale = drawingNode != null ? drawingNode.renderHeight(root.effectiveUiScale())
+                : root.effectiveUiScale();
+        return 0.5f / Math.max(0.01f, scale);
+    }
+
+    private float brightness() {
+        return drawingNode != null ? drawingNode.renderBrightness() : 1;
     }
 
     private void drawOutline(UiRoot root, UiRect rect, UiColor color, float alpha) {
@@ -1382,6 +1406,10 @@ public final class UiG2DRenderer implements UiRenderer {
         if (color == null || alpha <= 0.0f) {
             return;
         }
+        if (surfaceClip.active()) {
+            drawMaskedTriangle(root, x1, y1, x2, y2, x3, y3, color, alpha);
+            return;
+        }
         float left = Math.min(x1, Math.min(x2, x3));
         float top = Math.min(y1, Math.min(y2, y3));
         float right = Math.max(x1, Math.max(x2, x3));
@@ -1390,11 +1418,51 @@ public final class UiG2DRenderer implements UiRenderer {
                 || right > currentClip.right() || bottom > currentClip.bottom())) {
             return;
         }
+        useShapes();
         shapes.filledTriangle(
                 ndcX(root, x1), ndcY(root, y1, 0.0f),
                 ndcX(root, x2), ndcY(root, y2, 0.0f),
                 ndcX(root, x3), ndcY(root, y3, 0.0f),
-                color.red(), color.green(), color.blue(), color.alpha() * alpha);
+                color.red() * brightness(), color.green() * brightness(), color.blue() * brightness(), color.alpha() * alpha);
+    }
+
+    private void drawMaskedTriangle(UiRoot root, float x1, float y1, float x2, float y2, float x3, float y3,
+            UiColor color, float alpha) {
+        if (y1 > y2) {
+            float x = x1;
+            x1 = x2;
+            x2 = x;
+            float y = y1;
+            y1 = y2;
+            y2 = y;
+        }
+        if (y2 > y3) {
+            float x = x2;
+            x2 = x3;
+            x3 = x;
+            float y = y2;
+            y2 = y3;
+            y3 = y;
+        }
+        if (y1 > y2) {
+            float x = x1;
+            x1 = x2;
+            x2 = x;
+            float y = y1;
+            y1 = y2;
+            y2 = y;
+        }
+        if (y3 <= y1) return;
+        float step = rasterStep(root);
+        for (float top = y1; top < y3; top += step) {
+            float bottom = Math.min(y3, top + step);
+            float y = (top + bottom) * 0.5f;
+            float longEdge = x1 + (x3 - x1) * (y - y1) / (y3 - y1);
+            float shortEdge = y < y2 ? x1 + (x2 - x1) * (y - y1) / (y2 - y1)
+                    : x2 + (x3 - x2) * (y - y2) / (y3 - y2);
+            drawRect(root, Math.min(longEdge, shortEdge), top, Math.abs(longEdge - shortEdge), bottom - top,
+                    color.red(), color.green(), color.blue(), color.alpha() * alpha);
+        }
     }
 
     private UiColor contrastingColor(UiColor color) {
@@ -1421,6 +1489,15 @@ public final class UiG2DRenderer implements UiRenderer {
             float radius = width * 0.5f;
             drawRect(root, x1 - radius, y1 - radius, width, width,
                     color.red(), color.green(), color.blue(), color.alpha() * alpha);
+            return;
+        }
+        if (surfaceClip.active()) {
+            float halfNormalX = -dy / length * width * 0.5f;
+            float halfNormalY = dx / length * width * 0.5f;
+            drawMaskedTriangle(root, x1 - halfNormalX, y1 - halfNormalY,
+                    x2 - halfNormalX, y2 - halfNormalY, x2 + halfNormalX, y2 + halfNormalY, color, alpha);
+            drawMaskedTriangle(root, x1 - halfNormalX, y1 - halfNormalY,
+                    x2 + halfNormalX, y2 + halfNormalY, x1 + halfNormalX, y1 + halfNormalY, color, alpha);
             return;
         }
         float scale = root.effectiveUiScale();
@@ -1588,9 +1665,10 @@ public final class UiG2DRenderer implements UiRenderer {
                 return;
             }
         }
+        useShapes();
         shapes.line(ndcX(root, x1), ndcY(root, y1, 0.0f),
                 ndcX(root, x2), ndcY(root, y2, 0.0f),
-                red, green, blue, alpha);
+                red * brightness(), green * brightness(), blue * brightness(), alpha);
     }
 
     private int lineOutCode(float x, float y, UiRect clip) {
@@ -1636,7 +1714,7 @@ public final class UiG2DRenderer implements UiRenderer {
 
     private UiStyle controlStyle(UiRoot root, UiNode node) {
         UiStyle style = root.styleFor(node);
-        return style != null ? stateStyle(node, style) : null;
+        return style != null ? UiRoot.stateStyle(node, style) : null;
     }
 
     private UiColor drawableColor(UiDrawable drawable, UiColor fallback) {
@@ -1732,6 +1810,7 @@ public final class UiG2DRenderer implements UiRenderer {
         }
         float width = Math.max(0.0f, right - x);
         float height = Math.max(0.0f, bottom - y);
+        useShapes();
         shapes.rect(ndcX(root, x), ndcY(root, y, height), ndcWidth(root, width), ndcHeight(root, height),
                 color.red(), color.green(), color.blue(), color.alpha());
     }
@@ -2007,22 +2086,6 @@ public final class UiG2DRenderer implements UiRenderer {
             return TABS_BACKGROUND;
         }
         return UiDrawable.none();
-    }
-
-    private UiStyle stateStyle(UiNode node, UiStyle style) {
-        if (!node.modifier().enabled() && style.disabled() != null) {
-            return style.disabled();
-        }
-        if (node.pressed() && style.pressed() != null) {
-            return style.pressed();
-        }
-        if (node.hovered() && style.hover() != null) {
-            return style.hover();
-        }
-        if (node.focused() && style.focused() != null) {
-            return style.focused();
-        }
-        return style;
     }
 
     private float sliderProgress(UiRoot root, UiNode node) {

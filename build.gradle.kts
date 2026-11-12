@@ -35,7 +35,6 @@ System.getProperty("libfdx.compositeBuildDir")
 val libfdxGroup = libs.versions.libfdxGroup.get()
 val libfdxVersion = libs.versions.libfdxRelease.get()
 val libfdxSnapshotVersion = libs.versions.libfdxSnapshot.get()
-gradle.extensions.extraProperties.set("libfdxDependencyVersion", libfdxSnapshotVersion)
 
 val externalExtensionVersions = linkedMapOf(
     "jBox2D" to libs.versions.jbox2d.get(),

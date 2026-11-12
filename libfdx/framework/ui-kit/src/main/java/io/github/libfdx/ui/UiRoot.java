@@ -89,7 +89,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     private final UiTextEngine textEngine;
     private final OrderedMap<String, UiNode> retainedNodes = new OrderedMap<String, UiNode>();
     private final Array<UiNode> retainedNodeValues = new Array<UiNode>();
-    private final Array<UiNode> transitionNodes = new Array<UiNode>();
+    private final Array<UiNode> renderAnimationNodes = new Array<UiNode>();
     private final Array<UiObservableState> observedStateValues = new Array<UiObservableState>();
     private final OrderedMap<String, UiAnimatable<?>> animatables = new OrderedMap<String, UiAnimatable<?>>();
     private final Array<String> animatableKeys = new Array<String>();
@@ -139,6 +139,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     private float tooltipHoverStartSeconds;
     private float tooltipWakeSeconds = -1.0f;
     private UiInsets safeArea = UiInsets.ZERO;
+    private UiRect viewport;
     private float uiScale = 1.0f;
     private boolean autoUiScale = true;
     private boolean debugLines;
@@ -291,9 +292,9 @@ public final class UiRoot implements Disposable, UiStateListener {
         ensureComposed();
         float previousElapsedSeconds = elapsedSeconds;
         elapsedSeconds += Math.max(0.0f, deltaSeconds);
-        boolean transitionChanged = false;
-        for (int i = 0; i < transitionNodes.size(); i++) {
-            transitionChanged |= transitionNodes.get(i).updateTransition(Math.max(0, deltaSeconds) * animationScale);
+        boolean renderAnimationChanged = false;
+        for (int i = 0; i < renderAnimationNodes.size(); i++) {
+            renderAnimationChanged |= renderAnimationNodes.get(i).updateRenderAnimation(Math.max(0, deltaSeconds) * animationScale);
         }
         boolean animationRunning = false;
         for (int i = 0; i < animatableValues.size(); i++) {
@@ -315,7 +316,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (animationRunning || tooltipWakeDue) {
             ensureComposed();
         }
-        if (transitionChanged) updateRenderTransforms(rootNode);
+        if (renderAnimationChanged) updateRenderTransforms(rootNode);
     }
 
     /**
@@ -339,6 +340,28 @@ public final class UiRoot implements Disposable, UiStateListener {
         this.width = Math.max(0, width);
         this.height = Math.max(0, height);
         layout();
+    }
+
+    /** Returns the framebuffer viewport, or null when this root uses the whole framebuffer. */
+    public UiRect viewport() {
+        return viewport;
+    }
+
+    /**
+     * Sets a viewport in framebuffer pixels, measured from the top left. The root lays out
+     * and draws inside it, and continues to receive input in display coordinates.
+     * Update the viewport when the framebuffer resizes. Null restores the full framebuffer.
+     */
+    public UiRoot viewport(UiRect viewport) {
+        if (viewport != null && (viewport.x() < 0 || viewport.y() < 0
+                || viewport.width() <= 0 || viewport.height() <= 0
+                || (int) viewport.x() != viewport.x() || (int) viewport.y() != viewport.y()
+                || (int) viewport.width() != viewport.width() || (int) viewport.height() != viewport.height())) {
+            throw new IllegalArgumentException("UI viewport requires positive dimensions and nonnegative pixel coordinates");
+        }
+        this.viewport = viewport;
+        layout();
+        return this;
     }
 
     /**
@@ -482,7 +505,7 @@ public final class UiRoot implements Disposable, UiStateListener {
      * @return the display x
      */
     public int displayX(float uiX) {
-        return Math.round(uiX * logicalUiScale());
+        return Math.round(uiX * logicalUiScale() + viewportOffset(true));
     }
 
     /**
@@ -492,7 +515,7 @@ public final class UiRoot implements Disposable, UiStateListener {
      * @return the display y
      */
     public int displayY(float uiY) {
-        return Math.round(uiY * logicalUiScale());
+        return Math.round(uiY * logicalUiScale() + viewportOffset(false));
     }
 
     /**
@@ -502,7 +525,7 @@ public final class UiRoot implements Disposable, UiStateListener {
      * @return the UI x
      */
     public float uiX(int displayX) {
-        return displayX / logicalUiScale();
+        return (displayX - viewportOffset(true)) / logicalUiScale();
     }
 
     /**
@@ -512,7 +535,12 @@ public final class UiRoot implements Disposable, UiStateListener {
      * @return the UI y
      */
     public float uiY(int displayY) {
-        return displayY / logicalUiScale();
+        return (displayY - viewportOffset(false)) / logicalUiScale();
+    }
+
+    private float viewportOffset(boolean horizontal) {
+        if (viewport == null) return 0.0f;
+        return (horizontal ? viewport.x() : viewport.y()) / (display == null ? 1.0f : framebufferScale());
     }
 
     /**
@@ -694,11 +722,18 @@ public final class UiRoot implements Disposable, UiStateListener {
                 retainedNodeValues.add(node);
             }
         }
+        boolean wasHovered = node == hoveredNode && node.hovered();
+        boolean wasPressed = node == pressedNode && node.pressed();
         node.begin(key, modifier);
-        if (node.hasTransition()) {
-            if (!transitionNodes.contains(node)) transitionNodes.add(node);
+        UiStyle style = styleFor(node);
+        node.configurePressAnimation(node.type() == UiNodeType.BUTTON && node.modifier().enabled() && style != null
+                ? style.pressAnimation() : null);
+        node.hovered(wasHovered);
+        node.pressed(wasPressed);
+        if (node.hasRenderAnimation()) {
+            if (!renderAnimationNodes.contains(node)) renderAnimationNodes.add(node);
         } else {
-            transitionNodes.removeValue(node, true);
+            renderAnimationNodes.removeValue(node, true);
         }
         node.usedInComposition(compositionPass);
         return node;
@@ -736,7 +771,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         retainedNodes.clear();
         retainedNodeValues.clear();
-        transitionNodes.clear();
+        renderAnimationNodes.clear();
         animatables.clear();
         animatableKeys.clear();
         animatableValues.clear();
@@ -879,7 +914,7 @@ public final class UiRoot implements Disposable, UiStateListener {
                 clearReferencesToNode(node);
                 removeAnimationsForNode(identity);
                 removeStatesForNode(identity);
-                transitionNodes.removeValue(node, true);
+                renderAnimationNodes.removeValue(node, true);
                 if (node != null) {
                     node.dispose();
                 }
@@ -981,6 +1016,7 @@ public final class UiRoot implements Disposable, UiStateListener {
 
 
     float renderWidth() {
+        if (viewport != null) return viewport.width();
         int value = display != null ? display.framebufferWidth() : width;
         if(value <= 0 && display != null) {
             value = display.width();
@@ -989,6 +1025,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     float renderHeight() {
+        if (viewport != null) return viewport.height();
         int value = display != null ? display.framebufferHeight() : height;
         if(value <= 0 && display != null) {
             value = display.height();
@@ -1463,6 +1500,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             }
         }
         if ((event.key() == Key.ENTER || event.key() == Key.SPACE) && focusedNode.activatable()) {
+            focusedNode.pulsePress();
             focusedNode.activate();
             return true;
         }
@@ -1637,6 +1675,11 @@ public final class UiRoot implements Disposable, UiStateListener {
         return styleName != null ? theme.style(styleName) : null;
     }
 
+    UiShape shapeFor(UiNode node) {
+        UiStyle style = styleFor(node);
+        return style != null ? style.shape() : UiShape.rectangle();
+    }
+
     BitmapFontLayout textLayout(String text, UiTextStyle style, float maxWidth) {
         return textEngine.layout(text, style, maxWidth, effectiveUiScale());
     }
@@ -1785,7 +1828,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             layoutOverlay(node, inner);
         } else if (isColumnContainer(node.type())) {
             layoutColumn(node, inner);
-        } else if (node.type() == UiNodeType.ROW) {
+        } else if (node.type() == UiNodeType.ROW || node.type() == UiNodeType.BUTTON) {
             layoutRow(node, inner);
         } else if (node.type() == UiNodeType.GRID) {
             layoutGrid(node, inner);
@@ -1801,7 +1844,11 @@ public final class UiRoot implements Disposable, UiStateListener {
         UiScrollState state = node.scrollState();
         UiRect scrolled = scrolledViewport(node, viewport, state);
         layoutContainerChildren(node, scrolled);
-        if (updateScrollMetrics(node, viewport, scrolled)) {
+        boolean changed = updateScrollMetrics(node, viewport, scrolled);
+        if (node.descriptor() instanceof UiTreeState tree) {
+            changed |= tree.revealSelection(UiTreeView.ROW_HEIGHT, node.modifier().gap());
+        }
+        if (changed) {
             scrolled = scrolledViewport(node, viewport, state);
             layoutContainerChildren(node, scrolled);
             updateScrollMetrics(node, viewport, scrolled);
@@ -2180,11 +2227,17 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private UiSize preferredSize(UiNode node, float availableWidth, float availableHeight) {
+        UiModifier modifier = node.modifier();
+        if (!Float.isNaN(modifier.width())) {
+            availableWidth = Math.min(availableWidth, modifier.width());
+        }
+        if (!Float.isNaN(modifier.maxWidth())) {
+            availableWidth = Math.min(availableWidth, modifier.maxWidth());
+        }
         UiSize cached = node.cachedPreferredSize(layoutPass, availableWidth, availableHeight);
         if (cached != null) {
             return cached;
         }
-        UiModifier modifier = node.modifier();
         if (!Float.isNaN(modifier.width()) && !Float.isNaN(modifier.height())) {
             UiSize explicit = node.layoutSize(SIZE_PREFERRED_RESULT,
                     Math.max(minimumWidth(node), modifier.width()),
@@ -2201,7 +2254,9 @@ public final class UiRoot implements Disposable, UiStateListener {
         } else if (node.type() == UiNodeType.TEXT) {
             size = textSize(node, node.text(), padding, availableWidth);
         } else if (node.type() == UiNodeType.BUTTON) {
-            UiSize text = textSize(node, node.text(), padding, availableWidth);
+            UiSize text = node.children().isEmpty()
+                    ? textSize(node, node.text(), padding, availableWidth)
+                    : preferredRowSize(node, availableWidth, availableHeight, padding);
             size = node.layoutSize(SIZE_PREFERRED_BASE,
                     Math.max(72.0f, text.width() + 16.0f), Math.max(32.0f, text.height() + 6.0f));
         } else if (node.type() == UiNodeType.CHECKBOX) {
@@ -2305,6 +2360,8 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private UiSize preferredColumnSize(UiNode node, float availableWidth, float availableHeight, UiInsets padding) {
+        availableWidth = Math.max(0.0f, availableWidth - padding.horizontal());
+        availableHeight = Math.max(0.0f, availableHeight - padding.vertical());
         float widthValue = padding.horizontal();
         float heightValue = padding.vertical();
         float gap = node.modifier().gap();
@@ -2325,6 +2382,8 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private UiSize preferredRowSize(UiNode node, float availableWidth, float availableHeight, UiInsets padding) {
+        availableWidth = Math.max(0.0f, availableWidth - padding.horizontal());
+        availableHeight = Math.max(0.0f, availableHeight - padding.vertical());
         float widthValue = padding.horizontal();
         float heightValue = padding.vertical();
         float gap = node.modifier().gap();
@@ -2382,14 +2441,18 @@ public final class UiRoot implements Disposable, UiStateListener {
 
     private UiSize textSize(UiNode node, String text, UiInsets padding, float availableWidth) {
         int fallbackLength = text != null ? text.codePointCount(0, text.length()) : 0;
-        UiStyle style = styleFor(node);
-        UiTextStyle textStyle = style != null ? style.textStyle() : UiTextStyle.text();
-        float maxWidth = textStyle.wrap() || textStyle.ellipsis() ? availableWidth : 0.0f;
+        UiTextStyle textStyle = textStyleFor(node);
+        float maxWidth = textStyle.wrap() || textStyle.ellipsis()
+                ? Math.max(0.0f, availableWidth - padding.horizontal()) : 0.0f;
         BitmapFontLayout layout = textLayout(text, textStyle, maxWidth);
         node.cacheTextLayout(layoutPass, text, textStyle, maxWidth, layout);
         if (layout != null) {
+            // Keep the width that produced wrapped lines. Shrinking to the longest
+            // trimmed line can change the word breaks when the renderer lays it out again.
+            float textWidth = textStyle.wrap() && maxWidth > 0.0f && layout.lines().size() > 1
+                    ? maxWidth : (float)Math.ceil(layout.width());
             return node.layoutSize(SIZE_TEXT,
-                    layout.width() + padding.horizontal(), layout.height() + padding.vertical());
+                    textWidth + padding.horizontal(), layout.height() + padding.vertical());
         }
         return node.layoutSize(SIZE_TEXT,
                 fallbackLength * 8.0f + padding.horizontal(), 20.0f + padding.vertical());
@@ -2539,9 +2602,9 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (!node.visible() || !node.modifier().enabled()) {
             return false;
         }
-        float localX = node.localX(x);
-        float localY = node.localY(y);
-        boolean contains = node.bounds().contains(localX, localY);
+        float localX = node.hitLocalX(x);
+        float localY = node.hitLocalY(y);
+        boolean contains = shapeFor(node).contains(node.bounds(), localX, localY);
         if (!contains && clipsHitToBounds(node)) {
             return false;
         }
@@ -2746,7 +2809,8 @@ public final class UiRoot implements Disposable, UiStateListener {
             setFocused(isFocusable(restore) ? restore : null);
             if (focusedNode == null && activeModal != null) focusNext(1);
         }
-        if (feedbackOnly && hoveredNode != null && !feedbackEligible(hoveredNode)) {
+        if (hoveredNode != null && (!inputEligible(hoveredNode)
+                || feedbackOnly && !feedbackEligible(hoveredNode))) {
             setHovered(null);
         }
         if (capturedSurfaceNode != null && (!inputEligible(capturedSurfaceNode)
@@ -2790,7 +2854,7 @@ public final class UiRoot implements Disposable, UiStateListener {
                 && capturedSurfacePointerType == event.type();
         UiPointerResult result = surface.pointer(surfacePointerEvent.configure(
                 phase, event.timeNanos(), event.pointerId(), event.type(), event.button(),
-                node.localX(x), node.localY(y), event.scrollX(), event.scrollY(), node.bounds(), captured, node.focused()));
+                node.hitLocalX(x), node.hitLocalY(y), event.scrollX(), event.scrollY(), node.bounds(), captured, node.focused()));
         if (captured) {
             rememberCapturedSurfaceEvent(event, x, y);
         }
@@ -2862,7 +2926,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             surface.pointer(surfacePointerEvent.configure(
                     UiPointerPhase.CANCEL, capturedSurfaceTimeNanos, capturedSurfacePointerId,
                     capturedSurfacePointerType, capturedSurfaceButton,
-                    captured.localX(capturedSurfaceX), captured.localY(capturedSurfaceY),
+                    captured.hitLocalX(capturedSurfaceX), captured.hitLocalY(capturedSurfaceY),
                     0.0f, 0.0f, captured.bounds(), true, captured.focused()));
         }
         if (pressedNode == captured) {
@@ -2926,8 +2990,8 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private int tabIndexAt(UiNode node, float x, float y) {
-        x = node.localX(x);
-        y = node.localY(y);
+        x = node.hitLocalX(x);
+        y = node.hitLocalY(y);
         int count = tabCount(node);
         if (count <= 0) {
             return -1;
@@ -3137,7 +3201,7 @@ public final class UiRoot implements Disposable, UiStateListener {
                 .password(model.password())
                 .readOnly(model.readOnly())
                 .type(textInputType(model.inputFilter()))
-                .bounds(Math.round(bounds.x() * scale), Math.round(bounds.y() * scale),
+                .bounds(displayX(bounds.x()), displayY(bounds.y()),
                         Math.max(1, Math.round(bounds.width() * scale)),
                         Math.max(1, Math.round(bounds.height() * scale)))
                 .build();
@@ -3163,9 +3227,27 @@ public final class UiRoot implements Disposable, UiStateListener {
                 : null;
     }
 
-    private UiTextStyle textStyleFor(UiNode node) {
+    UiTextStyle textStyleFor(UiNode node) {
+        if (node.type() == UiNodeType.TEXT && node.modifier().style() == null
+                && node.modifier().inlineStyle() == null) {
+            for (UiNode parent = node.parent(); parent != null; parent = parent.parent()) {
+                if (parent.type() == UiNodeType.BUTTON) {
+                    UiStyle button = styleFor(parent);
+                    if (button != null) return stateStyle(parent, button).textStyle();
+                    break;
+                }
+            }
+        }
         UiStyle style = styleFor(node);
-        return style != null ? style.textStyle() : UiTextStyle.text();
+        return style != null ? stateStyle(node, style).textStyle() : UiTextStyle.text();
+    }
+
+    static UiStyle stateStyle(UiNode node, UiStyle style) {
+        if (!node.modifier().enabled() && style.disabled() != null) return style.disabled();
+        if (node.pressed() && style.pressed() != null) return style.pressed();
+        if (node.hovered() && style.hover() != null) return style.hover();
+        if (node.focused() && style.focused() != null) return style.focused();
+        return style;
     }
 
     private UiRect textInputBounds(UiNode node) {
@@ -3296,8 +3378,8 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (model == null) {
             return 0;
         }
-        x = node.localX(x);
-        y = node.localY(y);
+        x = node.hitLocalX(x);
+        y = node.hitLocalY(y);
         String value = model.value();
         UiTextStyle style = textStyleFor(node);
         UiRect bounds = textInputBounds(node);
@@ -3802,8 +3884,8 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         float worldX = pointerX;
         float worldY = pointerY;
-        pointerX = node.localX(pointerX);
-        pointerY = node.localY(pointerY);
+        pointerX = node.hitLocalX(pointerX);
+        pointerY = node.hitLocalY(pointerY);
         UiScrollState state = node.scrollState();
         UiRect verticalTrack = scrollVerticalTrack(node);
         UiRect verticalThumb = scrollVerticalThumb(node, state);
@@ -3860,8 +3942,8 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         activeScrollNode = node;
         activeScrollPointerMode = SCROLL_POINTER_BODY;
-        activeScrollStartPointerX = node.localX(pointerX);
-        activeScrollStartPointerY = node.localY(pointerY);
+        activeScrollStartPointerX = node.hitLocalX(pointerX);
+        activeScrollStartPointerY = node.hitLocalY(pointerY);
         activeScrollStartX = state.x();
         activeScrollStartY = state.y();
         return true;
@@ -3978,8 +4060,8 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (activeScrollNode == null || activeScrollNode.scrollState() == null) {
             return;
         }
-        pointerX = activeScrollNode.localX(pointerX);
-        pointerY = activeScrollNode.localY(pointerY);
+        pointerX = activeScrollNode.hitLocalX(pointerX);
+        pointerY = activeScrollNode.hitLocalY(pointerY);
         UiScrollState state = activeScrollNode.scrollState();
         if (activeScrollPointerMode == SCROLL_POINTER_BODY) {
             float deltaX = pointerX - activeScrollStartPointerX;
@@ -4243,7 +4325,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     private float sliderValueFromPointer(UiNode node, float x, UiRange range) {
         float trackX = node.bounds().x() + 8.0f;
         float trackWidth = Math.max(1.0f, node.bounds().width() - 16.0f);
-        float progress = clamp((node.localX(x) - trackX) / trackWidth, 0.0f, 1.0f);
+        float progress = clamp((node.hitLocalX(x) - trackX) / trackWidth, 0.0f, 1.0f);
         float value = range.minimum() + (range.maximum() - range.minimum()) * progress;
         return range.clamp(value);
     }

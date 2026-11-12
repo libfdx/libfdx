@@ -23,6 +23,9 @@ dependencies {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+    val temporary = layout.buildDirectory.dir("tmp/test-runtime").get().asFile
+    doFirst { temporary.mkdirs() }
+    systemProperty("java.io.tmpdir", temporary.absolutePath)
     systemProperty("preview.testClasses", sourceSets.test.get().output.classesDirs.asPath)
 }
 

@@ -44,9 +44,7 @@ fun registerWebBuild(taskName: String, descriptionText: String, target: String, 
     tasks.register(taskName) {
         group = "application"
         description = descriptionText
-        if (!(gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-            dependsOn(":libfdx:framework:fdx:platform:web:generate_runtime_fdx_web_native")
-        }
+        dependsOn(":libfdx:framework:fdx:platform:web:generate_runtime_fdx_web_native")
         dependsOn(builderClasspath)
         inputs.files(builderClasspath)
         inputs.property("mainClassArgs", mainClassArgs)

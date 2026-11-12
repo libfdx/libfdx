@@ -15,15 +15,9 @@ base {
 
 dependencies {
     implementation(project(":tests:core"))
-    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-        implementation("${libs.versions.libfdxGroup.get()}:backend_psp:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:g2d:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:ui_kit:${libs.versions.libfdxSnapshot.get()}")
-    } else {
-        implementation(project(":libfdx:backends:psp"))
-        implementation(project(":libfdx:framework:g2d"))
-        implementation(project(":libfdx:framework:ui-kit"))
-    }
+    implementation(project(":libfdx:backends:psp"))
+    implementation(project(":libfdx:framework:g2d"))
+    implementation(project(":libfdx:framework:ui-kit"))
 }
 
 libfdx {

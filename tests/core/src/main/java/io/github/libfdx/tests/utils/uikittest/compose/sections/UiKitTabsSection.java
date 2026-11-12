@@ -38,7 +38,7 @@ public final class UiKitTabsSection implements UiContent {
     }
 
     private void buildTabSelector(UiScope content) {
-        content.tabs(Ui.modifier().fillWidth().semanticLabel("Demo tabs")
+        content.tabs(Ui.modifier().fillWidth()
                         .validationId(UiKitValidationIds.TABS_DEMO).style("tabs"),
                 activeDemoTab, "Overview", "Loadout", "Stats", "Log");
     }

@@ -11,12 +11,9 @@ import io.github.libfdx.display.Display;
 import io.github.libfdx.graphics.Texture;
 import io.github.libfdx.graphics.g2d.TextureRegion;
 import io.github.libfdx.input.Input;
-import io.github.libfdx.input.InputAdapter;
-import io.github.libfdx.input.Key;
-import io.github.libfdx.input.KeyEvent;
 import io.github.libfdx.input.MouseButton;
-import io.github.libfdx.input.PointerEvent;
 import io.github.libfdx.tests.utils.uikittest.compose.UiKitSettingsPanel;
+import io.github.libfdx.tests.utils.uikittest.compose.UiKitSectionContent;
 import io.github.libfdx.tests.utils.uikittest.compose.UiKitShowcaseContent;
 import io.github.libfdx.tests.utils.uikittest.compose.sections.UiKitButtonsSection;
 import io.github.libfdx.tests.utils.uikittest.compose.sections.UiKitCheckboxesSection;
@@ -33,23 +30,28 @@ import io.github.libfdx.tests.utils.uikittest.compose.sections.UiKitTextFieldsSe
 import io.github.libfdx.tests.utils.uikittest.compose.sections.UiKitThemesSection;
 import io.github.libfdx.tests.utils.uikittest.compose.sections.UiKitTogglesSection;
 import io.github.libfdx.tests.utils.uikittest.compose.sections.UiKitTooltipsSection;
+import io.github.libfdx.tests.utils.uikittest.compose.sections.UiKitTreeSection;
 import io.github.libfdx.tests.utils.uikittest.compose.sections.UiKitWindowsSection;
 import io.github.libfdx.ui.Ui;
 import io.github.libfdx.ui.UiBooleanState;
 import io.github.libfdx.ui.UiContent;
 import io.github.libfdx.ui.UiFloatState;
 import io.github.libfdx.ui.UiIntState;
+import io.github.libfdx.ui.UiListState;
+import io.github.libfdx.ui.UiRect;
 import io.github.libfdx.ui.UiRoot;
 import io.github.libfdx.ui.UiScrollState;
 import io.github.libfdx.ui.UiState;
 import io.github.libfdx.ui.UiTheme;
 
-/** Owns the showcase state, assets, root setup, and preview navigation. */
+/** Owns the showcase state, assets, and root setup. */
 public final class UiKitShowcase {
     private static final String LOGO_ASSET = "fdx_logo_dark.png";
     private static final String PATCH_ASSET = "ui_panel_patch.png";
+    private static final String BUTTON_BACKGROUND_ASSET = "ui_button_game.png";
     private static final AssetDescriptor<Texture> LOGO_TEXTURE = AssetDescriptor.of(LOGO_ASSET, Texture.class);
     private static final AssetDescriptor<Texture> PANEL_PATCH = AssetDescriptor.of(PATCH_ASSET, Texture.class);
+    private static final AssetDescriptor<Texture> BUTTON_BACKGROUND = AssetDescriptor.of(BUTTON_BACKGROUND_ASSET, Texture.class);
     private static final float DEFAULT_SAFE_AREA = 0.0f;
     private static final float UI_SCALE_INITIAL = 1.0f;
     public static final int SECTION_BUTTONS = 0;
@@ -68,11 +70,30 @@ public final class UiKitShowcase {
     public static final int SECTION_LOADING = 13;
     public static final int SECTION_COLLAPSE = 14;
     public static final int SECTION_THEMES = 15;
+    public static final int SECTION_TREE = 16;
+    private static final int FULL_PREVIEW = -1;
+    private static final SectionInfo[] SECTION_INFO = {
+            new SectionInfo("buttons", "Buttons"),
+            new SectionInfo("checkboxes", "Checkboxes"),
+            new SectionInfo("sliders", "Sliders"),
+            new SectionInfo("progress-bars", "Progress bars"),
+            new SectionInfo("tabs", "Tabs"),
+            new SectionInfo("text-fields", "Text fields"),
+            new SectionInfo("lists", "Lists"),
+            new SectionInfo("drawing", "Drawing"),
+            new SectionInfo("windows", "Windows"),
+            new SectionInfo("scroll-view", "Scroll view"),
+            new SectionInfo("overlays", "Overlays"),
+            new SectionInfo("tooltips", "Tooltips"),
+            new SectionInfo("toggles", "Toggles & choices"),
+            new SectionInfo("loading", "Loading & status"),
+            new SectionInfo("disclosure", "Disclosure panels"),
+            new SectionInfo("themes", "Themes"),
+            new SectionInfo("tree", "Tree")
+    };
     private final boolean previewMode;
     private Display display;
     private UiRoot root;
-    private Input previewNavigationInput;
-    private InputAdapter previewNavigation;
     private UiIntState clickCount;
     private UiBooleanState checked;
     private UiBooleanState visualDebug;
@@ -86,7 +107,8 @@ public final class UiKitShowcase {
     private UiState<String> name;
     private UiScrollState navScroll;
     private TextureRegion panelPatchRegion;
-    private UiTheme[] demoThemes;
+    private TextureRegion buttonBackgroundRegion;
+    private final UiTheme[] demoThemes = new UiTheme[THEME_NAMES.length];
     private float initialUiScale;
     private boolean scaleGloballyActive;
     private Section[] sections;
@@ -99,6 +121,10 @@ public final class UiKitShowcase {
     private UiKitScrollViewSection scrollView;
     private UiKitOverlaysSection overlays;
     private UiKitTogglesSection toggles;
+    private UiFloatState sliderNormal;
+    private UiFloatState sliderWide;
+    private UiFloatState sliderDisabled;
+    private UiListState inventoryList;
 
     public UiKitShowcase(boolean previewMode) {
         this.previewMode = previewMode;
@@ -107,6 +133,7 @@ public final class UiKitShowcase {
     public static void loadAssets(AssetManager assets) {
         assets.load(LOGO_TEXTURE);
         assets.load(PANEL_PATCH);
+        assets.load(BUTTON_BACKGROUND);
     }
 
     /**
@@ -114,29 +141,44 @@ public final class UiKitShowcase {
      * The host drives asset loading before composition and disposes the preview binding.
      */
     public static PreviewContent previewContent(UiRoot root, AssetManager assets) {
-        return new PreviewContent(root, assets);
+        return new PreviewContent(root, assets, FULL_PREVIEW);
     }
 
-    /** Owns one preview's showcase state and navigation. The root and assets are borrowed. */
+    public static PreviewContent previewSection(UiRoot root, AssetManager assets, int section) {
+        if (section < 0 || section >= sectionCount()) throw new IllegalArgumentException("Unknown section: " + section);
+        return new PreviewContent(root, assets, section);
+    }
+
+    /** Owns one preview's showcase state. The root and assets are borrowed. */
     public static final class PreviewContent implements Disposable {
         private final UiKitShowcase showcase = new UiKitShowcase(true);
         private final UiContent content = UiKitShowcaseContent.deferred(this::preparedContent);
-        private boolean prepared;
+        private UiContent prepared;
         private boolean disposed;
 
-        private PreviewContent(UiRoot root, AssetManager assets) {
-            AssetHandle<Texture> logo = assets.load(LOGO_TEXTURE);
+        private PreviewContent(UiRoot root, AssetManager assets, int section) {
+            AssetHandle<Texture> logo = section == FULL_PREVIEW || section == SECTION_DRAWING || section == SECTION_BUTTONS
+                    ? assets.load(LOGO_TEXTURE) : null;
             AssetHandle<Texture> patch = assets.load(PANEL_PATCH);
+            AssetHandle<Texture> background = section == FULL_PREVIEW || section == SECTION_BUTTONS
+                    ? assets.load(BUTTON_BACKGROUND) : null;
             Runnable prepare = () -> {
-                if (disposed || prepared || !logo.isLoaded() || !patch.isLoaded()) {
+                if (disposed || prepared != null || !patch.isLoaded() || (logo != null && !logo.isLoaded())
+                        || (background != null && !background.isLoaded())) {
                     return;
                 }
-                showcase.initialize(assets, root.display(), false);
+                showcase.initializeState(root.display(), patch.asset(), background == null ? null : background.asset());
                 showcase.configureRoot(root);
-                showcase.installPreviewNavigation(root.input());
-                prepared = true;
+                TextureRegion image = logo == null ? null : new TextureRegion(logo.asset());
+                if (section == FULL_PREVIEW) {
+                    showcase.initializeFullContent(image, false);
+                    prepared = showcase.content();
+                } else {
+                    prepared = showcase.isolatedSection(section, image);
+                }
             };
-            logo.future().onSuccess(texture -> prepare.run());
+            if (logo != null) logo.future().onSuccess(texture -> prepare.run());
+            if (background != null) background.future().onSuccess(texture -> prepare.run());
             patch.future().onSuccess(texture -> prepare.run());
         }
 
@@ -145,17 +187,16 @@ public final class UiKitShowcase {
         }
 
         private UiContent preparedContent() {
-            if (!prepared || disposed) {
+            if (prepared == null || disposed) {
                 throw new FdxException("UI Kit showcase assets are unavailable");
             }
-            return showcase.content();
+            return prepared;
         }
 
         @Override
         public void dispose() {
             if (disposed) return;
             disposed = true;
-            showcase.removePreviewNavigation();
             showcase.detachRoot();
         }
 
@@ -167,11 +208,23 @@ public final class UiKitShowcase {
     }
 
     public void initialize(AssetManager loadedAssets, Display display, boolean validationActive) {
-        this.display = display;
         Texture logo = loadedAssets.get(LOGO_ASSET, Texture.class);
         Texture patch = loadedAssets.get(PATCH_ASSET, Texture.class);
+        initializeState(display, patch, loadedAssets.get(BUTTON_BACKGROUND_ASSET, Texture.class));
+        initializeFullContent(new TextureRegion(logo), validationActive);
+    }
+
+    private void initializeFullContent(TextureRegion logo, boolean validationActive) {
+        navScroll = new UiScrollState();
+        initializeSections(logo, validationActive);
+        activeSection = Ui.state(initialSection());
+    }
+
+    private void initializeState(Display display, Texture patch, Texture buttonBackground) {
+        this.display = display;
         panelPatchRegion = new TextureRegion(patch);
-        demoThemes = createThemes();
+        buttonBackgroundRegion = buttonBackground == null ? null : new TextureRegion(buttonBackground);
+        for (int i = 0; i < demoThemes.length; i++) demoThemes[i] = null;
 
         clickCount = Ui.state(0);
         checked = Ui.state(false);
@@ -183,50 +236,70 @@ public final class UiKitShowcase {
                 String.valueOf(UI_SCALE_INITIAL)));
         uiScale = Ui.state(initialUiScale);
         volume = Ui.state(0.35f);
+        sliderNormal = Ui.state(0.45f);
+        sliderWide = Ui.state(25.0f);
+        sliderDisabled = Ui.state(0.70f);
         activeTheme = Ui.state(initialTheme());
         name = Ui.state("Player");
-        navScroll = new UiScrollState();
-        initializeSections(new TextureRegion(logo), validationActive);
-        activeSection = Ui.state(initialSection());
+        overlays = null;
+        inventoryList = null;
     }
 
     private void initializeSections(TextureRegion logoRegion, boolean validationActive) {
-        Runnable incrementClick = this::incrementClick;
-        UiKitSlidersSection sliders = new UiKitSlidersSection(volume, this::compactViewport);
-        lists = new UiKitListsSection();
-        tabs = new UiKitTabsSection(volume, clickCount, lists.inventoryList, uiScale);
-        textFields = new UiKitTextFieldsSection(name);
-        UiKitDrawingSection drawing = new UiKitDrawingSection(sliders.sliderNormal, logoRegion);
-        windows = new UiKitWindowsSection(checked, showDetails, incrementClick,
-                () -> UiKitShowcaseContent.statusText(this), compactViewport());
-        scrollView = new UiKitScrollViewSection(name, incrementClick);
-        overlays = new UiKitOverlaysSection(incrementClick);
-        buttons = new UiKitButtonsSection(clickCount, showDetails, incrementClick, overlays.showPopup::toggle);
-        UiKitTooltipsSection tooltips = new UiKitTooltipsSection(this::compactViewport, incrementClick, compactChecked, name);
-        toggles = new UiKitTogglesSection();
+        sections = new Section[sectionCount()];
+        for (int index = 0; index < sections.length; index++) {
+            sections[index] = new Section(createSection(index, logoRegion));
+        }
+        UiKitDrawingSection drawing = (UiKitDrawingSection) sections[SECTION_DRAWING].content();
+        UiKitTooltipsSection tooltips = (UiKitTooltipsSection) sections[SECTION_TOOLTIPS].content();
         UiKitSettingsPanel settings = new UiKitSettingsPanel(display, visualDebug, scaleGlobally, uiScale);
+        content = new UiKitShowcaseContent(this, drawing, settings, tooltips, this::incrementClick, validationActive);
+    }
 
-        sections = new Section[SECTION_THEMES + 1];
-        sections[SECTION_BUTTONS] = new Section("Buttons", buttons);
-        sections[SECTION_CHECKBOXES] = new Section("Checkboxes",
-                new UiKitCheckboxesSection(checked, compactChecked, visualDebug));
-        sections[SECTION_SLIDERS] = new Section("Sliders", sliders);
-        sections[SECTION_PROGRESS_BARS] = new Section("Progress bars",
-                new UiKitProgressBarsSection(volume, sliders.sliderWide, sliders.sliderDisabled));
-        sections[SECTION_TABS] = new Section("Tabs", tabs);
-        sections[SECTION_TEXT_FIELDS] = new Section("Text fields", textFields);
-        sections[SECTION_LISTS] = new Section("Lists", lists);
-        sections[SECTION_DRAWING] = new Section("Drawing", drawing);
-        sections[SECTION_WINDOWS] = new Section("Windows", windows);
-        sections[SECTION_SCROLLVIEW] = new Section("Scroll view", scrollView);
-        sections[SECTION_OVERLAYS] = new Section("Overlays", overlays);
-        sections[SECTION_TOOLTIPS] = new Section("Tooltips", tooltips);
-        sections[SECTION_TOGGLES] = new Section("Toggles & choices", toggles);
-        sections[SECTION_LOADING] = new Section("Loading & status", new UiKitLoadingSection(volume));
-        sections[SECTION_COLLAPSE] = new Section("Disclosure panels", new UiKitDisclosureSection());
-        sections[SECTION_THEMES] = new Section("Themes", new UiKitThemesSection(activeTheme, this::selectTheme));
-        content = new UiKitShowcaseContent(this, drawing, settings, tooltips, incrementClick, previewMode,
-                validationActive);
+    private UiContent createSection(int index, TextureRegion logoRegion) {
+        return switch (index) {
+            case SECTION_BUTTONS -> buttons = new UiKitButtonsSection(clickCount, showDetails,
+                    this::incrementClick, overlays().showPopup::toggle, panelPatchRegion, logoRegion,
+                    buttonBackgroundRegion, this::compactViewport);
+            case SECTION_CHECKBOXES -> new UiKitCheckboxesSection(checked, compactChecked, visualDebug);
+            case SECTION_SLIDERS -> new UiKitSlidersSection(volume, this::compactViewport,
+                    sliderNormal, sliderWide, sliderDisabled);
+            case SECTION_PROGRESS_BARS -> new UiKitProgressBarsSection(volume, sliderWide, sliderDisabled);
+            case SECTION_TABS -> tabs = new UiKitTabsSection(volume, clickCount, inventory(), uiScale);
+            case SECTION_TEXT_FIELDS -> textFields = new UiKitTextFieldsSection(name);
+            case SECTION_LISTS -> lists = new UiKitListsSection(inventory());
+            case SECTION_DRAWING -> new UiKitDrawingSection(sliderNormal, logoRegion, this::compactViewport);
+            case SECTION_WINDOWS -> windows = new UiKitWindowsSection(checked, showDetails, this::incrementClick,
+                    () -> UiKitShowcaseContent.statusText(this), compactViewport());
+            case SECTION_SCROLLVIEW -> scrollView = new UiKitScrollViewSection(name, this::incrementClick);
+            case SECTION_OVERLAYS -> overlays();
+            case SECTION_TOOLTIPS -> new UiKitTooltipsSection(this::compactViewport, this::incrementClick, compactChecked, name);
+            case SECTION_TOGGLES -> toggles = new UiKitTogglesSection();
+            case SECTION_LOADING -> new UiKitLoadingSection(volume);
+            case SECTION_COLLAPSE -> new UiKitDisclosureSection();
+            case SECTION_THEMES -> new UiKitThemesSection(activeTheme, this::selectTheme);
+            case SECTION_TREE -> new UiKitTreeSection();
+            default -> throw new IllegalArgumentException("Unknown section: " + index);
+        };
+    }
+
+    private UiContent isolatedSection(int index, TextureRegion logoRegion) {
+        UiContent section = createSection(index, logoRegion);
+        return switch (index) {
+            case SECTION_BUTTONS, SECTION_OVERLAYS -> new UiKitSectionContent(section, overlays()::buildOverlays);
+            case SECTION_WINDOWS -> UiKitSectionContent.windows(windows, volume);
+            case SECTION_DRAWING -> UiKitSectionContent.drawing((UiKitDrawingSection) section, volume);
+            case SECTION_TOOLTIPS -> new UiKitSectionContent(section, ((UiKitTooltipsSection) section)::buildTooltips);
+            default -> new UiKitSectionContent(section);
+        };
+    }
+
+    private UiListState inventory() {
+        if (inventoryList == null) {
+            inventoryList = new UiListState();
+            inventoryList.scrollToItem(1, 0.0f);
+        }
+        return inventoryList;
     }
 
     public void configureRoot(UiRoot root) {
@@ -243,46 +316,6 @@ public final class UiKitShowcase {
 
     public void detachRoot() {
         root = null;
-    }
-
-    private void installPreviewNavigation(Input backendInput) {
-        if (backendInput == null) {
-            return;
-        }
-        previewNavigationInput = backendInput;
-        previewNavigation = new InputAdapter() {
-            public boolean keyDown(KeyEvent event) {
-                if (event.key() == Key.PAGE_UP) {
-                    activeSection.set(Math.floorMod(activeSection.get() - 1, sections.length));
-                    return true;
-                }
-                if (event.key() == Key.PAGE_DOWN) {
-                    activeSection.set((activeSection.get() + 1) % sections.length);
-                    return true;
-                }
-                return false;
-            }
-
-            public boolean scrolled(PointerEvent event) {
-                UiScrollState scroll = activeSectionScroll();
-                float before = scroll.y();
-                scroll.scrollBy(0, event.scrollY() * 24.0f);
-                if (scroll.y() != before) {
-                    root.requestCompose();
-                }
-                return true;
-            }
-
-        };
-        previewNavigationInput.addProcessor(previewNavigation);
-    }
-
-    private void removePreviewNavigation() {
-        if (previewNavigationInput != null) {
-            previewNavigationInput.removeProcessor(previewNavigation);
-            previewNavigationInput = null;
-            previewNavigation = null;
-        }
     }
 
     public void applyGlobalScale(Input input) {
@@ -315,28 +348,37 @@ public final class UiKitShowcase {
         return content;
     }
 
-    public int sectionCount() {
-        return sections.length;
+    public static int sectionCount() {
+        return SECTION_INFO.length;
     }
 
-    public String sectionLabel(int index) {
-        return sections[index].label();
+    public static String sectionId(int index) {
+        return SECTION_INFO[index].id();
+    }
+
+    public static String sectionLabel(int index) {
+        return SECTION_INFO[index].label();
     }
 
     public String activeSectionName() {
         int index = activeSection != null ? activeSection.get() : SECTION_BUTTONS;
         if (index < 0 || index >= sections.length) {
-            return sections[SECTION_BUTTONS].label();
+            return sectionLabel(SECTION_BUTTONS);
         }
-        return sections[index].label();
+        return sectionLabel(index);
     }
 
     public boolean compactViewport() {
         if (display == null || display.width() <= 0) {
             return false;
         }
+        float viewportWidth = display.width();
         float scale = 1.0f;
         if (root != null) {
+            UiRect viewport = root.viewport();
+            if (viewport != null && display.framebufferWidth() > 0) {
+                viewportWidth *= viewport.width() / display.framebufferWidth();
+            }
             scale = root.uiScale();
             if (root.autoUiScale()) {
                 scale *= display.contentScale();
@@ -348,7 +390,7 @@ public final class UiKitShowcase {
             scale *= display.contentScale();
         }
         scale = Math.max(0.25f, Math.min(4.0f, scale));
-        return display.width() / scale < 1100.0f;
+        return viewportWidth / scale < 1100.0f;
     }
 
     public UiScrollState activeSectionScroll() {
@@ -361,25 +403,28 @@ public final class UiKitShowcase {
 
     private int initialSection() {
         String requested = System.getProperty(previewMode ? "libfdx.uiPreview.section" : "libfdx.test.uiSection", "");
-        if (requested == null || requested.length() == 0) {
-            return SECTION_BUTTONS;
-        }
+        int index = sectionIndex(requested);
+        return index < 0 ? SECTION_BUTTONS : index;
+    }
+
+    public static int sectionIndex(String requested) {
+        if (requested.isEmpty()) return -1;
         if ("collapse bars".equalsIgnoreCase(requested)) {
             return SECTION_COLLAPSE;
         }
-        for (int i = 0; i < sections.length; i++) {
-            if (sections[i].label().equalsIgnoreCase(requested)) {
+        for (int i = 0; i < sectionCount(); i++) {
+            if (sectionLabel(i).equalsIgnoreCase(requested) || sectionId(i).equalsIgnoreCase(requested)) {
                 return i;
             }
         }
         try {
             int index = Integer.parseInt(requested);
-            if (index >= 0 && index < sections.length) {
+            if (index >= 0 && index < sectionCount()) {
                 return index;
             }
         } catch (NumberFormatException ignored) {
         }
-        return SECTION_BUTTONS;
+        return -1;
     }
 
     private int initialTheme() {
@@ -409,20 +454,12 @@ public final class UiKitShowcase {
         }
     }
 
-    private UiTheme[] createThemes() {
-        UiTheme[] themes = new UiTheme[THEME_NAMES.length];
-        for (int i = 0; i < themes.length; i++) {
-            themes[i] = UiKitShowcaseThemes.build(i, panelPatchRegion);
-        }
-        return themes;
-    }
-
     public UiTheme theme(int index) {
         int selected = Math.max(0, Math.min(THEME_NAMES.length - 1, index));
-        if (demoThemes != null && selected < demoThemes.length && demoThemes[selected] != null) {
-            return demoThemes[selected];
+        if (demoThemes[selected] == null) {
+            demoThemes[selected] = UiKitShowcaseThemes.build(selected, panelPatchRegion);
         }
-        return UiKitShowcaseThemes.build(selected, panelPatchRegion);
+        return demoThemes[selected];
     }
 
     public void enableGlobalScaleForValidation() {
@@ -527,6 +564,7 @@ public final class UiKitShowcase {
     }
 
     public UiKitOverlaysSection overlays() {
+        if (overlays == null) overlays = new UiKitOverlaysSection(this::incrementClick);
         return overlays;
     }
 
@@ -538,9 +576,11 @@ public final class UiKitShowcase {
         return THEME_NAMES[index];
     }
 
-    private record Section(String label, UiContent content, UiScrollState scroll) {
-        Section(String label, UiContent content) {
-            this(label, content, new UiScrollState());
+    private record SectionInfo(String id, String label) { }
+
+    private record Section(UiContent content, UiScrollState scroll) {
+        Section(UiContent content) {
+            this(content, new UiScrollState());
         }
 
     }

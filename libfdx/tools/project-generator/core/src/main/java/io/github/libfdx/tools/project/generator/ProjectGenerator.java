@@ -154,6 +154,14 @@ public final class ProjectGenerator {
         text.append("    }\n");
         text.append("}\n");
         text.append("\n");
+        text.append("dependencyResolutionManagement {\n");
+        text.append("    versionCatalogs {\n");
+        text.append("        create(\"libs\") {\n");
+        text.append("            version(\"libfdx\", providers.gradleProperty(\"libfdxVersion\").get())\n");
+        text.append("        }\n");
+        text.append("    }\n");
+        text.append("}\n");
+        text.append("\n");
         text.append("rootProject.name = \"").append(kotlinString(settings.projectName())).append("\"\n");
         appendModule(text, files, "core");
         appendModule(text, files, "editor");
@@ -174,10 +182,6 @@ public final class ProjectGenerator {
         return "plugins {\n"
                 + "    base\n"
                 + "}\n"
-                + "\n"
-                + "val libfdxVersion = providers.gradleProperty(\"libfdxVersion\").get()\n"
-                + "gradle.extensions.extraProperties.set(\"libfdxUsePublishedLibfdx\", true)\n"
-                + "gradle.extensions.extraProperties.set(\"libfdxDependencyVersion\", libfdxVersion)\n"
                 + "\n"
                 + "allprojects {\n"
                 + "    repositories {\n"
@@ -218,8 +222,9 @@ public final class ProjectGenerator {
         text.append("# Generated from ").append(sample.displayName()).append("\n\n");
         text.append("This project copies the `").append(sample.id())
                 .append("` sample bundled in the libFDX project generator. ")
-                .append("Its Java code, assets, scenes, and sample-owned Gradle files come from that sample; ")
-                .append("the root Gradle envelope pins them to libFDX `").append(libfdxVersion()).append("` (")
+                .append("Its Java code, assets, and Gradle modules come from that sample. ")
+                .append("The version catalog pins its libFDX library dependencies to `")
+                .append(libfdxVersion()).append("` (")
                 .append(channel()).append(").\n\n");
         text.append("The generated root project is `").append(settings.projectName()).append("`. ")
                 .append("To inspect available libFDX platform tasks, run:\n\n");

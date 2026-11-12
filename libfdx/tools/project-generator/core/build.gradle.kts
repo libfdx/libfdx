@@ -2,6 +2,8 @@ import java.io.ByteArrayOutputStream
 import java.util.Base64
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import org.gradle.api.publish.PublishingExtension
+import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.jvm.tasks.Jar
 
@@ -18,7 +20,6 @@ base {
     archivesName.set("project_generator_core")
 }
 
-val libfdxGroup = libs.versions.libfdxGroup.get()
 val libfdxReleaseVersion = libs.versions.libfdxRelease.get()
 val libfdxSnapshotVersion = libs.versions.libfdxSnapshot.get()
 val explicitGeneratorVersion = providers.gradleProperty("libfdx.projectGenerator.version")
@@ -78,6 +79,28 @@ val bundledSampleRoots = samplesDirectory.walkTopDown()
         { sampleId(it) }
     ))
     .toList()
+
+val bundledSampleFiles = bundledSampleRoots.flatMap(::sampleFiles)
+val localLibfdxDependency = Regex("""project\("(:libfdx:[\w:-]+)"\)""")
+val sampleLibfdxProjects = bundledSampleFiles.asSequence()
+    .filter { it.name == "build.gradle.kts" }
+    .flatMap { localLibfdxDependency.findAll(it.readText()) }
+    .map { it.groupValues[1] }
+    .distinct()
+    .associateWith { path -> evaluationDependsOn(path) }
+val sampleLibfdxModules = providers.provider {
+    sampleLibfdxProjects.mapValues { (_, dependencyProject) ->
+        val publication = dependencyProject.extensions.getByType<PublishingExtension>()
+            .publications.named<MavenPublication>("maven").get()
+        "${publication.groupId}:${publication.artifactId}"
+    }
+}
+
+fun libfdxAlias(module: String): String {
+    val parts = module.substringAfter(':').split('_', '-')
+    val suffix = parts.drop(1).joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
+    return "libfdx-${parts.first()}$suffix"
+}
 
 fun javaString(value: String): String {
     val escaped = StringBuilder(value.length + 16)
@@ -146,7 +169,7 @@ fun description(sampleRoot: File): String {
     return paragraph.joinToString(" ").ifEmpty { "Bundled libFDX sample." }
 }
 
-fun zipSample(sampleRoot: File): ByteArray {
+fun zipSample(sampleRoot: File, modules: Map<String, String>): ByteArray {
     val bytes = ByteArrayOutputStream()
     ZipOutputStream(bytes).use { zip ->
         sampleFiles(sampleRoot).forEach { file ->
@@ -154,7 +177,15 @@ fun zipSample(sampleRoot: File): ByteArray {
             val entry = ZipEntry(path)
             entry.time = 0L
             zip.putNextEntry(entry)
-            file.inputStream().use { input -> input.copyTo(zip) }
+            if (file.name == "build.gradle.kts") {
+                val standaloneScript = localLibfdxDependency.replace(file.readText()) { dependency ->
+                    val alias = libfdxAlias(modules.getValue(dependency.groupValues[1]))
+                    "libs.${alias.replace('-', '.')}"
+                }
+                zip.write(standaloneScript.toByteArray(Charsets.UTF_8))
+            } else {
+                file.inputStream().use { input -> input.copyTo(zip) }
+            }
             zip.closeEntry()
         }
     }
@@ -167,10 +198,9 @@ val generatedBundledSamplesDirectory =
 val generateBundledSamples = tasks.register("generate_bundled_project_samples") {
     group = "build"
     description = "Embeds every repository sample and the selected libFDX version into the project generator."
-    inputs.files(bundledSampleRoots.flatMap(::sampleFiles))
+    inputs.files(bundledSampleFiles)
     inputs.file(rootProject.layout.projectDirectory.file("gradle/libs.versions.toml"))
-    inputs.property("libfdxGroup", libfdxGroup)
-    inputs.property("libfdxReleaseVersion", libfdxReleaseVersion)
+    inputs.property("sampleLibfdxModules", sampleLibfdxModules)
     inputs.property("libfdxVersion", bundledLibfdxVersion)
     inputs.property("generatorChannel", bundledChannel)
     outputs.dir(generatedBundledSamplesDirectory)
@@ -182,25 +212,23 @@ val generateBundledSamples = tasks.register("generate_bundled_project_samples") 
             "io/github/libfdx/tools/project/generator")
         packageDirectory.mkdirs()
 
+        val modules = sampleLibfdxModules.get()
+        val publishedAliases = modules.values.sorted().joinToString("\n") { module ->
+            """${libfdxAlias(module)} = { module = "$module", version.ref = "libfdx" }"""
+        }
         val catalogText = rootProject.layout.projectDirectory
             .file("gradle/libs.versions.toml")
             .asFile
             .readText()
-            .replace(
-                Regex("""(?m)^libfdxSnapshot\s*=\s*["'][^"']*["']\s*$"""),
-                """libfdxSnapshot = "$bundledLibfdxVersion""""
-            )
+            .replaceFirst("[versions]", "[versions]\nlibfdx = \"$bundledLibfdxVersion\"")
+            .replaceFirst("[libraries]", "[libraries]\n$publishedAliases")
 
         val catalogSource = StringBuilder()
         catalogSource.appendLine("package io.github.libfdx.tools.project.generator;")
         catalogSource.appendLine()
         catalogSource.appendLine("final class BundledSampleCatalogData {")
         catalogSource.appendLine(
-            "    static final String LIBFDX_GROUP = \"${javaString(libfdxGroup)}\";")
-        catalogSource.appendLine(
             "    static final String LIBFDX_VERSION = \"${javaString(bundledLibfdxVersion)}\";")
-        catalogSource.appendLine(
-            "    static final String LIBFDX_RELEASE_VERSION = \"${javaString(libfdxReleaseVersion)}\";")
         catalogSource.appendLine(
             "    static final String CHANNEL = \"${javaString(bundledChannel)}\";")
         catalogSource.appendLine()
@@ -247,7 +275,7 @@ val generateBundledSamples = tasks.register("generate_bundled_project_samples") 
             .writeText(catalogSource.toString())
 
         bundledSampleRoots.forEachIndexed { index, sampleRoot ->
-            val encoded = Base64.getEncoder().encodeToString(zipSample(sampleRoot))
+            val encoded = Base64.getEncoder().encodeToString(zipSample(sampleRoot, modules))
             val chunks = encoded.chunked(12_000)
             val archiveSource = StringBuilder()
             archiveSource.appendLine("package io.github.libfdx.tools.project.generator;")

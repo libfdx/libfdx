@@ -55,25 +55,13 @@ configurations.create("cppRuntimeElements") {
 
 dependencies {
     add(graalSourceSet.implementationConfigurationName, project(":benchmark:core"))
-    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-        add(graalSourceSet.implementationConfigurationName, "${libs.versions.libfdxGroup.get()}:backend_desktop:${libs.versions.libfdxSnapshot.get()}")
-        add(graalSourceSet.runtimeOnlyConfigurationName, "${libs.versions.libfdxGroup.get()}:gl_desktop:${libs.versions.libfdxSnapshot.get()}")
-        add(graalSourceSet.runtimeOnlyConfigurationName, "${libs.versions.libfdxGroup.get()}:vulkan_desktop:${libs.versions.libfdxSnapshot.get()}")
-    } else {
-        add(graalSourceSet.implementationConfigurationName, project(":libfdx:backends:desktop"))
-        add(graalSourceSet.runtimeOnlyConfigurationName, project(":libfdx:extensions:graphics:gl:platform:desktop"))
-        add(graalSourceSet.runtimeOnlyConfigurationName, project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
-    }
+    add(graalSourceSet.implementationConfigurationName, project(":libfdx:backends:desktop"))
+    add(graalSourceSet.runtimeOnlyConfigurationName, project(":libfdx:extensions:graphics:gl:platform:desktop"))
+    add(graalSourceSet.runtimeOnlyConfigurationName, project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
     implementation(project(":benchmark:core"))
-    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-        implementation("${libs.versions.libfdxGroup.get()}:backend_desktop_c:${libs.versions.libfdxSnapshot.get()}")
-        runtimeOnly("${libs.versions.libfdxGroup.get()}:gl_desktop_c:${libs.versions.libfdxSnapshot.get()}")
-        runtimeOnly("${libs.versions.libfdxGroup.get()}:vulkan_desktop_c:${libs.versions.libfdxSnapshot.get()}")
-    } else {
-        implementation(project(":libfdx:backends:desktop_c"))
-        runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_c"))
-        runtimeOnly(project(":libfdx:extensions:graphics:vulkan:platform:desktop_c"))
-    }
+    implementation(project(":libfdx:backends:desktop_c"))
+    runtimeOnly(project(":libfdx:extensions:graphics:gl:platform:desktop_c"))
+    runtimeOnly(project(":libfdx:extensions:graphics:vulkan:platform:desktop_c"))
     add(cppSourceSet.implementationConfigurationName, project(":benchmark:core"))
     add(cppSourceSet.implementationConfigurationName, project(":libfdx:backends:desktop_cpp"))
     add(cppSourceSet.runtimeOnlyConfigurationName, project(":libfdx:extensions:graphics:gl:platform:desktop_cpp"))

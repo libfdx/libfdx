@@ -69,15 +69,9 @@ android {
 
 dependencies {
     implementation(project(":tests:core"))
-    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-        implementation("${libs.versions.libfdxGroup.get()}:backend_android:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:wgpu_android_jni:${libs.versions.libfdxSnapshot.get()}")
-        implementation("${libs.versions.libfdxGroup.get()}:vulkan_android_jni:${libs.versions.libfdxSnapshot.get()}")
-    } else {
-        implementation(project(":libfdx:backends:android"))
-        implementation(project(":libfdx:extensions:graphics:wgpu:platform:android_jni"))
-        implementation(project(":libfdx:extensions:graphics:vulkan:platform:android_jni"))
-    }
+    implementation(project(":libfdx:backends:android"))
+    implementation(project(":libfdx:extensions:graphics:wgpu:platform:android_jni"))
+    implementation(project(":libfdx:extensions:graphics:vulkan:platform:android_jni"))
 }
 
 base {

@@ -15,16 +15,10 @@ base {
 
 val sampleProjectPath = project.path.substringBefore(":platform:")
 val sampleRoot = layout.projectDirectory.dir("../..")
-val libfdxDependencyVersion =
-    gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
 
 dependencies {
     implementation(project("$sampleProjectPath:core"))
-    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-        implementation("${libs.versions.libfdxGroup.get()}:backend_ios_c:$libfdxDependencyVersion")
-    } else {
-        implementation(project(":libfdx:backends:ios_c"))
-    }
+    implementation(project(":libfdx:backends:ios_c"))
 }
 
 libfdx {

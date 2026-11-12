@@ -63,7 +63,6 @@ import io.github.libfdx.tests.ShaderPreloadingTest;
 import io.github.libfdx.tests.ShadowShaderPreparationTest;
 import io.github.libfdx.tests.ShaderGraphProgramTest;
 import io.github.libfdx.tests.ShaderGraphComputeTest;
-import io.github.libfdx.tests.ShaderGraphEditorVisualTest;
 import io.github.libfdx.tests.ShaderGraphTechniqueTest;
 import io.github.libfdx.tests.ShaderSceneTest;
 import io.github.libfdx.tests.Skybox3DTest;
@@ -614,13 +613,6 @@ public final class TestSelector {
                 @Override
                 public ApplicationListener create(long exitAfterFrames) {
                     return new UiCustomSurfaceVisualTest(exitAfterFrames);
-                }
-            }),
-            descriptor(ShaderGraphEditorVisualTest.class,
-                    "Exercises the visual shader graph editor and its rendering.", "UI", 1440, 900, new TestFactory() {
-                @Override
-                public ApplicationListener create(long exitAfterFrames) {
-                    return new ShaderGraphEditorVisualTest(exitAfterFrames);
                 }
             })
     };

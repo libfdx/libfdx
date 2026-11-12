@@ -3,6 +3,7 @@ package io.github.libfdx.gradle
 import org.gradle.api.internal.project.ProjectInternal
 import org.gradle.api.plugins.JavaPlugin
 import org.gradle.api.tasks.SourceSetContainer
+import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.testfixtures.ProjectBuilder
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
@@ -38,6 +39,42 @@ class UiPreviewTaskWiringTest {
     }
 
     @Test
+    fun `processor and custom compiler contracts use Gradle instead of bypassing generation`() {
+        val project = project()
+        project.pluginManager.apply(JavaPlugin::class.java)
+        val compile = project.tasks.getByName("compileJava") as JavaCompile
+        fun direct(): String {
+            val model = Properties()
+            previewJavaModel(project, model, emptySet())
+            return model.getProperty("java.0.direct")
+        }
+        assertEquals("true", direct())
+        compile.options.compilerArgs.add("-Xplugin:custom")
+        assertEquals("false", direct())
+        compile.options.compilerArgs.clear()
+        compile.options.annotationProcessorPath = project.files("processor.jar")
+        assertEquals("false", direct())
+        compile.options.annotationProcessorPath = project.files()
+        compile.options.compilerArgumentProviders.add(org.gradle.process.CommandLineArgumentProvider { listOf("-parameters") })
+        assertEquals("false", direct())
+        compile.options.compilerArgumentProviders.clear()
+        val moduleInfo = project.file("src/main/java/module-info.java")
+        moduleInfo.parentFile.mkdirs()
+        moduleInfo.writeText("module example {}")
+        assertEquals("false", direct())
+        moduleInfo.delete()
+        val variant = project.file("build/libs/variant.jar")
+        variant.parentFile.mkdirs()
+        java.util.jar.JarOutputStream(variant.outputStream()).use {
+            it.putNextEntry(java.util.jar.JarEntry("META-INF/versions/25/example/Panel.class"))
+            it.closeEntry()
+        }
+        val model = Properties()
+        previewJavaModel(project, model, emptySet(), listOf(variant))
+        assertEquals("false", model.getProperty("java.0.direct"))
+    }
+
+    @Test
     fun `prepare writes direct launch metadata and watches dependency sources and project assets`() {
         val project = project()
         project.pluginManager.apply(JavaPlugin::class.java)
@@ -63,6 +100,13 @@ class UiPreviewTaskWiringTest {
         val model = Properties()
         project.file("build/ui-preview/launch.properties").reader().use { model.load(it) }
         assertEquals("", model.getProperty("mainClass"))
+        assertEquals("true", model.getProperty("fastReload"))
+        assertEquals("50", model.getProperty("pollMillis"))
+        assertEquals("120", model.getProperty("debounceMillis"))
+        assertEquals("2", model.getProperty("java.count"))
+        assertEquals("true", model.getProperty("java.0.direct"))
+        assertTrue(model.getProperty("java.0.output").endsWith("build${java.io.File.separator}classes${java.io.File.separator}java${java.io.File.separator}main"))
+        assertTrue(model.getProperty("java.0.options.count").toInt() >= 4)
         assertEquals(sdk.absolutePath, model.getProperty("controllerClasspath"))
         assertEquals(":$UI_PREVIEW_PREPARE", model.getProperty("prepareTask"))
         assertEquals("one argument with spaces", model.getProperty("arguments.0"))

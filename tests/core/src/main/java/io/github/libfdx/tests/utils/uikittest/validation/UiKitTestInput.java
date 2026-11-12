@@ -124,6 +124,8 @@ public final class UiKitTestInput implements ScenarioInputDriver {
         if (node == null) {
             return;
         }
+        root.ensureVisible(node);
+        settleValidationLayout();
         UiRect bounds = node.bounds();
         int x = root.displayX(bounds.x() + bounds.width() * 0.5f);
         int y = root.displayY(bounds.y() + bounds.height() * 0.5f);

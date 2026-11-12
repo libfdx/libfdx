@@ -10,6 +10,7 @@ import io.github.libfdx.ui.UiContent;
 import io.github.libfdx.ui.UiFloatState;
 import io.github.libfdx.ui.UiRect;
 import io.github.libfdx.ui.UiScope;
+import java.util.function.BooleanSupplier;
 
 /** Demonstrates custom drawing and layered images. */
 public final class UiKitDrawingSection implements UiContent {
@@ -20,11 +21,13 @@ public final class UiKitDrawingSection implements UiContent {
     private final UiFloatState sliderNormal;
     private final TextureRegion logoRegion;
     private final UiFloatState drawingTextSize = Ui.state(DRAWING_TEXT_SIZE);
+    private final BooleanSupplier compactViewport;
     private float drawnVolume;
 
-    public UiKitDrawingSection(UiFloatState sliderNormal, TextureRegion logoRegion) {
+    public UiKitDrawingSection(UiFloatState sliderNormal, TextureRegion logoRegion, BooleanSupplier compactViewport) {
         this.sliderNormal = sliderNormal;
         this.logoRegion = logoRegion;
+        this.compactViewport = compactViewport;
     }
 
     @Override
@@ -47,6 +50,11 @@ public final class UiKitDrawingSection implements UiContent {
     }
 
     private void buildDrawingExamples(UiScope content, float drawnVolume) {
+        if (compactViewport.getAsBoolean()) {
+            buildBars(content, drawnVolume);
+            buildTextExample(content);
+            return;
+        }
         content.row(Ui.modifier().fillWidth().gap(10.0f), row -> {
             buildBars(row, drawnVolume);
             buildTextExample(row);
@@ -68,14 +76,16 @@ public final class UiKitDrawingSection implements UiContent {
     }
 
     private void buildTextExample(UiScope row) {
-        row.custom("draw-text", Ui.modifier().fillWidth().weight(1.0f).height(122.0f).style("tile"), custom -> {
+        row.custom("draw-text", Ui.modifier().fillWidth()
+                .height(Math.max(122.0f, drawingTextSize.get() * 2.0f + 54.0f)).style("tile"), custom -> {
             custom.draw((draw, bounds) -> {
                 draw.rect(bounds, UiColor.rgba8888(0x101720ff));
                 draw.text("FreeType " + Math.round(drawingTextSize.get()) + " px",
                         new UiRect(bounds.x() + 10.0f, bounds.y() + 8.0f, bounds.width() - 20.0f, 18.0f),
                         textStyle(13.0f, 0xa9b6c5ff));
                 draw.text("Resize this text",
-                        new UiRect(bounds.x() + 10.0f, bounds.y() + 42.0f, bounds.width() - 20.0f, 48.0f),
+                        new UiRect(bounds.x() + 10.0f, bounds.y() + 42.0f,
+                                bounds.width() - 20.0f, bounds.height() - 50.0f),
                         textStyle(drawingTextSize.get(), 0xf7fbffff));
             });
         });

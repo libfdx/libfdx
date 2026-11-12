@@ -117,14 +117,36 @@ public final class ProjectGeneratorSmokeTest {
         require(project.file("gradle.properties").textContent()
                         .contains("libfdxVersion=" + generator.libfdxVersion()),
                 "generated dependency version does not match the generator");
-        require(project.file("build.gradle.kts").textContent()
-                        .contains("libfdxDependencyVersion"),
-                "standalone version bridge missing");
+        require(project.file("settings.gradle.kts").textContent()
+                        .contains("version(\"libfdx\", providers.gradleProperty(\"libfdxVersion\").get())"),
+                "catalog and plugin are not driven by the same version property");
+        String catalog = project.file("gradle/libs.versions.toml").textContent();
+        require(catalog.contains("libfdx = \"" + generator.libfdxVersion() + "\""),
+                "catalog version does not match the generator");
+        require(catalog.contains("libfdx-application = { module = \"io.github.libfdx:application\", "
+                        + "version.ref = \"libfdx\" }"),
+                "catalog does not declare the published application dependency");
         require(project.file("core/build.gradle.kts").textContent()
-                        .contains("$libfdxDependencyVersion"),
-                "sample dependencies are not driven by the generator version");
+                        .contains("api(libs.libfdx.application)"),
+                "sample API dependency does not use the catalog");
+        require(project.file("platform/desktop/build.gradle.kts").textContent()
+                        .contains("glRuntimeClasspath(libs.libfdx.glDesktop)"),
+                "desktop provider does not use the catalog on its original configuration");
         require(!project.containsFile("core/src/main/java/com/example/demo/DemoApplication.java"),
                 "legacy hand-authored template source is still generated");
+
+        for (ProjectSample sample : samples) {
+            GeneratedProject exported = generator.generate(ProjectGenerationSettings.builder()
+                    .sampleId(sample.id())
+                    .platforms(sample.platforms().toArray(new ProjectPlatform[0]))
+                    .build()).project();
+            for (GeneratedFile file : exported.files()) {
+                if (file.path().endsWith("build.gradle.kts")) {
+                    require(!file.textContent().contains("project(\":libfdx:"),
+                            sample.id() + "/" + file.path() + " still references a libFDX checkout project");
+                }
+            }
+        }
 
         GeneratedProject platformer = generator.generate(ProjectGenerationSettings.builder()
                 .projectName("platformer")

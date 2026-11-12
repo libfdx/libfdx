@@ -20,17 +20,21 @@ import java.util.function.BooleanSupplier;
 public final class UiKitSlidersSection implements UiContent {
     private final UiFloatState volume;
     private final BooleanSupplier compactViewport;
-    public final UiFloatState sliderNormal = Ui.state(0.45f);
+    private final UiFloatState sliderNormal;
     private final UiFloatState sliderCompact = Ui.state(0.60f);
-    public final UiFloatState sliderWide = Ui.state(25.0f);
+    private final UiFloatState sliderWide;
     private final UiFloatState sliderNegative = Ui.state(0.0f);
-    public final UiFloatState sliderDisabled = Ui.state(0.70f);
+    private final UiFloatState sliderDisabled;
     private final UiFloatState sliderTiny = Ui.state(0.30f);
     private final UiFloatState sliderPrecise = Ui.state(0.125f);
 
-    public UiKitSlidersSection(UiFloatState volume, BooleanSupplier compactViewport) {
+    public UiKitSlidersSection(UiFloatState volume, BooleanSupplier compactViewport,
+            UiFloatState sliderNormal, UiFloatState sliderWide, UiFloatState sliderDisabled) {
         this.volume = volume;
         this.compactViewport = compactViewport;
+        this.sliderNormal = sliderNormal;
+        this.sliderWide = sliderWide;
+        this.sliderDisabled = sliderDisabled;
     }
 
     @Override

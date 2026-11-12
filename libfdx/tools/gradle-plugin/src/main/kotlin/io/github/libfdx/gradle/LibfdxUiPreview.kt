@@ -31,8 +31,9 @@ open class LibfdxUiPreviewExtension(project: Project, objects: ObjectFactory) {
     val arguments = objects.listProperty(String::class.java).convention(emptyList())
     val systemProperties = objects.mapProperty(String::class.java, String::class.java).convention(emptyMap())
     val buildArguments = objects.listProperty(String::class.java).convention(emptyList())
-    val pollMillis = objects.property(Long::class.java).convention(300L)
-    val debounceMillis = objects.property(Long::class.java).convention(300L)
+    val fastReload = objects.property(Boolean::class.java).convention(true)
+    val pollMillis = objects.property(Long::class.java).convention(50L)
+    val debounceMillis = objects.property(Long::class.java).convention(120L)
     val startupTimeoutMillis = objects.property(Long::class.java).convention(30_000L)
 }
 
@@ -80,7 +81,15 @@ internal fun registerUiPreviewTasks(project: Project, extension: LibfdxExtension
             properties.setProperty("startupTimeoutMillis", preview.startupTimeoutMillis.get().toString())
             val paths = classpath.files.toList()
             previewValues(properties, "classpath", paths.map(File::getAbsolutePath))
+            val shared = tool.files.toSet()
+            properties.setProperty("fastReload", preview.fastReload.get().toString())
+            val projectOutputs = previewJavaModel(project, properties, shared, paths)
             val cache = project.gradle.gradleUserHomeDir.resolve("caches").toPath().toAbsolutePath().normalize()
+            properties.setProperty("cacheDirectory", cache.toString())
+            previewValues(properties, "reloadClasspath", paths.filter {
+                val path = it.toPath().toAbsolutePath().normalize()
+                it !in shared && !path.startsWith(cache) && projectOutputs.any(path::startsWith)
+            }.map(File::getAbsolutePath))
             paths.forEachIndexed { index, file ->
                 properties.setProperty("classpath.$index.immutable", file.toPath().toAbsolutePath().normalize().startsWith(cache).toString())
             }
@@ -124,7 +133,7 @@ internal fun registerUiPreviewTasks(project: Project, extension: LibfdxExtension
                 val lock = channel.tryLock() ?: throw GradleException("UI preview is already running. Close its window or run $UI_PREVIEW_STOP.")
                 lock.release()
             }
-            // Supervisor uses java.base only. A private copy prevents SDK rebuilds from mutating its open jar.
+            // The supervisor uses JDK APIs. A private copy isolates it from SDK rebuilds.
             val controllerJar = directory.resolve("controller.jar")
             Files.copy(controllerClasspath.get().toPath(), controllerJar, StandardCopyOption.REPLACE_EXISTING)
             Files.deleteIfExists(directory.resolve("controller.ready"))
@@ -188,7 +197,7 @@ private fun previewWatchRoots(project: Project, extension: LibfdxExtension, prev
     roots.addAll(extension.assets.files)
     roots.addAll(preview.watch.files)
     roots.add(project.rootProject.buildFile)
-    listOf("settings.gradle", "settings.gradle.kts", "gradle.properties", "gradle/libs.versions.toml").forEach {
+    listOf("settings.gradle", "settings.gradle.kts", "gradle.properties", "local.properties", "gradle/libs.versions.toml").forEach {
         roots.add(project.rootProject.file(it))
     }
     return roots

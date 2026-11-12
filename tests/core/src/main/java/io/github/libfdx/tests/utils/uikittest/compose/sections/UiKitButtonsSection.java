@@ -2,6 +2,7 @@ package io.github.libfdx.tests.utils.uikittest.compose.sections;
 
 import static io.github.libfdx.tests.utils.uikittest.showcase.UiKitShowcaseThemes.textStyle;
 
+import io.github.libfdx.graphics.g2d.TextureRegion;
 import io.github.libfdx.tests.utils.uikittest.showcase.UiKitValidationIds;
 import io.github.libfdx.ui.Ui;
 import io.github.libfdx.ui.UiBooleanState;
@@ -12,6 +13,7 @@ import io.github.libfdx.ui.UiEasing;
 import io.github.libfdx.ui.UiIntState;
 import io.github.libfdx.ui.UiScope;
 import io.github.libfdx.ui.UiStyle;
+import java.util.function.BooleanSupplier;
 
 /** Demonstrates button variants, constrained layout, and transitions. */
 public final class UiKitButtonsSection implements UiContent {
@@ -19,6 +21,7 @@ public final class UiKitButtonsSection implements UiContent {
     private final UiBooleanState showDetails;
     private final Runnable incrementClick;
     private final Runnable togglePopup;
+    private final UiKitButtonCustomization customization;
     public final UiBooleanState dynamicEnabled = Ui.state(true);
     public final UiIntState transitionPhase = Ui.state(0);
     private final UiStyle inlineButtonStyle = UiStyle.button()
@@ -27,11 +30,13 @@ public final class UiKitButtonsSection implements UiContent {
             .text(textStyle(15.0f, 0xffffffff).wrap(false).ellipsis(true));
 
     public UiKitButtonsSection(UiIntState clickCount, UiBooleanState showDetails,
-            Runnable incrementClick, Runnable togglePopup) {
+            Runnable incrementClick, Runnable togglePopup, TextureRegion texture, TextureRegion logo,
+            TextureRegion buttonBackground, BooleanSupplier compactViewport) {
         this.clickCount = clickCount;
         this.showDetails = showDetails;
         this.incrementClick = incrementClick;
         this.togglePopup = togglePopup;
+        customization = new UiKitButtonCustomization(texture, logo, buttonBackground, incrementClick, compactViewport);
     }
 
     @Override
@@ -40,6 +45,7 @@ public final class UiKitButtonsSection implements UiContent {
         buildButtonVariants(content);
         buildAnimatedDetails(content);
         buildStatusTiles(content);
+        customization.build(content);
         buildConstrainedButtons(content);
         buildInlineStyleExample(content);
         buildTransitionExample(content);
@@ -84,20 +90,17 @@ public final class UiKitButtonsSection implements UiContent {
         content.text("Constrained layout", Ui.modifier().style("muted"));
         content.text("Three 150 px button requests shrink into a 250 px row without wrapping.",
                 Ui.modifier().style("small"));
-        content.panel(Ui.modifier().width(270.0f).padding(10.0f).style("tile"), panel ->
-                panel.row(Ui.modifier().width(250.0f).height(40.0f).gap(6.0f)
+        content.panel(Ui.modifier().fillWidth().padding(10.0f).style("tile"), panel ->
+                panel.row(Ui.modifier().fillWidth().height(40.0f).gap(6.0f)
                                 .semanticLabel("Constrained row"),
                         row -> {
                             row.button("Alpha", Ui.modifier().width(150.0f)
-                                            .semanticLabel("Constrained Alpha")
                                             .validationId(UiKitValidationIds.CONSTRAINED_ALPHA),
                                     incrementClick);
                             row.button("Beta", Ui.modifier().width(150.0f)
-                                            .semanticLabel("Constrained Beta")
                                             .validationId(UiKitValidationIds.CONSTRAINED_BETA),
                                     incrementClick);
                             row.button("Gamma", Ui.modifier().width(150.0f)
-                                            .semanticLabel("Constrained Gamma")
                                             .validationId(UiKitValidationIds.CONSTRAINED_GAMMA),
                                     incrementClick);
                         }));
@@ -120,9 +123,9 @@ public final class UiKitButtonsSection implements UiContent {
     }
 
     private void tile(UiScope grid, String title, String value) {
-        grid.panel(Ui.modifier().padding(6.0f).gap(3.0f).style("tile"), tile -> {
-            tile.text(title, Ui.modifier().style("section"));
-            tile.text(value, Ui.modifier().style("small"));
+        grid.panel(Ui.modifier().fillWidth().padding(6.0f).gap(3.0f).style("tile"), tile -> {
+            tile.text(title, Ui.modifier().fillWidth().style("section"));
+            tile.text(value, Ui.modifier().fillWidth().style("small"));
         });
     }
 

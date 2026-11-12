@@ -5,8 +5,6 @@ plugins {
 }
 
 val sampleProjectPath = project.path.substringBefore(":platform:")
-val libfdxDependencyVersion =
-    gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
 val androidCompileSdkVersion = providers.gradleProperty("androidCompileSdk").get().toInt()
 val androidMinSdkVersion = providers.gradleProperty("androidMinSdk").get().toInt()
 val androidTargetSdkVersion = providers.gradleProperty("androidTargetSdk").get().toInt()
@@ -32,17 +30,10 @@ android {
 
 dependencies {
     implementation(project("$sampleProjectPath:core"))
-    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-        implementation("${libs.versions.libfdxGroup.get()}:backend_android:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:wgpu_android_jni:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:vulkan_android_jni:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:webrtc_android_jni:$libfdxDependencyVersion")
-    } else {
-        implementation(project(":libfdx:backends:android"))
-        implementation(project(":libfdx:extensions:graphics:wgpu:platform:android_jni"))
-        implementation(project(":libfdx:extensions:graphics:vulkan:platform:android_jni"))
-        implementation(project(":libfdx:extensions:net:webrtc:platform:android_jni"))
-    }
+    implementation(project(":libfdx:backends:android"))
+    implementation(project(":libfdx:extensions:graphics:wgpu:platform:android_jni"))
+    implementation(project(":libfdx:extensions:graphics:vulkan:platform:android_jni"))
+    implementation(project(":libfdx:extensions:net:webrtc:platform:android_jni"))
 }
 
 base {

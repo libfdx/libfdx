@@ -26,10 +26,16 @@ public final class UiNode implements Disposable {
     private UiNode parent;
     private UiModifier modifier = UiModifier.none();
     private UiTransitionRuntime transition;
+    private UiPressAnimationRuntime pressAnimation;
+    private float renderBrightness = 1;
     private float renderScaleX = 1;
     private float renderScaleY = 1;
     private float renderOffsetX;
     private float renderOffsetY;
+    private float inputScaleX = 1;
+    private float inputScaleY = 1;
+    private float inputOffsetX;
+    private float inputOffsetY;
     private String text;
     private Object value;
     private int intValue;
@@ -117,8 +123,44 @@ public final class UiNode implements Disposable {
         }
     }
 
-    boolean updateTransition(float delta) { return transition != null && transition.update(delta); }
-    boolean hasTransition() { return transition != null; }
+    void configurePressAnimation(UiPressAnimation configuration) {
+        if (configuration == null) {
+            pressAnimation = null;
+        } else {
+            if (pressAnimation == null) pressAnimation = new UiPressAnimationRuntime();
+            pressAnimation.configure(configuration);
+        }
+    }
+
+    void pulsePress() {
+        if (pressAnimation != null) pressAnimation.pulse();
+    }
+
+    boolean updateRenderAnimation(float delta) {
+        boolean changed = transition != null && transition.update(delta);
+        if (pressAnimation != null) changed |= pressAnimation.update(delta);
+        return changed;
+    }
+
+    boolean hasRenderAnimation() {
+        return transition != null || pressAnimation != null;
+    }
+
+    private float pressScale() {
+        return pressAnimation != null ? pressAnimation.scale() : 1;
+    }
+
+    float renderBrightness() {
+        return renderBrightness;
+    }
+
+    float hitLocalX(float x) {
+        return inputScaleX > 0 ? (x - inputOffsetX) / inputScaleX : Float.NaN;
+    }
+
+    float hitLocalY(float y) {
+        return inputScaleY > 0 ? (y - inputOffsetY) / inputScaleY : Float.NaN;
+    }
 
     float renderAlpha() { return modifier.alpha() * (transition != null ? transition.alpha() : 1); }
     float transitionScale() { return transition != null ? transition.scale() : 1; }
@@ -126,8 +168,18 @@ public final class UiNode implements Disposable {
     void updateRenderTransform() {
         float parentScaleX = parent != null ? parent.renderScaleX : 1;
         float parentScaleY = parent != null ? parent.renderScaleY : 1;
-        float localScaleX = Math.max(0, modifier.scaleX() * transitionScale());
-        float localScaleY = Math.max(0, modifier.scaleY() * transitionScale());
+        float inputLocalScaleX = Math.max(0, modifier.scaleX() * transitionScale());
+        float inputLocalScaleY = Math.max(0, modifier.scaleY() * transitionScale());
+        inputScaleX = (parent != null ? parent.inputScaleX : 1) * inputLocalScaleX;
+        inputScaleY = (parent != null ? parent.inputScaleY : 1) * inputLocalScaleY;
+        inputOffsetX = (parent != null ? parent.inputOffsetX : 0)
+                + (parent != null ? parent.inputScaleX : 1) * (bounds.x() + bounds.width() * 0.5f) * (1 - inputLocalScaleX);
+        inputOffsetY = (parent != null ? parent.inputOffsetY : 0)
+                + (parent != null ? parent.inputScaleY : 1) * (bounds.y() + bounds.height() * 0.5f) * (1 - inputLocalScaleY);
+        float localScaleX = inputLocalScaleX * Math.max(0, pressScale());
+        float localScaleY = inputLocalScaleY * Math.max(0, pressScale());
+        renderBrightness = (parent != null ? parent.renderBrightness : 1)
+                * (pressAnimation != null ? pressAnimation.brightness() : 1);
         renderScaleX = parentScaleX * localScaleX;
         renderScaleY = parentScaleY * localScaleY;
         renderOffsetX = (parent != null ? parent.renderOffsetX : 0)
@@ -370,6 +422,7 @@ public final class UiNode implements Disposable {
 
     void pressed(boolean pressed) {
         this.pressed = pressed;
+        if (pressAnimation != null) pressAnimation.pressed(pressed);
     }
 
     void focused(boolean focused) {
@@ -857,6 +910,8 @@ public final class UiNode implements Disposable {
         parent = null;
         modifier = UiModifier.none();
         transition = null;
+        pressAnimation = null;
+        renderBrightness = 1;
         text = null;
         value = null;
         action = null;

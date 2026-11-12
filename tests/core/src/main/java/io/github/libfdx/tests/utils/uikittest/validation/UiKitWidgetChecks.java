@@ -10,6 +10,7 @@ import io.github.libfdx.display.Display;
 import io.github.libfdx.input.DefaultInput;
 import io.github.libfdx.input.MouseButton;
 import io.github.libfdx.tests.utils.uikittest.showcase.UiKitShowcase;
+import io.github.libfdx.tests.utils.uikittest.showcase.UiKitValidationIds;
 import io.github.libfdx.ui.UiNode;
 import io.github.libfdx.ui.UiNodeType;
 import io.github.libfdx.ui.UiRect;
@@ -165,7 +166,7 @@ final class UiKitWidgetChecks {
     void validateTabs() {
         showcase.tabs().activeDemoTab.set(0);
         interaction.settleValidationLayout();
-        UiNode tabs = find(root.rootNode(), UiNodeType.TABS, "Demo tabs");
+        UiNode tabs = UiScenarioTargets.id(UiKitValidationIds.TABS_DEMO).resolve(root);
         if (tabs == null) {
             throw new FdxException("UiKitTest could not find tabs node");
         }
@@ -188,7 +189,7 @@ final class UiKitWidgetChecks {
         }
         showcase.tabs().activeDemoTab.set(3);
         interaction.settleValidationLayout();
-        tabs = find(root.rootNode(), UiNodeType.TABS, "Demo tabs");
+        tabs = UiScenarioTargets.id(UiKitValidationIds.TABS_DEMO).resolve(root);
         if (tabs == null) {
             throw new FdxException("UiKitTest could not find tabs node for border click validation");
         }
@@ -208,7 +209,7 @@ final class UiKitWidgetChecks {
     }
 
     void validateToggleChoices() {
-        UiNode toggle = find(root.rootNode(), UiNodeType.SWITCH, "Notifications");
+        UiNode toggle = UiScenarioTargets.id(UiKitValidationIds.SWITCH_NOTIFICATIONS).resolve(root);
         if (toggle == null || toggle.bounds().width() < 48.0f || toggle.bounds().height() < 28.0f) {
             throw new FdxException("UiKitTest switch did not receive usable bounds");
         }
@@ -218,13 +219,13 @@ final class UiKitWidgetChecks {
         if (showcase.toggles().switchEnabled.get() == before) {
             throw new FdxException("UiKitTest switch did not toggle through pointer input");
         }
-        toggle = find(root.rootNode(), UiNodeType.SWITCH, "Notifications");
+        toggle = UiScenarioTargets.id(UiKitValidationIds.SWITCH_NOTIFICATIONS).resolve(root);
         interaction.click(toggle);
         interaction.settleValidationLayout();
 
         showcase.toggles().radioChoice.set(0);
         interaction.settleValidationLayout();
-        UiNode quality = find(root.rootNode(), UiNodeType.RADIO_BUTTON, "Quality");
+        UiNode quality = UiScenarioTargets.id(UiKitValidationIds.RADIO_QUALITY).resolve(root);
         if (quality == null || quality.bounds().height() < 28.0f) {
             throw new FdxException("UiKitTest radio choice did not receive a usable target");
         }
@@ -274,12 +275,14 @@ final class UiKitWidgetChecks {
 
     void validateConstrainedButtonLayout() {
         UiNode row = find(root.rootNode(), UiNodeType.ROW, "Constrained row");
-        UiNode alpha = find(root.rootNode(), UiNodeType.BUTTON, "Alpha");
-        UiNode beta = find(root.rootNode(), UiNodeType.BUTTON, "Beta");
-        UiNode gamma = find(root.rootNode(), UiNodeType.BUTTON, "Gamma");
+        UiNode alpha = UiScenarioTargets.id(UiKitValidationIds.CONSTRAINED_ALPHA).resolve(root);
+        UiNode beta = UiScenarioTargets.id(UiKitValidationIds.CONSTRAINED_BETA).resolve(root);
+        UiNode gamma = UiScenarioTargets.id(UiKitValidationIds.CONSTRAINED_GAMMA).resolve(root);
         if (row == null || alpha == null || beta == null || gamma == null) {
             throw new FdxException("UiKitTest could not find constrained layout nodes");
         }
+        root.ensureVisible(row);
+        interaction.settleValidationLayout();
         assertInside(alpha.bounds(), row.bounds(), "Alpha");
         assertInside(beta.bounds(), row.bounds(), "Beta");
         assertInside(gamma.bounds(), row.bounds(), "Gamma");
@@ -298,7 +301,7 @@ final class UiKitWidgetChecks {
     }
 
     void validatePressedConstrainedButton() {
-        UiNode gamma = find(root.rootNode(), UiNodeType.BUTTON, "Gamma");
+        UiNode gamma = UiScenarioTargets.id(UiKitValidationIds.CONSTRAINED_GAMMA).resolve(root);
         UiStyle button = root.theme() != null ? root.theme().style("button") : null;
         if (gamma == null || !gamma.pressed()) {
             throw new FdxException("UiKitTest did not hold Gamma in its pressed state for validation");

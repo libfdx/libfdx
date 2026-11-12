@@ -1,7 +1,13 @@
 package io.github.libfdx.tools.uipreview;
 
-/** A named composition factory. Keep the ID stable across edits and use a label for the picker and window title. */
-public record UiPreviewTarget(String id, String label, UiPreviewSetup setup) {
+import java.util.List;
+
+/** A named composition factory and its optional children. Keep IDs stable and unique within an entry. */
+public record UiPreviewTarget(String id, String label, UiPreviewSetup setup, List<UiPreviewTarget> children) {
+    public UiPreviewTarget(String id, String label, UiPreviewSetup setup) {
+        this(id, label, setup, List.of());
+    }
+
     public UiPreviewTarget {
         if (id == null || !id.matches("[a-zA-Z0-9][a-zA-Z0-9._-]*")) {
             throw new IllegalArgumentException("Preview target ID must contain only letters, digits, dots, underscores or hyphens");
@@ -9,6 +15,7 @@ public record UiPreviewTarget(String id, String label, UiPreviewSetup setup) {
         if (label == null || label.isBlank() || setup == null) {
             throw new IllegalArgumentException("Preview target label and setup required");
         }
+        children = List.copyOf(children);
     }
 
     /** Creates a target that only needs a content factory. */

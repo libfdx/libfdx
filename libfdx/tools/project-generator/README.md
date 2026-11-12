@@ -20,8 +20,8 @@ The generator build also records one libFDX dependency version:
   version for release engineering or timestamped snapshots.
 
 Every generated project writes that exact value to `libfdxVersion` in
-`gradle.properties`. Both the `io.github.libfdx` Gradle plugin and the sample's
-published libFDX dependencies use it.
+`gradle.properties`. The `io.github.libfdx` Gradle plugin and the `libfdx`
+version in the exported catalog both read that property.
 
 A release generator should be built and distributed with the matching libFDX
 release. Publish and verify the libFDX libraries and the `io.github.libfdx`
@@ -53,8 +53,10 @@ requirements.
 
 ## Generated layout
 
-The selected sample's Java, assets, manifests, documentation, and sample-owned
-Gradle files are copied. The generator adds only the standalone root files:
+The generator copies the selected sample's Java, assets, manifests,
+documentation, and Gradle modules. It replaces local libFDX project
+dependencies with version catalog aliases derived from the modules' Maven
+publications. It also adds the standalone root files:
 
 - `settings.gradle.kts`;
 - `build.gradle.kts`;

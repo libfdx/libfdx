@@ -33,32 +33,18 @@ base {
 
 val sampleProjectPath = project.path.substringBefore(":platform:")
 val sampleRoot = layout.projectDirectory.dir("../..")
-val libfdxDependencyVersion =
-    gradle.extensions.extraProperties.get("libfdxDependencyVersion") as String
 
 dependencies {
     implementation(project("$sampleProjectPath:core"))
-    if ((gradle.extensions.extraProperties.get("libfdxUsePublishedLibfdx") as Boolean)) {
-        implementation("${libs.versions.libfdxGroup.get()}:application:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:display:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:d3d12_core:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:wgpu_core:$libfdxDependencyVersion")
-        implementation("${libs.versions.libfdxGroup.get()}:backend_desktop:$libfdxDependencyVersion")
+    implementation(project(":libfdx:framework:application"))
+    implementation(project(":libfdx:framework:display"))
+    implementation(project(":libfdx:extensions:graphics:d3d12:core"))
+    implementation(project(":libfdx:extensions:graphics:wgpu:core"))
+    implementation(project(":libfdx:backends:desktop"))
 
-        glRuntimeClasspath("${libs.versions.libfdxGroup.get()}:gl_desktop:$libfdxDependencyVersion")
-        vulkanRuntimeClasspath("${libs.versions.libfdxGroup.get()}:vulkan_desktop:$libfdxDependencyVersion")
-        wgpuRuntimeClasspath("${libs.versions.libfdxGroup.get()}:wgpu_desktop_ffm:$libfdxDependencyVersion")
-    } else {
-        implementation(project(":libfdx:framework:application"))
-        implementation(project(":libfdx:framework:display"))
-        implementation(project(":libfdx:extensions:graphics:d3d12:core"))
-        implementation(project(":libfdx:extensions:graphics:wgpu:core"))
-        implementation(project(":libfdx:backends:desktop"))
-
-        glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
-        vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
-        wgpuRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
-    }
+    glRuntimeClasspath(project(":libfdx:extensions:graphics:gl:platform:desktop"))
+    vulkanRuntimeClasspath(project(":libfdx:extensions:graphics:vulkan:platform:desktop"))
+    wgpuRuntimeClasspath(project(":libfdx:extensions:graphics:wgpu:platform:desktop_ffm"))
 }
 
 libfdx {
