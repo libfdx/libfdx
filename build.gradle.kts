@@ -313,19 +313,19 @@ tasks.register<Sync>("stage_pages") {
     )
     pagesWebapp(
         projectPath = ":tests:platform:web",
-        buildTaskName = "libfdx_web_js_webgl_build",
+        buildTaskName = "libfdx_web_js_tests_webgl_build",
         webappPath = "dist/web-js/webapp",
         pagesPath = "tests/webgl-js"
     )
     pagesWebapp(
         projectPath = ":tests:platform:web",
-        buildTaskName = "libfdx_web_wasm_webgl_build",
+        buildTaskName = "libfdx_web_wasm_tests_webgl_build",
         webappPath = "dist/web-wasm/webapp",
         pagesPath = "tests/webgl-wasm"
     )
     pagesWebapp(
         projectPath = ":tests:platform:web",
-        buildTaskName = "libfdx_web_js_webgpu_build",
+        buildTaskName = "libfdx_web_js_tests_webgpu_build",
         webappPath = "dist/web-js/webapp",
         pagesPath = "tests/webgpu-js"
     )
