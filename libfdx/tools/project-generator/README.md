@@ -12,12 +12,17 @@ When the generator core is compiled, its build discovers every directory under
 is compressed into generated Java sources, so the desktop and web generators
 can work without GitHub or another network source.
 
-The generator build also records one libFDX dependency version:
+The development generator records the first eight hexadecimal characters of the
+checked-out libFDX commit followed by `-SNAPSHOT`, for example
+`8c990446-SNAPSHOT`. The Snapshot workflow publishes the libraries, Gradle
+plugin and plugin marker under that same version, then exports and launches a
+standalone desktop Starter against Sonatype. Direct Gradle users can use the
+same coordinate. Development snapshots expire after 90 days.
 
-- the default generator build records `libfdxSnapshot`;
-- `--project-prop=libfdx.projectGenerator.release=true` records `libfdxRelease`;
-- `--project-prop=libfdx.projectGenerator.version=<coordinate-version>` records an explicit
-  version for release engineering or timestamped snapshots.
+Build the generator from a Git checkout. Local generator builds use its HEAD.
+External projects can resolve that revision after its artifacts are published.
+`--project-prop=libfdx.projectGenerator.release=true` selects the numbered
+`libfdxRelease` for a release generator.
 
 Every generated project writes that exact value to `libfdxVersion` in
 `gradle.properties`. The `io.github.libfdx` Gradle plugin and the `libfdx`
@@ -110,11 +115,12 @@ selector, so `/project-generator/` opens the generator itself.
 
 Deployment is owned by the
 [`Pages` workflow](https://github.com/libfdx/libfdx.github.io/actions/workflows/pages.yml)
-in the `libfdx.github.io` repository. Run that workflow manually and set
-`libfdx_ref` to the libFDX branch, tag, or commit to build. A branch or commit
-embeds the snapshot dependency version. A tag matching the repository
+in the `libfdx.github.io` repository. It checks for a newly verified Snapshot
+workflow twice an hour and builds its exact libFDX SHA. You can also run it
+manually with a published branch, tag, or commit in `libfdx_ref`. A tag matching the repository
 `libfdxRelease` value, with or without a leading `v`, embeds the release
-version.
+version. The deployed generator's coordinate is available in
+[`libfdx-version.txt`](https://libfdx.github.io/project-generator/libfdx-version.txt).
 
 ## Validation
 

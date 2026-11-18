@@ -61,7 +61,7 @@ public final class ProjectGenerator {
     }
 
     /**
-     * Returns the generator dependency channel: snapshot, release, or custom.
+     * Returns the snapshot or release dependency channel.
      *
      * @return the channel
      */
@@ -226,6 +226,9 @@ public final class ProjectGenerator {
                 .append("The version catalog pins its libFDX library dependencies to `")
                 .append(libfdxVersion()).append("` (")
                 .append(channel()).append(").\n\n");
+        if ("snapshot".equals(channel())) {
+            text.append("Development snapshots expire from the snapshot repository after 90 days.\n\n");
+        }
         text.append("The generated root project is `").append(settings.projectName()).append("`. ")
                 .append("To inspect available libFDX platform tasks, run:\n\n");
         text.append("```powershell\n");

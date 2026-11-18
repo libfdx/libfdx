@@ -252,10 +252,15 @@ jobs:
             exit 1
           fi
 
+      - name: Identify development snapshot
+        if: ${{ !inputs.isRelease }}
+        shell: bash
+        run: echo "LIBFDX_SNAPSHOT=${GITHUB_SHA:0:8}-SNAPSHOT" >> "$GITHUB_ENV"
+
       - name: Install publication native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+          sudo apt-get install -y build-essential cmake libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev xvfb xauth
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
@@ -365,7 +370,7 @@ jobs:
         uses: actions/upload-artifact@v7
         if: ${{ inputs.shouldUpload && !inputs.isRelease }}
         with:
-          name: snapshot-deploy-SNAPSHOT-${{ github.run_number }}
+          name: snapshot-deploy-${{ env.LIBFDX_SNAPSHOT }}
           path: ./build/snapshot-deploy/
 
       - name: Upload snapshot to repository
@@ -376,6 +381,23 @@ jobs:
           timeout_minutes: 50
           retry_on: error
           command: ./gradlew publishSnapshot --parallel --max-workers=4
+
+      - name: Export Starter against the published snapshot
+        if: ${{ inputs.shouldUpload && !inputs.isRelease }}
+        run: |
+          ./gradlew :libfdx:tools:project-generator:platform:desktop:test_export_project
+          starter=libfdx/tools/project-generator/platform/desktop/build/tmp/project-generator-export-smoke/base-starter-project
+          grep -Fx "libfdxVersion=$LIBFDX_SNAPSHOT" "$starter/gradle.properties"
+          cp -R "$starter" "$RUNNER_TEMP/libfdx-starter"
+
+      - name: Run the standalone Starter from Sonatype
+        if: ${{ inputs.shouldUpload && !inputs.isRelease }}
+        uses: nick-fields/retry@v4
+        with:
+          max_attempts: 4
+          retry_wait_seconds: 30
+          timeout_minutes: 12
+          command: xvfb-run -a ./gradlew --refresh-dependencies -p "$RUNNER_TEMP/libfdx-starter" :platform:desktop:libfdx_desktop_jvm_gl_run -Dlibfdx.sample.exitAfterFrames=30
 
       - name: Create Git tag
         uses: actions/github-script@v9

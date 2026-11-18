@@ -28,6 +28,10 @@ public final class ProjectGeneratorSmokeTest {
         require(containsSample(samples, "2d/multiplayer-webrtc"), "WebRTC sample missing");
         require(containsSample(samples, "graphics/shader-graph"), "Shader Graph sample missing");
         require(generator.libfdxVersion().length() > 0, "Bundled libFDX version is empty");
+        if ("snapshot".equals(generator.channel())) {
+            require(generator.libfdxVersion().matches("[0-9a-f]{8}-SNAPSHOT"),
+                    "Development projects must use a commit snapshot: " + generator.libfdxVersion());
+        }
         require("base/starter-project".equals(
                         ProjectGenerationSettings.builder().build().sampleId()),
                 "Starter Project is not the default generated sample");

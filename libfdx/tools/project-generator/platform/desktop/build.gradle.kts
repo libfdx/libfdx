@@ -27,29 +27,9 @@ dependencies {
 val generatorMainClass = "io.github.libfdx.tools.project.generator.desktop.ProjectGeneratorDesktopLauncher"
 val generatorRuntimeClasspath = sourceSets["main"].runtimeClasspath
 val generatorDesktopDistDir = layout.buildDirectory.dir("dist/desktop-jvm")
-val explicitGeneratorVersion = providers.gradleProperty("libfdx.projectGenerator.version")
-    .orNull
-    ?.trim()
-    ?.takeIf { it.isNotEmpty() }
-val explicitReleaseGenerator = providers.gradleProperty("libfdx.projectGenerator.release")
-    .orNull
-    ?.trim()
-    ?.equals("true", ignoreCase = true) == true
-val pagesDeploymentRef = providers.environmentVariable("LIBFDX_REF")
-    .orNull
-    ?.trim()
-    ?.removePrefix("refs/tags/")
-val releaseVersion = libs.versions.libfdxRelease.get()
-val releaseGenerator = explicitReleaseGenerator
-    || pagesDeploymentRef == releaseVersion
-    || pagesDeploymentRef == "v$releaseVersion"
-val generatorLibfdxVersion = explicitGeneratorVersion
-    ?: if (releaseGenerator) releaseVersion else libs.versions.libfdxSnapshot.get()
-val generatorChannel = when {
-    explicitGeneratorVersion != null -> "custom"
-    releaseGenerator -> "release"
-    else -> "snapshot"
-}
+val generatorProject = project(":libfdx:tools:project-generator")
+val generatorLibfdxVersion = generatorProject.extra["generatorLibfdxVersion"] as String
+val generatorChannel = generatorProject.extra["generatorChannel"] as String
 
 val projectGeneratorDesktopGlBuild = tasks.register<Jar>("project_generator_desktop_gl_build") {
     group = "application"

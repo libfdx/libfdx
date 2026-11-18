@@ -17,6 +17,8 @@ pluginManagement {
     }
 }
 
+apply(from = "gradle/snapshot-version.settings.gradle.kts")
+
 val localProperties = Properties()
 providers.fileContents(layout.settingsDirectory.file("local.properties")).asText.orNull?.let { contents ->
     localProperties.load(contents.reader())

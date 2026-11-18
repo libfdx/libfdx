@@ -195,7 +195,7 @@ public final class ProjectGeneratorApplication extends ApplicationAdapter {
 
     private String dependencyLabel() {
         if ("snapshot".equals(generator.channel())) {
-            return "libFDX snapshot";
+            return "libFDX " + generator.libfdxVersion() + " (90-day development snapshot)";
         }
         return "libFDX " + generator.libfdxVersion() + " (" + generator.channel() + ")";
     }

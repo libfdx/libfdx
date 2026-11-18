@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/libfdx/libfdx/actions/workflows/workflow_snapshot.yml/badge.svg)](https://github.com/libfdx/libfdx/actions/workflows/workflow_snapshot.yml)
 [![Maven Central Version](https://img.shields.io/maven-central/v/io.github.libfdx/fdx)](https://central.sonatype.com/artifact/io.github.libfdx/fdx)
-[![Snapshot](https://img.shields.io/badge/snapshot---SNAPSHOT-red)](https://central.sonatype.com/service/rest/repository/browse/maven-snapshots/io/github/libfdx/fdx/)
+[![Development snapshots](https://img.shields.io/badge/snapshot-commit--based-red)](https://github.com/libfdx/libfdx/actions/workflows/workflow_snapshot.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 > [!WARNING]
@@ -65,6 +65,11 @@ Hosted tools and demos:
   bundled sample into a standalone project pinned to the generator's libFDX
   version.
 - [Tests](https://libfdx.github.io/tests/)
+
+For direct Maven or Gradle use, a successful Snapshot workflow publishes libFDX
+and its Gradle plugin as `<first-eight-commit-characters>-SNAPSHOT`. Generated
+development projects use the same version. Sonatype retains development
+snapshots for 90 days.
 
 ## Guides
 

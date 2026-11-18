@@ -850,8 +850,9 @@ class LibfdxGradlePlugin : Plugin<Project> {
             val targetMainClass = target?.mainClass?.orElse(desktopJvm.mainClass) ?: desktopJvm.mainClass
             val launchProperties = desktopJvm.launchProperties.get() + (target?.launchProperties?.get() ?: emptyMap())
             val displayName = target?.displayName?.get() ?: "libfdx desktop JVM"
+            val resourceName = desktopJvm.launchPropertiesResourceName.get()
             val launchDefaults = project.layout.buildDirectory.file(
-                "generated/desktop-jvm/$taskBaseName/${desktopJvm.launchPropertiesResourceName.get()}"
+                "generated/desktop-jvm/$taskBaseName/$resourceName"
             )
             val writeLaunchDefaults = if(launchProperties.isNotEmpty()) {
                 project.tasks.register("${taskBaseName}_write_launch_defaults") {
@@ -901,7 +902,7 @@ class LibfdxGradlePlugin : Plugin<Project> {
                 })
                 writeLaunchDefaults?.let {
                     from(launchDefaults.map { file -> file.asFile }) {
-                        rename { desktopJvm.launchPropertiesResourceName.get() }
+                        rename { resourceName }
                     }
                 }
             }

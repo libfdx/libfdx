@@ -20,30 +20,8 @@ base {
     archivesName.set("project_generator_core")
 }
 
-val libfdxReleaseVersion = libs.versions.libfdxRelease.get()
-val libfdxSnapshotVersion = libs.versions.libfdxSnapshot.get()
-val explicitGeneratorVersion = providers.gradleProperty("libfdx.projectGenerator.version")
-    .orNull
-    ?.trim()
-    ?.takeIf { it.isNotEmpty() }
-val explicitReleaseGenerator = providers.gradleProperty("libfdx.projectGenerator.release")
-    .orNull
-    ?.trim()
-    ?.equals("true", ignoreCase = true) == true
-val pagesDeploymentRef = providers.environmentVariable("LIBFDX_REF")
-    .orNull
-    ?.trim()
-    ?.removePrefix("refs/tags/")
-val releaseGenerator = explicitReleaseGenerator
-    || pagesDeploymentRef == libfdxReleaseVersion
-    || pagesDeploymentRef == "v$libfdxReleaseVersion"
-val bundledLibfdxVersion = explicitGeneratorVersion
-    ?: if (releaseGenerator) libfdxReleaseVersion else libfdxSnapshotVersion
-val bundledChannel = when {
-    explicitGeneratorVersion != null -> "custom"
-    releaseGenerator -> "release"
-    else -> "snapshot"
-}
+val bundledLibfdxVersion = parent!!.extra["generatorLibfdxVersion"] as String
+val bundledChannel = parent!!.extra["generatorChannel"] as String
 
 val samplesDirectory = rootProject.layout.projectDirectory.dir("samples").asFile
 val ignoredSampleDirectories = setOf("build", ".gradle", ".git", ".idea", "out", "node_modules")

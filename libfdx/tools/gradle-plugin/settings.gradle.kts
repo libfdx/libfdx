@@ -35,3 +35,5 @@ dependencyResolutionManagement {
         }
     }
 }
+
+apply(from = "../../../gradle/snapshot-version.settings.gradle.kts")

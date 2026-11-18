@@ -2,7 +2,6 @@
 playwright = "1.58.0"
 libfdxGroup = "io.github.libfdx"
 libfdxRelease = "0.0.2"
-libfdxSnapshot = "-SNAPSHOT"
 
 easyPublishing = "0.1.2"
 jnative = "0.1.0-SNAPSHOT"
