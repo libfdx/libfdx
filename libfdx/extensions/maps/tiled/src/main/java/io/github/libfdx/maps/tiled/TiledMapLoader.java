@@ -17,7 +17,7 @@ public final class TiledMapLoader implements AssetLoader<TileMap> {
     public static final int DEFAULT_MAX_CELLS = 1_048_576;
     private final int maxCells;
     public TiledMapLoader() { this(DEFAULT_MAX_CELLS); }
-    /** Bounds total layer cells, atlas tiles and animation frames per map; not a streaming setting. */
+    /** Bounds total layer cells, atlas tiles, animation frames and authored collision points per map. */
     public TiledMapLoader(int maxCells) {
         if (maxCells <= 0) { throw new FdxException("Tiled cell limit must be positive"); }
         this.maxCells = maxCells;

@@ -1,0 +1,19 @@
+{
+  "type": "tileset", "name": "collision", "tilewidth": 16, "tileheight": 8,
+  "tilecount": 2, "columns": 2, "image": "../images/terrain.png", "imagewidth": 100, "imageheight": 67,
+  "tileoffset": {"x": 2, "y": -1},
+  "tiles": [
+    {"id": 0, "animation": [{"tileid": 1, "duration": 100}], "objectgroup": {
+      "type": "objectgroup", "objects": [
+        {"id": 1, "name": "sensor", "type": "pickup", "point": true, "x": 2, "y": 2,
+         "properties": [{"name": "radius", "type": "int", "value": 3}]},
+        {"id": 2, "name": "slope", "x": 1, "y": 3, "rotation": 90,
+         "polygon": [{"x": 0, "y": 0}, {"x": 4, "y": 0}, {"x": 4, "y": 2}]},
+        {"id": 3, "ellipse": true, "x": 1, "y": 2, "width": 6, "height": 4},
+        {"id": 4, "capsule": true, "x": 1, "y": 2, "width": 6, "height": 4},
+        {"id": 5, "polyline": [{"x": 0, "y": 4}, {"x": 8, "y": 0}]},
+        {"id": 6, "x": 1, "y": 2, "width": 6, "height": 4}
+      ]}},
+    {"id": 1, "objectgroup": {"objects": [{"id": 1, "point": true, "x": 9, "y": 1}]}}
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "type": "map", "orientation": "orthogonal",
+  "width": 8, "height": 1, "tilewidth": 12, "tileheight": 10,
+  "tilesets": [
+    {"firstgid": 1, "source": "tilesets/collision.tsj"},
+    {"firstgid": 3, "name": "embedded", "tilecount": 1, "columns": 1, "tilewidth": 12,
+     "tileheight": 20, "image": "images/collection-a.png", "imagewidth": 12, "imageheight": 20,
+     "tiles": [{"id": 0, "objectgroup": {"objects": [{"id": 1, "point": true, "x": 3, "y": 5}]}}]}
+  ],
+  "layers": [
+    {"id": 1, "type": "group", "offsetx": 3, "offsety": 2, "layers": [
+      {"id": 2, "type": "tilelayer", "offsetx": 4, "offsety": -3, "width": 8, "height": 1,
+       "data": [1, 2147483649, 1073741825, 3221225473, 536870913, 2684354561, 1610612737, 3758096385]},
+      {"id": 3, "type": "objectgroup", "offsetx": 4, "offsety": -3,
+       "objects": [{"id": 1, "name": "placed", "gid": 2684354561, "x": 40, "y": 6,
+                    "width": 32, "height": 24, "rotation": 90}]}
+    ]}
+  ]
+}

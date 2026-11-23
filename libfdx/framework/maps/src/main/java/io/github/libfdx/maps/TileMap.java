@@ -252,7 +252,13 @@ public class TileMap {
         }
         return high >= 0 && atlases.get(high).contains(tileId - firstIds.get(high)) ? high : -1;
     }
-    /** Returns an object by stable ID, or null when absent. */
+    /** Returns the authored tile's shared collision geometry, or null for empty, unmapped or shapeless tiles. */
+    public TileCollision tileCollision(int tileId) {
+        int index = findAtlas(tileId);
+        return index < 0 ? null : atlas(index).collision(tileId - firstId(index));
+    }
+
+    /** Returns a map-layer object by stable ID, or null when absent. Tile collision shapes have tile-local IDs. */
     public MapObject findObject(int id) {
         for (int i = 0; i < mapLayers.size(); i++) {
             MapObject found = findObject(mapLayers.get(i), id);

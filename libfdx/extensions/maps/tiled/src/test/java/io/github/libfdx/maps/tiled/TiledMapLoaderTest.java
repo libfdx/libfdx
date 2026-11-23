@@ -28,6 +28,146 @@ final class TiledMapLoaderTest {
     private static final String COLLECTION = "tiled/tilesets/collection.tsj";
     private static final String COLLECTION_A = "tiled/images/collection-a.png";
     private static final String COLLECTION_B = "tiled/images/collection-b.png";
+    private static final String COLLISION_MAP = "tiled/collision.tmj";
+    private static final String COLLISION_ATLAS = "tiled/tilesets/collision.tsj";
+
+    @Test
+    void tileCollisionLoadsOnceAndFollowsEveryCellTransformAndTileObjectPlacement() {
+        Fixture fixture = new Fixture();
+        try {
+            var lease = fixture.manager.acquire(AssetDescriptor.of(COLLISION_MAP, TileMap.class));
+            fixture.drain();
+            TileMap map = lease.asset();
+            TileCollision collision = map.tileCollision(1);
+            assertEquals(Map.of(COLLISION_MAP, 1, COLLISION_ATLAS, 1), fixture.readCounts);
+            assertSame(map.atlas(0).collision(0), collision);
+            assertEquals(6, collision.shapeCount());
+            assertEquals(19, map.atlas(0).collisionPointCount());
+            assertEquals("sensor", collision.shape(0).name());
+            assertEquals("pickup", collision.shape(0).className());
+            assertEquals(3, collision.shape(0).properties().get("radius").longValue());
+            // The map object, the animated base tile, its frame and the embedded tileset each reuse ID 1.
+            assertEquals("placed", map.findObject(1).name());
+            assertEquals(2, collision.shape(0).x());
+            assertEquals(9, map.tileCollision(2).shape(0).x());
+            assertEquals(15, map.tileCollision(3).shape(0).y());
+            assertNull(map.tileCollision(0));
+            assertNull(map.tileCollision(4));
+
+            GroupLayer group = (GroupLayer) map.mapLayer(0);
+            TileLayer layer = (TileLayer) group.layer(0);
+            float[][] expected = {{2,6}, {14,6}, {2,2}, {14,2}, {4,7}, {12,7}, {4,1}, {12,1}};
+            float[] out = {-9, 0, 0, -9};
+            for (int col = 0; col < layer.width(); col++) {
+                assertSame(collision, map.tileCollision(layer.tile(col, 0)));
+                float x = col * map.tileWidth() + group.offsetX() + layer.offsetX();
+                float y = group.offsetY() + layer.offsetY();
+                collision.writeCellPoints(0, x, y, layer.transform(col, 0), out, 1);
+                assertArrayEquals(new float[]{-9, col * 12 + 9 + expected[col][0], 2 + expected[col][1], -9}, out);
+            }
+            ObjectLayer objects = (ObjectLayer) group.layer(1);
+            collision.writeObjectPoints(0, objects.object(0), group.offsetX() + objects.offsetX(),
+                    group.offsetY() + objects.offsetY(), out, 1);
+            assertArrayEquals(new float[]{-9, 71, -23, -9}, out, 0.0001f);
+
+            assertEquals(MapObject.Shape.POLYGON, collision.shape(1).shape());
+            float[] triangle = new float[6];
+            collision.writeCellPoints(1, 0, 0, 0, triangle, 0);
+            assertArrayEquals(new float[]{3,6, 3,2, 1,2}, triangle, 0.0001f);
+            assertEquals(MapObject.Shape.ELLIPSE, collision.shape(2).shape());
+            assertEquals(MapObject.Shape.CAPSULE, collision.shape(3).shape());
+            assertEquals(MapObject.Shape.POLYLINE, collision.shape(4).shape());
+            assertEquals(MapObject.Shape.RECTANGLE, collision.shape(5).shape());
+            float[] frame = new float[8];
+            for (int index : new int[]{2, 3, 5}) {
+                collision.writeCellPoints(index, 0, 0, TileTransform.FLIP_X, frame, 0);
+                assertArrayEquals(new float[]{17,7, 11,7, 11,3, 17,3}, frame);
+            }
+            assertThrows(FdxException.class, () -> collision.writeCellPoints(1, 0, 0, 0, out, 0));
+            assertThrows(FdxException.class, () -> collision.writeCellPoints(0, 0, 0, 8, out, 0));
+            assertThrows(FdxException.class, () -> collision.writeObjectPoints(0, collision.shape(0), 0, 0, out, 0));
+        } finally {
+            fixture.close();
+        }
+    }
+
+    @Test
+    void negativeChunkCellsUseTheCroppedImageSizeAndSparseTileId() {
+        Fixture fixture = new Fixture();
+        try {
+            JsonValue atlas = new JsonReader().parse(bytes(COLLECTION));
+            JsonValue shape = JsonValue.object().put("id", 1).put("x", 2).put("y", 1).put("point", true);
+            atlas.require("tiles").require(0).put("objectgroup", JsonValue.object().put("objects", JsonValue.array().add(shape)));
+            fixture.overrides.put(COLLECTION, encode(atlas));
+            JsonValue mapJson = new JsonReader().parse(bytes(COLLECTION_MAP));
+            JsonValue chunk = JsonValue.object().put("x", -2).put("y", 1).put("width", 1).put("height", 1)
+                    .put("data", JsonValue.array().add(100_000_001));
+            JsonValue layer = JsonValue.object().put("id", 1).put("type", "tilelayer").put("chunks", JsonValue.array().add(chunk));
+            mapJson.put("infinite", true).put("width", 0).put("height", 0).put("layers", JsonValue.array().add(layer));
+            fixture.overrides.put(COLLECTION_MAP, encode(mapJson));
+            var lease = fixture.manager.acquire(AssetDescriptor.of(COLLECTION_MAP, TileMap.class));
+            fixture.drain();
+            TileMap map = lease.asset();
+            ChunkedTileLayer chunks = (ChunkedTileLayer) map.mapLayer(0);
+            TileCollision collision = map.tileCollision(chunks.tile(-2, -2));
+            assertEquals(7, collision.shape(0).y()); // The cropped region is 8 pixels high, the source image is 20.
+            assertNull(map.tileCollision(1)); // Existing tile with no authored shapes.
+            assertNull(map.tileCollision(2)); // Gap in the image collection.
+            float[] point = new float[2];
+            collision.writeCellPoints(0, -2 * map.tileWidth(), -2 * map.tileHeight(), chunks.transform(-2, -2), point, 0);
+            assertArrayEquals(new float[]{-2 * map.tileWidth() + 4, -2 * map.tileHeight() + 8}, point);
+        } finally {
+            fixture.close();
+        }
+    }
+
+    @Test
+    void malformedCollisionGeometryFailsWithSourceTileAndObjectBeforeBinding() {
+        for (String invalid : new String[]{"duplicate", "conflicting", "nested", "vertices"}) {
+            Fixture fixture = new Fixture();
+            try {
+                JsonValue atlas = new JsonReader().parse(bytes(COLLISION_ATLAS));
+                JsonValue shapes = atlas.require("tiles").require(0).require("objectgroup").require("objects");
+                switch (invalid) {
+                    case "duplicate" -> shapes.add(shapes.require(0));
+                    case "conflicting" -> shapes.require(0).put("ellipse", true);
+                    case "nested" -> shapes.require(0).put("gid", 1);
+                    case "vertices" -> shapes.require(1).put("polygon", JsonValue.array());
+                }
+                fixture.overrides.put(COLLISION_ATLAS, encode(atlas));
+                fixture.graphics();
+                var lease = fixture.manager.acquire(AssetDescriptor.of(COLLISION_MAP, TileMapAsset.class));
+                fixture.drain();
+                String error = failure(lease);
+                assertTrue(error.contains(COLLISION_ATLAS), error);
+                assertTrue(error.contains("tile 0 collision"), error);
+                assertTrue(error.contains("object " + (invalid.equals("vertices") ? 2 : 1)), error);
+                assertEquals(0, fixture.uploads);
+            } finally {
+                fixture.close();
+            }
+        }
+    }
+
+    @Test
+    void collisionPointLimitIncludesExternalAndEmbeddedDefinitions() {
+        // The external atlas has 19 points. The embedded atlas contributes one more during assembly.
+        for (int limit : new int[]{18, 19, 20}) {
+            Fixture fixture = new Fixture(limit);
+            try {
+                var lease = fixture.manager.acquire(AssetDescriptor.of(COLLISION_MAP, TileMap.class));
+                fixture.drain();
+                if (limit == 20) {
+                    assertEquals(2, lease.asset().atlasCount());
+                } else {
+                    String error = failure(lease);
+                    assertTrue(error.contains(limit == 19 ? "total collision points" : "collision"), error);
+                }
+            } finally {
+                fixture.close();
+            }
+        }
+    }
 
     @Test
     void sparseCollectionsLoadDependenciesBeforeBindingAndUseNativeImageCrops() {

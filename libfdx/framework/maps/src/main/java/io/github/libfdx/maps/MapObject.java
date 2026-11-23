@@ -6,10 +6,12 @@ import io.github.libfdx.core.FdxException;
  * Immutable shape metadata in Y-up map units. Position is the author's anchor,
  * rotation is counterclockwise, and vertices are relative to the anchor.
  * Rectangle vertices extend downward from a top-left anchor; tile vertices extend
- * upward from a bottom-left anchor. Layer offsets are separate.
+ * upward from a bottom-left anchor. Ellipse and capsule points are the corners
+ * of their local bounding rectangle, starting at the top left and proceeding
+ * clockwise in the source image. Layer offsets are separate.
  */
 public final class MapObject {
-    public enum Shape { POINT, RECTANGLE, POLYGON, POLYLINE, TILE }
+    public enum Shape { POINT, RECTANGLE, POLYGON, POLYLINE, TILE, ELLIPSE, CAPSULE }
     private final int id, tileId, transform;
     private final String name, className;
     private final Shape shape;
@@ -30,7 +32,7 @@ public final class MapObject {
         if (vertices == null || (vertices.length & 1) != 0) { throw new FdxException("Invalid object vertices"); }
         boolean validShape = switch (shape) {
             case POINT -> vertices.length == 2;
-            case RECTANGLE -> vertices.length == 8;
+            case RECTANGLE, ELLIPSE, CAPSULE -> vertices.length == 8;
             case TILE -> vertices.length == 8 && tileId > 0 && width > 0 && height > 0;
             case POLYGON -> vertices.length >= 6;
             case POLYLINE -> vertices.length >= 4;
@@ -64,6 +66,12 @@ public final class MapObject {
     public int pointCount() { return vertices.length / 2; }
     public float pointX(int index) { return vertices[index * 2]; }
     public float pointY(int index) { return vertices[index * 2 + 1]; }
-    public float worldX(int index) { return x + pointX(index) * cos - pointY(index) * sin; }
-    public float worldY(int index) { return y + pointX(index) * sin + pointY(index) * cos; }
+    public float worldX(int index) { return worldX(pointX(index), pointY(index)); }
+
+    public float worldY(int index) { return worldY(pointX(index), pointY(index)); }
+
+    float worldX(float localX, float localY) { return x + localX * cos - localY * sin; }
+
+    float worldY(float localX, float localY) { return y + localX * sin + localY * cos; }
+
 }

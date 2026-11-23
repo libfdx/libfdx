@@ -17,6 +17,7 @@ final class TiledReader {
     private long cells;
     private int objectCount, layerCount, chunkCount;
     private long animationFrames;
+    private long collisionPoints;
     private final IntMap<Boolean> layerIds = new IntMap<Boolean>();
     private final IntMap<Boolean> objectIds = new IntMap<Boolean>();
     TiledReader(String source, int limit) { this.source = source; this.limit = limit; }
@@ -111,7 +112,9 @@ final class TiledReader {
                 objectCount += objects.size();
                 require(objectCount <= 65536, "too many objects");
                 MapObject[] values = new MapObject[objects.size()];
-                for (int j = 0; j < values.length; j++) { values[j] = mapObject(objects.require(j), map.worldHeight()); }
+                for (int j = 0; j < values.length; j++) {
+                    values[j] = mapObject(objects.require(j), 0, map.worldHeight(), objectIds, false);
+                }
                 String drawOrder = string(layer, "draworder", "topdown");
                 require(drawOrder.equals("index") || drawOrder.equals("topdown"), "unsupported object draworder");
                 ObjectLayer objectLayer = new ObjectLayer(values, drawOrder.equals("topdown"));
@@ -221,13 +224,23 @@ final class TiledReader {
                 int id = integer(tile, "id", -1);
                 require(!ids.containsKey(id), "duplicate tile metadata ID " + id);
                 ids.put(id, true);
-                require(!present(tile, "objectgroup"), "tile " + id + ": tileset collision groups are unsupported");
                 if (!atlas.isImageCollection()) {
                     require(!present(tile, "image") && !present(tile, "x") && !present(tile, "y")
                             && !present(tile, "width") && !present(tile, "height"),
                             "tile " + id + ": per-tile images/crops require an image collection");
                 }
                 atlas.tileMetadata(id, className(tile), properties(tile));
+                if (present(tile, "objectgroup")) {
+                    try {
+                        JsonValue grid = value.get("grid");
+                        require(grid == null || string(grid, "orientation", "orthogonal").equals("orthogonal"),
+                                "collision geometry requires an orthogonal tileset grid");
+                        MapObject[] shapes = collisionShapes(tile.require("objectgroup"), atlas.regionHeight(id));
+                        atlas.collision(id, shapes);
+                    } catch (RuntimeException failure) {
+                        throw error("tile " + id + " collision: " + failure.getMessage(), failure);
+                    }
+                }
                 JsonValue animation = tile.get("animation");
                 if (animation != null) {
                     array(animation, "tile " + id + " animation");
@@ -247,18 +260,38 @@ final class TiledReader {
         return atlas;
     }
 
-    private MapObject mapObject(JsonValue value, float mapHeight) {
+    private MapObject[] collisionShapes(JsonValue group, int tileHeight) {
+        object(group, "objectgroup");
+        require(string(group, "type", "objectgroup").equals("objectgroup"), "expected collision object group");
+        rejectLayerFeatures(group);
+        JsonValue objects = array(group.require("objects"), "collision objects");
+        require(objects.size() <= 65536 && collisionPoints + objects.size() <= limit, "too many collision shapes");
+        float originX = number(group, "offsetx", 0);
+        float originY = tileHeight - number(group, "offsety", 0);
+        IntMap<Boolean> ids = new IntMap<>();
+        MapObject[] shapes = new MapObject[objects.size()];
+        for (int i = 0; i < shapes.length; i++) {
+            shapes[i] = mapObject(objects.require(i), originX, originY, ids, true);
+        }
+        return shapes;
+    }
+
+    private MapObject mapObject(JsonValue value, float originX, float originY, IntMap<Boolean> ids, boolean collision) {
         object(value, "object");
         int id = positive(value, "id");
         try {
-            require(!objectIds.containsKey(id), "duplicate object ID"); objectIds.put(id, true);
-            require(!present(value, "template") && !present(value, "text") && !bool(value, "ellipse", false)
-                    && !bool(value, "capsule", false), "unsupported template/text/ellipse/capsule object");
-            float x = number(value, "x", 0), y = mapHeight - number(value, "y", 0);
+            require(!ids.containsKey(id), "duplicate object ID");
+            ids.put(id, true);
+            require(!present(value, "template") && !present(value, "text"), "unsupported template/text object");
+            boolean ellipse = bool(value, "ellipse", false), capsule = bool(value, "capsule", false);
+            require(collision || !(ellipse || capsule), "unsupported ellipse/capsule in map object layer");
+            require(!collision || !present(value, "gid"), "nested tile objects are unsupported in tile collision groups");
+            float x = originX + number(value, "x", 0), y = originY - number(value, "y", 0);
             float width = number(value, "width", 0), height = number(value, "height", 0);
             long gid = present(value, "gid") ? gid(value.require("gid")) : 0;
             boolean point = bool(value, "point", false), polygon = present(value, "polygon"), polyline = present(value, "polyline");
-            require((present(value, "gid") ? 1 : 0) + (point ? 1 : 0) + (polygon ? 1 : 0) + (polyline ? 1 : 0) <= 1,
+            require((present(value, "gid") ? 1 : 0) + (point ? 1 : 0) + (polygon ? 1 : 0) + (polyline ? 1 : 0)
+                    + (ellipse ? 1 : 0) + (capsule ? 1 : 0) <= 1,
                     "conflicting object shapes");
             MapObject.Shape shape;
             float[] vertices;
@@ -266,11 +299,13 @@ final class TiledReader {
                 require((gid & 0x0fffffffL) != 0 && width > 0 && height > 0, "tile object needs a tile and positive explicit size");
                 shape = MapObject.Shape.TILE; vertices = new float[] {0, 0, 0, height, width, height, width, 0};
             } else if (point) {
+                if (collision) { countCollisionPoints(1); }
                 shape = MapObject.Shape.POINT; vertices = new float[] {0, 0};
             } else if (polygon || polyline) {
                 shape = polygon ? MapObject.Shape.POLYGON : MapObject.Shape.POLYLINE;
                 JsonValue points = array(value.require(polygon ? "polygon" : "polyline"), "points");
                 require(points.size() >= (polygon ? 3 : 2) && points.size() <= 65536, "invalid point count");
+                if (collision) { countCollisionPoints(points.size()); }
                 vertices = new float[points.size() * 2];
                 for (int i = 0; i < points.size(); i++) {
                     JsonValue vertex = object(points.require(i), "point");
@@ -278,12 +313,19 @@ final class TiledReader {
                     vertices[i * 2 + 1] = -number(vertex, "y", 0);
                 }
             } else {
-                shape = MapObject.Shape.RECTANGLE; vertices = new float[] {0, 0, width, 0, width, -height, 0, -height};
+                if (collision) { countCollisionPoints(4); }
+                shape = ellipse ? MapObject.Shape.ELLIPSE : capsule ? MapObject.Shape.CAPSULE : MapObject.Shape.RECTANGLE;
+                vertices = new float[] {0, 0, width, 0, width, -height, 0, -height};
             }
             return new MapObject(id, string(value, "name", ""), className(value), shape, x, y, width, height,
                     -number(value, "rotation", 0), bool(value, "visible", true), number(value, "opacity", 1),
                     (int)(gid & 0x0fffffffL), flags(gid), vertices, properties(value));
         } catch (RuntimeException failure) { throw error("object " + id + ": " + failure.getMessage(), failure); }
+    }
+
+    private void countCollisionPoints(int count) {
+        collisionPoints += count;
+        require(collisionPoints <= limit, "collision points exceed limit " + limit);
     }
 
     private void rejectLayerFeatures(JsonValue layer) {
@@ -414,12 +456,14 @@ final class TiledReader {
         }
         TileMap assemble(Array<FdxFuture<TileAtlas>> atlases) {
             try {
-                long totalAtlasTiles = 0, totalAnimationFrames = 0;
+                long totalAtlasTiles = 0, totalAnimationFrames = 0, totalCollisionPoints = 0;
                 for (int i = 0; i < references.length; i++) {
                     TileAtlas atlas = atlases.get(i).get(); totalAtlasTiles += atlas.tileCount();
                     if (totalAtlasTiles > limit) { throw new FdxException("total atlas tiles exceed limit " + limit); }
                     totalAnimationFrames += atlas.animationFrameCount();
                     if (totalAnimationFrames > limit) { throw new FdxException("total animation frames exceed limit " + limit); }
+                    totalCollisionPoints += atlas.collisionPointCount();
+                    if (totalCollisionPoints > limit) { throw new FdxException("total collision points exceed limit " + limit); }
                     if ((long)references[i].firstId + atlas.localIdLimit() - 1 > 0x0fffffff) {
                         throw new FdxException("tileset global ID range exceeds the unflagged Tiled range");
                     }

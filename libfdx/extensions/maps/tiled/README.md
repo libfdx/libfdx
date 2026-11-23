@@ -60,6 +60,7 @@ large finite-map validation or texture uploads can exceed a time budget.
 | Layers | Tile/object/image layers and nested groups (up to 32); stable IDs/names/classes, editor order, inherited visibility/opacity/tint/offsets/parallax. |
 | Images | Relative image references, optional declared dimensions, native-size drawing, horizontal/vertical repetition bounded to the view. |
 | Objects | Points, rectangles, polygons, polylines, and bottom-left-aligned tile objects with explicit positive dimensions; rotation, visibility, opacity, properties, and stable IDs. |
+| Tile collisions | Points, rectangles, polygons, polylines, ellipses and capsules from the Tile Collision Editor. Shapes retain their IDs, names, classes and properties. |
 | Object order | Stored editor order plus stable `index` or `topdown` rendering of tile objects. |
 | Properties | String, signed integer, finite float, boolean, color, relative file path, and object-reference ID. Colors become packed RGBA; object reference 0 means unset. |
 | Drawing | Existing visible-rectangle culling and batching, including tiles extending beyond their cells and rotated tile-object bounds. Shape objects remain gameplay data; the scenario supplies an overlay. |
@@ -79,13 +80,55 @@ Absolute paths, URLs, and references escaping that root fail. File properties
 are retained as paths; they do not automatically load arbitrary gameplay assets.
 
 The default limit is 1,048,576 total layer cells and 1,048,576 total atlas tiles
-per map, with the same bound on animation frame entries (up to 65,536 per sequence).
+per map, with the same bound on animation frame entries (up to 65,536 per sequence)
+and authored collision points (up to 65,536 shapes per tile).
 `TiledMapLoader.register(assets, limit)` configures these bounds. Grouped layers
 share the map's total layer/object/cell limits; invalid hidden content also fails.
 Additional counts are checked before creating cell/object/vertex storage.
 Malformed sizes, fractional or overflowing IDs, overlapping ranges, missing
 tiles, and unsupported runtime features fail with source and layer/object
 context. A failed import is never partially published.
+
+## Using tileset collision shapes
+
+Draw shapes on a tile in Tiled's [Tile Collision Editor](https://doc.mapeditor.org/en/stable/manual/editing-tilesets/#tile-collision-editor).
+Acquire a CPU `TileMap` and look up the global tile ID stored in a cell.
+Every placement of that tile shares one `TileCollision` definition. An empty cell or
+a tile without shapes returns `null`. Animation always uses the base tile's authored
+collision geometry, so advancing the visual frame keeps the same hitbox.
+
+```java
+// During level setup. layer is a top-level TileLayer, and col and row are cell coordinates.
+TileCollision collision = map.tileCollision(layer.tile(col, row));
+if (collision != null) {
+    float cellX = col * map.tileWidth() + layer.offsetX();
+    float cellY = row * map.tileHeight() + layer.offsetY();
+    for (int i = 0; i < collision.shapeCount(); i++) {
+        MapObject shape = collision.shape(i);
+        float[] points = new float[2 * shape.pointCount()];
+        collision.writeCellPoints(i, cellX, cellY, layer.transform(col, row), points, 0);
+        // Pass shape.shape(), shape.className() and the X/Y pairs to your game's collision system.
+    }
+}
+```
+
+The same calls work on a `ChunkedTileLayer` with signed cell coordinates.
+For a tile object, look up `map.tileCollision(object.tileId())` and call
+`collision.writeObjectPoints(i, object, layerX, layerY, points, 0)`.
+Include parent group offsets in the cell origin or object layer offset.
+Both methods apply the tileset offset, authored shape rotation and all eight tile
+transforms. Tile objects also apply their own scale and rotation. Reuse the output
+array when querying during play. The methods preserve vertex order, so a reflection
+can reverse polygon winding.
+
+A point supplies one X/Y pair, a polyline supplies an open chain, and a polygon
+supplies its vertices in editor order. Rectangles supply their four corners.
+Ellipses and capsules retain their shape kind and original width and height.
+Their four output points are the transformed bounding frame in the order top-left,
+top-right, bottom-right, bottom-left of the authored shape. An ellipse touches
+the midpoint of each frame edge. Games choose how to represent curved geometry
+in their physics engine. Collision object IDs are local to each tile. Use
+`shape(i).id()` for these and `map.findObject(id)` for ordinary map objects.
 
 ## Coordinates and rendering
 
@@ -172,9 +215,9 @@ See [chunk residency](../streaming/README.md) for external file/window budgets.
 
 The loader rejects non-orthogonal orientations,
 TMX/TSX/XML, base64/compression,
-tileset collision object groups, transparent-color conversion,
+isometric tileset collision grids, nested tile objects in collision groups, transparent-color conversion,
 non-default tile sizing/alignment, non-normal blend modes,
-ellipse/capsule/text/template objects, and custom class/enum property types.
+ellipse/capsule objects on ordinary map layers, text/template objects, and custom class/enum property types.
 Ordinary string class names are retained. Editor background color and editor-only
 metadata do not configure the application's framebuffer clear operation.
 

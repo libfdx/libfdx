@@ -19,6 +19,8 @@ public final class TileAtlas {
     private final IntMap<MapProperties> tileProperties = new IntMap<MapProperties>();
     private final IntMap<String> tileClasses = new IntMap<String>();
     private final IntMap<TileAnimation> animations = new IntMap<TileAnimation>();
+    private final IntMap<TileCollision> collisions = new IntMap<>();
+    private long collisionPoints;
     private long animationFrames;
     public TileAtlas(String name, String imagePath, int imageWidth, int imageHeight, int tileWidth, int tileHeight,
             int columns, int tileCount, int margin, int spacing, float offsetX, float offsetY, MapProperties properties) {
@@ -123,6 +125,28 @@ public final class TileAtlas {
     }
     /** Total frame entries across this atlas's animations. */
     public long animationFrameCount() { return animationFrames; }
+
+    /** Returns shared collision geometry for an existing local tile ID, or null for a tile without shapes. */
+    public TileCollision collision(int localId) {
+        check(localId);
+        return collisions.get(localId);
+    }
+
+    /** Replaces this tile's shapes in editor order. Copies the array. A null or empty array clears it. */
+    public TileAtlas collision(int localId, MapObject[] shapes) {
+        check(localId);
+        TileCollision next = shapes == null || shapes.length == 0 ? null
+                : new TileCollision(shapes, regionWidth(localId), regionHeight(localId), offsetX, offsetY);
+        TileCollision previous = next == null ? collisions.remove(localId) : collisions.put(localId, next);
+        collisionPoints += (next == null ? 0 : next.pointCount()) - (previous == null ? 0 : previous.pointCount());
+        return this;
+    }
+
+    /** Total authored collision points, counted once per definition. Curved bounding frames use four. */
+    public long collisionPointCount() {
+        return collisionPoints;
+    }
+
     private void check(int localId) {
         if (!contains(localId)) { throw new FdxException("Missing local tile " + localId + " in " + name); }
     }

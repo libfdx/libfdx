@@ -56,6 +56,31 @@ final class TileModelTest {
         TileMap map = new TileMap(1, 1, 32, 32).addObjectLayer(layer);
         assertSame(c, map.findObject(3)); assertNull(map.findObject(99));
     }
+
+    @Test
+    void replacingCollisionDefinitionsKeepsMembershipAndPointCountsConsistent() {
+        TileAtlas atlas = new TileAtlas("tiles", "tiles.png", 32, 16, 16, 16, 2, 2, 0, 0, 0, 0, new MapProperties());
+        TileMap map = new TileMap(1, 1, 16, 16).addAtlas(7, atlas);
+        MapObject first = object(1, 3);
+        MapObject second = object(2, 4);
+        MapObject[] shapes = {first, second};
+        atlas.collision(0, shapes);
+        shapes[0] = second;
+        assertSame(first, map.tileCollision(7).shape(0));
+        MapObject[] replacement = {second};
+        atlas.collision(1, replacement);
+        assertEquals(3, atlas.collisionPointCount());
+        assertThrows(FdxException.class, () -> atlas.collision(0, new MapObject[]{null}));
+        assertSame(first, map.tileCollision(7).shape(0));
+        atlas.collision(0, replacement);
+        assertEquals(2, atlas.collisionPointCount());
+        atlas.collision(0, new MapObject[0]);
+        atlas.collision(1, null);
+        assertEquals(0, atlas.collisionPointCount());
+        assertNull(map.tileCollision(7));
+        assertNull(map.tileCollision(8));
+    }
+
     @Test
     void propertiesKeepTypesAndRejectWrongAccessors() {
         MapProperties properties = new MapProperties().put(new MapProperty("target", MapProperty.Type.OBJECT, 8L));
