@@ -65,7 +65,7 @@ public final class GltfMaterialsTest extends GraphicsParityTest {
         }
         blitter = new TextureBlitter(graphics.device());
         bay = new MaterialInspectionBay(graphics);
-        hud = new ShowcaseHud(graphics);
+        hud = new ShowcaseHud(fdx);
         markCreated();
     }
     @Override
@@ -117,7 +117,7 @@ public final class GltfMaterialsTest extends GraphicsParityTest {
         hud.begin(pass,width,height,uiScale,0,0);
         float uiWidth = width/uiScale, uiHeight = height/uiScale;
         boolean compact = viewWidth < 480;
-        hud.rect(0,0,uiWidth,110,.025f,.045f,.075f,1);
+        hud.panel(0,0,uiWidth,110,.025f,.045f,.075f,1);
         hud.text("SURFACE INSPECTION BAY",24,17,2.2f,.86f,.95f,1);
         hud.text(compact ? "13 MATERIAL PROBES / IDENTICAL LIGHTING" :
                 "13 MATERIAL PROBES / COMPARE THE SAME SURFACES UNDER THE SAME LIGHT",24,53,1.1f,.5f,.7f,.85f);
@@ -130,7 +130,7 @@ public final class GltfMaterialsTest extends GraphicsParityTest {
             hud.text(compact ? COMPACT_LABELS[i] : LABELS[i],(side*viewWidth+projected.x())/uiScale,
                     (header+projected.y())/uiScale,compact ? .65f/uiScale : .65f,.72f,.85f,.92f);
         }
-        hud.rect(0,uiHeight-76,uiWidth,76,.025f,.045f,.075f,1);
+        hud.panel(0,uiHeight-76,uiWidth,76,.025f,.045f,.075f,1);
         hud.text(ready ? (compact ? "COMPARE PATTERNS, SHADING AND SURFACE RELIEF" :
                 "LOOK FOR MATCHING PATTERNS, REFLECTIONS AND SURFACE RELIEF") : "LOADING MATERIAL PROBES...",
                 24,uiHeight-57,1.15f,.5f,.9f,.75f);

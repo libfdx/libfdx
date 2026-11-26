@@ -4,9 +4,7 @@ import static io.github.libfdx.tests.utils.uikittest.compose.UiKitShowcaseWidget
 
 import io.github.libfdx.ui.Ui;
 import io.github.libfdx.ui.UiBooleanState;
-import io.github.libfdx.ui.UiColor;
 import io.github.libfdx.ui.UiContent;
-import io.github.libfdx.ui.UiRect;
 import io.github.libfdx.ui.UiScope;
 import io.github.libfdx.ui.UiWindowState;
 import java.util.function.Supplier;
@@ -73,16 +71,7 @@ public final class UiKitWindowsSection implements UiContent {
         page.window("Resizable Stats", statsWindow, stats -> {
             stats.text("resize from the corner", Ui.modifier().style("muted"));
             stats.text(statusText.get(), Ui.modifier().style("small"));
-            stats.custom("stats-meter", Ui.modifier().fillWidth().height(48.0f), custom -> {
-                custom.draw((draw, bounds) -> {
-                    UiRect track = new UiRect(bounds.x() + 8.0f, bounds.y() + 18.0f,
-                            Math.max(1.0f, bounds.width() - 16.0f), 12.0f);
-                    draw.rect(bounds, UiColor.rgba8888(0x101820f2));
-                    draw.rect(track, UiColor.rgba8888(0x2b3442ff));
-                    draw.rect(new UiRect(track.x(), track.y(), track.width() * drawnVolume, track.height()),
-                            UiColor.rgba8888(0x7bd88fff));
-                });
-            });
+            stats.progressBar(Ui.modifier().fillWidth().height(16), drawnVolume);
         });
     }
 

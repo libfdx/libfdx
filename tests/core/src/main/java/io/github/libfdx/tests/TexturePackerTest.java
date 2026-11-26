@@ -48,7 +48,7 @@ public final class TexturePackerTest extends GraphicsParityTest {
         }
         fallback=managers[0].load(AssetDescriptor.of("deferred-image/gray.png",io.github.libfdx.assets.loaders.ImageData.class));
         font = new ShowcaseFont(managers[0].createScope(), false);
-        hud = new ShowcaseHud(graphics);
+        hud = new ShowcaseHud(fdx);
         sprites=new SpriteBatch(graphics); batch=new io.github.libfdx.tests.utils.shared.PixelBatch(sprites); markCreated();
     }
     @Override
@@ -122,7 +122,7 @@ public final class TexturePackerTest extends GraphicsParityTest {
         hud.text("PACKING REMOVES EMPTY PIXELS. DRAWING RESTORES THE ORIGINAL PIVOT AND APPEARANCE.", left, 94, 1.05f, .62f, .72f, .81f);
         for (int i = 0; i < 3; i++) {
             float x = left + i * (card + gap);
-            hud.rect(x, top, card, body, .075f, .11f, .16f, 1);
+            hud.panel(x, top, card, body, .075f, .11f, .16f, 1);
             hud.rect(x, top, card, 3, .26f, .72f, .77f, 1);
             hud.text(CASES[i], x + 14, top + 18, 1.05f, .89f, .94f, 1);
             hud.text(DETAILS[i], x + 14, top + 41, .9f, .57f, .7f, .79f);
@@ -131,7 +131,7 @@ public final class TexturePackerTest extends GraphicsParityTest {
             hud.text("MATCH SHAPE + WHITE CORNER", x + 14, top + body - 24, .8f, .62f, .72f, .81f);
         }
         float px = left + main + gap;
-        hud.rect(px, top, side, body, .075f, .11f, .16f, 1);
+        hud.panel(px, top, side, body, .075f, .11f, .16f, 1);
         hud.text("THE PACKED TEXTURE", px + 16, top + 18, 1.15f, .94f, .96f, 1);
         hud.text(pageLabel, px + 16, top + 44, 1, .38f, .86f, .73f);
         Texture page = atlases[0].page(0);
@@ -151,7 +151,7 @@ public final class TexturePackerTest extends GraphicsParityTest {
         hud.text("CROPPED SPRITES + EDGE PADDING", px + 16, top + body - 42, .85f, .62f, .72f, .81f);
         hud.text("REGIONS REUSE THIS PAGE.", px + 16, top + body - 24, .85f, .62f, .72f, .81f);
         float rowTop = h - 198;
-        hud.rect(left, rowTop, w - 48, 152, .075f, .11f, .16f, 1);
+        hud.panel(left, rowTop, w - 48, 152, .075f, .11f, .16f, 1);
         hud.text("BATCHING / SAME ORDER, SAME RESULT", left + 16, rowTop + 15, 1.2f, .94f, .96f, 1);
         hud.text("SOURCE TEXTURES", left + 16, rowTop + 56, .95f, .62f, .72f, .81f);
         hud.text("ATLAS REGIONS", left + 16, rowTop + 104, .95f, .38f, .86f, .73f);

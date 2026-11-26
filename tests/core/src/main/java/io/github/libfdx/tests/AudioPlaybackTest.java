@@ -3,6 +3,7 @@ package io.github.libfdx.tests;
 import io.github.libfdx.tests.utils.shared.GraphicsParityTest;
 
 import io.github.libfdx.Fdx;
+import io.github.libfdx.ui.*;
 import io.github.libfdx.assets.*;
 import io.github.libfdx.audio.*;
 import io.github.libfdx.audio.loaders.AudioAssetLoaders;
@@ -36,6 +37,9 @@ public final class AudioPlaybackTest extends GraphicsParityTest {
     private String voiceLabel = "0 VOICES";
     private int displayedVoices = -1;
     private float gain = .25f, pitch = 1, pan;
+    private final UiFloatState volumeSlider = Ui.state(.25f), panSlider = Ui.state(0f);
+    private final UiFloatState leftLevel = Ui.state(0f), rightLevel = Ui.state(0f);
+    private boolean playing;
     private boolean prepared, activationFailed, stereo;
 
     private long firstVoice;
@@ -53,7 +57,7 @@ public final class AudioPlaybackTest extends GraphicsParityTest {
         AudioAssetLoaders.register(assets, audio);
         G2DAssetLoaders.register(assets, graphics);
         font = new ShowcaseFont(assets.createScope(), false);
-        hud = new ShowcaseHud(graphics);
+        hud = new ShowcaseHud(fdx);
         firstScope = assets.createScope(); secondScope = assets.createScope();
         first = firstScope.load(AssetDescriptor.of("audio/tone.wav", Sound.class));
         second = secondScope.load(AssetDescriptor.of("audio/tone.wav", Sound.class));
@@ -61,9 +65,9 @@ public final class AudioPlaybackTest extends GraphicsParityTest {
         input = fdx.input();
         activationInput = new InputAdapter() {
             @Override
-            public boolean pointerDown(PointerEvent event) { click(event.x(), event.y()); return true; }
+            public boolean pointerDown(PointerEvent event) { if (audio.isSuspended()) activate(); return false; }
             @Override
-            public boolean touchDown(TouchEvent event) { click(event.point().x(), event.point().y()); return true; }
+            public boolean touchDown(TouchEvent event) { if (audio.isSuspended()) activate(); return false; }
             @Override
             public boolean keyDown(KeyEvent event) {
                 if (event.repeat()) return false;
@@ -82,6 +86,7 @@ public final class AudioPlaybackTest extends GraphicsParityTest {
             }
         };
         input.addProcessor(activationInput);
+        hud.controls(input, this::buildControls);
         markCreated();
     }
     private void activate() {
@@ -166,6 +171,8 @@ public final class AudioPlaybackTest extends GraphicsParityTest {
     }
 
     private void parameters() {
+        volumeSlider.set(gain);
+        panSlider.set(pan);
         audio.parameters(firstVoice, gain, pitch, pan);
         settingsLabel = "VOLUME " + Math.round(gain * 100) + "%     PITCH " + pitch + "X";
     }
@@ -175,20 +182,15 @@ public final class AudioPlaybackTest extends GraphicsParityTest {
         parameters();
     }
 
-    private void click(int px, int py) {
-        if (requiresCompletion()) { activate(); return; }
-        float scale = Math.min(display.width() / 960f, display.height() / 640f);
-        float x = (px - (display.width() - 960 * scale) / 2) / scale;
-        float y = (py - (display.height() - 640 * scale) / 2) / scale;
-        if (y >= 398 && y <= 446) {
-            if (x >= 48 && x < 218) togglePlayback();
-            else if (x >= 230 && x < 350) audio.stop(firstVoice);
-            else if (x >= 362 && x < 532) cyclePitch();
-        }
-        if (y >= 484 && y <= 524) {
-            if (x >= 48 && x <= 448) { pan = (x - 48) / 200 - 1; parameters(); }
-            if (x >= 520 && x <= 912) { gain = (x - 520) / 392; parameters(); }
-        }
+    private void buildControls(UiScope ui) {
+        ui.progressBar(hud.box(678, 266, 226, 12), leftLevel, 0, 1);
+        ui.progressBar(hud.box(678, 296, 226, 12), rightLevel, 0, 1);
+        if (requiresCompletion()) return;
+        ui.button(playing ? "PAUSE / SPACE" : "PLAY / SPACE", hud.button(48,398,170,48,playing), this::togglePlayback);
+        ui.button("STOP / S", hud.button(230,398,120,48,false), () -> audio.stop(firstVoice));
+        ui.button("PITCH / P", hud.button(362,398,170,48,false), this::cyclePitch);
+        ui.slider(hud.box(48,484,400,40).semanticLabel("Pan"), panSlider, -1, 1);
+        ui.slider(hud.box(520,484,392,40).semanticLabel("Volume"), volumeSlider, 0, 1);
     }
 
     private float channelGain(int channel) {
@@ -204,7 +206,12 @@ public final class AudioPlaybackTest extends GraphicsParityTest {
         RenderPass pass = current.commandEncoder().beginRenderPass(screen.colorAttachment(current.colorAttachment()));
         hud.begin(pass, width, height, scale, (width - 960 * scale) / 2, (height - 640 * scale) / 2);
         VoiceState state = audio.state(firstVoice);
-        boolean playing = state == VoiceState.PLAYING && !audio.isSuspended();
+        if (gain != volumeSlider.get() || pan != panSlider.get()) {
+            gain = volumeSlider.get();
+            pan = panSlider.get();
+            parameters();
+        }
+        playing = state == VoiceState.PLAYING && !audio.isSuspended();
         String status = !prepared ? "LOADING" : activationFailed ? "ACTIVATION FAILED" : released ? "CHECKS PASSED"
                 : audio.isSuspended() ? "OUTPUT SUSPENDED" : playing ? "PLAYING" : state == VoiceState.PAUSED ? "PAUSED" : "READY / STOPPED";
         int voices = audio.activeVoices();
@@ -212,7 +219,7 @@ public final class AudioPlaybackTest extends GraphicsParityTest {
         hud.text("LIBFDX / AUDIO LAB", 32, 24, 1.1f, .35f, .85f, .74f);
         hud.text("HEAR THE DIFFERENCE.", 32, 54, 2.8f, .91f, .96f, 1);
         hud.text(requiresCompletion() ? "AUTOMATED / PLAYBACK AND RESOURCE LIFETIME CHECKS" : "PLAY A LOOP. CHANGE ITS PITCH. MOVE IT BETWEEN YOUR SPEAKERS.", 34, 102, 1, .54f, .65f, .73f);
-        hud.rect(32, 142, 896, 232, .055f, .09f, .13f, 1);
+        hud.panel(32, 142, 896, 232, .055f, .09f, .13f, 1);
         hud.text("01 / SOURCE WAVEFORM", 48, 160, 1.15f, .65f, .76f, .82f);
         hud.text(sourceLabel, 48, 188, 1, .4f, .61f, .7f);
         for (int i = 0; i <= 8; i++) hud.rect(48 + i * 70, 218, 1, 124, .1f, .16f, .2f, 1);
@@ -230,22 +237,14 @@ public final class AudioPlaybackTest extends GraphicsParityTest {
         for (int channel = 0; channel < 2; channel++) {
             float level = playing && !requiresCompletion() ? gain * channelGain(channel) : 0;
             hud.text(channel == 0 ? "L" : "R", 656, 268 + channel * 30, 1, .65f, .76f, .82f);
-            hud.rect(678, 266 + channel * 30, 226, 12, .1f, .18f, .23f, 1);
-            hud.rect(678, 266 + channel * 30, 226 * level, 12, .32f, .87f, .73f, 1);
+            (channel == 0 ? leftLevel : rightLevel).set(level);
         }
+        hud.controlsVersion(playing ? 1 : 0);
         hud.text("SET GAIN / NOT A LIVE METER", 656, 334, .8f, .4f, .61f, .7f);
         if (!requiresCompletion()) {
-            hud.button(playing ? "PAUSE / SPACE" : "PLAY / SPACE", 48, 398, 170, 48, playing);
-            hud.button("STOP / S", 230, 398, 120, 48, false);
-            hud.button("PITCH / P", 362, 398, 170, 48, false);
             hud.text(settingsLabel, 554, 414, 1, .72f, .81f, .87f);
             hud.text("PAN / LEFT AND RIGHT ARROWS", 48, 472, 1, .65f, .76f, .82f);
             hud.text("VOLUME / UP AND DOWN ARROWS", 520, 472, 1, .65f, .76f, .82f);
-            hud.rect(48, 504, 400, 4, .14f, .24f, .3f, 1);
-            hud.rect(244 + pan * 200, 496, 8, 20, .32f, .87f, .73f, 1);
-            hud.rect(520, 504, 392, 4, .14f, .24f, .3f, 1);
-            hud.rect(520, 504, 392 * gain, 4, .32f, .87f, .73f, 1);
-            hud.rect(516 + gain * 392, 496, 8, 20, .32f, .87f, .73f, 1);
             hud.text("LEFT", 48, 534, .85f, .4f, .61f, .7f);
             hud.text("CENTER", 228, 534, .85f, .4f, .61f, .7f);
             hud.text("RIGHT", 418, 534, .85f, .4f, .61f, .7f);

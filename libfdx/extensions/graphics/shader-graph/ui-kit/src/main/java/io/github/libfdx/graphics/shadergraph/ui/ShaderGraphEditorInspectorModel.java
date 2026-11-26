@@ -3,6 +3,7 @@ package io.github.libfdx.graphics.shadergraph.ui;
 import io.github.libfdx.graphics.shader.target.ShaderArtifactEncoding;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphId;
 import io.github.libfdx.graphics.GraphicsFeature;
+import io.github.libfdx.graphics.shader.target.ShaderTargets;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraph;
 import io.github.libfdx.graphics.shadergraph.technique.ShaderGraphComputeTechniquePass;
 import io.github.libfdx.graphics.shadergraph.technique.ShaderGraphComputeVariant;
@@ -286,6 +287,46 @@ public final class ShaderGraphEditorInspectorModel {
             List<ShaderGraphEditorInspectorSection> sections,
             ShaderGraphEditorCompileSettings settings,
             ShaderGraphEditorCompilation compilation) {
+        if (settings.compiler() != null || settings.verifier() != null
+                || !settings.target().equals(ShaderTargets.WGPU_WGSL)) {
+            addTarget(sections, settings);
+        }
+        if (compilation != null) {
+            List<ShaderGraphEditorInspectorField> result =
+                    new ArrayList<>();
+            result.add(field("result.success", "Status",
+                    compilation.success() ? "Success" : "Failed",
+                    ShaderGraphEditorInspectorKind.SUMMARY, false));
+            for (ShaderGraphDiagnostic diagnostic
+                    : compilation.diagnostics()) {
+                result.add(field("diagnostic." + result.size(),
+                        diagnostic.severity() + " - "
+                                + diagnostic.code(),
+                        diagnostic.message(),
+                        ShaderGraphEditorInspectorKind.SUMMARY, false));
+            }
+            for (ShaderGraphEditorArtifact artifact
+                    : compilation.artifacts()) {
+                result.add(field("artifact." + result.size(),
+                        artifact.stage() + " - " + artifact.formatId(),
+                        artifact.targetId() + " / "
+                                + artifact.environmentId() + " / "
+                                + artifact.compilerId()
+                                + (artifact.verified()
+                                        ? " - verified"
+                                        : " - unverified"),
+                        artifact.encoding()
+                                == io.github.libfdx.graphics.shader.target.ShaderArtifactEncoding.TEXT
+                                        ? ShaderGraphEditorInspectorKind.CODE
+                                        : ShaderGraphEditorInspectorKind.SUMMARY,
+                        false));
+            }
+            sections.add(section("compilation", "Compilation", result));
+        }
+    }
+
+    private static void addTarget(List<ShaderGraphEditorInspectorSection> sections,
+            ShaderGraphEditorCompileSettings settings) {
         List<ShaderGraphEditorInspectorField> fields = new ArrayList<>();
         fields.add(field("compile.profile", "Profile",
                 settings.profile().name(),
@@ -326,39 +367,6 @@ public final class ShaderGraphEditorInspectorModel {
                     ShaderGraphEditorInspectorKind.SUMMARY, false));
         }
         sections.add(section("compile", "Target & Capability", fields));
-
-        if (compilation != null) {
-            List<ShaderGraphEditorInspectorField> result =
-                    new ArrayList<>();
-            result.add(field("result.success", "Status",
-                    compilation.success() ? "Success" : "Failed",
-                    ShaderGraphEditorInspectorKind.SUMMARY, false));
-            for (ShaderGraphDiagnostic diagnostic
-                    : compilation.diagnostics()) {
-                result.add(field("diagnostic." + result.size(),
-                        diagnostic.severity() + " - "
-                                + diagnostic.code(),
-                        diagnostic.message(),
-                        ShaderGraphEditorInspectorKind.SUMMARY, false));
-            }
-            for (ShaderGraphEditorArtifact artifact
-                    : compilation.artifacts()) {
-                result.add(field("artifact." + result.size(),
-                        artifact.stage() + " - " + artifact.formatId(),
-                        artifact.targetId() + " / "
-                                + artifact.environmentId() + " / "
-                                + artifact.compilerId()
-                                + (artifact.verified()
-                                        ? " - verified"
-                                        : " - unverified"),
-                        artifact.encoding()
-                                == io.github.libfdx.graphics.shader.target.ShaderArtifactEncoding.TEXT
-                                        ? ShaderGraphEditorInspectorKind.CODE
-                                        : ShaderGraphEditorInspectorKind.SUMMARY,
-                        false));
-            }
-            sections.add(section("compilation", "Compilation", result));
-        }
     }
 
     private static ShaderGraphEditorInspectorSection section(String id,
@@ -385,7 +393,7 @@ public final class ShaderGraphEditorInspectorModel {
             case INTEGER -> Long.toString(property.integerValue());
             case BOOLEAN -> Boolean.toString(property.booleanValue());
             case TYPE -> property.typeValue().toString();
-            case LITERAL -> property.literalValue().toString();
+            case LITERAL -> ShaderGraphEditorNodeValue.format(property.literalValue());
             case ID_LIST -> Arrays.toString(property.idValues());
             case INTEGER_LIST -> Arrays.toString(
                     property.integerValues());

@@ -15,6 +15,7 @@ base {
 
 dependencies {
     api(project(":libfdx:framework:application"))
+    implementation(project(":libfdx:framework:ui-kit"))
     implementation(project(":libfdx:framework:graphics"))
     implementation(project(":libfdx:framework:g2d"))
     implementation(project(":libfdx:extensions:maps:tiled"))

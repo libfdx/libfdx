@@ -126,8 +126,10 @@ an optional compiled cache. Runtime loading selects an exact embedded entry or
 compiles the semantics in memory; no dedicated build/package module or
 companion shader artifacts are required.
 
-The optional UI Kit editor depends on graph core and UI Kit only. Neither graph
-core, runtime, standard PBR, nor providers depend on the editor. Frame/pass
+The optional UI Kit shader editor uses graph core and UI Kit for authoring and
+portable G3D for its built-in surface preview. It owns the preview models and GPU
+resources. The desktop editor tool owns file selection, persistence, and window setup.
+Graph core, runtime, standard PBR, and providers can all run independently of the editor. Frame/pass
 scheduling remains in renderers and render graphs rather than shader nodes or
 techniques.
 

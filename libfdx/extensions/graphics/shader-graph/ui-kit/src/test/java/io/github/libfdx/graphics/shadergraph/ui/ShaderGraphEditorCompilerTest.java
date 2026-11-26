@@ -5,6 +5,8 @@ import io.github.libfdx.graphics.shader.target.ShaderArtifactEncoding;
 import io.github.libfdx.graphics.shader.ShaderProfile;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphDiagnostic;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphKind;
+import io.github.libfdx.graphics.shadergraph.model.ShaderEndpoint;
+import io.github.libfdx.ui.UiCustomContext;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -15,6 +17,83 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class ShaderGraphEditorCompilerTest {
+    @Test
+    void disconnectedBranchSurvivesSavingAndIsValidatedWhenWiredToAlpha() {
+        var graph = ShaderGraphEditorFixtures.graph("scratch", ShaderGraphKind.SURFACE);
+        var session = new ShaderGraphEditorSession(ShaderGraphEditorDocument.of(graph));
+        var editor = new ShaderGraphEditorView(session, new DefaultShaderGraphEditorCompiler());
+        try {
+            String original = editor.compileNow().canonicalWgsl();
+            assertFalse(original.isEmpty());
+            var palette = ShaderGraphEditorPalette.standard().templates();
+            var add = Arrays.stream(palette).filter(t -> t.label().equals("Add")).findFirst().orElseThrow();
+            var time = Arrays.stream(palette).filter(t -> t.label().equals("Time")).findFirst().orElseThrow();
+            var sum = add.create("scratch_add");
+            session.addNode(sum, 100, 100);
+            assertEquals(original, editor.compileNow().canonicalWgsl());
+
+            var clock = time.create("scratch_time");
+            session.addNode(clock, 20, 20);
+            var clockOutput = ShaderEndpoint.of("scratch_time", clock.outputs()[0].id().value());
+            session.connect(clockOutput, ShaderEndpoint.of("scratch_add", sum.inputs()[0].id().value()));
+            var unused = editor.compileNow();
+            assertTrue(unused.success(), diagnostics(unused));
+            assertEquals(original, unused.canonicalWgsl());
+            assertFalse(session.activeGraph().usesTime());
+            var saved = ShaderGraphEditorPersistence.write(session.document(), session.layout());
+            var loaded = ShaderGraphEditorPersistence.read(saved);
+            assertEquals(session.activeGraph(), loaded.document().graph());
+
+            session.bindMaterialOutput(MaterialOutputChannel.ALPHA,
+                    ShaderEndpoint.of("scratch_add", sum.outputs()[0].id().value()));
+            var broken = editor.compileNow();
+            assertFalse(broken.success());
+            assertTrue(Arrays.stream(broken.diagnostics()).anyMatch(d -> d.code().equals("FDXG_INPUT_MISSING")
+                    && sum.id().equals(d.nodeId()) && sum.inputs()[1].id().equals(d.portId())));
+            session.connect(clockOutput, ShaderEndpoint.of("scratch_add", sum.inputs()[1].id().value()));
+            var fixed = editor.compileNow();
+            assertTrue(fixed.success(), diagnostics(fixed));
+            assertTrue(fixed.canonicalWgsl().contains("fdx_time_seconds"));
+            assertTrue(session.activeGraph().usesTime());
+        } finally {
+            editor.dispose();
+        }
+    }
+
+    @Test
+    void livePreviewCompilesSemanticEditsOnceAndKeepsTheLastWorkingSurface() {
+        var session = new ShaderGraphEditorSession(
+                ShaderGraphEditorDocument.of(ShaderGraphEditorFixtures.editableFunction("live")));
+        var preview = new RecordingPreview();
+        var enabled = settings(session.document(), ShaderGraphEditorFixtures.capabilities());
+        var editor = new ShaderGraphEditorView(session, new DefaultShaderGraphEditorCompiler(),
+                ShaderGraphEditorPalette.standard(), preview, enabled);
+        try {
+            assertTrue(editor.updatePreview());
+            var first = session.lastGoodCompilation();
+            assertEquals(1, preview.presentations);
+            session.moveNode("sum", 50, 80);
+            assertTrue(editor.updatePreview());
+            assertSame(first, session.latestCompilation());
+            session.removeNodes("a");
+            assertTrue(editor.updatePreview());
+            var failed = session.latestCompilation();
+            assertFalse(failed.success());
+            assertSame(first, session.lastGoodCompilation());
+            assertTrue(editor.updatePreview());
+            assertSame(failed, session.latestCompilation());
+            assertEquals(1, preview.presentations);
+            editor.settings(ShaderGraphEditorCompileSettings.builder().previewMode(ShaderGraphEditorPreviewMode.NONE).build());
+            session.undo();
+            assertFalse(editor.updatePreview());
+            editor.settings(enabled);
+            assertTrue(editor.updatePreview());
+            assertEquals(2, preview.presentations);
+        } finally {
+            editor.dispose();
+        }
+    }
+
     @Test
     void compilesEveryEditorDocumentKindToCanonicalWgsl() {
         List<ShaderGraphEditorDocument> documents = List.of(
@@ -107,33 +186,70 @@ final class ShaderGraphEditorCompilerTest {
     }
 
     @Test
-    void reportsUnsupportedProviderBeforePreview() {
+    void renderPreviewAcceptsPortableGraphOnRenderOnlyDevice() {
+        var document = ShaderGraphEditorDocument.of(ShaderGraphEditorFixtures.graph("surface", ShaderGraphKind.SURFACE));
+        var session = new ShaderGraphEditorSession(document);
+        var preview = new RecordingPreview();
+        var view = new ShaderGraphEditorView(session, new DefaultShaderGraphEditorCompiler(),
+                ShaderGraphEditorPalette.standard(), preview, settings(document, GraphicsCapabilities.conservativeRender()));
+        try {
+            assertTrue(view.updatePreview());
+            assertTrue(session.latestCompilation().success());
+            assertEquals(1, preview.presentations);
+        } finally {
+            view.dispose();
+        }
+    }
+
+    @Test
+    void previewCapabilitiesDoNotChangeGraphCompilation() {
         ShaderGraphEditorDocument document = ShaderGraphEditorDocument.of(
                 ShaderGraphEditorFixtures.computeProgram("unsupported"));
-        ShaderGraphEditorCompileSettings settings =
-                settings(document,
-                        GraphicsCapabilities.conservativeRender());
+        ShaderGraphEditorCompileSettings settings = ShaderGraphEditorCompileSettings.builder()
+                .profile(ShaderProfile.PORTABLE_WEBGL2)
+                .capabilities(GraphicsCapabilities.conservativeRender())
+                .previewMode(ShaderGraphEditorPreviewMode.COMPUTE_DATA)
+                .build();
         ShaderGraphDiagnostic[] preflight =
                 ShaderGraphEditorCapabilityValidator.validate(
                         document, settings);
 
         assertTrue(Arrays.stream(preflight)
                 .anyMatch(value -> value.code().equals(
-                        "FDXE_PROFILE_UNSUPPORTED")));
-        assertTrue(Arrays.stream(preflight)
-                .anyMatch(value -> value.code().equals(
                         "FDXE_COMPUTE_UNSUPPORTED")));
 
         ShaderGraphEditorSession session =
                 new ShaderGraphEditorSession(document);
-        ShaderGraphEditorCompilation result =
-                new DefaultShaderGraphEditorCompiler().compile(
-                        session.beginCompilation(settings));
         RecordingPreview preview = new RecordingPreview();
-        assertFalse(result.success());
-        assertTrue(session.completeCompilation(result, preview,
-                settings.previewMode()));
-        assertEquals(0, preview.presentations);
+        var editor = new ShaderGraphEditorView(session, new DefaultShaderGraphEditorCompiler(),
+                ShaderGraphEditorPalette.standard(), preview, settings);
+        try {
+            assertFalse(editor.updatePreview());
+            var compiled = session.latestCompilation();
+            assertTrue(compiled.success(), diagnostics(compiled));
+            assertEquals(0, preview.presentations);
+            editor.settings(settings(document, ShaderGraphEditorFixtures.capabilities()));
+            assertTrue(editor.updatePreview());
+            assertEquals(compiled.canonicalWgsl(), session.latestCompilation().canonicalWgsl());
+            assertEquals(1, preview.presentations);
+        } finally {
+            editor.dispose();
+        }
+    }
+
+    @Test
+    void targetTranslationFailurePreservesTheCompiledGraph() {
+        var document = ShaderGraphEditorDocument.of(ShaderGraphEditorFixtures.editableFunction("translation"));
+        var session = new ShaderGraphEditorSession(document);
+        var compiler = new DefaultShaderGraphEditorCompiler((request, source) -> {
+            throw new IllegalStateException("translator unavailable");
+        });
+        var result = compiler.compile(session.beginCompilation(settings(document, null)));
+        assertTrue(result.success());
+        assertEquals(0, result.artifacts().length);
+        assertTrue(Arrays.stream(result.diagnostics()).anyMatch(value -> value.code().equals("FDXE_TARGET_COMPILE_FAILURE")));
+        assertTrue(session.completeCompilation(result));
+        assertSame(result, session.lastGoodCompilation());
     }
 
     @Test
@@ -202,8 +318,12 @@ final class ShaderGraphEditorCompilerTest {
     }
 
     private static final class RecordingPreview
-            implements ShaderGraphEditorPreviewHost {
+            implements ShaderGraphEditorPreviewSurface {
         int presentations;
+
+        @Override
+        public void build(UiCustomContext context) {
+        }
 
         @Override
         public void present(ShaderGraphEditorCompilation compilation,

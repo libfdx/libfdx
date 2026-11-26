@@ -1,11 +1,20 @@
 package io.github.libfdx.graphics.shadergraph.model;
 
 import io.github.libfdx.graphics.shadergraph.node.ShaderNode;
+import io.github.libfdx.graphics.shadergraph.standard.StandardShaderNodes;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.internal.PortableSha256;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Immutable, UI-independent shader graph asset.
@@ -20,6 +29,7 @@ public final class ShaderGraph {
     private final ShaderEdge[] edges;
     private final ShaderGraphOutput[] outputs;
     private final ShaderGraphDependency[] dependencies;
+    private final boolean usesTime;
     private String semanticHash;
 
     private ShaderGraph(Builder builder) {
@@ -36,6 +46,7 @@ public final class ShaderGraph {
         Arrays.sort(edges);
         outputs = sortedUnique(builder.outputs, "output");
         dependencies = sortedUnique(builder.dependencies, "dependency");
+        usesTime = hasTime(nodes) && hasTime(contributingNodes(null));
     }
 
     public static Builder builder(String id, ShaderGraphKind kind) {
@@ -80,8 +91,49 @@ public final class ShaderGraph {
         return null;
     }
 
+    private static boolean hasTime(ShaderNode[] nodes) {
+        return Arrays.stream(nodes).anyMatch(node -> node.definitionId().value().equals(StandardShaderNodes.TIME));
+    }
+
+    /** Whether an output depends on the built-in Time node. */
+    public boolean usesTime() {
+        return usesTime;
+    }
+
     public ShaderNode[] nodes() {
         return nodes.clone();
+    }
+
+    /**
+     * Returns nodes feeding the outputs or additional roots, in the same stable order as {@link #nodes()}.
+     * Compilers can supply a predicate for operations whose execution has side effects.
+     *
+     * @param additionalRoot optional predicate for additional roots
+     * @return a new array of contributing nodes
+     */
+    public ShaderNode[] contributingNodes(Predicate<ShaderNode> additionalRoot) {
+        Map<ShaderGraphId, List<ShaderGraphId>> inputs = new HashMap<>();
+        for (ShaderEdge edge : edges) {
+            inputs.computeIfAbsent(edge.target().nodeId(), key -> new ArrayList<>()).add(edge.source().nodeId());
+        }
+        ArrayDeque<ShaderGraphId> pending = new ArrayDeque<>();
+        for (ShaderGraphOutput output : outputs) {
+            pending.add(output.source().nodeId());
+        }
+        if (additionalRoot != null) {
+            for (ShaderNode node : nodes) {
+                if (additionalRoot.test(node)) pending.add(node.id());
+            }
+        }
+        Set<ShaderGraphId> live = new HashSet<>();
+        while (!pending.isEmpty()) {
+            ShaderGraphId id = pending.removeLast();
+            if (live.add(id)) {
+                List<ShaderGraphId> sources = inputs.get(id);
+                if (sources != null) pending.addAll(sources);
+            }
+        }
+        return Arrays.stream(nodes).filter(node -> live.contains(node.id())).toArray(ShaderNode[]::new);
     }
 
     public ShaderNode node(ShaderGraphId nodeId) {

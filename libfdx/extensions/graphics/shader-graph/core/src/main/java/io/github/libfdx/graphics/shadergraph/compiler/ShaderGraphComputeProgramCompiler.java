@@ -52,7 +52,7 @@ public final class ShaderGraphComputeProgramCompiler {
                     "Shader graph compute program cannot be null");
         }
         ShaderGraphCompileOptions actual = options != null ? options
-                : ShaderGraphCompileOptions.builder().build();
+                : ShaderGraphCompileOptions.portable();
         ShaderGraphCompileResult graph = graphCompiler.compile(
                 program.graph(), actual);
         List<ShaderGraphDiagnostic> diagnostics = new ArrayList<>();

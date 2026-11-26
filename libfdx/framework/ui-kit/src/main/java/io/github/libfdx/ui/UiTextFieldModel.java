@@ -7,6 +7,7 @@ package io.github.libfdx.ui;
  */
 final class UiTextFieldModel {
     private UiState<String> state;
+    private String label;
     private int cursor;
     private int selectionStart;
     private int selectionEnd;
@@ -16,6 +17,7 @@ final class UiTextFieldModel {
     private boolean multiline;
     private UiTextAreaOptions textAreaOptions = UiTextAreaOptions.defaults();
     private UiScrollState scrollState;
+    private float fieldScrollX;
     private UiTextInputFilter inputFilter = UiTextInputFilter.STRING;
     private Runnable submitAction;
 
@@ -31,13 +33,14 @@ final class UiTextFieldModel {
         return state;
     }
 
-    void state(UiState<String> state) {
+    void bind(UiState<String> state, String label) {
         this.state = state;
+        this.label = label;
         clampSelection();
     }
 
     String value() {
-        String value = state != null ? state.get() : "";
+        String value = state != null ? state.get() : label;
         return value != null ? value : "";
     }
 
@@ -57,6 +60,10 @@ final class UiTextFieldModel {
         this.selectionStart = codePointBoundary(value, anchor);
         this.selectionEnd = codePointBoundary(value, cursor);
         this.cursor = this.selectionEnd;
+    }
+
+    boolean selectsAllOnTripleClick() {
+        return label != null || (multiline && textAreaOptions.selectAllOnTripleClick());
     }
 
     void selectAll() {
@@ -159,6 +166,25 @@ final class UiTextFieldModel {
 
     void scrollState(UiScrollState scrollState) {
         this.scrollState = scrollState;
+    }
+
+    float scrollX() {
+        return scrollState != null ? scrollState.x() : fieldScrollX;
+    }
+
+    void scrollFieldBy(float dx, float textWidth, float viewportWidth) {
+        fieldScrollX = Math.clamp(fieldScrollX + dx, 0, Math.max(0, textWidth - viewportWidth));
+    }
+
+    void revealFieldCaret(float caretX, float textWidth, float viewportWidth) {
+        float available = Math.max(0, viewportWidth - (readOnly ? 0 : 1.5f));
+        fieldScrollX = Math.clamp(fieldScrollX, Math.max(0, caretX - available),
+                Math.max(0, Math.min(caretX, textWidth - available)));
+    }
+
+    void loseFocus() {
+        cursor(cursor);
+        fieldScrollX = 0;
     }
 
     void insert(String text) {

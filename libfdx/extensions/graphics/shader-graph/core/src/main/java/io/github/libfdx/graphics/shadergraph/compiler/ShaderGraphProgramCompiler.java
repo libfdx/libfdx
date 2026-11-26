@@ -53,11 +53,11 @@ public final class ShaderGraphProgramCompiler {
             throw new IllegalArgumentException("Shader graph program cannot be null");
         }
         ShaderGraphCompileOptions actual = options != null ? options
-                : ShaderGraphCompileOptions.builder().build();
+                : ShaderGraphCompileOptions.portable();
         ShaderGraphCompileResult vertex = graphCompiler.compile(
-                program.vertex(), stageOptions(actual, ShaderStage.VERTEX));
+                program.vertex(), actual.withStage(ShaderStage.VERTEX));
         ShaderGraphCompileResult fragment = graphCompiler.compile(
-                program.fragment(), stageOptions(actual, ShaderStage.FRAGMENT));
+                program.fragment(), actual.withStage(ShaderStage.FRAGMENT));
         List<ShaderGraphDiagnostic> diagnostics = new ArrayList<>();
         diagnostics.addAll(Arrays.asList(vertex.diagnostics()));
         diagnostics.addAll(Arrays.asList(fragment.diagnostics()));
@@ -88,16 +88,6 @@ public final class ShaderGraphProgramCompiler {
                 program.fragmentEntryPoint(),
                 diagnostics.toArray(ShaderGraphDiagnostic[]::new),
                 library.sourceMap());
-    }
-
-    private static ShaderGraphCompileOptions stageOptions(
-            ShaderGraphCompileOptions source, ShaderStage stage) {
-        return ShaderGraphCompileOptions.builder()
-                .profile(source.profile())
-                .capabilities(source.capabilities())
-                .library(source.library())
-                .stage(stage)
-                .build();
     }
 
     private static ShaderIrModule merge(ShaderIrModule vertex,

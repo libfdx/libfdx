@@ -58,6 +58,7 @@ public final class ShaderGraphEditorCompilation {
         return artifacts.clone();
     }
 
+    /** Returns whether the graph compiled to canonical WGSL. Optional artifact failures are warnings. */
     public boolean success() {
         if (canonicalWgsl.isEmpty()) {
             return false;

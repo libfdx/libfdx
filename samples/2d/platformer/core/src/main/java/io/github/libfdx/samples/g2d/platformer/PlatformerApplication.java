@@ -1,6 +1,7 @@
 package io.github.libfdx.samples.g2d.platformer;
 
 import io.github.libfdx.Fdx;
+import io.github.libfdx.ui.*;
 import io.github.libfdx.application.*;
 import io.github.libfdx.assets.*;
 import io.github.libfdx.audio.*;
@@ -44,6 +45,7 @@ public final class PlatformerApplication extends ApplicationAdapter {
     private PlatformerMenuInput menu;
     private SpriteBatch sprites;
     private BitmapFont font;
+    private UiRoot ui;
     private AuthoredPlatformerRenderer renderer;
     private String requestedPath=FIRST_LEVEL,capturePath;
     private long captureAt,renderedFrames;
@@ -71,16 +73,18 @@ public final class PlatformerApplication extends ApplicationAdapter {
             if (audio!=null) {
                 AudioAssetLoaders.register(assets,audio);
                 if (audio.maxMusicStreams()>0) AudioAssetLoaders.registerMusic(assets,audio,MusicBuffering.DEFAULT,executor);
-                mixer=new AudioMixer(audio).masterGain(hud.volume/10f).busGain(AudioBus.MUSIC,.55f);
+                mixer=new AudioMixer(audio).masterGain(hud.volume.get()/10f).busGain(AudioBus.MUSIC,.55f);
                 for(int i=0;i<EFFECTS.length;i++) effects[i]=globals.load(AssetDescriptor.of("audio/"+EFFECTS[i]+".wav",Sound.class));
             }
-            hud.audioAvailable=audio!=null;
+            hud.audioAvailable.set(audio!=null);
             PlatformerLevelAsset.register(assets,audio!=null && audio.maxMusicStreams()>0);
             fontPage=globals.load(TextureLoadOptions.PIXEL_ART.descriptor("ui/font.png",Texture.class));
             white=globals.load(TextureLoadOptions.PIXEL_ART.descriptor("ui/white.png",Texture.class));
             sprites=new SpriteBatch(graphics);
-            menu=new PlatformerMenuInput(input,router,view,audio,logger);
-            controls=new BackendPlatformerInput(input,router); menu.controls(controls); input.addProcessor(router);
+            menu=new PlatformerMenuInput(input,router,audio,logger);
+            ui = new UiToolkit(fdx.files()).root(display, graphics).autoUiScale(false).input(input, router);
+            controls = new BackendPlatformerInput(input, router);
+            input.addProcessor(router);
             requestLevel(FIRST_LEVEL);
             logger.info("Platformer created: "+graphics.providerId().value()+", budget 4 tasks / 1 ms, audio="+(audio!=null));
         } catch (RuntimeException | Error failure) {
@@ -93,21 +97,24 @@ public final class PlatformerApplication extends ApplicationAdapter {
         if (retiringScope!=null) { mixer.update(fadeRemaining); releaseRetiring(); }
         requestedPath=path; pendingScope=assets.createScope();
         pending=pendingScope.load(AssetDescriptor.of(path,PlatformerLevelAsset.class));
-        hud.loading=true; hud.failed=false; hud.status="LOADING LEVEL"; hud.heading="LOADING";
-        controls.enabled(false); simulationClock.pause(); menu.state(true,true);
+        hud.loading.set(true); hud.failed.set(false); hud.status.set("LOADING LEVEL"); hud.heading.set("LOADING");
+        controls.enabled(false); simulationClock.pause();
     }
     @Override
     public void render() {
         if (disposed || application==null) return;
         GraphicsFrame frame=graphics.currentFrame();
-        view.update(display.width(),display.height(),frame.width(),frame.height()); controls.layout(view);
+        view.update(display.width(),display.height(),frame.width(),frame.height());
+        hud.layout(ui, view, frame.height());
         commands(menu.consumeCommands());
         assets.update(4,1_000_000);
         if (renderer==null && ready(fontPage) && ready(white)) {
             StringBuilder characters=new StringBuilder(64);
             for(int i=32;i<96;i++) characters.append((char)i);
             font=BitmapFont.fromGrid(fontPage.asset(),characters.toString(),6,8);
-            renderer=new AuthoredPlatformerRenderer(sprites,view,white.asset(),font);
+            hud.font(ui, UiFont.bitmap(font));
+            ui.setContent(scope -> hud.build(scope, menu, controls));
+            renderer = new AuthoredPlatformerRenderer(sprites, view, white.asset());
         }
         boolean effectsReady=true;
         if (audio!=null) for(AssetLease<Sound> effect:effects) effectsReady &= ready(effect);
@@ -116,7 +123,7 @@ public final class PlatformerApplication extends ApplicationAdapter {
             else if (pending.isLoaded() && renderer!=null && effectsReady) publishLevel();
         }
         double delta=Math.max(0,Math.min(.1,application.deltaTime()));
-        boolean running=game!=null && !paused && !systemPaused && !hud.loading && !hud.failed;
+        boolean running=game!=null && !paused && !systemPaused && !hud.loading.get() && !hud.failed.get();
         controls.enabled(running && !game.gameOver() && !game.completed());
         controls.update(display.width(),display.height());
         if (running) {
@@ -142,11 +149,14 @@ public final class PlatformerApplication extends ApplicationAdapter {
         if(current!=null && current.music()!=null && current.music().failure()!=null && !musicFailureReported) {
             musicFailureReported=true; logger.warn("Platformer music failed: "+current.music().failure().getMessage());
         }
-        hud.game(game); hud.audioLocked=audio!=null && audio.isSuspended();
-        hud.menuOpen=paused || game!=null && (game.gameOver() || game.completed());
-        if(!hud.loading && !hud.failed) hud.heading=game!=null && game.completed()?"TRAIL CLEAR":game!=null && game.gameOver()?"TRY AGAIN":"PAUSED";
-        menu.state(hud.menuOpen,hud.loading || hud.failed);
-        if(renderer!=null) renderer.render(frame,current,game,hud,controls,elapsed);
+        hud.game(game); hud.audioLocked.set(audio!=null && audio.isSuspended());
+        hud.menuOpen.set(paused || game!=null && (game.gameOver() || game.completed()));
+        if(!hud.loading.get() && !hud.failed.get()) hud.heading.set(game!=null && game.completed()?"TRAIL CLEAR":game!=null && game.gameOver()?"TRY AGAIN":"PAUSED");
+        if (renderer != null) {
+            renderer.render(frame, current, game, elapsed);
+            ui.update((float) delta);
+            ui.render();
+        }
         else frame.commandEncoder().beginRenderPass(loadingPass.colorAttachment(frame.colorAttachment())
                 .colorLoadOp(LOADING_COLOR).colorStoreOp(StoreOp.store())).end();
         renderedFrames++;
@@ -178,7 +188,7 @@ public final class PlatformerApplication extends ApplicationAdapter {
         retiring=current; retiringScope=currentScope;
         current=next; currentScope=pendingScope; game=nextGame;
         pending=null; pendingScope=null; elapsed=footstep=0; paused=false;
-        hud.title=next.title(); hud.loading=hud.failed=false; musicFailureReported=false;
+        hud.title.set(next.title()); hud.loading.set(false); hud.failed.set(false); musicFailureReported=false;
         simulationClock.reset(); if(systemPaused) simulationClock.pause(); else simulationClock.resume();
         if(retiringScope!=null && (current.music()==null || retiring.music()==null || current.music()==retiring.music())) releaseRetiring();
         if(systemPaused) pauseMusic();
@@ -191,7 +201,7 @@ public final class PlatformerApplication extends ApplicationAdapter {
         logger.warn("Platformer level load failed: "+requestedPath+": "+failure.getMessage());
         pending=null;
         if(pendingScope!=null) { pendingScope.dispose(); pendingScope=null; }
-        hud.loading=false; hud.failed=true; hud.heading="LEVEL UNAVAILABLE"; hud.status="COULD NOT LOAD TRAIL";
+        hud.loading.set(false); hud.failed.set(true); hud.heading.set("LEVEL UNAVAILABLE"); hud.status.set("COULD NOT LOAD TRAIL");
     }
     private void releaseRetiring() {
         if(retiringScope==null) return;
@@ -205,34 +215,34 @@ public final class PlatformerApplication extends ApplicationAdapter {
     }
     private void commands(int commands) {
         if(commands==0) return;
-        if((commands&PlatformerMenuInput.QUIETER)!=0) volume(hud.volume-1);
-        if((commands&PlatformerMenuInput.LOUDER)!=0) volume(hud.volume+1);
+        if((commands&PlatformerMenuInput.QUIETER)!=0) volume(hud.volume.get()-1);
+        if((commands&PlatformerMenuInput.LOUDER)!=0) volume(hud.volume.get()+1);
         if((commands&PlatformerMenuInput.MUTE)!=0) {
-            if(hud.volume==0) volume(previousVolume); else { previousVolume=hud.volume; volume(0); }
+            if(hud.volume.get()==0) volume(previousVolume); else { previousVolume=hud.volume.get(); volume(0); }
         }
-        if((commands&PlatformerMenuInput.PAUSE)!=0 && !hud.loading) {
-            if(hud.failed && current!=null) hud.failed=false;
+        if((commands&PlatformerMenuInput.PAUSE)!=0 && !hud.loading.get()) {
+            if(hud.failed.get() && current!=null) hud.failed.set(false);
             if(game!=null && (game.gameOver() || game.completed())) { game.restart(); game.consumeEvents(); paused=false; }
             else paused=!paused;
             if(paused) { simulationClock.pause(); controls.enabled(false); pauseMusic(); }
             else { simulationClock.resume(); resumeMusic(); }
             logger.info("Platformer paused="+paused+", playerX="+(game==null?0:game.player().x()));
         }
-        if((commands&PlatformerMenuInput.RESTART)!=0 && !hud.loading) {
-            if(hud.failed) requestLevel(requestedPath);
+        if((commands&PlatformerMenuInput.RESTART)!=0 && !hud.loading.get()) {
+            if(hud.failed.get()) requestLevel(requestedPath);
             else if(game!=null) {
                 game.restart(); game.consumeEvents(); paused=false; controls.enabled(false);
                 simulationClock.reset(); simulationClock.resume(); resumeMusic(); elapsed=0;
                 logger.info("Platformer restarted at authored spawn");
             }
         }
-        if((commands&PlatformerMenuInput.NEXT)!=0 && !hud.loading && current!=null) requestLevel(current.next());
+        if((commands&PlatformerMenuInput.NEXT)!=0 && !hud.loading.get() && current!=null) requestLevel(current.next());
         play(2,.4f);
     }
     private void volume(int value) {
-        hud.volume=Math.max(0,Math.min(10,value));
-        if(mixer!=null) mixer.masterGain(hud.volume/10f);
-        logger.info("Platformer volume="+hud.volume);
+        hud.volume.set(Math.max(0,Math.min(10,value)));
+        if(mixer!=null) mixer.masterGain(hud.volume.get()/10f);
+        logger.info("Platformer volume="+hud.volume.get());
     }
     private void play(int index,float gain) {
         if(mixer!=null && effects[index]!=null && effects[index].isLoaded()) {
@@ -256,7 +266,7 @@ public final class PlatformerApplication extends ApplicationAdapter {
     @Override
     public void resume() {
         systemPaused=false; if(menu!=null) menu.enabled(true);
-        if(!paused && !hud.loading && !hud.failed) { simulationClock.resume(); resumeMusic(); }
+        if(!paused && !hud.loading.get() && !hud.failed.get()) { simulationClock.resume(); resumeMusic(); }
     }
     private void captureFrame(String path) {
         try {
@@ -270,6 +280,7 @@ public final class PlatformerApplication extends ApplicationAdapter {
         if(disposed) return; disposed=true;
         Throwable failure=null;
         if(input!=null) input.removeProcessor(router);
+        failure=close(ui,failure);
         failure=close(menu,failure); failure=close(controls,failure);
         failure=close(mixer,failure); failure=close(font,failure); failure=close(sprites,failure);
         Texture terrain=current==null?null:current.map().tiles().region(1).texture();

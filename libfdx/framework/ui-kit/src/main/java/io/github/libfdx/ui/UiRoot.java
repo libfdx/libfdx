@@ -50,8 +50,6 @@ public final class UiRoot implements Disposable, UiStateListener {
     private static final float SCROLLBAR_MIN_THUMB = 22.0f;
     private static final float SCROLL_BODY_DRAG_SLOP = 8.0f;
     private static final float TOUCH_TEXT_AREA_DRAG_SLOP = 8.0f;
-    private static final float TEXT_TAP_SLOP = 6.0f;
-    private static final long DOUBLE_TEXT_TAP_TIMEOUT_NANOS = 500_000_000L;
     private static final int RECT_WINDOW_TITLE = 3;
     private static final int RECT_WINDOW_RESIZE = 4;
     private static final int RECT_TEXT_INPUT = 5;
@@ -108,6 +106,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     private final Array<UiNode> modalStack = new Array<UiNode>();
     private final Array<UiNode> modalPreviousFocus = new Array<UiNode>();
     private UiNode activeModal;
+    private UiNode activePopup;
     private UiScope[] compositionScopes = new UiScope[64];
     private Array<?>[] compositionLists = new Array<?>[8];
     private int compositionScopeCount;
@@ -128,6 +127,14 @@ public final class UiRoot implements Disposable, UiStateListener {
     private PointerType feedbackPointerType;
     private float feedbackSliderValue;
     private UiNode focusedNode;
+    private static final class HeldPointer {
+        int id;
+        PointerType type;
+        UiNode node;
+        UiHoldState state;
+    }
+
+    private final Array<HeldPointer> heldPointers = new Array<>();
     private UiNode capturedSurfaceNode;
     private int capturedSurfacePointerId;
     private PointerType capturedSurfacePointerType = PointerType.MOUSE;
@@ -169,12 +176,7 @@ public final class UiRoot implements Disposable, UiStateListener {
     private float activeTextSelectionStartX;
     private float activeTextSelectionStartY;
     private boolean activeTextSelectionMoved;
-    private UiNode lastTextTapNode;
-    private PointerType lastTextTapType;
-    private int lastTextTapPointerId;
-    private long lastTextTapTimeNanos = Long.MIN_VALUE;
-    private float lastTextTapX;
-    private float lastTextTapY;
+    private final UiTapSequence textTaps = new UiTapSequence();
     private UiNode pendingTouchTextAreaNode;
     private float pendingTouchTextAreaStartX;
     private float pendingTouchTextAreaStartY;
@@ -286,6 +288,7 @@ public final class UiRoot implements Disposable, UiStateListener {
      */
     public void update(float deltaSeconds) {
         syncDisplayMetrics();
+        if (!heldPointers.isEmpty() && display != null && !display.focused()) releaseHolds();
         if (feedbackOnly && (hoveredNode != null || pressedNode != null) && display != null && !display.focused()) {
             clearPointerFeedback();
         }
@@ -627,6 +630,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (this.input == input && this.inputRouter == router) {
             return this;
         }
+        releaseHolds();
         if (this.input != null) {
             if (feedbackOnly) clearPointerFeedback();
             hidePlatformTextInput(this.input);
@@ -783,9 +787,11 @@ public final class UiRoot implements Disposable, UiStateListener {
         scrollStateKeys.clear();
         listStateKeys.clear();
         tooltipAnchors.clear();
+        releaseHolds();
         modalStack.clear();
         modalPreviousFocus.clear();
         activeModal = null;
+        activePopup = null;
         if (input != null) {
             hidePlatformTextInput(input);
             if (inputRouter != null) inputRouter.remove(inputHandler);
@@ -842,6 +848,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             UiComposition.CURRENT_ROOT.set(previous);
         }
         reconcileInputState();
+        activePopup = topOverlay(activeModal != null ? activeModal : rootNode, UiNodeType.POPUP);
         disposeUnusedNodes();
         layout();
     }
@@ -962,9 +969,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             activeTextSelectionStartY = 0.0f;
             activeTextSelectionMoved = false;
         }
-        if (lastTextTapNode == node) {
-            clearLastTextTap();
-        }
+        textTaps.forget(node);
     }
 
     private void removeAnimationsForNode(String identity) {
@@ -1158,6 +1163,53 @@ public final class UiRoot implements Disposable, UiStateListener {
         return pressedNode != null && pressedNode.pressed() ? pressedNode : hoveredNode;
     }
 
+    private HeldPointer heldPointer(PointerEvent event) {
+        for (int i = 0; i < heldPointers.size(); i++) {
+            HeldPointer held = heldPointers.get(i);
+            if (held.state != null && held.id == event.pointerId() && held.type == event.type()) return held;
+        }
+        return null;
+    }
+
+    private void pressHold(UiNode node, UiHoldState state, PointerEvent event) {
+        HeldPointer held = heldPointer(event);
+        if (held != null) releaseHold(held);
+        for (int i = 0; i < heldPointers.size(); i++) {
+            if (heldPointers.get(i).state == null) {
+                held = heldPointers.get(i);
+                break;
+            }
+        }
+        if (held == null) {
+            held = new HeldPointer();
+            heldPointers.add(held);
+        }
+        held.id = event.pointerId();
+        held.type = event.type();
+        held.node = node;
+        held.state = state;
+        state.press();
+        node.pressed(true);
+    }
+
+    private void releaseHold(HeldPointer held) {
+        held.state.release();
+        UiNode node = held.node;
+        held.state = null;
+        held.node = null;
+        for (int i = 0; i < heldPointers.size(); i++) {
+            if (heldPointers.get(i).node == node) return;
+        }
+        node.pressed(false);
+    }
+
+    private void releaseHolds() {
+        for (int i = 0; i < heldPointers.size(); i++) {
+            HeldPointer held = heldPointers.get(i);
+            if (held.state != null) releaseHold(held);
+        }
+    }
+
     boolean handlePointerMoved(PointerEvent event) {
         if (feedbackOnly) return handlePointerFeedback(event, UiPointerPhase.MOVE);
         ensureComposed();
@@ -1197,7 +1249,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             return true;
         }
         if (activeTextNode != null) {
-            updateActiveTextSelection(x, y);
+            updateActiveTextSelection(x, y, true);
             setHovered(hitTest(x, y));
             return true;
         }
@@ -1221,9 +1273,20 @@ public final class UiRoot implements Disposable, UiStateListener {
         ensureComposed();
         float x = uiX(event.x());
         float y = uiY(event.y());
+        UiNode popup = activePopup;
+        if (popup != null && popup.descriptor() instanceof UiPopup descriptor && descriptor.dismissal() != null
+                && !insidePopupContent(popup, x, y)) {
+            descriptor.dismissal().run();
+            if (descriptor.blockingInput()) return true;
+            ensureComposed();
+        }
         HitResult hit = hitTestResult(x, y);
+        if (hit.node != null && hit.node.descriptor() instanceof UiHoldState state && event.button() == MouseButton.LEFT) {
+            pressHold(hit.node, state, event);
+            return true;
+        }
         if (!isTextInput(hit.node)) {
-            clearLastTextTap();
+            textTaps.clear();
         }
         setHovered(hit.node);
         clearPendingScrollBodyGesture();
@@ -1284,7 +1347,7 @@ public final class UiRoot implements Disposable, UiStateListener {
                 if (pressedNode.type() == UiNodeType.TEXT_AREA && event.type() == PointerType.TOUCH) {
                     beginTouchTextAreaGesture(pressedNode, x, y);
                 } else {
-                    beginTextSelection(pressedNode, x, y);
+                    beginTextSelection(pressedNode, x, y, focusedTextInputTap && isShiftDown());
                 }
                 if (focusedTextInputTap) {
                     requestPlatformTextInput(pressedNode);
@@ -1306,6 +1369,11 @@ public final class UiRoot implements Disposable, UiStateListener {
         ensureComposed();
         float x = uiX(event.x());
         float y = uiY(event.y());
+        HeldPointer held = heldPointer(event);
+        if (held != null && event.button() == MouseButton.LEFT) {
+            releaseHold(held);
+            return true;
+        }
         HitResult hit = hitTestResult(x, y);
         if (ownsSurfaceCapture(event)) {
             UiNode captured = capturedSurfaceNode;
@@ -1327,11 +1395,11 @@ public final class UiRoot implements Disposable, UiStateListener {
             handled = true;
         }
         if (activeTextNode != null) {
-            updateActiveTextSelection(x, y);
+            updateActiveTextSelection(x, y, false);
             if (!activeTextSelectionMoved && activeTextNode == hit.node) {
                 completedTextTapNode = activeTextNode;
             } else {
-                clearLastTextTap();
+                textTaps.clear();
             }
             activeTextNode = null;
             activeTextSelectionAnchor = 0;
@@ -1414,6 +1482,7 @@ public final class UiRoot implements Disposable, UiStateListener {
 
     boolean handleKeyDown(KeyEvent event) {
         if (feedbackOnly) return false;
+        textTaps.clear();
         ensureComposed();
         reconcileInputState();
         if (focusedNode == null) {
@@ -1425,7 +1494,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             }
             return activeModal != null;
         }
-        UiSurfaceInput focusedSurfaceInput = surfaceInput(focusedNode);
+        UiSurfaceInput focusedSurfaceInput = surfaceInput(focusOwner(focusedNode));
         if (focusedSurfaceInput != null && focusedSurfaceInput.keyDown(event)) {
             return true;
         }
@@ -1446,20 +1515,17 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (isTextInput(focusedNode) && focusedNode.descriptor() instanceof UiTextFieldModel) {
             UiTextFieldModel model = (UiTextFieldModel) focusedNode.descriptor();
             if (handleTextShortcut(model, event.key())) {
-                ensureTextCursorVisible(focusedNode);
-                updatePlatformTextInput(focusedNode);
+                updateEditingCaret(focusedNode, model);
                 return true;
             }
             if (event.key() == Key.BACKSPACE) {
                 model.backspace();
-                ensureTextCursorVisible(focusedNode);
-                updatePlatformTextInput(focusedNode);
+                updateEditingCaret(focusedNode, model);
                 return true;
             }
             if (event.key() == Key.DELETE) {
                 model.delete();
-                ensureTextCursorVisible(focusedNode);
-                updatePlatformTextInput(focusedNode);
+                updateEditingCaret(focusedNode, model);
                 return true;
             }
             if (event.key() == Key.LEFT) {
@@ -1489,8 +1555,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             if (event.key() == Key.ENTER) {
                 if (model.multiline()) {
                     model.insert("\n");
-                    ensureTextCursorVisible(focusedNode);
-                    updatePlatformTextInput(focusedNode);
+                    updateEditingCaret(focusedNode, model);
                     return true;
                 }
                 if (model.submit()) {
@@ -1562,7 +1627,9 @@ public final class UiRoot implements Disposable, UiStateListener {
     private boolean focusNext(int direction) {
         focusableNodes.clear();
         try {
-            collectFocusable(activeModal != null ? activeModal : rootNode, focusableNodes);
+            var scope = activePopup != null && blocksInput(activePopup) && descendantOf(focusedNode, activePopup)
+                    ? activePopup : activeModal != null ? activeModal : rootNode;
+            collectFocusable(scope, focusableNodes);
             if (focusableNodes.isEmpty()) {
                 setFocused(null);
                 return activeModal != null;
@@ -1621,15 +1688,19 @@ public final class UiRoot implements Disposable, UiStateListener {
         if (feedbackOnly) return false;
         ensureComposed();
         reconcileInputState();
-        UiSurfaceInput focusedSurfaceInput = surfaceInput(focusedNode);
+        UiNode owner = focusOwner(focusedNode);
+        if (owner != null && owner.customContext() != null && !isTextInput(focusedNode)) {
+            UiNode editor = owner.customContext().focusTarget();
+            if (isFocusable(editor) && isTextInput(editor)) setFocused(editor);
+        }
+        UiSurfaceInput focusedSurfaceInput = isTextInput(focusedNode) ? null : surfaceInput(owner);
         if (focusedSurfaceInput != null && focusedSurfaceInput.textInput(event)) {
             return true;
         }
         if (focusedNode != null && isTextInput(focusedNode)
-                && focusedNode.descriptor() instanceof UiTextFieldModel) {
-            ((UiTextFieldModel) focusedNode.descriptor()).insert(event.text());
-            ensureTextCursorVisible(focusedNode);
-            updatePlatformTextInput(focusedNode);
+                && focusedNode.descriptor() instanceof UiTextFieldModel model) {
+            model.insert(event.text());
+            updateEditingCaret(focusedNode, model);
             return true;
         }
         return activeModal != null;
@@ -1670,7 +1741,7 @@ public final class UiRoot implements Disposable, UiStateListener {
         }
         String styleName = node.modifier().style();
         if (styleName == null) {
-            styleName = defaultStyleName(node.type());
+            styleName = isTextInput(node) && node.text() != null ? "text" : defaultStyleName(node.type());
         }
         return styleName != null ? theme.style(styleName) : null;
     }
@@ -1773,6 +1844,13 @@ public final class UiRoot implements Disposable, UiStateListener {
         UiRect targetBounds = node.rendererRect(RECT_LAYOUT_TARGET, x, y, widthValue, heightValue);
         UiRect actualBounds = animatedBounds(node, targetBounds);
         node.bounds(actualBounds);
+        if (node.focused() && node.type() == UiNodeType.TEXT_FIELD && node.descriptor() instanceof UiTextFieldModel model) {
+            if (model.readOnly()) {
+                model.scrollFieldBy(0, textWidth(model.value(), textStyleFor(node)), textInputBounds(node).width());
+            } else {
+                ensureTextCursorVisible(node);
+            }
+        }
         updateTextAreaMetrics(node);
         layoutChildren(node, actualBounds);
     }
@@ -1823,7 +1901,13 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private void layoutContainerChildren(UiNode node, UiRect inner) {
-        if (node.type() == UiNodeType.MODAL || node.type() == UiNodeType.POPUP
+        UiCustomContext custom = node.customContext();
+        if (custom != null) {
+            for (int i = 0; i < node.children().size(); i++) {
+                UiNode child = node.children().get(i);
+                if (isLayoutChild(child)) layoutNode(child, child == custom.overlayNode() ? custom.overlayBounds(inner) : inner);
+            }
+        } else if (node.type() == UiNodeType.MODAL || node.type() == UiNodeType.POPUP
                 || node.type() == UiNodeType.TOOLTIP) {
             layoutOverlay(node, inner);
         } else if (isColumnContainer(node.type())) {
@@ -1835,7 +1919,8 @@ public final class UiRoot implements Disposable, UiStateListener {
         } else {
             ArrayView<UiNode> children = node.children();
             for (int i = 0; i < children.size(); i++) {
-                layoutNode(children.get(i), inner);
+                UiNode child = children.get(i);
+                if (isLayoutChild(child)) layoutNode(child, inner);
             }
         }
     }
@@ -2170,6 +2255,9 @@ public final class UiRoot implements Disposable, UiStateListener {
                     y = aboveY;
                 }
                 y = clamp(y, inner.y(), inner.bottom() - heightValue);
+            } else if (node.descriptor() instanceof UiPopup popup && Float.isFinite(popup.anchorX())) {
+                x = clamp(inner.x() + popup.anchorX(), inner.x(), Math.max(inner.x(), inner.right() - widthValue));
+                y = clamp(inner.y() + popup.anchorY(), inner.y(), Math.max(inner.y(), inner.bottom() - heightValue));
             } else {
                 x = alignOverlayX(inner, widthValue, overlayHorizontalAlign(node)) + child.modifier().offsetX();
                 y = alignOverlayY(inner, heightValue, overlayVerticalAlign(node)) + child.modifier().offsetY();
@@ -2251,6 +2339,8 @@ public final class UiRoot implements Disposable, UiStateListener {
             UiVirtualListModel model = (UiVirtualListModel)node.descriptor();
             size = node.layoutSize(SIZE_PREFERRED_BASE, availableWidth,
                     model.preferredHeight() + padding.vertical());
+        } else if (isTextInput(node) && node.text() != null) {
+            size = textSize(node, node.text(), padding, 0);
         } else if (node.type() == UiNodeType.TEXT) {
             size = textSize(node, node.text(), padding, availableWidth);
         } else if (node.type() == UiNodeType.BUTTON) {
@@ -2642,6 +2732,14 @@ public final class UiRoot implements Disposable, UiStateListener {
         return false;
     }
 
+    private boolean insidePopupContent(UiNode popup, float x, float y) {
+        for (int i = 0; i < popup.children().size(); i++) {
+            UiNode child = popup.children().get(i);
+            if (child.visible() && child.bounds().contains(child.hitLocalX(x), child.hitLocalY(y))) return true;
+        }
+        return false;
+    }
+
     private boolean clipsHitToBounds(UiNode node) {
         UiNodeType type = node.type();
         return node.modifier().clipsToBounds()
@@ -2777,18 +2875,18 @@ public final class UiRoot implements Disposable, UiStateListener {
         return false;
     }
 
-    private UiNode topModal(UiNode node) {
+    private UiNode topOverlay(UiNode node, UiNodeType type) {
         if (!inputEligible(node)) return null;
         ArrayView<UiNode> children = renderChildren(node);
         for (int i = children.size() - 1; i >= 0; i--) {
-            UiNode modal = topModal(children.get(i));
+            UiNode modal = topOverlay(children.get(i), type);
             if (modal != null) return modal;
         }
-        return node.type() == UiNodeType.MODAL ? node : null;
+        return node.type() == type ? node : null;
     }
 
     private void reconcileInputState() {
-        UiNode nextModal = topModal(rootNode);
+        UiNode nextModal = topOverlay(rootNode, UiNodeType.MODAL);
         UiNode restore = null;
         int existing = nextModal != null ? modalStack.indexOf(nextModal) : -1;
         while (!modalStack.isEmpty()) {
@@ -2806,12 +2904,22 @@ public final class UiRoot implements Disposable, UiStateListener {
         boolean modalChanged = activeModal != nextModal;
         activeModal = nextModal;
         if (!feedbackOnly && (modalChanged || (focusedNode != null && !isFocusable(focusedNode)))) {
+            UiNode owner = focusOwner(focusedNode);
+            if (!modalChanged && owner != focusedNode && isFocusable(owner)) restore = owner;
             setFocused(isFocusable(restore) ? restore : null);
             if (focusedNode == null && activeModal != null) focusNext(1);
+        } else if (!feedbackOnly && focusedNode != null && focusedNode.customContext() != null) {
+            // A focused surface may have just composed an editor.
+            setFocused(focusedNode);
         }
         if (hoveredNode != null && (!inputEligible(hoveredNode)
                 || feedbackOnly && !feedbackEligible(hoveredNode))) {
             setHovered(null);
+        }
+        for (int i = 0; i < heldPointers.size(); i++) {
+            HeldPointer held = heldPointers.get(i);
+            if (held.state != null && (held.node.descriptor() != held.state || !inputEligible(held.node)
+                    || activeModal != null && !descendantOf(held.node, activeModal))) releaseHold(held);
         }
         if (capturedSurfaceNode != null && (!inputEligible(capturedSurfaceNode)
                 || (activeModal != null && !descendantOf(capturedSurfaceNode, activeModal)))) {
@@ -2936,8 +3044,15 @@ public final class UiRoot implements Disposable, UiStateListener {
         releaseSurfaceCapture(captured);
     }
 
+    private UiNode focusOwner(UiNode node) {
+        for (UiNode current = node; current != null; current = current.parent()) {
+            if (surfaceInput(current) != null) return current;
+        }
+        return node;
+    }
+
     private void notifySurfaceFocus(UiNode node, boolean focused) {
-        UiSurfaceInput surface = surfaceInput(node);
+        UiSurfaceInput surface = surfaceInput(focusOwner(node));
         if (surface != null) {
             surface.focusChanged(focused);
         }
@@ -3132,23 +3247,35 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private void setFocused(UiNode node) {
+        boolean selectText = false;
+        if (node != null && node.customContext() != null) {
+            var context = node.customContext();
+            UiNode overlay = context.focusTarget();
+            if (isFocusable(overlay)) {
+                node = overlay;
+                selectText = context.selectInitialText();
+            }
+        }
         if (focusedNode == node) {
             return;
         }
+        textTaps.clear();
         UiNode previous = focusedNode;
+        boolean ownerChanged = focusOwner(previous) != focusOwner(node);
         if (focusedNode != null) {
             UiTextFieldModel previousText = textModel(focusedNode);
             if (previousText != null) {
                 // Selection belongs to the focused editor; retain its insertion position only.
-                previousText.cursor(previousText.cursor());
+                previousText.loseFocus();
             }
-            notifySurfaceFocus(focusedNode, false);
+            if (ownerChanged) notifySurfaceFocus(focusedNode, false);
             focusedNode.focused(false);
         }
         focusedNode = node;
         if (focusedNode != null) {
             focusedNode.focused(true);
-            notifySurfaceFocus(focusedNode, true);
+            if (selectText && textModel(focusedNode) != null) textModel(focusedNode).selectAll();
+            if (ownerChanged) notifySurfaceFocus(focusedNode, true);
         }
         updatePlatformTextInput(previous, focusedNode);
     }
@@ -3302,13 +3429,13 @@ public final class UiRoot implements Disposable, UiStateListener {
         return width;
     }
 
-    private void beginTextSelection(UiNode node, float x, float y) {
+    private void beginTextSelection(UiNode node, float x, float y, boolean extend) {
         UiTextFieldModel model = textModel(node);
         if (model == null) {
             return;
         }
         int cursor = textIndexAtPointer(node, x, y);
-        if (isShiftDown() && model.hasSelection()) {
+        if (extend) {
             model.select(model.selectionStart(), cursor);
         } else {
             model.cursor(cursor);
@@ -3318,26 +3445,40 @@ public final class UiRoot implements Disposable, UiStateListener {
         activeTextSelectionStartX = x;
         activeTextSelectionStartY = y;
         activeTextSelectionMoved = false;
-        ensureTextCursorVisible(node);
-        updatePlatformTextInput(node);
+        updateEditingCaret(node, model);
         requestCompose();
     }
 
-    private void updateActiveTextSelection(float x, float y) {
+    private void updateActiveTextSelection(float x, float y, boolean dragging) {
         UiTextFieldModel model = textModel(activeTextNode);
         if (model == null) {
             return;
         }
         float deltaX = x - activeTextSelectionStartX;
         float deltaY = y - activeTextSelectionStartY;
-        float slop = TEXT_TAP_SLOP;
+        float slop = UiTapSequence.SLOP;
         if (deltaX * deltaX + deltaY * deltaY >= slop * slop) {
             activeTextSelectionMoved = true;
         }
+        if (model.readOnly() && dragging && activeTextSelectionMoved) {
+            scrollReadOnlyDrag(activeTextNode, model, x, y);
+        }
         model.select(activeTextSelectionAnchor, textIndexAtPointer(activeTextNode, x, y));
-        ensureTextCursorVisible(activeTextNode);
-        updatePlatformTextInput(activeTextNode);
+        updateEditingCaret(activeTextNode, model);
         requestCompose();
+    }
+
+    private void scrollReadOnlyDrag(UiNode node, UiTextFieldModel model, float x, float y) {
+        UiRect viewport = textInputBounds(node);
+        float localX = node.hitLocalX(x);
+        float localY = node.hitLocalY(y);
+        float dx = localX - Math.clamp(localX, viewport.x(), viewport.right());
+        float dy = localY - Math.clamp(localY, viewport.y(), viewport.bottom());
+        if (model.multiline()) {
+            model.scrollState().scrollBy(dx, dy);
+        } else if (dx != 0) {
+            model.scrollFieldBy(dx, textWidth(model.value(), textStyleFor(node)), viewport.width());
+        }
     }
 
     private void beginTouchTextAreaGesture(UiNode node, float x, float y) {
@@ -3383,10 +3524,9 @@ public final class UiRoot implements Disposable, UiStateListener {
         String value = model.value();
         UiTextStyle style = textStyleFor(node);
         UiRect bounds = textInputBounds(node);
-        float localX = x - bounds.x();
+        float localX = x - bounds.x() + model.scrollX();
         float localY = y - bounds.y();
         if (node.type() == UiNodeType.TEXT_AREA && model.scrollState() != null) {
-            localX += model.scrollState().x();
             localY += model.scrollState().y();
         }
         int line = node.type() == UiNodeType.TEXT_AREA
@@ -3405,10 +3545,9 @@ public final class UiRoot implements Disposable, UiStateListener {
         String value = model.value();
         UiTextStyle style = textStyleFor(node);
         UiRect bounds = textInputBounds(node);
-        float localX = x - bounds.x();
+        float localX = x - bounds.x() + model.scrollX();
         float localY = y - bounds.y();
         if (node.type() == UiNodeType.TEXT_AREA && model.scrollState() != null) {
-            localX += model.scrollState().x();
             localY += model.scrollState().y();
         }
         int line = node.type() == UiNodeType.TEXT_AREA
@@ -3449,51 +3588,31 @@ public final class UiRoot implements Disposable, UiStateListener {
     }
 
     private void completeTextTap(UiNode node, PointerEvent event, float x, float y) {
-        if (node == null || event == null || !isPrimaryTextTap(event)) {
-            clearLastTextTap();
+        UiTextFieldModel model = textModel(node);
+        if (model == null || event == null || !isPrimaryTextTap(event) || isShiftDown()) {
+            textTaps.clear();
             return;
         }
-        long elapsedNanos = event.timeNanos() - lastTextTapTimeNanos;
-        float deltaX = x - lastTextTapX;
-        float deltaY = y - lastTextTapY;
-        float slop = TEXT_TAP_SLOP;
-        boolean doubleTap = node == lastTextTapNode
-                && event.type() == lastTextTapType
-                && event.pointerId() == lastTextTapPointerId
-                && elapsedNanos >= 0L
-                && elapsedNanos <= DOUBLE_TEXT_TAP_TIMEOUT_NANOS
-                && deltaX * deltaX + deltaY * deltaY <= slop * slop;
-        if (doubleTap) {
-            selectTextUnitAtPointer(node, x, y);
-            clearLastTextTap();
-            return;
+        int count = textTaps.complete(node, event.type(), event.pointerId(), event.timeNanos(), x, y);
+        if (count >= 2) {
+            if (count == 2) {
+                selectTextUnitAtPointer(node, model, x, y);
+            } else {
+                model.selectAll();
+            }
+            updateEditingCaret(node, model);
+            requestCompose();
+            if (count == 3 || !model.selectsAllOnTripleClick()) {
+                textTaps.clear();
+            }
         }
-        lastTextTapNode = node;
-        lastTextTapType = event.type();
-        lastTextTapPointerId = event.pointerId();
-        lastTextTapTimeNanos = event.timeNanos();
-        lastTextTapX = x;
-        lastTextTapY = y;
     }
 
     private boolean isPrimaryTextTap(PointerEvent event) {
         return event.type() == PointerType.TOUCH || event.button() == MouseButton.LEFT;
     }
 
-    private void clearLastTextTap() {
-        lastTextTapNode = null;
-        lastTextTapType = null;
-        lastTextTapPointerId = 0;
-        lastTextTapTimeNanos = Long.MIN_VALUE;
-        lastTextTapX = 0.0f;
-        lastTextTapY = 0.0f;
-    }
-
-    private void selectTextUnitAtPointer(UiNode node, float x, float y) {
-        UiTextFieldModel model = textModel(node);
-        if (model == null) {
-            return;
-        }
+    private void selectTextUnitAtPointer(UiNode node, UiTextFieldModel model, float x, float y) {
         String value = model.value();
         int characterIndex = textCharacterAtPointer(node, x, y);
         if (characterIndex < 0 || characterIndex >= value.length()) {
@@ -3521,9 +3640,6 @@ public final class UiRoot implements Disposable, UiStateListener {
             }
             model.select(start, end);
         }
-        ensureTextCursorVisible(node);
-        updatePlatformTextInput(node);
-        requestCompose();
     }
 
     private int textSelectionCategory(int codePoint) {
@@ -3637,7 +3753,7 @@ public final class UiRoot implements Disposable, UiStateListener {
                     - (model.scrollState() != null ? model.scrollState().y() : 0.0f);
             return node.rendererRect(RECT_TEXT_CARET, x, y, 1.5f, textLineHeight(style));
         }
-        float cursorX = bounds.x() + textWidth(text, 0, cursor, style);
+        float cursorX = bounds.x() + textWidth(text, 0, cursor, style) - model.scrollX();
         float y = bounds.y() + Math.max(0.0f, (bounds.height() - lineHeight) * 0.5f);
         return node.rendererRect(RECT_TEXT_CARET, cursorX, y, 1.5f, lineHeight);
     }
@@ -3792,8 +3908,23 @@ public final class UiRoot implements Disposable, UiStateListener {
         return 0.0f;
     }
 
+    private void updateEditingCaret(UiNode node, UiTextFieldModel model) {
+        if (!model.readOnly()) {
+            ensureTextCursorVisible(node);
+            updatePlatformTextInput(node);
+        }
+    }
+
     private void ensureTextCursorVisible(UiNode node) {
         UiTextFieldModel model = textModel(node);
+        if (model != null && node.type() == UiNodeType.TEXT_FIELD) {
+            UiTextStyle style = textStyleFor(node);
+            String text = model.value();
+            float caret = textWidth(text, 0, model.cursor(), style);
+            float width = model.cursor() == text.length() ? caret : textWidth(text, style);
+            model.revealFieldCaret(caret, Math.max(caret, width), textInputBounds(node).width());
+            return;
+        }
         if (model == null || node.type() != UiNodeType.TEXT_AREA || model.scrollState() == null) {
             return;
         }
@@ -4027,7 +4158,7 @@ public final class UiRoot implements Disposable, UiStateListener {
 
     private void cancelPendingTextInputTapGesture() {
         clearPendingTextInputTapGesture();
-        clearLastTextTap();
+        textTaps.clear();
         if (pressedNode != null && isTextInput(pressedNode)) {
             pressedNode.pressed(false);
             pressedNode = null;
@@ -4046,7 +4177,7 @@ public final class UiRoot implements Disposable, UiStateListener {
             return;
         }
         model.cursor(textIndexAtPointer(node, x, y));
-        ensureTextCursorVisible(node);
+        if (!model.readOnly()) ensureTextCursorVisible(node);
         boolean alreadyFocused = focusedNode == node;
         setFocused(node);
         if (alreadyFocused) {

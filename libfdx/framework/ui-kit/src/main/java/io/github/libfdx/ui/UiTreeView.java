@@ -11,7 +11,8 @@ final class UiTreeView implements UiContent {
     private static final String ANCESTOR = "tree-ancestor";
     private static final String SELECTED = "tree-selected";
     private static final String DISCLOSURE = "tree-disclosure";
-    private static final UiModifier ROW = Ui.modifier().fillWidth().height(ROW_HEIGHT).animateItemPlacement();
+    private static final UiModifier ROW = Ui.modifier().fillWidth().height(ROW_HEIGHT);
+    private static final UiModifier ANIMATED_ROW = ROW.animateItemPlacement();
     private final UiTreeState state;
     private final Consumer<String> select;
     private final UiColor guide;
@@ -28,7 +29,7 @@ final class UiTreeView implements UiContent {
 
     @Override
     public void build(UiScope ui) {
-        ui.items(ROW, state.visibleRows(), row -> row.compositionKey, this::buildRow);
+        ui.items(state.animatePlacement() ? ANIMATED_ROW : ROW, state.visibleRows(), row -> row.compositionKey, this::buildRow);
     }
 
     private void buildRow(UiScope scope, UiTreeState.Row entry) {

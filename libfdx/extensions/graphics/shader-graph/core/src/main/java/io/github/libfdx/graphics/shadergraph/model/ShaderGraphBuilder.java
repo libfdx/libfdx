@@ -113,6 +113,29 @@ public final class ShaderGraphBuilder {
         return unary(nodeId, StandardShaderNodes.ABSOLUTE, value, value.type());
     }
 
+    /** Componentwise cosine of a floating scalar or vector angle in radians. */
+    /** Scene time in seconds supplied to a surface graph by its renderer. */
+    public ShaderExpression time(String nodeId) {
+        return node(nodeId, StandardShaderNodes.TIME, ShaderGraphType.scalar(ShaderScalarType.F32),
+                new ShaderGraphPort[0], new ShaderExpression[0]);
+    }
+
+    public ShaderExpression fraction(String nodeId, ShaderExpression value) {
+        return unary(nodeId, StandardShaderNodes.FRACTION, value, value.type());
+    }
+
+    /** UV + speed * time, with speed in texture-coordinate units per second. */
+    public ShaderExpression panner(String nodeId, ShaderExpression uv, ShaderExpression speed, ShaderExpression time) {
+        var vec2 = ShaderGraphType.vector(ShaderScalarType.F32, 2);
+        return node(nodeId, StandardShaderNodes.PANNER, vec2, new ShaderGraphPort[] {
+                ShaderGraphPort.required("speed", vec2), ShaderGraphPort.required("time", ShaderGraphType.scalar(ShaderScalarType.F32)),
+                ShaderGraphPort.required("uv", vec2) }, new ShaderExpression[] {speed, time, uv});
+    }
+
+    public ShaderExpression cosine(String nodeId, ShaderExpression radians) {
+        return unary(nodeId, StandardShaderNodes.COSINE, radians, radians.type());
+    }
+
     public ShaderExpression normalize(String nodeId, ShaderExpression value) {
         return unary(nodeId, StandardShaderNodes.NORMALIZE, value, value.type());
     }
@@ -139,6 +162,27 @@ public final class ShaderGraphBuilder {
         return node(nodeId, StandardShaderNodes.LERP, left.type(),
                 ports(left, right, amount),
                 new ShaderExpression[] { left, right, amount });
+    }
+
+    /** Hermite interpolation from zero to one between increasing edges, componentwise for floating vectors. */
+    public ShaderExpression smoothstep(String nodeId, ShaderExpression edge0, ShaderExpression edge1, ShaderExpression value) {
+        return node(nodeId, StandardShaderNodes.SMOOTHSTEP, value.type(), new ShaderGraphPort[] {
+                ShaderGraphPort.required("edge0", edge0.type()), ShaderGraphPort.required("edge1", edge1.type()),
+                ShaderGraphPort.required("value", value.type()) }, new ShaderExpression[] {edge0, edge1, value});
+    }
+
+    /** Continuous 2D value noise in [0,1] from a vec2f position in lattice units. */
+    public ShaderExpression noise2D(String nodeId, ShaderExpression uv) {
+        return node(nodeId, StandardShaderNodes.NOISE_2D, ShaderGraphType.scalar(ShaderScalarType.F32),
+                new ShaderGraphPort[] {ShaderGraphPort.required("uv", uv.type())}, new ShaderExpression[] {uv});
+    }
+
+    /** Facing-angle rim weight. Normal and surface-to-eye direction are vec3f in the same space. */
+    public ShaderExpression fresnel(String nodeId, ShaderExpression normal, ShaderExpression view, ShaderExpression power) {
+        return node(nodeId, StandardShaderNodes.FRESNEL, ShaderGraphType.scalar(ShaderScalarType.F32),
+                new ShaderGraphPort[] {ShaderGraphPort.required("normal", normal.type()),
+                        ShaderGraphPort.required("power", power.type()), ShaderGraphPort.required("view", view.type())},
+                new ShaderExpression[] {normal, power, view});
     }
 
     public ShaderExpression construct(String nodeId, ShaderGraphType type,

@@ -6,6 +6,9 @@ package io.github.libfdx.ui;
  * @author xpenatan
  */
 public final class UiPopup {
+    private final Runnable onDismiss;
+    private final float anchorX;
+    private final float anchorY;
     private final String id;
     private final UiAlign horizontalAlign;
     private final UiAlign verticalAlign;
@@ -13,7 +16,10 @@ public final class UiPopup {
     private final boolean blockingInput;
 
     private UiPopup(String id, UiAlign horizontalAlign, UiAlign verticalAlign, boolean dismissOnOutsidePress,
-            boolean blockingInput) {
+            boolean blockingInput, Runnable onDismiss, float anchorX, float anchorY) {
+        this.onDismiss = onDismiss;
+        this.anchorX = anchorX;
+        this.anchorY = anchorY;
         this.id = id;
         this.horizontalAlign = horizontalAlign != null ? horizontalAlign : UiAlign.START;
         this.verticalAlign = verticalAlign != null ? verticalAlign : UiAlign.START;
@@ -28,7 +34,7 @@ public final class UiPopup {
      * @return a new UI popup
      */
     public static UiPopup popup(String id) {
-        return new UiPopup(id, UiAlign.START, UiAlign.START, true, false);
+        return new UiPopup(id, UiAlign.START, UiAlign.START, true, false, null, Float.NaN, Float.NaN);
     }
 
     /**
@@ -39,7 +45,7 @@ public final class UiPopup {
      * @return this UI popup for chaining
      */
     public UiPopup align(UiAlign horizontalAlign, UiAlign verticalAlign) {
-        return new UiPopup(id, horizontalAlign, verticalAlign, dismissOnOutsidePress, blockingInput);
+        return new UiPopup(id, horizontalAlign, verticalAlign, dismissOnOutsidePress, blockingInput, onDismiss, anchorX, anchorY);
     }
 
     /**
@@ -49,7 +55,7 @@ public final class UiPopup {
      * @return this UI popup for chaining
      */
     public UiPopup dismissOnOutsidePress(boolean dismissOnOutsidePress) {
-        return new UiPopup(id, horizontalAlign, verticalAlign, dismissOnOutsidePress, blockingInput);
+        return new UiPopup(id, horizontalAlign, verticalAlign, dismissOnOutsidePress, blockingInput, onDismiss, anchorX, anchorY);
     }
 
     /**
@@ -59,7 +65,29 @@ public final class UiPopup {
      * @return this UI popup for chaining
      */
     public UiPopup blockingInput(boolean blockingInput) {
-        return new UiPopup(id, horizontalAlign, verticalAlign, dismissOnOutsidePress, blockingInput);
+        return new UiPopup(id, horizontalAlign, verticalAlign, dismissOnOutsidePress, blockingInput, onDismiss, anchorX, anchorY);
+    }
+
+    /** Places popup content at a point relative to its host, clamped inside the host on layout. */
+    public UiPopup at(float x, float y) {
+        return new UiPopup(id, horizontalAlign, verticalAlign, dismissOnOutsidePress, blockingInput, onDismiss, x, y);
+    }
+
+    /** Called on the UI thread to let the owner remove the popup when an outside press dismisses it. */
+    public UiPopup onDismiss(Runnable action) {
+        return new UiPopup(id, horizontalAlign, verticalAlign, dismissOnOutsidePress, blockingInput, action, anchorX, anchorY);
+    }
+
+    Runnable dismissal() {
+        return dismissOnOutsidePress ? onDismiss : null;
+    }
+
+    float anchorX() {
+        return anchorX;
+    }
+
+    float anchorY() {
+        return anchorY;
     }
 
     /**

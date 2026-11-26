@@ -80,7 +80,7 @@ public final class TextureMipsTest extends GraphicsParityTest {
         assets = new DefaultAssetManager(fdx.files(), null);
         G2DAssetLoaders.register(assets, graphics);
         font = new ShowcaseFont(assets.createScope(), false);
-        hud = new ShowcaseHud(graphics);
+        hud = new ShowcaseHud(fdx);
         for (int i = 0; i < 5; i++) {
             oldLevels[i] = solid(Math.max(1,19>>i), Math.max(1,11>>i), COLORS[i]);
             newLevels[i] = solid(Math.max(1,19>>i), Math.max(1,11>>i), COLORS[(i+2)%5]);

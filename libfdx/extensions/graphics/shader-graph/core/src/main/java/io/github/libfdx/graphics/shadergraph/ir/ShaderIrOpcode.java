@@ -36,5 +36,12 @@ public enum ShaderIrOpcode {
     ATOMIC_ADD,
     STORAGE_LOAD,
     STORAGE_STORE,
-    BARRIER
+    BARRIER,
+    SMOOTHSTEP,
+    NOISE_2D,
+    FRESNEL,
+    COSINE,
+    TIME,
+    FRACTION,
+    PANNER
 }

@@ -7,8 +7,9 @@ import io.github.libfdx.graphics.g2d.TextureRegion;
 import io.github.libfdx.ui.Ui;
 import io.github.libfdx.ui.UiAlign;
 import io.github.libfdx.ui.UiColor;
-import io.github.libfdx.ui.UiDrawContext;
-import io.github.libfdx.ui.UiRect;
+import io.github.libfdx.ui.UiDrawable;
+import io.github.libfdx.ui.UiFloatState;
+import io.github.libfdx.ui.UiStyle;
 import io.github.libfdx.ui.UiSize;
 import io.github.libfdx.ui.UiTheme;
 import java.nio.ByteBuffer;
@@ -25,17 +26,11 @@ public final class WebDefaultPreloadApplicationListener implements WebPreloadApp
     private static final UiColor BACKGROUND = UiColor.rgba8888(0x10141bff);
     private static final UiColor LOGO_MARK = UiColor.rgba8888(0x0265feff);
     private static final UiColor PROGRESS_TRACK = UiColor.rgba8888(0x263142ff);
-    private static final UiColor PROGRESS_EDGE = UiColor.rgba8888(0x53627799);
-    private static final UiColor PROGRESS_SHADOW = UiColor.rgba8888(0x00000066);
-    private static final UiColor PROGRESS_HIGHLIGHT = UiColor.rgba8888(0x77aaffff);
-    private static final UiColor PROGRESS_CAP = UiColor.rgba8888(0x4f92ffff);
     private static final float PAGE_PADDING = 24.0f;
     private static final float LOGO_PROGRESS_GAP = 0.0f;
     private static final float LOGO_WIDTH = 360.0f;
     private static final float PROGRESS_WIDTH = LOGO_WIDTH;
     private static final float PROGRESS_TRACK_HEIGHT = 10.0f;
-    private static final float PROGRESS_HEIGHT = PROGRESS_TRACK_HEIGHT + 2.0f;
-    private static final float PROGRESS_OFFSET_Y = 0.0f;
     private static final float LOGO_ASPECT = 512.0f / 341.0f;
     private static final float PROGRESS_RESPONSE_PER_SECOND = 10.0f;
     private static final float PROGRESS_SNAP_EPSILON = 0.001f;
@@ -44,7 +39,7 @@ public final class WebDefaultPreloadApplicationListener implements WebPreloadApp
     private TextureRegion logoRegion;
     private int logoLoadCheckedFiles = -1;
     private boolean logoLoadCheckedComplete;
-    private float displayedProgress;
+    private final UiFloatState displayedProgress = Ui.state(0.0f);
 
     /**
      * Runs the create step.
@@ -53,22 +48,17 @@ public final class WebDefaultPreloadApplicationListener implements WebPreloadApp
      */
     @Override
     public void create(WebPreloadContext context) {
-        displayedProgress = 0.0f;
+        displayedProgress.set(0.0f);
         context.ui().theme(theme());
         context.ui().setContent(ui -> ui.column(Ui.modifier().fill().padding(PAGE_PADDING).gap(LOGO_PROGRESS_GAP), page -> {
             page.spacer(Ui.modifier().weight(1.0f));
-            page.custom("web-preload-logo",
-                    Ui.modifier().fillWidth().maxWidth(LOGO_WIDTH).align(UiAlign.CENTER), logo -> {
-                        logo.measure(constraints -> logoSize(constraints.maxWidth(), constraints.maxHeight()));
-                        logo.draw(this::drawLogo);
-                    });
-            page.custom("web-preload-progress",
-                    Ui.modifier().fillWidth().maxWidth(PROGRESS_WIDTH).height(PROGRESS_HEIGHT)
-                            .align(UiAlign.CENTER).offset(0.0f, PROGRESS_OFFSET_Y),
-                    progress -> {
-                        progress.measure(constraints -> progressSize(constraints.maxWidth(), constraints.maxHeight()));
-                        progress.draw(this::drawProgress);
-                    });
+            UiSize size = logoSize(context.ui().uiX(context.display().width()) - 2 * PAGE_PADDING,
+                    context.ui().uiY(context.display().height()) - 2 * PAGE_PADDING - PROGRESS_TRACK_HEIGHT);
+            var logo = Ui.modifier().size(size.width(), size.height()).align(UiAlign.CENTER);
+            if (logoRegion == null) page.spacer(logo);
+            else page.image(logoRegion, logo.semanticLabel("libFDX"));
+            page.progressBar(Ui.modifier().fillWidth().maxWidth(PROGRESS_WIDTH).height(PROGRESS_TRACK_HEIGHT)
+                    .align(UiAlign.CENTER).semanticLabel("Loading progress"), displayedProgress, 0, 1);
             page.spacer(Ui.modifier().weight(1.0f));
         }));
     }
@@ -101,6 +91,11 @@ public final class WebDefaultPreloadApplicationListener implements WebPreloadApp
         }
     }
 
+    @Override
+    public void resize(WebPreloadContext context, int width, int height) {
+        context.ui().requestCompose();
+    }
+
     private void loadLogoIfReady(WebPreloadContext context) {
         if (logoRegion != null) {
             return;
@@ -120,10 +115,12 @@ public final class WebDefaultPreloadApplicationListener implements WebPreloadApp
                 .rgba8(LOGO_ASSET_PATH, image.width(), image.height()));
         context.graphics().device().writeTexture(logoTexture, image.rgba());
         logoRegion = new TextureRegion(logoTexture);
+        context.ui().requestCompose();
     }
 
     private static UiTheme theme() {
-        return Ui.darkTheme().colors(BACKGROUND, UiColor.WHITE);
+        return Ui.darkTheme().colors(BACKGROUND, UiColor.WHITE).progressBar(UiStyle.style()
+                .background(UiDrawable.color(PROGRESS_TRACK)).foreground(UiDrawable.color(LOGO_MARK)));
     }
 
     private UiSize logoSize(float availableWidth, float availableHeight) {
@@ -139,14 +136,9 @@ public final class WebDefaultPreloadApplicationListener implements WebPreloadApp
         return new UiSize(width, height);
     }
 
-    private static UiSize progressSize(float availableWidth, float availableHeight) {
-        return new UiSize(Math.max(0.0f, Math.min(PROGRESS_WIDTH, availableWidth)),
-                Math.max(0.0f, Math.min(PROGRESS_HEIGHT, availableHeight)));
-    }
-
     private void updateProgress(WebPreloadContext context) {
-        displayedProgress = advanceDisplayedProgress(displayedProgress, context.progress().progress(),
-                context.deltaTime(), context.progress().isFailed());
+        displayedProgress.set(advanceDisplayedProgress(displayedProgress.get(), context.progress().progress(),
+                context.deltaTime(), context.progress().isFailed()));
     }
 
     static float advanceDisplayedProgress(float displayed, float target, float delta, boolean failed) {
@@ -157,47 +149,6 @@ public final class WebDefaultPreloadApplicationListener implements WebPreloadApp
         float response = Math.min(1.0f, Math.max(0.0f, delta) * PROGRESS_RESPONSE_PER_SECOND);
         float next = displayed + (target - displayed) * response;
         return target - next <= PROGRESS_SNAP_EPSILON ? target : next;
-    }
-
-    private void drawLogo(UiDrawContext draw, UiRect bounds) {
-        if (logoRegion == null || logoRegion.width() <= 0 || logoRegion.height() <= 0) {
-            return;
-        }
-        float aspect = logoRegion.width() / (float) logoRegion.height();
-        float width = Math.min(bounds.width(), bounds.height() * aspect);
-        float height = width / aspect;
-        if (height > bounds.height()) {
-            height = bounds.height();
-            width = height * aspect;
-        }
-        if (width <= 0.0f || height <= 0.0f) {
-            return;
-        }
-        float x = bounds.x() + (bounds.width() - width) * 0.5f;
-        float y = bounds.y() + (bounds.height() - height) * 0.5f;
-        draw.image(logoRegion, x, y, width, height, UiColor.WHITE);
-    }
-
-    private void drawProgress(UiDrawContext draw, UiRect bounds) {
-        float width = Math.min(PROGRESS_WIDTH, bounds.width());
-        float height = Math.min(PROGRESS_TRACK_HEIGHT, bounds.height());
-        if (width <= 0.0f || height <= 0.0f) {
-            return;
-        }
-        float x = bounds.x() + (bounds.width() - width) * 0.5f;
-        float y = bounds.y() + (bounds.height() - height) * 0.5f;
-        draw.rect(x, y, width, height, PROGRESS_TRACK);
-        draw.rect(x, y - 1.0f, width, 1.0f, PROGRESS_EDGE);
-        draw.rect(x, y + height, width, 1.0f, PROGRESS_SHADOW);
-
-        float fill = width * clamp01(displayedProgress);
-        if (fill <= 0.0f) {
-            return;
-        }
-        draw.rect(x, y, fill, height, LOGO_MARK);
-        draw.rect(x, y, fill, 1.0f, PROGRESS_HIGHLIGHT);
-        float capWidth = Math.min(8.0f, fill);
-        draw.rect(x + fill - capWidth, y, capWidth, height, PROGRESS_CAP);
     }
 
     private static float clamp01(float value) {

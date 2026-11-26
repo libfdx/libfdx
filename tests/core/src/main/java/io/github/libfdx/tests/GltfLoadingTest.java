@@ -80,7 +80,7 @@ public final class GltfLoadingTest extends GraphicsParityTest {
         G2DAssetLoaders.register(assets, graphics);
         G3DAssetLoaders.register(assets, graphics);
         font = new ShowcaseFont(assets.createScope(), false);
-        hud = new ShowcaseHud(graphics);
+        hud = new ShowcaseHud(fdx);
         ModelBatchConfig batchConfig = new ModelBatchConfig();
         var capabilities = graphics.device().shaderPreparationCapabilities();
         if (capabilities.cpuExecution() != ShaderPreparationCapabilities.Execution.UNAVAILABLE

@@ -1,5 +1,9 @@
 # Running and reviewing tests
 
+Run `./gradlew :tests:platform:desktop:verify_gallery_hud` to render the Tiled map, scene and audio controls with OpenGL. The task saves framebuffer captures in `tests/platform/desktop/build/reports/gallery-hud/`.
+
+Run `./gradlew :libfdx:tools:shader-graph-editor:verify_node_picker` to open the shader graph picker, type a search and capture the result in `libfdx/tools/shader-graph-editor/build/reports/node-picker/search.ppm`.
+
 The test chooser is both a collection of interactive examples and a runtime
 regression suite. Its automatic run visits the scenarios registered in
 `TestSelector`; the selector is the authoritative catalog.

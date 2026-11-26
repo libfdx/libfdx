@@ -8,15 +8,13 @@ import io.github.libfdx.audio.*;
 import io.github.libfdx.audio.loaders.AudioAssetLoaders;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.*;
-import io.github.libfdx.graphics.g2d.SpriteBatch;
 import io.github.libfdx.input.*;
-import java.nio.ByteBuffer;
+import io.github.libfdx.ui.*;
 
 /** Actual bounded music loading, mixer crossfade, loop/seek and service suspension. */
 public final class MusicStreamingTest extends GraphicsParityTest {
     @Override
     protected boolean readyForCapture() { return requiresCompletion() ? released : phase > 0; }
-    private static final LoadOp CLEAR = LoadOp.clear(.025f,.035f,.055f,1);
     private final AssetExecutor executor;
     private Audio audio;
     private AudioMixer mixer;
@@ -26,8 +24,8 @@ public final class MusicStreamingTest extends GraphicsParityTest {
     private Music a,b;
     private Input input;
     private InputAdapter activation;
-    private SpriteBatch batch;
-    private Texture white;
+    private UiRoot ui;
+    private final UiFloatState firstGain = Ui.state(0f), secondGain = Ui.state(0f), completed = Ui.state(0f);
     private int phase=-1;
     private double elapsed;
     private boolean waiting,released;
@@ -56,8 +54,14 @@ public final class MusicStreamingTest extends GraphicsParityTest {
             public boolean keyDown(KeyEvent event) { activate(); return true; }
         };
         input.addProcessor(activation);
-        batch=new SpriteBatch(graphics); white=graphics.device().createTexture(TextureDescriptor.rgba8("Music status",1,1));
-        ByteBuffer pixel=ByteBuffer.allocateDirect(4); pixel.putInt(-1).flip(); graphics.device().writeTexture(white,pixel);
+        ui = new UiToolkit(fdx.files()).root(display, graphics);
+        ui.setContent(root -> root.column(Ui.modifier().fill().padding(24).gap(12), meters -> {
+            meters.spacer(Ui.modifier().weight(1));
+            meters.progressBar(Ui.modifier().fillWidth().height(18).semanticLabel("First track gain"), firstGain, 0, .5f);
+            meters.progressBar(Ui.modifier().fillWidth().height(18).semanticLabel("Second track gain"), secondGain, 0, .5f);
+            meters.progressBar(Ui.modifier().fillWidth().height(10).semanticLabel("Playback phases"), completed, 0, 7);
+            meters.spacer(Ui.modifier().weight(1));
+        }));
         markCreated();
     }
     @Override
@@ -111,22 +115,18 @@ public final class MusicStreamingTest extends GraphicsParityTest {
                 }
             }
         }
-        batch.viewport(framebufferWidth(),framebufferHeight()); batch.begin(CLEAR);
-        for(int i=0;i<7;i++) {
-            batch.color(i<=phase?.2f:.12f,i<=phase?.7f:.2f,i<=phase?.5f:.3f,1);
-            batch.draw(white,-.85f+i*.25f,-.65f,.2f,.1f);
-        }
-        batch.color(.15f,.25f,.4f,1); batch.draw(white,-.8f,-.1f,1.6f,.15f); batch.draw(white,-.8f,.3f,1.6f,.15f);
-        if(a!=null && !released) {
-            batch.color(.4f,.75f,1,1); batch.draw(white,-.8f,.3f,a.gain()*3.2f,.15f);
-            batch.color(1,.6f,.25f,1); batch.draw(white,-.8f,-.1f,b.gain()*3.2f,.15f);
-        }
-        batch.end(); finishFrame();
+        firstGain.set(a != null && !released ? a.gain() : 0);
+        secondGain.set(b != null && !released ? b.gain() : 0);
+        completed.set(phase + 1);
+        graphics.clear(.025f, .035f, .055f, 1);
+        ui.update((float)application.deltaTime());
+        ui.render();
+        finishFrame();
     }
     @Override
     public void dispose() {
         if(input!=null) input.removeProcessor(activation);
-        dispose(mixer); dispose(assets); dispose(executor); dispose(batch); dispose(white);
+        dispose(mixer); dispose(assets); dispose(executor); dispose(ui);
         if(requiresCompletion() && !released) throw new FdxException("Music scenario did not complete");
         verifyDisposed();
     }

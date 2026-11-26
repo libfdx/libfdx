@@ -76,9 +76,8 @@ snapshots for 90 days.
 - [Unresolved issues](docs/UNRESOLVED_ISSUES.md): known failures and criteria for
   revisiting them after dependency updates.
 - [Shaders](docs/SHADERS.md): WGSL authoring and provider translation.
-- [Shader graph sample](samples/graphics/shader-graph/): code-authored and
-  serialized graphs, batch integration, provider targets, and optional UI Kit
-  editing.
+- Run three saved or Java-authored surfaces in a standalone game window, or open
+  them in the editor. [Shader graph sample](samples/graphics/shader-graph/)
 - [UI Kit](docs/UI_KIT.md): UI ownership, composition, state, and rendering.
 - [Gradle plugin](libfdx/tools/gradle-plugin/README.md): project-generation DSL.
 - [Project generator](libfdx/tools/project-generator/README.md): bundled-sample

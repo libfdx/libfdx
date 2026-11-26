@@ -5,6 +5,7 @@ import io.github.libfdx.tests.utils.shared.ShowcaseFont;
 import io.github.libfdx.tests.utils.shared.ShowcaseHud;
 
 import io.github.libfdx.Fdx;
+import io.github.libfdx.ui.*;
 import io.github.libfdx.assets.*;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.core.FdxException;
@@ -50,12 +51,13 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
     private AnimationClip[] clips;
     private Input input;
     private EffectQuality desired,quality,rejectedQuality;
-    private boolean ready,paused,platformPaused,ibl=true,shadowEnabled=true,dragging,disposed;
+    private boolean ready,paused,platformPaused,dragging,disposed;
     private int rejectedWidth,rejectedHeight;
     private int frames,qualityAge,activeClip,eventCount,lastX,lastY,width,height,sceneX,sceneY,sceneWidth,sceneHeight;
     private long casterRevision,retirements;
     private float yaw=.62f,pitch=.4f,distance=11.8f,uiScale=1,uiLeft,uiTop;
     private String providerLabel,message="PREPARING THE GALLERY",drawStats="WARMING UP",timeStats="CPU RECORD / WARMING UP",budgetStats="";
+    private final UiBooleanState ibl = Ui.state(true), shadowEnabled = Ui.state(true);
     private final InputAdapter controls=new InputAdapter() {
         @Override
         public boolean keyDown(KeyEvent event) {
@@ -64,8 +66,8 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
                 case NUM_2 -> desired=EffectQuality.BALANCED;
                 case NUM_3 -> desired=EffectQuality.HIGH;
                 case SPACE -> paused=!paused;
-                case I -> ibl=!ibl;
-                case S -> shadowEnabled=!shadowEnabled;
+                case I -> ibl.toggle();
+                case S -> shadowEnabled.toggle();
                 case A -> chooseClip(1-activeClip);
                 case R -> { yaw=.62f; pitch=.4f; distance=11.8f; rejectedQuality=null; if(!ready) requestAssets(); }
                 default -> { return false; }
@@ -74,7 +76,6 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
         }
         @Override
         public boolean pointerDown(PointerEvent event) {
-            if (activate(uiX(event.x()),uiY(event.y()))) return true;
             dragging=insideView(uiX(event.x()),uiY(event.y())); lastX=event.x(); lastY=event.y();
             return dragging;
         }
@@ -92,8 +93,6 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
             if (!insideView(uiX(event.x()),uiY(event.y()))) return false;
             distance=Math.max(8,Math.min(17,distance+event.scrollY()*.6f)); return true;
         }
-        @Override
-        public boolean touchDown(TouchEvent event) { return activate(uiX(event.point().x()),uiY(event.point().y())); }
     };
 
     public SceneShowcaseTest(long frames) { this(frames, null); }
@@ -112,7 +111,8 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
         input=fdx.input();
         assets=new DefaultAssetManager(fdx.files(),executor);
         G2DAssetLoaders.register(assets,graphics); G3DAssetLoaders.register(assets,graphics);
-        hud=new ShowcaseHud(graphics);
+        hud=new ShowcaseHud(fdx);
+        hud.controls(fdx.input(), this::buildControls);
         batch=new ModelBatch(graphics).environment(environment).frustumCulling(true);
         updateLayout();
         input.addProcessor(controls);
@@ -218,10 +218,10 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
             }
             camera.viewport(sceneWidth,sceneHeight).position((float)(Math.sin(yaw)*Math.cos(pitch)*distance),
                     1.7f+(float)Math.sin(pitch)*distance,(float)(Math.cos(yaw)*Math.cos(pitch)*distance)).lookAt(0,1.7f,0);
-            environment.imageBasedLighting(ibl ? probeAsset.asset() : null)
-                    .cascadedShadowMap(shadowEnabled ? shadows : null);
+            environment.imageBasedLighting(ibl.get() ? probeAsset.asset() : null)
+                    .cascadedShadowMap(shadowEnabled.get() ? shadows : null);
             long updated=System.nanoTime();
-            if (shadowEnabled) shadows.renderIfNeeded(sun,camera,casters,casterRevision);
+            if (shadowEnabled.get()) shadows.renderIfNeeded(sun,camera,casters,casterRevision);
             long shadowed=System.nanoTime();
             RenderPass pass=targets.scene.begin(frame,true);
             batch.begin(pass,camera);
@@ -274,7 +274,7 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
         Targets old=targets; CascadedShadowMap3D oldShadows=shadows;
         targets=next; shadows=nextShadows; quality=desired; qualityAge=0;
         sampleCounts[quality.ordinal()]=0; rejectedQuality=null;
-        environment.cascadedShadowMap(shadowEnabled ? shadows : null);
+        environment.cascadedShadowMap(shadowEnabled.get() ? shadows : null);
         if (old!=null) { old.dispose(); retirements++; }
         if (oldShadows!=null && oldShadows!=shadows) oldShadows.dispose();
         budgetStats="TARGETS "+((targets.bytes()+shadows.estimatedBytes())/1_048_576)+" MB";
@@ -303,37 +303,32 @@ public final class SceneShowcaseTest extends GraphicsParityTest {
     private float uiX(int x) { return (x*width/(float)Math.max(1,display.width())-uiLeft)/uiScale; }
     private float uiY(int y) { return (y*height/(float)Math.max(1,display.height())-uiTop)/uiScale; }
     private static boolean insideView(float x,float y) { return x>=24 && x<672 && y>=112 && y<580; }
-    private boolean activate(float x,float y) {
-        if (x<712 || x>=920) return false;
-        if (y>=158 && y<194) { desired=x<780 ? EffectQuality.LOW : x<850 ? EffectQuality.BALANCED : EffectQuality.HIGH; return true; }
-        if (y>=242 && y<276) { chooseClip(x<816 ? 0 : 1); return true; }
-        if (y>=306 && y<338) { ibl=!ibl; return true; }
-        if (y>=342 && y<374) { shadowEnabled=!shadowEnabled; return true; }
-        if (y>=396 && y<434) { paused=!paused; return true; }
-        return false;
+    private void buildControls(UiScope ui) {
+        ui.button("LOW", hud.button(712,158,62,36,quality == EffectQuality.LOW), () -> desired = EffectQuality.LOW);
+        ui.button("BAL", hud.button(783,158,62,36,quality == EffectQuality.BALANCED), () -> desired = EffectQuality.BALANCED);
+        ui.button("HIGH", hud.button(854,158,66,36,quality == EffectQuality.HIGH), () -> desired = EffectQuality.HIGH);
+        ui.button("ORBIT", hud.button(712,242,98,34,activeClip == 0), () -> chooseClip(0));
+        ui.button("DRIFT", hud.button(822,242,98,34,activeClip == 1), () -> chooseClip(1));
+        ui.toggleSwitch("ENVIRONMENT", hud.box(712,306,208,32), ibl);
+        ui.toggleSwitch("SHADOWS", hud.box(712,342,208,32), shadowEnabled);
+        ui.button(paused ? "RESUME [SPACE]" : "PAUSE [SPACE]", hud.button(712,396,208,38,paused), () -> paused = !paused);
     }
 
+
     private void drawHud() {
-        hud.rect(24,24,912,68,.055f,.079f,.10f,1);
+        hud.panel(24,24,912,68,.055f,.079f,.10f,1);
         hud.rect(24,24,4,68,.34f,.88f,.72f,1);
-        hud.text("LIBFDX",44,42,2.5f,.87f,.96f,.92f);
-        hud.text("KINETIC GALLERY",168,42,2.5f,.87f,.96f,.92f);
+        hud.text("LIBFDX",44,32,2.5f,.87f,.96f,.92f);
+        hud.text("KINETIC GALLERY",168,32,2.5f,.87f,.96f,.92f);
         hud.text("LIGHT / MATERIAL / MOTION",168,70,1.1f,.49f,.62f,.66f);
         hud.text("REALTIME 3D",780,44,1.3f,.34f,.88f,.72f);
         hud.text(providerLabel,780,65,1.1f,.56f,.67f,.71f);
-        hud.rect(696,112,240,468,.055f,.079f,.10f,1);
+        hud.panel(696,112,240,468,.055f,.079f,.10f,1);
+        hud.controlsVersion((quality == null ? 0 : quality.ordinal() + 1) * 4 + activeClip * 2 + (paused ? 1 : 0));
         hud.text("QUALITY",712,132,1.5f,.6f,.73f,.77f);
-        hud.button("LOW",712,158,62,36,quality==EffectQuality.LOW);
-        hud.button("BAL",783,158,62,36,quality==EffectQuality.BALANCED);
-        hud.button("HIGH",854,158,66,36,quality==EffectQuality.HIGH);
         hud.rect(712,210,208,1,.14f,.21f,.25f,1);
         hud.text("ANIMATION",712,222,1.3f,.6f,.73f,.77f);
-        hud.button("ORBIT",712,242,98,34,activeClip==0);
-        hud.button("DRIFT",822,242,98,34,activeClip==1);
         hud.rect(712,290,208,1,.14f,.21f,.25f,1);
-        hud.toggle("ENVIRONMENT",712,306,208,32,ibl);
-        hud.toggle("SHADOWS",712,342,208,32,shadowEnabled);
-        hud.button(paused ? "RESUME [SPACE]" : "PAUSE [SPACE]",712,396,208,38,paused);
         hud.text("FRAME INSPECTOR",712,458,1.25f,.34f,.88f,.72f);
         hud.text(timeStats,712,484,1.05f,.75f,.83f,.84f);
         hud.text(drawStats,712,505,1.05f,.56f,.67f,.71f);

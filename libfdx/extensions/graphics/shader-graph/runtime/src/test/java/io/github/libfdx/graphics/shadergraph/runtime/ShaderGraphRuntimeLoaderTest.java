@@ -2,6 +2,8 @@ package io.github.libfdx.graphics.shadergraph.runtime;
 
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.ColorTargetState;
+import io.github.libfdx.graphics.GraphicsCapabilities;
+import io.github.libfdx.math.ClipDepthRange;
 import io.github.libfdx.graphics.TextureFormat;
 import io.github.libfdx.graphics.shader.ShaderProfile;
 import io.github.libfdx.graphics.shader.reflection.ShaderScalarType;
@@ -85,6 +87,22 @@ final class ShaderGraphRuntimeLoaderTest {
                     document.kind().name());
             assertCompiledProfile(miss, ShaderProfile.PORTABLE_WEBGPU);
             assertCompiledProfile(hit, ShaderProfile.PORTABLE_WEBGPU);
+
+            // Previously saved target-specific caches are safely rebuilt for portable use.
+            var portable = loader.load(ShaderGraphDocumentCodec.write(embedded));
+            assertTrue(portable.cacheMiss());
+            var shared = loader.load(ShaderGraphDocumentCodec.write(portable.documentWithCompiledCache()));
+            assertTrue(shared.cacheHit());
+            assertEquals(signature(hit), signature(shared));
+            assertCompiledProfile(shared, null);
+            if (document.program() != null) {
+                var variant = shared.renderTechnique().passes()[0].variants()[0];
+                for (ShaderProfile profile : ShaderProfile.values()) {
+                    var caps = GraphicsCapabilities.builder().profile(profile)
+                            .clipDepthRange(ClipDepthRange.ZERO_TO_ONE).build();
+                    assertTrue(variant.supports(profile, caps), profile.name());
+                }
+            }
         }
     }
 

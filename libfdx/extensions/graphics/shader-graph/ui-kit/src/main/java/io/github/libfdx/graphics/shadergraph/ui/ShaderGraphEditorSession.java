@@ -1,10 +1,14 @@
 package io.github.libfdx.graphics.shadergraph.ui;
 
+import io.github.libfdx.ui.Ui;
+import io.github.libfdx.ui.UiIntState;
+import io.github.libfdx.graphics.shadergraph.document.ShaderGraphPreviewAnimation;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphId;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.shadergraph.model.ShaderEdge;
 import io.github.libfdx.graphics.shadergraph.model.ShaderEndpoint;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraph;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraphWireRoute;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphDependency;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphEditorData;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphEditorNode;
@@ -25,17 +29,22 @@ import java.util.function.UnaryOperator;
  *
  * <p>Semantic and layout revisions are separate. Pan, zoom, selection, and
  * node positions never alter the document semantic hash or invalidate a
- * successful canonical compilation. Drag transactions may contain many
- * layout updates but create one undo record.</p>
+ * successful canonical compilation. The layout revision advances once per
+ * committed editor layout change, including undo or redo of that change.
+ * Navigating the viewport or selecting a graph leaves the layout revision alone.</p>
  */
 public final class ShaderGraphEditorSession {
     public static final int DEFAULT_HISTORY_CAPACITY = 256;
-    private static final float DEFAULT_NODE_WIDTH = 180.0f;
-    private static final float DEFAULT_NODE_HEIGHT = 104.0f;
 
     private final int historyCapacity;
     private final Deque<HistoryEntry> undo = new ArrayDeque<>();
     private final Deque<HistoryEntry> redo = new ArrayDeque<>();
+    private final UiIntState viewChanges = Ui.state(0);
+
+    void observeView() {
+        viewChanges.get();
+    }
+
     private final List<ShaderGraphEditorSessionListener> listeners =
             new ArrayList<>();
     private ShaderGraphEditorState state;
@@ -90,6 +99,7 @@ public final class ShaderGraphEditorSession {
         return semanticRevision;
     }
 
+    /** Returns the number of committed changes to authored editor layout in this session. */
     public long layoutRevision() {
         return layoutRevision;
     }
@@ -132,7 +142,7 @@ public final class ShaderGraphEditorSession {
 
     public void selectGraph(String graphId) {
         ShaderGraphEditorLayout next = layout().activeGraph(graphId);
-        applyState(new ShaderGraphEditorState(document(), next));
+        if (next != layout()) applyState(state.layout(next), false);
         if (!selectedNodeId.isEmpty()) {
             selectedNodeId = "";
             notifyListeners();
@@ -177,11 +187,12 @@ public final class ShaderGraphEditorSession {
         if (before.equals(after)) {
             return;
         }
-        applyState(after);
-        if (transactionStart == null) {
-            push(undo, new HistoryEntry(command.name().trim(), before, state));
+        boolean committed = transactionStart == null;
+        if (committed) {
+            push(undo, new HistoryEntry(command.name().trim(), before, after));
             redo.clear();
         }
+        applyState(after, committed);
     }
 
     public boolean undo() {
@@ -190,8 +201,8 @@ public final class ShaderGraphEditorSession {
         if (entry == null) {
             return false;
         }
-        applyState(entry.before);
         push(redo, entry);
+        applyState(entry.before, true);
         validateSelection();
         return true;
     }
@@ -202,8 +213,8 @@ public final class ShaderGraphEditorSession {
         if (entry == null) {
             return false;
         }
-        applyState(entry.after);
         push(undo, entry);
+        applyState(entry.after, true);
         validateSelection();
         return true;
     }
@@ -230,12 +241,14 @@ public final class ShaderGraphEditorSession {
         String name = transactionName;
         transactionStart = null;
         transactionName = null;
-        if (before.equals(state)) {
-            return false;
+        boolean changed = !before.equals(state);
+        if (changed) {
+            countLayoutEdit(before, state);
+            push(undo, new HistoryEntry(name, before, state));
+            redo.clear();
         }
-        push(undo, new HistoryEntry(name, before, state));
-        redo.clear();
-        return true;
+        notifyListeners();
+        return changed;
     }
 
     public boolean cancelTransaction() {
@@ -245,7 +258,7 @@ public final class ShaderGraphEditorSession {
         ShaderGraphEditorState before = transactionStart;
         transactionStart = null;
         transactionName = null;
-        applyState(before);
+        applyState(before, false);
         validateSelection();
         return true;
     }
@@ -301,24 +314,33 @@ public final class ShaderGraphEditorSession {
     }
 
     public void addNode(ShaderNode node, float x, float y) {
+        addNode(node, x, y, UnaryOperator.identity());
+    }
+
+    void addConnectedNode(ShaderNode node, float x, float y, ShaderGraphWireSocket origin, ShaderGraphWireSocket port) {
+        addNode(node, x, y, graph -> origin.connect(graph, port));
+    }
+
+    private void addNode(ShaderNode node, float x, float y, UnaryOperator<ShaderGraph> wire) {
         if (node == null) {
             throw new FdxException("Shader graph editor node cannot be null");
         }
         String graphId = activeGraph().id().value();
         execute(command("Add " + node.definitionId(), current -> {
             ShaderGraph graph = current.document().graph(graphId);
-            ShaderGraph replacement =
-                    ShaderGraphSemanticEdits.addNode(graph, node);
+            ShaderGraph replacement = wire.apply(ShaderGraphSemanticEdits.addNode(graph, node));
             ShaderGraphEditorDocument document =
                     current.document().withGraph(replacement);
             ShaderGraphEditorLayout layout =
                     current.layout().reconcile(document).withNode(graphId,
-                            ShaderGraphEditorNode.of(node.id().value(), x, y,
-                                    DEFAULT_NODE_WIDTH,
-                                    DEFAULT_NODE_HEIGHT, false));
+                            ShaderGraphEditorLayout.newNode(node, x, y));
             return new ShaderGraphEditorState(document, layout);
         }));
         selectNode(node.id().value());
+    }
+
+    void connectSockets(ShaderGraphWireSocket from, ShaderGraphWireSocket to) {
+        editActiveGraph("Connect wire", graph -> from.connect(graph, to));
     }
 
     public void duplicateNode(String nodeId, String duplicateId,
@@ -369,6 +391,10 @@ public final class ShaderGraphEditorSession {
                 graph -> ShaderGraphSemanticEdits.disconnect(graph, target));
     }
 
+    void disconnectNodeWires(String nodeId) {
+        editActiveGraph("Disconnect node wires", graph -> ShaderGraphSemanticEdits.disconnectNodeWires(graph, nodeId));
+    }
+
     public void setNodeProperty(String nodeId,
             ShaderNodeProperty property) {
         editActiveGraph("Edit node property",
@@ -385,7 +411,7 @@ public final class ShaderGraphEditorSession {
             ShaderGraphEditorDocument document =
                     current.document().withGraph(replacement);
             ShaderGraphEditorLayout layout =
-                    current.layout().reconcile(document);
+                    current.layout().renameWireEndpoints(graphId, nodeId, replacementId).reconcile(document);
             ShaderGraphEditorNode old = layoutNode(
                     current.layout().graph(graphId), nodeId);
             layout = layout.withNode(graphId, ShaderGraphEditorNode.of(
@@ -419,6 +445,21 @@ public final class ShaderGraphEditorSession {
                 graph -> ShaderGraphSemanticEdits.dependencies(graph, values));
     }
 
+    void bindMaterialOutput(MaterialOutputChannel channel, ShaderEndpoint source) {
+        editActiveGraph((source == null ? "Disconnect " : "Connect ") + channel.label,
+                graph -> ShaderGraphSemanticEdits.materialOutput(graph, channel, source));
+    }
+
+    void moveMaterialOutput(float x, float y) {
+        String graphId = activeGraph().id().value();
+        execute(command("Move Material Output", current ->
+                current.layout(current.layout().withMaterialOutput(graphId, x, y))));
+    }
+
+    void wireRoute(String name, ShaderGraphWireRoute.Wire wire, ShaderGraphWireRoute route) {
+        execute(command(name, current -> current.layout(current.layout().withWireRoute(wire, route))));
+    }
+
     public void moveNode(String nodeId, float x, float y) {
         String graphId = activeGraph().id().value();
         execute(command("Move node", current -> {
@@ -443,6 +484,11 @@ public final class ShaderGraphEditorSession {
             return new ShaderGraphEditorState(current.document(),
                     current.layout().withNode(graphId, replacement));
         }));
+    }
+
+    /** Updates the preview preset as an undoable editor edit. A null preset clears the selection. */
+    public void previewAnimation(ShaderGraphPreviewAnimation value) {
+        execute(command("Set preview animation", current -> current.layout(current.layout().withPreviewAnimation(value))));
     }
 
     public void viewport(float panX, float panY, float zoom) {
@@ -515,23 +561,18 @@ public final class ShaderGraphEditorSession {
         return lastGoodCompilation;
     }
 
-    private void applyState(ShaderGraphEditorState replacement) {
-        ShaderGraphEditorState reconciled = new ShaderGraphEditorState(
-                replacement.document(), replacement.layout());
-        boolean semanticChanged =
-                !state.document().equals(reconciled.document());
-        boolean layoutChanged = !state.layout().equals(reconciled.layout());
-        state = reconciled;
-        if (semanticChanged) {
+    private void applyState(ShaderGraphEditorState replacement, boolean committed) {
+        if (committed) countLayoutEdit(state, replacement);
+        if (!state.document().equals(replacement.document())) {
             semanticRevision++;
             latestCompilation = null;
         }
-        if (layoutChanged) {
-            layoutRevision++;
-        }
-        if (semanticChanged || layoutChanged) {
-            notifyListeners();
-        }
+        state = replacement;
+        notifyListeners();
+    }
+
+    private void countLayoutEdit(ShaderGraphEditorState before, ShaderGraphEditorState after) {
+        if (!before.layout().hasSameEdits(after.layout())) layoutRevision++;
     }
 
     private void push(Deque<HistoryEntry> history, HistoryEntry entry) {
@@ -560,6 +601,7 @@ public final class ShaderGraphEditorSession {
     }
 
     private void notifyListeners() {
+        viewChanges.set(viewChanges.get() + 1);
         ShaderGraphEditorSessionListener[] snapshot = listeners.toArray(
                 ShaderGraphEditorSessionListener[]::new);
         for (ShaderGraphEditorSessionListener listener : snapshot) {

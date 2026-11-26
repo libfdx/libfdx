@@ -43,7 +43,7 @@ public final class ShaderGraphTechniqueCompiler {
                     "Shader graph technique cannot be null");
         }
         ShaderGraphCompileOptions actual = options != null ? options
-                : ShaderGraphCompileOptions.builder().build();
+                : ShaderGraphCompileOptions.portable();
         Map<String, ShaderGraphProgramCompileResult> deduplicated =
                 new HashMap<>();
         List<ShaderGraphDiagnostic> diagnostics = new ArrayList<>();

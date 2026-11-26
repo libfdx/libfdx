@@ -65,7 +65,7 @@ public final class ShaderGraphRenderVariant
 
     /**
      * Profile used to compile a loaded document artifact, or {@code null} for
-     * a directly supplied runtime program.
+     * portable WGSL and directly supplied runtime programs.
      */
     public ShaderProfile compiledProfile() {
         return compiledProfile;

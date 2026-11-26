@@ -59,7 +59,7 @@ public final class AnimationIntegrationTest extends GraphicsParityTest {
         assets=new DefaultAssetManager(fdx.files());
         G2DAssetLoaders.register(assets,graphics);
         font=new ShowcaseFont(assets.createScope(),false);
-        hud=new ShowcaseHud(graphics);
+        hud=new ShowcaseHud(fdx);
         model=createModel();
         ground=new ModelBuilder(graphics).material(new Material("floor",
                 MaterialAttributes.baseColor(.36f,.4f,.46f,1),PbrAttributes.roughnessFactor(.9f)))
@@ -169,8 +169,7 @@ public final class AnimationIntegrationTest extends GraphicsParityTest {
                 : cycle<180 ? "CROSSFADE / WAVE TO REACH"
                 : cycle<300 ? "INTERRUPTED CROSSFADE / RETURN TO WAVE"
                 : "CULLING / SECOND RIBBON MOVED OUTSIDE BOTH VIEWS",20,timelineY,1.3f,.9f,.95f,1);
-        hud.rect(20,timelineY+28,uiWidth-40,4,.18f,.27f,.36f,1);
-        hud.rect(20,timelineY+28,(uiWidth-40)*cycle/360f,4,.3f,.83f,.7f,1);
+        hud.progress(20, timelineY + 28, uiWidth - 40, 4, cycle / 360f);
         hud.text("0S  WAVE",20,timelineY+44,1,.6f,.73f,.85f);
         hud.text("2S  REACH",20+(uiWidth-40)/3,timelineY+44,1,.6f,.73f,.85f);
         hud.text("3S  WAVE",20+(uiWidth-40)/2,timelineY+44,1,.6f,.73f,.85f);

@@ -159,6 +159,8 @@ public final class ProjectGeneratorSmokeTest {
         require(platformer.containsFile(
                 "assets/kenney/pixel-platformer/Tilemap/tilemap_packed.png"),
                 "sample-owned platformer assets were not bundled");
+        require(platformer.file("core/build.gradle.kts").textContent().contains("libs.libfdx.uiKit"),
+                "generated Platformer must depend on UI Kit");
         ProjectValidationResult validation = ProjectValidationResult.validate(ProjectGenerationSettings.builder()
                 .projectName("bad name")
                 .build());
@@ -180,16 +182,19 @@ public final class ProjectGeneratorSmokeTest {
         }
         require(unknownRejected, "unknown bundled sample was accepted");
 
-        boolean unsupportedRejected = false;
-        try {
-            generator.generate(ProjectGenerationSettings.builder()
-                    .sampleId("graphics/shader-graph")
-                    .platforms(ProjectPlatform.WEB)
-                    .build());
-        } catch (IllegalArgumentException expected) {
-            unsupportedRejected = true;
+        for (ProjectSample sample : samples) {
+            for (ProjectPlatform platform : ProjectPlatform.values()) {
+                if (sample.platforms().contains(platform)) continue;
+                boolean rejected = false;
+                try {
+                    generator.generate(ProjectGenerationSettings.builder()
+                            .sampleId(sample.id()).platforms(platform).build());
+                } catch (IllegalArgumentException expected) {
+                    rejected = true;
+                }
+                require(rejected, sample.id() + " accepted unsupported platform " + platform);
+            }
         }
-        require(unsupportedRejected, "unsupported sample platform was accepted");
     }
 
     private static boolean containsSample(List<ProjectSample> samples, String id) {

@@ -13,6 +13,7 @@ import java.util.function.Consumer;
  * @author xpenatan
  */
 public final class UiScope {
+    private static final UiTextAreaOptions SELECTABLE_LINES = UiTextAreaOptions.defaults().readOnly(true);
     private static final UiModifier DEFAULT_INTERACTIVE_MODIFIER = UiModifier.none().focusable(true);
     private static final UiModifier DEFAULT_ITEM_MODIFIER = UiModifier.none().animateItemPlacement();
     private static final UiModifier DEFAULT_VIRTUAL_LIST_MODIFIER = UiModifier.none().fillWidth();
@@ -322,6 +323,27 @@ public final class UiScope {
         return node;
     }
 
+    /** Displays a read-only label. Double-click selects a word and triple-click selects the whole label. */
+    public UiNode selectableText(String text) {
+        return selectableText(text, UiModifier.none());
+    }
+
+    /**
+     * Displays selectable read-only text with label sizing and styling. Explicit line breaks
+     * are preserved. A third consecutive click or tap selects the full value, including clipped text.
+     *
+     * @param text the displayed text
+     * @param modifier the layout and style
+     * @return the selectable label
+     */
+    public UiNode selectableText(String text, UiModifier modifier) {
+        String label = text != null ? text : "";
+        if (label.indexOf('\n') >= 0) {
+            return textArea(modifier, null, SELECTABLE_LINES, label);
+        }
+        return textField(modifier, null, UiTextInputFilter.STRING, null, label);
+    }
+
     /**
      * Runs the button step.
      *
@@ -345,6 +367,14 @@ public final class UiScope {
         UiNode node = addNode(UiNodeType.BUTTON, null, interactive(modifier));
         node.text(text);
         node.action(action);
+        return node;
+    }
+
+    /** Builds a button for continuous pointer input. Each finger releases independently. */
+    public UiNode holdButton(String text, UiModifier modifier, UiHoldState state) {
+        Objects.requireNonNull(state);
+        UiNode node = button(text, modifier, state::activate);
+        node.descriptor(state);
         return node;
     }
 
@@ -779,14 +809,15 @@ public final class UiScope {
      */
     public UiNode textField(UiModifier modifier, UiState<String> state, UiTextInputFilter inputFilter,
             Runnable submitAction) {
+        return textField(modifier, state, inputFilter, submitAction, null);
+    }
+
+    private UiNode textField(UiModifier modifier, UiState<String> state, UiTextInputFilter inputFilter,
+            Runnable submitAction, String label) {
         UiNode node = addNode(UiNodeType.TEXT_FIELD, null, interactive(modifier));
-        node.value(state != null ? state.get() : "");
-        UiTextFieldModel model = node.descriptor() instanceof UiTextFieldModel
-                ? (UiTextFieldModel) node.descriptor()
-                : new UiTextFieldModel(state);
-        model.state(state);
+        UiTextFieldModel model = bindTextModel(node, state, label);
         model.multiline(false);
-        model.readOnly(false);
+        model.readOnly(label != null);
         model.inputFilter(inputFilter);
         model.submitAction(submitAction);
         node.descriptor(model);
@@ -834,12 +865,12 @@ public final class UiScope {
      * @return the text area
      */
     public UiNode textArea(UiModifier modifier, UiState<String> state, UiTextAreaOptions options) {
+        return textArea(modifier, state, options, null);
+    }
+
+    private UiNode textArea(UiModifier modifier, UiState<String> state, UiTextAreaOptions options, String label) {
         UiNode node = addNode(UiNodeType.TEXT_AREA, null, interactive(modifier));
-        node.value(state != null ? state.get() : "");
-        UiTextFieldModel model = node.descriptor() instanceof UiTextFieldModel
-                ? (UiTextFieldModel) node.descriptor()
-                : new UiTextFieldModel(state);
-        model.state(state);
+        UiTextFieldModel model = bindTextModel(node, state, label);
         model.multiline(true);
         model.readOnly(options != null && options.readOnly());
         model.inputFilter(UiTextInputFilter.STRING);
@@ -849,6 +880,15 @@ public final class UiScope {
         node.scrollState(scrollState);
         node.descriptor(model);
         return node;
+    }
+
+    private UiTextFieldModel bindTextModel(UiNode node, UiState<String> state, String label) {
+        UiTextFieldModel model = node.descriptor() instanceof UiTextFieldModel retained
+                ? retained : new UiTextFieldModel(state);
+        model.bind(state, label);
+        node.text(label);
+        node.value(model.value());
+        return model;
     }
 
     /**
@@ -1166,6 +1206,7 @@ public final class UiScope {
             }
             content.build(context);
             node.customContext(context);
+            context.composeChildren(root, node);
         } else {
             node.customContext(null);
         }

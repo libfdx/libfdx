@@ -111,6 +111,65 @@ final class ShaderGraphCoreTest {
     }
 
     @Test
+    void smoothstepAndCosineAcceptFloatingVectorsOnBothPortableProfiles() {
+        var graph = new ShaderGraphBuilder("soft_mask", ShaderGraphKind.FUNCTION);
+        var zero = graph.constant("low", ShaderGraphLiteral.zero(VEC2));
+        var one = graph.constant("high", ShaderGraphLiteral.composite(VEC2,
+                ShaderGraphLiteral.f32(1), ShaderGraphLiteral.f32(1)));
+        graph.output("result", graph.cosine("wave", graph.smoothstep("ramp", zero, one, zero)));
+        for (var profile : new ShaderProfile[] { ShaderProfile.PORTABLE_WEBGPU, ShaderProfile.PORTABLE_WEBGL2 }) {
+            var result = new ShaderGraphCompiler().compile(graph.build(),
+                    ShaderGraphCompileOptions.builder().profile(profile).build());
+            assertTrue(result.success(), diagnostics(result));
+            assertTrue(result.wgsl().contains("smoothstep("));
+            assertTrue(result.wgsl().contains("cos("));
+        }
+    }
+
+    @Test
+    void timeAndPannerRoundTripAndCompileWithoutAParameterPreset() {
+        var graph = new ShaderGraphBuilder("flow", ShaderGraphKind.SURFACE);
+        var uv = graph.constant("uv", ShaderGraphLiteral.zero(VEC2));
+        graph.output("sample", graph.noise2D("field", graph.panner("current", uv, uv, graph.time("time"))));
+        var decoded = ShaderGraphCodec.read(ShaderGraphCodec.write(graph.build()));
+        assertTrue(decoded.usesTime());
+        assertEquals(0, decoded.parameters().length);
+        for (var profile : new ShaderProfile[] {ShaderProfile.PORTABLE_WEBGPU, ShaderProfile.PORTABLE_WEBGL2}) {
+            var result = new ShaderGraphCompiler().compile(decoded, ShaderGraphCompileOptions.builder().profile(profile).build());
+            assertTrue(result.success(), diagnostics(result));
+            assertTrue(result.wgsl().contains("fdx_graph_flow(fdx_time_seconds: f32)"));
+            assertTrue(result.wgsl().contains("fdx_graph_flow(0.0)"));
+        }
+        var unsupported = new ShaderGraphBuilder("invalid_clock", ShaderGraphKind.FUNCTION);
+        unsupported.output("time", unsupported.time("clock"));
+        assertCode(new ShaderGraphCompiler().compile(unsupported.build(), null), "FDXG_OPERATION");
+    }
+
+    @Test
+    void effectNodesRejectUnsupportedInputTypes() {
+        var cosine = new ShaderGraphBuilder("integer_angle", ShaderGraphKind.SURFACE);
+        cosine.output("result", cosine.cosine("wave", cosine.constant("angle", ShaderGraphLiteral.i32(1))));
+        assertCode(new ShaderGraphCompiler().compile(cosine.build(), null), "FDXG_OPERATION");
+
+        var ramp = new ShaderGraphBuilder("integer_ramp", ShaderGraphKind.FUNCTION);
+        var integer = ramp.constant("number", ShaderGraphLiteral.i32(1));
+        ramp.output("result", ramp.smoothstep("ramp", integer, integer, integer));
+        assertCode(new ShaderGraphCompiler().compile(ramp.build(), null), "FDXG_OPERATION");
+
+        var noise = new ShaderGraphBuilder("scalar_noise", ShaderGraphKind.FUNCTION);
+        var scalar = noise.constant("scalar", ShaderGraphLiteral.f32(0.5f));
+        noise.output("result", noise.noise2D("noise", scalar));
+        assertCode(new ShaderGraphCompiler().compile(noise.build(), null), "FDXG_OPERATION");
+
+        var rim = new ShaderGraphBuilder("invalid_rim", ShaderGraphKind.FUNCTION);
+        var uv = rim.constant("uv", ShaderGraphLiteral.zero(VEC2));
+        var direction = rim.constant("direction", ShaderGraphLiteral.zero(VEC3));
+        var power = rim.constant("power", ShaderGraphLiteral.f32(3));
+        rim.output("result", rim.fresnel("rim", uv, direction, power));
+        assertCode(new ShaderGraphCompiler().compile(rim.build(), null), "FDXG_OPERATION");
+    }
+
+    @Test
     void lowersFunctionsSurfaceMathStructuresAndControlFlowToTypedIr() {
         ShaderGraphBuilder function = new ShaderGraphBuilder(
                 "increase", ShaderGraphKind.FUNCTION);

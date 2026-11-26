@@ -41,6 +41,22 @@ public final class UiTreeState extends UiObservableState {
     private Row selected;
     private boolean visibilityDirty = true;
     private boolean revealPending;
+    private boolean animatePlacement = true;
+
+    /** Enables animated row movement. Disable it in transient pickers whose filter changes during typing. */
+    public UiTreeState animatePlacement(boolean enabled) {
+        if (animatePlacement != enabled) {
+            animatePlacement = enabled;
+            notifyListeners();
+        }
+        return this;
+    }
+
+    boolean animatePlacement() {
+        observeRead();
+        return animatePlacement;
+    }
+
 
     /**
      * Creates state for a fixed set of items. Root branches start expanded.
@@ -121,6 +137,12 @@ public final class UiTreeState extends UiObservableState {
         int position = visible.indexOf(anchor, true);
         int next = backward ? (position + count - 1) % count : (position + 1) % count;
         return visibleRows.get(next).item.key();
+    }
+
+    /** Returns the current number of rows after branch expansion. */
+    public int visibleCount() {
+        observeRead();
+        return visibleRows().size();
     }
 
     private void append(UiTreeItem item, Row parent) {

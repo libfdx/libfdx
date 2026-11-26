@@ -92,7 +92,7 @@ public final class AssetLoadingTest extends GraphicsParityTest {
         applicationThread = Thread.currentThread();
         input = fdx.input();
         input.addProcessor(controls);
-        scene = new AssetLoadingScene(graphics, fdx.files());
+        scene = new AssetLoadingScene(fdx);
         image = new DelayedImage(fdx.files().internal(IMAGE));
         fontDefinition = new DelayedImage(fdx.files().internal(FONT));
         fontPage = new DelayedImage(fdx.files().internal(FONT_PAGE));

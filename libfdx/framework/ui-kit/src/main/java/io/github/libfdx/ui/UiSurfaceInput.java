@@ -25,7 +25,8 @@ public interface UiSurfaceInput {
     }
 
     /**
-     * Handles a key-down operation while the surface is focused.
+     * Handles a key-down operation while the surface or its focused overlay owns focus.
+     * Returning false lets the focused widget perform its normal keyboard handling.
      *
      * @param event the key event
      * @return true when the operation was handled
@@ -45,7 +46,7 @@ public interface UiSurfaceInput {
     }
 
     /**
-     * Reports a focus transition.
+     * Reports focus entering or leaving the surface, including its focused overlay.
      *
      * @param focused true when the surface gained focus
      */

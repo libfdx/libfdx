@@ -2,6 +2,8 @@ package io.github.libfdx.graphics.g3d;
 
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompileOptions;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompiler;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraphBuilder;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraphKind;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphLiteral;
 import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphMaterialDefinition;
 import org.junit.jupiter.api.Test;
@@ -12,6 +14,21 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PbrGraphCustomizationTest {
+    @Test
+    void timeCanDriveOneSurfaceOutputWithoutMaterialParameters() {
+        var graph = new ShaderGraphBuilder("timed_mask", ShaderGraphKind.SURFACE);
+        graph.output("coverage", "alpha", graph.fraction("cycle", graph.time("seconds")));
+        var definition = ShaderGraphMaterialDefinition.compile(graph.build(), new ShaderGraphCompiler(),
+                ShaderGraphCompileOptions.builder().build());
+        var customization = new PbrGraphCustomization(definition);
+        for (boolean skinned : new boolean[] {false, true}) {
+            String source = customization.shader(skinned).source();
+            assertTrue(source.contains("fdx_graph_timed_mask(uniforms.cameraPosition.w)"));
+            assertTrue(source.contains("base.a = fdx_surface;"));
+            assertTrue(source.contains("fract("));
+        }
+    }
+
     @Test
     void composesTheSameGraphIntoStaticAndSkinnedPbrTemplates() {
         ShaderGraphMaterialDefinition definition =
@@ -45,6 +62,13 @@ class PbrGraphCustomizationTest {
         assertTrue(staticSource.contains("uniforms.fdx_tint"));
         assertFalse(staticSource.contains("fdx_graph_material"));
         assertNotEquals(staticSource, skinnedSource);
+        for (boolean skinned : new boolean[] { false, true }) {
+            String masked = customization.shader(skinned, true).source();
+            int graphAlpha = masked.indexOf("base.a = fdx_surface.");
+            assertTrue(graphAlpha >= 0);
+            assertTrue(masked.indexOf("if (base.a <= uniforms.emissiveFlags.y)") > graphAlpha,
+                    "The mask must test the alpha returned by the surface graph");
+        }
 
         var staticUniform = customization.shader(false).reflection()
                 .requireBinding(1, 0);

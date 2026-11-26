@@ -48,15 +48,7 @@ public final class TiledMapTest extends GraphicsParityTest {
         @Override
         public boolean pointerDown(PointerEvent event) {
             float x = event.x() * framebufferWidth() / (float) Math.max(1, display.width());
-            float y = event.y() * framebufferHeight() / (float) Math.max(1, display.height());
-            if (x >= sceneWidth) {
-                float row = y / scale;
-                if (row >= 260 && row < 296) paused = !paused;
-                else if (row >= 306 && row < 342) mist = !mist;
-                else if (row >= 352 && row < 388) objects = !objects;
-                else if (row >= 398 && row < 434) reset();
-                return true;
-            }
+            if (x >= sceneWidth) return false;
             dragging = true; moved = false; lastX = event.x(); lastY = event.y();
             return true;
         }
@@ -98,7 +90,8 @@ public final class TiledMapTest extends GraphicsParityTest {
                 ? TextureLoadOptions.DEFAULT : TextureLoadOptions.PIXEL_ART;
         map = scope.load(textureOptions.descriptor("tiled/coast.tmj", TileMapAsset.class));
         font = new ShowcaseFont(scope, false);
-        hud = new ShowcaseHud(graphics);
+        hud = new ShowcaseHud(fdx);
+        hud.controls(input, this::buildControls);
         sprites = new SpriteBatch(graphics, 4096); batch = new PixelBatch(sprites);
         solid = graphics.device().createTexture(TextureDescriptor.rgba8("Landmark outline", 1, 1));
         ByteBuffer pixel = ByteBuffer.allocateDirect(4); pixel.putInt(-1).flip();
@@ -144,17 +137,14 @@ public final class TiledMapTest extends GraphicsParityTest {
         }
         batch.end();
         hud.begin(pass, width, height, scale, sceneWidth, 0);
-        hud.rect(0, 0, 300, height / scale, .035f, .085f, .105f, 1);
+        hud.panel(0, 0, 300, height / scale, .035f, .085f, .105f, 1);
         hud.text("TILED / INTERACTIVE MAP", 22, 27, 1.05f, .43f, .78f, .76f);
         hud.text("COASTAL", 22, 65, 2.7f, .94f, .91f, .79f);
         hud.text("VILLAGE", 22, 102, 2.7f, .94f, .91f, .79f);
         hud.text("EXPLORE A MAP LOADED FROM TILED JSON.", 22, 161, 1.03f, .68f, .78f, .77f);
         hud.text("DRAG OR WASD / ARROWS TO PAN", 22, 192, 1.12f, .85f, .9f, .85f);
         hud.text("SCROLL TO ZOOM / CLICK GOLD LANDMARKS", 22, 215, 1.03f, .85f, .9f, .85f);
-        hud.button(paused ? "SPACE / RESUME WATER" : "SPACE / PAUSE WATER", 22, 260, 256, 36, !paused);
-        hud.button("P / PARALLAX MIST", 22, 306, 256, 36, mist);
-        hud.button("O / OBJECT OUTLINES", 22, 352, 256, 36, objects);
-        hud.button("R / RESET VIEW", 22, 398, 256, 36, false);
+        hud.controlsVersion((paused ? 1 : 0) | (mist ? 2 : 0) | (objects ? 4 : 0));
         hud.text("WHAT TO LOOK FOR", 22, 468, 1.15f, .92f, .76f, .46f);
         hud.text("WATER RIPPLES SWITCH ATLAS FRAMES.", 22, 499, 1.02f, .72f, .82f, .8f);
         hud.text("MIST MOVES SLOWER AS YOU PAN.", 22, 520, 1.02f, .72f, .82f, .8f);
@@ -165,6 +155,14 @@ public final class TiledMapTest extends GraphicsParityTest {
                 22, 631, 1.12f, .95f, .81f, .49f);
         hud.text(selected < 0 ? "ITS NAME IS READ FROM THE TMJ OBJECT." : "SELECTED MAP OBJECT / R TO CLEAR", 22, 658, 1, .66f, .77f, .76f);
         hud.end(); pass.end(); finishFrame();
+    }
+
+    private void buildControls(io.github.libfdx.ui.UiScope ui) {
+        ui.button(paused ? "SPACE / RESUME WATER" : "SPACE / PAUSE WATER", hud.button(22, 260, 256, 36, !paused),
+                () -> paused = !paused);
+        ui.button("P / PARALLAX MIST", hud.button(22, 306, 256, 36, mist), () -> mist = !mist);
+        ui.button("O / OBJECT OUTLINES", hud.button(22, 352, 256, 36, objects), () -> objects = !objects);
+        ui.button("R / RESET VIEW", hud.button(22, 398, 256, 36, false), this::reset);
     }
 
     private float effectiveZoom() { return Math.max(.01f, zoom * scale * .78f); }

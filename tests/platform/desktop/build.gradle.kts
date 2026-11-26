@@ -169,6 +169,33 @@ libfdx {
     }
 }
 
+val captureGalleryWidgets = mapOf(
+    "tiled" to "TiledMapTest",
+    "scene" to "SceneShowcaseTest",
+    "audio" to "AudioPlaybackTest"
+).map { (name, test) ->
+    tasks.register<JavaExec>("verify_gallery_hud_$name") {
+        group = "verification"
+        description = "Renders $test on OpenGL and captures its UI Kit widgets."
+        classpath(tasks.named("libfdx_desktop_jvm_tests_gl_build"))
+        mainClass.set("io.github.libfdx.tests.utils.desktoptestlauncher.DesktopTestLauncher")
+        workingDir = rootProject.projectDir
+        jvmArgs("--enable-native-access=ALL-UNNAMED")
+        systemProperty("libfdx.test.name", test)
+        systemProperty("libfdx.test.graphics", "gl")
+        systemProperty("libfdx.test.frames", "240")
+        systemProperty("libfdx.test.maximized", "false")
+        systemProperty("libfdx.test.visible", "false")
+        systemProperty("libfdx.test.capture", layout.buildDirectory.file("reports/gallery-hud/$name.ppm").get().asFile.absolutePath)
+    }
+}
+
+tasks.register("verify_gallery_hud") {
+    group = "verification"
+    description = "Renders the gallery map, scene and audio controls."
+    dependsOn(captureGalleryWidgets)
+}
+
 tasks.register("validate_desktop_graphics") {
     group = "verification"
     description = "Runs the desktop test/API matrix and writes an incremental checklist."

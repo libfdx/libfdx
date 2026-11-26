@@ -164,8 +164,6 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter impl
 
     private final long exitAfterFrames;
     private final Camera[] cameras = new Camera[CAMERA_EXAMPLE_COUNT];
-    private final int[] selectorX = new int[EXAMPLE_COUNT];
-    private final int[] selectorWidth = new int[EXAMPLE_COUNT];
     private final MutableAnchor3D firstPersonAnchor =
             new MutableAnchor3D(FIRST_PERSON_X, FIRST_PERSON_Y, FIRST_PERSON_Z, 0.0f, 1.0f, 0.0f);
     private final MutableAnchor3D thirdPersonAnchor =
@@ -838,11 +836,6 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter impl
                 if (event.button() != MouseButton.LEFT) {
                     return false;
                 }
-                int selector = selectorAt(event.x(), event.y());
-                if (selector >= 0) {
-                    selectPanel(selector);
-                    return true;
-                }
                 if (containsActiveView(event.x(), event.y())
                         && (activePanel == CINEMATIC_3D_PANEL || activePanel == CINEMATIC_2D_PANEL)) {
                     cinematicDragging = true;
@@ -1230,35 +1223,11 @@ public final class CameraControllersShowcaseTest extends ApplicationAdapter impl
         layoutHeight = Math.max(1, height);
         inputWidth = Math.max(1, display.width());
         inputHeight = Math.max(1, display.height());
-        int baseSelectorWidth = Math.max(1, width / EXAMPLE_COUNT);
-        for (int i = 0; i < EXAMPLE_COUNT; i++) {
-            int x = i * baseSelectorWidth;
-            selectorX[i] = x;
-            selectorWidth[i] = i == EXAMPLE_COUNT - 1 ? width - x : baseSelectorWidth;
-        }
     }
 
     private boolean containsActiveView(int x, int y) {
         int framebufferY = pointerFramebufferBottomY(y);
         return framebufferY >= 0 && framebufferY < Math.max(1, layoutHeight - SELECTOR_HEIGHT);
-    }
-
-    private int selectorAt(int x, int y) {
-        int framebufferX = pointerFramebufferX(x);
-        int framebufferY = pointerFramebufferBottomY(y);
-        if (framebufferY < layoutHeight - SELECTOR_HEIGHT || framebufferY >= layoutHeight) {
-            return -1;
-        }
-        for (int i = 0; i < EXAMPLE_COUNT; i++) {
-            if (framebufferX >= selectorX[i] && framebufferX < selectorX[i] + selectorWidth[i]) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    private int pointerFramebufferX(int x) {
-        return Math.round(x * (layoutWidth / (float) inputWidth));
     }
 
     private int pointerFramebufferBottomY(int y) {

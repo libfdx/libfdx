@@ -3,6 +3,7 @@ package io.github.libfdx.graphics.shadergraph.ui;
 import io.github.libfdx.core.FdxException;
 import io.github.libfdx.graphics.GraphicsCapabilities;
 import io.github.libfdx.graphics.GraphicsFeature;
+import io.github.libfdx.graphics.shader.ShaderProfile;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraph;
 import io.github.libfdx.graphics.shadergraph.technique.ShaderGraphComputeTechniquePass;
 import io.github.libfdx.graphics.shadergraph.technique.ShaderGraphComputeVariant;
@@ -39,11 +40,6 @@ public final class ShaderGraphEditorCapabilityValidator {
         if (capabilities == null) {
             return diagnostics.toArray(ShaderGraphDiagnostic[]::new);
         }
-        if (!capabilities.supports(settings.profile())) {
-            error(diagnostics, graph, "FDXE_PROFILE_UNSUPPORTED",
-                    "The selected provider does not support shader profile "
-                            + settings.profile());
-        }
         if (containsCompute(document)
                 && !capabilities.supports(GraphicsFeature.COMPUTE)) {
             error(diagnostics, graph, "FDXE_COMPUTE_UNSUPPORTED",
@@ -53,12 +49,14 @@ public final class ShaderGraphEditorCapabilityValidator {
             for (ShaderGraphTechniquePass pass : document.technique().passes()) {
                 boolean supported = false;
                 for (ShaderGraphVariant variant : pass.variants()) {
-                    supported |= variant.supports(settings.profile(), capabilities);
+                    for (ShaderProfile profile : ShaderProfile.values()) {
+                        supported |= variant.supports(profile, capabilities);
+                    }
                 }
                 if (!supported) {
                     error(diagnostics, graph, "FDXE_VARIANT_UNSUPPORTED",
                             "Render pass " + pass.passId()
-                                    + " has no variant for the selected profile/provider");
+                                    + " has no variant for the preview device");
                 }
                 try {
                     pass.pipelineState().targetLayout().validate(capabilities);
@@ -74,12 +72,14 @@ public final class ShaderGraphEditorCapabilityValidator {
                     : document.computeTechnique().passes()) {
                 boolean supported = false;
                 for (ShaderGraphComputeVariant variant : pass.variants()) {
-                    supported |= variant.supports(settings.profile(), capabilities);
+                    for (ShaderProfile profile : ShaderProfile.values()) {
+                        supported |= variant.supports(profile, capabilities);
+                    }
                 }
                 if (!supported) {
                     error(diagnostics, graph, "FDXE_VARIANT_UNSUPPORTED",
                             "Compute pass " + pass.passId()
-                                    + " has no variant for the selected profile/provider");
+                                    + " has no variant for the preview device");
                 }
             }
         }

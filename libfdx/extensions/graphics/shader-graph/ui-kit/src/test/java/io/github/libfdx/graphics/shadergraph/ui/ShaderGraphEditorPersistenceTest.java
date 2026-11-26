@@ -6,6 +6,13 @@ import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCacheContext;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompileOptions;
 import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphDocumentCompiler;
 import io.github.libfdx.graphics.shadergraph.document.ShaderGraphDocumentCodec;
+import io.github.libfdx.graphics.shadergraph.document.ShaderGraphPreviewAnimation;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraphLiteral;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraphEditorData;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraphEditorNode;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraphParameter;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraphParameterKind;
+import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphRuntimeLoader;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphId;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraph;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphBuilder;
@@ -18,10 +25,90 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class ShaderGraphEditorPersistenceTest {
+    @Test
+    void olderSurfaceLayoutsPlaceTheOutputBesideExistingNodesAndKeepTheViewport() {
+        var builder = new ShaderGraphBuilder("older", ShaderGraphKind.SURFACE);
+        var opacity = builder.constant("opacity", ShaderGraphLiteral.f32(0.5f));
+        builder.output("coverage", "alpha", opacity);
+        var document = ShaderGraphEditorDocument.of(builder.build());
+        var node = ShaderGraphEditorNode.of("opacity", -800, 150, 180, 104, false);
+        var data = ShaderGraphEditorData.of("older", new ShaderGraphEditorNode[] {node}, -70, 35, 1.4f);
+        var layout = ShaderGraphEditorLayout.of(new ShaderGraphEditorData[] {data}, "older");
+        var source = document.shaderDocument().withEditorJson(ShaderGraphEditorLayoutCodec.write(layout));
+        var loaded = ShaderGraphEditorPersistence.read(ShaderGraphDocumentCodec.write(source));
+        var canvas = loaded.layout().activeGraph();
+        assertEquals("", loaded.editorWarning());
+        assertEquals(data, canvas.withMaterialOutput(null));
+        assertTrue(canvas.materialOutput().x() > node.x() + node.width());
+        assertTrue(canvas.materialOutput().x() < 0);
+        assertEquals(node.y(), canvas.materialOutput().y());
+        assertEquals(document.semanticHash(), loaded.document().semanticHash());
+        assertEquals(opacity.endpoint(), MaterialOutputChannel.ALPHA.binding(loaded.document().graph().outputs()).source());
+    }
+
+    @Test
+    void previewRangeSurvivesBothSavesAndUndoWithoutChangingTheShader() {
+        var builder = new ShaderGraphBuilder("preview", ShaderGraphKind.SURFACE);
+        builder.parameter(ShaderGraphParameter.of("amount", ShaderGraphEditorFixtures.F32,
+                ShaderGraphParameterKind.MATERIAL, ShaderGraphLiteral.f32(0.25f)));
+        builder.output("alpha", "alpha", builder.parameter("value", "amount"));
+        var document = ShaderGraphEditorDocument.of(builder.build());
+        var session = new ShaderGraphEditorSession(document);
+        var range = new ShaderGraphPreviewAnimation("amount", -2, 3);
+        var legacy = ShaderGraphDocumentCodec.write(document.shaderDocument());
+        assertNull(ShaderGraphEditorPersistence.read(legacy).layout().previewAnimation());
+        assertEquals(range, ShaderGraphEditorPersistence.read(legacy, range).layout().previewAnimation());
+        session.previewAnimation(range);
+        assertEquals(0, session.semanticRevision());
+        var cached = ShaderGraphEditorPersistence.writeWithCompiledCache(document, session.layout());
+        assertTrue(cached.success());
+        for (String source : List.of(sessionSource(session), cached.source())) {
+            var loaded = ShaderGraphEditorPersistence.read(source);
+            assertEquals("", loaded.editorWarning());
+            assertEquals(range, loaded.layout().previewAnimation());
+            assertEquals(document.semanticHash(), loaded.document().semanticHash());
+            assertEquals(ShaderGraphLiteral.f32(0.25f), loaded.document().graph().parameter(ShaderGraphId.of("amount")).defaultValue());
+        }
+        session.viewport(-80, 55, 1.5f);
+        String broken = sessionSource(session).replace("\"min\":-2.0", "\"min\":8.0");
+        var recovered = ShaderGraphEditorPersistence.read(broken);
+        assertTrue(recovered.recoveredEditorState());
+        assertNull(recovered.layout().previewAnimation());
+        assertEquals(-80, recovered.layout().activeGraph().panX());
+        session.previewAnimation(null);
+        assertNull(ShaderGraphEditorPersistence.read(sessionSource(session), range).layout().previewAnimation());
+        session.undo();
+        assertEquals(range, session.layout().previewAnimation());
+        var other = ShaderGraphEditorDocument.of(ShaderGraphEditorFixtures.graph("other", ShaderGraphKind.SURFACE));
+        assertNull(session.layout().reconcile(other).previewAnimation());
+        assertThrows(IllegalArgumentException.class, () -> new ShaderGraphPreviewAnimation("amount", 2, 2));
+        assertThrows(IllegalArgumentException.class, () -> new ShaderGraphPreviewAnimation("amount", Float.NaN, 1));
+    }
+
+    private static String sessionSource(ShaderGraphEditorSession session) {
+        return ShaderGraphEditorPersistence.write(session.document(), session.layout());
+    }
+
+    @Test
+    void defaultSaveEmbedsTheCacheUsedByTheDefaultRuntimeLoader() {
+        var document = ShaderGraphEditorDocument.of(ShaderGraphEditorFixtures.computeProgram("shared"));
+        var layout = ShaderGraphEditorLayout.forDocument(document);
+        var saved = ShaderGraphEditorPersistence.writeWithCompiledCache(document, layout);
+        assertTrue(saved.success());
+        var asset = new ShaderGraphRuntimeLoader().load(saved.source());
+        assertTrue(asset.cacheHit());
+        assertEquals(document.semanticHash(), asset.document().semanticHash());
+        var reopened = ShaderGraphEditorPersistence.read(saved.source());
+        var savedAgain = ShaderGraphEditorPersistence.writeWithCompiledCache(reopened.document(), reopened.layout());
+        assertEquals(1, savedAgain.cacheHits());
+        assertEquals(saved.source(), savedAgain.source());
+    }
+
     @Test
     void saveWithCompiledCacheIsAtomicAndPlainSaveAllowsUnfinishedGraphs() {
         ShaderGraphEditorDocument document =

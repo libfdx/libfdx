@@ -14,6 +14,9 @@ import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
  * @author xpenatan
  */
 public final class RenderContext3D {
+    private static final long CLOCK_ORIGIN = System.nanoTime();
+    private float clockOverride = Float.NaN;
+    private float shaderTimeSeconds;
     private final GraphicsContext graphics;
     private Camera camera;
     private Environment environment;
@@ -57,6 +60,7 @@ public final class RenderContext3D {
             Environment environment, RenderTarget3D target,
             RenderPass pass, ShaderPassId shaderPassId) {
         this.graphics = graphics;
+        sampleClock();
         this.camera = camera;
         this.environment = environment;
         this.target = target;
@@ -73,12 +77,26 @@ public final class RenderContext3D {
             RenderTarget3D target, RenderPass pass,
             ShaderPassId shaderPassId) {
         this.camera = camera;
+        if (pass != null) sampleClock();
         compatibility = null;
         this.environment = environment;
         this.target = target;
         this.pass = pass;
         this.shaderPassId = shaderPassId != null
                 ? shaderPassId : ShaderPassId.FORWARD;
+    }
+
+    /** Shader time in seconds, sampled once at the start of the pass. */
+    public float shaderTimeSeconds() {
+        return shaderTimeSeconds;
+    }
+
+    void clockOverride(float seconds) {
+        clockOverride = seconds;
+    }
+
+    private void sampleClock() {
+        shaderTimeSeconds = Float.isNaN(clockOverride) ? (System.nanoTime() - CLOCK_ORIGIN) * 1.0e-9f : clockOverride;
     }
 
     void clear() {

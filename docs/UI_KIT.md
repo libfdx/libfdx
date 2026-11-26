@@ -247,7 +247,9 @@ ui.custom("node-canvas",
 line/quadratic/cubic segments in UI-root coordinates. `UiModifier.clip()`
 clips drawing, descendants, and hit testing to the node bounds. Build and retain
 paths outside the draw callback when practical; a pre-sized or warmed path can
-be cleared and rebuilt without steady-state allocation.
+be cleared and rebuilt without steady-state allocation. Call
+`UiDrawContext.beginLayer()` before drawing an overlay on a custom surface
+so its background covers earlier text and images.
 
 Interactive surfaces implement `UiSurfaceInput`. A pointer callback returns
 `CAPTURE` to keep receiving that pointer outside the node, `RELEASE` to end
@@ -257,12 +259,40 @@ key-down, text-input, and focus-change callbacks. `UiPointerEvent` is reused by
 the root and is valid only during its callback; handlers must copy any values
 they need later rather than retaining the event object.
 
+A focusable surface can compose a regular widget with `UiCustomContext.focusedOverlay(placement, content)`.
+The placement callback receives the surface content bounds on each layout. The content callback builds
+and returns a focusable child, such as `ui.textField(modifier, query)`. While the surface owns focus,
+that field handles pointer selection, text input and clipboard shortcuts. The surface can consume
+navigation keys such as **Up**, **Down** and **Esc**. Removing the overlay returns focus to the surface.
+
+Use `UiCustomContext.content` to compose several regular children above a drawing surface.
+Children share the surface's coordinate system and use stack layout. A child built inside
+that content can receive initial focus through `context.initialFocus(node)`.
+
+A context menu can use `Ui.popup(id).at(x, y).blockingInput(true).onDismiss(close)`.
+The anchor is relative to the host. Layout keeps the popup content inside the host when
+there is room. An outside press invokes the owner's callback on the UI thread. The callback
+removes the popup from the next composition. A blocking popup consumes that press.
+
+For continuous game input, `ui.holdButton(label, modifier, state)` accepts an
+application-owned `UiHoldState`. Read `down()` for sustained movement and
+`consumePressed()` for one-shot actions such as jumping. Each pointer releases independently.
+Removing or disabling the control releases its held state.
+
 The optional shader-graph editor is one consumer of custom surfaces. UI Kit
 provides node-canvas editing convenience only; graph documents, compilation,
 runtime loading, and direct Java authoring remain headless. See
 [Shaders](SHADERS.md#shader-graph-boundary) for that ownership boundary.
 
 ## Widgets
+
+Build composite widgets from UI Kit controls. For example, a shader node card
+should use a styled `UiScope.panel` for the card, `UiScope.text` for its title
+and socket labels, and `UiScope.textField` for editable text. The field owns
+caret movement, selection, and clipboard shortcuts. The graph editor owns wire
+geometry, socket connections, and node placement. If a canvas needs a new way
+to host or style a standard control, implement that capability in UI Kit so
+other canvases can use the same control.
 
 Containers and text can be combined with buttons, checkboxes, toggle switches,
 radio-button groups, sliders, determinate progress bars, indeterminate loading
@@ -382,6 +412,11 @@ UiFont font = UiFont.freeType("fonts/ui.ttf", 18)
 The current atlas path renders a font's outline/monochrome glyph. It does not
 promise color-font emoji layers.
 
+Use `selectableText` for read-only information that users may want to copy, such
+as inspector values, file paths and status messages. It uses label styling and
+shares text-field selection and clipboard behavior. Use `text` for captions
+inside controls that own the pointer gesture, such as buttons and graph nodes.
+
 Text fields retain cursor, selection, filtering, masking, validation, and
 scroll state. Focused editors use the platform text-input session exposed by
 `Input`; native/DOM editor presentation remains backend-owned.
@@ -391,6 +426,9 @@ that action while multiline text areas continue to insert a newline.
 `UiTextAreaOptions.readOnly(true)` keeps output text scrollable and selectable
 for copying without opening a platform editor or allowing mutations. Ctrl+C,
 Ctrl+X, and Ctrl+V use `Input.clipboard()`.
+Selecting or copying read-only text keeps the current scroll position. Dragging
+past the text viewport scrolls in the direction of the drag. Keyboard navigation
+can also bring the active end of a selection into view.
 
 Text selection belongs to the focused editor within each `UiRoot`. Moving focus
 to another text field, text area, button or empty space clears the previous
@@ -419,9 +457,11 @@ Clipboard behavior is backend-owned:
 Multiline text, caret, hit testing, and selection highlights all use the same
 resolved font line height so their geometry remains aligned after scrolling. A
 primary-button double-click or touch double-tap selects the text unit under the
-pointer in the shared UI Kit input path. Unicode letters and combining marks
-remain in one word; whitespace runs are selected together; punctuation is
-selected independently.
+pointer. Letters, digits, combining marks and underscores form words. A double-click
+on punctuation selects that character, and a double-click on whitespace selects
+the whitespace run. A third consecutive click or tap in the same spot selects
+the full value of a `selectableText` label. Text areas can enable the same
+third-click gesture with `UiTextAreaOptions.selectAllOnTripleClick(true)`.
 
 `UiRoot` owns hit testing and event routing for pointer/touch, wheel scrolling,
 keyboard/text focus, navigation, gestures, and drag/drop. Pointer capture keeps
@@ -452,6 +492,10 @@ rendering, clipping and hit testing use the transformed geometry, while layout
 bounds stay unchanged. Transition ticks advance without recomposition or
 relayout. Other observed state changes currently recompose and lay out the root.
 UI scale and animation scale support deterministic tests and accessibility behavior.
+
+A scene that already has an active color pass can call `UiG2DRenderer.renderInto(root, pass)`
+after `root.update(delta)`. The caller owns the pass and restores its drawing state,
+including the viewport and scissor, before drawing additional scene content.
 
 UI rendering uses common graphics/g2d and does not import provider or backend
 classes. Batches, vertex data, glyph layout, hit-test storage, and event objects

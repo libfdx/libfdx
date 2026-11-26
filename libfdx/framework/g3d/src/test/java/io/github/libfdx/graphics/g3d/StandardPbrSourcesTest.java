@@ -1,18 +1,15 @@
 package io.github.libfdx.graphics.g3d;
 
-import io.github.libfdx.graphics.GraphicsCapabilities;
 import io.github.libfdx.graphics.shader.ShaderProfile;
-import io.github.libfdx.math.ClipDepthRange;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class StandardPbrSourcesTest {
     @Test
     void workerRecipeMatchesCanonicalSourcesReflectionAndDefaultValuesForEveryVariantAndProfile() {
+        var reference = StandardPbrSources.compile(ShaderProfile.NATIVE);
         for (ShaderProfile profile : ShaderProfile.values()) {
-            var capabilities = GraphicsCapabilities.builder().profile(profile)
-                    .clipDepthRange(ClipDepthRange.NEGATIVE_ONE_TO_ONE).build();
-            var canonical = StandardPbrTechnique.compileCustomization(profile, capabilities,
+            var canonical = StandardPbrTechnique.compileCustomization(profile,
                     StandardPbrSurfaceGraph.create(), StandardPbrVertexGraph.create(), StandardPbrLightingGraph.create(), null);
             var packet = StandardPbrSources.compile(profile);
             var restored = packet.restore();
@@ -20,6 +17,7 @@ class StandardPbrSourcesTest {
             for (int i = 0; i < 8; i++) {
                 var expected = canonical.shader((i & 1) != 0, (i & 2) != 0, (i & 4) != 0);
                 var actual = restored.shader((i & 1) != 0, (i & 2) != 0, (i & 4) != 0);
+                assertEquals(reference.variant(i), actual.wgslSource());
                 assertEquals(expected.wgslSource(), actual.wgslSource());
                 assertEquals(expected.reflection().fullHash(), actual.reflection().fullHash());
                 assertEquals(expected.reflection().physicalHash(), actual.reflection().physicalHash());

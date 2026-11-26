@@ -64,11 +64,10 @@ public final class DefaultShaderGraphEditorCompiler
         }
         ShaderGraphEditorDocument document = request.document();
         List<ShaderGraphDiagnostic> diagnostics = new ArrayList<>();
-        addUnique(diagnostics, ShaderGraphEditorCapabilityValidator.validate(
-                document, request.settings()));
         String wgsl = "";
         try {
-            ShaderGraphCompileOptions options = options(request);
+            ShaderGraphCompileOptions options = ShaderGraphCompileOptions.portable(
+                    ShaderGraphLibrary.of(document.graphs()));
             Compilation canonical = compileCanonical(document, options);
             wgsl = canonical.wgsl;
             addUnique(diagnostics, canonical.diagnostics);
@@ -94,10 +93,10 @@ public final class DefaultShaderGraphEditorCompiler
                 }
             } catch (RuntimeException failure) {
                 artifacts = new ShaderGraphEditorArtifact[0];
-                addFailure(diagnostics, document,
+                diagnostics.add(new ShaderGraphDiagnostic(ShaderGraphDiagnosticSeverity.WARNING,
                         "FDXE_TARGET_COMPILE_FAILURE",
-                        "Target artifact compilation failed: "
-                                + message(failure));
+                        "Optional target artifact compilation failed: " + message(failure),
+                        document.graphs()[0].id(), null, null));
             }
         }
         // A factory lambda here collides with Compilation in TeaVM's short C filenames on Windows.
@@ -188,15 +187,6 @@ public final class DefaultShaderGraphEditorCompiler
             }
         }
         return new Compilation(source.toString(), result.diagnostics());
-    }
-
-    private static ShaderGraphCompileOptions options(
-            ShaderGraphEditorCompileRequest request) {
-        return ShaderGraphCompileOptions.builder()
-                .profile(request.settings().profile())
-                .capabilities(request.settings().capabilities())
-                .library(ShaderGraphLibrary.of(request.document().graphs()))
-                .build();
     }
 
     private static void addUnique(List<ShaderGraphDiagnostic> destination,

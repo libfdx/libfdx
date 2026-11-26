@@ -88,7 +88,7 @@ public final class ShaderPreloadingTest extends GraphicsParityTest {
         }
         spritePlan = new SpriteShaderPlan(graphics);
         modelPlan = new ModelShaderPlan(graphics);
-        hud = new ShowcaseHud(graphics, new SpriteBatchConfig().preparation(shaders).shaderPlan(spritePlan));
+        hud = new ShowcaseHud(fdx, new SpriteBatchConfig().preparation(shaders).shaderPlan(spritePlan));
         models = new ModelBatch(graphics, new ModelBatchConfig().preparation(shaders).shaderPlan(modelPlan))
                 .environment(new Environment().ambientColor(new Color(.25f, .25f, .3f, 1))
                         .add(new DirectionalLight().direction(-.3f, -.8f, -1).intensity(1.4f)));

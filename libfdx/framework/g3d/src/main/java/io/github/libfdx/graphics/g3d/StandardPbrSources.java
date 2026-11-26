@@ -27,7 +27,7 @@ public final class StandardPbrSources {
     }
     /** Runs the canonical CPU compiler/composer. Explicit work; do not call from a ready draw. */
     public static StandardPbrSources compile(ShaderProfile profile) {
-        PbrGraphCustomization compiled = StandardPbrTechnique.compileCustomization(profile, null,
+        PbrGraphCustomization compiled = StandardPbrTechnique.compileCustomization(profile,
                 StandardPbrSurfaceGraph.create(), StandardPbrVertexGraph.create(), StandardPbrLightingGraph.create(), null);
         String[] variants = new String[8];
         for (int i = 0; i < 8; i++) variants[i] = compiled.shader((i & 1) != 0, (i & 2) != 0, (i & 4) != 0).wgslSource();

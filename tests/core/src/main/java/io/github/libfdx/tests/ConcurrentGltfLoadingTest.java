@@ -68,7 +68,7 @@ public final class ConcurrentGltfLoadingTest extends GraphicsParityTest {
         G3DAssetLoaders.register(assets, graphics);
         assets.registerLoader(Model.class, assetMetrics.measure(G3DAssetLoaders.modelLoader(graphics)));
         font = new ShowcaseFont(assets.createScope(), false);
-        hud = new ShowcaseHud(graphics);
+        hud = new ShowcaseHud(fdx);
         shaders = new ShaderPreparation(graphics);
         plan = new ModelShaderPlan(graphics);
         loadingOnly = !graphics.device().shaderPreparationCapabilities().runtimeNonblocking();

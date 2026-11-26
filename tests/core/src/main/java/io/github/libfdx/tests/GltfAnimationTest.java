@@ -57,7 +57,7 @@ public final class GltfAnimationTest extends GraphicsParityTest {
         G3DAssetLoaders.register(assets, graphics);
         G2DAssetLoaders.register(assets, graphics);
         font = new ShowcaseFont(assets.createScope(), false);
-        hud = new ShowcaseHud(graphics);
+        hud = new ShowcaseHud(fdx);
         for (String path : PATHS) assets.load(AssetDescriptor.of(path, Model.class));
         float[] positions = AnimationDroneGeometry.positions();
         float[][] colors = {{.9f,.55f,.06f}, {.1f,.8f,.25f}, {.75f,.12f,.5f}};
@@ -196,8 +196,7 @@ public final class GltfAnimationTest extends GraphicsParityTest {
         }
         float timelineY = uiHeight - 66;
         float timelineWidth = uiWidth - 40;
-        hud.rect(20,timelineY,timelineWidth,3,.18f,.27f,.36f,1);
-        hud.rect(20,timelineY,timelineWidth * playbackTime / 4,3,.3f,.83f,.7f,1);
+        hud.progress(20, timelineY, timelineWidth, 3, playbackTime / 4);
         for (int tick = 0; tick <= 4; tick++) {
             float x = 20 + timelineWidth * tick / 4;
             hud.rect(x-1,timelineY-3,2,9,.6f,.73f,.83f,1);

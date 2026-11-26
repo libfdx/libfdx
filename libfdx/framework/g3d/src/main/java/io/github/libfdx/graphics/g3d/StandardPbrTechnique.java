@@ -88,7 +88,7 @@ public final class StandardPbrTechnique {
                         GraphicsFeature.COMPLETE_RENDER_PIPELINE_STATE);
         GraphicsCapabilities capabilities = graphics.device().capabilities();
         deferred = prepareSources ? new DeferredCustomization(capabilities, surfaceGraph, vertexGraph, lightingGraph, preparer) : null;
-        customization = prepareSources ? null : compileCustomization(capabilities, surfaceGraph, vertexGraph, lightingGraph, surfaceCompilation);
+        customization = prepareSources ? null : compileCustomization(profile(capabilities), surfaceGraph, vertexGraph, lightingGraph, surfaceCompilation);
         ShaderGraphRenderTechniquePass[] passes =
                 new ShaderGraphRenderTechniquePass[
                         STANDARD_PASSES.length];
@@ -147,7 +147,7 @@ public final class StandardPbrTechnique {
         }
         // Only CPU preparation workers call this monitor. Owner-thread default lookup never waits.
         synchronized PbrGraphCustomization generate() {
-            if (ready == null) ready = compileCustomization(capabilities, surface, vertex, lighting, null);
+            if (ready == null) ready = compileCustomization(profile(capabilities), surface, vertex, lighting, null);
             return ready;
         }
         synchronized FdxFuture<PbrGraphCustomization> generateAsync(Consumer<Runnable> execute) {
@@ -168,11 +168,6 @@ public final class StandardPbrTechnique {
         }
     }
 
-    private static PbrGraphCustomization compileCustomization(GraphicsCapabilities capabilities,
-            ShaderGraph surfaceGraph, ShaderGraph vertexGraph, ShaderGraph lightingGraph,
-            ShaderGraphRuntimeGraph surfaceCompilation) {
-        return compileCustomization(profile(capabilities), capabilities, surfaceGraph, vertexGraph, lightingGraph, surfaceCompilation);
-    }
     private static ShaderProfile profile(GraphicsCapabilities capabilities) {
         return capabilities
                 .supports(ShaderProfile.PORTABLE_WEBGPU)
@@ -182,15 +177,11 @@ public final class StandardPbrTechnique {
                                         ? ShaderProfile.PORTABLE_WEBGL2
                                         : ShaderProfile.NATIVE;
     }
-    static PbrGraphCustomization compileCustomization(ShaderProfile profile, GraphicsCapabilities capabilities,
+    static PbrGraphCustomization compileCustomization(ShaderProfile reflectionProfile,
             ShaderGraph surfaceGraph, ShaderGraph vertexGraph, ShaderGraph lightingGraph,
             ShaderGraphRuntimeGraph surfaceCompilation) {
         ShaderGraphCompiler compiler = new ShaderGraphCompiler();
-        ShaderGraphCompileOptions options =
-                ShaderGraphCompileOptions.builder()
-                        .profile(profile)
-                        .capabilities(capabilities)
-                        .build();
+        ShaderGraphCompileOptions options = ShaderGraphCompileOptions.portable();
         ShaderGraphMaterialDefinition definition =
                 surfaceCompilation != null
                         ? ShaderGraphMaterialDefinition.compiled(
@@ -204,7 +195,7 @@ public final class StandardPbrTechnique {
                 requireSuccessful("lighting",
                         compiler.compile(lightingGraph, options));
         return new PbrGraphCustomization(definition,
-                profile,
+                reflectionProfile,
                 vertexGraph, vertexCompilation, lightingGraph,
                 lightingCompilation);
     }

@@ -11,6 +11,8 @@ import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphDocumentCompile
 import io.github.libfdx.graphics.shadergraph.document.ShaderGraphDocument;
 import io.github.libfdx.graphics.shadergraph.document.ShaderGraphDocumentCodec;
 import io.github.libfdx.graphics.shadergraph.document.ShaderGraphDocumentReadResult;
+import io.github.libfdx.graphics.shadergraph.document.ShaderGraphPreviewAnimation;
+import io.github.libfdx.json.JsonReader;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,6 +33,16 @@ public final class ShaderGraphEditorPersistence {
             ShaderGraphEditorLayout layout) {
         return ShaderGraphDocumentCodec.write(
                 withEditorState(document, layout));
+    }
+
+    /** Embeds the portable WGSL cache consumed by the default runtime loader. */
+    public static ShaderGraphEditorSaveResult writeWithCompiledCache(
+            ShaderGraphEditorDocument document, ShaderGraphEditorLayout layout) {
+        if (document == null) {
+            throw new FdxException("Shader graph editor document cannot be null");
+        }
+        return writeWithCompiledCache(document, layout,
+                ShaderGraphCacheContext.portable(document.shaderDocument()));
     }
 
     /**
@@ -128,22 +140,33 @@ public final class ShaderGraphEditorPersistence {
      * @return the loaded document and reconciled layout
      */
     public static ShaderGraphEditorLoadResult read(String source) {
+        return read(source, null);
+    }
+
+    /** Uses the host preset only for files that predate a saved animation selection. */
+    public static ShaderGraphEditorLoadResult read(String source, ShaderGraphPreviewAnimation fallback) {
         ShaderGraphDocumentReadResult decoded =
                 ShaderGraphDocumentCodec.readResult(source);
         ShaderGraphDocument value = decoded.document();
         ShaderGraphEditorDocument document =
                 ShaderGraphEditorDocument.of(value);
         if (!value.hasEditor()) {
-            return new ShaderGraphEditorLoadResult(document,
-                    ShaderGraphEditorLayout.forDocument(document), "",
-                    decoded.cacheRejections());
+            var layout = ShaderGraphEditorLayout.forDocument(document);
+            if (fallback != null && fallback.appliesTo(value.graph())) layout = layout.withPreviewAnimation(fallback);
+            return new ShaderGraphEditorLoadResult(document, layout, "", decoded.cacheRejections());
         }
         try {
-            ShaderGraphEditorLayout layout =
-                    ShaderGraphEditorLayoutCodec.read(value.editorJson())
-                            .reconcile(document);
+            var editor = new JsonReader().parse(value.editorJson());
+            var layout = ShaderGraphEditorLayoutCodec.readCanvas(editor);
+            String warning = "";
+            try {
+                layout = layout.withPreviewAnimation(editor.get("previewAnimation") == null ? fallback
+                        : ShaderGraphPreviewAnimation.readFrom(editor));
+            } catch (RuntimeException invalidRange) {
+                warning = "Preview animation was ignored: " + invalidRange.getMessage();
+            }
             return new ShaderGraphEditorLoadResult(
-                    document, layout, "",
+                    document, layout.reconcile(document), warning,
                     decoded.cacheRejections());
         } catch (RuntimeException error) {
             String message = error.getMessage() != null ? error.getMessage()

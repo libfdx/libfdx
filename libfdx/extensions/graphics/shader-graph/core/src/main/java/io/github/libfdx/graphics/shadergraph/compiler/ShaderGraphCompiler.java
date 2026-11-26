@@ -63,7 +63,7 @@ public final class ShaderGraphCompiler {
             throw new IllegalArgumentException("Shader graph cannot be null");
         }
         ShaderGraphCompileOptions actual = options != null ? options
-                : ShaderGraphCompileOptions.builder().build();
+                : ShaderGraphCompileOptions.portable();
         Compilation compilation = new Compilation(actual);
         compilation.visit(graph, new ShaderGraphId[0]);
         compilation.sortDiagnostics();
@@ -156,13 +156,19 @@ public final class ShaderGraphCompiler {
         }
 
         private GraphState validateGraph(ShaderGraph graph) {
-            GraphState state = new GraphState(graph);
+            GraphState state = new GraphState(graph.contributingNodes(node -> {
+                var definition = registry.definition(node.definitionId(), node.definitionVersion());
+                return definition != null && switch (definition.opcode()) {
+                    case DISCARD, STORAGE_STORE, ATOMIC_ADD, BARRIER -> true;
+                    default -> false;
+                };
+            }));
             if (graph.outputs().length == 0) {
                 error(graph, "FDXG_OUTPUT_MISSING",
                         "Shader graph requires at least one output", null, null);
             }
             validateBindings(graph);
-            for (ShaderNode node : graph.nodes()) {
+            for (ShaderNode node : state.nodes) {
                 ShaderNodeDefinition definition = registry.definition(
                         node.definitionId(), node.definitionVersion());
                 state.definitions[state.nodeIndex(node.id())] = definition;
@@ -211,7 +217,7 @@ public final class ShaderGraphCompiler {
             validateEdges(graph, state);
             validateOutputs(graph);
             state.topological = topological(graph, state);
-            for (ShaderNode node : graph.nodes()) {
+            for (ShaderNode node : state.nodes) {
                 ShaderNodeDefinition definition =
                         state.definitions[state.nodeIndex(node.id())];
                 if (definition != null) {
@@ -323,6 +329,7 @@ public final class ShaderGraphCompiler {
                             edge.target().nodeId(), edge.target().portId());
                     continue;
                 }
+                if (state.nodeIndex(target.id()) < 0) continue;
                 ShaderGraphPort sourcePort = source.output(edge.source().portId());
                 ShaderGraphPort targetPort = target.input(edge.target().portId());
                 if (sourcePort == null) {
@@ -353,7 +360,7 @@ public final class ShaderGraphCompiler {
                     state.sources[targetIndex] = edge.source();
                 }
             }
-            for (ShaderNode node : graph.nodes()) {
+            for (ShaderNode node : state.nodes) {
                 for (ShaderGraphPort port : node.inputs()) {
                     int index = state.inputIndex(node.id(), port.id());
                     if (port.required() && state.sources[index] == null
@@ -384,14 +391,13 @@ public final class ShaderGraphCompiler {
         }
 
         private ShaderNode[] topological(ShaderGraph graph, GraphState state) {
-            ShaderNode[] nodes = graph.nodes();
+            ShaderNode[] nodes = state.nodes;
             int[] indegree = new int[nodes.length];
-            for (ShaderEdge edge : graph.edges()) {
+            ShaderEdge[] edges = graph.edges();
+            for (ShaderEdge edge : edges) {
                 int source = state.nodeIndex(edge.source().nodeId());
                 int target = state.nodeIndex(edge.target().nodeId());
-                if (source >= 0 && target >= 0 && source != target) {
-                    indegree[target]++;
-                } else if (source == target && source >= 0) {
+                if (source >= 0 && target >= 0) {
                     indegree[target]++;
                 }
             }
@@ -412,7 +418,7 @@ public final class ShaderGraphCompiler {
                 }
                 emitted[selected] = true;
                 result[output] = nodes[selected];
-                for (ShaderEdge edge : graph.edges()) {
+                for (ShaderEdge edge : edges) {
                     if (edge.source().nodeId().equals(nodes[selected].id())) {
                         int target = state.nodeIndex(edge.target().nodeId());
                         if (target >= 0) {
@@ -509,6 +515,44 @@ public final class ShaderGraphCompiler {
                 case CLAMP, LERP -> {
                     requireInputCount(graph, node, 3);
                     requireSameNumeric(graph, node, output);
+                }
+                case TIME -> {
+                    requireInputCount(graph, node, 0);
+                    if (graph.kind() != ShaderGraphKind.SURFACE || !output.equals(ShaderGraphType.scalar(ShaderScalarType.F32))) {
+                        operationError(graph, node, "Time requires a surface graph and an f32 output");
+                    }
+                }
+                case PANNER -> {
+                    requireInputCount(graph, node, 3);
+                    var vec2 = ShaderGraphType.vector(ShaderScalarType.F32, 2);
+                    if (!output.equals(vec2) || inputs.length == 3 && (!inputs[0].type().equals(vec2)
+                            || !inputs[1].type().equals(ShaderGraphType.scalar(ShaderScalarType.F32)) || !inputs[2].type().equals(vec2))) {
+                        operationError(graph, node, "Panner requires vec2f speed and UV, f32 time and vec2f output");
+                    }
+                }
+                case COSINE, FRACTION, SMOOTHSTEP -> {
+                    requireInputCount(graph, node, opcode == ShaderIrOpcode.SMOOTHSTEP ? 3 : 1);
+                    requireSameNumeric(graph, node, output);
+                    if (!isFloat(output) || (output.valueType().kind() != ShaderValueKind.SCALAR
+                            && output.valueType().kind() != ShaderValueKind.VECTOR)) {
+                        operationError(graph, node, opcode + " requires matching floating scalars or vectors");
+                    }
+                }
+                case NOISE_2D -> {
+                    requireInputCount(graph, node, 1);
+                    if (inputs.length == 1 && (!inputs[0].type().equals(ShaderGraphType.vector(ShaderScalarType.F32, 2))
+                            || !output.equals(ShaderGraphType.scalar(ShaderScalarType.F32)))) {
+                        operationError(graph, node, "Noise 2D requires a vec2f coordinate and an f32 output");
+                    }
+                }
+                case FRESNEL -> {
+                    requireInputCount(graph, node, 3);
+                    ShaderGraphType vector = ShaderGraphType.vector(ShaderScalarType.F32, 3);
+                    ShaderGraphType scalar = ShaderGraphType.scalar(ShaderScalarType.F32);
+                    if (inputs.length == 3 && (!inputs[0].type().equals(vector) || !inputs[1].type().equals(scalar)
+                            || !inputs[2].type().equals(vector) || !output.equals(scalar))) {
+                        operationError(graph, node, "Fresnel requires vec3f normal and view directions and f32 power and output");
+                    }
                 }
                 case CONSTRUCT -> validateConstruct(graph, node, output);
                 case CONVERT -> {
@@ -994,7 +1038,7 @@ public final class ShaderGraphCompiler {
     }
 
     private static final class GraphState {
-        private final ShaderGraph graph;
+        private final ShaderNode[] nodes;
         private final ShaderNodeDefinition[] definitions;
         private final ShaderGraphId[] inputNodes;
         private final ShaderGraphId[] inputPorts;
@@ -1002,18 +1046,18 @@ public final class ShaderGraphCompiler {
         private ShaderNode[] topological = new ShaderNode[0];
         private boolean valid;
 
-        GraphState(ShaderGraph graph) {
-            this.graph = graph;
-            definitions = new ShaderNodeDefinition[graph.nodes().length];
+        GraphState(ShaderNode[] nodes) {
+            this.nodes = nodes;
+            definitions = new ShaderNodeDefinition[nodes.length];
             int count = 0;
-            for (ShaderNode node : graph.nodes()) {
+            for (ShaderNode node : nodes) {
                 count += node.inputs().length;
             }
             inputNodes = new ShaderGraphId[count];
             inputPorts = new ShaderGraphId[count];
             sources = new ShaderEndpoint[count];
             int index = 0;
-            for (ShaderNode node : graph.nodes()) {
+            for (ShaderNode node : nodes) {
                 for (ShaderGraphPort port : node.inputs()) {
                     inputNodes[index] = node.id();
                     inputPorts[index] = port.id();
@@ -1023,7 +1067,6 @@ public final class ShaderGraphCompiler {
         }
 
         int nodeIndex(ShaderGraphId id) {
-            ShaderNode[] nodes = graph.nodes();
             for (int i = 0; i < nodes.length; i++) {
                 if (nodes[i].id().equals(id)) {
                     return i;

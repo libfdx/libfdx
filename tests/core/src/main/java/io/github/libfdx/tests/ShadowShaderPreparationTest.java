@@ -69,7 +69,7 @@ public final class ShadowShaderPreparationTest extends GraphicsParityTest {
         world = new ModelBatch(graphics, new ModelBatchConfig().shaderPlan(worldPlan).shaderGroup(group))
                 .environment(environment);
         spritePlan = new SpriteShaderPlan(graphics);
-        hud = new ShowcaseHud(graphics, new SpriteBatchConfig().preparation(shaders).shaderPlan(spritePlan));
+        hud = new ShowcaseHud(fdx, new SpriteBatchConfig().preparation(shaders).shaderPlan(spritePlan));
         assets = new DefaultAssetManager(fdx.files());
         G2DAssetLoaders.register(assets, graphics);
         font = new ShowcaseFont(assets.createScope(), false);

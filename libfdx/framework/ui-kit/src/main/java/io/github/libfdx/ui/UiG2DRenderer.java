@@ -47,6 +47,8 @@ public final class UiG2DRenderer implements UiRenderer {
             UiDrawable.color(UiColor.rgba8888(0x202a36ff));
     private static final UiDrawable TEXT_INPUT_BACKGROUND =
             UiDrawable.color(UiColor.rgba8888(0x121820ff));
+    private static final UiColor TEXT_SELECTION = UiColor.rgb(0.25f, 0.50f, 0.90f);
+    private static final UiColor TEXT_CARET = UiColor.rgb(0.85f, 0.92f, 1.0f);
     private static final UiDrawable TABS_BACKGROUND =
             UiDrawable.color(UiColor.rgba8888(0x101820ff));
     private static final UiColor DEBUG_INVALID = UiColor.rgba8888(0xff3b30ff);
@@ -114,11 +116,38 @@ public final class UiG2DRenderer implements UiRenderer {
                 .colorLoadOp(LoadOp.load())
                 .colorStoreOp(StoreOp.store()));
         try {
+            drawInto(root, node, pass, viewport, frame);
+        } finally {
+            pass.end();
+        }
+    }
+
+    /**
+     * Draws an updated root into the caller's active color pass on this renderer's graphics thread.
+     * The pass must target the current frame dimensions. The caller owns the pass and reapplies
+     * its viewport, scissor and drawing state before continuing its own rendering.
+     */
+    public void renderInto(UiRoot root, RenderPass pass) {
+        if (disposed || shapes == null || pass == null || root == null || root.rootNode() == null) return;
+        GraphicsFrame frame = graphics.currentFrame();
+        UiRect viewport = root.viewport();
+        if (viewport != null && (viewport.right() > frame.width() || viewport.bottom() > frame.height())) return;
+        resetCustomDraws();
+        overlayNodes.clear();
+        prepareText(root, root.rootNode());
+        drawInto(root, root.rootNode(), pass, viewport, frame);
+    }
+
+    private void drawInto(UiRoot root, UiNode node, RenderPass pass, UiRect viewport, GraphicsFrame frame) {
+        try {
             activePass = pass;
             if (viewport != null) {
                 int bottom = frame.height() - (int) viewport.bottom();
                 pass.setViewport((int) viewport.x(), bottom, (int) viewport.width(), (int) viewport.height());
                 pass.setScissor((int) viewport.x(), bottom, (int) viewport.width(), (int) viewport.height());
+            } else {
+                pass.setViewport(0, 0, frame.width(), frame.height());
+                pass.setScissor(0, 0, frame.width(), frame.height());
             }
             renderSubtree(root, node);
             renderOverlayQueue(root);
@@ -131,7 +160,6 @@ public final class UiG2DRenderer implements UiRenderer {
         } finally {
             finishDrawing();
             activePass = null;
-            pass.end();
             resetCustomDraws();
             overlayNodes.clear();
         }
@@ -180,6 +208,15 @@ public final class UiG2DRenderer implements UiRenderer {
         if (!shapesActive) {
             shapes.begin(activePass);
             shapesActive = true;
+        }
+    }
+
+    private void useFilledShapes() {
+        useShapes();
+        // ShapeRenderer submits triangles before lines in each flush.
+        // Finish earlier strokes before queuing a fill that can cover them.
+        if (shapes.getQueuedLineCount() > 0) {
+            shapes.flush();
         }
     }
 
@@ -246,8 +283,7 @@ public final class UiG2DRenderer implements UiRenderer {
         drawBackground(root, node, alpha);
         if (node.type() == UiNodeType.CUSTOM) {
             drawCustom(root, node, alpha);
-            renderCustomImages(root, node);
-            renderCustomText(root, node);
+            finishCustomLayer(root, node);
         }
         drawControl(root, node, alpha);
         drawNodeContent(root, node, alpha);
@@ -777,25 +813,27 @@ public final class UiG2DRenderer implements UiRenderer {
         UiRect bounds = nodeTextBounds(root, node);
         int start = model.selectionMin();
         int end = model.selectionMax();
+        UiColor selection = textInputForeground(root, node, TEXT_SELECTION);
+        float selectionAlpha = selection.alpha() * alpha * 0.65f;
         if (node.type() == UiNodeType.TEXT_AREA) {
             drawMultilineSelection(root, model.value(), start, end, bounds, style,
-                    textAreaScrollX(node), textAreaScrollY(node), alpha);
+                    textAreaScrollX(node), textAreaScrollY(node), selection, selectionAlpha);
         } else {
             String text = nodeText(node);
             int safeStart = Math.max(0, Math.min(start, text.length()));
             int safeEnd = Math.max(safeStart, Math.min(end, text.length()));
             float startX = textWidth(root, text, 0, safeStart, style);
             float endX = textWidth(root, text, 0, safeEnd, style);
-            float x = bounds.x() + startX;
+            float x = bounds.x() + startX - model.scrollX();
             float width = Math.max(0.0f, endX - startX);
             float height = Math.min(bounds.height(), Math.max(12.0f, textLineHeight(root, style)));
             float y = bounds.y() + Math.max(0.0f, (bounds.height() - height) * 0.5f);
-            drawRect(root, x, y, width, height, 0.25f, 0.50f, 0.90f, alpha * 0.65f);
+            drawRect(root, x, y, width, height, selection.red(), selection.green(), selection.blue(), selectionAlpha);
         }
     }
 
     private void drawMultilineSelection(UiRoot root, String value, int start, int end, UiRect bounds,
-            UiTextStyle style, float scrollX, float scrollY, float alpha) {
+            UiTextStyle style, float scrollX, float scrollY, UiColor selection, float alpha) {
         String text = value != null ? value : "";
         float lineHeight = textLineHeight(root, style);
         int lineStart = 0;
@@ -812,7 +850,7 @@ public final class UiG2DRenderer implements UiRenderer {
                     float x = bounds.x() + startX - scrollX;
                     float width = Math.max(3.0f, endX - startX);
                     float y = bounds.y() + lineIndex * lineHeight - scrollY;
-                    drawRect(root, x, y, width, lineHeight, 0.25f, 0.50f, 0.90f, alpha * 0.65f);
+                    drawRect(root, x, y, width, lineHeight, selection.red(), selection.green(), selection.blue(), alpha);
                 }
                 lineStart = i + 1;
                 lineIndex++;
@@ -827,8 +865,14 @@ public final class UiG2DRenderer implements UiRenderer {
         if (((int) (root.elapsedSeconds() * 2.0f)) % 2 != 0) {
             return;
         }
+        UiColor caret = textInputForeground(root, node, TEXT_CARET);
         drawRect(root, root.textCaretBounds(node, ((UiTextFieldModel) node.descriptor()).cursor()),
-                0.85f, 0.92f, 1.0f, alpha);
+                caret.red(), caret.green(), caret.blue(), caret.alpha() * alpha);
+    }
+
+    private UiColor textInputForeground(UiRoot root, UiNode node, UiColor fallback) {
+        UiStyle style = controlStyle(root, node);
+        return drawableColor(style != null ? style.foreground() : null, fallback);
     }
 
     private void drawCustom(final UiRoot root, UiNode node, float alpha) {
@@ -837,6 +881,12 @@ public final class UiG2DRenderer implements UiRenderer {
             return;
         }
         custom.drawFunction().draw(customDrawContext.configure(root, node, alpha), node.bounds());
+    }
+
+    private void finishCustomLayer(UiRoot root, UiNode node) {
+        renderCustomImages(root, node);
+        renderCustomText(root, node);
+        resetCustomDraws();
     }
 
     private void queueCustomImage(UiNode node, TextureRegion region, float x, float y, float width, float height,
@@ -1009,6 +1059,7 @@ public final class UiG2DRenderer implements UiRenderer {
             x -= textAreaScrollX(node);
             y = bounds.y() - textAreaScrollY(node);
         } else {
+            if (node.type() == UiNodeType.TEXT_FIELD) x -= ((UiTextFieldModel)node.descriptor()).scrollX();
             y = bounds.y() + Math.max(0.0f, (bounds.height() - 7.0f) * 0.5f);
         }
         float cursor = x;
@@ -1020,11 +1071,11 @@ public final class UiG2DRenderer implements UiRenderer {
                 continue;
             }
             if (rows == FALLBACK_GLYPH_SPACE) {
-                cursor += 5.0f;
+                cursor += node.type() == UiNodeType.TEXT_FIELD ? 8.0f : 5.0f;
                 continue;
             }
             drawGlyphRows(root, rows, cursor, y, color.red(), color.green(), color.blue(), textAlpha);
-            cursor += 7.0f;
+            cursor += node.type() == UiNodeType.TEXT_FIELD ? 8.0f : 7.0f;
         }
     }
 
@@ -1070,7 +1121,7 @@ public final class UiG2DRenderer implements UiRenderer {
     }
 
     private void drawImage(UiRoot root, UiNode node, float alpha) {
-        if (batch == null || node.image() == null) {
+        if (node.image() == null) {
             return;
         }
         drawRegion(root, node.image(), node.bounds().x(), node.bounds().y(), node.bounds().width(),
@@ -1228,7 +1279,7 @@ public final class UiG2DRenderer implements UiRenderer {
                 return;
             }
         }
-        useShapes();
+        useFilledShapes();
         float brightness = brightness();
         red *= brightness;
         green *= brightness;
@@ -1295,7 +1346,7 @@ public final class UiG2DRenderer implements UiRenderer {
 
     private void drawFilledCircle(UiRoot root, float centerX, float centerY, float radius,
             UiColor color, float alpha) {
-        if (color == null || radius <= 0.0f || alpha <= 0.0f) {
+        if (color == null || !Float.isFinite(radius) || radius <= 0.0f || alpha <= 0.0f) {
             return;
         }
         drawFilledCircle(root, centerX, centerY, radius,
@@ -1418,7 +1469,7 @@ public final class UiG2DRenderer implements UiRenderer {
                 || right > currentClip.right() || bottom > currentClip.bottom())) {
             return;
         }
-        useShapes();
+        useFilledShapes();
         shapes.filledTriangle(
                 ndcX(root, x1), ndcY(root, y1, 0.0f),
                 ndcX(root, x2), ndcY(root, y2, 0.0f),
@@ -1860,28 +1911,30 @@ public final class UiG2DRenderer implements UiRenderer {
 
     private void drawBitmapText(UiRoot root, BitmapFont font, String text, UiNode node, UiRect bounds, UiTextStyle style,
             float alpha) {
-        float maxWidth = style.wrap() || style.ellipsis() ? bounds.width() : 0.0f;
+        boolean field = node.type() == UiNodeType.TEXT_FIELD;
+        float maxWidth = !field && (style.wrap() || style.ellipsis()) ? bounds.width() : 0.0f;
+        float x = bounds.x() - (field ? ((UiTextFieldModel)node.descriptor()).scrollX() : 0);
         BitmapFontLayout layout = root.textLayout(node, text, style, maxWidth);
         if (layout == null) {
             return;
         }
         float y = bounds.y() + Math.max(0.0f, (bounds.height() - layout.height()) * 0.5f);
         if (style.shadowColor().alpha() > 0.0f && style.shadowOffset() != 0.0f) {
-            drawBitmapTextLines(root, font, layout, bounds.x() + style.shadowOffset(),
+            drawBitmapTextLines(root, font, layout, x + style.shadowOffset(),
                     y + style.shadowOffset(), style, style.shadowColor(), alpha, bounds.width());
         }
         if (style.outlineColor().alpha() > 0.0f && style.outlineWidth() > 0.0f) {
             float outline = style.outlineWidth();
-            drawBitmapTextLines(root, font, layout, bounds.x() - outline, y, style,
+            drawBitmapTextLines(root, font, layout, x - outline, y, style,
                     style.outlineColor(), alpha, bounds.width());
-            drawBitmapTextLines(root, font, layout, bounds.x() + outline, y, style,
+            drawBitmapTextLines(root, font, layout, x + outline, y, style,
                     style.outlineColor(), alpha, bounds.width());
-            drawBitmapTextLines(root, font, layout, bounds.x(), y - outline, style,
+            drawBitmapTextLines(root, font, layout, x, y - outline, style,
                     style.outlineColor(), alpha, bounds.width());
-            drawBitmapTextLines(root, font, layout, bounds.x(), y + outline, style,
+            drawBitmapTextLines(root, font, layout, x, y + outline, style,
                     style.outlineColor(), alpha, bounds.width());
         }
-        drawBitmapTextLines(root, font, layout, bounds.x(), y, style, style.color(), alpha, bounds.width());
+        drawBitmapTextLines(root, font, layout, x, y, style, style.color(), alpha, bounds.width());
     }
 
     private void drawBitmapTextLines(UiRoot root, BitmapFont font, BitmapFontLayout layout, float x, float y,
@@ -2389,10 +2442,20 @@ public final class UiG2DRenderer implements UiRenderer {
         }
 
         @Override
+        public void beginLayer() {
+            finishCustomLayer(root, node);
+        }
+
+        @Override
         public void rect(UiRect bounds, UiColor color) {
             if (color != null) {
                 drawRect(root, bounds, color.red(), color.green(), color.blue(), color.alpha() * alpha);
             }
+        }
+
+        @Override
+        public void circle(float centerX, float centerY, float radius, UiColor color) {
+            drawFilledCircle(root, centerX, centerY, radius, color, alpha);
         }
 
         @Override
@@ -2430,5 +2493,6 @@ public final class UiG2DRenderer implements UiRenderer {
             UiTextStyle actualStyle = style != null ? style : UiTextStyle.text();
             queueCustomText(node, text, bounds, actualStyle, alpha);
         }
+
     }
 }

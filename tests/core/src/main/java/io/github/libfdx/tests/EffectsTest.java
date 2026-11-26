@@ -46,7 +46,7 @@ public final class EffectsTest extends GraphicsParityTest
         assets = new DefaultAssetManager(fdx.files());
         G2DAssetLoaders.register(assets, graphics);
         font = new ShowcaseFont(assets.createScope(), false);
-        hud = new ShowcaseHud(graphics);
+        hud = new ShowcaseHud(fdx);
         lighting = new Lighting2D(graphics.device()).bounds(0, 0, 1, 1).ambient(.13f, .16f, .22f)
                 .light(0, .23f, .73f, .20f, .85f, 1, .36f, .10f, 12)
                 .light(1, .78f, .60f, .24f, .85f, .18f, .48f, 1, 10)
@@ -152,7 +152,7 @@ public final class EffectsTest extends GraphicsParityTest
         for (int i = 0; i < PANEL_COUNT; i++) {
             float x = panelX(i) / uiScale, y = panelTop(i) / uiScale;
             float w = panelWidth / uiScale;
-            hud.rect(x, y, w, caption / uiScale, .055f, .075f, .105f, 1);
+            hud.panel(x, y, w, caption / uiScale, .055f, .075f, .105f, 1);
             hud.rect(x, y, w, 2, i >= 3 ? .32f : .85f, i >= 3 ? .77f : .56f, i >= 3 ? .83f : .30f, 1);
             String title = switch (i % 3) {
                 case 0 -> "LOW / NO BLOOM";

@@ -85,7 +85,7 @@ public final class MultipleShadersTest extends GraphicsParityTest {
             assets = new DefaultAssetManager(fdx.files());
             G2DAssetLoaders.register(assets, graphics);
             font = new ShowcaseFont(assets.createScope(), false);
-            hud = new ShowcaseHud(graphics);
+            hud = new ShowcaseHud(fdx);
         } catch (RuntimeException | Error failure) {
             failed = true;
             logger.error("MultipleShadersTest preparation failed", failure);

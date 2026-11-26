@@ -115,6 +115,10 @@ final class ShaderWgslEmitter {
             signature.append(parameterSymbol(parameters[i].id())).append(": ")
                     .append(type(parameters[i].type()));
         }
+        if (function.usesTime()) {
+            if (parameters.length != 0) signature.append(", ");
+            signature.append("fdx_time_seconds: f32");
+        }
         signature.append(") -> ");
         if (function.outputs().length == 1) {
             signature.append(type(function.outputs()[0].value().type()));
@@ -189,12 +193,43 @@ final class ShaderWgslEmitter {
             case MINIMUM -> expression = call(symbols, operands, "min");
             case MAXIMUM -> expression = call(symbols, operands, "max");
             case NEGATE -> expression = "(-" + find(symbols, operands[0]) + ")";
+            case TIME -> expression = "fdx_time_seconds";
+            case FRACTION -> expression = call(symbols, operands, "fract");
+            case PANNER -> expression = "(" + find(symbols, operands[2]) + " + "
+                    + find(symbols, operands[0]) + " * " + find(symbols, operands[1]) + ")";
+            case COSINE -> expression = call(symbols, operands, "cos");
             case ABSOLUTE -> expression = call(symbols, operands, "abs");
             case NORMALIZE -> expression = call(symbols, operands, "normalize");
             case DOT -> expression = call(symbols, operands, "dot");
             case CROSS -> expression = call(symbols, operands, "cross");
             case CLAMP -> expression = call(symbols, operands, "clamp");
             case LERP -> expression = call(symbols, operands, "mix");
+            case SMOOTHSTEP -> expression = call(symbols, operands, "smoothstep");
+            case NOISE_2D -> {
+                String uv = find(symbols, operands[0]);
+                writer.line("  var " + result + ": f32;");
+                writer.line("  {");
+                writer.line("    let cell = bitcast<vec2u>(vec2i(floor(" + uv + ")));");
+                writer.line("    let f = fract(" + uv + ");");
+                writer.line("    let t = f * f * (vec2f(3.0) - 2.0 * f);");
+                // Hash the four neighboring integer lattice points together. Keep 24 bits for an exact f32 conversion.
+                writer.line("    let x = vec4u(cell.x) + vec4u(0u, 1u, 0u, 1u);");
+                writer.line("    let y = vec4u(cell.y) + vec4u(0u, 0u, 1u, 1u);");
+                writer.line("    let h = x * 0x9e3779b9u + y * 0x85ebca6bu;");
+                writer.line("    let m = (h ^ (h >> vec4u(16u))) * 0xc2b2ae35u;");
+                writer.line("    let corners = vec4f((m ^ (m >> vec4u(13u))) >> vec4u(8u)) / 16777216.0;");
+                writer.line("    " + result + " = mix(mix(corners.x, corners.y, t.x), mix(corners.z, corners.w, t.x), t.y);");
+                writer.line("  }");
+                symbols.add(new ValueSymbol(instruction.result(), result));
+                return;
+            }
+            case FRESNEL -> {
+                String n = find(symbols, operands[0]);
+                String power = find(symbols, operands[1]);
+                String view = find(symbols, operands[2]);
+                String cosine = "dot(" + n + ", " + view + ") / max(length(" + n + ") * length(" + view + "), 1e-20)";
+                expression = "pow(1.0 - clamp(" + cosine + ", 0.0, 1.0), max(" + power + ", 0.0001))";
+            }
             case CONSTRUCT, CONVERT -> expression =
                     type(instruction.result().type()) + '('
                             + join(symbols, operands) + ')';
@@ -360,6 +395,7 @@ final class ShaderWgslEmitter {
             }
             call.append(defaultArgument(parameters[i]));
         }
+        if (root.usesTime()) call.append(parameters.length == 0 ? "0.0" : ", 0.0");
         writer.line(call.append(");").toString());
         writer.line("  return " + colorExpression(root) + ";");
         writer.line("}");

@@ -17,6 +17,7 @@ base {
 dependencies {
     api(project(":libfdx:extensions:graphics:shader-graph:core"))
     api(project(":libfdx:framework:ui-kit"))
+    implementation(project(":libfdx:framework:g3d"))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
 }

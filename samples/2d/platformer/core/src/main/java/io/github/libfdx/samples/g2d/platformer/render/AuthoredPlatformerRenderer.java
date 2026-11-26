@@ -4,7 +4,6 @@ import io.github.libfdx.graphics.*;
 import io.github.libfdx.graphics.g2d.*;
 import io.github.libfdx.maps.TileTransform;
 import io.github.libfdx.samples.g2d.platformer.*;
-import io.github.libfdx.samples.g2d.platformer.input.BackendPlatformerInput;
 
 /** Draws borrowed map/assets and retained gameplay/UI state. All pass handles stay inside one frame. */
 public final class AuthoredPlatformerRenderer {
@@ -12,16 +11,15 @@ public final class AuthoredPlatformerRenderer {
     private final SpriteBatch sprites;
     private final PlatformerView view;
     private final Texture white;
-    private final BitmapFont font;
     private final TileMapRenderer tiles=new TileMapRenderer();
     private final RenderPassDescriptor descriptor=new RenderPassDescriptor().label("Platformer scene and HUD");
     private final PixelBatch batch;
-    public AuthoredPlatformerRenderer(SpriteBatch sprites, PlatformerView view, Texture white, BitmapFont font) {
-        this.sprites=sprites; this.view=view; this.white=white; this.font=font;
+    public AuthoredPlatformerRenderer(SpriteBatch sprites, PlatformerView view, Texture white) {
+        this.sprites=sprites; this.view=view; this.white=white;
         batch=new PixelBatch(sprites,view.viewport());
     }
     public void render(GraphicsFrame frame, PlatformerLevelAsset level, PlatformerGame game,
-            PlatformerHud hud, BackendPlatformerInput controls, double seconds) {
+            double seconds) {
         PixelArtViewport viewport=view.viewport();
         RenderPass pass=frame.commandEncoder().beginRenderPass(descriptor.colorAttachment(frame.colorAttachment())
                 .colorLoadOp(CLEAR).colorStoreOp(StoreOp.store()));
@@ -51,55 +49,12 @@ public final class AuthoredPlatformerRenderer {
                     }
                 }
             }
-            viewport.camera(0,0); drawHud(hud,controls);
+            viewport.camera(0,0);
         } finally {
             try { if (begun) batch.end(); } finally { pass.end(); }
         }
     }
-    private void drawHud(PlatformerHud hud,BackendPlatformerInput controls) {
-        panel(6,152,288,22,.08f,.13f,.18f,.93f);
-        text(hud.title,12,160,.99f,.88f,.61f); text(hud.score,160,160,.85f,.92f,.87f);
-        button("MENU",258,156,34,16,hud.menuOpen);
-        if (!hud.menuOpen && !hud.loading && !hud.failed) {
-            button("<",8,8,36,28,controls.leftDown()); button(">",50,8,36,28,controls.rightDown());
-            button("JUMP",242,8,50,28,controls.jumpDown());
-            panel(94,8,140,16,.08f,.13f,.18f,.75f);
-            centered(hud.audioLocked ? "PRESS A KEY FOR SOUND" : hud.audioAvailable ? "A/D MOVE  SPACE JUMP" : "SILENT MODE",164,12,.83f,.9f,.9f);
-        }
-        if (hud.menuOpen || hud.loading || hud.failed) {
-            panel(0,0,300,152,.03f,.05f,.09f,.62f);
-            panel(47,39,206,101,.36f,.52f,.55f,1);
-            panel(49,41,202,97,.07f,.12f,.17f,1);
-            centered(hud.heading,150,123,1,.87f,.57f);
-            if (hud.loading || hud.failed) {
-                centered(hud.status,150,96,.87f,.94f,.93f);
-                centered(hud.failed ? "R RETRY  P RETURN" : "PREPARING YOUR TRAIL",150,73,.62f,.78f,.81f);
-            } else {
-                button("RESUME",62,92,80,18,false); button("RESTART",158,92,80,18,false);
-                button("NEXT TRAIL",62,68,176,18,false);
-                button("-",62,46,24,18,false); button("+",180,46,24,18,false); button("M",212,46,26,18,hud.volume==0);
-                for (int i=0;i<10;i++) panel(94+i*8,52,5,6,i<hud.volume?.98f:.21f,i<hud.volume?.76f:.3f,.32f,1);
-                centered(hud.audioAvailable ? "VOLUME: Q/E   M MUTE" : "NO AUDIO PROVIDER",150,26,.73f,.84f,.85f);
-            }
-        }
-    }
-    private void button(String text,float x,float y,float width,float height,boolean active) {
-        panel(x,y,width,height,.22f,.37f,.39f,.96f);
-        panel(x+1,y+1,width-2,height-3,active?.46f:.1f,active?.48f:.22f,active?.27f:.25f,1);
-        centered(text,x+width/2,y+(height-8)/2,1,.93f,.73f);
-    }
-    private void panel(float x,float y,float width,float height,float r,float g,float b,float a) {
-        batch.color(r,g,b,a); batch.draw(white,x,y,width,height);
-    }
-    private void centered(String text,float x,float y,float r,float g,float b) { text(text,x-text.length()*3,y,r,g,b); }
-    private void text(String text,float x,float y,float r,float g,float b) {
-        batch.color(r,g,b,1);
-        for (int i=0;i<text.length();i++) {
-            BitmapFontGlyph glyph=font.glyph(text.charAt(i));
-            if (glyph!=null) batch.draw(glyph.region(),x,y,6,8);
-            x+=6;
-        }
-    }
+
     private static final class PixelBatch implements Batch2D {
         private final SpriteBatch batch;
         private final PixelArtViewport view;

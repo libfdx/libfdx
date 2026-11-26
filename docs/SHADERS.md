@@ -697,6 +697,99 @@ The optional UI Kit module edits the same semantic document and stores layout
 in its optional in-file `editor` block. Editor data never participates in the
 semantic hash or shader behavior.
 
+For surface graphs, construct `ShaderGraphEditorView(graphics, session, settings)`
+and call `renderPreview(deltaSeconds)` before drawing the UI. The view creates
+the preview sphere, cube and plane on demand and disposes their GPU resources
+when replaced or when the view is disposed. The desktop editor also provides a
+file picker for glTF preview models. Surface previews open paused at the authored
+material values. Add **Inputs – Time** to a surface graph and connect its scalar output to drive changes in the material. **Play** advances seconds, **Pause** holds the frame, and **Restart** resets time to zero. **Rotate** controls only the preview mesh. For example, connect Time, UV and a Vector2 velocity to **Panner**, then feed the result into Noise 2D. On the canvas, drag an output socket to **Material Output**. Its Float inputs accept Alpha, Metallic, Roughness and Occlusion. Its Vec3 inputs accept Base Color, Normal and Emissive. Dropping a compatible wire replaces the current binding. **Frame Output** brings the node into view. Drag its header to move it and save the graph to keep its position. A surface can supply a single channel.
+
+Double-click the value at the bottom of a **Constant** or **Material parameter**
+card to edit it on the canvas. Type to replace the selected number. For vectors,
+use **Tab** to move between components. Press **Enter** or click **Apply** to
+update the shader. Press **Escape** or click outside the editor to discard the
+draft. The inspector also lets you edit the selected node's value.
+
+To control that value from a game, enter a name such as `fade` and click
+**Expose as material parameter**. The existing wires keep their connections.
+Select the resulting **Material parameter** node to edit its shared default,
+then save the graph. Each material instance starts with that default. For a
+float parameter named `fade`, game code can override it on a `GraphMaterial`:
+
+```java
+material.graphMaterial().set("fade", ShaderGraphLiteral.f32(0.75f));
+```
+
+A **Stage input** such as UV or normal comes from the renderer. A **Function
+input** comes from the calling graph. To supply a fixed value at just one such
+node, select it, enter the override, and click **Replace with constant**.
+
+Hold the **right mouse button** and drag anywhere on the canvas to pan, including over a node or wire. Release the button in place to open the action menu for the item you pressed. The **left mouse button** selects and drags nodes, socket connections, and routing pins. Scroll to zoom around the pointer.
+
+**Layout revision** counts completed edits in the current session. Moving a node,
+the Material Output, or a routing pin counts once when you release it. Undoing
+or redoing a layout edit counts once more. Pan, zoom, **Fit**, **Frame Output**,
+and graph selection only change the view. Saving still records the viewport.
+
+Right-click empty canvas to open the node picker. Click a category such as **Math** to expand it, or start typing to reveal matching nodes across categories. The search uses the same text field as the inspector. Drag or hold **Shift** and press an arrow to select text, then use the usual cut, copy and paste shortcuts. **Up** and **Down** move the tree highlight. **Enter** opens a category or places the highlighted node at the original click. With an empty search, **Left** and **Right** navigate the tree. While editing a query, they move the text caret. **Esc** closes the picker.
+
+Each socket shows its name and shader type. Inputs sit on the left and outputs on the right. Right-click a node for **Duplicate node**, **Delete node**, or **Disconnect all wires**. To unplug one connection, right-click its wire or socket and choose **Disconnect**. An output socket lists each destination separately. **Undo** restores the edit.
+
+Click a wire to highlight its path and both sockets. The bottom of the canvas shows the source and destination names. If two wires share a path, click again to select the next one. To follow a long wire, right-click it and choose **Show source** or **Show destination**.
+
+Right-click a wire and choose **Add routing pin**. Drag the square pin to guide the spline around nodes.
+
+Left-click a pin to show **Routing pin** in the inspector. Choose **Up**, **Down**, **Left**, or **Right**, or enter a **Rotation** in degrees and press **Enter** or **Apply**. A new pin starts at zero degrees. Zero points right and positive angles turn clockwise, following the wire from source to destination. Rotation shapes both curves at that pin.
+
+To get a straight run followed by a curve, right-click the first segment and choose **Make segment straight**. Adding a pin to that straight segment keeps both halves straight. Use **Make segment curved** to restore the spline on an individual segment. Right-click a pin to remove it, or choose **Reset wire route** to restore the original unpinned spline. **Esc** cancels a pin drag. Each completed drag is one undoable edit. Saving the `.fdxgraph` keeps these routes in its editor layout.
+
+Drag a wire from a socket and release it on empty canvas to create a connected node. Starting from an output lists nodes that accept its exact type. Starting from an input, including **Material Output**, lists nodes that produce that type. Each result names the first matching socket in canvas order. Choose a result to place that socket at the drop point and connect it. **Esc** cancels, and one **Undo** removes the insertion and restores any previous connection.
+
+A standard PBR ModelBatch supplies time automatically. Use `batch.shaderTimeSeconds(seconds)` before `begin` to synchronize passes to the game's simulation or freeze a frame. Use `useRealtimeShaderClock()` to resume the renderer clock. Java authoring uses `graph.time("time")` and serializes the same nodes as the editor.
+
+Under **Parameter animation**, choose a float material parameter and apply its minimum and maximum. **Play range** advances through that range in six seconds and **Stop range** restores the authored value. On older surfaces without Time these controls are labeled **Play** and **Stop**. Both save modes persist the range under `editor.previewAnimation`. Shader time and rotation are local to the editor session.
+
+Launch the standalone editor from the repository root with
+`./gradlew :libfdx:tools:shader-graph-editor:run` (WGPU). The tool also has
+named `libfdx_desktop_jvm_<provider>_run` tasks for `d3d12`, `gl`, `vulkan`
+and `wgpu`. Choose **Open effect…** to
+open one or more `.fdxgraph` files from disk. Open additional files from the
+toolbar. The **Effects** panel appears when two or more documents are available.
+Switching effects preserves unsaved edits, undo history and preview state until
+the window closes. Reopening a file selects its existing session. Both **Save**
+and **Save with compiled cache** write to the selected file’s original location.
+
+You can leave unfinished expressions on the canvas and save them in the graph.
+An expression contributes to the shader once a wire path leads from it to a graph
+output, such as **Material Output → Alpha**. At that point compilation checks
+its required inputs. Fragment discard, storage writes, atomic adds and barriers
+also execute when their return value is unused.
+
+A required input with a missing connection shows **!** on its socket and **Missing**
+under its name. The Diagnostics panel identifies the node and input. While you
+finish wiring, the editor keeps the last working shader in the live preview and
+shows its revision in the **Canonical WGSL** heading. Both update when the graph
+compiles successfully again.
+
+In **Show output**, double-click a word or shader identifier to select it.
+Triple-click in the same spot to select the entire widget. In the **Canonical
+WGSL** heading this selects both words. In the code pane it selects the whole
+shader, including offscreen lines. Press **Ctrl+C** to copy. Drag or
+**Shift+click** to select a range. Diagnostics, artifacts and inspector values
+support the same gestures.
+
+The editor compiles the graph to canonical WGSL independently of the active
+graphics API. The preview renderer translates that source for the current device.
+**Save with compiled cache** embeds the same portable result on every provider.
+The `:libfdx:tools:shader-graph-editor:distZip` task packages the editor under
+the tool’s `build/distributions`. Extract the ZIP and run
+`bin/shader-graph-editor` (or `bin\shader-graph-editor.bat` on Windows) with
+JDK 25. The distribution includes the runtime libraries.
+
+A host can also open a file or Java-authored graph at startup, or pass a list
+of named effects to `ShaderGraphDesktopEditor.openEffects`. The same file picker
+is available in hosted editors. See the [shader graph sample](../samples/graphics/shader-graph/README.md).
+
 Graph scope is layered:
 
 | Scope | Responsibility |
@@ -735,6 +828,12 @@ graph/program/technique
   -> SpriteBatch or ModelBatch draw
 ```
 
+A standard PBR surface graph can read `normal` and `viewDirection` as
+world-space directions and write `alpha` and `emissive`. The forward masked
+pass applies the material cutoff after evaluating the graph. The
+[dissolve and rim highlight sample](../samples/graphics/shader-graph/#build-the-dissolve-and-rim-highlight)
+shows how to wire Noise 2D, Smoothstep and Fresnel into those outputs.
+
 SpriteBatch and ModelBatch use the same public `ShaderProvider` vocabulary:
 
 ```java
@@ -749,9 +848,7 @@ The common interface does not imply that one compiled technique fits every
 renderer. Standard PBR and sprite techniques have different passes, vertex
 ABIs, resources, and pipeline state, so applications normally create one
 `ShaderGraphProvider` instance for each technique while keeping both variables
-typed as `ShaderProvider`. See the
-[shader graph sample](../samples/graphics/shader-graph/) for code-authored and
-serialized graphs used by both batch families.
+typed as `ShaderProvider`.
 
 The configured provider is borrowed: dispose the batch before disposing the
 provider, and do not replace or mutate provider state during an active
@@ -803,10 +900,13 @@ Serialized authoring uses one versioned `.fdxgraph` for graph, program,
 compute-program, render-technique, and compute-technique semantics. The
 required semantic block is sufficient for correctness. An optional `editor`
 block restores visual layout, and an optional `compiled` block caches
-target/profile-specific results. There are no companion WGSL, reflection,
+portable WGSL or explicitly requested target-specific results. There are no companion WGSL, reflection,
 manifest, source-map, diagnostic, or layout files.
 
-`ShaderGraphRuntimeLoader` parses the document and chooses an exact embedded
+`ShaderGraphRuntimeLoader.load(source)` uses the portable cache, including on a
+different graphics provider. An older file containing only a device-specific
+cache is recompiled from its graph in memory. Callers requesting a specific
+build target can pass its cache context explicitly. The loader selects an exact embedded
 entry using semantic/dependency/compiler/library/profile/capability/target/
 environment/options/interface/pass/variant identity. A miss compiles the
 required semantics in memory. Runtime loading itself never rewrites the asset;

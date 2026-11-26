@@ -547,11 +547,13 @@ final class PbrGraphCustomization {
             }
             call.append(argument(parameters[i]));
         }
+        if (definition.graph().usesTime()) {
+            if (parameters.length != 0) call.append(", ");
+            call.append("uniforms.cameraPosition.w");
+        }
         call.append(");\n");
         ShaderGraphOutput[] outputs = definition.graph().outputs();
-        if (outputs.length == 1) {
-            throw new FdxException("PBR surface graph must expose named surface fields");
-        }
+        int beforeAssignments = call.length();
         appendAssignment(call, outputs, "baseColor", "base_color",
                 "base = vec4f(VALUE, base.a);");
         appendAssignment(call, outputs, "alpha", "alpha",
@@ -566,6 +568,7 @@ final class PbrGraphCustomization {
                 "ao = clamp(VALUE, 0.0, 1.0);");
         appendAssignment(call, outputs, "emissive", "emissive",
                 "emissive = VALUE;");
+        if (outputs.length == 1 && call.length() == beforeAssignments) throw new FdxException("PBR surface graph needs a named surface output");
         return call.toString();
     }
 
@@ -656,6 +659,7 @@ final class PbrGraphCustomization {
             case "basecolor", "base_color" -> "base.rgb";
             case "alpha" -> "base.a";
             case "normal" -> "n";
+            case "viewdirection", "view_direction" -> "v";
             case "metallic" -> "metallic";
             case "roughness" -> "roughness";
             case "occlusion" -> "ao";
@@ -673,8 +677,7 @@ final class PbrGraphCustomization {
         for (ShaderGraphOutput output : outputs) {
             if (semantic.equalsIgnoreCase(output.semantic())
                     || id.equalsIgnoreCase(output.id().value())) {
-                String value = "fdx_surface."
-                        + ShaderGraphSymbols.output(output.id());
+                String value = outputs.length == 1 ? "fdx_surface" : "fdx_surface." + ShaderGraphSymbols.output(output.id());
                 source.append(statement.replace("VALUE", value)).append('\n');
                 return;
             }

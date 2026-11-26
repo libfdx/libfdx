@@ -6,7 +6,6 @@ import io.github.libfdx.assets.*;
 import io.github.libfdx.core.Disposable;
 import io.github.libfdx.graphics.*;
 import io.github.libfdx.graphics.g2d.*;
-import io.github.libfdx.files.FileSystem;
 import io.github.libfdx.tests.utils.assetloadingtest.AssetLoadingFixtures.Card;
 
 /** Two cargo bays borrow the same resources; the overlay owns its separate font assets. */
@@ -21,12 +20,12 @@ public final class AssetLoadingScene implements Disposable {
     private final String[] progress = new String[25];
     private boolean disposed;
 
-    public AssetLoadingScene(GraphicsContext graphics, FileSystem files) {
-        this.graphics = graphics;
-        uiAssets = new DefaultAssetManager(files);
+    public AssetLoadingScene(io.github.libfdx.Fdx fdx) {
+        this.graphics = fdx.graphics().main();
+        uiAssets = new DefaultAssetManager(fdx.files());
         G2DAssetLoaders.register(uiAssets, graphics);
         font = new ShowcaseFont(uiAssets.createScope(), false);
-        hud = new ShowcaseHud(graphics);
+        hud = new ShowcaseHud(fdx);
         sprites = new SpriteBatch(graphics);
         for (int i = 0; i <= 24; i++) progress[i] = i + " / 24 CARGO ASSETS READY";
     }
@@ -47,17 +46,16 @@ public final class AssetLoadingScene implements Disposable {
         for (int bay = 0; bay < 2; bay++) {
             float x = 28 + bay * 466;
             boolean closed = bay == 0 ? firstClosed : allClosed;
-            hud.rect(x, 148, 438, 302, .065f, .10f, .15f, 1);
+            hud.panel(x, 148, 438, 302, .065f, .10f, .15f, 1);
             hud.text(bay == 0 ? "BAY A / FIRST LEVEL" : "BAY B / SECOND LEVEL", x + 18, 164, 1.4f, .83f, .90f, .97f);
             hud.text(closed ? "CLOSED / NO OWNERSHIP" : "OPEN / HOLDS 24 ASSET LEASES", x + 18, 191, 1, .51f, .66f, .77f);
             for (int i = 0; i < cards.length; i++) {
                 float cx = x + 18 + i % 6 * 68, cy = 228 + i / 6 * 50;
-                hud.rect(cx, cy, 60, 40, .12f, .18f, .24f, 1);
+                hud.panel(cx, cy, 60, 40, .12f, .18f, .24f, 1);
             }
             if (closed) hud.text("RELEASED", x + 166, 426, 1, .91f, .66f, .38f);
         }
-        hud.rect(28, 480, 904, 10, .12f, .18f, .24f, 1);
-        hud.rect(28, 480, 904 * loaded / 24, 10, .24f, .79f, .65f, 1);
+        hud.progress(28, 480, 904, 10, loaded / 24f);
         hud.text(allClosed ? "24 CARGO ASSETS + SHARED TEXTURE DISPOSED / CHECKS PASSED" : progress[loaded], 28, 505, 1.3f, .85f, .94f, .93f);
         hud.text(allClosed ? "THE LAST OWNER CLOSED. THE EMPTY BAYS CONFIRM THAT ASSETS ARE GONE."
                 : firstClosed ? "THE LOGO AND CARGO REMAIN VALID UNTIL THE LAST LEVEL CLOSES."

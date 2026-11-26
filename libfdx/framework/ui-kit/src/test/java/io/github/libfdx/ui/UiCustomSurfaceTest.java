@@ -15,6 +15,53 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class UiCustomSurfaceTest {
     @Test
+    void overlayRetainsEditingFocusUntilTheUserLeavesTheSurface() {
+        var root = new UiRoot(null, null, null, null).allowFontFallback(true);
+        var input = new io.github.libfdx.input.DefaultInput();
+        var handler = new RecordingSurfaceInput();
+        var open = Ui.state(false);
+        var query = Ui.state("");
+        var nodes = new UiNode[3];
+        root.input(input);
+        root.resize(250, 100);
+        root.setContent(ui -> ui.row(row -> {
+            nodes[0] = row.custom("canvas", SURFACE_MODIFIER, context -> {
+                context.input(handler);
+                if (open.get()) context.focusedOverlay(area -> area, child ->
+                        nodes[1] = child.textField(Ui.modifier().fill(), query));
+            });
+            nodes[2] = row.button("Outside", () -> {});
+        }));
+        root.update(0);
+        try {
+            root.handlePointerDown(POINTER_DOWN);
+            root.handlePointerUp(POINTER_UP_INSIDE);
+            open.set(true);
+            input.dispatchTextInput("a");
+            assertTrue(nodes[1].focused());
+            assertEquals("a", query.get());
+            assertEquals(0, handler.focusLost);
+            open.set(false);
+            root.update(0);
+            assertTrue(nodes[0].focused());
+            assertEquals(1, handler.focusGained);
+            open.set(true);
+            root.update(0);
+            UiRect button = nodes[2].bounds();
+            int x = root.displayX(button.x() + 2), y = root.displayY(button.y() + 2);
+            input.dispatchPointerDown(MouseButton.LEFT, x, y);
+            input.dispatchPointerUp(MouseButton.LEFT, x, y);
+            assertTrue(nodes[2].focused());
+            assertEquals(1, handler.focusLost);
+            open.set(false);
+            root.update(0);
+            assertTrue(nodes[2].focused());
+        } finally {
+            root.dispose();
+        }
+    }
+
+    @Test
     void orderedUiInputConsumesPressesAndDetachesWithoutRemovingGameplay() {
         var input = new io.github.libfdx.input.DefaultInput();
         var router = new io.github.libfdx.input.InputRouter();

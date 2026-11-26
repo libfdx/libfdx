@@ -37,9 +37,10 @@ final class ShaderGraphSampleGraphsTest {
         ShaderGraph asset = document.graph();
 
         assertEquals(ShaderGraphDocumentCodec.write(
-                ShaderGraphDocument.of(code)), source.trim());
+                ShaderGraphSampleGraphs.Example.DISSOLVE.document()), source.trim());
         assertEquals(code.semanticHash(), asset.semanticHash());
-        assertNotNull(asset.parameter(ShaderGraphId.of("warmth")));
+        assertNotNull(asset.parameter(ShaderGraphId.of("threshold")));
+        assertNotNull(asset.parameter(ShaderGraphId.of("rim_power")));
     }
 
     @Test
@@ -139,11 +140,28 @@ final class ShaderGraphSampleGraphsTest {
     }
 
     private static String assetSource() throws Exception {
-        try (InputStream stream =
-                ShaderGraphSampleGraphsTest.class.getClassLoader()
-                        .getResourceAsStream(
-                                ShaderGraphSampleGraphs.SURFACE_ASSET)) {
-            assertNotNull(stream);
+        return assetSource(ShaderGraphSampleGraphs.SURFACE_ASSET);
+    }
+
+    @Test
+    void everyGalleryAssetMatchesItsBuilderOnBothPortableProfiles() throws Exception {
+        var loader = new ShaderGraphRuntimeLoader();
+        for (var example : ShaderGraphSampleGraphs.Example.values()) {
+            var file = assetSource(example.asset);
+            var document = example.document();
+            assertTrue(example.animation.appliesTo(document.graph()), example.title);
+            assertEquals(ShaderGraphDocumentCodec.write(document), file.trim(), example.title);
+            var portable = loader.load(file);
+            assertRuntimeGraphEquals(loader.load(document).graph(), portable.graph());
+            for (var target : new ShaderGraphCacheContext[] {WEBGPU, WEBGL2}) {
+                assertRuntimeGraphEquals(portable.graph(), loader.load(document, target).graph());
+            }
+        }
+    }
+
+    private static String assetSource(String path) throws Exception {
+        try (InputStream stream = ShaderGraphSampleGraphsTest.class.getClassLoader().getResourceAsStream(path)) {
+            assertNotNull(stream, path);
             return new String(stream.readAllBytes(),
                     StandardCharsets.UTF_8);
         }

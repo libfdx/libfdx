@@ -1,551 +1,256 @@
 package io.github.libfdx.samples.shadergraph;
 
 import io.github.libfdx.Fdx;
-import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
-import io.github.libfdx.core.Disposable;
+import io.github.libfdx.assets.AssetDescriptor;
+import io.github.libfdx.assets.AssetHandle;
+import io.github.libfdx.assets.DefaultAssetManager;
 import io.github.libfdx.core.FdxException;
-import io.github.libfdx.core.Logger;
+import io.github.libfdx.core.FdxFuture;
 import io.github.libfdx.display.Display;
-import io.github.libfdx.files.FileSystem;
+import io.github.libfdx.files.FileHandle;
 import io.github.libfdx.graphics.GraphicsContext;
 import io.github.libfdx.graphics.LoadOp;
-import io.github.libfdx.graphics.shader.reflection.ShaderScalarType;
-import io.github.libfdx.graphics.shader.ShaderProfile;
-import io.github.libfdx.graphics.shader.runtime.ShaderProvider;
-import io.github.libfdx.graphics.Texture;
-import io.github.libfdx.graphics.TextureDescriptor;
 import io.github.libfdx.graphics.camera.Camera;
 import io.github.libfdx.graphics.camera.CameraProjection;
-import io.github.libfdx.graphics.g2d.SpriteBatch;
-import io.github.libfdx.graphics.g2d.SpriteBatchConfig;
-import io.github.libfdx.graphics.g2d.StandardSpriteTechnique;
-import io.github.libfdx.graphics.g2d.TextureRegion;
 import io.github.libfdx.graphics.g3d.DefaultModelInstance;
 import io.github.libfdx.graphics.g3d.DirectionalLight;
 import io.github.libfdx.graphics.g3d.Environment;
+import io.github.libfdx.graphics.g3d.G3DAssetLoaders;
 import io.github.libfdx.graphics.g3d.GraphMaterial;
+import io.github.libfdx.graphics.g3d.MaterialAlphaMode;
 import io.github.libfdx.graphics.g3d.MaterialAttributes;
 import io.github.libfdx.graphics.g3d.Model;
 import io.github.libfdx.graphics.g3d.ModelBatch;
 import io.github.libfdx.graphics.g3d.ModelBatchConfig;
+import io.github.libfdx.graphics.g3d.ModelShaderPlan;
 import io.github.libfdx.graphics.g3d.PbrAttributes;
 import io.github.libfdx.graphics.g3d.StandardPbrTechnique;
-import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCacheContext;
-import io.github.libfdx.graphics.shadergraph.compiler.ShaderGraphCompileOptions;
-import io.github.libfdx.graphics.shadergraph.document.ShaderGraphDocument;
-import io.github.libfdx.graphics.shadergraph.document.ShaderGraphDocumentCodec;
-import io.github.libfdx.graphics.shadergraph.model.ShaderGraph;
-import io.github.libfdx.graphics.shadergraph.model.ShaderGraphLiteral;
-import io.github.libfdx.graphics.shadergraph.model.ShaderGraphParameter;
-import io.github.libfdx.graphics.shadergraph.model.ShaderGraphResource;
-import io.github.libfdx.graphics.shadergraph.model.ShaderGraphType;
-import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphMaterialDefinition;
+import io.github.libfdx.graphics.shader.runtime.ShaderPassId;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparation;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationReport;
+import io.github.libfdx.graphics.shader.runtime.ShaderPreparationScope;
+import io.github.libfdx.graphics.shadergraph.document.ShaderGraphPreviewAnimation;
+import io.github.libfdx.graphics.shadergraph.document.ShaderGraphPreviewPlayback;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraphKind;
 import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphProvider;
 import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphRuntimeAsset;
-import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphRuntimeGraph;
 import io.github.libfdx.graphics.shadergraph.runtime.ShaderGraphRuntimeLoader;
-import io.github.libfdx.input.Input;
 import io.github.libfdx.input.InputAdapter;
-import io.github.libfdx.input.Key;
 import io.github.libfdx.input.KeyEvent;
+import io.github.libfdx.input.TouchEvent;
+import io.github.libfdx.json.JsonReader;
 import io.github.libfdx.math.Color;
-import io.github.libfdx.math.Matrix4;
+import io.github.libfdx.samples.shadergraph.ShaderGraphSampleGraphs.Example;
 
-import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
-/**
- * Public headless shader-graph sample.
- *
- * <p>The application demonstrates direct Java authoring, serialized graph
- * loading, standard PBR surface replacement, the common ShaderProvider
- * contract for both batch families, and atomic last-good reload behavior. It
- * deliberately has no UI Kit dependency.</p>
- */
+/** A game-side surface graph example using a mesh, a graph material and a ModelBatch. */
 public final class ShaderGraphSampleApplication extends ApplicationAdapter {
-    private static final int CHECKER_SIZE = 16;
-    private static final ShaderGraphType VEC4 =
-            ShaderGraphType.vector(ShaderScalarType.F32, 4);
+    private static final Example[] EXAMPLES = Example.values();
+    private static final LoadOp BACKGROUND = LoadOp.clear(0.024f, 0.031f, 0.047f, 1);
+    private final boolean fromCode;
+    private final long frameLimit;
+    private ShaderGraphPreviewPlayback playback;
+    private Fdx fdx;
+    private GraphicsContext graphics;
+    private Display display;
+    private DefaultAssetManager assets;
+    private AssetHandle<Model> crystal;
+    private DefaultModelInstance instance;
+    private final Camera camera = new Camera();
+    private ModelBatch batch;
+    private ShaderGraphProvider provider;
+    private ShaderPreparation shaders;
+    private ModelShaderPlan shaderPlan;
+    private ShaderPreparationScope effectScope;
+    private FdxFuture<ShaderPreparationReport> preparing;
+    private GraphMaterial material;
+    private Example requested;
+    private Example active;
+    private int animatedParameter;
+    private boolean playing = true;
+    private double shaderTime;
+    private long frames;
 
-    private final long exitAfterFrames;
-    private final InputAdapter reloadInput = new InputAdapter() {
+    private final InputAdapter controls = new InputAdapter() {
+        @Override
+        public boolean touchDown(TouchEvent event) {
+            requested = EXAMPLES[(requested.ordinal() + 1) % EXAMPLES.length];
+            return true;
+        }
+
         @Override
         public boolean keyDown(KeyEvent event) {
-            if (event.key() == Key.R) {
-                reloadFromAsset();
-                return true;
+            switch (event.key()) {
+                case LEFT -> requested = EXAMPLES[Math.floorMod(requested.ordinal() - 1, EXAMPLES.length)];
+                case RIGHT -> requested = EXAMPLES[(requested.ordinal() + 1) % EXAMPLES.length];
+                case NUM_1 -> requested = Example.DISSOLVE;
+                case NUM_2 -> requested = Example.BASALT;
+                case NUM_3 -> requested = Example.VORTEX;
+                case SPACE -> playing = !playing;
+                default -> { return false; }
             }
-            return false;
+            return true;
         }
+
     };
-    private final Matrix4 translation = new Matrix4();
-    private final Matrix4 rotation = new Matrix4();
-    private final Matrix4 transform = new Matrix4();
 
-    private Application application;
-    private Display display;
-    private FileSystem files;
-    private GraphicsContext graphics;
-    private Input input;
-    private Logger logger;
-    private Camera camera;
-    private Environment environment;
-    private ModelBatch modelBatch;
-    private SpriteBatch spriteBatch;
-    private ShaderProvider modelShaderProvider;
-    private ShaderProvider spriteShaderProvider;
-    private ShaderGraphProvider modelGraphProvider;
-    private ShaderGraphProvider spriteGraphProvider;
-    private StandardPbrTechnique activePbrTechnique;
-    private Model floorModel;
-    private Model leftModel;
-    private Model rightModel;
-    private DefaultModelInstance floor;
-    private DefaultModelInstance left;
-    private DefaultModelInstance right;
-    private Texture spriteTexture;
-    private TextureRegion spriteRegion;
-    private String capturePath;
-    private long captureFrame;
-    private long renderedFrames;
-    private boolean captured;
-
-    /**
-     * Creates an interactive sample.
-     */
-    public ShaderGraphSampleApplication() {
-        this(0L);
+    /** Creates an interactive gallery starting at the chosen effect. */
+    public ShaderGraphSampleApplication(Example example, boolean fromCode) {
+        this(example, fromCode, 0);
     }
 
-    /**
-     * Creates a sample with an optional finite validation run.
-     *
-     * @param exitAfterFrames frames to render, or zero to run interactively
-     */
-    public ShaderGraphSampleApplication(long exitAfterFrames) {
-        this.exitAfterFrames = exitAfterFrames;
+    /** A positive frame limit closes the sample after that many rendered model frames. */
+    public ShaderGraphSampleApplication(Example example, boolean fromCode, long frameLimit) {
+        this.requested = example;
+        this.fromCode = fromCode;
+        this.frameLimit = frameLimit;
     }
 
     @Override
     public void create(Fdx fdx) {
-        application = fdx.app();
-        display = fdx.displays().main();
-        files = fdx.files();
+        this.fdx = fdx;
         graphics = fdx.graphics().main();
-        input = fdx.input();
-        logger = fdx.logger();
-
-        activePbrTechnique = selectedTechnique();
-        ShaderGraph surface = activePbrTechnique.surfaceGraph();
-        modelGraphProvider = new ShaderGraphProvider(graphics,
-                activePbrTechnique.technique());
-        spriteGraphProvider = new ShaderGraphProvider(graphics,
-                StandardSpriteTechnique.compile(graphics));
-        modelShaderProvider = modelGraphProvider;
-        spriteShaderProvider = spriteGraphProvider;
-
-        environment = new Environment()
-                .ambientColor(new Color(0.065f, 0.075f, 0.105f, 1.0f))
-                .neutralToneMapping(1.18f)
-                .add(new DirectionalLight()
-                        .direction(-0.32f, -0.84f, -0.42f)
-                        .color(new Color(1.0f, 0.91f, 0.78f, 1.0f))
-                        .intensity(2.15f));
-        modelBatch = new ModelBatch(graphics,
-                new ModelBatchConfig()
-                        .shaderProvider(modelShaderProvider))
-                .environment(environment);
-        spriteBatch = new SpriteBatch(graphics,
-                new SpriteBatchConfig()
-                        .shaderProvider(spriteShaderProvider));
-
-        GraphMaterial floorMaterial = material("floor", 0.08f,
-                0.30f, 0.36f, 0.48f, 0.86f);
-        GraphMaterial leftMaterial = material("cool", 0.0f,
-                0.20f, 0.62f, 0.95f, 0.34f);
-        GraphMaterial rightMaterial = material("warm", 1.0f,
-                0.98f, 0.38f, 0.12f, 0.56f);
-        floorModel = ShaderGraphSampleModelFactory.box(graphics,
-                "shader graph floor", 7.0f, 0.12f, 5.0f,
-                floorMaterial);
-        leftModel = ShaderGraphSampleModelFactory.box(graphics,
-                "shader graph cool cube", 1.35f, 1.35f, 1.35f,
-                leftMaterial);
-        rightModel = ShaderGraphSampleModelFactory.box(graphics,
-                "shader graph warm cube", 1.35f, 1.35f, 1.35f,
-                rightMaterial);
-        floor = new DefaultModelInstance(floorModel);
-        floor.transform().setToTranslation(0.0f, -1.05f, -1.2f);
-        left = new DefaultModelInstance(leftModel);
-        right = new DefaultModelInstance(rightModel);
-
-        camera = new Camera()
-                .projection(CameraProjection.PERSPECTIVE)
-                .fieldOfView(58.0f)
-                .viewport(framebufferWidth(), framebufferHeight())
-                .nearFar(0.1f, 60.0f)
-                .position(5.2f, 3.1f, 6.7f)
-                .lookAt(0.0f, -0.10f, -1.2f)
-                .update();
-        spriteTexture = createCheckerTexture();
-        spriteRegion = new TextureRegion(spriteTexture);
-        capturePath =
-                System.getProperty("libfdx.sample.capture", "");
-        captureFrame = Long.parseLong(System.getProperty(
-                "libfdx.sample.captureFrame", "3"));
-        input.addProcessor(reloadInput);
-
-        if (Boolean.getBoolean("libfdx.sample.validateReload")) {
-            String uncachedSource = ShaderGraphDocumentCodec.write(
-                    ShaderGraphDocument.of(
-                            ShaderGraphSampleGraphs
-                                    .codeAuthoredSurface()));
-            ShaderGraphRuntimeAsset miss =
-                    loadRuntimeSurface(
-                            uncachedSource,
-                            "uncached validation source");
-            if (!miss.cacheMiss()) {
-                throw new FdxException(
-                        "Uncached shader graph did not compile "
-                                + "through a cache miss");
-            }
-            String embeddedSource = ShaderGraphDocumentCodec.write(
-                    miss.documentWithCompiledCache());
-            ShaderGraphRuntimeAsset hit =
-                    loadRuntimeSurface(
-                            embeddedSource,
-                            "embedded-cache validation source");
-            if (!hit.cacheHit()) {
-                throw new FdxException(
-                        "Embedded shader graph cache was not used");
-            }
-            requireEquivalentRuntimeGraph(miss.graph(), hit.graph());
-
-            long revision = modelGraphProvider.revision();
-            if (!replaceSurface(embeddedSource,
-                    "valid embedded-cache validation source")
-                    || modelGraphProvider.revision() <= revision) {
-                throw new FdxException(
-                        "Valid shader reload was not published");
-            }
-            revision = modelGraphProvider.revision();
-            if (replaceSurface("{\"format\":1}", "invalid validation source")
-                    || revision != modelGraphProvider.revision()) {
-                throw new FdxException(
-                        "Failed shader reload replaced the last-good technique");
-            }
-            logger.info("Shader graph sample verified one-file cache "
-                    + "miss/hit parity and last-good reload behavior");
-        }
-        logger.info("Shader graph sample loaded "
-                + surface.id() + " through "
-                + graphSource() + " authoring for provider "
-                + graphics.providerId().value());
+        display = fdx.displays().main();
+        camera.projection(CameraProjection.PERSPECTIVE).fieldOfView(39).nearFar(0.1f, 30)
+                .position(0, 0.64f, 4.25f).lookAt(0, 0, 0);
+        resize(display.framebufferWidth(), display.framebufferHeight());
+        assets = new DefaultAssetManager(fdx.files());
+        G3DAssetLoaders.register(assets, graphics);
+        crystal = assets.load(AssetDescriptor.of("models/crystal.gltf", Model.class));
+        fdx.input().addProcessor(controls);
     }
 
-    @Override
-    public void resize(int width, int height) {
-        if (camera != null && width > 0 && height > 0) {
-            camera.viewport(width, height).update();
-        }
+    private FileHandle surfaceFile(Example example) {
+        FileHandle edited = fdx.files().local("assets/" + example.asset);
+        return edited.exists() ? edited : fdx.files().internal(example.asset);
     }
 
-    @Override
-    public void render() {
-        float angle = renderedFrames * 0.0125f;
-        setTransform(left, -1.35f, -0.22f, -1.15f, angle);
-        setTransform(right, 1.35f, -0.22f, -1.15f, -angle * 0.82f);
-
-        modelBatch.begin(LoadOp.clear(
-                0.026f, 0.036f, 0.065f, 1.0f), camera);
-        modelBatch.render(floor);
-        modelBatch.render(left);
-        modelBatch.render(right);
-        modelBatch.end();
-
-        spriteBatch.begin(LoadOp.load());
-        spriteBatch.color(0.34f, 0.78f, 1.0f, 0.95f);
-        spriteBatch.draw(spriteRegion,
-                -0.93f, 0.70f, 0.20f, 0.20f);
-        spriteBatch.color(1.0f, 0.58f, 0.24f, 0.95f);
-        spriteBatch.draw(spriteRegion,
-                -0.69f, 0.70f, 0.20f, 0.20f);
-        spriteBatch.color(1.0f, 1.0f, 1.0f, 1.0f);
-        spriteBatch.end();
-
-        if (!captured && capturePath != null
-                && !capturePath.isBlank()
-                && renderedFrames >= captureFrame) {
-            capture(capturePath);
-            captured = true;
-        }
-        renderedFrames++;
-        if (exitAfterFrames > 0L
-                && renderedFrames >= exitAfterFrames) {
-            application.requestExit();
-        }
+    /** Loads a locally available or preloaded surface document on the graphics thread. */
+    public static StandardPbrTechnique loadSurface(GraphicsContext graphics, FileHandle file) {
+        return StandardPbrTechnique.create(graphics, loadAsset(file).graph());
     }
 
-    @Override
-    public void dispose() {
-        if (input != null) {
-            input.removeProcessor(reloadInput);
-        }
-        dispose(spriteBatch);
-        dispose(modelBatch);
-        dispose(spriteTexture);
-        dispose(rightModel);
-        dispose(leftModel);
-        dispose(floorModel);
-        dispose(spriteGraphProvider);
-        dispose(modelGraphProvider);
-        spriteBatch = null;
-        modelBatch = null;
-        spriteTexture = null;
-        rightModel = null;
-        leftModel = null;
-        floorModel = null;
-        spriteGraphProvider = null;
-        modelGraphProvider = null;
-        modelShaderProvider = null;
-        spriteShaderProvider = null;
-        if (capturePath != null && !capturePath.isBlank()
-                && !captured) {
-            throw new FdxException(
-                    "Shader graph sample did not capture " + capturePath);
-        }
-        if (exitAfterFrames > 0L
-                && renderedFrames < exitAfterFrames) {
-            throw new FdxException("Shader graph sample rendered "
-                    + renderedFrames + " of " + exitAfterFrames
-                    + " required frames");
-        }
-        if (logger != null) {
-            logger.info("Shader graph sample rendered "
-                    + renderedFrames + " frames");
-        }
-    }
-
-    private StandardPbrTechnique selectedTechnique() {
-        if ("code".equalsIgnoreCase(graphSource())) {
-            return StandardPbrTechnique.create(graphics,
-                    ShaderGraphSampleGraphs.codeAuthoredSurface());
-        }
-        return StandardPbrTechnique.create(graphics,
-                loadRuntimeSurface(
-                        ShaderGraphSampleGraphs
-                                .loadSurfaceSource(files),
-                        ShaderGraphSampleGraphs.SURFACE_ASSET)
-                        .graph());
-    }
-
-    private String graphSource() {
-        return System.getProperty(
-                "libfdx.sample.graphSource", "asset").trim();
-    }
-
-    private GraphMaterial material(String id, float warmth,
-            float red, float green, float blue, float roughness) {
-        GraphMaterial material = activePbrTechnique.material(id);
-        material.set(MaterialAttributes.baseColor(
-                        1.0f, 1.0f, 1.0f, 1.0f))
-                .set(PbrAttributes.metallicFactor(0.16f))
-                .set(PbrAttributes.roughnessFactor(roughness));
-        material.graphMaterial()
-                .set("tint", ShaderGraphLiteral.composite(VEC4,
-                        ShaderGraphLiteral.f32(red),
-                        ShaderGraphLiteral.f32(green),
-                        ShaderGraphLiteral.f32(blue),
-                        ShaderGraphLiteral.f32(1.0f)))
-                .set("warmth", ShaderGraphLiteral.f32(warmth));
-        return material;
-    }
-
-    private void reloadFromAsset() {
-        replaceSurface(ShaderGraphSampleGraphs.loadSurfaceSource(files),
-                ShaderGraphSampleGraphs.SURFACE_ASSET);
-    }
-
-    private boolean replaceSurface(String source, String label) {
-        try {
-            ShaderGraphRuntimeAsset loaded =
-                    loadRuntimeSurface(source, label);
-            StandardPbrTechnique replacement =
-                    StandardPbrTechnique.create(
-                            graphics, loaded.graph());
-            requireCompatibleMaterialSchema(
-                    activePbrTechnique.materialDefinition(),
-                    replacement.materialDefinition());
-            modelGraphProvider.replace(replacement.technique());
-            activePbrTechnique = replacement;
-            logger.info("Shader graph sample accepted " + label
-                    + " through a cache "
-                    + (loaded.cacheHit() ? "hit" : "miss")
-                    + " at provider revision "
-                    + modelGraphProvider.revision());
-            return true;
-        } catch (RuntimeException failure) {
-            logger.warn("Shader graph sample kept its last-good shader after "
-                    + label + " failed: " + message(failure));
-            return false;
-        }
-    }
-
-    private ShaderGraphRuntimeAsset loadRuntimeSurface(
-            String source, String label) {
-        ShaderGraphRuntimeAsset loaded =
-                new ShaderGraphRuntimeLoader().load(
-                        source, ShaderGraphCacheContext.wgpu(
-                                ShaderGraphCompileOptions.builder()
-                                        .profile(preferredProfile())
-                                        .capabilities(
-                                                graphics.device()
-                                                        .capabilities())
-                                        .build()));
-        if (loaded.graph() == null
-                || loaded.graph().graph().kind()
-                        != io.github.libfdx.graphics.shadergraph.model
-                                .ShaderGraphKind.SURFACE) {
-            throw new FdxException(
-                    "Shader graph asset is not a surface: " + label);
+    private static ShaderGraphRuntimeAsset loadAsset(FileHandle file) {
+        var loaded = new ShaderGraphRuntimeLoader().load(file.readString(StandardCharsets.UTF_8).get());
+        if (loaded.graph() == null || loaded.graph().graph().kind() != ShaderGraphKind.SURFACE) {
+            throw new FdxException("Expected a surface graph in " + file.path());
         }
         return loaded;
     }
 
-    private ShaderProfile preferredProfile() {
-        if (graphics.device().capabilities().supports(
-                ShaderProfile.PORTABLE_WEBGPU)) {
-            return ShaderProfile.PORTABLE_WEBGPU;
-        }
-        if (graphics.device().capabilities().supports(
-                ShaderProfile.PORTABLE_WEBGL2)) {
-            return ShaderProfile.PORTABLE_WEBGL2;
-        }
-        return ShaderProfile.NATIVE;
-    }
-
-    private static void requireCompatibleMaterialSchema(
-            ShaderGraphMaterialDefinition current,
-            ShaderGraphMaterialDefinition replacement) {
-        ShaderGraphParameter[] currentParameters = current.parameters();
-        ShaderGraphParameter[] replacementParameters =
-                replacement.parameters();
-        if (currentParameters.length != replacementParameters.length) {
-            throw new FdxException(
-                    "Reloaded surface changed its material parameter count");
-        }
-        for (int i = 0; i < currentParameters.length; i++) {
-            ShaderGraphParameter left = currentParameters[i];
-            ShaderGraphParameter right = replacementParameters[i];
-            if (!left.id().equals(right.id())
-                    || !left.type().equals(right.type())) {
-                throw new FdxException(
-                        "Reloaded surface changed material parameter "
-                                + left.id());
+    private void show(Example example) {
+        StandardPbrTechnique technique;
+        ShaderGraphPreviewAnimation preset;
+        if (fromCode) {
+            technique = StandardPbrTechnique.create(graphics, example.build());
+            preset = example.animation;
+        } else {
+            var asset = loadAsset(surfaceFile(example));
+            technique = StandardPbrTechnique.create(graphics, asset.graph());
+            preset = null;
+            if (!technique.surfaceGraph().usesTime() && asset.document().hasEditor()) {
+                try {
+                    preset = ShaderGraphPreviewAnimation.readFrom(new JsonReader().parse(asset.document().editorJson()));
+                } catch (RuntimeException invalidPreset) {
+                    fdx.logger().warn("Ignoring preview animation in " + example.asset + ": " + invalidPreset.getMessage());
+                }
             }
         }
-        ShaderGraphResource[] currentResources = current.resources();
-        ShaderGraphResource[] replacementResources =
-                replacement.resources();
-        if (currentResources.length != replacementResources.length) {
-            throw new FdxException(
-                    "Reloaded surface changed its material resource count");
-        }
-        for (int i = 0; i < currentResources.length; i++) {
-            ShaderGraphResource left = currentResources[i];
-            ShaderGraphResource right = replacementResources[i];
-            if (!left.id().equals(right.id())
-                    || !left.type().equals(right.type())
-                    || left.group() != right.group()
-                    || left.binding() != right.binding()) {
-                throw new FdxException(
-                        "Reloaded surface changed material resource "
-                                + left.id());
+        GraphMaterial next = technique.material("crystal");
+        next.set(MaterialAttributes.baseColor(0.11f, 0.29f, 0.42f, 1)).set(PbrAttributes.roughnessFactor(0.38f));
+        for (var output : technique.surfaceGraph().outputs()) {
+            if ("alpha".equalsIgnoreCase(output.semantic()) || "alpha".equalsIgnoreCase(output.id().value())) {
+                next.alphaMode(MaterialAlphaMode.MASK).set(MaterialAttributes.alphaCutoff(0.35f));
+                break;
             }
         }
-    }
-
-    private static void requireEquivalentRuntimeGraph(
-            ShaderGraphRuntimeGraph expected,
-            ShaderGraphRuntimeGraph actual) {
-        if (expected == null || actual == null
-                || !expected.graph().semanticHash().equals(
-                        actual.graph().semanticHash())
-                || !expected.wgsl().equals(actual.wgsl())
-                || !expected.libraryWgsl().equals(
-                        actual.libraryWgsl())
-                || !expected.shaderInterface().equals(
-                        actual.shaderInterface())
-                || !expected.libraryInterface().equals(
-                        actual.libraryInterface())) {
-            throw new FdxException(
-                    "Cache hit and miss produced different runtime shaders");
+        if (provider == null) {
+            provider = new ShaderGraphProvider(graphics, technique.technique());
+            shaders = new ShaderPreparation(graphics);
+            shaderPlan = new ModelShaderPlan(graphics, provider);
+            batch = new ModelBatch(graphics, new ModelBatchConfig().preparation(shaders).shaderPlan(shaderPlan))
+                    .environment(new Environment().ambientColor(new Color(0.22f, 0.25f, 0.30f, 1))
+                            .add(new DirectionalLight().direction(-0.4f, -0.8f, -0.6f).intensity(2.0f)));
+        } else {
+            provider.replace(technique.technique());
         }
+        instance.nodeMaterial(crystal.asset().nodes().get(0).id(), 0, next);
+        if (effectScope != null) effectScope.dispose();
+        effectScope = shaders.createScope(example.title);
+        shaderPlan.include(effectScope, instance, ShaderPassId.FORWARD, shaderPlan.surfaceTarget(graphics.currentFrame()));
+        preparing = shaders.prepareAsync(effectScope.seal());
+        material = next;
+        animatedParameter = !technique.surfaceGraph().usesTime() && preset != null && preset.appliesTo(technique.surfaceGraph())
+                ? next.graphMaterial().definition().parameterIndex(preset.parameter()) : -1;
+        playback = animatedParameter < 0 ? null : new ShaderGraphPreviewPlayback(preset);
+        shaderTime = 0;
+        if (example == Example.VORTEX) instance.transform().setToRotationX(-0.43f).rotateY(-0.45f);
+        else instance.transform().setToRotationY(0.3f);
+        active = example;
+        display.title(example.title + "  |  " + (fromCode ? "Java" : "File") + "  |  1–3 or arrows: effect   Space: pause");
+        fdx.logger().info("Showing " + technique.surfaceGraph().id() + " from " + (fromCode ? "Java" : example.asset));
     }
 
-    private void setTransform(DefaultModelInstance instance,
-            float x, float y, float z, float angle) {
-        translation.setToTranslation(x, y, z);
-        rotation.setToRotationY(angle);
-        transform.setToMul(translation, rotation);
-        instance.transform(transform);
-    }
-
-    private Texture createCheckerTexture() {
-        Texture texture = graphics.device().createTexture(
-                TextureDescriptor.rgba8(
-                        "shader graph sample sprite",
-                        CHECKER_SIZE, CHECKER_SIZE));
-        ByteBuffer pixels = ByteBuffer.allocateDirect(
-                CHECKER_SIZE * CHECKER_SIZE * 4);
-        for (int y = 0; y < CHECKER_SIZE; y++) {
-            for (int x = 0; x < CHECKER_SIZE; x++) {
-                boolean bright = ((x / 4) + (y / 4)) % 2 == 0;
-                pixels.put((byte)(bright ? 255 : 48));
-                pixels.put((byte)(bright ? 255 : 96));
-                pixels.put((byte)(bright ? 255 : 180));
-                pixels.put((byte)255);
+    @Override
+    public void render() {
+        if (instance == null) {
+            assets.update();
+            if (crystal.future().isFailed()) crystal.future().get();
+            if (!crystal.isLoaded()) {
+                graphics.clear(0.024f, 0.031f, 0.047f, 1);
+                return;
+            }
+            instance = new DefaultModelInstance(crystal.asset());
+        }
+        if (active != requested) {
+            try {
+                show(requested);
+            } catch (RuntimeException failure) {
+                if (active == null) throw failure;
+                requested = active;
+                fdx.logger().error("Could not switch shader graph", failure);
             }
         }
-        pixels.flip();
-        graphics.device().writeTexture(texture, pixels);
-        return texture;
-    }
-
-    private void capture(String path) {
-        try {
-            ShaderGraphFramebufferCapture.writePpm(path,
-                    framebufferWidth(), framebufferHeight(),
-                    graphics.currentFrame().frameBuffer()
-                            .readPixelsRgba8());
-            logger.info("Shader graph sample captured " + path);
-        } catch (Exception failure) {
-            throw new FdxException(
-                    "Could not capture shader graph sample", failure);
+        if (preparing != null) {
+            shaders.updateLoading();
+            if (!preparing.isDone()) {
+                graphics.clear(0.024f, 0.031f, 0.047f, 1);
+                return;
+            }
+            var report = preparing.get();
+            if (!report.allReady()) throw new FdxException("Could not prepare " + active.title + ": " + report.items());
+            preparing = null;
+        } else {
+            shaders.update();
         }
-    }
-
-    private int framebufferWidth() {
-        int width = display.framebufferWidth() > 0
-                ? display.framebufferWidth() : display.width();
-        return Math.max(1, width);
-    }
-
-    private int framebufferHeight() {
-        int height = display.framebufferHeight() > 0
-                ? display.framebufferHeight() : display.height();
-        return Math.max(1, height);
-    }
-
-    private static String message(Throwable failure) {
-        return failure.getMessage() != null
-                ? failure.getMessage()
-                : failure.getClass().getSimpleName();
-    }
-
-    private static void dispose(Disposable value) {
-        if (value != null && !value.isDisposed()) {
-            value.dispose();
+        float delta = playing ? Math.max(0f, Math.min(fdx.app().deltaTime(), 0.1f)) : 0f;
+        shaderTime += delta;
+        batch.shaderTimeSeconds((float) shaderTime);
+        if (playback != null) {
+            material.graphMaterial().set(animatedParameter, playback.advance(delta));
         }
+        batch.begin(BACKGROUND, camera);
+        batch.render(instance);
+        batch.end();
+        if (frameLimit > 0 && ++frames >= frameLimit) fdx.app().requestExit();
     }
+
+    @Override
+    public void resize(int width, int height) {
+        if (width > 0 && height > 0) camera.viewport(width, height).update();
+    }
+
+    @Override
+    public void dispose() {
+        if (fdx != null) fdx.input().removeProcessor(controls);
+        if (batch != null) batch.dispose();
+        if (effectScope != null) effectScope.dispose();
+        if (shaders != null) shaders.dispose();
+        if (shaderPlan != null) shaderPlan.dispose();
+        if (provider != null) provider.dispose();
+        if (assets != null) assets.dispose();
+    }
+
 }

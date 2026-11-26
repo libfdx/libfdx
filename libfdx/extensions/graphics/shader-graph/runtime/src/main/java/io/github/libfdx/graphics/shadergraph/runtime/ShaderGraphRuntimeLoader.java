@@ -30,6 +30,13 @@ public final class ShaderGraphRuntimeLoader {
     private final ShaderGraphDocumentCompiler compiler =
             new ShaderGraphDocumentCompiler();
 
+    /** Loads canonical WGSL and reuses the same embedded cache on every graphics provider. */
+    public ShaderGraphRuntimeAsset load(String source) {
+        ShaderGraphDocumentReadResult decoded = ShaderGraphDocumentCodec.readResult(source);
+        return load(decoded.document(), ShaderGraphCacheContext.portable(decoded.document()),
+                ShaderPassId.FORWARD, DEFAULT_COMPUTE_PASS, decoded.cacheRejections());
+    }
+
     public ShaderGraphRuntimeAsset load(String source,
             ShaderGraphCacheContext context) {
         return load(source, context,
@@ -45,6 +52,11 @@ public final class ShaderGraphRuntimeLoader {
         return load(decoded.document(), context,
                 renderProgramPass, computeProgramPass,
                 decoded.cacheRejections());
+    }
+
+    /** Loads a decoded or code-authored document with the portable cache context. */
+    public ShaderGraphRuntimeAsset load(ShaderGraphDocument document) {
+        return load(document, ShaderGraphCacheContext.portable(document));
     }
 
     public ShaderGraphRuntimeAsset load(ShaderGraphDocument document,
@@ -117,16 +129,15 @@ public final class ShaderGraphRuntimeLoader {
         ShaderGraphRenderProgram program =
                 renderProgram(semantic, passId, entry,
                         compilation.document().id());
-        ShaderGraphRenderVariant variant =
-                ShaderGraphRenderVariant.builder("", program)
-                        .profiles(context.compileOptions().profile())
-                        .compiledProfile(
-                                context.compileOptions().profile())
-                        .build();
+        ShaderGraphRenderVariant.Builder variant = ShaderGraphRenderVariant.builder("", program);
+        ShaderProfile profile = context.compileOptions().profile();
+        if (profile != null) {
+            variant.profiles(profile).compiledProfile(profile);
+        }
         return ShaderGraphRenderTechnique.of(
                 semantic.id().value(),
                 ShaderGraphRenderTechniquePass.builder(passId)
-                        .variants(variant)
+                        .variants(variant.build())
                         .build());
     }
 
@@ -165,10 +176,10 @@ public final class ShaderGraphRuntimeLoader {
                         ShaderGraphRenderVariant.builder(
                                         source.key(), program)
                                 .profiles(source.profiles())
-                                .features(source.features())
-                                .compiledProfile(
-                                        context.compileOptions()
-                                                .profile());
+                                .features(source.features());
+                if (context.compileOptions().profile() != null) {
+                    builder.compiledProfile(context.compileOptions().profile());
+                }
                 if (source.fallbackKey() != null) {
                     builder.fallback(source.fallbackKey());
                 }
@@ -214,13 +225,12 @@ public final class ShaderGraphRuntimeLoader {
                 compilation,
                 ShaderGraphDocumentCompiler.COMPUTE_PROGRAM,
                 "", "");
+        ShaderProfile profile = context.compileOptions().profile();
         ShaderGraphComputeRuntimeTechnique.Variant variant =
                 computeVariant("", semantic, entry,
-                        new ShaderProfile[] {
-                                context.compileOptions().profile()
-                        },
+                        profile == null ? new ShaderProfile[0] : new ShaderProfile[] {profile},
                         new io.github.libfdx.graphics.GraphicsFeature[0],
-                        null, context.compileOptions().profile(),
+                        null, profile,
                         semantic.id().value());
         return ShaderGraphComputeRuntimeTechnique.of(
                 semantic.id().value(),

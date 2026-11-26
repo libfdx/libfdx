@@ -37,6 +37,15 @@ Do not manually duplicate inventories that can be read from source or Gradle.
   it matters, and what evidence will establish success.
 - Confirm names, paths, declarations, tasks, and behavior from source or
   observed output before claiming correctness.
+- All basic UI widgets belong in `libfdx/framework/ui-kit`. Check the kit
+  first and use its existing widgets, including inside custom widgets, tools,
+  and samples. If a basic widget or shared behavior is missing, add it to the
+  kit and use it from there. See [widget composition](docs/UI_KIT.md#widgets).
+- Provide a named Gradle task for each supported workflow and mode. The task
+  name alone must be sufficient to run it. If a workflow requires `-P`, `-D`,
+  `--args`, or other user-supplied parameters, add a task in the owning module
+  that sets those options. Run and document the named task. Leave manual
+  invocation to users who explicitly ask for it.
 - Put each method annotation on its own line above the method declaration.
 - Leave an empty line after every method or constructor.
 - Generated output and ignored IDE metadata are not source unless explicitly in

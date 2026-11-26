@@ -310,13 +310,13 @@ public final class ShaderGraphCodec {
         };
     }
 
-    private static JsonValue endpoint(ShaderEndpoint value) {
+    static JsonValue endpoint(ShaderEndpoint value) {
         return JsonValue.object()
                 .put("node", value.nodeId().value())
                 .put("port", value.portId().value());
     }
 
-    private static ShaderEndpoint readEndpoint(JsonValue value) {
+    static ShaderEndpoint readEndpoint(JsonValue value) {
         return ShaderEndpoint.of(value.requireString("node"),
                 value.requireString("port"));
     }

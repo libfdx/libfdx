@@ -7,12 +7,18 @@ import io.github.libfdx.graphics.shadergraph.model.ShaderGraph;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphDependency;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphId;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphOutput;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraphLiteral;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraphParameterKind;
+import io.github.libfdx.graphics.shadergraph.standard.StandardShaderNodes;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphParameter;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphPort;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphResource;
 import io.github.libfdx.graphics.shadergraph.node.ShaderNode;
 import io.github.libfdx.graphics.shadergraph.node.ShaderNodeProperty;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import io.github.libfdx.graphics.shadergraph.model.ShaderGraphKind;
 
 /**
  * Immutable semantic graph edit operations used by command history and
@@ -184,6 +190,35 @@ public final class ShaderGraphSemanticEdits {
         return replaceNode(graph, replacement);
     }
 
+    static ShaderGraph parameterDefault(ShaderGraph graph, ShaderGraphId id, ShaderGraphLiteral value) {
+        var parameters = graph.parameters();
+        for (int i = 0; i < parameters.length; i++) {
+            var parameter = parameters[i];
+            if (parameter.id().equals(id)) {
+                parameters[i] = ShaderGraphParameter.semantic(id.value(), parameter.type(), parameter.kind(),
+                        value, parameter.semantic());
+                return parameters(graph, parameters);
+            }
+        }
+        throw new FdxException("Unknown shader graph parameter " + id);
+    }
+
+    static ShaderGraph exposeConstant(ShaderGraph graph, ShaderNode node, String name, ShaderGraphLiteral value) {
+        var parameter = ShaderGraphParameter.of(name, value.type(), ShaderGraphParameterKind.MATERIAL, value);
+        if (graph.parameter(parameter.id()) != null) throw new FdxException("Parameter already exists: " + parameter.id());
+        var existing = graph.parameters();
+        var expanded = Arrays.copyOf(existing, existing.length + 1);
+        expanded[existing.length] = parameter;
+        var reference = ShaderNode.of(node.id().value(), StandardShaderNodes.PARAMETER, 1, node.inputs(), node.outputs(),
+                ShaderNodeProperty.string("parameter", parameter.id().value()));
+        return replaceNode(parameters(graph, expanded), reference);
+    }
+
+    static ShaderGraph useConstant(ShaderGraph graph, ShaderNode node, ShaderGraphLiteral value) {
+        return replaceNode(graph, ShaderNode.of(node.id().value(), StandardShaderNodes.CONSTANT, 1,
+                node.inputs(), node.outputs(), ShaderNodeProperty.literal("literal", value)));
+    }
+
     public static ShaderGraph renameNode(ShaderGraph graph, String nodeId, String replacementId) {
         ShaderNode current = requireNode(graph, nodeId);
         ShaderGraphId oldId = current.id();
@@ -232,6 +267,43 @@ public final class ShaderGraphSemanticEdits {
     public static ShaderGraph resources(ShaderGraph graph, ShaderGraphResource... resources) {
         return rebuild(graph, graph.parameters(), resources, graph.nodes(),
                 graph.edges(), graph.outputs(), graph.dependencies());
+    }
+
+    static ShaderGraph disconnectNodeWires(ShaderGraph graph, String nodeId) {
+        var id = requireNode(graph, nodeId).id();
+        var edges = new ArrayList<>(List.of(graph.edges()));
+        boolean changed = edges.removeIf(edge -> id.equals(edge.source().nodeId()) || id.equals(edge.target().nodeId()));
+        var outputs = graph.outputs();
+        var remaining = new ArrayList<>(List.of(outputs));
+        if (graph.kind() == ShaderGraphKind.SURFACE) {
+            for (var channel : MaterialOutputChannel.values()) {
+                var binding = channel.binding(outputs);
+                if (binding != null && id.equals(binding.source().nodeId())) changed |= remaining.remove(binding);
+            }
+        }
+        return changed ? rebuild(graph, graph.parameters(), graph.resources(), graph.nodes(),
+                edges.toArray(ShaderEdge[]::new), remaining.toArray(ShaderGraphOutput[]::new), graph.dependencies()) : graph;
+    }
+
+    static ShaderGraph materialOutput(ShaderGraph graph, MaterialOutputChannel channel, ShaderEndpoint source) {
+        if (graph.kind() != ShaderGraphKind.SURFACE) throw new FdxException("Material Output requires a surface graph");
+        ShaderGraphOutput[] outputs = graph.outputs();
+        var bound = channel.binding(outputs);
+        var updated = new ArrayList<>(List.of(outputs));
+        if (source == null) {
+            if (bound == null) return graph;
+            updated.remove(bound);
+        } else {
+            if (!channel.type.equals(requireOutput(graph, source).type())) {
+                throw new FdxException(channel.label + " requires a " + channel.typeLabel + " output");
+            }
+            if (bound != null && source.equals(bound.source())) return graph;
+            String id = bound == null ? channel.id : bound.id().value();
+            var replacement = ShaderGraphOutput.semantic(id, channel.type, source, channel.semantic);
+            if (bound == null) updated.add(replacement);
+            else updated.set(updated.indexOf(bound), replacement);
+        }
+        return outputs(graph, updated.toArray(ShaderGraphOutput[]::new));
     }
 
     public static ShaderGraph outputs(ShaderGraph graph, ShaderGraphOutput... outputs) {

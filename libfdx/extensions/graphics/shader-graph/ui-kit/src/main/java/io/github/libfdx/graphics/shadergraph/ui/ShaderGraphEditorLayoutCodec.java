@@ -1,6 +1,7 @@
 package io.github.libfdx.graphics.shadergraph.ui;
 
 import io.github.libfdx.core.FdxException;
+import io.github.libfdx.graphics.shadergraph.document.ShaderGraphPreviewAnimation;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphEditorCodec;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphEditorData;
 import io.github.libfdx.json.JsonReader;
@@ -24,15 +25,25 @@ public final class ShaderGraphEditorLayoutCodec {
         for (ShaderGraphEditorData graph : layout.graphs()) {
             graphs.add(new JsonReader().parse(ShaderGraphEditorCodec.write(graph)));
         }
-        return JsonWriter.compact(JsonValue.object()
+        JsonValue editor = JsonValue.object()
                 .put("asset", "shader-graph-editor-layout")
                 .put("format", CURRENT_VERSION)
                 .put("activeGraph", layout.activeGraphId())
-                .put("graphs", graphs));
+                .put("graphs", graphs);
+        if (layout.previewAnimation() != null) layout.previewAnimation().writeTo(editor);
+        else editor.put("previewAnimation", JsonValue.nullValue());
+        return JsonWriter.compact(editor);
     }
 
     public static ShaderGraphEditorLayout read(String source) {
         JsonValue root = new JsonReader().parse(source);
+        return readCanvas(root).withPreviewAnimation(ShaderGraphPreviewAnimation.readFrom(root));
+    }
+
+    static ShaderGraphEditorLayout readCanvas(JsonValue root) {
+        if (root != null && root.isObject() && root.get("asset") == null && root.get("previewAnimation") != null) {
+            return ShaderGraphEditorLayout.of(new ShaderGraphEditorData[0], "");
+        }
         if (root == null || !root.isObject()
                 || !"shader-graph-editor-layout".equals(root.requireString("asset"))
                 || root.require("format").intValue() != CURRENT_VERSION) {

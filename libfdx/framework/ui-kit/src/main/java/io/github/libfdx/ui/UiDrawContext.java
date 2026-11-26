@@ -9,6 +9,13 @@ import io.github.libfdx.graphics.g2d.TextureRegion;
  */
 public interface UiDrawContext {
     /**
+     * Starts a layer above all shapes, images and text drawn so far on this custom surface.
+     * Ordered immediate renderers can use the default implementation.
+     */
+    default void beginLayer() {
+    }
+
+    /**
      * Runs the rect step.
      *
      * @param bounds the bounds
@@ -27,6 +34,21 @@ public interface UiDrawContext {
      */
     default void rect(float x, float y, float width, float height, UiColor color) {
         rect(new UiRect(x, y, width, height), color);
+    }
+
+    /** Fills a circle centered in UI-root coordinates. The radius is in UI pixels. */
+    default void circle(float centerX, float centerY, float radius, UiColor color) {
+        if (!(radius > 0.0f) || !Float.isFinite(radius) || color == null || color.alpha() <= 0.0f) {
+            return;
+        }
+        // Bound the work for contexts that implement this primitive using rectangles.
+        int rows = Math.min(256, (int) Math.ceil(2.0f * radius));
+        float rowHeight = 2.0f * radius / rows;
+        for (int row = 0; row < rows; row++) {
+            float dy = (row + 0.5f) * rowHeight - radius;
+            float halfWidth = (float) Math.sqrt(Math.max(0.0f, radius * radius - dy * dy));
+            rect(centerX - halfWidth, centerY - radius + row * rowHeight, 2.0f * halfWidth, rowHeight, color);
+        }
     }
 
     /**
@@ -92,4 +114,5 @@ public interface UiDrawContext {
      * @param style the style
      */
     void text(String text, UiRect bounds, UiTextStyle style);
+
 }

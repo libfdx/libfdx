@@ -680,7 +680,6 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
                     if (uniforms.textureFlags.x < 1.5) { sampledColor = srgbToLinear(sampledColor); }
                     base = vec4f(base.rgb * sampledColor, base.a * texel.a);
                 }
-                //__PBR_ALPHA_TEST__
                 var ao = clamp(input.pbr.x, 0.0, 1.0);
                 var metallic = clamp(input.pbr.y, 0.0, 1.0);
                 var roughness = clamp(input.pbr.z, 0.04, 1.0);
@@ -705,14 +704,15 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
                 if (uniforms.normalOcclusion.z > 0.5 && !facing) { n = -n; }
                 let worldPositionDx = dpdx(input.worldPosition);
                 let worldPositionDy = dpdy(input.worldPosition);
+                var v = normalize(uniforms.cameraPosition.xyz - input.worldPosition);
+                if (uniforms.cameraDirection.w > 0.5) { v = -normalize(uniforms.cameraDirection.xyz); }
                 //__PBR_SURFACE_GRAPH_EVALUATION__
+                //__PBR_ALPHA_TEST__
                 let albedo = base.rgb;
                 let lightingInfluence = clamp(uniforms.materialParams.x,
                         0.0, 1.0);
                 var color = albedo + emissive;
                 if (lightingInfluence > 0.0) {
-                var v = normalize(uniforms.cameraPosition.xyz - input.worldPosition);
-                if (uniforms.cameraDirection.w > 0.5) { v = -normalize(uniforms.cameraDirection.xyz); }
                 let l = normalize(-uniforms.lightDirection.xyz);
                 let radiance = uniforms.lightColorIntensity.rgb * uniforms.lightColorIntensity.a;
                 let shadowInfluence = clamp(uniforms.materialParams.y, 0.0, 1.0);
@@ -2260,8 +2260,9 @@ public final class PbrShaderProvider implements PreparedShaderProvider3D, Dispos
             uniforms.setUniformMatrix4(uniforms.MODEL, modelMatrix);
             uniforms.setUniformMatrix4(uniforms.VIEW_PROJECTION, viewProjectionMatrix);
             Vector3 cameraPosition = context.camera().position();
-            uniforms.setUniform3f(uniforms.CAMERA_POSITION,
-                    cameraPosition.x(), cameraPosition.y(), cameraPosition.z());
+            // The view position uses xyz. Surface graphs read scene time from the fourth lane.
+            uniforms.setUniform4f(uniforms.CAMERA_POSITION,
+                    cameraPosition.x(), cameraPosition.y(), cameraPosition.z(), context.shaderTimeSeconds());
             Vector3 cameraDirection = context.camera().direction();
             uniforms.setUniform4f(uniforms.CAMERA_DIRECTION,
                     cameraDirection.x(), cameraDirection.y(), cameraDirection.z(),

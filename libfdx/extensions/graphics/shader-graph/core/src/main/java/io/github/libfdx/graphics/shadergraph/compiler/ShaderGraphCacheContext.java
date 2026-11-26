@@ -79,10 +79,25 @@ public final class ShaderGraphCacheContext {
      */
     public static ShaderGraphCacheContext wgpu(
             ShaderGraphCompileOptions options) {
+        return wgsl(options, WGPU_TARGET);
+    }
+
+    /** Creates the shared WGSL cache context from the graphs in the document. */
+    public static ShaderGraphCacheContext portable(ShaderGraphDocument document) {
+        if (document == null) {
+            throw new FdxException("Portable shader graph cache requires a document");
+        }
+        TreeMap<String, ShaderGraph> graphs = new TreeMap<>();
+        collectGraphs(document, graphs);
+        ShaderGraphLibrary library = ShaderGraphLibrary.of(graphs.values().toArray(new ShaderGraph[0]));
+        return wgsl(ShaderGraphCompileOptions.portable(library), "canonical-wgsl");
+    }
+
+    private static ShaderGraphCacheContext wgsl(ShaderGraphCompileOptions options, String target) {
         return builder(options)
-                .compiler("libfdx-shader-graph-wgsl", "1")
+                .compiler("libfdx-shader-graph-wgsl", "2")
                 .libraries("standard-nodes-v1", "standard-wgsl-v1")
-                .target(WGPU_TARGET, WGSL_FORMAT,
+                .target(target, WGSL_FORMAT,
                         "libfdx-wgsl-runtime-v1")
                 .interfaceAbiVersion(INTERFACE_ABI)
                 .build();
@@ -124,7 +139,7 @@ public final class ShaderGraphCacheContext {
                 .compiler(compilerId, compilerVersion)
                 .libraries(nodeLibraryVersion,
                         standardLibraryVersion)
-                .profile(compileOptions.profile().id(),
+                .profile(profileId(compileOptions),
                         capabilitiesHash)
                 .target(targetId, artifactFormat,
                         consumerEnvironment)
@@ -284,10 +299,14 @@ public final class ShaderGraphCacheContext {
         return PortableSha256.hashUtf8(key.toString());
     }
 
+    private static String profileId(ShaderGraphCompileOptions options) {
+        return options.profile() == null ? "portable" : options.profile().id();
+    }
+
     private static String optionsHash(
             ShaderGraphCompileOptions options) {
         return PortableSha256.hashUtf8(
-                "profile=" + options.profile().id()
+                "profile=" + profileId(options)
                         + "\nstage="
                         + (options.stage() != null
                                 ? options.stage().name() : "auto"));

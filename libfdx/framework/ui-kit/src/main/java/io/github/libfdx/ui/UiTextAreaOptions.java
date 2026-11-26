@@ -6,16 +6,19 @@ package io.github.libfdx.ui;
  * @author xpenatan
  */
 public final class UiTextAreaOptions {
-    private static final UiTextAreaOptions DEFAULTS = new UiTextAreaOptions(false, false, 96.0f, Float.NaN);
+    private static final UiTextAreaOptions DEFAULTS = new UiTextAreaOptions(false, false, false, 96.0f, Float.NaN);
 
     private final boolean autoGrow;
     private final boolean readOnly;
+    private final boolean selectAllOnTripleClick;
     private final float minHeight;
     private final float maxHeight;
 
-    private UiTextAreaOptions(boolean autoGrow, boolean readOnly, float minHeight, float maxHeight) {
+    private UiTextAreaOptions(boolean autoGrow, boolean readOnly, boolean selectAllOnTripleClick,
+            float minHeight, float maxHeight) {
         this.autoGrow = autoGrow;
         this.readOnly = readOnly;
+        this.selectAllOnTripleClick = selectAllOnTripleClick;
         this.minHeight = minHeight > 0.0f ? minHeight : 96.0f;
         this.maxHeight = maxHeight > 0.0f ? maxHeight : Float.NaN;
     }
@@ -36,7 +39,7 @@ public final class UiTextAreaOptions {
      * @return this UI text area options for chaining
      */
     public UiTextAreaOptions autoGrow(boolean autoGrow) {
-        return new UiTextAreaOptions(autoGrow, readOnly, minHeight, maxHeight);
+        return new UiTextAreaOptions(autoGrow, readOnly, selectAllOnTripleClick, minHeight, maxHeight);
     }
 
     /**
@@ -50,7 +53,22 @@ public final class UiTextAreaOptions {
      * @return these UI text area options for chaining
      */
     public UiTextAreaOptions readOnly(boolean readOnly) {
-        return new UiTextAreaOptions(autoGrow, readOnly, minHeight, maxHeight);
+        return new UiTextAreaOptions(autoGrow, readOnly, selectAllOnTripleClick, minHeight, maxHeight);
+    }
+
+    /**
+     * Chooses whether a primary triple-click or touch triple-tap selects the entire text.
+     *
+     * @param selectAllOnTripleClick true to enable whole-text selection on the third click or tap
+     * @return the updated options
+     */
+    public UiTextAreaOptions selectAllOnTripleClick(boolean selectAllOnTripleClick) {
+        return new UiTextAreaOptions(autoGrow, readOnly, selectAllOnTripleClick, minHeight, maxHeight);
+    }
+
+    /** Returns whether a triple-click or triple-tap selects the full contents. */
+    public boolean selectAllOnTripleClick() {
+        return selectAllOnTripleClick;
     }
 
     /**
@@ -60,7 +78,7 @@ public final class UiTextAreaOptions {
      * @return this UI text area options for chaining
      */
     public UiTextAreaOptions minHeight(float minHeight) {
-        return new UiTextAreaOptions(autoGrow, readOnly, minHeight, maxHeight);
+        return new UiTextAreaOptions(autoGrow, readOnly, selectAllOnTripleClick, minHeight, maxHeight);
     }
 
     /**
@@ -70,7 +88,7 @@ public final class UiTextAreaOptions {
      * @return this UI text area options for chaining
      */
     public UiTextAreaOptions maxHeight(float maxHeight) {
-        return new UiTextAreaOptions(autoGrow, readOnly, minHeight, maxHeight);
+        return new UiTextAreaOptions(autoGrow, readOnly, selectAllOnTripleClick, minHeight, maxHeight);
     }
 
     /**

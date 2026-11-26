@@ -323,6 +323,24 @@ public final class ModelBatch implements Batch3D {
         return this;
     }
 
+    /** Supplies simulation or preview time in seconds for subsequent passes. Set before begin. */
+    public ModelBatch shaderTimeSeconds(float seconds) {
+        ensureNotDisposed();
+        if (drawing || !Float.isFinite(seconds) || seconds < 0) {
+            throw new FdxException("Set finite nonnegative shader time before ModelBatch.begin()");
+        }
+        context.clockOverride(seconds);
+        return this;
+    }
+
+    /** Restores the default shared monotonic shader clock for subsequent passes. */
+    public ModelBatch useRealtimeShaderClock() {
+        ensureNotDisposed();
+        if (drawing) throw new FdxException("Change the shader clock before ModelBatch.begin()");
+        context.clockOverride(Float.NaN);
+        return this;
+    }
+
     /** Enables optional conservative culling at flush, before sorting/shader selection/GPU submission.
      * Defaults to false. Uses that flush's camera and current transforms. Missing/uncertain bounds stay visible;
      * DefaultModelInstance supplies current-pose bounds for prepared skins. Each shadow pass uses its own camera.

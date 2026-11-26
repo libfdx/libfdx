@@ -16,10 +16,19 @@ public final class ShaderIrFunction {
     private final ShaderGraphResource[] resources;
     private final ShaderIrInstruction[] instructions;
     private final ShaderIrOutput[] outputs;
+    private final boolean usesTime;
 
     public ShaderIrFunction(ShaderGraphId graphId, ShaderGraphKind kind,
             ShaderGraphParameter[] parameters, ShaderGraphResource[] resources,
             ShaderIrInstruction[] instructions, ShaderIrOutput[] outputs) {
+        this(graphId, kind, parameters, resources, instructions, outputs, instructions != null
+                && java.util.Arrays.stream(instructions).anyMatch(op -> op.opcode() == ShaderIrOpcode.TIME));
+    }
+
+    public ShaderIrFunction(ShaderGraphId graphId, ShaderGraphKind kind,
+            ShaderGraphParameter[] parameters, ShaderGraphResource[] resources,
+            ShaderIrInstruction[] instructions, ShaderIrOutput[] outputs, boolean usesTime) {
+        this.usesTime = usesTime;
         if (graphId == null || kind == null || parameters == null
                 || resources == null || instructions == null || outputs == null) {
             throw new FdxException("Shader IR function is incomplete");
@@ -34,6 +43,10 @@ public final class ShaderIrFunction {
 
     public ShaderGraphId graphId() {
         return graphId;
+    }
+
+    public boolean usesTime() {
+        return usesTime;
     }
 
     public ShaderGraphKind kind() {

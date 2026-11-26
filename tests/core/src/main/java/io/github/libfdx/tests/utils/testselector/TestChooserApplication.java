@@ -79,16 +79,6 @@ public final class TestChooserApplication extends ApplicationAdapter {
             }
             float x = root.uiX(event.x());
             float y = root.uiY(event.y());
-            if (copyTestName != null) {
-                if (event.button() == MouseButton.LEFT && copyMenuItem != null
-                        && copyMenuItem.bounds().contains(x, y)) {
-                    return false;
-                }
-                closeCopyMenu();
-                if (event.button() != MouseButton.RIGHT) {
-                    return true;
-                }
-            }
             if (event.button() != MouseButton.RIGHT) {
                 return false;
             }
@@ -96,18 +86,18 @@ public final class TestChooserApplication extends ApplicationAdapter {
             if (row != null) {
                 testList.resetClick();
                 copyTestName = row.modifier().semanticLabel();
-                copyMenuX = Math.max(0.0f, Math.min(x, root.rootNode().bounds().right() - COPY_MENU_WIDTH));
-                copyMenuY = Math.max(0.0f, Math.min(y, root.rootNode().bounds().bottom() - TEST_ROW_HEIGHT));
+                copyMenuX = x;
+                copyMenuY = y;
                 root.requestCompose();
+                return true;
             }
-            return true;
+            return false;
         }
     };
     private final InputRouter selectorInput = new InputRouter().add(returnInputProcessor);
     private String copyTestName;
     private float copyMenuX;
     private float copyMenuY;
-    private UiNode copyMenuItem;
     private Fdx fdx;
     private Application application;
     private Display display;
@@ -437,9 +427,9 @@ public final class TestChooserApplication extends ApplicationAdapter {
         }
         buildMenu(ui);
         if (copyTestName != null) {
-            ui.popup(Ui.popup("copy-test-name").blockingInput(true), popup -> {
-                copyMenuItem = popup.button("Copy name", Ui.modifier()
-                        .width(COPY_MENU_WIDTH).height(TEST_ROW_HEIGHT).offset(copyMenuX, copyMenuY), () -> {
+            ui.popup(Ui.popup("copy-test-name").at(copyMenuX, copyMenuY).blockingInput(true).onDismiss(this::closeCopyMenu), popup -> {
+                popup.button("Copy name", Ui.modifier()
+                        .width(COPY_MENU_WIDTH).height(TEST_ROW_HEIGHT), () -> {
                             fdx.input().clipboard().setText(copyTestName);
                             closeCopyMenu();
                         });
@@ -449,7 +439,6 @@ public final class TestChooserApplication extends ApplicationAdapter {
 
     private void closeCopyMenu() {
         copyTestName = null;
-        copyMenuItem = null;
         root.requestCompose();
     }
 

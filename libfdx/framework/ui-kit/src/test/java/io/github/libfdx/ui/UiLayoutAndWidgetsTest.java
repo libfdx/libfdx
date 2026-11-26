@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.libfdx.core.ProviderId;
 import io.github.libfdx.display.Display;
+import io.github.libfdx.input.DefaultInput;
 import io.github.libfdx.input.Key;
 import io.github.libfdx.input.KeyEvent;
 import io.github.libfdx.input.MouseButton;
@@ -14,6 +15,83 @@ import io.github.libfdx.input.PointerEvent;
 import org.junit.jupiter.api.Test;
 
 final class UiLayoutAndWidgetsTest {
+    @Test
+    void holdButtonsTrackIndependentFingersAndReleaseWhenRemoved() {
+        var input = new DefaultInput();
+        var root = new UiRoot(null, null, null, null).allowFontFallback(true).input(input);
+        var hold = new UiHoldState();
+        var visible = Ui.state(true);
+        UiNode[] buttons = new UiNode[2];
+        try {
+            root.resize(200, 80);
+            root.setContent(ui -> ui.row(Ui.modifier().fill(), row -> {
+                buttons[0] = row.holdButton("One", Ui.modifier().size(80, 40), hold);
+                if (visible.get()) buttons[1] = row.holdButton("Two", Ui.modifier().size(80, 40), hold);
+            }));
+            root.update(0);
+            input.dispatchTouchDown(1, 20, 20, 1);
+            input.dispatchTouchDown(2, 30, 20, 1);
+            input.dispatchTouchDown(3, 100, 20, 1);
+            assertTrue(hold.consumePressed());
+            assertFalse(hold.consumePressed());
+            input.dispatchTouchUp(1, 20, 20, 0);
+            assertTrue(buttons[0].pressed());
+            input.dispatchTouchUp(2, 30, 20, 0);
+            assertFalse(buttons[0].pressed());
+            assertTrue(buttons[1].pressed());
+            assertTrue(hold.down());
+            visible.set(false);
+            root.update(0);
+            assertFalse(hold.down());
+        } finally {
+            root.dispose();
+        }
+    }
+
+    @Test
+    void anchoredPopupClampsToHostAndHonorsOutsidePressPolicy() {
+        for (boolean blocking : new boolean[] {true, false}) {
+            for (boolean dismiss : new boolean[] {true, false}) {
+                UiRoot root = new UiRoot(null, null, null, null).allowFontFallback(true);
+                try {
+                    root.resize(320, 180);
+                    var visible = Ui.state(true);
+                    int[] hits = {0, 0};
+                    UiNode[] item = new UiNode[1];
+                    root.setContent(ui -> ui.stack(Ui.modifier().fill(), host -> {
+                        host.button("Behind", Ui.modifier().size(90, 40), () -> hits[0]++);
+                        if (visible.get()) {
+                            host.popup(Ui.popup("choices").at(300, 170).blockingInput(blocking)
+                                    .dismissOnOutsidePress(dismiss).onDismiss(() -> visible.set(false)),
+                                    menu -> item[0] = menu.button("Inside", Ui.modifier().size(80, 32), () -> hits[1]++));
+                        }
+                    }));
+                    root.update(0);
+                    assertEquals(240, item[0].bounds().x());
+                    assertEquals(148, item[0].bounds().y());
+                    clickAt(root, 280, 162);
+                    assertEquals(1, hits[1]);
+                    assertTrue(visible.get());
+                    clickAt(root, 20, 20);
+                    assertEquals(!dismiss, visible.get());
+                    assertEquals(blocking ? 0 : 1, hits[0]);
+                    if (dismiss) {
+                        root.update(0);
+                        clickAt(root, 20, 20);
+                        assertEquals(blocking ? 1 : 2, hits[0]);
+                    }
+                } finally {
+                    root.dispose();
+                }
+            }
+        }
+    }
+
+    private static void clickAt(UiRoot root, int x, int y) {
+        root.handlePointerDown(PointerEvent.button(0, MouseButton.LEFT, x, y));
+        root.handlePointerUp(PointerEvent.button(1, MouseButton.LEFT, x, y));
+    }
+
     @Test
     void displayContentScaleIsAppliedByDefaultAndCanBeDisabled() {
         UiRoot root = new UiRoot(null, new ScaledDisplay(1.5f), null, null).allowFontFallback(true);

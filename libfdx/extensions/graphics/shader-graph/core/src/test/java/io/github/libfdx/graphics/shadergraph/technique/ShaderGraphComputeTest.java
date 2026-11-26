@@ -83,6 +83,21 @@ final class ShaderGraphComputeTest {
     }
 
     @Test
+    void compilesSideEffectsWhoseResultsDoNotFeedAnOutput() {
+        var graph = computeBuilder("independent_store");
+        graph.resource(ShaderGraphResource.workgroup("shared", ShaderGraphType.workgroupArray(U32, 4)));
+        var shared = graph.resource("shared_data", "shared");
+        var index = graph.constant("index", ShaderGraphLiteral.u32(0));
+        var stored = graph.storageStore("store", shared, index, graph.constant("value", ShaderGraphLiteral.u32(7)));
+        graph.barrier("sync", ShaderGraphBarrierScope.WORKGROUP, stored);
+        graph.output("result", index);
+        var result = compile(program("effects", graph.build(), 1, 1, 1));
+        assertTrue(result.success(), diagnostics(result));
+        assertTrue(result.wgsl().contains("fdx_workgroup_shared["));
+        assertTrue(result.wgsl().contains("workgroupBarrier();"));
+    }
+
+    @Test
     void serializesComputeResourcesAndRejectsProfilesAndLimits() {
         ShaderGraph source = storageTextureGraph();
         assertEquals(source, ShaderGraphCodec.read(
