@@ -446,10 +446,12 @@ Clipboard behavior is backend-owned:
   bounded access retries, and the same last-value fallback during contention.
 - Android uses `ClipboardManager` and preserves the last local value when
   lifecycle or privacy restrictions temporarily deny clipboard access.
-- Web mirrors programmatic writes to `navigator.clipboard` and keeps an
-  immediate synchronous cache. Browser reads remain asynchronous and
-  permission-gated; the backend's native DOM editor is the authoritative
-  interactive copy/paste path.
+- Desktop browsers edit the focused canvas field directly. An invisible native
+  text control handles typed text, IME composition and paste. Mobile browsers
+  open a bottom editor with the on-screen keyboard and accept/cancel buttons.
+  Web mirrors programmatic clipboard writes to `navigator.clipboard` and caches
+  the last value for synchronous reads. Reading the system clipboard is
+  asynchronous and subject to browser permissions.
 - iOS C and PSP currently use `MemoryClipboard`; PSP has no general platform
   text clipboard. Applications on a backend without a system bridge still get
   deterministic in-process copy/paste.

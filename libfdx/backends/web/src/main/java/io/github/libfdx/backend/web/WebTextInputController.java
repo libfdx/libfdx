@@ -6,6 +6,8 @@ import io.github.libfdx.input.TextInputController;
 import io.github.libfdx.input.TextInputRequest;
 import io.github.libfdx.input.TextInputType;
 import org.teavm.jso.JSBody;
+import org.teavm.jso.JSFunctor;
+import org.teavm.jso.JSObject;
 import org.teavm.jso.dom.events.Event;
 import org.teavm.jso.dom.events.EventListener;
 import org.teavm.jso.dom.events.KeyboardEvent;
@@ -20,6 +22,7 @@ import org.teavm.jso.dom.html.HTMLElement;
  * @author xpenatan
  */
 final class WebTextInputController implements TextInputController {
+    private final boolean mobile = isMobileBrowser();
     private DefaultInput input;
     private HTMLCanvasElement canvas;
     private TextInputRequest request = TextInputRequest.builder().build();
@@ -31,7 +34,6 @@ final class WebTextInputController implements TextInputController {
     private Registration editorKeyRegistration;
     private Registration cancelRegistration;
     private Registration acceptRegistration;
-    private boolean active;
     private boolean multilineEditor;
     private boolean committingEditor;
 
@@ -44,7 +46,7 @@ final class WebTextInputController implements TextInputController {
     }
 
     boolean handlesEvent(Event event) {
-        return active && panel != null && event != null && eventTargetsPanel(panel, event);
+        return panel != null && event != null && eventTargetsPanel(panel, event);
     }
 
     /**
@@ -59,6 +61,14 @@ final class WebTextInputController implements TextInputController {
             hideTextInput();
             return;
         }
+        if (!mobile) {
+            if (editor == null) {
+                editor = createDesktopEditor(input::dispatchTextInput);
+                editorKeyRegistration = editor.onKeyDown(this::handleDesktopCommand);
+            }
+            focusDesktopEditor(editor, canvas, this.request.boundsX(), this.request.boundsY());
+            return;
+        }
         ensurePanel();
         configureEditor(editor, multilineEditor, this.request.password(), this.request.readOnly(),
                 inputMode(this.request.type()), this.request.text(), this.request.selectionStart(),
@@ -71,7 +81,6 @@ final class WebTextInputController implements TextInputController {
         showPanel(panel);
         installViewportHandler(panel);
         focusEditor(editor, this.request.selectionStart(), this.request.selectionEnd());
-        active = true;
     }
 
     /**
@@ -85,7 +94,7 @@ final class WebTextInputController implements TextInputController {
             return;
         }
         applyRequest(request);
-        if (active && editor != null) {
+        if (panel != null) {
             configureEditor(editor, multilineEditor, this.request.password(), this.request.readOnly(),
                     inputMode(this.request.type()), this.request.text(), this.request.selectionStart(),
                     this.request.selectionEnd());
@@ -98,16 +107,14 @@ final class WebTextInputController implements TextInputController {
      */
     @Override
     public void hideTextInput() {
-        active = false;
-        disposePanel();
+        disposeEditor();
         if (canvas != null) {
             focusCanvas(canvas);
         }
     }
 
     void dispose() {
-        active = false;
-        disposePanel();
+        disposeEditor();
     }
 
     private void ensurePanel() {
@@ -115,7 +122,7 @@ final class WebTextInputController implements TextInputController {
         if (panel != null && editor != null && multilineEditor == multiline) {
             return;
         }
-        disposePanel();
+        disposeEditor();
         HTMLDocument document = HTMLDocument.current();
         panel = document.createElement("div");
         editor = document.createElement(multiline ? "textarea" : "input");
@@ -154,6 +161,30 @@ final class WebTextInputController implements TextInputController {
         });
     }
 
+    private void handleDesktopCommand(KeyboardEvent event) {
+        if (!event.isMetaKey() || event.isCtrlKey() || event.isAltKey()) {
+            return;
+        }
+        Key shortcut = switch (event.getCode()) {
+            case "KeyA" -> Key.A;
+            case "KeyC" -> Key.C;
+            case "KeyX" -> Key.X;
+            default -> null;
+        };
+        if (shortcut != null) {
+            event.preventDefault();
+            event.stopPropagation();
+            dispatchControlShortcut(shortcut);
+        }
+    }
+
+    private void dispatchControlShortcut(Key key) {
+        input.dispatchKeyDown(Key.CONTROL_LEFT);
+        input.dispatchKeyDown(key);
+        input.dispatchKeyUp(key);
+        input.dispatchKeyUp(Key.CONTROL_LEFT);
+    }
+
     private void handleEditorKey(KeyboardEvent event) {
         String key = event.getKey();
         if ("Escape".equals(key) || "Esc".equals(key)) {
@@ -179,10 +210,7 @@ final class WebTextInputController implements TextInputController {
         String value = editorValue(editor);
         committingEditor = true;
         try {
-            input.dispatchKeyDown(Key.CONTROL_LEFT);
-            input.dispatchKeyDown(Key.A);
-            input.dispatchKeyUp(Key.A);
-            input.dispatchKeyUp(Key.CONTROL_LEFT);
+            dispatchControlShortcut(Key.A);
             if (value != null && value.length() > 0) {
                 input.dispatchTextInput(value);
             } else {
@@ -195,7 +223,7 @@ final class WebTextInputController implements TextInputController {
         hideTextInput();
     }
 
-    private void disposePanel() {
+    private void disposeEditor() {
         disposeRegistration(editorKeyRegistration);
         disposeRegistration(cancelRegistration);
         disposeRegistration(acceptRegistration);
@@ -205,6 +233,8 @@ final class WebTextInputController implements TextInputController {
         if (panel != null) {
             removeViewportHandler(panel);
             removeElement(panel);
+        } else if (editor != null) {
+            removeElement(editor);
         }
         panel = null;
         editor = null;
@@ -232,6 +262,54 @@ final class WebTextInputController implements TextInputController {
         }
         return "text";
     }
+
+    @JSBody(script = """
+            return !!(navigator.userAgentData && navigator.userAgentData.mobile)
+                || /Mobi|Android|iPad|iPhone|iPod/i.test(navigator.userAgent)
+                || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            """)
+    private static native boolean isMobileBrowser();
+
+    @JSFunctor
+    private interface TextReceiver extends JSObject {
+        void receive(String text);
+
+    }
+
+    // Let the browser produce committed text (including paste and IME), while the canvas owns editing and rendering.
+    @JSBody(params = "receive", script = """
+            const field = document.createElement('textarea');
+            field.tabIndex = -1;
+            field.autocomplete = 'off';
+            field.spellcheck = false;
+            field.setAttribute('aria-label', 'Text input');
+            field.style.cssText = 'position:fixed;width:1px;height:1px;padding:0;border:0;opacity:0;pointer-events:none';
+            const flush = () => {
+                const text = field.value;
+                field.value = '';
+                if (text && field.isConnected) receive(text);
+            };
+            field.oninput = event => { if (!event.isComposing) flush(); };
+            field.addEventListener('compositionend', () => setTimeout(flush, 0));
+            // The input event supplies printable text; the canvas handles navigation and editing shortcuts.
+            field.onkeypress = event => event.stopPropagation();
+            field.onkeydown = event => {
+                const paste = ((event.ctrlKey || event.metaKey) && event.code === 'KeyV')
+                    || (event.shiftKey && event.key === 'Insert');
+                if (paste || event.key === ' ' || event.isComposing || event.keyCode === 229) event.stopPropagation();
+            };
+            document.body.appendChild(field);
+            return field;
+            """)
+    private static native HTMLElement createDesktopEditor(TextReceiver receive);
+
+    @JSBody(params = { "editor", "canvas", "x", "y" }, script = """
+            const rect = canvas.getBoundingClientRect();
+            editor.style.left = (rect.left + x * rect.width / canvas.width) + 'px';
+            editor.style.top = (rect.top + y * rect.height / canvas.height) + 'px';
+            editor.focus({preventScroll:true});
+            """)
+    private static native void focusDesktopEditor(HTMLElement editor, HTMLCanvasElement canvas, int x, int y);
 
     @JSBody(params = { "parent", "child" }, script = "parent.appendChild(child);")
     private static native void appendChild(HTMLElement parent, HTMLElement child);
