@@ -1,8 +1,13 @@
 package io.github.libfdx.backend.web;
 
-import org.teavm.model.MethodReference;
+import java.util.Arrays;
+import org.teavm.dependency.AbstractDependencyListener;
+import org.teavm.dependency.DependencyAgent;
+import org.teavm.jso.impl.JSOPlugin;
 import org.teavm.model.ClassHolder;
+import org.teavm.model.ClassHolderTransformerContext;
 import org.teavm.model.MethodDescriptor;
+import org.teavm.model.MethodReference;
 import org.teavm.model.Program;
 import org.teavm.model.ValueType;
 import org.teavm.model.instructions.ConstructInstruction;
@@ -12,6 +17,7 @@ import org.teavm.model.instructions.InvokeInstruction;
 import org.teavm.model.instructions.StringConstantInstruction;
 import org.teavm.platform.metadata.ResourceArray;
 import org.teavm.platform.plugin.MetadataRegistration;
+import org.teavm.vm.spi.Before;
 import org.teavm.vm.spi.TeaVMHost;
 import org.teavm.vm.spi.TeaVMPlugin;
 
@@ -20,6 +26,7 @@ import org.teavm.vm.spi.TeaVMPlugin;
  *
  * @author xpenatan
  */
+@Before(JSOPlugin.class)
 public final class WebTeaVMPlugin implements TeaVMPlugin {
     /**
      * Runs the install step.
@@ -29,6 +36,9 @@ public final class WebTeaVMPlugin implements TeaVMPlugin {
     @Override
     public void install(TeaVMHost host) {
         host.add((cls, context) -> {
+            if (cls.getName().equals("com.github.xpenatan.jParser.loader.JParserLibraryLoader")) {
+                bindModuleInitialization(cls, context);
+            }
             bindPreparationDefaults(cls);
             if (cls.getName().equals("io.github.libfdx.backend.web.WebRuntimeShaderCompiler")) {
                 var method = cls.getMethod(new MethodDescriptor("compiledIdentity", ValueType.object("java.lang.String")));
@@ -41,10 +51,42 @@ public final class WebTeaVMPlugin implements TeaVMPlugin {
                 method.setProgram(program);
             }
         });
-        MetadataRegistration registration = host.getService(MetadataRegistration.class);
-        if (registration != null) {
-            registration.register(new MethodReference(WebGeneratedAssets.class, "assets", ResourceArray.class),
-                    new WebAssetMetadataGenerator());
+        // The loader transform must precede JS interop. Look up the metadata service after all plugins install.
+        host.add(new AbstractDependencyListener() {
+            @Override
+            public void started(DependencyAgent agent) {
+                MetadataRegistration registration = agent.getService(MetadataRegistration.class);
+                if (registration != null) {
+                    registration.register(new MethodReference(WebGeneratedAssets.class, "assets", ResourceArray.class),
+                            new WebAssetMetadataGenerator());
+                }
+            }
+
+        });
+    }
+
+    /** Forward module factory rejections to jParser's existing script-load listener when WebGPU is packaged. */
+    private static void bindModuleInitialization(ClassHolder cls, ClassHolderTransformerContext context) {
+        String bridge = "io.github.libfdx.graphics.wgpu.internal.WebModuleInitialization";
+        context.getIncrementalCache().addDependencies(cls.getName(), bridge);
+        if (context.getHierarchy().getClassSource().get(bridge) == null) return;
+
+        var listenerType = ValueType.object("com.github.xpenatan.jParser.loader.JParserLibraryLoaderListener");
+        var nameType = ValueType.parse(String.class);
+        var initialize = new MethodReference(cls.getName(), "initializeModule", nameType, ValueType.VOID);
+        var checked = new MethodReference(bridge, "initialize", nameType, listenerType, ValueType.VOID);
+        for (var method : cls.getMethods()) {
+            var program = method.getProgram();
+            int listener = Arrays.asList(method.getParameterTypes()).indexOf(listenerType);
+            if (program == null || listener < 0) continue;
+            for (var block : program.getBasicBlocks()) {
+                for (var instruction : block) {
+                    if (instruction instanceof InvokeInstruction call && initialize.equals(call.getMethod())) {
+                        call.setArguments(call.getArguments().get(0), program.variableAt(listener + 1));
+                        call.setMethod(checked);
+                    }
+                }
+            }
         }
     }
 

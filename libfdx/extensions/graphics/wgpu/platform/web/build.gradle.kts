@@ -18,6 +18,7 @@ base {
 
 dependencies {
     api(project(":libfdx:extensions:graphics:wgpu:core"))
+    implementation(project(":libfdx:extensions:graphics:gl:platform:web"))
 
     implementation(libs.jwebgpu.web)
     implementation(libs.jwebgpu.web.wasm)

@@ -104,6 +104,11 @@ chooses the active provider. Selection must be explicit when more than one
 compatible provider is available, and unsupported combinations fail clearly.
 Provider changes normally require application restart.
 
+On the web, selecting WebGPU also supplies WebGL as a startup fallback. The backend
+tries it once if WebGPU initialization fails. Preload and application listeners
+receive the ready attachment's actual provider ID and device capabilities. Device
+loss after startup follows the selected provider's normal lifecycle.
+
 Portable code uses common handles. Advanced access checks `providerId()` and
 uses typed `as()` access only inside the owning resource lifetime. Matching
 provider IDs alone do not prove that two resources share a compatible native

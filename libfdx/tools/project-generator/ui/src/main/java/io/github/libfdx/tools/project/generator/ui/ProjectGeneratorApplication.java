@@ -37,6 +37,7 @@ public final class ProjectGeneratorApplication extends ApplicationAdapter {
     private final ProjectExportTarget exportTarget;
     private final long exitAfterFrames;
     private final ProjectGenerator generator = new ProjectGenerator();
+    private final String title = "libFDX Project Generator (" + generator.libfdxVersion() + ")";
     private final List<ProjectSample> samples = generator.samples();
     private final UiState<String> projectName = Ui.state(ProjectGenerationSettings.DEFAULT_PROJECT_NAME);
     private final UiState<String> packageName = Ui.state(ProjectGenerationSettings.DEFAULT_PACKAGE_NAME);
@@ -152,7 +153,7 @@ public final class ProjectGeneratorApplication extends ApplicationAdapter {
     private void buildUi(UiScope ui) {
         ui.scroll(Ui.modifier().fill(), viewport ->
             viewport.column(Ui.modifier().fillWidth().padding(18.0f).gap(12.0f), page -> {
-                page.text("libFDX Project Generator");
+                page.text(title);
                 page.text("Choose a starting point and the platforms for your new libFDX project.");
                 page.panel(Ui.modifier().fillWidth().padding(14.0f).gap(6.0f), form -> {
                     ProjectSample selected = selectedSample();
@@ -173,7 +174,7 @@ public final class ProjectGeneratorApplication extends ApplicationAdapter {
                             }
                             options.text("Platforms");
                             platformChoices(options, selected);
-                            options.text("Dependency: " + dependencyLabel());
+                            options.text("Dependency: libFDX " + generator.libfdxVersion());
                         });
                     });
                     form.text(selected != null
@@ -191,13 +192,6 @@ public final class ProjectGeneratorApplication extends ApplicationAdapter {
                     form.text("Status: " + status.get());
                 });
             }));
-    }
-
-    private String dependencyLabel() {
-        if ("snapshot".equals(generator.channel())) {
-            return "libFDX " + generator.libfdxVersion() + " (90-day development snapshot)";
-        }
-        return "libFDX " + generator.libfdxVersion() + " (" + generator.channel() + ")";
     }
 
     private int defaultSampleIndex() {

@@ -9,17 +9,30 @@ import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.GraphicsAttachmentRequirements;
 import io.github.libfdx.graphics.GraphicsEnvironment;
 import io.github.libfdx.graphics.GraphicsProviderSupport;
+import io.github.libfdx.graphics.GraphicsStartupFallback;
 import io.github.libfdx.graphics.NativeWindow;
 import io.github.libfdx.graphics.NativeWindowPlatform;
+import io.github.libfdx.graphics.gl.web.WebGLProvider;
 import org.teavm.jso.JSBody;
 
 /**
- * Provides web WGPU services.
+ * Requests WebGPU for browser startup. The web backend automatically tries WebGL if WebGPU
+ * initialization fails. The selected attachment exposes the active provider ID and capabilities.
  *
  * @author xpenatan
  */
-public final class WebWGPUProvider implements GraphicsAttachmentProvider, GraphicsProviderSupport {
+public final class WebWGPUProvider implements GraphicsStartupFallback, GraphicsProviderSupport {
     private WGPUConfiguration configuration = new WGPUConfiguration().backend(WGPUBackend.WEBGPU);
+
+    @Override
+    public GraphicsAttachmentProvider fallbackProvider() {
+        return new WebGLProvider().shaderCache(configuration.shaderCache());
+    }
+
+    @Override
+    public boolean requiresFreshWindow(GraphicsAttachment failedAttachment) {
+        return failedAttachment instanceof WGPUWebGraphicsAttachment attachment && attachment.mayHaveBoundCanvas();
+    }
 
     /**
      * Returns the identifier of the provider backing this object.

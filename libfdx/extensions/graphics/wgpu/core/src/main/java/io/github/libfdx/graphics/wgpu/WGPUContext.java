@@ -141,12 +141,13 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     private WGPURequestDeviceCallback deviceCallback;
     private WGPUUncapturedErrorCallback errorCallback;
     private WGPUDeviceLostCallback deviceLostCallback;
-    private Consumer<Runnable> deferDeviceLossRetirement;
+    private Consumer<Runnable> deferCallbackRetirement;
     private volatile boolean deviceLossNotified;
     private boolean deviceLossRequested;
     private boolean nativeDeviceReleased;
     private boolean adapterCallbackComplete;
     private boolean deviceCallbackComplete;
+    private boolean initializationCancelled;
     private int width;
     private int height;
     private int pendingResizeWidth;
@@ -286,6 +287,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             @Override
             protected void onCallback(WGPURequestAdapterStatus status, WGPUAdapter selectedAdapter, String message) {
                 adapterCallbackComplete = true;
+                if (initializationCancelled) deferCallbackRetirement.accept(WGPUContext.this::dispose);
                 debugInit("adapter-callback " + status + (message != null ? ": " + message : ""));
                 if (status != WGPURequestAdapterStatus.Success) {
                     selectedAdapter.dispose();
@@ -293,10 +295,22 @@ public final class WGPUContext implements GraphicsContext, Disposable {
                     return;
                 }
                 adapter = selectedAdapter;
-                requestDevice(initState, selectedAdapter);
+                if (!initializationCancelled) {
+                    try {
+                        requestDevice(initState, selectedAdapter);
+                    } catch (RuntimeException failure) {
+                        // The adapter callback may run after initializeAsync has returned.
+                        initState.fail("Could not request WGPU device: " + failure);
+                    }
+                }
             }
         };
-        instance.requestAdapter(options, WGPUCallbackMode.AllowProcessEvents, adapterCallback);
+        try {
+            instance.requestAdapter(options, callbackMode(), adapterCallback);
+        } catch (RuntimeException | Error failure) {
+            adapterCallbackComplete = true;
+            throw failure;
+        }
     }
 
     private void finishInitializationIfReady() {
@@ -348,10 +362,13 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         descriptor.setLabel("libfdx WGPU Device");
         descriptor.getDefaultQueue().setLabel("libfdx WGPU Queue");
 
+        // The callback becomes pending only when its request is submitted below.
+        deviceCallbackComplete = true;
         deviceCallback = new WGPURequestDeviceCallback() {
             @Override
             protected void onCallback(WGPURequestDeviceStatus status, WGPUDevice selectedDevice, String message) {
                 deviceCallbackComplete = true;
+                if (initializationCancelled) deferCallbackRetirement.accept(WGPUContext.this::dispose);
                 debugInit("device-callback " + status + (message != null ? ": " + message : ""));
                 if (status != WGPURequestDeviceStatus.Success) {
                     selectedDevice.dispose();
@@ -359,6 +376,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
                     return;
                 }
                 device = selectedDevice;
+                if (initializationCancelled) return;
                 queue = selectedDevice.getQueue();
                 state.complete = true;
             }
@@ -378,8 +396,8 @@ public final class WGPUContext implements GraphicsContext, Disposable {
                 resourceDomain.deviceLost("WGPU device lost (" + reason + "): " + message);
                 deviceLossNotified = true;
                 // Browser notifications can arrive after destroy/release and must return before disposal.
-                if (deferDeviceLossRetirement != null)
-                    deferDeviceLossRetirement.accept(WGPUContext.this::retireDeviceLossCallback);
+                if (deferCallbackRetirement != null)
+                    deferCallbackRetirement.accept(WGPUContext.this::retireDeviceLossCallback);
             }
         };
         WGPUVectorFeatureName features = null;
@@ -399,10 +417,16 @@ public final class WGPUContext implements GraphicsContext, Disposable {
                 }
             }
             descriptor.setRequiredFeatures(features != null ? features : WGPUVectorFeatureName.NULL);
-            descriptor.setDeviceLostCallback(deferDeviceLossRetirement != null
-                    ? WGPUCallbackMode.AllowSpontaneous : WGPUCallbackMode.AllowProcessEvents, deviceLostCallback);
+            descriptor.setDeviceLostCallback(callbackMode(), deviceLostCallback);
             deviceLossRequested = true;
-            selectedAdapter.requestDevice(descriptor, WGPUCallbackMode.AllowProcessEvents, deviceCallback, errorCallback);
+            deviceCallbackComplete = false;
+            try {
+                selectedAdapter.requestDevice(descriptor, callbackMode(), deviceCallback, errorCallback);
+            } catch (RuntimeException | Error failure) {
+                deviceCallbackComplete = true;
+                deviceLossRequested = false;
+                throw failure;
+            }
         } finally {
             // requestDevice consumes its descriptor synchronously; the callback has separate ownership.
             descriptor.setRequiredFeatures(WGPUVectorFeatureName.NULL);
@@ -420,6 +444,19 @@ public final class WGPUContext implements GraphicsContext, Disposable {
         if(deviceCallbackComplete && deviceCallback != null) {
             deviceCallback.dispose();
             deviceCallback = null;
+        }
+    }
+
+    private WGPUCallbackMode callbackMode() {
+        return deferCallbackRetirement != null ? WGPUCallbackMode.AllowSpontaneous : WGPUCallbackMode.AllowProcessEvents;
+    }
+
+    /** Browser requests can finish after the last frame. Retire their handles after the callback returns. */
+    void disposeAfterWebRequests() {
+        if ((adapterCallback != null && !adapterCallbackComplete) || (deviceCallback != null && !deviceCallbackComplete)) {
+            initializationCancelled = true;
+        } else {
+            dispose();
         }
     }
 
@@ -1559,9 +1596,9 @@ public final class WGPUContext implements GraphicsContext, Disposable {
     }
 
     // Installed by the browser attachment before initialization; native event pumps retire inline after release.
-    void deferDeviceLossRetirement(Consumer<Runnable> defer) {
-        if (initializationStarted) throw new FdxException("Device loss dispatch must be set before initialization");
-        deferDeviceLossRetirement = defer;
+    void deferCallbackRetirement(Consumer<Runnable> defer) {
+        if (initializationStarted) throw new FdxException("Callback dispatch must be set before initialization");
+        deferCallbackRetirement = defer;
     }
 
     void cancelLostDevicePreparation() {
@@ -1577,7 +1614,7 @@ public final class WGPUContext implements GraphicsContext, Disposable {
 
     private void retireDeviceLossCallback() {
         if (!nativeDeviceReleased || deviceLostCallback == null) return;
-        if (deferDeviceLossRetirement != null && deviceLossRequested && !deviceLossNotified) return;
+        if (deferCallbackRetirement != null && deviceLossRequested && !deviceLossNotified) return;
         deviceLostCallback.dispose();
         deviceLostCallback = null;
     }
@@ -1736,8 +1773,8 @@ public final class WGPUContext implements GraphicsContext, Disposable {
             errorCallback = null;
         }
         nativeDeviceReleased = true;
-        if (deferDeviceLossRetirement != null) {
-            cleanup.run(() -> deferDeviceLossRetirement.accept(this::retireDeviceLossCallback));
+        if (deferCallbackRetirement != null) {
+            cleanup.run(() -> deferCallbackRetirement.accept(this::retireDeviceLossCallback));
         } else cleanup.run(this::retireDeviceLossCallback);
         cleanup.throwIfFailed();
     }

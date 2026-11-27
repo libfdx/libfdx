@@ -42,6 +42,7 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
         this.loadStartMillis = System.currentTimeMillis();
         publishDebugStatus("loader-start", null);
         JWebGPULoader.init(this.configuration.loaderBackend().toNative(), (success, error) -> {
+            if (disposed) return;
             if (!success) {
                 loadState.error = error != null ? error : new FdxException("jWebGPU web backend failed to load");
                 publishDebugStatus("loader-error", loadState.error.getMessage());
@@ -88,7 +89,7 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
 
     private void createContextWhenLoaded() {
         if (loadState.error != null) {
-            throw new FdxException("Failed to load jWebGPU web backend", loadState.error);
+            throw new FdxException("Failed to load jWebGPU web backend: " + loadState.error, loadState.error);
         }
         if (!loadState.complete) {
             if (System.currentTimeMillis() - loadStartMillis > LOAD_TIMEOUT_MILLIS) {
@@ -102,15 +103,19 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
         publishDebugStatus("context-create", null);
         WGPUInstance instance = WGPU.setupInstance();
         if (instance == null || !instance.isValid()) {
+            if (instance != null) instance.dispose();
             publishDebugStatus("instance-error", "Could not create a valid WGPU web instance");
             throw new FdxException("Could not create a valid WGPU web instance");
         }
-        WGPUNativeSurface.SurfaceHandle surface = WGPUNativeSurface.create(instance, nativeWindow);
-        publishDebugStatus("surface-created", null);
-        context = new WGPUContext(configuration, instance, surface.surface(), surface.owner());
-        context.deferDeviceLossRetirement(work -> Window.setTimeout(work::run, 0));
+        // The context owns the instance and binds the canvas only after device selection.
+        context = new WGPUContext(configuration, instance, nativeWindow, true);
+        context.deferCallbackRetirement(work -> Window.setTimeout(work::run, 0));
         context.initializeAsync();
         context.resize(width, height);
+    }
+
+    boolean mayHaveBoundCanvas() {
+        return context != null && context.nativeDevice() != null;
     }
 
     /**
@@ -215,7 +220,7 @@ final class WGPUWebGraphicsAttachment implements GraphicsAttachment, GraphicsAtt
     public void dispose() {
         disposed = true;
         if (context != null) {
-            context.dispose();
+            context.disposeAfterWebRequests();
             context = null;
         }
     }

@@ -84,7 +84,7 @@ final class WebRuntimeBootstrap {
             output.textContent='libfdx startup/runtime failed\\n'+message;
             document.body.appendChild(output);
             """)
-    private static native void reportFailure(String message);
+    static native void reportFailure(String message);
 
     @JSBody(script = "return new URL('scripts/',document.baseURI).href;")
     private static native String runtimeBaseUrl();

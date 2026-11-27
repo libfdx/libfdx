@@ -20,6 +20,7 @@ import io.github.libfdx.graphics.GraphicsAttachmentReadiness;
 import io.github.libfdx.graphics.GraphicsAttachmentProvider;
 import io.github.libfdx.graphics.GraphicsEnvironment;
 import io.github.libfdx.graphics.GraphicsProviderSupport;
+import io.github.libfdx.graphics.GraphicsStartupFallback;
 import io.github.libfdx.graphics.NativeWindow;
 import io.github.libfdx.input.DefaultInput;
 import io.github.libfdx.input.DefaultInputCapabilities;
@@ -67,7 +68,8 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         }
     };
     private final PlatformRunnable jsFrameRunner = frameRunner::run;
-    private WebApplicationConfig config;
+    private GraphicsAttachmentProvider startupProvider;
+    private FdxException primaryGraphicsFailure;
     private WebRuntimeCoreProvider runtimeCoreProvider;
     private io.github.libfdx.core.FdxFuture<Void> runtimeReady;
     private ApplicationListener listener;
@@ -115,7 +117,9 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
     /**
      * Starts asynchronous browser initialization and returns before assets are ready. The Java backend
      * loads the page's shared native runtime and bootstrap logo before creating either preload or main
-     * listeners. Initialization failures dispose this backend and surface through the browser error
+     * listeners. A provider offering a startup fallback can be retried once with its alternative.
+     * If the failed provider may have bound the canvas, the backend replaces the element and copies
+     * its attributes before installing input handlers. Terminal failures dispose this backend and surface through the browser error
      * handler. Disposing while initialization is pending prevents subsequent listener creation.
      *
      * @param config the configuration
@@ -142,29 +146,16 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                     && !actualConfig.graphicsProvider().equals(graphicsProvider.providerId())) {
                 throw new FdxException("Configured graphics provider ID does not match attached GraphicsAttachmentProvider");
             }
-            if (graphicsProvider instanceof GraphicsProviderSupport
-                    && !((GraphicsProviderSupport) graphicsProvider).isSupported()) {
-                String reason = ((GraphicsProviderSupport) graphicsProvider).supportFailureReason();
-                throw new FdxException(reason != null ? reason : "Web graphics provider is not supported");
-            }
-            logger.info("Web graphics provider selected: " + graphicsProvider.providerId());
-
-            this.config = actualConfig;
+            startupProvider = graphicsProvider;
             this.listener = listener;
             DisplayConfig displayConfig = actualConfig.displayConfig();
             setDocumentTitle(displayConfig.title());
             canvas = getOrCreateCanvas(actualConfig.canvasId(), displayConfig.width(), displayConfig.height());
-            setCanvasInteractive(canvas);
             display = new WebDisplay(displayConfig.title());
             refreshDisplaySize();
-            input = createInput();
-            installInputListeners();
 
-            graphics = graphicsProvider.create(new WebGraphicsEnvironment(display,
-                    NativeWindow.web(canvas, "#" + actualConfig.canvasId())));
             if (actualConfig.audio() != null) audio = actualConfig.audio().create();
-            fdx = new DefaultFdx(this, new DefaultDisplays(display), new DefaultGraphics(graphics), input,
-                    new WebFileSystem(), new DefaultStorage(new WebStorageBackend()), null, audio, logger);
+            boolean graphicsReady = prepareGraphics(false);
             applicationPreloadListener = actualConfig.applicationPreloadListener();
             preloadApplicationListener = applicationPreloadListener == null
                     ? (actualConfig.preloadApplicationListener() != null
@@ -178,7 +169,7 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             lifecycle = ApplicationLifecycle.CREATED;
             lastFrameMillis = System.currentTimeMillis();
 
-            if (isRuntimeReady() && isGraphicsReady()) {
+            if (isRuntimeReady() && graphicsReady) {
                 createPreloadListener();
             }
             Window.requestAnimationFrame(this);
@@ -435,12 +426,8 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         }
         try {
             if (!listenerCreated) {
-                if (graphics != null) {
-                    graphics.processEvents();
-                }
-                if (isRuntimeReady() && isGraphicsReady()) {
-                    // Publish the ready device's camera convention before either listener is created.
-                    fdx.graphics().main();
+                boolean graphicsReady = prepareGraphics(true);
+                if (isRuntimeReady() && graphicsReady) {
                     createPreloadListener();
                     boolean preloadStepped = false;
                     if (!preloadStarted) {
@@ -489,9 +476,69 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
         }
     }
 
-    private boolean isGraphicsReady() {
-        return graphics == null || !(graphics instanceof GraphicsAttachmentReadiness)
-                || ((GraphicsAttachmentReadiness) graphics).isReady();
+    private boolean prepareGraphics(boolean pollEvents) {
+        while (true) {
+            try {
+                if (graphics == null) graphics = createGraphicsAttachment(startupProvider);
+                if (pollEvents) graphics.processEvents();
+                if (graphics instanceof GraphicsAttachmentReadiness readiness && !readiness.isReady()) return false;
+                break;
+            } catch (RuntimeException failure) {
+                selectGraphicsFallback(failure);
+            }
+        }
+        if (startupProvider != null) {
+            startupProvider = null;
+            primaryGraphicsFailure = null;
+            logger.info("Web graphics provider selected: " + graphics.providerId());
+            setCanvasInteractive(canvas);
+            input = createInput();
+            installInputListeners();
+            fdx = new DefaultFdx(this, new DefaultDisplays(display), new DefaultGraphics(graphics), input,
+                    new WebFileSystem(), new DefaultStorage(new WebStorageBackend()), null, audio, logger);
+        }
+        return true;
+    }
+
+    private GraphicsAttachment createGraphicsAttachment(GraphicsAttachmentProvider provider) {
+        if (provider instanceof GraphicsProviderSupport support && !support.isSupported()) {
+            String reason = support.supportFailureReason();
+            throw new FdxException(reason != null ? reason : "Web graphics provider is not supported");
+        }
+        GraphicsAttachment attachment = provider.create(new WebGraphicsEnvironment(display,
+                NativeWindow.web(canvas, "#" + canvas.getId())));
+        if (attachment == null) throw new FdxException("No graphics attachment returned by " + provider.providerId());
+        return attachment;
+    }
+
+    private void selectGraphicsFallback(RuntimeException failure) {
+        if (primaryGraphicsFailure != null) {
+            FdxException both = new FdxException(primaryGraphicsFailure.getMessage() + ". Fallback "
+                    + startupProvider.providerId() + " failed: " + failure, failure);
+            both.addSuppressed(primaryGraphicsFailure);
+            WebRuntimeBootstrap.reportFailure(both.getMessage());
+            throw both;
+        }
+        if (!(startupProvider instanceof GraphicsStartupFallback policy)) throw failure;
+        GraphicsAttachmentProvider fallback = policy.fallbackProvider();
+        primaryGraphicsFailure = new FdxException("Web graphics provider " + startupProvider.providerId()
+                + " failed: " + failure, failure);
+        logger.warn(primaryGraphicsFailure.getMessage() + ". Trying " + fallback.providerId());
+        boolean replaceCanvas = policy.requiresFreshWindow(graphics);
+        if (graphics != null) {
+            try {
+                graphics.dispose();
+            } catch (RuntimeException cleanupFailure) {
+                primaryGraphicsFailure.addSuppressed(cleanupFailure);
+                logger.error("Failed to dispose the initial graphics attachment", cleanupFailure);
+            }
+            graphics = null;
+        }
+        if (replaceCanvas) {
+            canvas = replaceGraphicsCanvas(canvas);
+            refreshDisplaySize();
+        }
+        startupProvider = fallback;
     }
 
     private boolean isRuntimeReady() {
@@ -784,6 +831,8 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
                 gamepads = null;
             }
             input = null;
+            startupProvider = null;
+            primaryGraphicsFailure = null;
             fdx = null;
             listener = null;
             display = null;
@@ -840,6 +889,13 @@ public final class WebApplicationBackend implements ApplicationBackend, Applicat
             "canvas.style.display = 'block';\n" +
             "return canvas;")
     private static native HTMLCanvasElement getOrCreateCanvas(String id, int width, int height);
+
+    @JSBody(params = "canvas", script = """
+            const replacement = canvas.cloneNode(true);
+            canvas.replaceWith(replacement);
+            return replacement;
+            """)
+    private static native HTMLCanvasElement replaceGraphicsCanvas(HTMLCanvasElement canvas);
 
     @JSBody(params = { "title" }, script = "document.title = title || '';")
     private static native void setDocumentTitle(String title);
