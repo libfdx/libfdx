@@ -460,6 +460,11 @@ public final class ShaderGraphEditorSession {
         execute(command(name, current -> current.layout(current.layout().withWireRoute(wire, route))));
     }
 
+    /** Arranges the active graph's nodes and material output as one undoable layout edit. */
+    public void organizeGraph() {
+        execute(command("Organize graph", current -> current.layout(current.layout().organized(activeGraph()))));
+    }
+
     public void moveNode(String nodeId, float x, float y) {
         String graphId = activeGraph().id().value();
         execute(command("Move node", current -> {

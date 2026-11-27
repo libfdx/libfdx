@@ -240,6 +240,7 @@ public final class ShaderGraphEditorView implements UiContent {
         ui.button("Redo", UiModifier.none()
                 .enabled(session.canRedo()), () -> session.redo());
         ui.button("Fit", canvas::fitGraph);
+        ui.button("Organize", canvas::organizeGraph);
         if (session.activeGraph().kind() == ShaderGraphKind.SURFACE) ui.button("Frame Output", canvas::frameMaterialOutput);
         if (preview != null) {
             ui.button(settings.previewMode() == ShaderGraphEditorPreviewMode.NONE ? "Preview off" : "Preview on",

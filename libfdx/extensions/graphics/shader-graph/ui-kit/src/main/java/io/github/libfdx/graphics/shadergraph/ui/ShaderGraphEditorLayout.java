@@ -11,11 +11,8 @@ import io.github.libfdx.graphics.shadergraph.model.ShaderGraphEditorNode;
 import io.github.libfdx.graphics.shadergraph.model.ShaderGraphId;
 import io.github.libfdx.graphics.shadergraph.node.ShaderNode;
 import io.github.libfdx.graphics.shadergraph.standard.StandardShaderNodes;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -128,6 +125,12 @@ public final class ShaderGraphEditorLayout {
 
     ShaderGraphEditorLayout withMaterialOutput(String graphId, float x, float y) {
         return withGraph(requireGraph(graphId).withMaterialOutput(new ShaderGraphEditorData.Position(x, y)));
+    }
+
+    ShaderGraphEditorLayout organized(ShaderGraph graph) {
+        var current = requireGraph(graph.id().value());
+        var positioned = new ShaderGraphOrganizer(graph, current).arrange(current);
+        return current.equals(positioned) ? this : withGraph(positioned);
     }
 
     ShaderGraphEditorLayout withWireRoute(Wire wire, ShaderGraphWireRoute route) {
@@ -274,57 +277,16 @@ public final class ShaderGraphEditorLayout {
     }
 
     private static ShaderGraphEditorData defaultGraphLayout(ShaderGraph graph) {
-        ShaderNode[] nodes = graph.nodes();
-        // Place each operation one column beyond its furthest upstream dependency.
-        Map<ShaderGraphId, Integer> indexes = new HashMap<>();
-        List<List<Integer>> consumers = new ArrayList<>(nodes.length);
-        int[] remaining = new int[nodes.length];
-        int[] column = new int[nodes.length];
-        for (int i = 0; i < nodes.length; i++) {
-            indexes.put(nodes[i].id(), i);
-            consumers.add(new ArrayList<>());
-        }
-        for (var edge : graph.edges()) {
-            Integer source = indexes.get(edge.source().nodeId());
-            Integer target = indexes.get(edge.target().nodeId());
-            if (source != null && target != null) {
-                consumers.get(source).add(target);
-                remaining[target]++;
-            }
-        }
-        var ready = new ArrayDeque<Integer>();
-        for (int i = 0; i < nodes.length; i++) {
-            if (remaining[i] == 0) {
-                ready.addLast(i);
-            }
-        }
-        int lastColumn = 0;
-        while (!ready.isEmpty()) {
-            int index = ready.removeFirst();
-            lastColumn = Math.max(lastColumn, column[index]);
-            for (int target : consumers.get(index)) {
-                column[target] = Math.max(column[target], column[index] + 1);
-                if (--remaining[target] == 0) {
-                    ready.addLast(target);
-                }
-            }
-        }
-        // Keep unresolvable cycles visible in their own column for repair.
-        float[] nextY = new float[lastColumn + 2];
-        ShaderGraphEditorNode[] values = new ShaderGraphEditorNode[nodes.length];
-        for (int i = 0; i < nodes.length; i++) {
-            int x = remaining[i] == 0 ? column[i] : lastColumn + 1;
-            values[i] = newNode(nodes[i], x * (DEFAULT_NODE_WIDTH + DEFAULT_COLUMN_GAP), nextY[x]);
-            nextY[x] += values[i].height() + DEFAULT_ROW_GAP;
-        }
-        float zoom = nodes.length > 12 ? 0.75f : 1.0f;
+        int count = graph.nodes().length;
+        float zoom = count > 12 ? 0.75f : 1.0f;
         if (graph.kind() == ShaderGraphKind.SURFACE) zoom = Math.min(zoom, 0.85f);
-        var data = placeMaterialOutput(graph, ShaderGraphEditorData.of(graph.id().value(), values, 24, 24, zoom), values);
+        var empty = ShaderGraphEditorData.of(graph.id().value(), new ShaderGraphEditorNode[0], 24, 24, zoom);
+        var data = new ShaderGraphOrganizer(graph, empty).arrange(empty);
         var output = data.materialOutput();
         if (output == null) return data;
         // Open a new surface on the final operations. Previously saved viewports are restored in reconcileGraph.
-        return data.withViewport(24 - Math.max(0, output.x() - (DEFAULT_NODE_WIDTH + DEFAULT_COLUMN_GAP)) * zoom,
-                24 - output.y() * zoom, zoom);
+        return data.withViewport(24 - Math.max(0, output.x() - 3 * (DEFAULT_NODE_WIDTH + DEFAULT_COLUMN_GAP)) * zoom,
+                24 - Math.max(0, output.y() - 1.5f * DEFAULT_NODE_HEIGHT) * zoom, zoom);
     }
 
     private static ShaderGraphEditorData placeMaterialOutput(ShaderGraph graph, ShaderGraphEditorData data,

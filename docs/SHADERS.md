@@ -726,6 +726,12 @@ node, select it, enter the override, and click **Replace with constant**.
 
 Hold the **right mouse button** and drag anywhere on the canvas to pan, including over a node or wire. Release the button in place to open the action menu for the item you pressed. The **left mouse button** selects and drags nodes, socket connections, and routing pins. Scroll to zoom around the pointer.
 
+Click **Organize** to arrange and frame the active graph. Inputs sit near their
+consumers, related branches follow socket order, and disconnected work sits below
+the output branches. Routing pins move with their endpoints and keep their angles
+and segment styles. **Undo** restores the previous arrangement and view in one step.
+Graphs without saved positions start organized. **Save** keeps your chosen layout.
+
 **Layout revision** counts completed edits in the current session. Moving a node,
 the Material Output, or a routing pin counts once when you release it. Undoing
 or redoing a layout edit counts once more. Pan, zoom, **Fit**, **Frame Output**,

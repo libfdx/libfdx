@@ -60,8 +60,8 @@ public final class ShaderGraphEditorCanvas implements UiCustomContent,
     private static final float PORT_STEP = 18.0f;
     private static final float PORT_RADIUS = 6.0f;
     private static final MaterialOutputChannel[] CHANNELS = MaterialOutputChannel.values();
-    private static final float OUTPUT_WIDTH = 182;
-    private static final float OUTPUT_HEIGHT = PORT_TOP + (CHANNELS.length - 1) * PORT_STEP + 16;
+    static final float OUTPUT_WIDTH = 182;
+    static final float OUTPUT_HEIGHT = PORT_TOP + (CHANNELS.length - 1) * PORT_STEP + 16;
     private static final float MIN_ZOOM = 0.25f;
     private static final float MAX_ZOOM = 2.5f;
     private static final double ZOOM_PER_NOTCH = 1.1;
@@ -424,6 +424,18 @@ public final class ShaderGraphEditorCanvas implements UiCustomContent,
         return !event.composition() && menu.text(event.text());
     }
 
+    /** Arranges the active graph and frames it in a single undo step. */
+    public void organizeGraph() {
+        session.beginTransaction("Organize graph");
+        try {
+            session.organizeGraph();
+            fitGraph();
+            session.commitTransaction();
+        } finally {
+            if (session.transactionActive()) session.cancelTransaction();
+        }
+    }
+
     /** Centers all node bounds in the current canvas, including nodes dragged outside the original viewport. */
     public void fitGraph() {
         refresh();
@@ -721,7 +733,11 @@ public final class ShaderGraphEditorCanvas implements UiCustomContent,
     }
 
     private float materialPortY(int index) {
-        return localY(materialOutput.y() + PORT_TOP + index * PORT_STEP);
+        return localY(materialOutput.y() + materialSocketY(index));
+    }
+
+    static float materialSocketY(int index) {
+        return PORT_TOP + index * PORT_STEP;
     }
 
     private boolean insideMaterialOutput(float x, float y) {
