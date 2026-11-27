@@ -6,7 +6,7 @@ import java.io.File
 import java.io.RandomAccessFile
 
 /** Bounded local asset serving, including one HTTP byte range and HEAD metadata. */
-internal fun serveWebFile(root: File, exchange: HttpExchange) {
+fun serveWebFile(root: File, exchange: HttpExchange) {
     exchange.use {
         val method = exchange.requestMethod
         if(method != "GET" && method != "HEAD") {

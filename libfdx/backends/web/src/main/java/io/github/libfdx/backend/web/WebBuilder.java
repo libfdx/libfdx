@@ -44,6 +44,7 @@ public final class WebBuilder {
     private TeaVMOptimization optimization = TeaVMOptimization.BALANCED;
     private boolean obfuscated = true;
     private boolean strict;
+    private boolean asyncEnabled = true;
     private boolean debugInformation;
     private boolean sourceMaps;
     private boolean sourceFilesCopied;
@@ -370,6 +371,17 @@ public final class WebBuilder {
     }
 
     /**
+     * Enables TeaVM suspension for operations such as WebGPU readback. Enabled by default.
+     *
+     * @param asyncEnabled whether the compiled application can suspend
+     * @return this web builder for chaining
+     */
+    public WebBuilder asyncEnabled(boolean asyncEnabled) {
+        this.asyncEnabled = asyncEnabled;
+        return this;
+    }
+
+    /**
      * Sets the debug information and returns this web builder.
      *
      * @param debugInformation the debug information
@@ -507,8 +519,7 @@ public final class WebBuilder {
                 sourceFilesCopied,
                 fastDependencyAnalysis,
                 incremental
-        ), strategy -> {
-        }, "TeaVM web build failed for " + actualMainClass);
+        ), strategy -> strategy.setAsyncEnabled(asyncEnabled), "TeaVM web build failed for " + actualMainClass);
         try {
             if (target.isWasm()) {
                 WebAppWriter.copyWasmRuntime(output.resolve(targetFileName + "-runtime.js"), wasmRuntimeModular,

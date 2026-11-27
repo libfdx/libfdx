@@ -73,14 +73,15 @@ make Gradle fail after the matrix finishes, keeping the report available.
 | --- | --- | --- |
 | `validate_desktop_graphics` | GL, Vulkan, Direct3D 12, WGPU | Desktop graphics drivers |
 | `validate_android_graphics` | GLES, Vulkan, WGPU JNI | One authorized ADB device; use `ANDROID_SERIAL` to select it |
-| `validate_web_graphics` | JS/WebGL, JS/WebGPU, Wasm/WebGL | Chromium, or an installed Chrome/Edge channel |
+| `validate_web_graphics` | JS/WebGL, JS/WebGPU, Wasm/WebGL, Wasm/WebGPU | Chromium, or an installed Chrome/Edge channel |
 
 Android installs the debug APK once, then force-stops and relaunches the test
 application for every pair. Completion uses a unique token emitted after
 activity/backend cleanup; logcat is scoped to the test application's UID.
 The supervisor also force-stops the app after a timed-out worker.
 
-Web builds the applications once and serves them locally. Every pair uses a
+Web builds the applications once and serves them locally with the Gradle web
+runner's HTTP byte-range support for deferred assets. Every pair uses a
 fresh browser worker with console/error collection, an activation click after
 the test is ready, and completion verification after backend disposal.
 The browser version is logged. A final-page PNG is diagnostic evidence, not
@@ -102,7 +103,7 @@ Install the pinned test Chromium once, or use an already installed channel:
 All matrix tasks accept `libfdx.test.autoTests` (comma-separated test class
 names), `libfdx.test.autoGraphics` (combinations from the table, using
 `gl,vulkan,d3d12,wgpu`, `gles,vulkan,wgpu_jni`, or
-`js-webgl,js-webgpu,wasm-webgl`), `autoTimeoutSeconds` (180 by default),
+`js-webgl,js-webgpu,wasm-webgl,wasm-webgpu`), `autoTimeoutSeconds` (180 by default),
 `autoDurationSeconds` (six by default), and `autoReportDirectory`.
 These are system properties with the `libfdx.test.` prefix. For example:
 

@@ -129,7 +129,8 @@ public final class WebGLContextLossChecks {
                 operation.advanceLoading();
                 if (index == 1) {
                     check(api.supportsParallelShaderCompilation(), "Submitted-link check requires driver polling");
-                    check(operation.phase() == ShaderPreparationPhase.PIPELINE, "Link was not submitted");
+                    // Source translation may span several loading frames before the link is submitted.
+                    if (operation.phase() != ShaderPreparationPhase.PIPELINE) return;
                 } else if (!operation.isDone()) return;
                 if (index == 5) {
                     result = operation.finish(); operation.dispose(); operation = null;

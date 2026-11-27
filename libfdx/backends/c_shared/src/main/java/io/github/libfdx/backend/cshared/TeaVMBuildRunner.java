@@ -1,9 +1,8 @@
 package io.github.libfdx.backend.cshared;
 
 import org.teavm.backend.javascript.JSModuleType;
-import org.teavm.diagnostics.ProblemProvider;
+import org.teavm.diagnostics.ProblemSeverity;
 import org.teavm.tooling.EmptyTeaVMToolLog;
-import org.teavm.tooling.TeaVMProblemRenderer;
 import org.teavm.tooling.TeaVMSourceFilePolicy;
 import org.teavm.tooling.TeaVMTargetType;
 import org.teavm.tooling.TeaVMToolLog;
@@ -11,6 +10,7 @@ import org.teavm.tooling.builder.BuildException;
 import org.teavm.tooling.builder.BuildResult;
 import org.teavm.tooling.builder.BuildStrategy;
 import org.teavm.tooling.builder.InProcessBuildStrategy;
+import org.teavm.tooling.builder.RenderedProblem;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -72,11 +72,19 @@ public final class TeaVMBuildRunner {
         configureTarget.accept(strategy);
         try {
             BuildResult result = strategy.build();
-            ProblemProvider problems = result.getProblems();
-            TeaVMProblemRenderer.describeProblems(result.getCallGraph(), problems, actualLog);
-            if (!problems.getSevereProblems().isEmpty()) {
+            int errorCount = 0;
+            for (RenderedProblem problem : result.getProblems()) {
+                String message = problem.getText() + problem.getStackTrace();
+                if (problem.getSeverity() == ProblemSeverity.ERROR) {
+                    actualLog.error(message);
+                    errorCount++;
+                } else {
+                    actualLog.warning(message);
+                }
+            }
+            if (errorCount > 0) {
                 throw new BuilderException(failureMessage + ": TeaVM reported "
-                        + problems.getSevereProblems().size() + " severe problem(s)");
+                        + errorCount + " severe problem(s)");
             }
             return generatedFiles(request.targetDirectory);
         } catch (BuildException error) {

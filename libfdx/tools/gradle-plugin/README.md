@@ -190,6 +190,10 @@ commit or package them.
 
 ## Local web serving
 
+The `js` and `wasm` targets enable TeaVM async support by default so WebGPU
+readback can suspend while the browser maps a buffer. Applications that have
+no reachable suspending methods can set `asyncEnabled.set(false)` on either target.
+
 Generated `index.html` starts the TeaVM application directly: the JavaScript target
 loads the application script, and the Wasm target uses TeaVM's companion runtime
 to load the application Wasm and call its entry point. The Java web backend then

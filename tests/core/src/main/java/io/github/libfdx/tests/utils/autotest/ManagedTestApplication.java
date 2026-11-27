@@ -3,6 +3,7 @@ package io.github.libfdx.tests.utils.autotest;
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationListener;
+import io.github.libfdx.tests.utils.shared.TestReadiness;
 
 /** Observes one isolated automatic scenario without replacing its completion assertions. */
 public final class ManagedTestApplication implements ApplicationListener {
@@ -37,7 +38,8 @@ public final class ManagedTestApplication implements ApplicationListener {
     @Override
     public void onFrameEnd() {
         test.onFrameEnd();
-        if (!observed && timing.update(application.deltaTime())) {
+        boolean ready = !(test instanceof TestReadiness scene) || scene.readyForAutomaticCompletion();
+        if (!observed && timing.update(application.deltaTime(), ready)) {
             observed = true;
             onObservationComplete.run();
             application.requestExit();

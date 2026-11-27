@@ -1,3 +1,7 @@
+import com.sun.net.httpserver.HttpServer
+import io.github.libfdx.gradle.serveWebFile
+import java.net.InetSocketAddress
+
 plugins {
     id("io.github.libfdx")
 }
@@ -15,7 +19,43 @@ dependencies {
     add(graphicsMatrixRunner.name, libs.playwright)
 }
 
-tasks.register<JavaExec>("validate_web_graphics") {
+abstract class WebGraphicsValidation : JavaExec() {
+    @get:Internal
+    abstract val jsDirectory: DirectoryProperty
+
+    @get:Internal
+    abstract val wasmDirectory: DirectoryProperty
+
+    @TaskAction
+    override fun exec() {
+        val servers = mutableListOf<HttpServer>()
+        try {
+            for ((runtime, directory) in mapOf("Js" to jsDirectory, "Wasm" to wasmDirectory)) {
+                val root = directory.get().asFile.canonicalFile
+                check(root.resolve("index.html").isFile) { "Missing web build: $root" }
+                val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+                servers.add(server)
+                server.createContext("/") { exchange ->
+                    exchange.responseHeaders.set("Cross-Origin-Opener-Policy", "same-origin")
+                    exchange.responseHeaders.set("Cross-Origin-Embedder-Policy", "require-corp")
+                    if (exchange.requestURI.path == "/favicon.ico") {
+                        exchange.use { it.sendResponseHeaders(204, -1) }
+                    } else {
+                        serveWebFile(root, exchange)
+                    }
+                }
+                server.start()
+                systemProperty("libfdx.test.autoWeb${runtime}Url", "http://127.0.0.1:${server.address.port}")
+            }
+            super.exec()
+        } finally {
+            servers.forEach { it.stop(0) }
+        }
+    }
+
+}
+
+tasks.register<WebGraphicsValidation>("validate_web_graphics") {
     group = "verification"
     description = "Builds and validates all tests on JS and Wasm with WebGL and WebGPU in isolated browsers."
     dependsOn("libfdx_web_js_tests_webgl_build", "libfdx_web_js_tests_webgpu_build", "libfdx_web_wasm_tests_webgl_build", "libfdx_web_wasm_tests_webgpu_build")
@@ -27,11 +67,11 @@ tasks.register<JavaExec>("validate_web_graphics") {
     environment("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")
     environment("PLAYWRIGHT_BROWSERS_PATH", layout.buildDirectory.dir("browsers").get().asFile.absolutePath)
     doFirst {
+        jsDirectory.set(tasks.named<io.github.libfdx.gradle.LibfdxRunWebTask>("libfdx_web_js_tests_webgl_run").get().webappDir)
+        wasmDirectory.set(tasks.named<io.github.libfdx.gradle.LibfdxRunWebTask>("libfdx_web_wasm_tests_webgl_run").get().webappDir)
         val temporaryDirectory = layout.buildDirectory.dir("tmp/browser-runner").get().asFile
         temporaryDirectory.mkdirs()
         systemProperty("java.io.tmpdir", temporaryDirectory.absolutePath)
-        systemProperty("libfdx.test.autoWebJsDirectory", tasks.named<io.github.libfdx.gradle.LibfdxRunWebTask>("libfdx_web_js_tests_webgl_run").get().webappDir.get().asFile.absolutePath)
-        systemProperty("libfdx.test.autoWebWasmDirectory", tasks.named<io.github.libfdx.gradle.LibfdxRunWebTask>("libfdx_web_wasm_tests_webgl_run").get().webappDir.get().asFile.absolutePath)
     }
 }
 

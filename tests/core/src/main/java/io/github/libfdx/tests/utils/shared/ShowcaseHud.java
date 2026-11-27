@@ -141,7 +141,7 @@ public final class ShowcaseHud implements Disposable {
                 layer.text(label.text, box(label.x, label.y, Math.max(1, remaining), label.size * 1.6f)
                         .style(UiStyle.style().text(textStyle(label.size, label.red, label.green, label.blue))));
             }
-            if (controls != null) controls.build(layer);
+            if (controls != null && font != null) controls.build(layer);
         });
     }
 

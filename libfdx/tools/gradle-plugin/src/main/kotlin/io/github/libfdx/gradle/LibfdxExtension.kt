@@ -386,6 +386,7 @@ open class LibfdxWebExtension @Inject constructor(
     project: Project,
     teavmConfig: TeaVMConfiguration
 ) : LibfdxTargetExtension(teavmConfig) {
+    val asyncEnabled: Property<Boolean> = teavmConfig.asyncEnabled.convention(true)
     open val entryPointName: Property<String> = objects.property(String::class.java).convention("main")
     val mainClassArgs: Property<String> = objects.property(String::class.java).convention("")
     val htmlTitle: Property<String> = objects.property(String::class.java).convention("libfdx")

@@ -142,10 +142,14 @@ public final class GraphicsMatrixRunner {
     }
 
     private static String failureDetail(Path log) {
-        try (var lines = Files.lines(log)) {
-            return lines.filter(line -> line.contains("Exception") || line.contains("[error]") || line.contains("fatal error"))
-                    .findFirst().orElse("See process log");
-        } catch (IOException | java.io.UncheckedIOException error) {
+        try (var reader = Files.newBufferedReader(log)) {
+            String summary = null;
+            for (String line; (line = reader.readLine()) != null;) {
+                if (line.contains("Exception") || line.contains("fatal error")) return line;
+                if (summary == null && line.contains("[error]")) summary = line;
+            }
+            return summary != null ? summary : "See process log";
+        } catch (IOException error) {
             return "See process log (could not decode diagnostic text)";
         }
     }

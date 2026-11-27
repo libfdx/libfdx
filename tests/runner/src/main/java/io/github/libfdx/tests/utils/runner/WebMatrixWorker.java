@@ -1,8 +1,6 @@
 package io.github.libfdx.tests.utils.runner;
 
 import com.microsoft.playwright.*;
-import com.sun.net.httpserver.HttpServer;
-import java.net.InetSocketAddress;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -10,35 +8,13 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Fresh browser and local server for one pair; the outer JVM supervisor enforces the hard timeout. */
+/** Fresh browser for one pair; the outer JVM supervisor enforces the hard timeout. */
 public final class WebMatrixWorker {
     public static void main(String[] args) throws Exception {
         String variant = System.getProperty("libfdx.test.graphics");
-        String directoryProperty = variant.startsWith("wasm-") ? "libfdx.test.autoWebWasmDirectory" : "libfdx.test.autoWebJsDirectory";
-        Path directory = Path.of(System.getProperty(directoryProperty)).toAbsolutePath().normalize();
-        if (!Files.isRegularFile(directory.resolve("index.html"))) throw new IllegalStateException("Missing web build: " + directory);
-        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/", exchange -> {
-            if (exchange.getRequestURI().getPath().equals("/favicon.ico")) {
-                exchange.sendResponseHeaders(204, -1); exchange.close(); return;
-            }
-            Path file = directory.resolve("." + exchange.getRequestURI().getPath()).normalize();
-            if (Files.isDirectory(file)) file = file.resolve("index.html");
-            if (!file.startsWith(directory) || !Files.isRegularFile(file)) {
-                exchange.sendResponseHeaders(404, -1); exchange.close(); return;
-            }
-            String name = file.toString();
-            String mime = name.endsWith(".wasm") ? "application/wasm" : name.endsWith(".js") ? "application/javascript"
-                    : name.endsWith(".html") ? "text/html" : Files.probeContentType(file);
-            exchange.getResponseHeaders().set("Content-Type", mime == null ? "application/octet-stream" : mime);
-            exchange.getResponseHeaders().set("Cross-Origin-Opener-Policy", "same-origin");
-            exchange.getResponseHeaders().set("Cross-Origin-Embedder-Policy", "require-corp");
-            exchange.sendResponseHeaders(200, Files.size(file));
-            try (var stream = exchange.getResponseBody()) { Files.copy(file, stream); }
-        });
-        server.start();
+        String testName = System.getProperty("libfdx.test.name");
+        String serverUrl = System.getProperty(variant.startsWith("wasm-") ? "libfdx.test.autoWebWasmUrl" : "libfdx.test.autoWebJsUrl");
         Path marker = Path.of(System.getProperty("libfdx.test.autoCompletionFile"));
-        boolean completed = false;
         try (Playwright playwright = Playwright.create()) {
             BrowserType.LaunchOptions options = new BrowserType.LaunchOptions()
                     .setHeadless(Boolean.parseBoolean(System.getProperty("libfdx.test.autoWebHeadless", "false")));
@@ -53,12 +29,14 @@ public final class WebMatrixWorker {
                 List<String> errors = new ArrayList<>();
                 page.onConsoleMessage(message -> {
                     System.out.println("[browser " + message.type() + "] " + message.text());
-                    if (message.type().equals("error")) errors.add(message.text());
+                    if (message.type().equals("error") && !expectedResourceError(message, testName, serverUrl)) {
+                        errors.add(message.text() + " at " + message.location());
+                    }
                 });
                 page.onPageError(error -> { errors.add(error); System.err.println(error); });
                 page.onCrash(ignored -> errors.add("Browser page crashed"));
-                boolean concurrentGltf = "ConcurrentGltfLoadingTest".equals(System.getProperty("libfdx.test.name"));
-                boolean defaultPbr = concurrentGltf || List.of("GltfLoadingTest", "ModelBatchTest").contains(System.getProperty("libfdx.test.name"));
+                boolean concurrentGltf = "ConcurrentGltfLoadingTest".equals(testName);
+                boolean defaultPbr = concurrentGltf || List.of("GltfLoadingTest", "ModelBatchTest").contains(testName);
                 if (defaultPbr) page.addInitScript("""
                         window.libfdxPbrWorkers={started:0,results:0,terminated:0};
                         window.libfdxImageWorkers={started:0,decoded:0,mipmapped:0,terminated:0};
@@ -111,8 +89,8 @@ public final class WebMatrixWorker {
                         };
                         """);
                 String api = variant.endsWith("webgpu") ? "webgpu" : "webgl";
-                String url = "http://127.0.0.1:" + server.getAddress().getPort() + "/?test="
-                        + System.getProperty("libfdx.test.name") + "&graphics=" + api + "&frames=-1&autoChild=true&autoDurationSeconds="
+                String url = serverUrl + "/?test="
+                        + testName + "&graphics=" + api + "&frames=-1&autoChild=true&autoDurationSeconds="
                         + System.getProperty("libfdx.test.autoDurationSeconds", "6");
                 StringBuilder optionsQuery = new StringBuilder(url);
                 for (String option : List.of("shaderAsync", "shaderLoadingOnly", "shaderPreload", "shaderCount",
@@ -160,7 +138,7 @@ public final class WebMatrixWorker {
                     System.out.println("DEFAULT_PBR_WORKER_PASS " + counts);
                     Object images = page.evaluate("() => window.libfdxImageWorkers");
                     // Ducky explicitly requests mip filtering; the helmet's sampler has no mip filter.
-                    boolean needsMipmaps = concurrentGltf || "GltfLoadingTest".equals(System.getProperty("libfdx.test.name"));
+                    boolean needsMipmaps = concurrentGltf || "GltfLoadingTest".equals(testName);
                     if (!Boolean.TRUE.equals(page.evaluate("needsMips => {const w=window.libfdxImageWorkers;return w.started===1 && w.decoded>0 && (!needsMips || w.mipmapped>0) && w.terminated===1;}", needsMipmaps)))
                         throw new IllegalStateException("Default image/mipmap worker was not shared, used and disposed: " + images);
                     System.out.println("DEFAULT_IMAGE_WORKER_PASS " + images);
@@ -182,11 +160,23 @@ public final class WebMatrixWorker {
                                 + "ms, asset update=" + updateLimit + "ms), or input did not progress");
                 }
                 page.screenshot(new Page.ScreenshotOptions().setPath(Path.of(marker + ".png")));
-                completed = true;
             }
-        } finally {
-            server.stop(0);
         }
-        if (completed) Files.writeString(marker, "completed\n");
+        Files.writeString(marker, "completed\n");
     }
+
+    private static boolean expectedResourceError(ConsoleMessage message, String test, String serverUrl) {
+        // These fixtures exercise the application's handling of specific HTTP failures.
+        return switch (test) {
+            case "FileStreamingTest" -> resourceError(message, serverUrl + "/assets/streaming/empty.bin", 416);
+            case "ModelLodOptimizerTest" -> resourceError(message, serverUrl + "/assets/gltf-animation/missing.glb", 404);
+            default -> false;
+        };
+    }
+
+    private static boolean resourceError(ConsoleMessage message, String url, int status) {
+        return message.location().startsWith(url + ":")
+                && message.text().startsWith("Failed to load resource: the server responded with a status of " + status + " ");
+    }
+
 }
