@@ -12,12 +12,16 @@ When the generator core is compiled, its build discovers every directory under
 is compressed into generated Java sources, so the desktop and web generators
 can work without GitHub or another network source.
 
-The development generator records the first eight hexadecimal characters of the
+The development generator records the first seven hexadecimal characters of the
 checked-out libFDX commit followed by `-SNAPSHOT`, for example
-`8c990446-SNAPSHOT`. The Snapshot workflow publishes the libraries, Gradle
+`8c99044-SNAPSHOT`. The Snapshot workflow publishes the libraries, Gradle
 plugin and plugin marker under that same version, then exports and launches a
 standalone desktop Starter against Sonatype. Direct Gradle users can use the
 same coordinate. Development snapshots expire after 90 days.
+
+The version beside the generator title and on the dependency line can be
+selected and copied. Double-click the hash to select it, or triple-click the
+version to select the complete dependency version.
 
 Build the generator from a Git checkout. Local generator builds use its HEAD.
 External projects can resolve that revision after its artifacts are published.

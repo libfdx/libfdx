@@ -67,7 +67,7 @@ Hosted tools and demos:
 - [Tests](https://libfdx.github.io/tests/)
 
 For direct Maven or Gradle use, a successful Snapshot workflow publishes libFDX
-and its Gradle plugin as `<first-eight-commit-characters>-SNAPSHOT`. Generated
+and its Gradle plugin as `<first-seven-commit-characters>-SNAPSHOT`. Generated
 development projects use the same version. Sonatype retains development
 snapshots for 90 days.
 

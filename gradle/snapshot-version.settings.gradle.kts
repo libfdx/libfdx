@@ -5,4 +5,4 @@ val commit = providers.exec {
 }.standardOutput.asText.get().trim()
 
 dependencyResolutionManagement.versionCatalogs.maybeCreate("libs")
-    .version("libfdxSnapshot", "${commit.take(8)}-SNAPSHOT")
+    .version("libfdxSnapshot", "${commit.take(7)}-SNAPSHOT")

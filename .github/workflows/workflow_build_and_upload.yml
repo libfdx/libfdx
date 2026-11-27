@@ -255,7 +255,7 @@ jobs:
       - name: Identify development snapshot
         if: ${{ !inputs.isRelease }}
         shell: bash
-        run: echo "LIBFDX_SNAPSHOT=${GITHUB_SHA:0:8}-SNAPSHOT" >> "$GITHUB_ENV"
+        run: echo "LIBFDX_SNAPSHOT=${GITHUB_SHA:0:7}-SNAPSHOT" >> "$GITHUB_ENV"
 
       - name: Install publication native build dependencies
         run: |

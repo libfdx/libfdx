@@ -29,7 +29,7 @@ public final class ProjectGeneratorSmokeTest {
         require(containsSample(samples, "graphics/shader-graph"), "Shader Graph sample missing");
         require(generator.libfdxVersion().length() > 0, "Bundled libFDX version is empty");
         if ("snapshot".equals(generator.channel())) {
-            require(generator.libfdxVersion().matches("[0-9a-f]{8}-SNAPSHOT"),
+            require(generator.libfdxVersion().matches("[0-9a-f]{7}-SNAPSHOT"),
                     "Development projects must use a commit snapshot: " + generator.libfdxVersion());
         }
         require("base/starter-project".equals(
