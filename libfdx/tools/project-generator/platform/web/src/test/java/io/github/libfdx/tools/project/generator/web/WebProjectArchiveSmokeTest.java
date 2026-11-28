@@ -49,7 +49,6 @@ public final class WebProjectArchiveSmokeTest {
                 "Unselected desktop platform was included in ZIP.");
         require(entries.contains("assets/kenney/pixel-platformer/Tilemap/tilemap_packed.png"),
                 "Missing bundled sample asset in ZIP.");
-        require(entries.contains("PROJECT_GENERATOR.md"), "Missing generator provenance in ZIP.");
         require(entries.size() == project.fileCount(), "ZIP entry count did not match generated file count.");
     }
 

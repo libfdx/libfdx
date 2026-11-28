@@ -94,7 +94,7 @@ public final class ProjectGenerator {
         if (STARTER_SAMPLE_ID.equals(sample.id())) {
             files = rewritePackage(files, resolved.packageName());
         }
-        addEnvelope(files, resolved, sample);
+        addEnvelope(files, resolved);
         return new ProjectGenerationResult(resolved,
                 new GeneratedProject(resolved.projectName(), new ArrayList<GeneratedFile>(files.values())));
     }
@@ -124,8 +124,7 @@ public final class ProjectGenerator {
         return files;
     }
 
-    private void addEnvelope(Map<String, GeneratedFile> files, ProjectGenerationSettings settings,
-            ProjectSample sample) {
+    private void addEnvelope(Map<String, GeneratedFile> files, ProjectGenerationSettings settings) {
         addGenerated(files, GeneratedFile.text("settings.gradle.kts", settingsGradle(settings, files)));
         addGenerated(files, GeneratedFile.text("build.gradle.kts", rootBuildGradle()));
         addGenerated(files, GeneratedFile.text("gradle.properties", gradleProperties()));
@@ -134,7 +133,6 @@ public final class ProjectGenerator {
         if (!files.containsKey(".gitignore")) {
             addGenerated(files, GeneratedFile.text(".gitignore", gitignore()));
         }
-        addGenerated(files, GeneratedFile.text("PROJECT_GENERATOR.md", generatorReadme(settings, sample, files)));
     }
 
     private String settingsGradle(ProjectGenerationSettings settings, Map<String, GeneratedFile> files) {
@@ -214,46 +212,6 @@ public final class ProjectGenerator {
                 + ".idea/\n"
                 + "*.iml\n"
                 + "local.properties\n";
-    }
-
-    private String generatorReadme(ProjectGenerationSettings settings, ProjectSample sample,
-            Map<String, GeneratedFile> files) {
-        StringBuilder text = new StringBuilder();
-        text.append("# Generated from ").append(sample.displayName()).append("\n\n");
-        text.append("This project copies the `").append(sample.id())
-                .append("` sample bundled in the libFDX project generator. ")
-                .append("Its Java code, assets, and Gradle modules come from that sample. ")
-                .append("The version catalog pins its libFDX library dependencies to `")
-                .append(libfdxVersion()).append("` (")
-                .append(channel()).append(").\n\n");
-        if ("snapshot".equals(channel())) {
-            text.append("Development snapshots expire from the snapshot repository after 90 days.\n\n");
-        }
-        text.append("The generated root project is `").append(settings.projectName()).append("`. ")
-                .append("To inspect available libFDX platform tasks, run:\n\n");
-        text.append("```powershell\n");
-        text.append("./gradlew tasks --group libfdx\n");
-        text.append("```\n\n");
-        text.append("Included modules:\n\n");
-        if (files.containsKey("core/build.gradle.kts")) {
-            text.append("- `:core`\n");
-        }
-        if (files.containsKey("editor/build.gradle.kts")) {
-            text.append("- `:editor`\n");
-        }
-        ProjectPlatform[] platforms = ProjectPlatform.values();
-        for (int i = 0; i < platforms.length; i++) {
-            String module = "platform/" + platforms[i].directory();
-            if (files.containsKey(module + "/build.gradle.kts")) {
-                text.append("- `:").append(module.replace('/', ':')).append("` (")
-                        .append(platforms[i].displayName()).append(")\n");
-            }
-        }
-        if (STARTER_SAMPLE_ID.equals(sample.id())) {
-            text.append("\nJava package: `").append(settings.packageName()).append("`\n");
-        }
-        text.append("\nOnly the selected platform modules were exported.\n");
-        return text.toString();
     }
 
     private void validatePlatforms(ProjectSample sample, Set<ProjectPlatform> platforms) {

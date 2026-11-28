@@ -102,7 +102,6 @@ public final class ProjectGeneratorSmokeTest {
         require(project.containsFile("settings.gradle.kts"), "settings.gradle.kts missing");
         require(project.containsFile("build.gradle.kts"), "root build.gradle.kts missing");
         require(project.containsFile("gradle/libs.versions.toml"), "version catalog missing");
-        require(project.containsFile("PROJECT_GENERATOR.md"), "generator provenance missing");
         require(project.containsFile(
                 "core/src/main/java/io/github/libfdx/samples/g2d/spritemovement/SpriteMovementApplication.java"),
                 "bundled sample application source missing");

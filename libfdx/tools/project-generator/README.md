@@ -65,14 +65,9 @@ requirements.
 The generator copies the selected sample's Java, assets, manifests,
 documentation, and Gradle modules. It replaces local libFDX project
 dependencies with version catalog aliases derived from the modules' Maven
-publications. It also adds the standalone root files:
-
-- `settings.gradle.kts`;
-- `build.gradle.kts`;
-- `gradle.properties`;
-- `gradle/libs.versions.toml`;
-- `.gitignore` when the sample does not own one; and
-- `PROJECT_GENERATOR.md` with sample and dependency provenance.
+publications. It adds `settings.gradle.kts`, `build.gradle.kts`,
+`gradle.properties`, and `gradle/libs.versions.toml`. It also adds a
+`.gitignore` when the sample does not provide one.
 
 `:core`, optional `:editor`, and the selected platform modules are included.
 Each launcher module applies `io.github.libfdx` directly and owns the plugin

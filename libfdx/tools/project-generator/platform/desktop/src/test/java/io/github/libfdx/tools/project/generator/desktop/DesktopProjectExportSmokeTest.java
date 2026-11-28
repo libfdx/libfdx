@@ -81,8 +81,6 @@ public final class DesktopProjectExportSmokeTest {
             require(sampleExport.success(), "Expected " + sample.id() + " export to succeed: "
                     + sampleExport.message());
             requireFile(sampleDestination.resolve("settings.gradle.kts"), "include(\":core\")");
-            require(Files.isRegularFile(sampleDestination.resolve("PROJECT_GENERATOR.md")),
-                    "Missing generator provenance for " + sample.id());
             if (ProjectGenerationSettings.DEFAULT_SAMPLE_ID.equals(sample.id())) {
                 requireFile(sampleDestination.resolve(
                                 "core/src/main/java/org/example/starter/StarterProjectApplication.java"),
