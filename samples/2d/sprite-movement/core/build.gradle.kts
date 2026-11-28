@@ -17,7 +17,7 @@ base {
 dependencies {
     api(project(":libfdx:framework:application"))
     implementation(project(":libfdx:framework:assets:loaders"))
-    implementation(project(":libfdx:framework:camera"))
+    implementation(project(":libfdx:framework:ui-kit"))
     implementation(project(":libfdx:framework:files"))
     implementation(project(":libfdx:framework:graphics"))
     implementation(project(":libfdx:framework:g2d"))

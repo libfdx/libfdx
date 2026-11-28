@@ -1,22 +1,19 @@
-# 2D Sprite Movement
+# Tidepost – 2D Sprite Movement
 
-This sample is an ordinary portable libFDX application with a controllable
-sprite, orthographic camera, and repeated wall tiles. Move with WASD or the
-arrow keys.
+Pilot a small mail boat across an illustrated harbor. Deliver to the market quay, lighthouse and shipyard in order by sailing up to the envelope at each pier.
 
-## Code map
+Use WASD or the arrow keys, a gamepad's left stick or D-pad, or hold and drag on the water. A shorter drag or a lighter stick movement gives finer control near the dock. Release to slow down. Select **Start route** to leave the anchorage and **Sail again** to replay.
 
-- `SpriteMovementApplication` owns the application lifecycle, camera, batch,
-  textures, update order, and drawing.
-- `SpriteMovementState` owns the player and fixed wall data without a framework
-  entity model.
-- `input` converts backend keyboard state into allocation-free movement values.
-- `render` loads and owns the two sample textures used by the application.
-- `platform` contains backend-specific launchers that start the application
-  directly.
+`SpriteMovementState` handles acceleration, turning, hull clearance and the wake in chart coordinates. The harbor image and collision outlines share those coordinates. When the screen shows only part of the chart, the camera follows the boat and a bearing arrow points toward the next delivery.
 
-Run the desktop GL variant from the repository root:
+Run the desktop sample from the repository root.
 
 ```powershell
 .\gradlew.bat :samples:2d:sprite-movement:platform:desktop:libfdx_desktop_jvm_gl_run
+```
+
+Run the WebGL version in a browser.
+
+```powershell
+.\gradlew.bat :samples:2d:sprite-movement:platform:web:libfdx_web_js_webgl_run
 ```

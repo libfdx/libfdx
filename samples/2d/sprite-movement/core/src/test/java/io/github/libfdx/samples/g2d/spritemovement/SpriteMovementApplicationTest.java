@@ -6,7 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.libfdx.application.ApplicationAdapter;
+import io.github.libfdx.assets.loaders.AtlasData;
+import io.github.libfdx.samples.g2d.spritemovement.render.SpriteMovementTextures;
 import io.github.libfdx.graphics.RenderPass;
 import io.github.libfdx.graphics.g2d.Batch2D;
 import io.github.libfdx.samples.g2d.spritemovement.input.MovementInput;
@@ -22,41 +23,72 @@ final class SpriteMovementApplicationTest {
     private static final float EPSILON = 0.000001f;
 
     @Test
-    void applicationUsesPlainApplicationLifecycleAndFixedLevelState() {
-        assertTrue(ApplicationAdapter.class.isAssignableFrom(SpriteMovementApplication.class));
-
-        SpriteMovementState state = new SpriteMovementState();
-        assertEquals(0.0f, state.playerX(), EPSILON);
-        assertEquals(0.0f, state.playerY(), EPSILON);
-        assertEquals(4, state.wallCount());
-        assertWall(state.wallAt(0), -3.0f, 0.0f, 0.5f, 4.0f);
-        assertWall(state.wallAt(1), 3.0f, 0.0f, 0.5f, 4.0f);
-        assertWall(state.wallAt(2), 0.0f, -2.0f, 6.5f, 0.5f);
-        assertWall(state.wallAt(3), 0.0f, 2.0f, 6.5f, 0.5f);
-    }
-
-    @Test
-    void directUpdateMovesPlayerAndNormalizesDiagonalInput() {
+    void helmPreservesAnalogSpeedAndNormalizesDiagonals() {
         MutableMovementInput input = new MutableMovementInput();
         SpriteMovementState state = new SpriteMovementState();
-
-        input.horizontal = 1.0f;
-        state.update(input, 0.5f);
-        assertEquals(1.5f, state.playerX(), EPSILON);
-        assertEquals(0.0f, state.playerY(), EPSILON);
-
-        state.reset();
-        input.vertical = 1.0f;
-        state.update(input, 0.5f);
-        float diagonalDistance = 3.0f * 0.5f * 0.70710677f;
-        assertEquals(diagonalDistance, state.playerX(), EPSILON);
-        assertEquals(diagonalDistance, state.playerY(), EPSILON);
+        input.horizontal = 0.5f;
+        advance(state, input, 32);
+        assertEquals(SpriteMovementState.SPEED / 2, state.vx, EPSILON);
+        input.horizontal = 1;
+        input.vertical = 1;
+        advance(state, input, 32);
+        assertEquals(SpriteMovementState.SPEED, Math.hypot(state.vx, state.vy), .001f);
+        assertEquals(state.vx, -state.vy, .001f);
+        input.horizontal = input.vertical = 0;
+        advance(state, input, 32);
+        assertEquals(0, state.vx, EPSILON);
+        assertEquals(0, state.vy, EPSILON);
     }
 
     @Test
-    void applicationAssetsAreCheckedIn() {
-        assertTrue(Files.isRegularFile(Path.of("assets", SpriteMovementApplication.PLAYER_SPRITE)));
-        assertTrue(Files.isRegularFile(Path.of("assets", SpriteMovementApplication.WALL_TILE)));
+    void boatStopsAtTheIslandAndWakeDissipates() {
+        SpriteMovementState state = new SpriteMovementState();
+        MutableMovementInput input = new MutableMovementInput();
+        input.vertical = 1;
+        advance(state, input, 180);
+        assertTrue(state.y > 153 && state.y < 165);
+        assertTrue(SpriteMovementState.water(state.x, state.y));
+        assertEquals(0, state.vy, EPSILON);
+        for (float age : state.wakeAge) assertEquals(1, age, EPSILON);
+    }
+
+    @Test
+    void routeCanBeSailedInOrderAndRestarted() {
+        SpriteMovementState state = new SpriteMovementState();
+        MutableMovementInput input = new MutableMovementInput();
+        for (int i = 0; i < SpriteMovementState.ROUTE.length; i++) {
+            SpriteMovementState.Dock dock = SpriteMovementState.ROUTE[i];
+            assertTrue(SpriteMovementState.water(dock.x(), dock.y()), dock.name());
+            for (int frame = 0; frame < 500 && state.delivered == i; frame++) {
+                float dx = dock.x() - state.x, dy = dock.y() - state.y;
+                float distance = (float) Math.hypot(dx, dy);
+                input.horizontal = dx / distance;
+                input.vertical = -dy / distance;
+                state.update(input, 1f / 60);
+                assertTrue(SpriteMovementState.water(state.x, state.y));
+            }
+            assertEquals(i + 1, state.delivered, dock.name());
+        }
+        state.reset();
+        assertEquals(0, state.delivered);
+        assertEquals(SpriteMovementState.START_X, state.x);
+        assertEquals(SpriteMovementState.START_Y, state.y);
+    }
+
+    @Test
+    void harborAndPackedSpritesAreBundled() throws Exception {
+        Path assets = Path.of("assets");
+        assertTrue(Files.isRegularFile(assets.resolve(SpriteMovementTextures.CHART)));
+        Path atlasFile = assets.resolve(SpriteMovementTextures.ATLAS);
+        AtlasData atlas = AtlasData.parse(Files.readAllBytes(atlasFile));
+        assertTrue(Files.isRegularFile(atlasFile.resolveSibling(atlas.page(0).image())));
+        for (String name : new String[]{"launch", "wake", "ripple", "mail", "bearing"}) {
+            assertTrue(atlas.indexOf(name) >= 0, name);
+        }
+    }
+
+    private static void advance(SpriteMovementState state, MovementInput input, int frames) {
+        for (int i = 0; i < frames; i++) state.update(input, 1f / 60);
     }
 
     @Test
@@ -82,16 +114,6 @@ final class SpriteMovementApplicationTest {
         assertEquals(0.125f,
                 SpriteMovementApplication.toClipSize(-1.0f, viewportWidth * 2.0f),
                 EPSILON);
-    }
-
-    @Test
-    void runtimeRepeatsWallTextureAtHalfWorldUnitIntervals() {
-        assertEquals(1, SpriteMovementApplication.wallTileCount(0.0f));
-        assertEquals(1, SpriteMovementApplication.wallTileCount(0.5f));
-        assertEquals(2, SpriteMovementApplication.wallTileCount(0.51f));
-        assertEquals(8, SpriteMovementApplication.wallTileCount(4.0f));
-        assertEquals(13, SpriteMovementApplication.wallTileCount(6.5f));
-        assertEquals(8, SpriteMovementApplication.wallTileCount(-4.0f));
     }
 
     @Test
@@ -157,18 +179,6 @@ final class SpriteMovementApplicationTest {
         assertEquals(0, batchHandler.endCount);
         assertEquals(1, passHandler.endCount);
         assertEquals("pass", endOrder.get(0));
-    }
-
-    private static void assertWall(
-            SpriteMovementState.Wall wall,
-            float x,
-            float y,
-            float width,
-            float height) {
-        assertEquals(x, wall.x, EPSILON);
-        assertEquals(y, wall.y, EPSILON);
-        assertEquals(width, wall.width, EPSILON);
-        assertEquals(height, wall.height, EPSILON);
     }
 
     private static final class MutableMovementInput implements MovementInput {

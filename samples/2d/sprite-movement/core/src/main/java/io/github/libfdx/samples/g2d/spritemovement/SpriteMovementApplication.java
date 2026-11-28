@@ -3,258 +3,210 @@ package io.github.libfdx.samples.g2d.spritemovement;
 import io.github.libfdx.Fdx;
 import io.github.libfdx.application.Application;
 import io.github.libfdx.application.ApplicationAdapter;
-import io.github.libfdx.graphics.GraphicsContext;
-import io.github.libfdx.graphics.GraphicsFrame;
-import io.github.libfdx.graphics.LoadOp;
-import io.github.libfdx.graphics.RenderPass;
-import io.github.libfdx.graphics.RenderPassDescriptor;
-import io.github.libfdx.graphics.StoreOp;
-import io.github.libfdx.graphics.Texture;
-import io.github.libfdx.graphics.TextureView;
-import io.github.libfdx.graphics.camera.Camera;
-import io.github.libfdx.graphics.camera.CameraProjection;
-import io.github.libfdx.graphics.g2d.Batch2D;
-import io.github.libfdx.graphics.g2d.SpriteBatch;
-import io.github.libfdx.samples.g2d.spritemovement.input.KeyboardMovementInput;
-import io.github.libfdx.samples.g2d.spritemovement.input.MovementInput;
+import io.github.libfdx.core.Disposable;
+import io.github.libfdx.display.Display;
+import io.github.libfdx.graphics.*;
+import io.github.libfdx.graphics.g2d.*;
+import io.github.libfdx.input.Input;
+import io.github.libfdx.samples.g2d.spritemovement.input.HarborControls;
 import io.github.libfdx.samples.g2d.spritemovement.render.SpriteMovementTextures;
+import io.github.libfdx.ui.UiRoot;
+import io.github.libfdx.ui.UiToolkit;
 
-/**
- * Portable 2D Sprite Movement application.
- *
- * <p>The application owns its game state, camera, batch, and textures. Platform
- * launchers only select a backend and graphics provider before starting it.</p>
- */
+/** Tidepost runs the same chart, steering and postal route on every backend. */
 public final class SpriteMovementApplication extends ApplicationAdapter {
-    public static final String PLAYER_SPRITE = "sprites/player.png";
-    public static final String WALL_TILE = "tiles/wall.png";
-
-    private static final float MIN_VIEWPORT_SIZE = 0.01f;
-    private static final float CAMERA_VIEWPORT_HEIGHT = 6.0f;
-    private static final float WALL_TILE_SIZE = 0.5f;
-    private static final int INITIAL_SPRITE_CAPACITY = 64;
-    private static final LoadOp CLEAR_COLOR = LoadOp.clear(0.08f, 0.10f, 0.14f, 1.0f);
-    private static final float PLAYER_RED = 0.20392157f;
-    private static final float PLAYER_GREEN = 0.8392157f;
-    private static final float PLAYER_BLUE = 0.8235294f;
-    private static final float WALL_RED = 0.5176471f;
-    private static final float WALL_GREEN = 0.5568628f;
-    private static final float WALL_BLUE = 0.61960787f;
-
     private final long exitAfterFrames;
     private final SpriteMovementState state = new SpriteMovementState();
-    private final Camera camera = new Camera();
-    private final RenderPassDescriptor renderPassDescriptor =
-            new RenderPassDescriptor().label("sprite movement scene");
+    private final RenderPassDescriptor descriptor = new RenderPassDescriptor().label("Tidepost harbor");
+    private static final LoadOp SEA = LoadOp.clear(.08f, .39f, .4f, 1);
     private Application application;
     private GraphicsContext graphics;
-    private MovementInput input;
+    private Display display;
+    private Input input;
+    private HarborControls controls;
     private SpriteBatch batch;
-    private SpriteMovementTextures textures;
+    private SpriteMovementTextures art;
+    private UiRoot ui;
+    private DispatchCard card;
+    private boolean sailing, paused, startRequested;
+    private float time, left, top, viewWidth, viewHeight;
 
-    /** Creates an application that runs until the platform requests an exit. */
     public SpriteMovementApplication() {
-        this(0L);
+        this(0);
     }
 
-    /**
-     * Creates an application with an optional bounded lifetime for smoke tests.
-     *
-     * @param exitAfterFrames frames to render before exiting, or zero to keep running
-     */
     public SpriteMovementApplication(long exitAfterFrames) {
-        this.exitAfterFrames = Math.max(0L, exitAfterFrames);
+        this.exitAfterFrames = Math.max(0, exitAfterFrames);
     }
 
     @Override
     public void create(Fdx fdx) {
-        if (fdx == null) {
-            throw new IllegalArgumentException("fdx cannot be null.");
-        }
-        GraphicsContext nextGraphics = fdx.graphics().main();
-        MovementInput nextInput = new KeyboardMovementInput(fdx.input());
-        SpriteBatch nextBatch = new SpriteBatch(nextGraphics, INITIAL_SPRITE_CAPACITY);
-        SpriteMovementTextures nextTextures;
-        try {
-            nextTextures = new SpriteMovementTextures(fdx.files(), nextGraphics);
-        } catch (RuntimeException | Error failure) {
-            try {
-                nextBatch.dispose();
-            } catch (RuntimeException | Error cleanupFailure) {
-                failure.addSuppressed(cleanupFailure);
-            }
-            throw failure;
-        }
+        if (fdx == null) throw new IllegalArgumentException("fdx required");
         application = fdx.app();
-        graphics = nextGraphics;
-        input = nextInput;
-        batch = nextBatch;
-        textures = nextTextures;
-        state.reset();
+        graphics = fdx.graphics().main();
+        display = fdx.displays().main();
+        input = fdx.input();
+        try {
+            batch = new SpriteBatch(graphics);
+            art = new SpriteMovementTextures(fdx.files(), graphics);
+            controls = new HarborControls(input);
+            card = new DispatchCard(art.mail, () -> startRequested = true);
+            ui = new UiToolkit(fdx.files()).root(display, graphics).autoUiScale(false).input(input);
+            DispatchCard.theme(ui);
+            ui.setContent(card::build);
+            input.addProcessor(controls);
+        } catch (RuntimeException | Error failed) {
+            try { dispose(); } catch (RuntimeException | Error cleanup) { failed.addSuppressed(cleanup); }
+            throw failed;
+        }
     }
 
     @Override
     public void render() {
-        if (application == null || graphics == null || batch == null || textures == null) {
+        if (application == null) return;
+        GraphicsFrame frame = graphics.currentFrame();
+        if (frame == null || frame.width() <= 0 || frame.height() <= 0) return;
+        card.layout(ui, display, frame.width(), frame.height());
+        float dt = paused ? 0 : Math.max(0, Math.min(application.deltaTime(), .12f));
+        controls.poll();
+        boolean confirm = controls.takeConfirm();
+        if (!paused && !sailing && (startRequested || confirm)) {
+            state.reset();
+            sailing = true;
+            controls.sailing(true);
+            card.stop(0);
+        }
+        startRequested = false;
+        if (sailing && !paused) {
+            state.update(controls, dt);
+            card.stop(state.delivered);
+            if (state.delivered == SpriteMovementState.ROUTE.length) {
+                sailing = false;
+                controls.sailing(false);
+            }
+        }
+        time = (time + dt) % 60;
+        draw(frame);
+        ui.update(dt);
+        ui.render();
+        if (exitAfterFrames > 0 && application.frameId() >= exitAfterFrames) application.requestExit();
+    }
+
+    private void draw(GraphicsFrame frame) {
+        float aspect = (float) frame.width() / frame.height();
+        viewWidth = Math.min(SpriteMovementState.WIDTH, SpriteMovementState.HEIGHT * aspect);
+        viewHeight = viewWidth / aspect;
+        left = clamp(state.x - viewWidth / 2, 0, SpriteMovementState.WIDTH - viewWidth);
+        top = clamp(state.y - viewHeight / 2, 0, SpriteMovementState.HEIGHT - viewHeight);
+        batch.viewport(frame.width(), frame.height());
+        RenderPass pass = frame.commandEncoder().beginRenderPass(descriptor.colorAttachment(frame.colorAttachment())
+                .colorLoadOp(SEA).colorStoreOp(StoreOp.store()));
+        boolean begun = false;
+        Throwable failure = null;
+        try {
+            batch.begin(pass);
+            begun = true;
+            batch.color(1, 1, 1, 1);
+            batch.drawUv(art.harbor, left / SpriteMovementState.WIDTH, top / SpriteMovementState.HEIGHT,
+                    (left + viewWidth) / SpriteMovementState.WIDTH, (top + viewHeight) / SpriteMovementState.HEIGHT,
+                    -1, -1, 2, 2);
+            for (int i = 0; i < SpriteMovementState.WAKE_COUNT; i++) {
+                float age = state.wakeAge[i];
+                if (age >= 1) continue;
+                batch.color(.86f, 1, .96f, (1 - age) * .95f);
+                sprite(art.wake, state.wakeX[i], state.wakeY[i], 9 + age * 23, 13 + age * 7, state.wakeHeading[i]);
+            }
+            if (sailing) {
+                if (state.delivered > 0 && state.deliveryAge < 1) {
+                    SpriteMovementState.Dock previous = SpriteMovementState.ROUTE[state.delivered - 1];
+                    float age = state.deliveryAge;
+                    batch.color(1, .9f, .58f, 1 - age);
+                    sprite(art.ripple, previous.x(), previous.y(), 16 + age * 44, 12 + age * 28, 0);
+                }
+                drawDestination();
+            }
+            batch.color(.05f, .19f, .20f, .44f);
+            sprite(art.launch, state.x + 1.5f, state.y + 2, 10.8f, 25, state.heading);
+            batch.color(1, 1, 1, 1);
+            sprite(art.launch, state.x, state.y, 10.8f, 25, state.heading);
+        } catch (RuntimeException | Error failed) {
+            failure = failed;
+            throw failed;
+        } finally {
+            finishRender(batch, pass, begun, failure);
+        }
+    }
+
+    private void drawDestination() {
+        SpriteMovementState.Dock dock = SpriteMovementState.ROUTE[state.delivered];
+        float x = dock.x(), y = dock.y();
+        if (x < left + 12 || x > left + viewWidth - 12 || y < top + 26 || y > top + viewHeight - 12) {
+            float px = clamp(x, left + 14, left + viewWidth - 14);
+            float py = clamp(y, top + 18, top + viewHeight - 16);
+            float bearing = (float) Math.toDegrees(Math.atan2(x - px, py - y));
+            batch.color(1, 1, 1, 1);
+            sprite(art.bearing, px, py, 17, 17, bearing);
             return;
         }
-        state.update(input, application.deltaTime());
-        GraphicsFrame frame = graphics.currentFrame();
-        TextureView colorTarget = frame != null ? frame.colorAttachment() : null;
-        if (colorTarget == null) {
-            throw new IllegalStateException("The main graphics context has no current render frame.");
-        }
-        render(frame, colorTarget, frame.width(), frame.height());
-        if (exitAfterFrames > 0L && application.frameId() >= exitAfterFrames) {
-            application.requestExit();
-        }
+        float pulse = time % 1.5f / 1.5f;
+        batch.color(1, .94f, .72f, .86f * (1 - pulse));
+        sprite(art.ripple, x, y, 15 + pulse * 14, 10 + pulse * 9, 0);
+        batch.color(1, 1, 1, 1);
+        sprite(art.mail, x, y - 11 + (float) Math.sin(time * 3) * .7f, 18, 20, 0);
+    }
+
+    private void sprite(TextureRegion region, float x, float y, float w, float h, float heading) {
+        float width = toClipSize(w, viewWidth), height = toClipSize(h, viewHeight);
+        batch.draw(region, toClipCenter(x, left + viewWidth / 2, viewWidth) - width / 2,
+                toClipCenter(top + viewHeight / 2, y, viewHeight) - height / 2, width, height,
+                width / 2, height / 2, -heading);
+    }
+
+    public static float toClipSize(float worldSize, float viewportSize) {
+        return 2 * Math.abs(worldSize) / Math.max(.01f, viewportSize);
+    }
+
+    public static float toClipCenter(float worldPosition, float cameraPosition, float viewportSize) {
+        return 2 * (worldPosition - cameraPosition) / Math.max(.01f, viewportSize);
+    }
+
+    private static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    @Override
+    public void pause() {
+        paused = true;
+        startRequested = false;
+        if (controls != null) controls.sailing(false);
+    }
+
+    @Override
+    public void resume() {
+        paused = false;
+        if (controls != null) controls.sailing(sailing);
     }
 
     @Override
     public void dispose() {
-        Throwable failure = null;
-        if (textures != null) {
-            try {
-                textures.dispose();
-            } catch (RuntimeException | Error disposeFailure) {
-                failure = disposeFailure;
-            }
-            textures = null;
-        }
-        if (batch != null) {
-            try {
-                batch.dispose();
-            } catch (RuntimeException | Error disposeFailure) {
-                failure = aggregateFailure(failure, disposeFailure);
-            }
-            batch = null;
-        }
-        input = null;
-        graphics = null;
+        if (controls != null) input.removeProcessor(controls);
+        controls = null;
         application = null;
+        Throwable failure = close(ui, null);
+        ui = null;
+        failure = close(art, failure);
+        art = null;
+        failure = close(batch, failure);
+        batch = null;
         rethrowFailure(failure);
     }
 
-    private void render(GraphicsFrame frame, TextureView colorTarget, int width, int height) {
-        updateCamera(width, height);
-        float cameraViewportWidth = camera.viewportWidth() * camera.zoom();
-        float cameraViewportHeight = camera.viewportHeight() * camera.zoom();
-        float cameraX = camera.position().x();
-        float cameraY = camera.position().y();
-
-        batch.viewport(width, height);
-        RenderPass pass = frame.commandEncoder().beginRenderPass(renderPassDescriptor
-                .colorAttachment(colorTarget)
-                .colorLoadOp(CLEAR_COLOR)
-                .colorStoreOp(StoreOp.store()));
-        boolean batchBegun = false;
-        Throwable renderFailure = null;
-        try {
-            batch.begin(pass);
-            batchBegun = true;
-
-            batch.color(PLAYER_RED, PLAYER_GREEN, PLAYER_BLUE, 1.0f);
-            drawSprite(
-                    textures.player(),
-                    state.playerX(),
-                    state.playerY(),
-                    SpriteMovementState.PLAYER_WIDTH,
-                    SpriteMovementState.PLAYER_HEIGHT,
-                    cameraX,
-                    cameraY,
-                    cameraViewportWidth,
-                    cameraViewportHeight);
-
-            batch.color(WALL_RED, WALL_GREEN, WALL_BLUE, 1.0f);
-            Texture wallTexture = textures.wall();
-            for (int i = 0; i < state.wallCount(); i++) {
-                drawTiledWall(
-                        wallTexture,
-                        state.wallAt(i),
-                        cameraX,
-                        cameraY,
-                        cameraViewportWidth,
-                        cameraViewportHeight);
-            }
-        } catch (RuntimeException | Error failure) {
-            renderFailure = failure;
-            throw failure;
-        } finally {
-            finishRender(batch, pass, batchBegun, renderFailure);
+    private static Throwable close(Disposable resource, Throwable failure) {
+        if (resource != null) {
+            try { resource.dispose(); }
+            catch (RuntimeException | Error cleanup) { return aggregateFailure(failure, cleanup); }
         }
-    }
-
-    private void updateCamera(int width, int height) {
-        float aspect = height > 0 ? Math.max(1, width) / (float) height : 1.0f;
-        camera.projection(CameraProjection.ORTHOGRAPHIC)
-                .viewport(CAMERA_VIEWPORT_HEIGHT * aspect, CAMERA_VIEWPORT_HEIGHT)
-                .position(0.0f, 0.0f, 10.0f)
-                .direction(0.0f, 0.0f, -1.0f)
-                .up(0.0f, 1.0f, 0.0f)
-                .nearFar(0.1f, 100.0f)
-                .update();
-    }
-
-    private void drawTiledWall(
-            Texture texture,
-            SpriteMovementState.Wall wall,
-            float cameraX,
-            float cameraY,
-            float cameraViewportWidth,
-            float cameraViewportHeight) {
-        float width = Math.abs(wall.width);
-        float height = Math.abs(wall.height);
-        int columns = wallTileCount(width);
-        int rows = wallTileCount(height);
-        float tileWidth = width / columns;
-        float tileHeight = height / rows;
-        float firstTileX = wall.x - width * 0.5f + tileWidth * 0.5f;
-        float firstTileY = wall.y - height * 0.5f + tileHeight * 0.5f;
-        for (int row = 0; row < rows; row++) {
-            float worldY = firstTileY + row * tileHeight;
-            for (int column = 0; column < columns; column++) {
-                float worldX = firstTileX + column * tileWidth;
-                drawSprite(
-                        texture,
-                        worldX,
-                        worldY,
-                        tileWidth,
-                        tileHeight,
-                        cameraX,
-                        cameraY,
-                        cameraViewportWidth,
-                        cameraViewportHeight);
-            }
-        }
-    }
-
-    private void drawSprite(
-            Texture texture,
-            float worldX,
-            float worldY,
-            float worldWidth,
-            float worldHeight,
-            float cameraX,
-            float cameraY,
-            float cameraViewportWidth,
-            float cameraViewportHeight) {
-        float drawWidth = toClipSize(worldWidth, cameraViewportWidth);
-        float drawHeight = toClipSize(worldHeight, cameraViewportHeight);
-        float x = toClipCenter(worldX, cameraX, cameraViewportWidth) - drawWidth * 0.5f;
-        float y = toClipCenter(worldY, cameraY, cameraViewportHeight) - drawHeight * 0.5f;
-        batch.draw(texture, x, y, drawWidth, drawHeight);
-    }
-
-    public static int wallTileCount(float worldSize) {
-        return Math.max(1, (int) Math.ceil(Math.abs(worldSize) / WALL_TILE_SIZE));
-    }
-
-    public static float toClipSize(float worldSize, float viewportSize) {
-        return Math.abs(worldSize) * 2.0f / Math.max(MIN_VIEWPORT_SIZE, viewportSize);
-    }
-
-    public static float toClipCenter(float worldPosition, float cameraPosition, float viewportSize) {
-        return (worldPosition - cameraPosition) * 2.0f / Math.max(MIN_VIEWPORT_SIZE, viewportSize);
+        return failure;
     }
 
     static void finishRender(Batch2D batch, RenderPass pass, boolean batchBegun, Throwable renderFailure) {

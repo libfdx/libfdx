@@ -109,8 +109,8 @@ public final class ProjectGeneratorSmokeTest {
                 "platform/desktop/src/main/java/io/github/libfdx/samples/g2d/spritemovement/desktop/"
                         + "SpriteMovementDesktopLauncher.java"),
                 "bundled desktop launcher missing");
-        require(project.containsFile("assets/sprites/player.png"), "bundled binary sprite missing");
-        require(!project.file("assets/sprites/player.png").isText(), "PNG was not preserved as binary");
+        require(project.containsFile("assets/sprites/post-0.png"), "bundled binary sprite missing");
+        require(!project.file("assets/sprites/post-0.png").isText(), "PNG was not preserved as binary");
         require(project.file("settings.gradle.kts").textContent().contains("include(\":core\")"),
                 "generated core module missing");
         require(project.file("settings.gradle.kts").textContent().contains("include(\":platform:desktop\")"),

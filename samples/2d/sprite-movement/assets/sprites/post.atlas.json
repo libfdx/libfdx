@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "alpha": "straight",
+  "pages": [
+    {
+      "image": "post-0.png",
+      "width": 512,
+      "height": 256
+    }
+  ],
+  "sprites": [
+    {
+      "name": "bearing",
+      "page": 0,
+      "x": 419,
+      "y": 3,
+      "width": 48,
+      "height": 48,
+      "originalWidth": 48,
+      "originalHeight": 48,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    },
+    {
+      "name": "launch",
+      "page": 0,
+      "x": 3,
+      "y": 3,
+      "width": 104,
+      "height": 240,
+      "originalWidth": 104,
+      "originalHeight": 240,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    },
+    {
+      "name": "mail",
+      "page": 0,
+      "x": 113,
+      "y": 3,
+      "width": 96,
+      "height": 104,
+      "originalWidth": 96,
+      "originalHeight": 104,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    },
+    {
+      "name": "ripple",
+      "page": 0,
+      "x": 215,
+      "y": 3,
+      "width": 96,
+      "height": 96,
+      "originalWidth": 96,
+      "originalHeight": 96,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    },
+    {
+      "name": "wake",
+      "page": 0,
+      "x": 317,
+      "y": 3,
+      "width": 96,
+      "height": 64,
+      "originalWidth": 96,
+      "originalHeight": 64,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    }
+  ]
+}
