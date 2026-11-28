@@ -1,0 +1,1013 @@
+{
+  "type": "map",
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
+  "width": 214,
+  "height": 14,
+  "tilewidth": 18,
+  "tileheight": 18,
+  "tilesets": [],
+  "layers": [
+    {
+      "id": 1,
+      "type": "objectgroup",
+      "name": "Footpaths and lifts",
+      "objects": [
+        {
+          "id": 1,
+          "type": "solid",
+          "x": 0,
+          "y": 194,
+          "width": 240,
+          "height": 58
+        },
+        {
+          "id": 2,
+          "type": "solid",
+          "x": 240,
+          "y": 177,
+          "width": 133,
+          "height": 75
+        },
+        {
+          "id": 3,
+          "type": "solid",
+          "x": 411,
+          "y": 196,
+          "width": 165,
+          "height": 56
+        },
+        {
+          "id": 4,
+          "type": "solid",
+          "x": 576,
+          "y": 217,
+          "width": 99,
+          "height": 35
+        },
+        {
+          "id": 5,
+          "type": "solid",
+          "x": 701,
+          "y": 204,
+          "width": 219,
+          "height": 48
+        },
+        {
+          "id": 6,
+          "type": "solid",
+          "x": 951,
+          "y": 184,
+          "width": 177,
+          "height": 68
+        },
+        {
+          "id": 7,
+          "type": "solid",
+          "x": 1128,
+          "y": 160,
+          "width": 112,
+          "height": 92
+        },
+        {
+          "id": 8,
+          "type": "solid",
+          "x": 1276,
+          "y": 179,
+          "width": 150,
+          "height": 73
+        },
+        {
+          "id": 9,
+          "type": "solid",
+          "x": 1464,
+          "y": 167,
+          "width": 122,
+          "height": 85
+        },
+        {
+          "id": 10,
+          "type": "solid",
+          "x": 1586,
+          "y": 191,
+          "width": 213,
+          "height": 61
+        },
+        {
+          "id": 11,
+          "type": "bridge",
+          "x": 75,
+          "y": 163,
+          "width": 68,
+          "height": 6
+        },
+        {
+          "id": 12,
+          "type": "bridge",
+          "x": 160,
+          "y": 139,
+          "width": 77,
+          "height": 6
+        },
+        {
+          "id": 13,
+          "type": "bridge",
+          "x": 458,
+          "y": 163,
+          "width": 80,
+          "height": 6
+        },
+        {
+          "id": 14,
+          "type": "bridge",
+          "x": 546,
+          "y": 148,
+          "width": 116,
+          "height": 6
+        },
+        {
+          "id": 15,
+          "type": "bridge",
+          "x": 704,
+          "y": 134,
+          "width": 52,
+          "height": 6
+        },
+        {
+          "id": 16,
+          "type": "bridge",
+          "x": 765,
+          "y": 113,
+          "width": 133,
+          "height": 6
+        },
+        {
+          "id": 17,
+          "type": "bridge",
+          "x": 1003,
+          "y": 152,
+          "width": 111,
+          "height": 6
+        },
+        {
+          "id": 18,
+          "type": "bridge",
+          "x": 1388,
+          "y": 145,
+          "width": 91,
+          "height": 6
+        },
+        {
+          "id": 19,
+          "type": "lift",
+          "x": 363,
+          "y": 162,
+          "width": 63,
+          "height": 6
+        },
+        {
+          "id": 20,
+          "type": "lift",
+          "x": 1218,
+          "y": 143,
+          "width": 64,
+          "height": 6
+        },
+        {
+          "id": 30,
+          "type": "solid",
+          "x": 1799,
+          "y": 195,
+          "width": 213,
+          "height": 57
+        },
+        {
+          "id": 31,
+          "type": "solid",
+          "x": 2012,
+          "y": 180,
+          "width": 202,
+          "height": 72
+        },
+        {
+          "id": 32,
+          "type": "solid",
+          "x": 2248,
+          "y": 190,
+          "width": 456,
+          "height": 62
+        },
+        {
+          "id": 33,
+          "type": "solid",
+          "x": 2704,
+          "y": 203,
+          "width": 184,
+          "height": 49
+        },
+        {
+          "id": 34,
+          "type": "solid",
+          "x": 2917,
+          "y": 184,
+          "width": 234,
+          "height": 68
+        },
+        {
+          "id": 35,
+          "type": "solid",
+          "x": 3151,
+          "y": 166,
+          "width": 182,
+          "height": 86
+        },
+        {
+          "id": 36,
+          "type": "solid",
+          "x": 3367,
+          "y": 181,
+          "width": 215,
+          "height": 71
+        },
+        {
+          "id": 37,
+          "type": "solid",
+          "x": 3604,
+          "y": 191,
+          "width": 241,
+          "height": 61
+        },
+        {
+          "id": 38,
+          "type": "bridge",
+          "x": 2273,
+          "y": 157,
+          "width": 98,
+          "height": 6
+        },
+        {
+          "id": 39,
+          "type": "bridge",
+          "x": 2531,
+          "y": 155,
+          "width": 98,
+          "height": 6
+        },
+        {
+          "id": 40,
+          "type": "bridge",
+          "x": 1841,
+          "y": 163,
+          "width": 85,
+          "height": 6
+        },
+        {
+          "id": 41,
+          "type": "bridge",
+          "x": 2060,
+          "y": 149,
+          "width": 102,
+          "height": 6
+        },
+        {
+          "id": 42,
+          "type": "bridge",
+          "x": 2730,
+          "y": 172,
+          "width": 86,
+          "height": 6
+        },
+        {
+          "id": 43,
+          "type": "bridge",
+          "x": 2974,
+          "y": 150,
+          "width": 106,
+          "height": 6
+        },
+        {
+          "id": 44,
+          "type": "bridge",
+          "x": 3179,
+          "y": 136,
+          "width": 82,
+          "height": 6
+        },
+        {
+          "id": 45,
+          "type": "bridge",
+          "x": 3411,
+          "y": 150,
+          "width": 93,
+          "height": 6
+        },
+        {
+          "id": 46,
+          "type": "bridge",
+          "x": 3267,
+          "y": 109,
+          "width": 54,
+          "height": 6
+        },
+        {
+          "id": 47,
+          "type": "lift",
+          "x": 3567,
+          "y": 153,
+          "width": 55,
+          "height": 6
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "objectgroup",
+      "name": "Encounters and landmarks",
+      "objects": [
+        {
+          "id": 100,
+          "type": "player",
+          "x": 36,
+          "y": 182,
+          "point": true
+        },
+        {
+          "id": 101,
+          "type": "site",
+          "x": 277,
+          "y": 165,
+          "point": true,
+          "name": "Ore Siding"
+        },
+        {
+          "id": 102,
+          "type": "site",
+          "x": 832,
+          "y": 101,
+          "point": true,
+          "name": "Crane Walk"
+        },
+        {
+          "id": 103,
+          "type": "site",
+          "x": 1345,
+          "y": 167,
+          "point": true,
+          "name": "Prospector Camp"
+        },
+        {
+          "id": 104,
+          "type": "hopper",
+          "x": 140.5,
+          "y": 186,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 100
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 181
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 38
+            }
+          ]
+        },
+        {
+          "id": 105,
+          "type": "enemy",
+          "x": 510,
+          "y": 188,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 469
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 551
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 22
+            },
+            {
+              "name": "shot",
+              "type": "string",
+              "value": "SHARD"
+            }
+          ]
+        },
+        {
+          "id": 106,
+          "type": "moth",
+          "x": 583.5,
+          "y": 103,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 543
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 624
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 29
+            }
+          ]
+        },
+        {
+          "id": 107,
+          "type": "enemy",
+          "x": 802,
+          "y": 196,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 748
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 856
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 22
+            }
+          ]
+        },
+        {
+          "id": 108,
+          "type": "moth",
+          "x": 1131,
+          "y": 114,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 1088
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 1174
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 29
+            }
+          ]
+        },
+        {
+          "id": 109,
+          "type": "hopper",
+          "x": 1523,
+          "y": 159,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 1488
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 1562
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 38
+            }
+          ]
+        },
+        {
+          "id": 110,
+          "type": "hazard",
+          "x": 1168,
+          "y": 155,
+          "point": true
+        },
+        {
+          "id": 111,
+          "type": "coin",
+          "x": 91.32,
+          "y": 143.26181157628525,
+          "point": true
+        },
+        {
+          "id": 112,
+          "type": "coin",
+          "x": 109,
+          "y": 142,
+          "point": true
+        },
+        {
+          "id": 113,
+          "type": "coin",
+          "x": 126.68,
+          "y": 143.26181157628525,
+          "point": true
+        },
+        {
+          "id": 114,
+          "type": "coin",
+          "x": 477.2,
+          "y": 143.26181157628525,
+          "point": true
+        },
+        {
+          "id": 115,
+          "type": "coin",
+          "x": 498,
+          "y": 142,
+          "point": true
+        },
+        {
+          "id": 116,
+          "type": "coin",
+          "x": 518.8,
+          "y": 143.26181157628525,
+          "point": true
+        },
+        {
+          "id": 117,
+          "type": "coin",
+          "x": 693.68,
+          "y": 114.26181157628525,
+          "point": true
+        },
+        {
+          "id": 118,
+          "type": "coin",
+          "x": 715,
+          "y": 113,
+          "point": true
+        },
+        {
+          "id": 119,
+          "type": "coin",
+          "x": 736.32,
+          "y": 114.26181157628525,
+          "point": true
+        },
+        {
+          "id": 120,
+          "type": "coin",
+          "x": 1001.48,
+          "y": 140.26181157628525,
+          "point": true
+        },
+        {
+          "id": 121,
+          "type": "coin",
+          "x": 1039.5,
+          "y": 141,
+          "point": true
+        },
+        {
+          "id": 122,
+          "type": "coin",
+          "x": 1085.52,
+          "y": 140.26181157628525,
+          "point": true
+        },
+        {
+          "id": 123,
+          "type": "coin",
+          "x": 1347.64,
+          "y": 125.26181157628524,
+          "point": true
+        },
+        {
+          "id": 124,
+          "type": "coin",
+          "x": 1370,
+          "y": 124,
+          "point": true
+        },
+        {
+          "id": 125,
+          "type": "coin",
+          "x": 1392.36,
+          "y": 125.26181157628524,
+          "point": true
+        },
+        {
+          "id": 128,
+          "type": "winch",
+          "x": 974,
+          "y": 184,
+          "point": true
+        },
+        {
+          "id": 130,
+          "type": "grove",
+          "x": 1619,
+          "y": 191,
+          "point": true
+        },
+        {
+          "id": 131,
+          "type": "goal",
+          "x": 3757,
+          "y": 172,
+          "point": true
+        },
+        {
+          "id": 140,
+          "type": "site",
+          "x": 1714,
+          "y": 179,
+          "point": true,
+          "name": "Ore Exchange"
+        },
+        {
+          "id": 141,
+          "type": "dial",
+          "x": 2322,
+          "y": 157,
+          "point": true,
+          "properties": [
+            {
+              "name": "number",
+              "type": "int",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "id": 142,
+          "type": "dial",
+          "x": 2453,
+          "y": 190,
+          "point": true,
+          "properties": [
+            {
+              "name": "number",
+              "type": "int",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "id": 143,
+          "type": "dial",
+          "x": 2580,
+          "y": 155,
+          "point": true,
+          "properties": [
+            {
+              "name": "number",
+              "type": "int",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "id": 144,
+          "type": "lamp-gate",
+          "x": 2669,
+          "y": 190,
+          "point": true,
+          "name": "Power all three signal lamps.",
+          "properties": [
+            {
+              "name": "setting",
+              "type": "int",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "id": 145,
+          "type": "winch",
+          "x": 1959,
+          "y": 195,
+          "point": true
+        },
+        {
+          "id": 146,
+          "type": "portal",
+          "x": 3115,
+          "y": 184,
+          "point": true
+        },
+        {
+          "id": 148,
+          "type": "enemy",
+          "x": 1874,
+          "y": 187,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 1832
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 1916
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 25
+            },
+            {
+              "name": "shot",
+              "type": "string",
+              "value": "SHARD"
+            }
+          ]
+        },
+        {
+          "id": 149,
+          "type": "hopper",
+          "x": 2088.5,
+          "y": 172,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 2045
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 2132
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 35
+            }
+          ]
+        },
+        {
+          "id": 150,
+          "type": "enemy",
+          "x": 2995,
+          "y": 176,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 2950
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 3040
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 27
+            },
+            {
+              "name": "shot",
+              "type": "string",
+              "value": "SHARD"
+            }
+          ]
+        },
+        {
+          "id": 151,
+          "type": "hopper",
+          "x": 3446.5,
+          "y": 173,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 3400
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 3493
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 37
+            }
+          ]
+        },
+        {
+          "id": 152,
+          "type": "enemy",
+          "x": 3289.5,
+          "y": 158,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 3271
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 3308
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 29
+            },
+            {
+              "name": "shot",
+              "type": "string",
+              "value": "SHARD"
+            }
+          ]
+        },
+        {
+          "id": 153,
+          "type": "moth",
+          "x": 2113,
+          "y": 81,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 2076
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 2150
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 28.5
+            }
+          ]
+        },
+        {
+          "id": 154,
+          "type": "moth",
+          "x": 3242,
+          "y": 74,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 3205
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 3279
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 28.5
+            }
+          ]
+        },
+        {
+          "id": 155,
+          "type": "moth",
+          "x": 3474.5,
+          "y": 71,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 3437.5
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 3511.5
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 28.5
+            }
+          ]
+        },
+        {
+          "id": 156,
+          "type": "coin",
+          "x": 1851,
+          "y": 139,
+          "point": true
+        },
+        {
+          "id": 157,
+          "type": "coin",
+          "x": 1874,
+          "y": 135,
+          "point": true
+        },
+        {
+          "id": 158,
+          "type": "coin",
+          "x": 1897,
+          "y": 139,
+          "point": true
+        },
+        {
+          "id": 159,
+          "type": "coin",
+          "x": 2756,
+          "y": 147,
+          "point": true
+        },
+        {
+          "id": 160,
+          "type": "coin",
+          "x": 2779,
+          "y": 143,
+          "point": true
+        },
+        {
+          "id": 161,
+          "type": "coin",
+          "x": 2802,
+          "y": 147,
+          "point": true
+        },
+        {
+          "id": 162,
+          "type": "coin",
+          "x": 2969,
+          "y": 128,
+          "point": true
+        },
+        {
+          "id": 163,
+          "type": "coin",
+          "x": 2992,
+          "y": 124,
+          "point": true
+        },
+        {
+          "id": 164,
+          "type": "coin",
+          "x": 3015,
+          "y": 128,
+          "point": true
+        },
+        {
+          "id": 165,
+          "type": "coin",
+          "x": 3203,
+          "y": 110,
+          "point": true
+        },
+        {
+          "id": 166,
+          "type": "coin",
+          "x": 3226,
+          "y": 106,
+          "point": true
+        },
+        {
+          "id": 167,
+          "type": "coin",
+          "x": 3249,
+          "y": 110,
+          "point": true
+        }
+      ]
+    }
+  ]
+}

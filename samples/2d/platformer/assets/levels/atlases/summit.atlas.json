@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "alpha": "straight",
+  "pages": [
+    {
+      "image": "summit-0.png",
+      "width": 1024,
+      "height": 1024
+    }
+  ],
+  "sprites": [
+    {
+      "name": "landmark",
+      "page": 0,
+      "x": 3,
+      "y": 3,
+      "width": 470,
+      "height": 464,
+      "originalWidth": 470,
+      "originalHeight": 464,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    },
+    {
+      "name": "site-1",
+      "page": 0,
+      "x": 479,
+      "y": 3,
+      "width": 256,
+      "height": 256,
+      "originalWidth": 256,
+      "originalHeight": 256,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    },
+    {
+      "name": "site-2",
+      "page": 0,
+      "x": 741,
+      "y": 3,
+      "width": 256,
+      "height": 256,
+      "originalWidth": 256,
+      "originalHeight": 256,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    },
+    {
+      "name": "site-3",
+      "page": 0,
+      "x": 3,
+      "y": 473,
+      "width": 256,
+      "height": 256,
+      "originalWidth": 256,
+      "originalHeight": 256,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    }
+  ]
+}

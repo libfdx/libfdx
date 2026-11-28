@@ -1,0 +1,1013 @@
+{
+  "type": "map",
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
+  "width": 210,
+  "height": 14,
+  "tilewidth": 18,
+  "tileheight": 18,
+  "tilesets": [],
+  "layers": [
+    {
+      "id": 1,
+      "type": "objectgroup",
+      "name": "Footpaths and lifts",
+      "objects": [
+        {
+          "id": 1,
+          "type": "solid",
+          "x": 0,
+          "y": 196,
+          "width": 241,
+          "height": 56
+        },
+        {
+          "id": 2,
+          "type": "solid",
+          "x": 241,
+          "y": 215,
+          "width": 130,
+          "height": 37
+        },
+        {
+          "id": 3,
+          "type": "solid",
+          "x": 407,
+          "y": 198,
+          "width": 149,
+          "height": 54
+        },
+        {
+          "id": 4,
+          "type": "solid",
+          "x": 556,
+          "y": 179,
+          "width": 99,
+          "height": 73
+        },
+        {
+          "id": 5,
+          "type": "solid",
+          "x": 691,
+          "y": 194,
+          "width": 203,
+          "height": 58
+        },
+        {
+          "id": 6,
+          "type": "solid",
+          "x": 928,
+          "y": 176,
+          "width": 141,
+          "height": 76
+        },
+        {
+          "id": 7,
+          "type": "solid",
+          "x": 1104,
+          "y": 201,
+          "width": 147,
+          "height": 51
+        },
+        {
+          "id": 8,
+          "type": "solid",
+          "x": 1251,
+          "y": 184,
+          "width": 131,
+          "height": 68
+        },
+        {
+          "id": 9,
+          "type": "solid",
+          "x": 1417,
+          "y": 166,
+          "width": 129,
+          "height": 86
+        },
+        {
+          "id": 10,
+          "type": "solid",
+          "x": 1546,
+          "y": 182,
+          "width": 182,
+          "height": 70
+        },
+        {
+          "id": 11,
+          "type": "bridge",
+          "x": 78,
+          "y": 167,
+          "width": 80,
+          "height": 6
+        },
+        {
+          "id": 12,
+          "type": "bridge",
+          "x": 176,
+          "y": 144,
+          "width": 89,
+          "height": 6
+        },
+        {
+          "id": 13,
+          "type": "bridge",
+          "x": 452,
+          "y": 167,
+          "width": 73,
+          "height": 6
+        },
+        {
+          "id": 14,
+          "type": "bridge",
+          "x": 541,
+          "y": 146,
+          "width": 88,
+          "height": 6
+        },
+        {
+          "id": 15,
+          "type": "bridge",
+          "x": 640,
+          "y": 128,
+          "width": 105,
+          "height": 6
+        },
+        {
+          "id": 16,
+          "type": "bridge",
+          "x": 760,
+          "y": 110,
+          "width": 105,
+          "height": 6
+        },
+        {
+          "id": 17,
+          "type": "bridge",
+          "x": 966,
+          "y": 144,
+          "width": 73,
+          "height": 6
+        },
+        {
+          "id": 18,
+          "type": "bridge",
+          "x": 1292,
+          "y": 151,
+          "width": 87,
+          "height": 6
+        },
+        {
+          "id": 19,
+          "type": "lift",
+          "x": 361,
+          "y": 180,
+          "width": 58,
+          "height": 6
+        },
+        {
+          "id": 20,
+          "type": "lift",
+          "x": 1061,
+          "y": 161,
+          "width": 58,
+          "height": 6
+        },
+        {
+          "id": 30,
+          "type": "solid",
+          "x": 1728,
+          "y": 197,
+          "width": 201,
+          "height": 55
+        },
+        {
+          "id": 31,
+          "type": "solid",
+          "x": 1929,
+          "y": 182,
+          "width": 227,
+          "height": 70
+        },
+        {
+          "id": 32,
+          "type": "solid",
+          "x": 2187,
+          "y": 189,
+          "width": 459,
+          "height": 63
+        },
+        {
+          "id": 33,
+          "type": "solid",
+          "x": 2646,
+          "y": 174,
+          "width": 173,
+          "height": 78
+        },
+        {
+          "id": 34,
+          "type": "solid",
+          "x": 2849,
+          "y": 191,
+          "width": 248,
+          "height": 61
+        },
+        {
+          "id": 35,
+          "type": "solid",
+          "x": 3097,
+          "y": 171,
+          "width": 196,
+          "height": 81
+        },
+        {
+          "id": 36,
+          "type": "solid",
+          "x": 3325,
+          "y": 187,
+          "width": 217,
+          "height": 65
+        },
+        {
+          "id": 37,
+          "type": "solid",
+          "x": 3542,
+          "y": 177,
+          "width": 230,
+          "height": 75
+        },
+        {
+          "id": 38,
+          "type": "bridge",
+          "x": 2331,
+          "y": 157,
+          "width": 98,
+          "height": 6
+        },
+        {
+          "id": 39,
+          "type": "bridge",
+          "x": 2438,
+          "y": 128,
+          "width": 74,
+          "height": 6
+        },
+        {
+          "id": 40,
+          "type": "bridge",
+          "x": 2521,
+          "y": 159,
+          "width": 40,
+          "height": 6
+        },
+        {
+          "id": 41,
+          "type": "bridge",
+          "x": 1770,
+          "y": 165,
+          "width": 85,
+          "height": 6
+        },
+        {
+          "id": 42,
+          "type": "bridge",
+          "x": 1977,
+          "y": 151,
+          "width": 102,
+          "height": 6
+        },
+        {
+          "id": 43,
+          "type": "bridge",
+          "x": 2672,
+          "y": 143,
+          "width": 86,
+          "height": 6
+        },
+        {
+          "id": 44,
+          "type": "bridge",
+          "x": 2906,
+          "y": 157,
+          "width": 106,
+          "height": 6
+        },
+        {
+          "id": 45,
+          "type": "bridge",
+          "x": 3125,
+          "y": 141,
+          "width": 82,
+          "height": 6
+        },
+        {
+          "id": 46,
+          "type": "bridge",
+          "x": 3369,
+          "y": 156,
+          "width": 93,
+          "height": 6
+        },
+        {
+          "id": 48,
+          "type": "lift",
+          "x": 3278,
+          "y": 143,
+          "width": 65,
+          "height": 6
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "objectgroup",
+      "name": "Encounters and landmarks",
+      "objects": [
+        {
+          "id": 100,
+          "type": "player",
+          "x": 36,
+          "y": 184,
+          "point": true
+        },
+        {
+          "id": 101,
+          "type": "site",
+          "x": 304,
+          "y": 203,
+          "point": true,
+          "name": "Slag Channel"
+        },
+        {
+          "id": 102,
+          "type": "site",
+          "x": 809,
+          "y": 98,
+          "point": true,
+          "name": "Chain Gantry"
+        },
+        {
+          "id": 103,
+          "type": "site",
+          "x": 1176,
+          "y": 189,
+          "point": true,
+          "name": "Kiln Yard"
+        },
+        {
+          "id": 104,
+          "type": "enemy",
+          "x": 165.5,
+          "y": 188,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 120
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 211
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 22
+            },
+            {
+              "name": "shot",
+              "type": "string",
+              "value": "EMBER"
+            }
+          ]
+        },
+        {
+          "id": 105,
+          "type": "hopper",
+          "x": 228,
+          "y": 136,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 216
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 240
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 38
+            }
+          ]
+        },
+        {
+          "id": 106,
+          "type": "moth",
+          "x": 527.5,
+          "y": 111,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 477
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 578
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 29
+            }
+          ]
+        },
+        {
+          "id": 107,
+          "type": "enemy",
+          "x": 805,
+          "y": 186,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 762
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 848
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 22
+            },
+            {
+              "name": "shot",
+              "type": "string",
+              "value": "EMBER"
+            }
+          ]
+        },
+        {
+          "id": 108,
+          "type": "hopper",
+          "x": 995,
+          "y": 168,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 974
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 1016
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 38
+            }
+          ]
+        },
+        {
+          "id": 109,
+          "type": "moth",
+          "x": 1425,
+          "y": 87,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 1380
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 1470
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 29
+            }
+          ]
+        },
+        {
+          "id": 110,
+          "type": "hazard",
+          "x": 1586,
+          "y": 177,
+          "point": true
+        },
+        {
+          "id": 111,
+          "type": "coin",
+          "x": 97.2,
+          "y": 147.26181157628525,
+          "point": true
+        },
+        {
+          "id": 112,
+          "type": "coin",
+          "x": 118,
+          "y": 146,
+          "point": true
+        },
+        {
+          "id": 113,
+          "type": "coin",
+          "x": 138.8,
+          "y": 147.26181157628525,
+          "point": true
+        },
+        {
+          "id": 114,
+          "type": "coin",
+          "x": 469.52,
+          "y": 147.26181157628525,
+          "point": true
+        },
+        {
+          "id": 115,
+          "type": "coin",
+          "x": 488.5,
+          "y": 146,
+          "point": true
+        },
+        {
+          "id": 116,
+          "type": "coin",
+          "x": 507.48,
+          "y": 147.26181157628525,
+          "point": true
+        },
+        {
+          "id": 117,
+          "type": "coin",
+          "x": 672.8,
+          "y": 108.26181157628525,
+          "point": true
+        },
+        {
+          "id": 118,
+          "type": "coin",
+          "x": 697.5,
+          "y": 107,
+          "point": true
+        },
+        {
+          "id": 119,
+          "type": "coin",
+          "x": 722.2,
+          "y": 108.26181157628525,
+          "point": true
+        },
+        {
+          "id": 120,
+          "type": "coin",
+          "x": 959.84,
+          "y": 156.26181157628525,
+          "point": true
+        },
+        {
+          "id": 121,
+          "type": "coin",
+          "x": 998.5,
+          "y": 133,
+          "point": true
+        },
+        {
+          "id": 122,
+          "type": "coin",
+          "x": 1035.16,
+          "y": 132.26181157628525,
+          "point": true
+        },
+        {
+          "id": 123,
+          "type": "coin",
+          "x": 1313.6,
+          "y": 131.26181157628525,
+          "point": true
+        },
+        {
+          "id": 124,
+          "type": "coin",
+          "x": 1337,
+          "y": 130,
+          "point": true
+        },
+        {
+          "id": 125,
+          "type": "coin",
+          "x": 1360.4,
+          "y": 131.26181157628525,
+          "point": true
+        },
+        {
+          "id": 130,
+          "type": "mill",
+          "x": 1457,
+          "y": 166,
+          "point": true
+        },
+        {
+          "id": 131,
+          "type": "goal",
+          "x": 3684,
+          "y": 158,
+          "point": true
+        },
+        {
+          "id": 140,
+          "type": "site",
+          "x": 1644,
+          "y": 170,
+          "point": true,
+          "name": "Foundry Yard"
+        },
+        {
+          "id": 141,
+          "type": "dial",
+          "x": 2263,
+          "y": 189,
+          "point": true,
+          "properties": [
+            {
+              "name": "number",
+              "type": "int",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "id": 142,
+          "type": "dial",
+          "x": 2380,
+          "y": 157,
+          "point": true,
+          "properties": [
+            {
+              "name": "number",
+              "type": "int",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "id": 143,
+          "type": "dial",
+          "x": 2487,
+          "y": 128,
+          "point": true,
+          "properties": [
+            {
+              "name": "number",
+              "type": "int",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "id": 144,
+          "type": "lamp-gate",
+          "x": 2611,
+          "y": 189,
+          "point": true,
+          "name": "Ignite all three furnace lamps.",
+          "properties": [
+            {
+              "name": "setting",
+              "type": "int",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "id": 145,
+          "type": "winch",
+          "x": 1888,
+          "y": 197,
+          "point": true
+        },
+        {
+          "id": 146,
+          "type": "winch",
+          "x": 3039,
+          "y": 191,
+          "point": true
+        },
+        {
+          "id": 147,
+          "type": "portal",
+          "x": 3502,
+          "y": 187,
+          "point": true
+        },
+        {
+          "id": 148,
+          "type": "hopper",
+          "x": 1803,
+          "y": 189,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 1761
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 1845
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 34
+            }
+          ]
+        },
+        {
+          "id": 149,
+          "type": "enemy",
+          "x": 2005.5,
+          "y": 174,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 1962
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 2049
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 26
+            },
+            {
+              "name": "shot",
+              "type": "string",
+              "value": "EMBER"
+            }
+          ]
+        },
+        {
+          "id": 150,
+          "type": "hopper",
+          "x": 2927,
+          "y": 183,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 2882
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 2972
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 36
+            }
+          ]
+        },
+        {
+          "id": 151,
+          "type": "enemy",
+          "x": 3406,
+          "y": 179,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 3385
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 3427
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 28
+            },
+            {
+              "name": "shot",
+              "type": "string",
+              "value": "EMBER"
+            }
+          ]
+        },
+        {
+          "id": 152,
+          "type": "hopper",
+          "x": 3580,
+          "y": 169,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 3572
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 3588
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 38
+            }
+          ]
+        },
+        {
+          "id": 153,
+          "type": "moth",
+          "x": 2042.5,
+          "y": 91,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 2005.5
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 2079.5
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 33
+            }
+          ]
+        },
+        {
+          "id": 154,
+          "type": "moth",
+          "x": 3195,
+          "y": 79,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 3158
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 3232
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 33
+            }
+          ]
+        },
+        {
+          "id": 155,
+          "type": "moth",
+          "x": 3433.5,
+          "y": 77,
+          "point": true,
+          "properties": [
+            {
+              "name": "minX",
+              "type": "float",
+              "value": 3396.5
+            },
+            {
+              "name": "maxX",
+              "type": "float",
+              "value": 3470.5
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 33
+            }
+          ]
+        },
+        {
+          "id": 156,
+          "type": "coin",
+          "x": 1780,
+          "y": 141,
+          "point": true
+        },
+        {
+          "id": 157,
+          "type": "coin",
+          "x": 1803,
+          "y": 137,
+          "point": true
+        },
+        {
+          "id": 158,
+          "type": "coin",
+          "x": 1826,
+          "y": 141,
+          "point": true
+        },
+        {
+          "id": 159,
+          "type": "coin",
+          "x": 2698,
+          "y": 118,
+          "point": true
+        },
+        {
+          "id": 160,
+          "type": "coin",
+          "x": 2721,
+          "y": 114,
+          "point": true
+        },
+        {
+          "id": 161,
+          "type": "coin",
+          "x": 2744,
+          "y": 118,
+          "point": true
+        },
+        {
+          "id": 162,
+          "type": "coin",
+          "x": 2901,
+          "y": 135,
+          "point": true
+        },
+        {
+          "id": 163,
+          "type": "coin",
+          "x": 2924,
+          "y": 131,
+          "point": true
+        },
+        {
+          "id": 164,
+          "type": "coin",
+          "x": 2947,
+          "y": 135,
+          "point": true
+        },
+        {
+          "id": 165,
+          "type": "coin",
+          "x": 3149,
+          "y": 115,
+          "point": true
+        },
+        {
+          "id": 166,
+          "type": "coin",
+          "x": 3172,
+          "y": 111,
+          "point": true
+        },
+        {
+          "id": 167,
+          "type": "coin",
+          "x": 3195,
+          "y": 115,
+          "point": true
+        }
+      ]
+    }
+  ]
+}

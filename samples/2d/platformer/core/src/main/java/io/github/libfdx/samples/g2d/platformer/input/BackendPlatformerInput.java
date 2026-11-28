@@ -7,9 +7,10 @@ import io.github.libfdx.ui.UiHoldState;
 /** Owns the sample's rebindable controls and detaches its processor on disposal. */
 public final class BackendPlatformerInput implements PlatformerInput, Disposable {
     private final InputActions actions;
-    private final InputAction move, jump, restart;
+    private final InputAction move, jump, drop, restart;
     public final UiHoldState leftButton = new UiHoldState();
     public final UiHoldState rightButton = new UiHoldState();
+    public final UiHoldState dropButton = new UiHoldState();
     public final UiHoldState jumpButton = new UiHoldState();
 
     public BackendPlatformerInput(Input input) {
@@ -17,8 +18,11 @@ public final class BackendPlatformerInput implements PlatformerInput, Disposable
     }
     /** Registers gameplay as a borrowed router child when supplied; the caller owns router registration. */
     public BackendPlatformerInput(Input input, InputRouter router) {
-        if(input==null) { actions=null; move=jump=restart=null; return; }
+        if(input==null) { actions=null; move=jump=drop=restart=null; return; }
         actions=new InputActions(input); move=actions.define("move",.1f);
+        drop=actions.define("drop");
+        actions.bind(drop, InputBinding.key(Key.S)).bind(drop, InputBinding.key(Key.DOWN))
+                .bind(drop, InputBinding.button(-1, GamepadButton.DPAD_DOWN, 1));
         jump=actions.define("jump"); restart=actions.define("restart");
         actions.bind(move,InputBinding.key(Key.A,-1)).bind(move,InputBinding.key(Key.LEFT,-1));
         actions.bind(move,InputBinding.key(Key.D)).bind(move,InputBinding.key(Key.RIGHT));
@@ -26,8 +30,7 @@ public final class BackendPlatformerInput implements PlatformerInput, Disposable
         actions.bind(move,InputBinding.button(-1,GamepadButton.DPAD_LEFT,-1));
         actions.bind(move,InputBinding.button(-1,GamepadButton.DPAD_RIGHT,1));
         jumpBinding(InputBinding.key(Key.SPACE)); jumpBinding(InputBinding.key(Key.W)); jumpBinding(InputBinding.key(Key.UP));
-        jumpBinding(InputBinding.mouse(MouseButton.LEFT)); jumpBinding(InputBinding.button(-1,GamepadButton.SOUTH,1));
-        actions.bind(restart,InputBinding.key(Key.R)).bind(restart,InputBinding.key(Key.ENTER));
+        jumpBinding(InputBinding.button(-1,GamepadButton.SOUTH,1));
         if (router == null) { input.addProcessor(actions); } else { router.add(actions); }
     }
     private void jumpBinding(InputBinding binding) { actions.bind(jump,binding).bind(restart,binding); }
@@ -38,7 +41,10 @@ public final class BackendPlatformerInput implements PlatformerInput, Disposable
     }
     public void enabled(boolean enabled) {
         if(actions!=null) actions.enabled(enabled);
-        if (!enabled) jumpButton.consumePressed();
+        if (!enabled) {
+            jumpButton.consumePressed();
+            dropButton.consumePressed();
+        }
     }
 
     @Override
@@ -59,6 +65,11 @@ public final class BackendPlatformerInput implements PlatformerInput, Disposable
     @Override
     public boolean restartDown() {
         return actions != null && actions.enabled() && (restart.down() || jumpButton.down());
+    }
+
+    @Override
+    public boolean consumeDropPress() {
+        return actions != null && actions.enabled() && (drop.consumePressed() | dropButton.consumePressed());
     }
 
     @Override

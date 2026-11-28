@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "alpha": "straight",
+  "pages": [
+    {
+      "image": "hollow-0.png",
+      "width": 1024,
+      "height": 1024
+    }
+  ],
+  "sprites": [
+    {
+      "name": "landmark",
+      "page": 0,
+      "x": 3,
+      "y": 3,
+      "width": 496,
+      "height": 468,
+      "originalWidth": 496,
+      "originalHeight": 468,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    },
+    {
+      "name": "site-1",
+      "page": 0,
+      "x": 505,
+      "y": 3,
+      "width": 256,
+      "height": 256,
+      "originalWidth": 256,
+      "originalHeight": 256,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    },
+    {
+      "name": "site-2",
+      "page": 0,
+      "x": 3,
+      "y": 477,
+      "width": 256,
+      "height": 256,
+      "originalWidth": 256,
+      "originalHeight": 256,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    },
+    {
+      "name": "site-3",
+      "page": 0,
+      "x": 265,
+      "y": 477,
+      "width": 256,
+      "height": 256,
+      "originalWidth": 256,
+      "originalHeight": 256,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    }
+  ]
+}

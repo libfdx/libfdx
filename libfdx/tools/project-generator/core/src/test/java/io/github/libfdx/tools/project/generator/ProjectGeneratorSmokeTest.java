@@ -155,9 +155,8 @@ public final class ProjectGeneratorSmokeTest {
                 .projectName("platformer")
                 .sampleId("2d/platformer")
                 .build()).project();
-        require(platformer.containsFile(
-                "assets/kenney/pixel-platformer/Tilemap/tilemap_packed.png"),
-                "sample-owned platformer assets were not bundled");
+        require(platformer.containsFile("assets/levels/atlases/shared.atlas.json"),
+                "shared platformer atlas was not bundled");
         require(platformer.file("core/build.gradle.kts").textContent().contains("libs.libfdx.uiKit"),
                 "generated Platformer must depend on UI Kit");
         ProjectValidationResult validation = ProjectValidationResult.validate(ProjectGenerationSettings.builder()

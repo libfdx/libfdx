@@ -23,8 +23,8 @@ public final class PlatformerLevel {
      * gameplay classes, rotated collision shapes and invalid spawns fail before use.
      */
     public static PlatformerGame create(PlatformerInput input, TileMap map) {
-        if (map == null || map.worldWidth() < VIEW_WIDTH || map.worldHeight() != VIEW_HEIGHT) {
-            throw new FdxException("Platformer maps must be at least 300 pixels wide and 180 pixels high");
+        if (map == null || map.worldWidth() < VIEW_WIDTH || map.worldHeight() < VIEW_HEIGHT) {
+            throw new FdxException("Platformer maps must be at least 300 pixels wide and at least 180 pixels high");
         }
         PlatformerGame game = new PlatformerGame(input);
         game.levelBounds(-1, world(map.worldWidth()));
@@ -32,6 +32,7 @@ public final class PlatformerLevel {
         if (game.player() == null || game.solidCount() == 0 || game.goalCount() != 1) {
             throw new FdxException("Platformer level needs one player, collision geometry and one goal");
         }
+        if (game.gate() != null) game.gate().validate(game.goalAt(0).x());
         return game;
     }
     public static float world(float pixel) { return pixel / PIXELS_PER_UNIT - 1; }
@@ -53,38 +54,62 @@ public final class PlatformerLevel {
                     if (px < 0 || px > map.worldWidth() || py < 0 || py > map.worldHeight()) {
                         throw new FdxException("Gameplay anchor outside the level");
                     }
-                    if (kind.equals("solid")) {
+                    if (kind.equals("solid") || kind.equals("bridge") || kind.equals("lift")) {
                         if (object.shape() != MapObject.Shape.RECTANGLE || object.width() <= 0 || object.height() <= 0) {
                             throw new FdxException("Collision must be a positive rectangle");
                         }
                         if ((double)px+object.width() > map.worldWidth() || py-object.height() < 0) {
                             throw new FdxException("Collision rectangle outside the level");
                         }
-                        game.addSolid(game.addSprite(world(px+object.width()/2), world(py-object.height()/2),
-                                object.width()/PIXELS_PER_UNIT/2, object.height()/PIXELS_PER_UNIT/2, -1,
-                                PlatformerConstants.LAYER_PLATFORM, 1));
+                        var surface = game.addSprite(world(px+object.width()/2), world(py-object.height()/2),
+                                object.width()/PIXELS_PER_UNIT/2, object.height()/PIXELS_PER_UNIT/2);
+                        game.addSolid(surface);
+                        surface.bridge = !kind.equals("solid");
+                        surface.lift = kind.equals("lift");
                         continue;
                     }
                     if (object.shape() != MapObject.Shape.POINT) { throw new FdxException("Entity spawn must be a point"); }
-                    int region = Math.toIntExact(object.properties().get("region").longValue());
-                    if (region < 0 || region >= PlatformerConstants.REGION_COUNT || map.findAtlas(region+1) < 0) {
-                        throw new FdxException("Missing entity sprite " + region);
+                    if (kind.equals("dial")) {
+                        game.puzzle().dial(Math.toIntExact(object.properties().get("number").longValue()), world(px), world(py));
+                        continue;
+                    }
+                    if (kind.equals("bell-gate") || kind.equals("lamp-gate")) {
+                        game.puzzle().mechanism(kind.equals("bell-gate"),
+                                Math.toIntExact(object.properties().get("setting").longValue()), object.name(), world(px), world(py));
+                        continue;
+                    }
+                    if (kind.equals("site")) {
+                        game.addSite(object.name(), world(px), world(py));
+                        continue;
+                    }
+                    var scenery = switch (kind) {
+                        case "mill" -> PlatformerGame.Scenery.MILL;
+                        case "winch" -> PlatformerGame.Scenery.WINCH;
+                        case "grove" -> PlatformerGame.Scenery.GROVE;
+                        case "portal" -> PlatformerGame.Scenery.PORTAL;
+                        default -> null;
+                    };
+                    if (scenery != null) {
+                        game.addScenery(scenery, world(px), world(py));
+                        continue;
                     }
                     float halfWidth = 8, halfHeight = 8;
-                    int drawLayer;
                     switch (kind) {
-                        case "player" -> { halfHeight = 12; drawLayer = PlatformerConstants.LAYER_PLAYER; }
-                        case "coin" -> { halfWidth = halfHeight = 6; drawLayer = PlatformerConstants.LAYER_ITEM; }
-                        case "hazard" -> { halfHeight = 6; drawLayer = PlatformerConstants.LAYER_HAZARD; }
-                        case "enemy" -> { halfWidth = halfHeight = 10; drawLayer = PlatformerConstants.LAYER_ENEMY; }
-                        case "goal" -> { halfWidth = 10; halfHeight = 19; drawLayer = PlatformerConstants.LAYER_GOAL; }
+                        case "player" -> halfHeight = 12;
+                        case "coin" -> halfWidth = halfHeight = 6;
+                        case "hazard" -> halfHeight = 6;
+                        case "enemy", "moth", "hopper" -> {
+                            halfWidth = kind.equals("enemy") ? 12 : 9;
+                            halfHeight = kind.equals("moth") ? 6 : 8;
+                        }
+                        case "goal" -> { halfWidth = 10; halfHeight = 19; }
                         default -> throw new FdxException("Unknown gameplay class " + kind);
                     }
                     if (px-halfWidth < 0 || px+halfWidth > map.worldWidth() || py-halfHeight < 0 || py+halfHeight > map.worldHeight()) {
                         throw new FdxException("Entity bounds outside the level");
                     }
                     PlatformerGame.Sprite sprite = game.addSprite(world(px), world(py), halfWidth/PIXELS_PER_UNIT,
-                            halfHeight/PIXELS_PER_UNIT, region, drawLayer, 1);
+                            halfHeight/PIXELS_PER_UNIT);
                     switch (kind) {
                         case "player" -> {
                             if (game.player() != null) { throw new FdxException("Duplicate player spawn"); }
@@ -93,12 +118,19 @@ public final class PlatformerLevel {
                         case "coin" -> game.addCollectible(sprite, 1);
                         case "hazard" -> game.addHazard(sprite);
                         case "goal" -> game.addGoal(sprite);
-                        case "enemy" -> {
+                        case "enemy", "moth", "hopper" -> {
                             float min = number(object, "minX"), max = number(object, "maxX"), speed = number(object, "speed");
                             if (min < 0 || max > map.worldWidth() || min > px || max < px || min >= max || speed <= 0) {
                                 throw new FdxException("Invalid patrol range/speed");
                             }
-                            game.addEnemy(sprite, world(min), world(max), speed/PIXELS_PER_UNIT);
+                            PlatformerGame.EnemyKind species = switch (kind) {
+                                case "moth" -> PlatformerGame.EnemyKind.MOTH;
+                                case "hopper" -> PlatformerGame.EnemyKind.HOPPER;
+                                default -> PlatformerGame.EnemyKind.CRAWLER;
+                            };
+                            var shot = object.properties().find("shot");
+                            game.addEnemy(sprite, world(min), world(max), speed / PIXELS_PER_UNIT, species,
+                                    shot == null ? null : RangedAttack.Kind.valueOf(shot.stringValue()));
                         }
                     }
                 } catch (RuntimeException error) { throw new FdxException("Platformer object " + object.id() + ": " + error.getMessage(), error); }
@@ -120,7 +152,6 @@ public final class PlatformerLevel {
      */
     public static PlatformerGame create(PlatformerInput input) {
         PlatformerGame game = new PlatformerGame(input);
-        createBackground(game);
         createLevel(game);
         createPlayer(game);
         return game;
@@ -131,189 +162,61 @@ public final class PlatformerLevel {
                 PlatformerConstants.PLAYER_START_X,
                 PlatformerConstants.PLAYER_START_Y,
                 PlatformerConstants.PLAYER_HALF_WIDTH,
-                PlatformerConstants.PLAYER_HALF_HEIGHT,
-                PlatformerConstants.REGION_PLAYER_IDLE,
-                PlatformerConstants.LAYER_PLAYER,
-                1.0f));
-    }
-
-    private static void createBackground(PlatformerGame game) {
-        createSprite(game, 0.0f, 0.0f, 2.08f, 2.08f, PlatformerConstants.REGION_BACKGROUND_SKY,
-                PlatformerConstants.LAYER_BACKGROUND, 0.0f);
-        createCloud(game, -0.70f, 0.58f, 0.16f);
-        createCloud(game, -0.12f, 0.70f, 0.16f);
-        createCloud(game, 0.68f, 0.52f, 0.16f);
-        createSprite(game, 1.38f, 0.66f, 0.16f, 0.12f, PlatformerConstants.REGION_CLOUD_SMALL,
-                PlatformerConstants.LAYER_BACKGROUND, 0.10f);
-        createCloud(game, 2.18f, 0.60f, 0.16f);
+                PlatformerConstants.PLAYER_HALF_HEIGHT));
     }
 
     private static void createLevel(PlatformerGame game) {
-        createGrassSpan(game, PlatformerConstants.LEVEL_LEFT, PlatformerConstants.GROUND_TILE_Y, 14);
-        createGrassSpan(game, 0.92f, PlatformerConstants.GROUND_TILE_Y, 7);
-        createGrassSpan(game, 2.00f, PlatformerConstants.GROUND_TILE_Y, 13);
+        createSolidSpan(game, PlatformerConstants.LEVEL_LEFT, PlatformerConstants.GROUND_TILE_Y, 14);
+        createSolidSpan(game, 0.92f, PlatformerConstants.GROUND_TILE_Y, 7);
+        createSolidSpan(game, 2.00f, PlatformerConstants.GROUND_TILE_Y, 13);
 
-        createBridgeSpan(game, -0.56f, -0.55f, 4);
-        createGrassSpan(game, 0.06f, -0.33f, 4);
-        createGrassSpan(game, 0.76f, -0.09f, 5);
-        createBridgeSpan(game, 1.48f, -0.35f, 4);
-        createGrassSpan(game, 2.26f, -0.08f, 5);
-        createGrassSpan(game, 2.86f, -0.45f, 4);
+        createSolidSpan(game, -0.56f, -0.55f, 4);
+        createSolidSpan(game, 0.06f, -0.33f, 4);
+        createSolidSpan(game, 0.76f, -0.09f, 5);
+        createSolidSpan(game, 1.48f, -0.35f, 4);
+        createSolidSpan(game, 2.26f, -0.08f, 5);
+        createSolidSpan(game, 2.86f, -0.45f, 4);
 
-        createDecoration(game, -0.86f, PlatformerConstants.GROUND_TOP_Y + 0.06f,
-                PlatformerConstants.REGION_BUSH, 0.13f, 0.10f);
-        createDecoration(game, -0.46f, PlatformerConstants.GROUND_TOP_Y + 0.08f,
-                PlatformerConstants.REGION_FLOWER, 0.10f, 0.10f);
-        createDecoration(game, 0.28f, -0.21f, PlatformerConstants.REGION_ROCK, 0.10f, 0.10f);
-        createDecoration(game, 1.08f, PlatformerConstants.GROUND_TOP_Y + 0.12f,
-                PlatformerConstants.REGION_TREE, 0.16f, 0.22f);
-        createDecoration(game, 2.18f, PlatformerConstants.GROUND_TOP_Y + 0.07f,
-                PlatformerConstants.REGION_SIGN_RIGHT, 0.13f, 0.12f);
+        createCollectible(game, -0.40f, -0.40f);
+        createCollectible(game, -0.26f, -0.40f);
+        createCollectible(game, 0.20f, -0.18f);
+        createCollectible(game, 0.92f, 0.06f);
+        createCollectible(game, 1.08f, 0.06f);
+        createCollectible(game, 1.62f, -0.20f);
+        createCollectible(game, 2.42f, 0.07f);
+        createCollectible(game, 2.58f, 0.07f);
 
-        createCollectible(game, -0.40f, -0.40f, PlatformerConstants.REGION_COIN);
-        createCollectible(game, -0.26f, -0.40f, PlatformerConstants.REGION_COIN);
-        createCollectible(game, 0.20f, -0.18f, PlatformerConstants.REGION_GEM);
-        createCollectible(game, 0.92f, 0.06f, PlatformerConstants.REGION_COIN);
-        createCollectible(game, 1.08f, 0.06f, PlatformerConstants.REGION_COIN);
-        createCollectible(game, 1.62f, -0.20f, PlatformerConstants.REGION_KEY);
-        createCollectible(game, 2.42f, 0.07f, PlatformerConstants.REGION_GEM);
-        createCollectible(game, 2.58f, 0.07f, PlatformerConstants.REGION_COIN);
-
-        createHazard(game, 0.54f, PlatformerConstants.GROUND_TOP_Y + 0.036f,
-                PlatformerConstants.REGION_SPIKE);
-        createHazard(game, 2.02f, PlatformerConstants.GROUND_TOP_Y + 0.036f,
-                PlatformerConstants.REGION_SPIKE);
+        createHazard(game, 0.54f, PlatformerConstants.GROUND_TOP_Y + 0.036f);
+        createHazard(game, 2.02f, PlatformerConstants.GROUND_TOP_Y + 0.036f);
         createEnemy(game, 1.26f, PlatformerConstants.GROUND_TOP_Y + ENEMY_HALF_HEIGHT,
-                1.04f, 1.62f, 0.30f, PlatformerConstants.REGION_ENEMY_WALKER);
+                1.04f, 1.62f, 0.30f);
         createEnemy(game, 2.66f, PlatformerConstants.GROUND_TOP_Y + ENEMY_HALF_HEIGHT,
-                2.36f, 3.10f, 0.34f, PlatformerConstants.REGION_ENEMY_FLYER);
+                2.36f, 3.10f, 0.34f);
         createGoal(game, 3.22f, PlatformerConstants.GROUND_TOP_Y + 0.13f);
     }
 
-    private static void createGrassSpan(PlatformerGame game, float startX, float y, int count) {
+    private static void createSolidSpan(PlatformerGame game, float startX, float y, int count) {
+        float half = PlatformerConstants.TILE_HALF;
         for (int i = 0; i < count; i++) {
-            int region = PlatformerConstants.REGION_GRASS_SINGLE;
-            if (count > 1 && i == 0) {
-                region = PlatformerConstants.REGION_GRASS_LEFT;
-            } else if (count > 1 && i == count - 1) {
-                region = PlatformerConstants.REGION_GRASS_RIGHT;
-            } else if (count > 1) {
-                region = PlatformerConstants.REGION_GRASS_MIDDLE;
-            }
-            float x = startX + PlatformerConstants.TILE_HALF + i * PlatformerConstants.TILE_SIZE;
-            createTile(game, x, y, region, true);
-            createTile(game, x, y - PlatformerConstants.TILE_SIZE, dirtRegion(count, i), false);
+            float x = startX + half + i * PlatformerConstants.TILE_SIZE;
+            game.addSolid(game.addSprite(x, y, half, half));
         }
     }
 
-    private static void createBridgeSpan(PlatformerGame game, float startX, float y, int count) {
-        for (int i = 0; i < count; i++) {
-            int region = PlatformerConstants.REGION_BRIDGE_MIDDLE;
-            if (i == 0) {
-                region = PlatformerConstants.REGION_BRIDGE_LEFT;
-            } else if (i == count - 1) {
-                region = PlatformerConstants.REGION_BRIDGE_RIGHT;
-            }
-            float x = startX + PlatformerConstants.TILE_HALF + i * PlatformerConstants.TILE_SIZE;
-            createTile(game, x, y, region, true);
-        }
+    private static void createCollectible(PlatformerGame game, float x, float y) {
+        game.addCollectible(game.addSprite(x, y, ITEM_HALF, ITEM_HALF), 1);
     }
 
-    private static int dirtRegion(int count, int index) {
-        if (count == 1) {
-            return PlatformerConstants.REGION_DIRT_SINGLE;
-        }
-        if (index == 0) {
-            return PlatformerConstants.REGION_DIRT_LEFT;
-        }
-        if (index == count - 1) {
-            return PlatformerConstants.REGION_DIRT_RIGHT;
-        }
-        return PlatformerConstants.REGION_DIRT_MIDDLE;
+    private static void createHazard(PlatformerGame game, float x, float y) {
+        game.addHazard(game.addSprite(x, y, PlatformerConstants.TILE_HALF * 0.82f, PlatformerConstants.TILE_HALF * 0.62f));
     }
 
-    private static void createTile(PlatformerGame game, float x, float y, int region, boolean solid) {
-        PlatformerGame.Sprite sprite = game.addSprite(
-                x,
-                y,
-                PlatformerConstants.TILE_HALF,
-                PlatformerConstants.TILE_HALF,
-                region,
-                PlatformerConstants.LAYER_PLATFORM,
-                1.0f);
-        if (solid) {
-            game.addSolid(sprite);
-        }
-    }
-
-    private static void createDecoration(
-            PlatformerGame game, float x, float y, int region, float width, float height) {
-        createSprite(game, x, y, width, height, region, PlatformerConstants.LAYER_DECORATION, 1.0f);
-    }
-
-    private static void createCloud(PlatformerGame game, float x, float y, float tileWidth) {
-        createSprite(game, x, y, tileWidth, tileWidth, PlatformerConstants.REGION_CLOUD_LEFT,
-                PlatformerConstants.LAYER_BACKGROUND, 0.10f);
-        createSprite(game, x + tileWidth, y, tileWidth, tileWidth,
-                PlatformerConstants.REGION_CLOUD_MIDDLE,
-                PlatformerConstants.LAYER_BACKGROUND, 0.10f);
-        createSprite(game, x + tileWidth * 2.0f, y, tileWidth, tileWidth,
-                PlatformerConstants.REGION_CLOUD_RIGHT,
-                PlatformerConstants.LAYER_BACKGROUND, 0.10f);
-    }
-
-    private static void createCollectible(PlatformerGame game, float x, float y, int region) {
-        PlatformerGame.Sprite sprite = game.addSprite(
-                x,
-                y,
-                ITEM_HALF,
-                ITEM_HALF,
-                region,
-                PlatformerConstants.LAYER_ITEM,
-                1.0f);
-        game.addCollectible(sprite, 1);
-    }
-
-    private static void createHazard(PlatformerGame game, float x, float y, int region) {
-        PlatformerGame.Sprite sprite = game.addSprite(
-                x,
-                y,
-                PlatformerConstants.TILE_HALF * 0.82f,
-                PlatformerConstants.TILE_HALF * 0.62f,
-                region,
-                PlatformerConstants.LAYER_HAZARD,
-                1.0f);
-        game.addHazard(sprite);
-    }
-
-    private static void createEnemy(
-            PlatformerGame game, float x, float y, float minX, float maxX, float speed, int region) {
-        PlatformerGame.Sprite sprite = game.addSprite(
-                x,
-                y,
-                ENEMY_HALF_WIDTH,
-                ENEMY_HALF_HEIGHT,
-                region,
-                PlatformerConstants.LAYER_ENEMY,
-                1.0f);
-        game.addEnemy(sprite, minX, maxX, speed);
+    private static void createEnemy(PlatformerGame game, float x, float y, float minX, float maxX, float speed) {
+        game.addEnemy(game.addSprite(x, y, ENEMY_HALF_WIDTH, ENEMY_HALF_HEIGHT), minX, maxX, speed);
     }
 
     private static void createGoal(PlatformerGame game, float x, float y) {
-        PlatformerGame.Sprite sprite = game.addSprite(
-                x,
-                y,
-                0.075f,
-                0.13f,
-                PlatformerConstants.REGION_DOOR,
-                PlatformerConstants.LAYER_GOAL,
-                1.0f);
-        game.addGoal(sprite);
+        game.addGoal(game.addSprite(x, y, 0.075f, 0.13f));
     }
 
-    private static void createSprite(
-            PlatformerGame game, float x, float y, float width, float height, int region, int layer,
-            float parallax) {
-        game.addSprite(x, y, width * 0.5f, height * 0.5f, region, layer, parallax);
-    }
 }

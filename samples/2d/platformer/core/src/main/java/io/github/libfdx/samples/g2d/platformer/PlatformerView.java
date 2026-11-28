@@ -1,24 +1,33 @@
 package io.github.libfdx.samples.g2d.platformer;
 
-import io.github.libfdx.graphics.g2d.PixelArtViewport;
-
-/** Shared integer viewport placement for the rendered world and UI Kit controls. */
+/** Continuous camera projection in authored map units, independent of UI and texture resolution. */
 public final class PlatformerView {
-    public static final int WIDTH = 300, HEIGHT = 180;
-    private final PixelArtViewport viewport = new PixelArtViewport(WIDTH, HEIGHT);
-    private int windowWidth = WIDTH, windowHeight = HEIGHT, frameWidth = WIDTH, frameHeight = HEIGHT, revision;
+    private int windowWidth, windowHeight, frameWidth, frameHeight;
+    private float worldWidth, worldHeight;
 
-    public void update(int windowWidth, int windowHeight, int frameWidth, int frameHeight) {
-        if (windowWidth < 1 || windowHeight < 1 || frameWidth < 1 || frameHeight < 1) { return; }
-        if (this.windowWidth != windowWidth || this.windowHeight != windowHeight
-                || this.frameWidth != frameWidth || this.frameHeight != frameHeight) { revision++; }
-        this.windowWidth = windowWidth; this.windowHeight = windowHeight;
-        this.frameWidth = frameWidth; this.frameHeight = frameHeight;
-        viewport.update(frameWidth, frameHeight);
+    public void update(int width, int height, int framebufferWidth, int framebufferHeight) {
+        if (width <= 0 || height <= 0 || framebufferWidth <= 0 || framebufferHeight <= 0) return;
+        windowWidth = width;
+        windowHeight = height;
+        frameWidth = framebufferWidth;
+        frameHeight = framebufferHeight;
+        float aspect = frameWidth / (float) frameHeight;
+        worldWidth = Math.max(300, Math.min(850, 264 * aspect));
+        worldHeight = worldWidth / aspect;
     }
 
-    public int revision() { return revision; }
+    public float width() { return worldWidth; }
 
-    public PixelArtViewport viewport() { return viewport; }
+    public float height() { return worldHeight; }
+
+    public int frameWidth() { return frameWidth; }
+
+    public int frameHeight() { return frameHeight; }
+
+    public float uiScale() {
+        float fit = Math.min(windowWidth / 360f, windowHeight / 320f);
+        float designScale = Math.min(1.35f, Math.max(1, Math.min(windowWidth / 1440f, windowHeight / 850f)));
+        return Math.min(4, Math.max(.25f, Math.min(fit, designScale) * frameWidth / Math.max(1f, windowWidth)));
+    }
 
 }

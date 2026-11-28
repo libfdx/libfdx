@@ -10,9 +10,9 @@ import io.github.libfdx.samples.g2d.platformer.input.PlatformerInput;
 public final class PlatformerGame {
     private static final int MAX_SPRITES = 192;
     private static final int MAX_SOLIDS = 96;
-    private static final int MAX_COLLECTIBLES = 16;
+    private static final int MAX_COLLECTIBLES = 32;
     private static final int MAX_HAZARDS = 8;
-    private static final int MAX_ENEMIES = 8;
+    private static final int MAX_ENEMIES = 20;
     private static final int MAX_GOALS = 2;
     // Less than 0.001 source pixel: tolerate roundoff on the non-moving axis only.
     private static final float CONTACT_EPSILON = 0.000001f;
@@ -30,7 +30,43 @@ public final class PlatformerGame {
     private int hazardCount;
     private int enemyCount;
     private int goalCount;
+    private final String[] siteNames = new String[8];
+    private final float[] siteX = new float[8], siteY = new float[8];
+    private int siteCount, visitedMask, lastSite = -1;
+    public enum Scenery { MILL, WINCH, GROVE, PORTAL }
+    private final Scenery[] scenery = new Scenery[16];
+    private final float[] sceneryX = new float[16], sceneryY = new float[16];
+    private int sceneryCount;
+
+    void addScenery(Scenery kind, float x, float y) {
+        if (sceneryCount == scenery.length) throw new IllegalArgumentException("Too many scenic installations");
+        scenery[sceneryCount] = kind;
+        sceneryX[sceneryCount] = x;
+        sceneryY[sceneryCount++] = y;
+    }
+
+    public int sceneryCount() { return sceneryCount; }
+
+    public Scenery scenery(int i) { return scenery[i]; }
+
+    public float sceneryX(int i) { return sceneryX[i]; }
+
+    public float sceneryY(int i) { return sceneryY[i]; }
+
     private Sprite player;
+    private ClockworkGate gate;
+
+    ClockworkGate puzzle() {
+        if (gate == null) gate = new ClockworkGate();
+        return gate;
+    }
+
+    public ClockworkGate gate() { return gate; }
+
+    public int nearbyDial() {
+        return gate != null && playerOnGround && player != null ? gate.nearby(player) : -1;
+    }
+
     private float playerVelocityX;
     private float playerVelocityY;
     private boolean playerOnGround = true;
@@ -39,6 +75,11 @@ public final class PlatformerGame {
     private boolean rightDown;
     private boolean jumpDown;
     private boolean jumpPressed;
+    private float liftTime, recoilTime, recoilDirection;
+    private float previousFeet, jumpBuffer, groundGrace, landingTime, hurtTime;
+    private int health = MAX_HEALTH;
+    public static final int MAX_HEALTH = 3;
+    private boolean dropPressed;
     private boolean restartDown;
     private boolean restartPressed;
     private float cameraX;
@@ -50,7 +91,8 @@ public final class PlatformerGame {
     private float spawnX = PlatformerConstants.PLAYER_START_X, spawnY = PlatformerConstants.PLAYER_START_Y;
     private float cameraMaximum = PlatformerConstants.CAMERA_MAX_X;
     private int events;
-    public static final int JUMP = 1, COIN = 2, HURT = 4, COMPLETE = 8, RESTART = 16;
+    public static final int JUMP = 1, COIN = 2, HURT = 4, COMPLETE = 8, RESTART = 16, STOMP = 32, LAND = 64;
+    public static final int TURN = 128;
 
     /** Returns and clears simulation events since the last call; no callbacks or event objects. */
     public int consumeEvents() { int result = events; events = 0; return result; }
@@ -81,9 +123,29 @@ public final class PlatformerGame {
         updateInput();
         updateRestart();
         float delta = clampedDelta(deltaTime);
+        if (!gameOver && !completed) {
+            if (gate != null) {
+                gate.update(delta);
+                int dial = dropPressed ? nearbyDial() : -1;
+                if (dial >= 0) {
+                    gate.turn(dial);
+                    dropPressed = false;
+                    events |= TURN;
+                }
+            }
+            updateLifts(delta);
+            hurtTime = Math.max(0, hurtTime - delta);
+            landingTime = Math.max(0, landingTime - delta);
+        }
         updatePlayer(delta);
         updateEnemies(delta);
         updateInteractions();
+        if (delta > 0 && player != null && !restarting && !gameOver && !completed) {
+            for (int i = 0; i < enemyCount && !gameOver; i++) {
+                Enemy enemy = enemies[i];
+                if (enemy.attack != null) enemy.attack.update(this, enemy, delta);
+            }
+        }
         updateCamera(delta);
     }
 
@@ -274,12 +336,11 @@ public final class PlatformerGame {
     }
     public int goalCount() { return goalCount; }
 
-    Sprite addSprite(float x, float y, float halfWidth, float halfHeight, int regionId, int layer,
-            float parallax) {
+    Sprite addSprite(float x, float y, float halfWidth, float halfHeight) {
         if (spriteCount >= sprites.length) {
             throw new IllegalStateException("Platformer sprite capacity exceeded");
         }
-        Sprite sprite = new Sprite(x, y, halfWidth, halfHeight, regionId, layer, parallax);
+        Sprite sprite = new Sprite(x, y, halfWidth, halfHeight);
         sprites[spriteCount++] = sprite;
         return sprite;
     }
@@ -307,10 +368,18 @@ public final class PlatformerGame {
     }
 
     void addEnemy(Sprite sprite, float minX, float maxX, float speed) {
+        addEnemy(sprite, minX, maxX, speed, EnemyKind.CRAWLER);
+    }
+
+    void addEnemy(Sprite sprite, float minX, float maxX, float speed, EnemyKind kind) {
+        addEnemy(sprite, minX, maxX, speed, kind, null);
+    }
+
+    void addEnemy(Sprite sprite, float minX, float maxX, float speed, EnemyKind kind, RangedAttack.Kind shot) {
         if (enemyCount >= enemies.length) {
             throw new IllegalStateException("Platformer enemy capacity exceeded");
         }
-        enemies[enemyCount++] = new Enemy(sprite, minX, maxX, speed);
+        enemies[enemyCount++] = new Enemy(sprite, minX, maxX, speed, kind, shot);
     }
 
     void addGoal(Sprite sprite) {
@@ -319,6 +388,29 @@ public final class PlatformerGame {
         }
         goals[goalCount++] = sprite;
     }
+
+    void addSite(String name, float x, float y) {
+        if (name.isBlank() || siteCount == siteNames.length) throw new IllegalArgumentException("Invalid trail site");
+        siteNames[siteCount] = name;
+        siteX[siteCount] = x;
+        siteY[siteCount++] = y;
+    }
+
+    public int siteCount() { return siteCount; }
+
+    public int visitedCount() { return Integer.bitCount(visitedMask); }
+
+    public String siteName(int index) { return siteNames[index]; }
+
+    public float siteX(int index) { return siteX[index]; }
+
+    public float siteY(int index) { return siteY[index]; }
+
+    public boolean visited(int index) { return (visitedMask & (1 << index)) != 0; }
+
+    public int lastSite() { return lastSite; }
+
+    public Sprite solidAt(int index) { return checkedSprite(solids, solidCount, index, "Surface"); }
 
     void player(Sprite sprite) {
         player = sprite;
@@ -335,6 +427,7 @@ public final class PlatformerGame {
         jumpPressed = input != null && input.consumeJumpPress() || nextJumpDown && !jumpDown;
         restartPressed = input != null && input.consumeRestartPress() || nextRestartDown && !restartDown;
         jumpDown = nextJumpDown;
+        dropPressed = input != null && input.consumeDropPress();
         restartDown = nextRestartDown;
     }
 
@@ -354,15 +447,14 @@ public final class PlatformerGame {
         if (player == null) { return; }
         cameraX = 0.0f;
         coinsCollected = 0;
-        gameOver = false;
-        completed = false;
-        restarting = true;
-        player.x = spawnX;
-        player.y = spawnY;
-        playerVelocityX = 0.0f;
-        playerVelocityY = 0.0f;
-        playerOnGround = true;
-        playerFacingRight = true;
+        visitedMask = 0;
+        if (gate != null) gate.reset();
+        lastSite = -1;
+        liftTime = 0;
+        for (int i = 0; i < solidCount; i++) {
+            if (solids[i].lift) solids[i].y = solids[i].previousY = solids[i].restY;
+        }
+        respawn(spawnX, spawnY);
         for (int i = 0; i < collectibleCount; i++) {
             collectibles[i].collected = false;
         }
@@ -370,6 +462,41 @@ public final class PlatformerGame {
             enemies[i].reset();
         }
         events |= RESTART;
+    }
+
+    public int health() { return health; }
+
+    public float hurtTime() { return hurtTime; }
+
+    public float landingTime() { return landingTime; }
+
+    /** Re-enter at a lit lantern or beyond the unlocked gate, retaining discoveries, gears and puzzle state. */
+    public void retry() {
+        boolean useGate = gate != null && gate.solved() && (lastSite < 0 || siteX[lastSite] <= gate.x());
+        if (useGate) {
+            respawn(gate.x() + ClockworkGate.HALF_WIDTH + player.halfWidth + .01f, gate.y() + player.halfHeight);
+        } else if (lastSite >= 0) {
+            respawn(siteX[lastSite], siteY[lastSite]);
+        } else {
+            restart();
+            return;
+        }
+        cameraX = clamp(player.x - .25f, PlatformerConstants.CAMERA_MIN_X, cameraMaximum);
+        hurtTime = 1.2f;
+        events = RESTART;
+    }
+
+    private void respawn(float x, float y) {
+        for (int i = 0; i < enemyCount; i++) {
+            if (enemies[i].attack != null) enemies[i].attack.reset();
+        }
+        gameOver = completed = false;
+        restarting = true;
+        player.position(x, y);
+        playerVelocityX = playerVelocityY = 0;
+        playerOnGround = playerFacingRight = true;
+        jumpBuffer = groundGrace = landingTime = hurtTime = recoilTime = 0;
+        health = MAX_HEALTH;
     }
 
     private void updatePlayer(float delta) {
@@ -387,19 +514,23 @@ public final class PlatformerGame {
         if (rightDown) {
             horizontal += 1.0f;
         }
-        playerVelocityX = horizontal * PlatformerConstants.PLAYER_MOVE_SPEED;
+        recoilTime = Math.max(0, recoilTime - delta);
+        playerVelocityX = recoilTime > 0 ? recoilDirection * .63f : horizontal * PlatformerConstants.PLAYER_MOVE_SPEED;
         if (horizontal < 0.0f) {
             playerFacingRight = false;
         } else if (horizontal > 0.0f) {
             playerFacingRight = true;
         }
-        if (jumpPressed && playerOnGround) {
+        boolean groundedBefore = playerOnGround;
+        jumpBuffer = jumpPressed ? .095f : Math.max(0, jumpBuffer - delta);
+        groundGrace = playerOnGround ? .075f : Math.max(0, groundGrace - delta);
+        if (jumpBuffer > 0 && groundGrace > 0) {
+            jumpBuffer = groundGrace = 0;
             playerVelocityY = PlatformerConstants.JUMP_VELOCITY;
             playerOnGround = false;
             events |= JUMP;
         }
         if (delta <= 0.0f) {
-            updatePlayerRegion();
             return;
         }
         playerVelocityY += PlatformerConstants.GRAVITY * delta;
@@ -411,15 +542,20 @@ public final class PlatformerGame {
         resolveHorizontal();
         player.x = clamp(player.x, levelLeft + player.halfWidth, levelRight - player.halfWidth);
 
+        previousFeet = player.y - player.halfHeight;
         player.y += playerVelocityY * delta;
         playerOnGround = false;
-        resolveVertical();
+        float impactVelocity = playerVelocityY;
+        resolveVertical(previousFeet);
+        if (playerOnGround && !groundedBefore && impactVelocity < -.5f) {
+            landingTime = .09f;
+            events |= LAND;
+        }
         if (player.y < PlatformerConstants.FALL_Y) {
             gameOver = true;
             events |= HURT;
             playerVelocityY = 0.0f;
         }
-        updatePlayerRegion();
     }
 
     private void resolveHorizontal() {
@@ -427,9 +563,16 @@ public final class PlatformerGame {
             return;
         }
         boolean movingRight = playerVelocityX > 0.0f;
+        if (gate != null && gate.opening() < 1 && Math.abs(player.x - gate.x()) < player.halfWidth + ClockworkGate.HALF_WIDTH
+                && player.y + player.halfHeight > gate.y() + gate.opening() * ClockworkGate.HEIGHT
+                && player.y - player.halfHeight < gate.y() + ClockworkGate.HEIGHT) {
+            float clearance = player.halfWidth + ClockworkGate.HALF_WIDTH;
+            player.x = gate.x() + (movingRight ? -clearance : clearance);
+            playerVelocityX = 0;
+        }
         for (int i = 0; i < solidCount; i++) {
             Sprite solid = solids[i];
-            if (!overlaps(player, solid)
+            if (solid.bridge || !overlaps(player, solid)
                     || player.y - player.halfHeight >= solid.y + solid.halfHeight - CONTACT_EPSILON
                     || player.y + player.halfHeight <= solid.y - solid.halfHeight + CONTACT_EPSILON) {
                 continue;
@@ -443,10 +586,14 @@ public final class PlatformerGame {
         }
     }
 
-    private void resolveVertical() {
+    private void resolveVertical(float previousFeet) {
         boolean falling = playerVelocityY <= 0.0f;
         for (int i = 0; i < solidCount; i++) {
             Sprite solid = solids[i];
+            float entryTop = (solid.lift ? Math.min(solid.previousY, solid.y) : solid.y) + solid.halfHeight;
+            if (solid.bridge && (!falling || previousFeet < entryTop - CONTACT_EPSILON || dropPressed)) {
+                continue;
+            }
             if (!overlaps(player, solid)
                     || player.x - player.halfWidth >= solid.x + solid.halfWidth - CONTACT_EPSILON
                     || player.x + player.halfWidth <= solid.x - solid.halfWidth + CONTACT_EPSILON) {
@@ -462,13 +609,40 @@ public final class PlatformerGame {
         }
     }
 
+    private void updateLifts(float delta) {
+        liftTime += delta;
+        for (int i = 0; i < solidCount; i++) {
+            Sprite lift = solids[i];
+            if (!lift.lift) continue;
+            float top = lift.y + lift.halfHeight;
+            boolean riding = player != null && playerOnGround
+                    && Math.abs(player.y - player.halfHeight - top) < CONTACT_EPSILON
+                    && Math.abs(player.x - lift.x) < player.halfWidth + lift.halfWidth - CONTACT_EPSILON;
+            lift.previousY = lift.y;
+            lift.y = lift.restY + .13f * (float)Math.sin(liftTime * 1.85f);
+            if (riding) player.y += lift.y - lift.previousY;
+        }
+    }
+
     private void updateEnemies(float delta) {
         if (gameOver || completed || restarting) {
             return;
         }
         for (int i = 0; i < enemyCount; i++) {
             Enemy enemy = enemies[i];
-            enemy.sprite.x += enemy.speed * enemy.direction * delta;
+            enemy.previousTop = enemy.sprite.y + enemy.sprite.halfHeight;
+            enemy.age += delta;
+            if (enemy.defeated) continue;
+            float travel = delta;
+            if (enemy.kind == EnemyKind.MOTH) {
+                enemy.sprite.y = enemy.startY + .095f * (float) Math.sin(enemy.age * 3.2f);
+            } else if (enemy.kind == EnemyKind.HOPPER) {
+                float phase = enemy.age % 1.45f;
+                float flight = Math.min(1, phase / .72f);
+                enemy.sprite.y = enemy.startY + .23f * 4 * flight * (1 - flight);
+                if (phase >= .72f) travel = 0;
+            }
+            enemy.sprite.x += enemy.speed * enemy.direction * travel;
             if (enemy.sprite.x < enemy.minX) {
                 enemy.sprite.x = enemy.minX;
                 enemy.direction = 1;
@@ -499,14 +673,29 @@ public final class PlatformerGame {
             }
         }
         for (int i = 0; i < enemyCount; i++) {
-            if (overlaps(player, enemies[i].sprite)) {
-                gameOver = true;
-                events |= HURT;
-                return;
+            Enemy enemy = enemies[i];
+            if (enemy.defeated || !overlaps(player, enemy.sprite)) continue;
+            if (!playerOnGround && playerVelocityY < 0 && previousFeet >= enemy.previousTop - .008f) {
+                enemy.defeated = true;
+                enemy.age = 0;
+                player.y = enemy.sprite.y + enemy.sprite.halfHeight + player.halfHeight;
+                playerVelocityY = PlatformerConstants.JUMP_VELOCITY * .80f;
+                groundGrace = jumpBuffer = 0;
+                events |= STOMP;
+            } else {
+                hurtPlayer(player.x < enemy.sprite.x ? -1 : 1);
+                if (gameOver) return;
+            }
+        }
+        for (int i = 0; i < siteCount; i++) {
+            if (!visited(i) && Math.abs(player.x - siteX[i]) < .14f && Math.abs(player.y - siteY[i]) < .115f) {
+                visitedMask |= 1 << i;
+                lastSite = i;
+                health = Math.min(MAX_HEALTH, health + 1);
             }
         }
         for (int i = 0; i < goalCount; i++) {
-            if (overlaps(player, goals[i])) {
+            if (playerOnGround && (gate == null || gate.solved()) && overlaps(player, goals[i])) {
                 completed = true;
                 events |= COMPLETE;
                 return;
@@ -522,12 +711,6 @@ public final class PlatformerGame {
                 cameraMaximum);
         float alpha = Math.min(1.0f, delta * PlatformerConstants.CAMERA_FOLLOW_SPEED);
         cameraX += (target - cameraX) * alpha;
-    }
-
-    private void updatePlayerRegion() {
-        player.regionId = playerOnGround && Math.abs(playerVelocityX) > 0.001f
-                ? PlatformerConstants.REGION_PLAYER_WALK
-                : PlatformerConstants.REGION_PLAYER_IDLE;
     }
 
     private static Sprite checkedSprite(Sprite[] values, int size, int index, String label) {
@@ -561,21 +744,25 @@ public final class PlatformerGame {
         private float y;
         private final float halfWidth;
         private final float halfHeight;
-        private int regionId;
-        private final int layer;
-        private final float parallax;
         private int value;
         private boolean collected;
+        boolean bridge, lift;
+        private final float restY;
+        private float previousY;
 
-        private Sprite(float x, float y, float halfWidth, float halfHeight, int regionId, int layer,
-                float parallax) {
+        public boolean isLift() { return lift; }
+
+        public float restY() { return restY; }
+
+
+        public boolean isBridge() { return bridge; }
+
+
+        private Sprite(float x, float y, float halfWidth, float halfHeight) {
             this.x = x;
-            this.y = y;
+            this.restY = this.previousY = this.y = y;
             this.halfWidth = halfWidth;
             this.halfHeight = halfHeight;
-            this.regionId = regionId;
-            this.layer = layer;
-            this.parallax = parallax;
         }
 
         public float x() {
@@ -592,18 +779,6 @@ public final class PlatformerGame {
 
         public float halfHeight() {
             return halfHeight;
-        }
-
-        public int regionId() {
-            return regionId;
-        }
-
-        public int layer() {
-            return layer;
-        }
-
-        public float parallax() {
-            return parallax;
         }
 
         public boolean collected() {
@@ -623,6 +798,21 @@ public final class PlatformerGame {
         }
     }
 
+    void hurtPlayer(float direction) {
+        if (hurtTime > 0) return;
+        health--;
+        recoilDirection = direction;
+        recoilTime = .16f;
+        playerVelocityY = .73f;
+        playerOnGround = false;
+        jumpBuffer = groundGrace = 0;
+        hurtTime = 1.15f;
+        events |= HURT;
+        if (health == 0) gameOver = true;
+    }
+
+    public enum EnemyKind { CRAWLER, MOTH, HOPPER }
+
     /**
      * Enemy patrol data allocated once during level construction.
      */
@@ -634,8 +824,23 @@ public final class PlatformerGame {
         private final float maxX;
         private final float speed;
         private int direction = -1;
+        private final EnemyKind kind;
+        private final RangedAttack attack;
+        private float age, previousTop;
+        private boolean defeated;
 
-        private Enemy(Sprite sprite, float minX, float maxX, float speed) {
+        public EnemyKind kind() { return kind; }
+
+        public RangedAttack attack() { return attack; }
+
+        public float age() { return age; }
+
+        public boolean defeated() { return defeated; }
+
+        private Enemy(Sprite sprite, float minX, float maxX, float speed, EnemyKind kind, RangedAttack.Kind shot) {
+            this.kind = kind;
+            attack = shot == null ? null : new RangedAttack(shot);
+            this.previousTop = sprite.y + sprite.halfHeight;
             this.sprite = sprite;
             this.startX = sprite.x;
             this.startY = sprite.y;
@@ -648,6 +853,8 @@ public final class PlatformerGame {
             return sprite;
         }
 
+        public boolean movingLeft() { return direction < 0; }
+
         public float startX() {
             return startX;
         }
@@ -656,6 +863,9 @@ public final class PlatformerGame {
             sprite.x = startX;
             sprite.y = startY;
             direction = -1;
+            age = 0;
+            defeated = false;
+            previousTop = startY + sprite.halfHeight;
         }
     }
 }

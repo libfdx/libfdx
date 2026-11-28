@@ -47,8 +47,9 @@ public final class WebProjectArchiveSmokeTest {
                 "Missing selected web launcher in ZIP.");
         require(!entries.contains("platform/desktop/build.gradle.kts"),
                 "Unselected desktop platform was included in ZIP.");
-        require(entries.contains("assets/kenney/pixel-platformer/Tilemap/tilemap_packed.png"),
-                "Missing bundled sample asset in ZIP.");
+        require(entries.contains("assets/levels/atlases/shared-0.png")
+                        && entries.contains("assets/levels/atlases/meadow.atlas.json"),
+                "Missing platformer atlas assets in ZIP.");
         require(entries.size() == project.fileCount(), "ZIP entry count did not match generated file count.");
     }
 

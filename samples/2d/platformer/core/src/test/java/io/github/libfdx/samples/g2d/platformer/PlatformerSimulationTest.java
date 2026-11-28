@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.libfdx.samples.g2d.platformer.input.TestPlatformerInput;
-import io.github.libfdx.samples.g2d.platformer.render.PlatformerTextures;
 import org.junit.jupiter.api.Test;
 
 final class PlatformerSimulationTest {
@@ -172,22 +171,138 @@ final class PlatformerSimulationTest {
         PlatformerGame.Sprite goal = game.goalAt(0);
         game.player().position(goal.x(), goal.y());
 
-        game.update(FRAME);
+        assertFalse(game.completed());
+        for (int i = 0; i < 30; i++) game.update(FRAME);
 
+        assertTrue(game.playerOnGround());
         assertTrue(game.completed());
     }
 
     @Test
-    void textureRegionIdsStayInsideKenneySheets() {
-        assertTrue(PlatformerTextures.validRegionId(PlatformerConstants.REGION_GRASS_SINGLE));
-        assertTrue(PlatformerTextures.validRegionId(PlatformerConstants.REGION_COIN));
-        assertTrue(PlatformerTextures.validRegionId(PlatformerConstants.REGION_GEM));
-        assertTrue(PlatformerTextures.validRegionId(PlatformerConstants.REGION_SPIKE));
-        assertTrue(PlatformerTextures.validRegionId(PlatformerConstants.REGION_DOOR));
-        assertTrue(PlatformerTextures.validRegionId(PlatformerConstants.REGION_PLAYER_IDLE));
-        assertTrue(PlatformerTextures.validRegionId(PlatformerConstants.REGION_ENEMY_WALKER));
-        assertTrue(PlatformerTextures.validRegionId(PlatformerConstants.REGION_CLOUD_LEFT));
-        assertTrue(PlatformerTextures.validRegionId(PlatformerConstants.REGION_BACKGROUND_SKY));
-        assertFalse(PlatformerTextures.validRegionId(PlatformerConstants.REGION_COUNT));
+    void landingOnAnEnemyBouncesAndSideContactHasARecoveryWindow() {
+        var game = new PlatformerGame(new TestPlatformerInput());
+        var player = game.addSprite(0, .17f, .05f, .07f);
+        game.player(player);
+        var beetle = game.addSprite(0, 0, .09f, .06f);
+        game.addEnemy(beetle, -.1f, .1f, .01f);
+        for (int i = 0; i < 30 && !game.enemyAt(0).defeated(); i++) game.update(FRAME);
+        assertTrue(game.enemyAt(0).defeated());
+        assertTrue(game.playerVelocityY() > 0);
+        assertEquals(PlatformerGame.MAX_HEALTH, game.health());
+        assertTrue((game.consumeEvents() & PlatformerGame.STOMP) != 0);
+
+        game.restart();
+        player.position(0, 0);
+        game.update(FRAME);
+        assertFalse(game.enemyAt(0).defeated());
+        assertEquals(PlatformerGame.MAX_HEALTH - 1, game.health());
+        game.update(FRAME);
+        assertEquals(PlatformerGame.MAX_HEALTH - 1, game.health());
     }
+
+    @Test
+    void warnedShotCanBeJumpedAndClearsOnRetry() {
+        var input = new TestPlatformerInput();
+        var game = shootingRange(input, RangedAttack.Kind.SEED);
+        var shot = game.enemyAt(0).attack();
+        game.addSite("Lantern", game.player().x(), game.player().y());
+        int warnings = 0;
+        for (int i = 0; i < 180 && !shot.flying(); i++) {
+            game.update(FRAME);
+            if (shot.charge() > 0) warnings++;
+        }
+        assertTrue(warnings >= 30);
+        assertTrue(shot.flying());
+        assertFalse(shot.facesLeft());
+        for (int i = 0; i < 90 && shot.x() < game.player().x() - .25f; i++) game.update(FRAME);
+        assertTrue(shot.flying());
+        input.jump = true;
+        game.update(FRAME);
+        input.jump = false;
+        for (int i = 0; i < 30; i++) game.update(FRAME);
+        assertTrue(shot.x() > game.player().x());
+        assertEquals(PlatformerGame.MAX_HEALTH, game.health());
+        game.retry();
+        assertFalse(shot.flying());
+        assertEquals(0, shot.charge());
+        for (int i = 0; i < 180; i++) game.update(FRAME);
+        assertEquals(PlatformerGame.MAX_HEALTH - 1, game.health());
+    }
+
+    @Test
+    void terrainBlocksShardsAndPearlsBounceOnce() {
+        var game = shootingRange(new TestPlatformerInput(), RangedAttack.Kind.SHARD);
+        game.addSolid(game.addSprite(.3f, .06f, .02f, .20f));
+        for (int i = 0; i < 200; i++) game.update(FRAME);
+        assertEquals(PlatformerGame.MAX_HEALTH, game.health());
+        assertFalse(game.enemyAt(0).attack().flying());
+
+        game = shootingRange(new TestPlatformerInput(), RangedAttack.Kind.PEARL);
+        var shot = game.enemyAt(0).attack();
+        boolean descending = false;
+        int bounces = 0;
+        for (int i = 0; i < 220; i++) {
+            float previous = shot.y();
+            boolean inFlight = shot.flying();
+            game.update(FRAME);
+            if (shot.flying()) game.player().position(-.55f, .07f);
+            if (inFlight && shot.flying()) {
+                if (descending && shot.y() > previous) bounces++;
+                descending = shot.y() < previous;
+            }
+        }
+        assertEquals(1, bounces);
+        assertFalse(shot.flying());
+    }
+
+    @Test
+    void stompingInterruptsAChargedShot() {
+        var game = shootingRange(new TestPlatformerInput(), RangedAttack.Kind.EMBER);
+        var enemy = game.enemyAt(0);
+        for (int i = 0; i < 64; i++) game.update(FRAME);
+        assertTrue(enemy.attack().charge() > 0);
+        game.player().position(enemy.sprite().x(), .22f);
+        for (int i = 0; i < 120; i++) {
+            game.update(FRAME);
+            assertFalse(enemy.attack().flying());
+        }
+        assertTrue(enemy.defeated());
+        assertEquals(0, enemy.attack().charge());
+    }
+
+    private static PlatformerGame shootingRange(TestPlatformerInput input, RangedAttack.Kind kind) {
+        var game = new PlatformerGame(input);
+        game.addSolid(game.addSprite(0, -.1f, 3, .1f));
+        game.player(game.addSprite(.60f, .07f, .05f, .07f));
+        game.addEnemy(game.addSprite(0, .06f, .08f, .06f), -.01f, .01f, .01f, PlatformerGame.EnemyKind.CRAWLER, kind);
+        return game;
+    }
+
+    @Test
+    void movingLiftCarriesItsRiderAndRetryUsesTheDiscoveredLantern() {
+        var input = new TestPlatformerInput();
+        var game = new PlatformerGame(input);
+        var lift = game.addSprite(0, 0, .3f, .02f);
+        lift.lift = lift.bridge = true;
+        game.addSolid(lift);
+        var player = game.addSprite(0, .09f, .05f, .07f);
+        game.player(player);
+        for (int i = 0; i < 120; i++) {
+            game.update(FRAME);
+            assertTrue(game.playerOnGround());
+            assertEquals(lift.y() + lift.halfHeight() + player.halfHeight(), player.y(), .0001);
+        }
+        game.addSite("Millrace", player.x(), player.y());
+        game.update(FRAME);
+        assertEquals(1, game.visitedCount());
+        player.position(.5f, -2);
+        game.update(FRAME);
+        assertTrue(game.gameOver());
+        game.retry();
+        assertFalse(game.gameOver());
+        assertEquals(1, game.visitedCount());
+        assertEquals(game.siteX(0), player.x());
+        assertEquals(game.siteY(0), player.y());
+    }
+
 }

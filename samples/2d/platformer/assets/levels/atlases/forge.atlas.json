@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "alpha": "straight",
+  "pages": [
+    {
+      "image": "forge-0.png",
+      "width": 1024,
+      "height": 1024
+    }
+  ],
+  "sprites": [
+    {
+      "name": "landmark",
+      "page": 0,
+      "x": 3,
+      "y": 3,
+      "width": 506,
+      "height": 483,
+      "originalWidth": 506,
+      "originalHeight": 483,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    },
+    {
+      "name": "site-1",
+      "page": 0,
+      "x": 515,
+      "y": 3,
+      "width": 256,
+      "height": 256,
+      "originalWidth": 256,
+      "originalHeight": 256,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    },
+    {
+      "name": "site-2",
+      "page": 0,
+      "x": 3,
+      "y": 492,
+      "width": 256,
+      "height": 256,
+      "originalWidth": 256,
+      "originalHeight": 256,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    },
+    {
+      "name": "site-3",
+      "page": 0,
+      "x": 265,
+      "y": 492,
+      "width": 256,
+      "height": 256,
+      "originalWidth": 256,
+      "originalHeight": 256,
+      "trimX": 0,
+      "trimY": 0,
+      "pivotX": 0.5,
+      "pivotY": 0.5
+    }
+  ]
+}

@@ -5,6 +5,15 @@ public final class TestPlatformerInput implements PlatformerInput {
     public boolean right;
     public boolean jump;
     public boolean restart;
+    public boolean drop;
+
+    @Override
+    public boolean consumeDropPress() {
+        boolean pressed = drop;
+        drop = false;
+        return pressed;
+    }
+
 
     @Override
     public boolean leftDown() {
